@@ -11,6 +11,7 @@ import { CharacterAPI } from '@/services/characterApi';
 import FeatCard from './FeatCard';
 import FeatDetailsPanel from './FeatDetailsPanel';
 import FeatSummary from './FeatSummary';
+import VirtualizedFeatSection from './VirtualizedFeatSection';
 import { useIconPreloader } from '@/hooks/useIconPreloader';
 
 interface Prerequisite {
@@ -301,22 +302,6 @@ export default function FeatsEditor() {
     });
   }, [categoryFeats, allCurrentFeats, categorySearch]);
 
-  // Only preload icons for visible feats (first 15 from each category)
-  const visibleFeatIcons = useMemo(() => {
-    const visibleFeats = [
-      ...allCurrentFeats.slice(0, 15),
-      ...filteredCategoryFeats.slice(0, 15)
-    ];
-    return visibleFeats.map(feat => `ife_${feat.label.toLowerCase()}`);
-  }, [allCurrentFeats, filteredCategoryFeats]);
-
-  // Preload icons only for visible feats
-  const iconPreloader = useIconPreloader(visibleFeatIcons, {
-    enabled: true,
-    batchSize: 10,
-    delay: 100,
-  });
-
   // Group feats by category for display with mutually exclusive categories
   const groupedCurrentFeats = useMemo(() => {
     if (!featsData) return {};
@@ -349,6 +334,34 @@ export default function FeatsEditor() {
       Object.entries(groups).filter(([, feats]) => feats.length > 0)
     );
   }, [filteredCurrentFeats, featsData]);
+
+  // Preload icons based on virtualization strategy
+  const visibleFeatIcons = useMemo(() => {
+    const visibleFeats: FeatInfo[] = [];
+    
+    // For current feats - preload first 10 items from each category (virtualized or not)
+    Object.entries(groupedCurrentFeats).forEach(([, categoryFeats]) => {
+      visibleFeats.push(...categoryFeats.slice(0, 10));
+    });
+    
+    // For category feats - only preload if list is small or first 10 for large lists
+    if (filteredCategoryFeats.length < 20) {
+      // Small list - preload all
+      visibleFeats.push(...filteredCategoryFeats);
+    } else {
+      // Large list (virtualized) - only preload first 10
+      visibleFeats.push(...filteredCategoryFeats.slice(0, 10));
+    }
+    
+    return visibleFeats.map(feat => `ife_${feat.label.toLowerCase()}`);
+  }, [groupedCurrentFeats, filteredCategoryFeats]);
+
+  // Preload icons only for visible feats
+  useIconPreloader(visibleFeatIcons, {
+    enabled: true,
+    batchSize: 10,
+    delay: 100,
+  });
 
   // Early return for loading/error states
   if (isLoading) {
@@ -534,19 +547,33 @@ export default function FeatsEditor() {
                   </div>
                   
                   {expandedCategories.has(category) && (
-                    <div className={viewMode === 'grid' ? 'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-2'}>
-                      {categoryFeats.map((feat, index) => (
-                        <FeatCard 
-                          key={`current-${feat.id}-${index}`} 
-                          feat={feat} 
-                          isActive={true} 
+                    <>
+                      {categoryFeats.length >= 20 ? (
+                        <VirtualizedFeatSection
+                          feats={categoryFeats}
+                          isActive={true}
                           viewMode={viewMode}
+                          maxHeight={400}
                           onDetails={loadFeatDetails}
                           onAdd={handleAddFeat}
                           onRemove={handleRemoveFeat}
                         />
-                      ))}
-                    </div>
+                      ) : (
+                        <div className={viewMode === 'grid' ? 'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-2'}>
+                          {categoryFeats.map((feat, index) => (
+                            <FeatCard 
+                              key={`current-${feat.id}-${index}`} 
+                              feat={feat} 
+                              isActive={true} 
+                              viewMode={viewMode}
+                              onDetails={loadFeatDetails}
+                              onAdd={handleAddFeat}
+                              onRemove={handleRemoveFeat}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
@@ -600,19 +627,33 @@ export default function FeatsEditor() {
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[rgb(var(--color-primary))]"></div>
                         </div>
                       ) : (
-                        <div className={viewMode === 'grid' ? 'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-2'}>
-                          {filteredCategoryFeats.map((feat, index) => (
-                            <FeatCard 
-                              key={`category-${feat.id}-${index}`} 
-                              feat={feat} 
-                              isActive={false} 
+                        <>
+                          {filteredCategoryFeats.length >= 20 ? (
+                            <VirtualizedFeatSection
+                              feats={filteredCategoryFeats}
+                              isActive={false}
                               viewMode={viewMode}
+                              maxHeight={500}
                               onDetails={loadFeatDetails}
                               onAdd={handleAddFeat}
                               onRemove={handleRemoveFeat}
                             />
-                          ))}
-                        </div>
+                          ) : (
+                            <div className={viewMode === 'grid' ? 'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 'space-y-2'}>
+                              {filteredCategoryFeats.map((feat, index) => (
+                                <FeatCard 
+                                  key={`category-${feat.id}-${index}`} 
+                                  feat={feat} 
+                                  isActive={false} 
+                                  viewMode={viewMode}
+                                  onDetails={loadFeatDetails}
+                                  onAdd={handleAddFeat}
+                                  onRemove={handleRemoveFeat}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </>
                       )}
                       
                       {/* Category Info */}
@@ -639,7 +680,7 @@ export default function FeatsEditor() {
               {selectedCategory && filteredCategoryFeats.length === 0 && categorySearch && (
                 <div className="text-center py-8">
                   <p className="text-[rgb(var(--color-text-secondary))]">
-                    No feats found matching "{categorySearch}"
+                    No feats found matching &quot;{categorySearch}&quot;
                   </p>
                 </div>
               )}
