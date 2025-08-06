@@ -115,7 +115,7 @@ interface FeatsState {
     general_feats: FeatInfo[];
     custom_feats: FeatInfo[];
   };
-  available_feats: FeatInfo[];
+  available_feats?: FeatInfo[]; // Optional - no longer loaded from /feats/state/
 }
 
 export default function FeatsEditor() {
@@ -129,6 +129,7 @@ export default function FeatsEditor() {
   const [categoryFeatsLoading, setCategoryFeatsLoading] = useState(false);
   const [categoryFeatsError, setCategoryFeatsError] = useState<string | null>(null);
   const [categorySearch, setCategorySearch] = useState('');
+  const [onlyAvailable, setOnlyAvailable] = useState(true); // Show only obtainable feats by default
 
   // Load feats data only if character exists and data hasn't been loaded
   useEffect(() => {
@@ -144,7 +145,7 @@ export default function FeatsEditor() {
     }
   }, [selectedCategory]);
 
-  // Load category feats when category or subcategory changes
+  // Load category feats when category, subcategory, or availability changes
   useEffect(() => {
     const loadCategoryFeats = async () => {
       if (!character?.id || !selectedCategory) {
@@ -156,26 +157,16 @@ export default function FeatsEditor() {
       setCategoryFeatsError(null);
       
       try {
-        // Mock API call - replace with actual API when backend is ready
-        // await CharacterAPI.getLegitimateFeats(character.id, {
-        //   category: selectedCategory,
-        //   subcategory: selectedSubcategory || undefined
-        // });
+        // Use real API with category-based loading
+        const response = await CharacterAPI.getLegitimateFeats(character.id, {
+          category: selectedCategory,
+          subcategory: selectedSubcategory || undefined,
+          onlyAvailable: onlyAvailable,
+          page: 1,
+          limit: 100 // Load more initially for better UX
+        });
         
-        // For now, use mock data
-        const mockFeats: FeatInfo[] = Array.from({ length: Math.floor(Math.random() * 100) + 20 }, (_, i) => ({
-          id: 1000 + i,
-          label: `${selectedSubcategory || selectedCategory} Feat ${i + 1}`,
-          name: `${selectedSubcategory || selectedCategory} Feat ${i + 1}`,
-          type: Math.floor(Math.random() * 5),
-          protected: Math.random() > 0.8,
-          custom: Math.random() > 0.9,
-          description: `A ${selectedSubcategory || selectedCategory} feat that does something important.`,
-          can_take: Math.random() > 0.3,
-          has_feat: false,
-        }));
-        
-        setCategoryFeats(mockFeats);
+        setCategoryFeats(response.feats);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to load category feats';
         setCategoryFeatsError(errorMessage);
@@ -186,7 +177,7 @@ export default function FeatsEditor() {
     };
 
     loadCategoryFeats();
-  }, [character?.id, selectedCategory, selectedSubcategory]);
+  }, [character?.id, selectedCategory, selectedSubcategory, onlyAvailable]);
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -470,15 +461,30 @@ export default function FeatsEditor() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {/* Show Only Obtainable Feats Toggle */}
+              {selectedCategory && (
+                <Button
+                  variant={onlyAvailable ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setOnlyAvailable(!onlyAvailable)}
+                  className="text-xs"
+                  title={onlyAvailable ? 'Showing only feats you can take' : 'Showing all feats in category'}
+                >
+                  {onlyAvailable ? 'Obtainable Only' : 'Show All'}
+                </Button>
+              )}
+              
               {/* Current Feats Only Toggle */}
-              <Button
-                variant={filters.activeOnly ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setFilters(prev => ({ ...prev, activeOnly: !prev.activeOnly }))}
-                className="text-xs"
-              >
-                Current Only
-              </Button>
+              {!selectedCategory && (
+                <Button
+                  variant={filters.activeOnly ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setFilters(prev => ({ ...prev, activeOnly: !prev.activeOnly }))}
+                  className="text-xs"
+                >
+                  Current Only
+                </Button>
+              )}
               
               {/* View Mode Toggle */}
               <div className="flex rounded-md">

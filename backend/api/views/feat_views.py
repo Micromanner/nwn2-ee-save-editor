@@ -20,8 +20,7 @@ class FeatViewSet(BaseCharacterViewSet):
     """
     @action(detail=False, methods=['get'], url_path='state')
     def feats_state(self, request, character_pk=None):
-        """Get current feats and available feats for the feats editor"""
-        feat_type = request.query_params.get('type')
+        """Get current feats state (no expensive available_feats calculation)"""
         
         try:
             character, manager = self._get_character_manager(character_pk)
@@ -29,9 +28,7 @@ class FeatViewSet(BaseCharacterViewSet):
             
             state = {
                 'current_feats': feat_manager.get_feat_summary(),
-                'available_feats': feat_manager.get_available_feats(
-                    feat_type=int(feat_type) if feat_type else None
-                ),
+                # Removed available_feats - use /feats/legitimate/ endpoint instead
                 'feat_slots': {
                     'available': feat_manager.get_bonus_feats_available(),
                     'used': len(feat_manager.get_all_feats())
@@ -40,7 +37,9 @@ class FeatViewSet(BaseCharacterViewSet):
                     'general': 0,
                     'combat': 1,
                     'metamagic': 2,
-                    'item_creation': 3
+                    'item_creation': 3,
+                    'divine': 4,
+                    'epic': 5
                 }
             }
             
@@ -214,8 +213,11 @@ class FeatViewSet(BaseCharacterViewSet):
     
     @action(detail=False, methods=['get'], url_path='legitimate')
     def legitimate_feats(self, request, character_pk=None):
-        """Get legitimate feats with pagination (filtered to exclude dev/broken feats)"""
+        """Get legitimate feats with pagination and smart filtering"""
         feat_type = request.query_params.get('type', None)
+        category = request.query_params.get('category', '').lower()
+        subcategory = request.query_params.get('subcategory', '').lower()
+        only_available = request.query_params.get('only_available', 'true').lower() == 'true'
         page = int(request.query_params.get('page', 1))
         limit = int(request.query_params.get('limit', 50))
         search = request.query_params.get('search', '').strip()
@@ -224,25 +226,36 @@ class FeatViewSet(BaseCharacterViewSet):
             character, manager = self._get_character_manager(character_pk)
             feat_manager = manager.get_manager('feat')
             
-            # Get all legitimate feats first
-            all_legitimate = feat_manager.get_legitimate_feats(
-                feat_type=int(feat_type) if feat_type else None
-            )
+            # Get feats based on category and availability
+            if only_available:
+                # Get only feats the character can actually take
+                all_feats = feat_manager.get_available_feats_by_category(
+                    category=category,
+                    subcategory=subcategory,
+                    feat_type=int(feat_type) if feat_type else None
+                )
+            else:
+                # Get all legitimate feats in category (no prereq checking)
+                all_feats = feat_manager.get_legitimate_feats_by_category(
+                    category=category,
+                    subcategory=subcategory,
+                    feat_type=int(feat_type) if feat_type else None
+                )
             
             # Apply search filter if provided
             if search:
                 search_lower = search.lower()
-                all_legitimate = [
-                    feat for feat in all_legitimate 
+                all_feats = [
+                    feat for feat in all_feats 
                     if search_lower in feat.get('label', '').lower() or 
                        search_lower in feat.get('name', '').lower()
                 ]
             
             # Calculate pagination
-            total = len(all_legitimate)
+            total = len(all_feats)
             start_idx = (page - 1) * limit
             end_idx = start_idx + limit
-            paginated_feats = all_legitimate[start_idx:end_idx]
+            paginated_feats = all_feats[start_idx:end_idx]
             
             has_next = end_idx < total
             has_prev = page > 1
@@ -261,7 +274,9 @@ class FeatViewSet(BaseCharacterViewSet):
                     'end_idx': min(end_idx, total)
                 },
                 'search': search,
-                'filtered_from_total': 'Applied filtering to remove dev/broken feats'
+                'category': category,
+                'subcategory': subcategory,
+                'only_available': only_available
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

@@ -42,7 +42,9 @@ class GamedataConfig(AppConfig):
                 from api.system_views import update_initialization_status, initialization_status
                 from datetime import datetime
                 
+                # Immediately update status when background thread starts
                 initialization_status['started_at'] = datetime.now().isoformat()
+                update_initialization_status('initializing', 5, 'Background initialization started...')
                 logger.info("Starting background initialization of heavy components...")
                 
                 # Stage 1: Resource Manager
@@ -62,7 +64,17 @@ class GamedataConfig(AppConfig):
                         update_initialization_status('icon_cache', 30, 'Loading icon cache (4000+ icons)...')
                         logger.info("Background: Initializing icon cache...")
                         start_time = time.time()
-                        gamedata.cache.icon_cache.icon_cache.initialize()
+                        
+                        # Check if icon cache has progress callback capability
+                        cache_obj = gamedata.cache.icon_cache.icon_cache
+                        if hasattr(cache_obj, 'initialize'):
+                            # Try to add progress updates during icon cache loading
+                            update_initialization_status('icon_cache', 35, 'Scanning for icons...')
+                            cache_obj.initialize()
+                            update_initialization_status('icon_cache', 45, 'Processing icons...')
+                            time.sleep(0.1)  # Brief pause to show progress
+                            update_initialization_status('icon_cache', 55, 'Building icon index...')
+                        
                         init_time = time.time() - start_time
                         initialization_status['details']['icon_cache'] = True
                         update_initialization_status('icon_cache', 60, f'Icon cache loaded in {init_time:.1f}s')
@@ -79,9 +91,18 @@ class GamedataConfig(AppConfig):
                     from .dynamic_loader.singleton import get_dynamic_game_data_loader
                     start_time = time.time()
                     
+                    # Create progress callback that updates initialization status
+                    def game_data_progress(message, percent):
+                        # Map the internal progress (0-100%) to our range (65-95%)
+                        mapped_progress = 65 + int(percent * 0.30)  # 30% of range (95-65=30)
+                        update_initialization_status('game_data', mapped_progress, f'Game data: {message}')
+                    
                     # Get shared ResourceManager and pass it to the loader
                     shared_rm = get_shared_resource_manager()
-                    loader = get_dynamic_game_data_loader(resource_manager=shared_rm)
+                    loader = get_dynamic_game_data_loader(
+                        resource_manager=shared_rm, 
+                        progress_callback=game_data_progress
+                    )
                     
                     init_time = time.time() - start_time
                     initialization_status['details']['game_data'] = True

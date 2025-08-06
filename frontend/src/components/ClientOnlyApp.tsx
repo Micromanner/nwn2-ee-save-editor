@@ -146,9 +146,9 @@ function AppContent() {
       }
     };
     
-    // Start polling
+    // Start polling with more frequent updates during loading
     checkInitStatus();
-    intervalId = setInterval(checkInitStatus, 500);
+    intervalId = setInterval(checkInitStatus, 250); // Poll every 250ms for smoother progress
     
     return () => {
       isActive = false;

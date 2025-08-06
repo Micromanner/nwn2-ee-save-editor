@@ -21,7 +21,7 @@ interface FeatsState {
     general_feats: FeatInfo[];
     custom_feats: FeatInfo[];
   };
-  available_feats: FeatInfo[];
+  available_feats?: FeatInfo[]; // Optional - no longer loaded from /feats/state/
 }
 
 interface FeatSummaryProps {

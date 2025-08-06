@@ -696,6 +696,186 @@ class FeatManager(EventEmitter):
         
         return available
     
+    def get_feat_category(self, feat_data) -> str:
+        """
+        Determine the category of a feat based on its properties
+        
+        Args:
+            feat_data: Feat data object from 2DA
+            
+        Returns:
+            Category string: 'general', 'combat', 'metamagic', 'item_creation', 
+                           'divine', 'epic', 'class', 'racial', etc.
+        """
+        # Check for Epic feats first (highest priority)
+        min_level = getattr(feat_data, 'MinLevel', getattr(feat_data, 'minlevel', 0))
+        if min_level and int(min_level) >= 21:
+            return 'epic'
+        
+        # Check feat type
+        feat_type = getattr(feat_data, 'Type', getattr(feat_data, 'type', 0))
+        if feat_type:
+            feat_type = int(feat_type)
+            if feat_type == 0:
+                return 'general'
+            elif feat_type == 1:
+                return 'combat'
+            elif feat_type == 2:
+                return 'metamagic'
+            elif feat_type == 3:
+                return 'item_creation'
+            elif feat_type == 4:
+                return 'divine'
+        
+        # Check for class-specific feats
+        label = getattr(feat_data, 'LABEL', getattr(feat_data, 'label', ''))
+        if label:
+            label_lower = label.lower()
+            # Class-specific feat patterns
+            if any(cls in label_lower for cls in ['barbarian', 'bard', 'cleric', 'druid', 
+                                                   'fighter', 'monk', 'paladin', 'ranger', 
+                                                   'rogue', 'sorcerer', 'wizard', 'warlock']):
+                return 'class'
+            
+            # Racial feat patterns  
+            if any(race in label_lower for race in ['human', 'elf', 'dwarf', 'halfling',
+                                                     'gnome', 'orc', 'tiefling', 'aasimar']):
+                return 'racial'
+        
+        # Default to general
+        return 'general'
+    
+    def get_feat_subcategory(self, feat_data, category: str) -> str:
+        """
+        Get subcategory for class or racial feats
+        
+        Args:
+            feat_data: Feat data object
+            category: Main category
+            
+        Returns:
+            Subcategory string or empty string
+        """
+        if category != 'class' and category != 'racial':
+            return ''
+            
+        label = getattr(feat_data, 'LABEL', getattr(feat_data, 'label', ''))
+        if not label:
+            return ''
+            
+        label_lower = label.lower()
+        
+        if category == 'class':
+            # Check for specific class names
+            classes = ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 
+                      'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 
+                      'wizard', 'warlock']
+            for cls in classes:
+                if cls in label_lower:
+                    return cls
+                    
+        elif category == 'racial':
+            # Check for specific race names
+            races = ['human', 'elf', 'dwarf', 'halfling', 'gnome', 
+                    'orc', 'tiefling', 'aasimar']
+            for race in races:
+                if race in label_lower:
+                    return race
+        
+        return ''
+    
+    def get_legitimate_feats_by_category(self, category: str = '', subcategory: str = '', 
+                                         feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get legitimate feats filtered by category (no prerequisite checking)
+        
+        Args:
+            category: Category filter (general, combat, class, etc.)
+            subcategory: Subcategory filter (for class/racial)
+            feat_type: Optional feat type filter
+            
+        Returns:
+            List of feat info dicts
+        """
+        legitimate = []
+        
+        # Get all feats from dynamic game data
+        all_feats = self.game_data_loader.get_table('feat')
+        if not all_feats:
+            return legitimate
+        
+        for row_index, feat_data in enumerate(all_feats):
+            # Filter out illegitimate feats first
+            if not self.is_legitimate_feat(feat_data):
+                continue
+                
+            # Check category if specified
+            if category:
+                feat_category = self.get_feat_category(feat_data)
+                if feat_category != category:
+                    continue
+                    
+                # Check subcategory if specified
+                if subcategory and category in ['class', 'racial']:
+                    feat_subcategory = self.get_feat_subcategory(feat_data, category)
+                    if feat_subcategory != subcategory:
+                        continue
+            
+            # Use proper row index as feat ID
+            feat_id = getattr(feat_data, 'id', getattr(feat_data, 'row_index', row_index))
+            
+            # Skip if wrong type
+            if feat_type is not None:
+                data_type = getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0))
+                if data_type != feat_type:
+                    continue
+            
+            feat_info = self.get_feat_info(feat_id, feat_data)
+            if feat_info:
+                legitimate.append(feat_info)
+        
+        return legitimate
+    
+    def get_available_feats_by_category(self, category: str = '', subcategory: str = '',
+                                        feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get available feats filtered by category (WITH prerequisite checking)
+        
+        Args:
+            category: Category filter (general, combat, class, etc.)
+            subcategory: Subcategory filter (for class/racial)
+            feat_type: Optional feat type filter
+            
+        Returns:
+            List of feat info dicts that character can actually take
+        """
+        available = []
+        
+        # First get legitimate feats by category (no prereq checking)
+        category_feats = self.get_legitimate_feats_by_category(category, subcategory, feat_type)
+        
+        # Get character's current feats once to avoid repeated has_feat() calls
+        current_feat_ids = set()
+        feat_list = self.gff.get('FeatList', [])
+        for feat in feat_list:
+            current_feat_ids.add(feat.get('Feat', -1))
+        
+        # Now check prerequisites for each feat
+        for feat_info in category_feats:
+            feat_id = feat_info['id']
+            
+            # Skip if already has feat
+            if feat_id in current_feat_ids:
+                continue
+            
+            # Check prerequisites
+            is_valid, _ = self.validate_feat_prerequisites(feat_id)
+            
+            if is_valid:
+                available.append(feat_info)
+        
+        return available
+    
     def get_feat_summary(self) -> Dict[str, Any]:
         """Get summary of character's feats"""
         feat_list = self.gff.get('FeatList', [])
