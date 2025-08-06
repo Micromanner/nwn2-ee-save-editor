@@ -10,6 +10,7 @@ use crate::{
     config::IconCacheConfig,
     error::Result,
     persistence::DiskCache,
+    index::{LazyIconCache, IndexBuilder},
     discovery::IconDiscovery,
     processing::ImageProcessor,
     IconKey,
@@ -37,6 +38,9 @@ pub struct RustIconCache {
     /// Persistent disk cache for fast startup
     disk_cache: Arc<DiskCache>,
     
+    /// Lazy loading cache (new optimized system)
+    lazy_cache: Option<Arc<LazyIconCache>>,
+    
     /// Image processor
     processor: Arc<ImageProcessor>,
     
@@ -45,12 +49,23 @@ pub struct RustIconCache {
     
     /// Statistics
     stats: Arc<RwLock<CacheStatistics>>,
+    
+    /// Flag to use lazy loading
+    use_lazy_loading: bool,
 }
 
 impl RustIconCache {
     /// Create a new icon cache
     pub fn new(config: IconCacheConfig) -> Result<Self> {
         let cache_dir = config.cache_directory.clone();
+        let use_lazy_loading = std::env::var("ICON_CACHE_LAZY_LOADING")
+            .unwrap_or_else(|_| "true".to_string()) == "true";
+        
+        let lazy_cache = if use_lazy_loading {
+            Some(Arc::new(LazyIconCache::new(&cache_dir, 1000)?))
+        } else {
+            None
+        };
         
         Ok(Self {
             cache: Arc::new(DashMap::new()),
@@ -58,16 +73,26 @@ impl RustIconCache {
             filename_map: Arc::new(DashMap::new()),
             config: config.clone(),
             nwn2_home: None,
-            disk_cache: Arc::new(DiskCache::new(cache_dir)?),
+            disk_cache: Arc::new(DiskCache::new(&cache_dir)?),
+            lazy_cache,
             processor: Arc::new(ImageProcessor::new(config.clone())),
             discovery: Arc::new(IconDiscovery::new()),
             stats: Arc::new(RwLock::new(CacheStatistics::default())),
+            use_lazy_loading,
         })
     }
     
     /// Create a new icon cache with NWN2 home directory
     pub fn with_nwn2_home(config: IconCacheConfig, nwn2_home: PathBuf) -> Result<Self> {
         let cache_dir = config.cache_directory.clone();
+        let use_lazy_loading = std::env::var("ICON_CACHE_LAZY_LOADING")
+            .unwrap_or_else(|_| "true".to_string()) == "true";
+        
+        let lazy_cache = if use_lazy_loading {
+            Some(Arc::new(LazyIconCache::new(&cache_dir, 1000)?))
+        } else {
+            None
+        };
         
         Ok(Self {
             cache: Arc::new(DashMap::new()),
@@ -75,17 +100,47 @@ impl RustIconCache {
             filename_map: Arc::new(DashMap::new()),
             config: config.clone(),
             nwn2_home: Some(nwn2_home),
-            disk_cache: Arc::new(DiskCache::new(cache_dir)?),
+            disk_cache: Arc::new(DiskCache::new(&cache_dir)?),
+            lazy_cache,
             processor: Arc::new(ImageProcessor::new(config.clone())),
             discovery: Arc::new(IconDiscovery::new()),
             stats: Arc::new(RwLock::new(CacheStatistics::default())),
+            use_lazy_loading,
         })
     }
     
     /// Initialize the cache (load from disk or rebuild)
     pub async fn initialize(&self, force_reload: bool) -> Result<()> {
-        println!("RustIconCache::initialize called with force_reload={}", force_reload);
+        println!("RustIconCache::initialize called with force_reload={}, lazy_loading={}", 
+                 force_reload, self.use_lazy_loading);
         
+        // If using lazy loading, just load the index
+        if self.use_lazy_loading {
+            if let Some(lazy_cache) = &self.lazy_cache {
+                if !force_reload {
+                    // Try to load existing index
+                    log::info!("Loading icon index for lazy loading...");
+                    println!("Loading icon index (lazy mode)...");
+                    match lazy_cache.load_index().await {
+                        Ok(_) => {
+                            log::info!("Icon index loaded successfully");
+                            println!("Icon index loaded successfully (startup complete)");
+                            
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to load index: {}, building cache...", e);
+                            println!("Index not found, building cache...");
+                        }
+                    }
+                }
+                
+                // Build index from scratch
+                return self.build_lazy_cache_index().await;
+            }
+        }
+        
+        // Original behavior for non-lazy loading
         if !force_reload && self.config.enable_persistence && self.disk_cache.is_valid().await? {
             // Fast path: load pre-processed cache from disk
             log::info!("Loading icon cache from disk...");
@@ -111,6 +166,15 @@ impl RustIconCache {
     
     /// Get an icon by name with filename fallback
     pub fn get_icon(&self, name: &str) -> Option<CachedIcon> {
+        // Use lazy loading if enabled
+        if self.use_lazy_loading {
+            if let Some(lazy_cache) = &self.lazy_cache {
+                // Create a runtime for async operation
+                let runtime = tokio::runtime::Runtime::new().ok()?;
+                return runtime.block_on(lazy_cache.get_icon(name));
+            }
+        }
+        
         // Debug cache access for alignment icons
         if name.contains("align") {
             log::info!("CACHE ACCESS DEBUG: Requesting icon '{}', cache size: {}", name, self.cache.len());
@@ -164,6 +228,13 @@ impl RustIconCache {
     
     /// Get an icon by name (async version for consistency)
     pub async fn get_icon_async(&self, name: &str) -> Option<CachedIcon> {
+        // Use lazy loading if enabled
+        if self.use_lazy_loading {
+            if let Some(lazy_cache) = &self.lazy_cache {
+                return lazy_cache.get_icon(name).await;
+            }
+        }
+        
         self.get_icon(name)
     }
     
@@ -441,5 +512,57 @@ impl RustIconCache {
         // Steam Workshop support would go here
         // For now, return empty
         vec![]
+    }
+    
+    /// Build the lazy cache index from scratch
+    async fn build_lazy_cache_index(&self) -> Result<()> {
+        log::info!("Building lazy cache index...");
+        println!("Building lazy cache index...");
+        
+        // 1. Discover all icon sources
+        let sources = self.discover_all_sources().await?;
+        log::info!("Discovered {} icon sources", sources.len());
+        
+        // 2. Process all sources and build index
+        let mut index_builder = IndexBuilder::new();
+        let mut total_icons = 0;
+        
+        // Sort by source type priority
+        let mut all_sources = sources;
+        all_sources.sort_by_key(|s| s.source_type);
+        
+        for source in all_sources {
+            log::info!("Processing {:?} source with {} icons", source.source_type, source.icons.len());
+            
+            match self.process_source_parallel(source).await {
+                Ok(icons) => {
+                    for (name, icon) in icons {
+                        index_builder.add_icon(name, &icon);
+                        total_icons += 1;
+                        
+                        // Show progress every 100 icons
+                        if total_icons % 100 == 0 {
+                            println!("Processed {} icons...", total_icons);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to process source: {}", e);
+                }
+            }
+        }
+        
+        // 3. Save the index and data files
+        index_builder.save(&self.config.cache_directory).await?;
+        
+        log::info!("Index built with {} icons", total_icons);
+        println!("Index built successfully with {} icons", total_icons);
+        
+        // 4. Load the index we just built
+        if let Some(lazy_cache) = &self.lazy_cache {
+            lazy_cache.load_index().await?;
+        }
+        
+        Ok(())
     }
 }

@@ -8,6 +8,7 @@ pub mod cache;
 pub mod discovery;
 pub mod processing;
 pub mod persistence;
+pub mod index;
 pub mod error;
 pub mod config;
 
