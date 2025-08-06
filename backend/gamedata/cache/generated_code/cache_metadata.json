@@ -1,0 +1,4472 @@
+{
+  "gender": {
+    "table_name": "gender",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.232021",
+    "code_size": 7072
+  },
+  "backgrounds": {
+    "table_name": "backgrounds",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.233320",
+    "code_size": 8297
+  },
+  "categories": {
+    "table_name": "categories",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.234423",
+    "code_size": 6977
+  },
+  "skills": {
+    "table_name": "skills",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.235402",
+    "code_size": 7862
+  },
+  "racialtypes": {
+    "table_name": "racialtypes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.236452",
+    "code_size": 8882
+  },
+  "cls_atk_1": {
+    "table_name": "cls_atk_1",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.237729",
+    "code_size": 6947
+  },
+  "cls_atk_2": {
+    "table_name": "cls_atk_2",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.238935",
+    "code_size": 6947
+  },
+  "cls_atk_3": {
+    "table_name": "cls_atk_3",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.240169",
+    "code_size": 6947
+  },
+  "domains": {
+    "table_name": "domains",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.241211",
+    "code_size": 7666
+  },
+  "classes": {
+    "table_name": "classes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.242478",
+    "code_size": 12387
+  },
+  "baseitems": {
+    "table_name": "baseitems",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.244071",
+    "code_size": 11450
+  },
+  "appearance": {
+    "table_name": "appearance",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.245598",
+    "code_size": 10348
+  },
+  "spells": {
+    "table_name": "spells",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.246980",
+    "code_size": 10729
+  },
+  "feat": {
+    "table_name": "feat",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.248409",
+    "code_size": 10342
+  },
+  "iprp_base1": {
+    "table_name": "iprp_base1",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.250240",
+    "code_size": 7027
+  },
+  "iprp_slotscost": {
+    "table_name": "iprp_slotscost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.250416",
+    "code_size": 7014
+  },
+  "iprp_staminacost": {
+    "table_name": "iprp_staminacost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.259525",
+    "code_size": 7057
+  },
+  "iprp_terraintype": {
+    "table_name": "iprp_terraintype",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.259654",
+    "code_size": 7024
+  },
+  "resistancecost": {
+    "table_name": "resistancecost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.263392",
+    "code_size": 6977
+  },
+  "cls_feat_comm": {
+    "table_name": "cls_feat_comm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.263428",
+    "code_size": 7197
+  },
+  "effectanim": {
+    "table_name": "effectanim",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.266806",
+    "code_size": 6988
+  },
+  "cls_feat_crea": {
+    "table_name": "cls_feat_crea",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.268312",
+    "code_size": 7197
+  },
+  "race_feat_fey": {
+    "table_name": "race_feat_fey",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.269776",
+    "code_size": 7050
+  },
+  "race_feat_const": {
+    "table_name": "race_feat_const",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.270082",
+    "code_size": 7060
+  },
+  "race_feat_hforc": {
+    "table_name": "race_feat_hforc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.272749",
+    "code_size": 7060
+  },
+  "cls_pres_charnag": {
+    "table_name": "cls_pres_charnag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.276324",
+    "code_size": 7143
+  },
+  "race_feat_undead": {
+    "table_name": "race_feat_undead",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.276511",
+    "code_size": 7065
+  },
+  "cls_pres_hexblade": {
+    "table_name": "cls_pres_hexblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.277638",
+    "code_size": 7148
+  },
+  "cmi_spellbook": {
+    "table_name": "cmi_spellbook",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.279439",
+    "code_size": 7072
+  },
+  "cls_pres_nw9wd": {
+    "table_name": "cls_pres_nw9wd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.279837",
+    "code_size": 7133
+  },
+  "cls_pres_palema": {
+    "table_name": "cls_pres_palema",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.283268",
+    "code_size": 7138
+  },
+  "des_pcstart_weap": {
+    "table_name": "des_pcstart_weap",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.284494",
+    "code_size": 7413
+  },
+  "des_pcstart_arm": {
+    "table_name": "des_pcstart_arm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.284885",
+    "code_size": 7408
+  },
+  "iprp_walk": {
+    "table_name": "iprp_walk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.288304",
+    "code_size": 6989
+  },
+  "race_feat_gith": {
+    "table_name": "race_feat_gith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.290172",
+    "code_size": 7055
+  },
+  "race_feat_human": {
+    "table_name": "race_feat_human",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.291341",
+    "code_size": 7060
+  },
+  "cls_feat_dragonsam": {
+    "table_name": "cls_feat_dragonsam",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.291722",
+    "code_size": 7222
+  },
+  "cls_pres_childnight": {
+    "table_name": "cls_pres_childnight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.296186",
+    "code_size": 7158
+  },
+  "cls_pres_elemwar": {
+    "table_name": "cls_pres_elemwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.297250",
+    "code_size": 7143
+  },
+  "cls_pres_dragonsam": {
+    "table_name": "cls_pres_dragonsam",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.297277",
+    "code_size": 7153
+  },
+  "cls_pres_mr": {
+    "table_name": "cls_pres_mr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.297435",
+    "code_size": 7118
+  },
+  "race_feat_imaskari": {
+    "table_name": "race_feat_imaskari",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.300328",
+    "code_size": 7075
+  },
+  "cls_pres_asasin": {
+    "table_name": "cls_pres_asasin",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.305315",
+    "code_size": 7138
+  },
+  "cls_feat_outs": {
+    "table_name": "cls_feat_outs",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.305361",
+    "code_size": 7197
+  },
+  "cls_pres_contm": {
+    "table_name": "cls_pres_contm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.306259",
+    "code_size": 7133
+  },
+  "cls_pres_eknight": {
+    "table_name": "cls_pres_eknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.306739",
+    "code_size": 7143
+  },
+  "cls_pres_nw9ag": {
+    "table_name": "cls_pres_nw9ag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.310938",
+    "code_size": 7133
+  },
+  "iprp_ammotype": {
+    "table_name": "iprp_ammotype",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.312525",
+    "code_size": 7058
+  },
+  "iprp_combatdam": {
+    "table_name": "iprp_combatdam",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.313171",
+    "code_size": 7014
+  },
+  "race_feat_air_genasi": {
+    "table_name": "race_feat_air_genasi",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.318191",
+    "code_size": 7085
+  },
+  "race_feat_fire_genasi": {
+    "table_name": "race_feat_fire_genasi",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.318223",
+    "code_size": 7090
+  },
+  "race_feat_earth_genasi": {
+    "table_name": "race_feat_earth_genasi",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.318554",
+    "code_size": 7095
+  },
+  "phenotype": {
+    "table_name": "phenotype",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.318583",
+    "code_size": 6990
+  },
+  "race_feat_hagspawn": {
+    "table_name": "race_feat_hagspawn",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.323839",
+    "code_size": 7075
+  },
+  "race_feat_water_genasi": {
+    "table_name": "race_feat_water_genasi",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.324033",
+    "code_size": 7095
+  },
+  "cls_feat_optmst": {
+    "table_name": "cls_feat_optmst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.325913",
+    "code_size": 7207
+  },
+  "cls_feat_dthblde": {
+    "table_name": "cls_feat_dthblde",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.326128",
+    "code_size": 7212
+  },
+  "cls_pres_avenger": {
+    "table_name": "cls_pres_avenger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.329192",
+    "code_size": 7143
+  },
+  "cls_pres_dthblde": {
+    "table_name": "cls_pres_dthblde",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.333916",
+    "code_size": 7143
+  },
+  "cls_pres_drgwrr": {
+    "table_name": "cls_pres_drgwrr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.334188",
+    "code_size": 7138
+  },
+  "cls_pres_frostmage": {
+    "table_name": "cls_pres_frostmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.334885",
+    "code_size": 7153
+  },
+  "cls_pres_mastcraft": {
+    "table_name": "cls_pres_mastcraft",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.337678",
+    "code_size": 7153
+  },
+  "race_feat_spellscale": {
+    "table_name": "race_feat_spellscale",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.341265",
+    "code_size": 7085
+  },
+  "race_feat_feytouched": {
+    "table_name": "race_feat_feytouched",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.341308",
+    "code_size": 7085
+  },
+  "cls_pres_templar": {
+    "table_name": "cls_pres_templar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.341353",
+    "code_size": 7143
+  },
+  "cls_feat_fey": {
+    "table_name": "cls_feat_fey",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.344985",
+    "code_size": 7192
+  },
+  "cls_pres_blkgrd": {
+    "table_name": "cls_pres_blkgrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.347999",
+    "code_size": 7138
+  },
+  "cls_feat_gian": {
+    "table_name": "cls_feat_gian",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.349766",
+    "code_size": 7197
+  },
+  "cls_pres_nw9mg": {
+    "table_name": "cls_pres_nw9mg",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.350404",
+    "code_size": 7133
+  },
+  "iprp_savingthrow": {
+    "table_name": "iprp_savingthrow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.352848",
+    "code_size": 7044
+  },
+  "iprp_trapsize": {
+    "table_name": "iprp_trapsize",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.354415",
+    "code_size": 7009
+  },
+  "race_feat_giant": {
+    "table_name": "race_feat_giant",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.355881",
+    "code_size": 7060
+  },
+  "repadjust": {
+    "table_name": "repadjust",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.357555",
+    "code_size": 7480
+  },
+  "cls_pres_darklant": {
+    "table_name": "cls_pres_darklant",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.360895",
+    "code_size": 7148
+  },
+  "cls_pres_dischord": {
+    "table_name": "cls_pres_dischord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.361200",
+    "code_size": 7148
+  },
+  "cls_pres_drgslyr": {
+    "table_name": "cls_pres_drgslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.366463",
+    "code_size": 7143
+  },
+  "cls_pres_drpirate": {
+    "table_name": "cls_pres_drpirate",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.366754",
+    "code_size": 7148
+  },
+  "cls_pres_dslyr": {
+    "table_name": "cls_pres_dslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.369781",
+    "code_size": 7133
+  },
+  "cls_pres_feyward": {
+    "table_name": "cls_pres_feyward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.372094",
+    "code_size": 7143
+  },
+  "cls_pres_elddisc": {
+    "table_name": "cls_pres_elddisc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.372270",
+    "code_size": 7143
+  },
+  "cls_pres_hosp": {
+    "table_name": "cls_pres_hosp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.373403",
+    "code_size": 7128
+  },
+  "cls_pres_marksman": {
+    "table_name": "cls_pres_marksman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.382353",
+    "code_size": 7148
+  },
+  "cls_pres_vguard": {
+    "table_name": "cls_pres_vguard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.386003",
+    "code_size": 7138
+  },
+  "cls_pres_sb": {
+    "table_name": "cls_pres_sb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.386107",
+    "code_size": 7118
+  },
+  "catype": {
+    "table_name": "catype",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.387830",
+    "code_size": 6970
+  },
+  "cls_bfeat_nw9": {
+    "table_name": "cls_bfeat_nw9",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.391999",
+    "code_size": 6977
+  },
+  "cls_feat_aber": {
+    "table_name": "cls_feat_aber",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.392034",
+    "code_size": 7197
+  },
+  "cls_feat_cheat": {
+    "table_name": "cls_feat_cheat",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.394402",
+    "code_size": 7202
+  },
+  "cls_feat_drag": {
+    "table_name": "cls_feat_drag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.394701",
+    "code_size": 7197
+  },
+  "cls_pres_frenz": {
+    "table_name": "cls_pres_frenz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.409681",
+    "code_size": 7133
+  },
+  "cls_pres_dwdef": {
+    "table_name": "cls_pres_dwdef",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.409876",
+    "code_size": 7133
+  },
+  "cls_savthr_nw9a": {
+    "table_name": "cls_savthr_nw9a",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.410342",
+    "code_size": 7130
+  },
+  "cls_pres_mystc": {
+    "table_name": "cls_pres_mystc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.410731",
+    "code_size": 7133
+  },
+  "cls_savthr_nw9m": {
+    "table_name": "cls_savthr_nw9m",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.415265",
+    "code_size": 7130
+  },
+  "cls_savthr_nw9w": {
+    "table_name": "cls_savthr_nw9w",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.418566",
+    "code_size": 7130
+  },
+  "encdifficulty": {
+    "table_name": "encdifficulty",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.421696",
+    "code_size": 7055
+  },
+  "iprp_acmodtype": {
+    "table_name": "iprp_acmodtype",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.421814",
+    "code_size": 7014
+  },
+  "iprp_amount": {
+    "table_name": "iprp_amount",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.425507",
+    "code_size": 6999
+  },
+  "iprp_lightcost": {
+    "table_name": "iprp_lightcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.427042",
+    "code_size": 7047
+  },
+  "iprp_traps": {
+    "table_name": "iprp_traps",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.428619",
+    "code_size": 7027
+  },
+  "race_feat_dragon": {
+    "table_name": "race_feat_dragon",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.430919",
+    "code_size": 7065
+  },
+  "treasurescale": {
+    "table_name": "treasurescale",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.434456",
+    "code_size": 7055
+  },
+  "repute": {
+    "table_name": "repute",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.434981",
+    "code_size": 7134
+  },
+  "cls_pres_fotf": {
+    "table_name": "cls_pres_fotf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.440765",
+    "code_size": 7128
+  },
+  "cls_pres_cotsf": {
+    "table_name": "cls_pres_cotsf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.441630",
+    "code_size": 7133
+  },
+  "cls_pres_aknight": {
+    "table_name": "cls_pres_aknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.441885",
+    "code_size": 7143
+  },
+  "cls_feat_charnag": {
+    "table_name": "cls_feat_charnag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.442537",
+    "code_size": 7212
+  },
+  "cls_pres_natwar": {
+    "table_name": "cls_pres_natwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.447113",
+    "code_size": 7138
+  },
+  "cls_pres_nsenforce": {
+    "table_name": "cls_pres_nsenforce",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.447922",
+    "code_size": 7153
+  },
+  "cls_pres_stormsinger": {
+    "table_name": "cls_pres_stormsinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.449539",
+    "code_size": 7163
+  },
+  "cls_feat_hum": {
+    "table_name": "cls_feat_hum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.453190",
+    "code_size": 7192
+  },
+  "cls_pres_warrdark": {
+    "table_name": "cls_pres_warrdark",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.453522",
+    "code_size": 7148
+  },
+  "cls_pres_doomguide": {
+    "table_name": "cls_pres_doomguide",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.457872",
+    "code_size": 7153
+  },
+  "cls_pres_scholar": {
+    "table_name": "cls_pres_scholar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.460138",
+    "code_size": 7143
+  },
+  "cls_pres_sdthf": {
+    "table_name": "cls_pres_sdthf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.460963",
+    "code_size": 7133
+  },
+  "cls_pres_shadow": {
+    "table_name": "cls_pres_shadow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.463413",
+    "code_size": 7138
+  },
+  "cls_pres_wprst": {
+    "table_name": "cls_pres_wprst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.467411",
+    "code_size": 7133
+  },
+  "creaturesize": {
+    "table_name": "creaturesize",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.468536",
+    "code_size": 7074
+  },
+  "iprp_abilities": {
+    "table_name": "iprp_abilities",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.472326",
+    "code_size": 7014
+  },
+  "iprp_aligngrp": {
+    "table_name": "iprp_aligngrp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.474959",
+    "code_size": 7009
+  },
+  "iprp_bladecost": {
+    "table_name": "iprp_bladecost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.476100",
+    "code_size": 7047
+  },
+  "iprp_neg5cost": {
+    "table_name": "iprp_neg5cost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.478097",
+    "code_size": 7079
+  },
+  "iprp_redcost": {
+    "table_name": "iprp_redcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.482134",
+    "code_size": 7074
+  },
+  "iprp_poison": {
+    "table_name": "iprp_poison",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.482204",
+    "code_size": 6999
+  },
+  "race_feat_grayorc": {
+    "table_name": "race_feat_grayorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.487604",
+    "code_size": 7070
+  },
+  "race_feat_half": {
+    "table_name": "race_feat_half",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.490617",
+    "code_size": 7055
+  },
+  "race_feat_strong": {
+    "table_name": "race_feat_strong",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.491510",
+    "code_size": 7065
+  },
+  "cls_feat_swrdncr": {
+    "table_name": "cls_feat_swrdncr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.494488",
+    "code_size": 7212
+  },
+  "cls_pres_divseek": {
+    "table_name": "cls_pres_divseek",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.497841",
+    "code_size": 7143
+  },
+  "cls_pres_dreadcom": {
+    "table_name": "cls_pres_dreadcom",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.500371",
+    "code_size": 7148
+  },
+  "cls_pres_heartward": {
+    "table_name": "cls_pres_heartward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.500427",
+    "code_size": 7153
+  },
+  "cls_pres_nsinfil": {
+    "table_name": "cls_pres_nsinfil",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.506310",
+    "code_size": 7143
+  },
+  "cls_pres_whderv": {
+    "table_name": "cls_pres_whderv",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.506825",
+    "code_size": 7138
+  },
+  "cls_pres_optmst": {
+    "table_name": "cls_pres_optmst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.509274",
+    "code_size": 7138
+  },
+  "cls_pres_dradis": {
+    "table_name": "cls_pres_dradis",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.514513",
+    "code_size": 7138
+  },
+  "cls_pres_caval": {
+    "table_name": "cls_pres_caval",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.515009",
+    "code_size": 7133
+  },
+  "areaeffects": {
+    "table_name": "areaeffects",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.518077",
+    "code_size": 7284
+  },
+  "cls_pres_duel": {
+    "table_name": "cls_pres_duel",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.518213",
+    "code_size": 7128
+  },
+  "cls_pres_hellfire": {
+    "table_name": "cls_pres_hellfire",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.524642",
+    "code_size": 7148
+  },
+  "cls_pres_invisiblade": {
+    "table_name": "cls_pres_invisiblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.524683",
+    "code_size": 7163
+  },
+  "cls_pres_sacrd": {
+    "table_name": "cls_pres_sacrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.526320",
+    "code_size": 7133
+  },
+  "cls_pres_sacredfist": {
+    "table_name": "cls_pres_sacredfist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.530123",
+    "code_size": 7158
+  },
+  "damagereductins": {
+    "table_name": "damagereductins",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.533875",
+    "code_size": 7020
+  },
+  "iprp_color": {
+    "table_name": "iprp_color",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.535147",
+    "code_size": 6994
+  },
+  "iprp_visualfx": {
+    "table_name": "iprp_visualfx",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.536050",
+    "code_size": 7123
+  },
+  "parts_neck": {
+    "table_name": "parts_neck",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.541280",
+    "code_size": 7042
+  },
+  "parts_robe": {
+    "table_name": "parts_robe",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.541585",
+    "code_size": 8033
+  },
+  "cls_feat_feyward": {
+    "table_name": "cls_feat_feyward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.545405",
+    "code_size": 7212
+  },
+  "cls_feat_marshal": {
+    "table_name": "cls_feat_marshal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.546064",
+    "code_size": 7212
+  },
+  "cls_feat_wildstlk": {
+    "table_name": "cls_feat_wildstlk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.551080",
+    "code_size": 7217
+  },
+  "cls_pres_canaith": {
+    "table_name": "cls_pres_canaith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.551347",
+    "code_size": 7143
+  },
+  "cls_pres_ghstkilr": {
+    "table_name": "cls_pres_ghstkilr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.556437",
+    "code_size": 7148
+  },
+  "cls_pres_lion": {
+    "table_name": "cls_pres_lion",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.556467",
+    "code_size": 7128
+  },
+  "cls_pres_lyricthaum": {
+    "table_name": "cls_pres_lyricthaum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.561805",
+    "code_size": 7158
+  },
+  "cls_pres_temp": {
+    "table_name": "cls_pres_temp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.563889",
+    "code_size": 7128
+  },
+  "damagelevels": {
+    "table_name": "damagelevels",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.567777",
+    "code_size": 7152
+  },
+  "iprp_damvulcost": {
+    "table_name": "iprp_damvulcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.568437",
+    "code_size": 7089
+  },
+  "iprp_spellshl": {
+    "table_name": "iprp_spellshl",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.570980",
+    "code_size": 7086
+  },
+  "race_feat_aasim": {
+    "table_name": "race_feat_aasim",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.573793",
+    "code_size": 7060
+  },
+  "race_feat_elf": {
+    "table_name": "race_feat_elf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.576551",
+    "code_size": 7050
+  },
+  "race_feat_gold": {
+    "table_name": "race_feat_gold",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.578848",
+    "code_size": 7055
+  },
+  "race_feat_hfdrow": {
+    "table_name": "race_feat_hfdrow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.583346",
+    "code_size": 7065
+  },
+  "race_feat_hfelf": {
+    "table_name": "race_feat_hfelf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.585605",
+    "code_size": 7060
+  },
+  "race_feat_shield_dwarf": {
+    "table_name": "race_feat_shield_dwarf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.586197",
+    "code_size": 7095
+  },
+  "cls_feat_fotf": {
+    "table_name": "cls_feat_fotf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.591191",
+    "code_size": 7197
+  },
+  "race_feat_tief": {
+    "table_name": "race_feat_tief",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.591569",
+    "code_size": 7055
+  },
+  "cls_feat_templar": {
+    "table_name": "cls_feat_templar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.596400",
+    "code_size": 7212
+  },
+  "cls_pres_fmaster": {
+    "table_name": "cls_pres_fmaster",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.596450",
+    "code_size": 7143
+  },
+  "cls_pres_shiftr": {
+    "table_name": "cls_pres_shiftr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.602690",
+    "code_size": 7138
+  },
+  "cls_pres_kot": {
+    "table_name": "cls_pres_kot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.602743",
+    "code_size": 7123
+  },
+  "cls_pres_stormlord": {
+    "table_name": "cls_pres_stormlord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.607608",
+    "code_size": 7153
+  },
+  "creaturespeed": {
+    "table_name": "creaturespeed",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.610063",
+    "code_size": 7161
+  },
+  "iprp_alignment": {
+    "table_name": "iprp_alignment",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.613697",
+    "code_size": 7014
+  },
+  "nwn2_alignicons": {
+    "table_name": "nwn2_alignicons",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.614719",
+    "code_size": 7076
+  },
+  "nwn2_bloodtypes": {
+    "table_name": "nwn2_bloodtypes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.619028",
+    "code_size": 7297
+  },
+  "parts_hand": {
+    "table_name": "parts_hand",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.623556",
+    "code_size": 7042
+  },
+  "race_feat_dwarf": {
+    "table_name": "race_feat_dwarf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.624324",
+    "code_size": 7060
+  },
+  "race_feat_gnome": {
+    "table_name": "race_feat_gnome",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.625976",
+    "code_size": 7060
+  },
+  "reputation": {
+    "table_name": "reputation",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.631652",
+    "code_size": 7326
+  },
+  "spellschools": {
+    "table_name": "spellschools",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.634377",
+    "code_size": 7298
+  },
+  "cls_feat_skullclan": {
+    "table_name": "cls_feat_skullclan",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.635153",
+    "code_size": 7222
+  },
+  "cls_bfeat_arctr": {
+    "table_name": "cls_bfeat_arctr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.639255",
+    "code_size": 6987
+  },
+  "cls_bfeat_caval": {
+    "table_name": "cls_bfeat_caval",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.642820",
+    "code_size": 6987
+  },
+  "cls_bfeat_frenz": {
+    "table_name": "cls_bfeat_frenz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.646303",
+    "code_size": 6987
+  },
+  "cls_bfeat_contm": {
+    "table_name": "cls_bfeat_contm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.646387",
+    "code_size": 6987
+  },
+  "cls_bfeat_mystc": {
+    "table_name": "cls_bfeat_mystc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.649696",
+    "code_size": 6987
+  },
+  "cls_bfeat_sacrd": {
+    "table_name": "cls_bfeat_sacrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.652778",
+    "code_size": 6987
+  },
+  "cls_bfeat_sdthf": {
+    "table_name": "cls_bfeat_sdthf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.657618",
+    "code_size": 6987
+  },
+  "cls_spon_cler": {
+    "table_name": "cls_spon_cler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.657875",
+    "code_size": 7331
+  },
+  "cls_spon_dru": {
+    "table_name": "cls_spon_dru",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.663364",
+    "code_size": 7326
+  },
+  "des_prayer": {
+    "table_name": "des_prayer",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.663423",
+    "code_size": 7137
+  },
+  "iprp_immunity": {
+    "table_name": "iprp_immunity",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.667107",
+    "code_size": 7042
+  },
+  "iprp_spelllvcost": {
+    "table_name": "iprp_spelllvcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.670471",
+    "code_size": 7057
+  },
+  "iprp_spelllvlimm": {
+    "table_name": "iprp_spelllvlimm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.675897",
+    "code_size": 7057
+  },
+  "iprp_weightcost": {
+    "table_name": "iprp_weightcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.679263",
+    "code_size": 7089
+  },
+  "race_feat_yuanti": {
+    "table_name": "race_feat_yuanti",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.682997",
+    "code_size": 7065
+  },
+  "cls_pres_champwild": {
+    "table_name": "cls_pres_champwild",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.687262",
+    "code_size": 7153
+  },
+  "skill_mounted": {
+    "table_name": "skill_mounted",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.687657",
+    "code_size": 7263
+  },
+  "cls_pres_skullclan": {
+    "table_name": "cls_pres_skullclan",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.692716",
+    "code_size": 7153
+  },
+  "cmi_spellbook_count": {
+    "table_name": "cmi_spellbook_count",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.696686",
+    "code_size": 7232
+  },
+  "ammunitiontypes": {
+    "table_name": "ammunitiontypes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.699684",
+    "code_size": 7244
+  },
+  "iprp_immuncost": {
+    "table_name": "iprp_immuncost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.702552",
+    "code_size": 7084
+  },
+  "iprp_neg10cost": {
+    "table_name": "iprp_neg10cost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.706651",
+    "code_size": 7084
+  },
+  "iprp_resistcost": {
+    "table_name": "iprp_resistcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.712928",
+    "code_size": 7093
+  },
+  "iprp_soakcost": {
+    "table_name": "iprp_soakcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.713358",
+    "code_size": 7119
+  },
+  "cls_feat_canaith": {
+    "table_name": "cls_feat_canaith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.714396",
+    "code_size": 7212
+  },
+  "cls_feat_cotsf": {
+    "table_name": "cls_feat_cotsf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.718792",
+    "code_size": 7202
+  },
+  "cls_feat_elemarcher": {
+    "table_name": "cls_feat_elemarcher",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.724550",
+    "code_size": 7227
+  },
+  "cls_feat_lyricthaum": {
+    "table_name": "cls_feat_lyricthaum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.724747",
+    "code_size": 7227
+  },
+  "cls_pres_bladesinger": {
+    "table_name": "cls_pres_bladesinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.728478",
+    "code_size": 7163
+  },
+  "cls_pres_swiftblade": {
+    "table_name": "cls_pres_swiftblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.731691",
+    "code_size": 7158
+  },
+  "color_ghostwise": {
+    "table_name": "color_ghostwise",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.735857",
+    "code_size": 7201
+  },
+  "iprp_dmgtypes": {
+    "table_name": "iprp_dmgtypes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.743001",
+    "code_size": 7009
+  },
+  "iprp_paramtable": {
+    "table_name": "iprp_paramtable",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.743059",
+    "code_size": 7080
+  },
+  "damagehitvisual": {
+    "table_name": "damagehitvisual",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.743101",
+    "code_size": 7133
+  },
+  "iprp_trapcost": {
+    "table_name": "iprp_trapcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.747246",
+    "code_size": 7239
+  },
+  "cls_feat_drpirate": {
+    "table_name": "cls_feat_drpirate",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.755138",
+    "code_size": 7217
+  },
+  "cls_feat_darklant": {
+    "table_name": "cls_feat_darklant",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.755172",
+    "code_size": 7217
+  },
+  "cls_pres_elemarcher": {
+    "table_name": "cls_pres_elemarcher",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.757910",
+    "code_size": 7158
+  },
+  "cls_pres_shdwstlkr": {
+    "table_name": "cls_pres_shdwstlkr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.760832",
+    "code_size": 7153
+  },
+  "cls_pres_archer": {
+    "table_name": "cls_pres_archer",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.760878",
+    "code_size": 7138
+  },
+  "iprp_materials": {
+    "table_name": "iprp_materials",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.770989",
+    "code_size": 7015
+  },
+  "iprp_bonuscost": {
+    "table_name": "iprp_bonuscost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.771156",
+    "code_size": 7084
+  },
+  "iprp_monsterhit": {
+    "table_name": "iprp_monsterhit",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.773583",
+    "code_size": 7182
+  },
+  "parts_foot": {
+    "table_name": "parts_foot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.782741",
+    "code_size": 7042
+  },
+  "cls_feat_natwar": {
+    "table_name": "cls_feat_natwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.784019",
+    "code_size": 7207
+  },
+  "race_feat_drow": {
+    "table_name": "race_feat_drow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.784419",
+    "code_size": 7055
+  },
+  "cls_pres_dshape": {
+    "table_name": "cls_pres_dshape",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.790894",
+    "code_size": 7138
+  },
+  "cls_pres_wildstlk": {
+    "table_name": "cls_pres_wildstlk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.791301",
+    "code_size": 7148
+  },
+  "armor": {
+    "table_name": "armor",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.796796",
+    "code_size": 7549
+  },
+  "cls_pres_arctr": {
+    "table_name": "cls_pres_arctr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.801419",
+    "code_size": 7133
+  },
+  "iprp_chargecost": {
+    "table_name": "iprp_chargecost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.803736",
+    "code_size": 7158
+  },
+  "cls_pres_harper": {
+    "table_name": "cls_pres_harper",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.807574",
+    "code_size": 7138
+  },
+  "iprp_damagetype": {
+    "table_name": "iprp_damagetype",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.813887",
+    "code_size": 7052
+  },
+  "iprp_onhitcost": {
+    "table_name": "iprp_onhitcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.815034",
+    "code_size": 7084
+  },
+  "cls_feat_dervish": {
+    "table_name": "cls_feat_dervish",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.818725",
+    "code_size": 7212
+  },
+  "cls_feat_ghstkilr": {
+    "table_name": "cls_feat_ghstkilr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.820218",
+    "code_size": 7217
+  },
+  "cls_feat_vguard": {
+    "table_name": "cls_feat_vguard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.828125",
+    "code_size": 7207
+  },
+  "cls_pres_bfz": {
+    "table_name": "cls_pres_bfz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.830944",
+    "code_size": 7123
+  },
+  "iprp_monsterdam": {
+    "table_name": "iprp_monsterdam",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.835469",
+    "code_size": 7019
+  },
+  "race_feat_halfcelestial": {
+    "table_name": "race_feat_halfcelestial",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.839886",
+    "code_size": 7100
+  },
+  "cls_feat_elemwar": {
+    "table_name": "cls_feat_elemwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.840252",
+    "code_size": 7212
+  },
+  "cls_feat_marksman": {
+    "table_name": "cls_feat_marksman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.847285",
+    "code_size": 7217
+  },
+  "cls_feat_mr": {
+    "table_name": "cls_feat_mr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.847400",
+    "code_size": 7187
+  },
+  "cls_pres_darksoul": {
+    "table_name": "cls_pres_darksoul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.853765",
+    "code_size": 7148
+  },
+  "armorvisualdata": {
+    "table_name": "armorvisualdata",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.856382",
+    "code_size": 7130
+  },
+  "chargenclothes": {
+    "table_name": "chargenclothes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.862881",
+    "code_size": 7007
+  },
+  "cls_feat_dmage": {
+    "table_name": "cls_feat_dmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.863217",
+    "code_size": 7202
+  },
+  "parts_bicep": {
+    "table_name": "parts_bicep",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.865457",
+    "code_size": 7047
+  },
+  "disease": {
+    "table_name": "disease",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.870855",
+    "code_size": 7699
+  },
+  "cls_feat_mystc": {
+    "table_name": "cls_feat_mystc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.871739",
+    "code_size": 7202
+  },
+  "iprp_neg20cost": {
+    "table_name": "iprp_neg20cost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.876588",
+    "code_size": 7084
+  },
+  "iprp_srcost": {
+    "table_name": "iprp_srcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.880448",
+    "code_size": 7069
+  },
+  "parts_belt": {
+    "table_name": "parts_belt",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.882885",
+    "code_size": 7042
+  },
+  "parts_legs": {
+    "table_name": "parts_legs",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.886079",
+    "code_size": 7042
+  },
+  "race_feat_gray": {
+    "table_name": "race_feat_gray",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.891150",
+    "code_size": 7055
+  },
+  "ranges": {
+    "table_name": "ranges",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.896233",
+    "code_size": 7113
+  },
+  "race_feat_svirf": {
+    "table_name": "race_feat_svirf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.896344",
+    "code_size": 7060
+  },
+  "tintmap": {
+    "table_name": "tintmap",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.902930",
+    "code_size": 7218
+  },
+  "xpbaseconst": {
+    "table_name": "xpbaseconst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.905891",
+    "code_size": 7069
+  },
+  "cls_feat_drgwrr": {
+    "table_name": "cls_feat_drgwrr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.913060",
+    "code_size": 7207
+  },
+  "cls_feat_shdwstlkr": {
+    "table_name": "cls_feat_shdwstlkr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.913789",
+    "code_size": 7222
+  },
+  "cls_pres_dmage": {
+    "table_name": "cls_pres_dmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.917299",
+    "code_size": 7133
+  },
+  "cls_pres_swrdncr": {
+    "table_name": "cls_pres_swrdncr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.919853",
+    "code_size": 7143
+  },
+  "cls_feat_contm": {
+    "table_name": "cls_feat_contm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.927248",
+    "code_size": 7202
+  },
+  "cls_pres_redwiz": {
+    "table_name": "cls_pres_redwiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.934295",
+    "code_size": 7138
+  },
+  "cls_feat_sacrd": {
+    "table_name": "cls_feat_sacrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.934923",
+    "code_size": 7202
+  },
+  "color_aasimar": {
+    "table_name": "color_aasimar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.939505",
+    "code_size": 7191
+  },
+  "color_airgen": {
+    "table_name": "color_airgen",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.949839",
+    "code_size": 7186
+  },
+  "color_deepgnome": {
+    "table_name": "color_deepgnome",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.949964",
+    "code_size": 7201
+  },
+  "color_drow": {
+    "table_name": "color_drow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.952834",
+    "code_size": 7176
+  },
+  "color_earthgen": {
+    "table_name": "color_earthgen",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.957957",
+    "code_size": 7196
+  },
+  "color_firegen": {
+    "table_name": "color_firegen",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.958411",
+    "code_size": 7191
+  },
+  "color_golddwarf": {
+    "table_name": "color_golddwarf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.966573",
+    "code_size": 7201
+  },
+  "color_graydwarf": {
+    "table_name": "color_graydwarf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:07.967443",
+    "code_size": 7201
+  },
+  "color_grayorc": {
+    "table_name": "color_grayorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.013271",
+    "code_size": 7191
+  },
+  "color_halfdrow": {
+    "table_name": "color_halfdrow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.013612",
+    "code_size": 7196
+  },
+  "color_halfelf": {
+    "table_name": "color_halfelf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.020419",
+    "code_size": 7191
+  },
+  "color_halforc": {
+    "table_name": "color_halforc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.021825",
+    "code_size": 7191
+  },
+  "color_lightfoot": {
+    "table_name": "color_lightfoot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.032998",
+    "code_size": 7201
+  },
+  "color_human": {
+    "table_name": "color_human",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.033472",
+    "code_size": 7181
+  },
+  "color_moonelf": {
+    "table_name": "color_moonelf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.039266",
+    "code_size": 7191
+  },
+  "color_rockgnome": {
+    "table_name": "color_rockgnome",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.040590",
+    "code_size": 7201
+  },
+  "color_shielddwarf": {
+    "table_name": "color_shielddwarf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.047551",
+    "code_size": 7211
+  },
+  "color_strongheart": {
+    "table_name": "color_strongheart",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.048399",
+    "code_size": 7211
+  },
+  "color_sunelf": {
+    "table_name": "color_sunelf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.053424",
+    "code_size": 7186
+  },
+  "color_watergen": {
+    "table_name": "color_watergen",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.060843",
+    "code_size": 7196
+  },
+  "color_tiefling": {
+    "table_name": "color_tiefling",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.062670",
+    "code_size": 7196
+  },
+  "color_wildelf": {
+    "table_name": "color_wildelf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.068279",
+    "code_size": 7191
+  },
+  "color_woodelf": {
+    "table_name": "color_woodelf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.073762",
+    "code_size": 7191
+  },
+  "color_yuanti": {
+    "table_name": "color_yuanti",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.076436",
+    "code_size": 7186
+  },
+  "iprp_weightinc": {
+    "table_name": "iprp_weightinc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.083008",
+    "code_size": 7051
+  },
+  "parts_shin": {
+    "table_name": "parts_shin",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.083263",
+    "code_size": 7042
+  },
+  "cls_feat_dshape": {
+    "table_name": "cls_feat_dshape",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.092581",
+    "code_size": 7207
+  },
+  "cls_feat_elddisc": {
+    "table_name": "cls_feat_elddisc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.098268",
+    "code_size": 7212
+  },
+  "cls_feat_thug": {
+    "table_name": "cls_feat_thug",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.101341",
+    "code_size": 7197
+  },
+  "color_feytouch": {
+    "table_name": "color_feytouch",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.105464",
+    "code_size": 7196
+  },
+  "color_moonelf2": {
+    "table_name": "color_moonelf2",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.111184",
+    "code_size": 7196
+  },
+  "capart": {
+    "table_name": "capart",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.111529",
+    "code_size": 7031
+  },
+  "combatmodes": {
+    "table_name": "combatmodes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.120388",
+    "code_size": 7224
+  },
+  "cls_feat_bladesinger": {
+    "table_name": "cls_feat_bladesinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.122944",
+    "code_size": 7232
+  },
+  "cls_feat_frostmage": {
+    "table_name": "cls_feat_frostmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.128119",
+    "code_size": 7222
+  },
+  "cls_feat_swiftblade": {
+    "table_name": "cls_feat_swiftblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.128293",
+    "code_size": 7227
+  },
+  "iprp_arcspell": {
+    "table_name": "iprp_arcspell",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.132929",
+    "code_size": 7042
+  },
+  "iprp_protection": {
+    "table_name": "iprp_protection",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.134877",
+    "code_size": 7052
+  },
+  "iprp_meleecost": {
+    "table_name": "iprp_meleecost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.141550",
+    "code_size": 7084
+  },
+  "tailmodel": {
+    "table_name": "tailmodel",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.146137",
+    "code_size": 7282
+  },
+  "cls_feat_kot": {
+    "table_name": "cls_feat_kot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.150445",
+    "code_size": 7192
+  },
+  "cls_feat_mastcraft": {
+    "table_name": "cls_feat_mastcraft",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.155268",
+    "code_size": 7222
+  },
+  "des_restsystem": {
+    "table_name": "des_restsystem",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.157211",
+    "code_size": 8110
+  },
+  "iprp_saveelement": {
+    "table_name": "iprp_saveelement",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.160300",
+    "code_size": 7077
+  },
+  "itemtypes": {
+    "table_name": "itemtypes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.165084",
+    "code_size": 6987
+  },
+  "restsys_wm_tables": {
+    "table_name": "restsys_wm_tables",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.168279",
+    "code_size": 7553
+  },
+  "cls_feat_lion": {
+    "table_name": "cls_feat_lion",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.173450",
+    "code_size": 7197
+  },
+  "cls_pres_dervish": {
+    "table_name": "cls_pres_dervish",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.177274",
+    "code_size": 7143
+  },
+  "cls_feat_bfz": {
+    "table_name": "cls_feat_bfz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.181511",
+    "code_size": 7192
+  },
+  "cls_feat_sb": {
+    "table_name": "cls_feat_sb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.184573",
+    "code_size": 7187
+  },
+  "parts_forearm": {
+    "table_name": "parts_forearm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.186453",
+    "code_size": 7057
+  },
+  "cls_feat_scout": {
+    "table_name": "cls_feat_scout",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.190286",
+    "code_size": 7202
+  },
+  "metamagic": {
+    "table_name": "metamagic",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.197735",
+    "code_size": 7711
+  },
+  "cls_feat_stormsinger": {
+    "table_name": "cls_feat_stormsinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.202841",
+    "code_size": 7232
+  },
+  "cls_feat_childnight": {
+    "table_name": "cls_feat_childnight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.202887",
+    "code_size": 7227
+  },
+  "cls_skill_contm": {
+    "table_name": "cls_skill_contm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.207826",
+    "code_size": 7126
+  },
+  "cls_skill_kensei": {
+    "table_name": "cls_skill_kensei",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.210549",
+    "code_size": 7131
+  },
+  "cls_skill_mystc": {
+    "table_name": "cls_skill_mystc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.215753",
+    "code_size": 7126
+  },
+  "cls_skill_nw9mg": {
+    "table_name": "cls_skill_nw9mg",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.221382",
+    "code_size": 7126
+  },
+  "cls_skill_sacrd": {
+    "table_name": "cls_skill_sacrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.221487",
+    "code_size": 7126
+  },
+  "cls_skill_shiftr": {
+    "table_name": "cls_skill_shiftr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.227178",
+    "code_size": 7131
+  },
+  "iprp_onhit": {
+    "table_name": "iprp_onhit",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.233304",
+    "code_size": 7092
+  },
+  "masterfeats": {
+    "table_name": "masterfeats",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.236816",
+    "code_size": 7102
+  },
+  "parts_shoulder": {
+    "table_name": "parts_shoulder",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.240046",
+    "code_size": 7062
+  },
+  "spelltarget": {
+    "table_name": "spelltarget",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.244568",
+    "code_size": 7184
+  },
+  "cls_feat_fmaster": {
+    "table_name": "cls_feat_fmaster",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.247595",
+    "code_size": 7212
+  },
+  "cls_skill_archer": {
+    "table_name": "cls_skill_archer",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.252263",
+    "code_size": 7131
+  },
+  "cls_skill_barb": {
+    "table_name": "cls_skill_barb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.257459",
+    "code_size": 7121
+  },
+  "cls_skill_arctr": {
+    "table_name": "cls_skill_arctr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.257958",
+    "code_size": 7126
+  },
+  "cls_skill_blkgrd": {
+    "table_name": "cls_skill_blkgrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.262751",
+    "code_size": 7131
+  },
+  "cls_skill_caval": {
+    "table_name": "cls_skill_caval",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.268401",
+    "code_size": 7126
+  },
+  "cls_skill_cler": {
+    "table_name": "cls_skill_cler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.270100",
+    "code_size": 7121
+  },
+  "cls_skill_divcha": {
+    "table_name": "cls_skill_divcha",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.276261",
+    "code_size": 7131
+  },
+  "cls_skill_doomguide": {
+    "table_name": "cls_skill_doomguide",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.280415",
+    "code_size": 7146
+  },
+  "cls_skill_dradis": {
+    "table_name": "cls_skill_dradis",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.285835",
+    "code_size": 7131
+  },
+  "cls_skill_dru": {
+    "table_name": "cls_skill_dru",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.289912",
+    "code_size": 7116
+  },
+  "cls_skill_duelist": {
+    "table_name": "cls_skill_duelist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.294548",
+    "code_size": 7136
+  },
+  "cls_skill_dwdef": {
+    "table_name": "cls_skill_dwdef",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.298138",
+    "code_size": 7126
+  },
+  "cls_skill_favored_soul": {
+    "table_name": "cls_skill_favored_soul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.306467",
+    "code_size": 7161
+  },
+  "cls_skill_eknight": {
+    "table_name": "cls_skill_eknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.306591",
+    "code_size": 7136
+  },
+  "cls_skill_frenz": {
+    "table_name": "cls_skill_frenz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.314988",
+    "code_size": 7126
+  },
+  "cls_skill_fight": {
+    "table_name": "cls_skill_fight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.315728",
+    "code_size": 7126
+  },
+  "cls_skill_harper": {
+    "table_name": "cls_skill_harper",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.317331",
+    "code_size": 7131
+  },
+  "cls_skill_invisiblade": {
+    "table_name": "cls_skill_invisiblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.328538",
+    "code_size": 7156
+  },
+  "cls_skill_monk": {
+    "table_name": "cls_skill_monk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.332287",
+    "code_size": 7121
+  },
+  "cls_skill_nw9ag": {
+    "table_name": "cls_skill_nw9ag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.333318",
+    "code_size": 7126
+  },
+  "cls_skill_nw9wd": {
+    "table_name": "cls_skill_nw9wd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.336961",
+    "code_size": 7126
+  },
+  "cls_skill_palema": {
+    "table_name": "cls_skill_palema",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.342801",
+    "code_size": 7131
+  },
+  "cls_skill_rang": {
+    "table_name": "cls_skill_rang",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.347102",
+    "code_size": 7121
+  },
+  "cls_skill_redwiz": {
+    "table_name": "cls_skill_redwiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.351369",
+    "code_size": 7131
+  },
+  "cls_skill_sacredfist": {
+    "table_name": "cls_skill_sacredfist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.355725",
+    "code_size": 7151
+  },
+  "cls_skill_sdthf": {
+    "table_name": "cls_skill_sdthf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.362519",
+    "code_size": 7126
+  },
+  "cls_skill_scholar": {
+    "table_name": "cls_skill_scholar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.362672",
+    "code_size": 7136
+  },
+  "cls_skill_shadow": {
+    "table_name": "cls_skill_shadow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.367445",
+    "code_size": 7131
+  },
+  "cls_skill_sorc": {
+    "table_name": "cls_skill_sorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.367746",
+    "code_size": 7121
+  },
+  "cls_skill_stormlord": {
+    "table_name": "cls_skill_stormlord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.378401",
+    "code_size": 7146
+  },
+  "cls_skill_spiritshaman": {
+    "table_name": "cls_skill_spiritshaman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.378741",
+    "code_size": 7161
+  },
+  "cls_skill_swashbuckler": {
+    "table_name": "cls_skill_swashbuckler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.384572",
+    "code_size": 7161
+  },
+  "cls_skill_wiz": {
+    "table_name": "cls_skill_wiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.387420",
+    "code_size": 7116
+  },
+  "cls_skill_wm": {
+    "table_name": "cls_skill_wm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.392084",
+    "code_size": 7111
+  },
+  "cls_skill_wprst": {
+    "table_name": "cls_skill_wprst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.396101",
+    "code_size": 7126
+  },
+  "cls_feat_drgshmn": {
+    "table_name": "cls_feat_drgshmn",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.403751",
+    "code_size": 7212
+  },
+  "iprp_bonushp": {
+    "table_name": "iprp_bonushp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.403781",
+    "code_size": 7074
+  },
+  "cls_feat_heartward": {
+    "table_name": "cls_feat_heartward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.411618",
+    "code_size": 7222
+  },
+  "cls_skill_aknight": {
+    "table_name": "cls_skill_aknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.411973",
+    "code_size": 7136
+  },
+  "cls_skill_champwild": {
+    "table_name": "cls_skill_champwild",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.419246",
+    "code_size": 7146
+  },
+  "cls_skill_divseek": {
+    "table_name": "cls_skill_divseek",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.421574",
+    "code_size": 7136
+  },
+  "cls_skill_dmage": {
+    "table_name": "cls_skill_dmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.429010",
+    "code_size": 7126
+  },
+  "cls_skill_dragonsam": {
+    "table_name": "cls_skill_dragonsam",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.429086",
+    "code_size": 7146
+  },
+  "cls_skill_dreadcom": {
+    "table_name": "cls_skill_dreadcom",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.436586",
+    "code_size": 7141
+  },
+  "cls_skill_drgshmn": {
+    "table_name": "cls_skill_drgshmn",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.441742",
+    "code_size": 7136
+  },
+  "cls_skill_drpirate": {
+    "table_name": "cls_skill_drpirate",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.446717",
+    "code_size": 7141
+  },
+  "cls_skill_dshape": {
+    "table_name": "cls_skill_dshape",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.450349",
+    "code_size": 7131
+  },
+  "cls_skill_elemarcher": {
+    "table_name": "cls_skill_elemarcher",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.451338",
+    "code_size": 7151
+  },
+  "cls_skill_frostmage": {
+    "table_name": "cls_skill_frostmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.459484",
+    "code_size": 7146
+  },
+  "cls_skill_ghstkilr": {
+    "table_name": "cls_skill_ghstkilr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.466575",
+    "code_size": 7141
+  },
+  "cls_skill_hosp": {
+    "table_name": "cls_skill_hosp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.467181",
+    "code_size": 7121
+  },
+  "cls_skill_mastcraft": {
+    "table_name": "cls_skill_mastcraft",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.467730",
+    "code_size": 7146
+  },
+  "cls_skill_ninja": {
+    "table_name": "cls_skill_ninja",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.481211",
+    "code_size": 7126
+  },
+  "cls_skill_nsinfil": {
+    "table_name": "cls_skill_nsinfil",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.481440",
+    "code_size": 7136
+  },
+  "cls_skill_nsenforce": {
+    "table_name": "cls_skill_nsenforce",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.482276",
+    "code_size": 7146
+  },
+  "cls_skill_scout": {
+    "table_name": "cls_skill_scout",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.489498",
+    "code_size": 7126
+  },
+  "cls_skill_skullclan": {
+    "table_name": "cls_skill_skullclan",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.496653",
+    "code_size": 7146
+  },
+  "cls_skill_temp": {
+    "table_name": "cls_skill_temp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.501305",
+    "code_size": 7121
+  },
+  "cls_skill_thug": {
+    "table_name": "cls_skill_thug",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.503917",
+    "code_size": 7121
+  },
+  "cls_skill_warrdark": {
+    "table_name": "cls_skill_warrdark",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.507247",
+    "code_size": 7141
+  },
+  "cls_skill_wildstlk": {
+    "table_name": "cls_skill_wildstlk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.513850",
+    "code_size": 7141
+  },
+  "cls_skill_asasin": {
+    "table_name": "cls_skill_asasin",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.519444",
+    "code_size": 7131
+  },
+  "cls_skill_bard": {
+    "table_name": "cls_skill_bard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.526324",
+    "code_size": 7121
+  },
+  "cls_skill_hellfire": {
+    "table_name": "cls_skill_hellfire",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.526426",
+    "code_size": 7141
+  },
+  "cls_skill_rog": {
+    "table_name": "cls_skill_rog",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.534096",
+    "code_size": 7116
+  },
+  "cls_skill_pal": {
+    "table_name": "cls_skill_pal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.535088",
+    "code_size": 7116
+  },
+  "cls_skill_wlck": {
+    "table_name": "cls_skill_wlck",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.543489",
+    "code_size": 7121
+  },
+  "cls_skill_bfz": {
+    "table_name": "cls_skill_bfz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.549024",
+    "code_size": 7116
+  },
+  "cls_skill_bladesinger": {
+    "table_name": "cls_skill_bladesinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.554095",
+    "code_size": 7156
+  },
+  "cls_skill_canaith": {
+    "table_name": "cls_skill_canaith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.554334",
+    "code_size": 7136
+  },
+  "cls_skill_charnag": {
+    "table_name": "cls_skill_charnag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.563585",
+    "code_size": 7136
+  },
+  "cls_skill_childnight": {
+    "table_name": "cls_skill_childnight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.565440",
+    "code_size": 7151
+  },
+  "cls_skill_cotsf": {
+    "table_name": "cls_skill_cotsf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.572012",
+    "code_size": 7126
+  },
+  "cls_skill_darklant": {
+    "table_name": "cls_skill_darklant",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.576595",
+    "code_size": 7141
+  },
+  "cls_skill_darksoul": {
+    "table_name": "cls_skill_darksoul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.577836",
+    "code_size": 7141
+  },
+  "cls_skill_dervish": {
+    "table_name": "cls_skill_dervish",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.584522",
+    "code_size": 7136
+  },
+  "cls_skill_dischord": {
+    "table_name": "cls_skill_dischord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.590785",
+    "code_size": 7141
+  },
+  "cls_skill_drgslyr": {
+    "table_name": "cls_skill_drgslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.592398",
+    "code_size": 7136
+  },
+  "cls_skill_drgwrr": {
+    "table_name": "cls_skill_drgwrr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.600235",
+    "code_size": 7131
+  },
+  "cls_skill_dslyr": {
+    "table_name": "cls_skill_dslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.600653",
+    "code_size": 7126
+  },
+  "cls_skill_elddisc": {
+    "table_name": "cls_skill_elddisc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.608254",
+    "code_size": 7136
+  },
+  "cls_skill_dthblde": {
+    "table_name": "cls_skill_dthblde",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.610305",
+    "code_size": 7136
+  },
+  "cls_skill_elemwar": {
+    "table_name": "cls_skill_elemwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.615136",
+    "code_size": 7136
+  },
+  "cls_skill_feyward": {
+    "table_name": "cls_skill_feyward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.620133",
+    "code_size": 7136
+  },
+  "cls_skill_fmaster": {
+    "table_name": "cls_skill_fmaster",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.625345",
+    "code_size": 7136
+  },
+  "cls_skill_fotf": {
+    "table_name": "cls_skill_fotf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.631702",
+    "code_size": 7121
+  },
+  "cls_skill_heartward": {
+    "table_name": "cls_skill_heartward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.631754",
+    "code_size": 7146
+  },
+  "cls_skill_hexblade": {
+    "table_name": "cls_skill_hexblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.638067",
+    "code_size": 7141
+  },
+  "cls_skill_kot": {
+    "table_name": "cls_skill_kot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.642560",
+    "code_size": 7116
+  },
+  "cls_skill_lyricthaum": {
+    "table_name": "cls_skill_lyricthaum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.651847",
+    "code_size": 7151
+  },
+  "cls_skill_lion": {
+    "table_name": "cls_skill_lion",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.652102",
+    "code_size": 7121
+  },
+  "cls_skill_marksman": {
+    "table_name": "cls_skill_marksman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.658104",
+    "code_size": 7141
+  },
+  "cls_skill_marshal": {
+    "table_name": "cls_skill_marshal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.661547",
+    "code_size": 7136
+  },
+  "cls_skill_mr": {
+    "table_name": "cls_skill_mr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.672229",
+    "code_size": 7111
+  },
+  "cls_skill_optmst": {
+    "table_name": "cls_skill_optmst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.678237",
+    "code_size": 7131
+  },
+  "cls_skill_natwar": {
+    "table_name": "cls_skill_natwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.678295",
+    "code_size": 7131
+  },
+  "cls_skill_sb": {
+    "table_name": "cls_skill_sb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.683789",
+    "code_size": 7111
+  },
+  "cls_skill_shdwstlkr": {
+    "table_name": "cls_skill_shdwstlkr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.687202",
+    "code_size": 7146
+  },
+  "cls_skill_stormsinger": {
+    "table_name": "cls_skill_stormsinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.695909",
+    "code_size": 7156
+  },
+  "cls_skill_swrdncr": {
+    "table_name": "cls_skill_swrdncr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.703158",
+    "code_size": 7136
+  },
+  "cls_skill_swiftblade": {
+    "table_name": "cls_skill_swiftblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.704942",
+    "code_size": 7151
+  },
+  "cls_skill_templar": {
+    "table_name": "cls_skill_templar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.708601",
+    "code_size": 7136
+  },
+  "cls_skill_vguard": {
+    "table_name": "cls_skill_vguard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.713641",
+    "code_size": 7131
+  },
+  "cls_skill_whderv": {
+    "table_name": "cls_skill_whderv",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.718576",
+    "code_size": 7131
+  },
+  "cls_feat_arctr": {
+    "table_name": "cls_feat_arctr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.723586",
+    "code_size": 7202
+  },
+  "cls_feat_dischord": {
+    "table_name": "cls_feat_dischord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.729158",
+    "code_size": 7217
+  },
+  "cls_feat_caval": {
+    "table_name": "cls_feat_caval",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.734210",
+    "code_size": 7202
+  },
+  "cls_bfeat_asasin": {
+    "table_name": "cls_bfeat_asasin",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.735996",
+    "code_size": 7033
+  },
+  "iprp_costtable": {
+    "table_name": "iprp_costtable",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.745374",
+    "code_size": 7071
+  },
+  "wingmodel": {
+    "table_name": "wingmodel",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.746345",
+    "code_size": 7282
+  },
+  "cls_atk_4": {
+    "table_name": "cls_atk_4",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.754125",
+    "code_size": 6947
+  },
+  "iprp_ammocost": {
+    "table_name": "iprp_ammocost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.760284",
+    "code_size": 7153
+  },
+  "cls_feat_drgslyr": {
+    "table_name": "cls_feat_drgslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.762772",
+    "code_size": 7212
+  },
+  "cls_feat_dslyr": {
+    "table_name": "cls_feat_dslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.767530",
+    "code_size": 7202
+  },
+  "cls_pres_kensei": {
+    "table_name": "cls_pres_kensei",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.774082",
+    "code_size": 7138
+  },
+  "parts_pelvis": {
+    "table_name": "parts_pelvis",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.785157",
+    "code_size": 7052
+  },
+  "cls_feat_frenz": {
+    "table_name": "cls_feat_frenz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.787552",
+    "code_size": 7202
+  },
+  "cls_feat_doomguide": {
+    "table_name": "cls_feat_doomguide",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.794556",
+    "code_size": 7222
+  },
+  "cls_feat_hellfire": {
+    "table_name": "cls_feat_hellfire",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.800516",
+    "code_size": 7217
+  },
+  "cls_feat_invisiblade": {
+    "table_name": "cls_feat_invisiblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.807331",
+    "code_size": 7232
+  },
+  "cls_pres_wm": {
+    "table_name": "cls_pres_wm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.812544",
+    "code_size": 7118
+  },
+  "iprp_onhitdur": {
+    "table_name": "iprp_onhitdur",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.817888",
+    "code_size": 7180
+  },
+  "iprp_spellcstr": {
+    "table_name": "iprp_spellcstr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.818475",
+    "code_size": 7047
+  },
+  "xptable": {
+    "table_name": "xptable",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.819485",
+    "code_size": 8096
+  },
+  "cls_feat_darksoul": {
+    "table_name": "cls_feat_darksoul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.837612",
+    "code_size": 7217
+  },
+  "exptable": {
+    "table_name": "exptable",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.840554",
+    "code_size": 6977
+  },
+  "iprp_damagereduction": {
+    "table_name": "iprp_damagereduction",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.842206",
+    "code_size": 7077
+  },
+  "cmi_spellbonus": {
+    "table_name": "cmi_spellbonus",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.853020",
+    "code_size": 7242
+  },
+  "cls_feat_whderv": {
+    "table_name": "cls_feat_whderv",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.860297",
+    "code_size": 7207
+  },
+  "cls_feat_sacredfist": {
+    "table_name": "cls_feat_sacredfist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.862658",
+    "code_size": 7227
+  },
+  "cls_feat_kensei": {
+    "table_name": "cls_feat_kensei",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.864668",
+    "code_size": 7207
+  },
+  "cls_bsplvl_arctr": {
+    "table_name": "cls_bsplvl_arctr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.878900",
+    "code_size": 7102
+  },
+  "cls_pres_divcha": {
+    "table_name": "cls_pres_divcha",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.880798",
+    "code_size": 7138
+  },
+  "cls_bsplvl_doomguide": {
+    "table_name": "cls_bsplvl_doomguide",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.896262",
+    "code_size": 7122
+  },
+  "cls_bsplvl_fullprog": {
+    "table_name": "cls_bsplvl_fullprog",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.906685",
+    "code_size": 7117
+  },
+  "cls_bsplvl_eknight": {
+    "table_name": "cls_bsplvl_eknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.906763",
+    "code_size": 7112
+  },
+  "cls_bsplvl_harper": {
+    "table_name": "cls_bsplvl_harper",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.909045",
+    "code_size": 7107
+  },
+  "cls_bsplvl_hellfire": {
+    "table_name": "cls_bsplvl_hellfire",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.909069",
+    "code_size": 7117
+  },
+  "cls_bsplvl_palema": {
+    "table_name": "cls_bsplvl_palema",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.926193",
+    "code_size": 7107
+  },
+  "cls_bsplvl_sacredfist": {
+    "table_name": "cls_bsplvl_sacredfist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.932746",
+    "code_size": 7127
+  },
+  "cls_bsplvl_wprst": {
+    "table_name": "cls_bsplvl_wprst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.935723",
+    "code_size": 7102
+  },
+  "cls_bsplvl_bfz": {
+    "table_name": "cls_bsplvl_bfz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.938413",
+    "code_size": 7092
+  },
+  "cls_bsplvl_bladesinger": {
+    "table_name": "cls_bsplvl_bladesinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.945417",
+    "code_size": 7132
+  },
+  "cls_bsplvl_canaith": {
+    "table_name": "cls_bsplvl_canaith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.955683",
+    "code_size": 7112
+  },
+  "cls_bsplvl_charnag": {
+    "table_name": "cls_bsplvl_charnag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.957062",
+    "code_size": 7112
+  },
+  "cls_bsplvl_childnight": {
+    "table_name": "cls_bsplvl_childnight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.960236",
+    "code_size": 7127
+  },
+  "cls_bsplvl_divcha": {
+    "table_name": "cls_bsplvl_divcha",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.963023",
+    "code_size": 7107
+  },
+  "cls_bsplvl_dmage": {
+    "table_name": "cls_bsplvl_dmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.972261",
+    "code_size": 7102
+  },
+  "cls_bsplvl_drgslyr": {
+    "table_name": "cls_bsplvl_drgslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.977462",
+    "code_size": 7112
+  },
+  "cls_bsplvl_dshape": {
+    "table_name": "cls_bsplvl_dshape",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.982713",
+    "code_size": 7107
+  },
+  "cls_bsplvl_dslyr": {
+    "table_name": "cls_bsplvl_dslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.983845",
+    "code_size": 7102
+  },
+  "cls_bsplvl_elddisc": {
+    "table_name": "cls_bsplvl_elddisc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.989334",
+    "code_size": 7112
+  },
+  "cls_bsplvl_feyward": {
+    "table_name": "cls_bsplvl_feyward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:08.990612",
+    "code_size": 7112
+  },
+  "cls_bsplvl_fmaster": {
+    "table_name": "cls_bsplvl_fmaster",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.000768",
+    "code_size": 7112
+  },
+  "cls_bsplvl_frostmage": {
+    "table_name": "cls_bsplvl_frostmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.008646",
+    "code_size": 7122
+  },
+  "cls_bsplvl_hosp": {
+    "table_name": "cls_bsplvl_hosp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.010268",
+    "code_size": 7097
+  },
+  "cls_bsplvl_heartward": {
+    "table_name": "cls_bsplvl_heartward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.010351",
+    "code_size": 7122
+  },
+  "cls_bsplvl_kot": {
+    "table_name": "cls_bsplvl_kot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.020685",
+    "code_size": 7092
+  },
+  "cls_bsplvl_lion": {
+    "table_name": "cls_bsplvl_lion",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.026612",
+    "code_size": 7097
+  },
+  "cls_bsplvl_lyricthaum": {
+    "table_name": "cls_bsplvl_lyricthaum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.030008",
+    "code_size": 7127
+  },
+  "cls_bsplvl_mr": {
+    "table_name": "cls_bsplvl_mr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.037959",
+    "code_size": 7087
+  },
+  "cls_bsplvl_natwar": {
+    "table_name": "cls_bsplvl_natwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.041653",
+    "code_size": 7107
+  },
+  "cls_bsplvl_sb": {
+    "table_name": "cls_bsplvl_sb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.046134",
+    "code_size": 7087
+  },
+  "cls_bsplvl_shdwstlkr": {
+    "table_name": "cls_bsplvl_shdwstlkr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.050149",
+    "code_size": 7122
+  },
+  "cls_bsplvl_skullclan": {
+    "table_name": "cls_bsplvl_skullclan",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.055704",
+    "code_size": 7122
+  },
+  "cls_bsplvl_stormsinger": {
+    "table_name": "cls_bsplvl_stormsinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.062987",
+    "code_size": 7132
+  },
+  "cls_bsplvl_swiftblade": {
+    "table_name": "cls_bsplvl_swiftblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.064078",
+    "code_size": 7127
+  },
+  "cls_bsplvl_vguard": {
+    "table_name": "cls_bsplvl_vguard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.073961",
+    "code_size": 7107
+  },
+  "cls_feat_hexblade": {
+    "table_name": "cls_feat_hexblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.079258",
+    "code_size": 7217
+  },
+  "iprp_skillcost": {
+    "table_name": "iprp_skillcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.082247",
+    "code_size": 7084
+  },
+  "iprp_kitcost": {
+    "table_name": "iprp_kitcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.084418",
+    "code_size": 7074
+  },
+  "parts_chest": {
+    "table_name": "parts_chest",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.093349",
+    "code_size": 7047
+  },
+  "cls_feat_scholar": {
+    "table_name": "cls_feat_scholar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.098239",
+    "code_size": 7212
+  },
+  "cls_feat_stormlord": {
+    "table_name": "cls_feat_stormlord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.101862",
+    "code_size": 7222
+  },
+  "cls_feat_palema": {
+    "table_name": "cls_feat_palema",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.108199",
+    "code_size": 7207
+  },
+  "cls_feat_favored_soul": {
+    "table_name": "cls_feat_favored_soul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.113063",
+    "code_size": 7237
+  },
+  "iprp_monstcost": {
+    "table_name": "iprp_monstcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.121460",
+    "code_size": 7121
+  },
+  "armorrulestats": {
+    "table_name": "armorrulestats",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.123695",
+    "code_size": 7494
+  },
+  "cls_bfeat_harper": {
+    "table_name": "cls_bfeat_harper",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.126178",
+    "code_size": 6992
+  },
+  "cls_feat_nw9ag": {
+    "table_name": "cls_feat_nw9ag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.135551",
+    "code_size": 7202
+  },
+  "cls_feat_wlck": {
+    "table_name": "cls_feat_wlck",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.141819",
+    "code_size": 7197
+  },
+  "cls_feat_ninja": {
+    "table_name": "cls_feat_ninja",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.147083",
+    "code_size": 7202
+  },
+  "cls_bfeat_archer": {
+    "table_name": "cls_bfeat_archer",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.150415",
+    "code_size": 6992
+  },
+  "cls_bfeat_barb": {
+    "table_name": "cls_bfeat_barb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.153670",
+    "code_size": 7023
+  },
+  "cls_bfeat_bard": {
+    "table_name": "cls_bfeat_bard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.160025",
+    "code_size": 7023
+  },
+  "cls_bfeat_blkgrd": {
+    "table_name": "cls_bfeat_blkgrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.161329",
+    "code_size": 6992
+  },
+  "cls_bfeat_cler": {
+    "table_name": "cls_bfeat_cler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.165233",
+    "code_size": 7023
+  },
+  "cls_bfeat_divcha": {
+    "table_name": "cls_bfeat_divcha",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.171888",
+    "code_size": 7036
+  },
+  "cls_bfeat_doomguide": {
+    "table_name": "cls_bfeat_doomguide",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.178458",
+    "code_size": 7048
+  },
+  "cls_bfeat_dradis": {
+    "table_name": "cls_bfeat_dradis",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.183709",
+    "code_size": 6992
+  },
+  "cls_bfeat_dru": {
+    "table_name": "cls_bfeat_dru",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.188975",
+    "code_size": 7018
+  },
+  "cls_bfeat_duelist": {
+    "table_name": "cls_bfeat_duelist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.192286",
+    "code_size": 6997
+  },
+  "cls_bfeat_dwdef": {
+    "table_name": "cls_bfeat_dwdef",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.194473",
+    "code_size": 6987
+  },
+  "cls_bfeat_eknight": {
+    "table_name": "cls_bfeat_eknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.202338",
+    "code_size": 6997
+  },
+  "cls_bfeat_favored_soul": {
+    "table_name": "cls_bfeat_favored_soul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.213024",
+    "code_size": 7063
+  },
+  "cls_bfeat_fight": {
+    "table_name": "cls_bfeat_fight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.216275",
+    "code_size": 7028
+  },
+  "cls_bfeat_hellfire": {
+    "table_name": "cls_bfeat_hellfire",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.216951",
+    "code_size": 7002
+  },
+  "cls_bfeat_invisiblade": {
+    "table_name": "cls_bfeat_invisiblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.224344",
+    "code_size": 7017
+  },
+  "cls_bfeat_kensei": {
+    "table_name": "cls_bfeat_kensei",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.227215",
+    "code_size": 6992
+  },
+  "cls_bfeat_monk": {
+    "table_name": "cls_bfeat_monk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.236086",
+    "code_size": 7023
+  },
+  "cls_bfeat_pal": {
+    "table_name": "cls_bfeat_pal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.236642",
+    "code_size": 7018
+  },
+  "cls_bfeat_palema": {
+    "table_name": "cls_bfeat_palema",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.244278",
+    "code_size": 6992
+  },
+  "cls_bfeat_rang": {
+    "table_name": "cls_bfeat_rang",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.249072",
+    "code_size": 7023
+  },
+  "cls_bfeat_redwiz": {
+    "table_name": "cls_bfeat_redwiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.255240",
+    "code_size": 6992
+  },
+  "cls_bfeat_rog": {
+    "table_name": "cls_bfeat_rog",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.257297",
+    "code_size": 6977
+  },
+  "cls_bfeat_sacredfist": {
+    "table_name": "cls_bfeat_sacredfist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.264054",
+    "code_size": 7012
+  },
+  "cls_bfeat_scholar": {
+    "table_name": "cls_bfeat_scholar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.267486",
+    "code_size": 6997
+  },
+  "cls_bfeat_shadow": {
+    "table_name": "cls_bfeat_shadow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.273720",
+    "code_size": 6992
+  },
+  "cls_bfeat_shiftr": {
+    "table_name": "cls_bfeat_shiftr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.283364",
+    "code_size": 6992
+  },
+  "cls_bfeat_sorc": {
+    "table_name": "cls_bfeat_sorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.291488",
+    "code_size": 7023
+  },
+  "cls_bfeat_spiritshaman": {
+    "table_name": "cls_bfeat_spiritshaman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.291762",
+    "code_size": 7063
+  },
+  "cls_bfeat_stormlord": {
+    "table_name": "cls_bfeat_stormlord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.294252",
+    "code_size": 7007
+  },
+  "cls_bfeat_swashbuckler": {
+    "table_name": "cls_bfeat_swashbuckler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.302221",
+    "code_size": 7063
+  },
+  "cls_bfeat_wiz": {
+    "table_name": "cls_bfeat_wiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.303564",
+    "code_size": 7018
+  },
+  "cls_bfeat_wlck": {
+    "table_name": "cls_bfeat_wlck",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.311386",
+    "code_size": 7023
+  },
+  "cls_bfeat_wm": {
+    "table_name": "cls_bfeat_wm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.318976",
+    "code_size": 6972
+  },
+  "cls_bfeat_wprst": {
+    "table_name": "cls_bfeat_wprst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.323661",
+    "code_size": 6987
+  },
+  "cls_savthr_barb": {
+    "table_name": "cls_savthr_barb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.330304",
+    "code_size": 7130
+  },
+  "cls_savthr_cler": {
+    "table_name": "cls_savthr_cler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.333426",
+    "code_size": 7130
+  },
+  "cls_savthr_bard": {
+    "table_name": "cls_savthr_bard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.334718",
+    "code_size": 7130
+  },
+  "cls_savthr_cons": {
+    "table_name": "cls_savthr_cons",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.345960",
+    "code_size": 7130
+  },
+  "cls_savthr_dru": {
+    "table_name": "cls_savthr_dru",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.358155",
+    "code_size": 7125
+  },
+  "cls_savthr_duelist": {
+    "table_name": "cls_savthr_duelist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.359333",
+    "code_size": 7145
+  },
+  "cls_savthr_fight": {
+    "table_name": "cls_savthr_fight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.362091",
+    "code_size": 7135
+  },
+  "cls_savthr_monk": {
+    "table_name": "cls_savthr_monk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.372391",
+    "code_size": 7130
+  },
+  "cls_savthr_pal": {
+    "table_name": "cls_savthr_pal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.377173",
+    "code_size": 7125
+  },
+  "cls_savthr_rang": {
+    "table_name": "cls_savthr_rang",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.382992",
+    "code_size": 7130
+  },
+  "cls_savthr_rog": {
+    "table_name": "cls_savthr_rog",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.388835",
+    "code_size": 7125
+  },
+  "cls_savthr_sorc": {
+    "table_name": "cls_savthr_sorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.391721",
+    "code_size": 7130
+  },
+  "cls_savthr_wild": {
+    "table_name": "cls_savthr_wild",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.393365",
+    "code_size": 7130
+  },
+  "cls_savthr_wiz": {
+    "table_name": "cls_savthr_wiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.406237",
+    "code_size": 7125
+  },
+  "cls_spgn_bard": {
+    "table_name": "cls_spgn_bard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.406483",
+    "code_size": 7477
+  },
+  "cls_spgn_cler": {
+    "table_name": "cls_spgn_cler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.414839",
+    "code_size": 7660
+  },
+  "cls_spgn_dru": {
+    "table_name": "cls_spgn_dru",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.424612",
+    "code_size": 7655
+  },
+  "cls_spgn_pal": {
+    "table_name": "cls_spgn_pal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.426159",
+    "code_size": 7350
+  },
+  "cls_spgn_rang": {
+    "table_name": "cls_spgn_rang",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.428883",
+    "code_size": 7355
+  },
+  "cls_spgn_sorc": {
+    "table_name": "cls_spgn_sorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.437947",
+    "code_size": 7660
+  },
+  "cls_spgn_wiz": {
+    "table_name": "cls_spgn_wiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.441090",
+    "code_size": 7655
+  },
+  "cls_spgn_wlck": {
+    "table_name": "cls_spgn_wlck",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.456598",
+    "code_size": 7355
+  },
+  "cls_spkn_bard": {
+    "table_name": "cls_spkn_bard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.457558",
+    "code_size": 7404
+  },
+  "cls_spkn_favoredsoul": {
+    "table_name": "cls_spkn_favoredsoul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.464594",
+    "code_size": 7622
+  },
+  "cls_spkn_sorc": {
+    "table_name": "cls_spkn_sorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.474520",
+    "code_size": 7587
+  },
+  "cls_spkn_wlck": {
+    "table_name": "cls_spkn_wlck",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.475914",
+    "code_size": 7282
+  },
+  "epicattacks": {
+    "table_name": "epicattacks",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.483633",
+    "code_size": 6957
+  },
+  "epicsaves": {
+    "table_name": "epicsaves",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.491044",
+    "code_size": 7100
+  },
+  "itemvalue": {
+    "table_name": "itemvalue",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.494841",
+    "code_size": 7204
+  },
+  "cls_bfeat_aknight": {
+    "table_name": "cls_bfeat_aknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.499634",
+    "code_size": 6997
+  },
+  "cls_bfeat_bfz": {
+    "table_name": "cls_bfeat_bfz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.505501",
+    "code_size": 6977
+  },
+  "cls_bfeat_bladesinger": {
+    "table_name": "cls_bfeat_bladesinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.513320",
+    "code_size": 7017
+  },
+  "cls_bfeat_canaith": {
+    "table_name": "cls_bfeat_canaith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.517158",
+    "code_size": 6997
+  },
+  "cls_bfeat_champwild": {
+    "table_name": "cls_bfeat_champwild",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.527214",
+    "code_size": 7007
+  },
+  "cls_bfeat_charnag": {
+    "table_name": "cls_bfeat_charnag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.527851",
+    "code_size": 6997
+  },
+  "cls_bfeat_childnight": {
+    "table_name": "cls_bfeat_childnight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.538130",
+    "code_size": 7012
+  },
+  "cls_bfeat_cotsf": {
+    "table_name": "cls_bfeat_cotsf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.538603",
+    "code_size": 7028
+  },
+  "cls_bfeat_darklant": {
+    "table_name": "cls_bfeat_darklant",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.547233",
+    "code_size": 7002
+  },
+  "cls_bfeat_darksoul": {
+    "table_name": "cls_bfeat_darksoul",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.554721",
+    "code_size": 7043
+  },
+  "cls_bfeat_dervish": {
+    "table_name": "cls_bfeat_dervish",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.559875",
+    "code_size": 6997
+  },
+  "cls_bfeat_dischord": {
+    "table_name": "cls_bfeat_dischord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.561723",
+    "code_size": 7002
+  },
+  "cls_bfeat_divseek": {
+    "table_name": "cls_bfeat_divseek",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.570281",
+    "code_size": 6997
+  },
+  "cls_bfeat_dmage": {
+    "table_name": "cls_bfeat_dmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.575773",
+    "code_size": 6987
+  },
+  "cls_bfeat_drgshmn": {
+    "table_name": "cls_bfeat_drgshmn",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.582676",
+    "code_size": 7038
+  },
+  "cls_bfeat_dragonsam": {
+    "table_name": "cls_bfeat_dragonsam",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.584374",
+    "code_size": 7007
+  },
+  "cls_bfeat_drgslyr": {
+    "table_name": "cls_bfeat_drgslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.593150",
+    "code_size": 6997
+  },
+  "cls_bfeat_dslyr": {
+    "table_name": "cls_bfeat_dslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.605101",
+    "code_size": 6987
+  },
+  "cls_bfeat_drgwrr": {
+    "table_name": "cls_bfeat_drgwrr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.605169",
+    "code_size": 6992
+  },
+  "cls_bfeat_dshape": {
+    "table_name": "cls_bfeat_dshape",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.605334",
+    "code_size": 6992
+  },
+  "cls_bfeat_dthblde": {
+    "table_name": "cls_bfeat_dthblde",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.617422",
+    "code_size": 6997
+  },
+  "cls_bfeat_elddisc": {
+    "table_name": "cls_bfeat_elddisc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.620574",
+    "code_size": 6997
+  },
+  "cls_bfeat_elemarcher": {
+    "table_name": "cls_bfeat_elemarcher",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.625156",
+    "code_size": 7012
+  },
+  "cls_bfeat_elemwar": {
+    "table_name": "cls_bfeat_elemwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.629059",
+    "code_size": 6997
+  },
+  "cls_bfeat_feyward": {
+    "table_name": "cls_bfeat_feyward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.642018",
+    "code_size": 6997
+  },
+  "cls_bfeat_fmaster": {
+    "table_name": "cls_bfeat_fmaster",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.646185",
+    "code_size": 6997
+  },
+  "cls_bfeat_fotf": {
+    "table_name": "cls_bfeat_fotf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.650445",
+    "code_size": 6982
+  },
+  "cls_bfeat_frostmage": {
+    "table_name": "cls_bfeat_frostmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.653611",
+    "code_size": 7007
+  },
+  "cls_bfeat_ghstkilr": {
+    "table_name": "cls_bfeat_ghstkilr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.663803",
+    "code_size": 7043
+  },
+  "cls_bfeat_heartward": {
+    "table_name": "cls_bfeat_heartward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.671814",
+    "code_size": 7007
+  },
+  "cls_bfeat_hexblade": {
+    "table_name": "cls_bfeat_hexblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.673341",
+    "code_size": 7043
+  },
+  "cls_bfeat_hosp": {
+    "table_name": "cls_bfeat_hosp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.679309",
+    "code_size": 6982
+  },
+  "cls_bfeat_kot": {
+    "table_name": "cls_bfeat_kot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.682856",
+    "code_size": 6977
+  },
+  "cls_bfeat_lion": {
+    "table_name": "cls_bfeat_lion",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.693952",
+    "code_size": 6982
+  },
+  "cls_bfeat_lyricthaum": {
+    "table_name": "cls_bfeat_lyricthaum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.700956",
+    "code_size": 7012
+  },
+  "cls_bfeat_marksman": {
+    "table_name": "cls_bfeat_marksman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.704340",
+    "code_size": 7043
+  },
+  "cls_bfeat_marshal": {
+    "table_name": "cls_bfeat_marshal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.707040",
+    "code_size": 7038
+  },
+  "cls_bfeat_mastcraft": {
+    "table_name": "cls_bfeat_mastcraft",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.718608",
+    "code_size": 7007
+  },
+  "cls_bfeat_mr": {
+    "table_name": "cls_bfeat_mr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.727181",
+    "code_size": 6972
+  },
+  "cls_bfeat_natwar": {
+    "table_name": "cls_bfeat_natwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.729623",
+    "code_size": 6992
+  },
+  "cls_bfeat_ninja": {
+    "table_name": "cls_bfeat_ninja",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.736151",
+    "code_size": 7028
+  },
+  "cls_bfeat_nobonus": {
+    "table_name": "cls_bfeat_nobonus",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.746409",
+    "code_size": 6997
+  },
+  "cls_bfeat_nsenforce": {
+    "table_name": "cls_bfeat_nsenforce",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.750425",
+    "code_size": 7007
+  },
+  "cls_bfeat_optmst": {
+    "table_name": "cls_bfeat_optmst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.757410",
+    "code_size": 6992
+  },
+  "cls_bfeat_nsinfil": {
+    "table_name": "cls_bfeat_nsinfil",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.758126",
+    "code_size": 6997
+  },
+  "cls_bfeat_sb": {
+    "table_name": "cls_bfeat_sb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.773622",
+    "code_size": 6972
+  },
+  "cls_bfeat_scout": {
+    "table_name": "cls_bfeat_scout",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.775884",
+    "code_size": 7028
+  },
+  "cls_bfeat_shdwstlkr": {
+    "table_name": "cls_bfeat_shdwstlkr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.784217",
+    "code_size": 7007
+  },
+  "cls_bfeat_skullclan": {
+    "table_name": "cls_bfeat_skullclan",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.784251",
+    "code_size": 7007
+  },
+  "cls_bfeat_swiftblade": {
+    "table_name": "cls_bfeat_swiftblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.794727",
+    "code_size": 7012
+  },
+  "cls_bfeat_stormsinger": {
+    "table_name": "cls_bfeat_stormsinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.795023",
+    "code_size": 7017
+  },
+  "cls_bfeat_swrdncr": {
+    "table_name": "cls_bfeat_swrdncr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.805159",
+    "code_size": 6997
+  },
+  "cls_bfeat_temp": {
+    "table_name": "cls_bfeat_temp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.811181",
+    "code_size": 6982
+  },
+  "cls_bfeat_templar": {
+    "table_name": "cls_bfeat_templar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.817971",
+    "code_size": 7038
+  },
+  "cls_bfeat_thug": {
+    "table_name": "cls_bfeat_thug",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.823115",
+    "code_size": 7023
+  },
+  "cls_bfeat_vguard": {
+    "table_name": "cls_bfeat_vguard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.826468",
+    "code_size": 7033
+  },
+  "cls_bfeat_warrdark": {
+    "table_name": "cls_bfeat_warrdark",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.835354",
+    "code_size": 7002
+  },
+  "cls_bfeat_whderv": {
+    "table_name": "cls_bfeat_whderv",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.842741",
+    "code_size": 6992
+  },
+  "cls_bfeat_wildstlk": {
+    "table_name": "cls_bfeat_wildstlk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.852738",
+    "code_size": 7002
+  },
+  "cls_savthr_ninja": {
+    "table_name": "cls_savthr_ninja",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.852958",
+    "code_size": 7135
+  },
+  "skillvsitemcost": {
+    "table_name": "skillvsitemcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.860636",
+    "code_size": 7327
+  },
+  "cls_featmap_arctr": {
+    "table_name": "cls_featmap_arctr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.863115",
+    "code_size": 7137
+  },
+  "cls_featmap_doomguide": {
+    "table_name": "cls_featmap_doomguide",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.868193",
+    "code_size": 7157
+  },
+  "cls_featmap_eknight": {
+    "table_name": "cls_featmap_eknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.881322",
+    "code_size": 7147
+  },
+  "cls_featmap_harper": {
+    "table_name": "cls_featmap_harper",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.889602",
+    "code_size": 7142
+  },
+  "cls_featmap_hellfire": {
+    "table_name": "cls_featmap_hellfire",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.889832",
+    "code_size": 7152
+  },
+  "cls_featmap_palema": {
+    "table_name": "cls_featmap_palema",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.891176",
+    "code_size": 7142
+  },
+  "cls_featmap_redwiz": {
+    "table_name": "cls_featmap_redwiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.900911",
+    "code_size": 7142
+  },
+  "cls_featmap_sacredfist": {
+    "table_name": "cls_featmap_sacredfist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.911706",
+    "code_size": 7162
+  },
+  "cls_featmap_scholar": {
+    "table_name": "cls_featmap_scholar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.918522",
+    "code_size": 7147
+  },
+  "cls_featmap_stormlord": {
+    "table_name": "cls_featmap_stormlord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.919538",
+    "code_size": 7157
+  },
+  "cls_featmap_wprst": {
+    "table_name": "cls_featmap_wprst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.924494",
+    "code_size": 7137
+  },
+  "iprp_damagecost": {
+    "table_name": "iprp_damagecost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.927120",
+    "code_size": 7310
+  },
+  "cls_featmap_bfz": {
+    "table_name": "cls_featmap_bfz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.944320",
+    "code_size": 7127
+  },
+  "cls_featmap_bladesinger": {
+    "table_name": "cls_featmap_bladesinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.944435",
+    "code_size": 7167
+  },
+  "cls_featmap_canaith": {
+    "table_name": "cls_featmap_canaith",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.953404",
+    "code_size": 7147
+  },
+  "cls_featmap_charnag": {
+    "table_name": "cls_featmap_charnag",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.956945",
+    "code_size": 7147
+  },
+  "cls_featmap_childnight": {
+    "table_name": "cls_featmap_childnight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.965855",
+    "code_size": 7162
+  },
+  "cls_featmap_cotsf": {
+    "table_name": "cls_featmap_cotsf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.969352",
+    "code_size": 7137
+  },
+  "cls_featmap_dischord": {
+    "table_name": "cls_featmap_dischord",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.979256",
+    "code_size": 7152
+  },
+  "cls_featmap_divcha": {
+    "table_name": "cls_featmap_divcha",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.986818",
+    "code_size": 7142
+  },
+  "cls_featmap_dmage": {
+    "table_name": "cls_featmap_dmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.988150",
+    "code_size": 7137
+  },
+  "cls_featmap_drgslyr": {
+    "table_name": "cls_featmap_drgslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:09.996605",
+    "code_size": 7147
+  },
+  "cls_featmap_dshape": {
+    "table_name": "cls_featmap_dshape",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.003873",
+    "code_size": 7142
+  },
+  "cls_featmap_dslyr": {
+    "table_name": "cls_featmap_dslyr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.011049",
+    "code_size": 7137
+  },
+  "cls_featmap_elddisc": {
+    "table_name": "cls_featmap_elddisc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.014026",
+    "code_size": 7147
+  },
+  "cls_featmap_feyward": {
+    "table_name": "cls_featmap_feyward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.022474",
+    "code_size": 7147
+  },
+  "cls_featmap_fmaster": {
+    "table_name": "cls_featmap_fmaster",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.026227",
+    "code_size": 7147
+  },
+  "cls_featmap_frostmage": {
+    "table_name": "cls_featmap_frostmage",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.036676",
+    "code_size": 7157
+  },
+  "cls_featmap_heartward": {
+    "table_name": "cls_featmap_heartward",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.039667",
+    "code_size": 7157
+  },
+  "cls_featmap_hosp": {
+    "table_name": "cls_featmap_hosp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.043801",
+    "code_size": 7132
+  },
+  "cls_featmap_kot": {
+    "table_name": "cls_featmap_kot",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.049583",
+    "code_size": 7127
+  },
+  "cls_featmap_lion": {
+    "table_name": "cls_featmap_lion",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.064542",
+    "code_size": 7132
+  },
+  "cls_featmap_lyricthaum": {
+    "table_name": "cls_featmap_lyricthaum",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.071024",
+    "code_size": 7162
+  },
+  "cls_featmap_marksman": {
+    "table_name": "cls_featmap_marksman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.074717",
+    "code_size": 7152
+  },
+  "cls_featmap_mr": {
+    "table_name": "cls_featmap_mr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.076877",
+    "code_size": 7122
+  },
+  "cls_featmap_natwar": {
+    "table_name": "cls_featmap_natwar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.092506",
+    "code_size": 7142
+  },
+  "cls_featmap_sb": {
+    "table_name": "cls_featmap_sb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.100113",
+    "code_size": 7122
+  },
+  "cls_featmap_shdwstlkr": {
+    "table_name": "cls_featmap_shdwstlkr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.106367",
+    "code_size": 7157
+  },
+  "cls_featmap_skullclan": {
+    "table_name": "cls_featmap_skullclan",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.107175",
+    "code_size": 7157
+  },
+  "cls_featmap_stormsinger": {
+    "table_name": "cls_featmap_stormsinger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.117708",
+    "code_size": 7167
+  },
+  "cls_featmap_swiftblade": {
+    "table_name": "cls_featmap_swiftblade",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.128533",
+    "code_size": 7162
+  },
+  "cls_featmap_swrdncr": {
+    "table_name": "cls_featmap_swrdncr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.135913",
+    "code_size": 7147
+  },
+  "cls_featmap_templar": {
+    "table_name": "cls_featmap_templar",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.141594",
+    "code_size": 7147
+  },
+  "cls_featmap_vguard": {
+    "table_name": "cls_featmap_vguard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.144850",
+    "code_size": 7142
+  },
+  "cls_feat_harper": {
+    "table_name": "cls_feat_harper",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.155672",
+    "code_size": 7207
+  },
+  "restduration": {
+    "table_name": "restduration",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.164915",
+    "code_size": 7021
+  },
+  "cls_feat_wprst": {
+    "table_name": "cls_feat_wprst",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.170002",
+    "code_size": 7202
+  },
+  "traps": {
+    "table_name": "traps",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.175115",
+    "code_size": 7300
+  },
+  "cls_feat_eknight": {
+    "table_name": "cls_feat_eknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.180149",
+    "code_size": 7212
+  },
+  "cls_feat_asasin": {
+    "table_name": "cls_feat_asasin",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.189015",
+    "code_size": 7207
+  },
+  "racialsubtypes": {
+    "table_name": "racialsubtypes",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.199216",
+    "code_size": 8713
+  },
+  "cls_feat_shadow": {
+    "table_name": "cls_feat_shadow",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.201130",
+    "code_size": 7207
+  },
+  "cls_feat_avenger": {
+    "table_name": "cls_feat_avenger",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.207738",
+    "code_size": 7212
+  },
+  "cls_feat_nw9mg": {
+    "table_name": "cls_feat_nw9mg",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.212622",
+    "code_size": 7202
+  },
+  "cls_feat_spiritshaman": {
+    "table_name": "cls_feat_spiritshaman",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.224632",
+    "code_size": 7237
+  },
+  "actions": {
+    "table_name": "actions",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.233377",
+    "code_size": 7098
+  },
+  "cls_feat_cler": {
+    "table_name": "cls_feat_cler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.234030",
+    "code_size": 7197
+  },
+  "cls_feat_archer": {
+    "table_name": "cls_feat_archer",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.242156",
+    "code_size": 7207
+  },
+  "encumbrance": {
+    "table_name": "encumbrance",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.244903",
+    "code_size": 7009
+  },
+  "cls_feat_dradis": {
+    "table_name": "cls_feat_dradis",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.258507",
+    "code_size": 7207
+  },
+  "poison": {
+    "table_name": "poison",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.258629",
+    "code_size": 7588
+  },
+  "itemprops": {
+    "table_name": "itemprops",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.270681",
+    "code_size": 8418
+  },
+  "cls_feat_nw9wd": {
+    "table_name": "cls_feat_nw9wd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.272781",
+    "code_size": 7202
+  },
+  "cls_feat_sorc": {
+    "table_name": "cls_feat_sorc",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.274998",
+    "code_size": 7197
+  },
+  "cls_feat_sdthf": {
+    "table_name": "cls_feat_sdthf",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.291738",
+    "code_size": 7202
+  },
+  "cls_feat_wm": {
+    "table_name": "cls_feat_wm",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.299175",
+    "code_size": 7187
+  },
+  "itempropdef": {
+    "table_name": "itempropdef",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.299447",
+    "code_size": 7442
+  },
+  "cls_feat_shiftr": {
+    "table_name": "cls_feat_shiftr",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.309632",
+    "code_size": 7207
+  },
+  "cls_feat_redwiz": {
+    "table_name": "cls_feat_redwiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.313084",
+    "code_size": 7207
+  },
+  "cls_feat_wiz": {
+    "table_name": "cls_feat_wiz",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.314973",
+    "code_size": 7192
+  },
+  "nwn2_deities": {
+    "table_name": "nwn2_deities",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.329322",
+    "code_size": 9119
+  },
+  "nwn2_colors": {
+    "table_name": "nwn2_colors",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.337703",
+    "code_size": 7036
+  },
+  "effecticons": {
+    "table_name": "effecticons",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.339912",
+    "code_size": 7041
+  },
+  "cls_feat_monk": {
+    "table_name": "cls_feat_monk",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.340146",
+    "code_size": 7197
+  },
+  "iprp_onhitspell": {
+    "table_name": "iprp_onhitspell",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.359214",
+    "code_size": 7110
+  },
+  "cls_feat_rang": {
+    "table_name": "cls_feat_rang",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.366850",
+    "code_size": 7266
+  },
+  "cls_feat_druid": {
+    "table_name": "cls_feat_druid",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.371909",
+    "code_size": 7202
+  },
+  "cls_feat_bard": {
+    "table_name": "cls_feat_bard",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.373034",
+    "code_size": 7197
+  },
+  "cls_feat_blkgrd": {
+    "table_name": "cls_feat_blkgrd",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.383042",
+    "code_size": 7207
+  },
+  "packages": {
+    "table_name": "packages",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.393070",
+    "code_size": 7711
+  },
+  "polymorph": {
+    "table_name": "polymorph",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.397506",
+    "code_size": 8025
+  },
+  "cls_feat_barb": {
+    "table_name": "cls_feat_barb",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.406537",
+    "code_size": 7197
+  },
+  "des_xp_rewards": {
+    "table_name": "des_xp_rewards",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.406691",
+    "code_size": 7066
+  },
+  "iprp_spellcost": {
+    "table_name": "iprp_spellcost",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.418493",
+    "code_size": 7105
+  },
+  "cls_feat_dwdef": {
+    "table_name": "cls_feat_dwdef",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.421006",
+    "code_size": 7202
+  },
+  "cls_feat_pal": {
+    "table_name": "cls_feat_pal",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.433740",
+    "code_size": 7192
+  },
+  "cls_feat_champwild": {
+    "table_name": "cls_feat_champwild",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.439465",
+    "code_size": 7222
+  },
+  "cls_feat_warrdark": {
+    "table_name": "cls_feat_warrdark",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.444523",
+    "code_size": 7217
+  },
+  "cls_feat_aknight": {
+    "table_name": "cls_feat_aknight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.445205",
+    "code_size": 7212
+  },
+  "cls_feat_swashbuckler": {
+    "table_name": "cls_feat_swashbuckler",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.461335",
+    "code_size": 7237
+  },
+  "cls_feat_duelist": {
+    "table_name": "cls_feat_duelist",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.467913",
+    "code_size": 7212
+  },
+  "cls_feat_divcha": {
+    "table_name": "cls_feat_divcha",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.476709",
+    "code_size": 7207
+  },
+  "cls_feat_temp": {
+    "table_name": "cls_feat_temp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.479407",
+    "code_size": 7197
+  },
+  "cls_feat_hosp": {
+    "table_name": "cls_feat_hosp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.491663",
+    "code_size": 7197
+  },
+  "des_matcomp": {
+    "table_name": "des_matcomp",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.492843",
+    "code_size": 7069
+  },
+  "cls_feat_fight": {
+    "table_name": "cls_feat_fight",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.504455",
+    "code_size": 7202
+  },
+  "iprp_spells": {
+    "table_name": "iprp_spells",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.504509",
+    "code_size": 7384
+  },
+  "iprp_feats": {
+    "table_name": "iprp_feats",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.517554",
+    "code_size": 7080
+  },
+  "cls_feat_dreadcom": {
+    "table_name": "cls_feat_dreadcom",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.524982",
+    "code_size": 7217
+  },
+  "cls_feat_divseek": {
+    "table_name": "cls_feat_divseek",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.527904",
+    "code_size": 7212
+  },
+  "cls_feat_nsenforce": {
+    "table_name": "cls_feat_nsenforce",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.536730",
+    "code_size": 7222
+  },
+  "cls_feat_nsinfil": {
+    "table_name": "cls_feat_nsinfil",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.544718",
+    "code_size": 7212
+  },
+  "cls_feat_rog": {
+    "table_name": "cls_feat_rog",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.553602",
+    "code_size": 7192
+  },
+  "des_feat2item": {
+    "table_name": "des_feat2item",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.560095",
+    "code_size": 7058
+  },
+  "portraits": {
+    "table_name": "portraits",
+    "file_hash": null,
+    "generated_at": "2025-08-05T13:38:10.564835",
+    "code_size": 7191
+  }
+}

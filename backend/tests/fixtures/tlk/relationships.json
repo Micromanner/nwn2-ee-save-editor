@@ -1,0 +1,12 @@
+{
+  "relationships": [],
+  "validation_report": {
+    "total_relationships": 0,
+    "valid_relationships": 0,
+    "broken_references": [],
+    "missing_tables": [],
+    "dependency_order": []
+  },
+  "generated_at": "2025-08-05T14:36:36.367063",
+  "table_structure_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+}

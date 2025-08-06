@@ -1,0 +1,398 @@
+{
+  "chest": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 0",
+      "body_model_type": "Default (Cloth)"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 1",
+      "body_model_type": "Padded"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 2",
+      "body_model_type": "Leather"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 3",
+      "body_model_type": "Studded Leather"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 4",
+      "body_model_type": "Chain Shirt"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 5",
+      "body_model_type": "Scale Mail"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 6",
+      "body_model_type": "Banded Mail"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 7",
+      "body_model_type": "Half-Plate"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 8",
+      "body_model_type": "Full Plate"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 9",
+      "body_model_type": "Hide"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 10",
+      "body_model_type": "Naked"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 6.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 11",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 12",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 13",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 8.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 14",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 15",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 16"
+    },
+    {
+      "id": 17,
+      "ac_bonus": 6.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 17"
+    },
+    {
+      "id": 18,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 18"
+    },
+    {
+      "id": 19,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 19"
+    },
+    {
+      "id": 20,
+      "ac_bonus": 1.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 20"
+    },
+    {
+      "id": 21,
+      "ac_bonus": 8.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 21"
+    },
+    {
+      "id": 22,
+      "ac_bonus": 3.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 22"
+    },
+    {
+      "id": 23,
+      "ac_bonus": 8.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 23"
+    },
+    {
+      "id": 24,
+      "ac_bonus": 5.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 24"
+    },
+    {
+      "id": 25,
+      "ac_bonus": 5.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 25"
+    },
+    {
+      "id": 26,
+      "ac_bonus": 5.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 26"
+    },
+    {
+      "id": 27,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 27"
+    },
+    {
+      "id": 28,
+      "ac_bonus": 1.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 28"
+    },
+    {
+      "id": 29,
+      "ac_bonus": 3.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 29"
+    },
+    {
+      "id": 30,
+      "ac_bonus": 6.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 30"
+    },
+    {
+      "id": 31,
+      "ac_bonus": 5.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 31"
+    },
+    {
+      "id": 32,
+      "ac_bonus": 5.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 32"
+    },
+    {
+      "id": 33,
+      "ac_bonus": 7.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 33"
+    },
+    {
+      "id": 34,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 34"
+    },
+    {
+      "id": 35,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 35"
+    },
+    {
+      "id": 36,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 36"
+    },
+    {
+      "id": 37,
+      "ac_bonus": 8.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 37"
+    },
+    {
+      "id": 38,
+      "ac_bonus": 4.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 38"
+    },
+    {
+      "id": 39,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 39"
+    },
+    {
+      "id": 40,
+      "ac_bonus": 1.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 40"
+    },
+    {
+      "id": 41,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 41"
+    },
+    {
+      "id": 42,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 42"
+    },
+    {
+      "id": 43,
+      "ac_bonus": 3.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 43"
+    },
+    {
+      "id": 44,
+      "ac_bonus": 3.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 44"
+    },
+    {
+      "id": 45,
+      "ac_bonus": 6.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 45"
+    },
+    {
+      "id": 46,
+      "ac_bonus": 7.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 46"
+    },
+    {
+      "id": 47,
+      "ac_bonus": 7.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 47"
+    },
+    {
+      "id": 48,
+      "ac_bonus": 6.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 48"
+    },
+    {
+      "id": 49,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 49"
+    },
+    {
+      "id": 50,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 50"
+    },
+    {
+      "id": 51,
+      "ac_bonus": 7.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 51"
+    },
+    {
+      "id": 52,
+      "ac_bonus": 7.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 52"
+    },
+    {
+      "id": 53,
+      "ac_bonus": 8.0,
+      "cost_modifier": 0.0,
+      "part_type": "chest",
+      "name": "Chest 53"
+    }
+  ]
+}

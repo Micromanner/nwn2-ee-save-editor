@@ -1,0 +1,646 @@
+{
+  "master_colors": {
+    "0": {
+      "id": 0,
+      "name": "AliceBlue"
+    },
+    "1": {
+      "id": 1,
+      "name": "AntiqueWhite"
+    },
+    "2": {
+      "id": 2,
+      "name": "Aqua"
+    },
+    "3": {
+      "id": 3,
+      "name": "Aquamarine"
+    },
+    "4": {
+      "id": 4,
+      "name": "Azure"
+    },
+    "5": {
+      "id": 5,
+      "name": "Beige"
+    },
+    "6": {
+      "id": 6,
+      "name": "Bisque"
+    },
+    "7": {
+      "id": 7,
+      "name": "Black"
+    },
+    "8": {
+      "id": 8,
+      "name": "BlanchedAlmond"
+    },
+    "9": {
+      "id": 9,
+      "name": "Blue"
+    },
+    "10": {
+      "id": 10,
+      "name": "BlueViolet"
+    },
+    "11": {
+      "id": 11,
+      "name": "Brown"
+    },
+    "12": {
+      "id": 12,
+      "name": "BurlyWood"
+    },
+    "13": {
+      "id": 13,
+      "name": "CadetBlue"
+    },
+    "14": {
+      "id": 14,
+      "name": "Chartreuse"
+    },
+    "15": {
+      "id": 15,
+      "name": "Chocolate"
+    },
+    "16": {
+      "id": 16,
+      "name": "Coral"
+    },
+    "17": {
+      "id": 17,
+      "name": "CornflowerBlue"
+    },
+    "18": {
+      "id": 18,
+      "name": "Cornsilk"
+    },
+    "19": {
+      "id": 19,
+      "name": "Crimson"
+    },
+    "20": {
+      "id": 20,
+      "name": "Cyan"
+    },
+    "21": {
+      "id": 21,
+      "name": "DarkBlue"
+    },
+    "22": {
+      "id": 22,
+      "name": "DarkCyan"
+    },
+    "23": {
+      "id": 23,
+      "name": "DarkGoldenRod"
+    },
+    "24": {
+      "id": 24,
+      "name": "DarkGray"
+    },
+    "25": {
+      "id": 25,
+      "name": "DarkGreen"
+    },
+    "26": {
+      "id": 26,
+      "name": "DarkKhaki"
+    },
+    "27": {
+      "id": 27,
+      "name": "DarkMagenta"
+    },
+    "28": {
+      "id": 28,
+      "name": "DarkOliveGreen"
+    },
+    "29": {
+      "id": 29,
+      "name": "DarkOrange"
+    },
+    "30": {
+      "id": 30,
+      "name": "DarkOrchid"
+    },
+    "31": {
+      "id": 31,
+      "name": "DarkRed"
+    },
+    "32": {
+      "id": 32,
+      "name": "DarkSalmon"
+    },
+    "33": {
+      "id": 33,
+      "name": "DarkSeaGreen"
+    },
+    "34": {
+      "id": 34,
+      "name": "DarkSlateBlue"
+    },
+    "35": {
+      "id": 35,
+      "name": "DarkSlateGray"
+    },
+    "36": {
+      "id": 36,
+      "name": "DarkTurquoise"
+    },
+    "37": {
+      "id": 37,
+      "name": "DarkViolet"
+    },
+    "38": {
+      "id": 38,
+      "name": "DeepPink"
+    },
+    "39": {
+      "id": 39,
+      "name": "DeepSkyBlue"
+    },
+    "40": {
+      "id": 40,
+      "name": "DimGray"
+    },
+    "41": {
+      "id": 41,
+      "name": "DodgerBlue"
+    },
+    "42": {
+      "id": 42,
+      "name": "Feldspar"
+    },
+    "43": {
+      "id": 43,
+      "name": "FireBrick"
+    },
+    "44": {
+      "id": 44,
+      "name": "FloralWhite"
+    },
+    "45": {
+      "id": 45,
+      "name": "ForestGreen"
+    },
+    "46": {
+      "id": 46,
+      "name": "Fuchsia"
+    },
+    "47": {
+      "id": 47,
+      "name": "Gainsboro"
+    },
+    "48": {
+      "id": 48,
+      "name": "GhostWhite"
+    },
+    "49": {
+      "id": 49,
+      "name": "Gold"
+    },
+    "50": {
+      "id": 50,
+      "name": "GoldenRod"
+    },
+    "51": {
+      "id": 51,
+      "name": "Gray"
+    },
+    "52": {
+      "id": 52,
+      "name": "Green"
+    },
+    "53": {
+      "id": 53,
+      "name": "GreenYellow"
+    },
+    "54": {
+      "id": 54,
+      "name": "HoneyDew"
+    },
+    "55": {
+      "id": 55,
+      "name": "HotPink"
+    },
+    "56": {
+      "id": 56,
+      "name": "IndianRed"
+    },
+    "57": {
+      "id": 57,
+      "name": "Indigo"
+    },
+    "58": {
+      "id": 58,
+      "name": "Ivory"
+    },
+    "59": {
+      "id": 59,
+      "name": "Khaki"
+    },
+    "60": {
+      "id": 60,
+      "name": "Lavender"
+    },
+    "61": {
+      "id": 61,
+      "name": "LavenderBlush"
+    },
+    "62": {
+      "id": 62,
+      "name": "LawnGreen"
+    },
+    "63": {
+      "id": 63,
+      "name": "LemonChiffon"
+    },
+    "64": {
+      "id": 64,
+      "name": "LightBlue"
+    },
+    "65": {
+      "id": 65,
+      "name": "LightCoral"
+    },
+    "66": {
+      "id": 66,
+      "name": "LightCyan"
+    },
+    "67": {
+      "id": 67,
+      "name": "LightGoldenRodYellow"
+    },
+    "68": {
+      "id": 68,
+      "name": "LightGrey"
+    },
+    "69": {
+      "id": 69,
+      "name": "LightGreen"
+    },
+    "70": {
+      "id": 70,
+      "name": "LightPink"
+    },
+    "71": {
+      "id": 71,
+      "name": "LightSalmon"
+    },
+    "72": {
+      "id": 72,
+      "name": "LightSeaGreen"
+    },
+    "73": {
+      "id": 73,
+      "name": "LightSkyBlue"
+    },
+    "74": {
+      "id": 74,
+      "name": "LightSlateBlue"
+    },
+    "75": {
+      "id": 75,
+      "name": "LightSlateGray"
+    },
+    "76": {
+      "id": 76,
+      "name": "LightSteelBlue"
+    },
+    "77": {
+      "id": 77,
+      "name": "LightYellow"
+    },
+    "78": {
+      "id": 78,
+      "name": "Lime"
+    },
+    "79": {
+      "id": 79,
+      "name": "LimeGreen"
+    },
+    "80": {
+      "id": 80,
+      "name": "Linen"
+    },
+    "81": {
+      "id": 81,
+      "name": "Magenta"
+    },
+    "82": {
+      "id": 82,
+      "name": "Maroon"
+    },
+    "83": {
+      "id": 83,
+      "name": "MediumAquaMarine"
+    },
+    "84": {
+      "id": 84,
+      "name": "MediumBlue"
+    },
+    "85": {
+      "id": 85,
+      "name": "MediumOrchid"
+    },
+    "86": {
+      "id": 86,
+      "name": "MediumPurple"
+    },
+    "87": {
+      "id": 87,
+      "name": "MediumSeaGreen"
+    },
+    "88": {
+      "id": 88,
+      "name": "MediumSlateBlue"
+    },
+    "89": {
+      "id": 89,
+      "name": "MediumSpringGreen"
+    },
+    "90": {
+      "id": 90,
+      "name": "MediumTurquoise"
+    },
+    "91": {
+      "id": 91,
+      "name": "MediumVioletRed"
+    },
+    "92": {
+      "id": 92,
+      "name": "MidnightBlue"
+    },
+    "93": {
+      "id": 93,
+      "name": "MintCream"
+    },
+    "94": {
+      "id": 94,
+      "name": "MistyRose"
+    },
+    "95": {
+      "id": 95,
+      "name": "Moccasin"
+    },
+    "96": {
+      "id": 96,
+      "name": "NavajoWhite"
+    },
+    "97": {
+      "id": 97,
+      "name": "Navy"
+    },
+    "98": {
+      "id": 98,
+      "name": "OldLace"
+    },
+    "99": {
+      "id": 99,
+      "name": "Olive"
+    },
+    "100": {
+      "id": 100,
+      "name": "OliveDrab"
+    },
+    "101": {
+      "id": 101,
+      "name": "Orange"
+    },
+    "102": {
+      "id": 102,
+      "name": "OrangeRed"
+    },
+    "103": {
+      "id": 103,
+      "name": "Orchid"
+    },
+    "104": {
+      "id": 104,
+      "name": "PaleGoldenRod"
+    },
+    "105": {
+      "id": 105,
+      "name": "PaleGreen"
+    },
+    "106": {
+      "id": 106,
+      "name": "PaleTurquoise"
+    },
+    "107": {
+      "id": 107,
+      "name": "PaleVioletRed"
+    },
+    "108": {
+      "id": 108,
+      "name": "PapayaWhip"
+    },
+    "109": {
+      "id": 109,
+      "name": "PeachPuff"
+    },
+    "110": {
+      "id": 110,
+      "name": "Peru"
+    },
+    "111": {
+      "id": 111,
+      "name": "Pink"
+    },
+    "112": {
+      "id": 112,
+      "name": "Plum"
+    },
+    "113": {
+      "id": 113,
+      "name": "PowderBlue"
+    },
+    "114": {
+      "id": 114,
+      "name": "Purple"
+    },
+    "115": {
+      "id": 115,
+      "name": "Red"
+    },
+    "116": {
+      "id": 116,
+      "name": "RosyBrown"
+    },
+    "117": {
+      "id": 117,
+      "name": "RoyalBlue"
+    },
+    "118": {
+      "id": 118,
+      "name": "SaddleBrown"
+    },
+    "119": {
+      "id": 119,
+      "name": "Salmon"
+    },
+    "120": {
+      "id": 120,
+      "name": "SandyBrown"
+    },
+    "121": {
+      "id": 121,
+      "name": "SeaGreen"
+    },
+    "122": {
+      "id": 122,
+      "name": "SeaShell"
+    },
+    "123": {
+      "id": 123,
+      "name": "Sienna"
+    },
+    "124": {
+      "id": 124,
+      "name": "Silver"
+    },
+    "125": {
+      "id": 125,
+      "name": "SkyBlue"
+    },
+    "126": {
+      "id": 126,
+      "name": "SlateBlue"
+    },
+    "127": {
+      "id": 127,
+      "name": "SlateGray"
+    },
+    "128": {
+      "id": 128,
+      "name": "Snow"
+    },
+    "129": {
+      "id": 129,
+      "name": "SpringGreen"
+    },
+    "130": {
+      "id": 130,
+      "name": "SteelBlue"
+    },
+    "131": {
+      "id": 131,
+      "name": "Tan"
+    },
+    "132": {
+      "id": 132,
+      "name": "Teal"
+    },
+    "133": {
+      "id": 133,
+      "name": "Thistle"
+    },
+    "134": {
+      "id": 134,
+      "name": "Tomato"
+    },
+    "135": {
+      "id": 135,
+      "name": "Turquoise"
+    },
+    "136": {
+      "id": 136,
+      "name": "Violet"
+    },
+    "137": {
+      "id": 137,
+      "name": "VioletRed"
+    },
+    "138": {
+      "id": 138,
+      "name": "Wheat"
+    },
+    "139": {
+      "id": 139,
+      "name": "White"
+    },
+    "140": {
+      "id": 140,
+      "name": "WhiteSmoke"
+    },
+    "141": {
+      "id": 141,
+      "name": "Yellow"
+    },
+    "142": {
+      "id": 142,
+      "name": "YellowGreen"
+    },
+    "143": {
+      "id": 143,
+      "name": "Text"
+    },
+    "144": {
+      "id": 144,
+      "name": "TextPositive"
+    },
+    "145": {
+      "id": 145,
+      "name": "TextNegative"
+    },
+    "146": {
+      "id": 146,
+      "name": "TextNeutral"
+    },
+    "147": {
+      "id": 147,
+      "name": "ItemUseable"
+    },
+    "148": {
+      "id": 148,
+      "name": "ItemNotUseable"
+    },
+    "149": {
+      "id": 149,
+      "name": "Unidentified"
+    },
+    "150": {
+      "id": 150,
+      "name": "HotbarText"
+    },
+    "151": {
+      "id": 151,
+      "name": "HotbarDisabled"
+    },
+    "152": {
+      "id": 152,
+      "name": "HotbarItmNoUse"
+    }
+  },
+  "item_colors": {
+    "0": {
+      "id": 0,
+      "name": "Blue"
+    },
+    "1": {
+      "id": 1,
+      "name": "Yellow"
+    },
+    "2": {
+      "id": 2,
+      "name": "Purple"
+    },
+    "3": {
+      "id": 3,
+      "name": "Red"
+    },
+    "4": {
+      "id": 4,
+      "name": "Green"
+    },
+    "5": {
+      "id": 5,
+      "name": "Orange"
+    },
+    "6": {
+      "id": 6,
+      "name": "White"
+    }
+  }
+}

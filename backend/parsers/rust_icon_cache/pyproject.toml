@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "rust_icon_cache"
+version = "0.1.0"
+description = "High-performance icon cache for NWN2 Enhanced Edition"
+requires-python = ">=3.9"
+
+[tool.maturin]
+features = ["python-bindings"]
+module-name = "rust_icon_cache"

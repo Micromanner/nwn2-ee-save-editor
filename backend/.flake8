@@ -1,0 +1,13 @@
+[flake8]
+exclude = 
+    venv/,
+    __pycache__/,
+    migrations/,
+    */migrations/,
+    .git/,
+    .tox/,
+    build/,
+    dist/,
+    *.egg-info/
+max-line-length = 120
+extend-ignore = W293,W292

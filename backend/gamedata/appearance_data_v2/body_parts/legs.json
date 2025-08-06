@@ -1,0 +1,139 @@
+{
+  "legs": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 0",
+      "body_model_type": "Default (Cloth)"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 1",
+      "body_model_type": "Padded"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 2",
+      "body_model_type": "Leather"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.03,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 3",
+      "body_model_type": "Studded Leather"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.14,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 4",
+      "body_model_type": "Chain Shirt"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.35,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 5",
+      "body_model_type": "Scale Mail"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.28,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 6",
+      "body_model_type": "Banded Mail"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.49,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 7",
+      "body_model_type": "Half-Plate"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.03,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 8",
+      "body_model_type": "Full Plate"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.49,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 9",
+      "body_model_type": "Hide"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.59,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 10",
+      "body_model_type": "Naked"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 11",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 12",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 13",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 14",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 15",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "legs",
+      "name": "Legs 16"
+    }
+  ]
+}

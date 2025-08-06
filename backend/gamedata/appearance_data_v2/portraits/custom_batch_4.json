@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 4,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 408,
+      "filename": "PLC_H08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc H08"
+    },
+    {
+      "id": 409,
+      "filename": "PLC_H09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc H09"
+    },
+    {
+      "id": 410,
+      "filename": "PLC_H10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc H10"
+    },
+    {
+      "id": 411,
+      "filename": "PLC_I01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I01"
+    },
+    {
+      "id": 412,
+      "filename": "PLC_I02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I02"
+    },
+    {
+      "id": 413,
+      "filename": "PLC_I03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I03"
+    },
+    {
+      "id": 414,
+      "filename": "PLC_I04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I04"
+    },
+    {
+      "id": 415,
+      "filename": "PLC_I05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I05"
+    },
+    {
+      "id": 416,
+      "filename": "PLC_I06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I06"
+    },
+    {
+      "id": 417,
+      "filename": "PLC_I07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I07"
+    },
+    {
+      "id": 418,
+      "filename": "PLC_I08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I08"
+    },
+    {
+      "id": 419,
+      "filename": "PLC_I09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I09"
+    },
+    {
+      "id": 420,
+      "filename": "PLC_I10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc I10"
+    },
+    {
+      "id": 421,
+      "filename": "PLC_J01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J01"
+    },
+    {
+      "id": 422,
+      "filename": "PLC_J02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J02"
+    },
+    {
+      "id": 423,
+      "filename": "PLC_J03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J03"
+    },
+    {
+      "id": 424,
+      "filename": "PLC_J04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J04"
+    },
+    {
+      "id": 425,
+      "filename": "PLC_J05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J05"
+    },
+    {
+      "id": 426,
+      "filename": "PLC_J06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J06"
+    },
+    {
+      "id": 427,
+      "filename": "PLC_J07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J07"
+    },
+    {
+      "id": 428,
+      "filename": "PLC_J08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J08"
+    },
+    {
+      "id": 429,
+      "filename": "PLC_J09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J09"
+    },
+    {
+      "id": 430,
+      "filename": "PLC_J10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc J10"
+    },
+    {
+      "id": 431,
+      "filename": "PLC_K01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K01"
+    },
+    {
+      "id": 432,
+      "filename": "PLC_K02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K02"
+    },
+    {
+      "id": 433,
+      "filename": "PLC_K03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K03"
+    },
+    {
+      "id": 434,
+      "filename": "PLC_K04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K04"
+    },
+    {
+      "id": 435,
+      "filename": "PLC_K05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K05"
+    },
+    {
+      "id": 436,
+      "filename": "PLC_K06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K06"
+    },
+    {
+      "id": 437,
+      "filename": "PLC_K07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K07"
+    },
+    {
+      "id": 438,
+      "filename": "PLC_K08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K08"
+    },
+    {
+      "id": 439,
+      "filename": "PLC_K09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K09"
+    },
+    {
+      "id": 440,
+      "filename": "PLC_K10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc K10"
+    },
+    {
+      "id": 441,
+      "filename": "PLC_L01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L01"
+    },
+    {
+      "id": 442,
+      "filename": "PLC_L02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L02"
+    },
+    {
+      "id": 443,
+      "filename": "PLC_L03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L03"
+    },
+    {
+      "id": 444,
+      "filename": "PLC_L04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L04"
+    },
+    {
+      "id": 445,
+      "filename": "PLC_L05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L05"
+    },
+    {
+      "id": 446,
+      "filename": "PLC_L06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L06"
+    },
+    {
+      "id": 447,
+      "filename": "PLC_L07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L07"
+    },
+    {
+      "id": 448,
+      "filename": "PLC_L08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L08"
+    },
+    {
+      "id": 449,
+      "filename": "PLC_L09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L09"
+    },
+    {
+      "id": 450,
+      "filename": "PLC_L10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc L10"
+    },
+    {
+      "id": 451,
+      "filename": "PLC_M01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M01"
+    },
+    {
+      "id": 452,
+      "filename": "PLC_M02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M02"
+    },
+    {
+      "id": 453,
+      "filename": "PLC_M03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M03"
+    },
+    {
+      "id": 454,
+      "filename": "PLC_M04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M04"
+    },
+    {
+      "id": 455,
+      "filename": "PLC_M05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M05"
+    },
+    {
+      "id": 456,
+      "filename": "PLC_M06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M06"
+    },
+    {
+      "id": 457,
+      "filename": "PLC_M07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M07"
+    },
+    {
+      "id": 458,
+      "filename": "PLC_M08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M08"
+    },
+    {
+      "id": 459,
+      "filename": "PLC_M09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M09"
+    },
+    {
+      "id": 460,
+      "filename": "PLC_M10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc M10"
+    },
+    {
+      "id": 461,
+      "filename": "PLC_N01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc N01"
+    },
+    {
+      "id": 462,
+      "filename": "PLC_N02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc N02"
+    },
+    {
+      "id": 463,
+      "filename": "PLC_N03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc N03"
+    },
+    {
+      "id": 464,
+      "filename": "PLC_N04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc N04"
+    },
+    {
+      "id": 465,
+      "filename": "PLC_N05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc N05"
+    },
+    {
+      "id": 466,
+      "filename": "PLC_N06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc N06"
+    },
+    {
+      "id": 467,
+      "filename": "PLC_O01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O01"
+    },
+    {
+      "id": 468,
+      "filename": "PLC_O02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O02"
+    },
+    {
+      "id": 469,
+      "filename": "PLC_O03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O03"
+    },
+    {
+      "id": 470,
+      "filename": "PLC_O04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O04"
+    },
+    {
+      "id": 471,
+      "filename": "PLC_O05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O05"
+    },
+    {
+      "id": 472,
+      "filename": "PLC_O06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O06"
+    },
+    {
+      "id": 473,
+      "filename": "PLC_O07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O07"
+    },
+    {
+      "id": 474,
+      "filename": "PLC_O08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O08"
+    },
+    {
+      "id": 475,
+      "filename": "PLC_O09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O09"
+    },
+    {
+      "id": 476,
+      "filename": "PLC_O10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc O10"
+    },
+    {
+      "id": 477,
+      "filename": "PLC_P01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc P01"
+    },
+    {
+      "id": 478,
+      "filename": "PLC_P02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc P02"
+    },
+    {
+      "id": 479,
+      "filename": "PLC_P03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc P03"
+    },
+    {
+      "id": 480,
+      "filename": "PLC_Q01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q01"
+    },
+    {
+      "id": 481,
+      "filename": "PLC_Q02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q02"
+    },
+    {
+      "id": 482,
+      "filename": "PLC_Q03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q03"
+    },
+    {
+      "id": 483,
+      "filename": "PLC_Q04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q04"
+    },
+    {
+      "id": 484,
+      "filename": "PLC_Q05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q05"
+    },
+    {
+      "id": 485,
+      "filename": "PLC_Q06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q06"
+    },
+    {
+      "id": 486,
+      "filename": "PLC_Q07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q07"
+    },
+    {
+      "id": 487,
+      "filename": "PLC_Q08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc Q08"
+    },
+    {
+      "id": 488,
+      "filename": "PLC_R01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R01"
+    },
+    {
+      "id": 489,
+      "filename": "PLC_R02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R02"
+    },
+    {
+      "id": 490,
+      "filename": "PLC_R03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R03"
+    },
+    {
+      "id": 491,
+      "filename": "PLC_R04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R04"
+    },
+    {
+      "id": 492,
+      "filename": "PLC_R05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R05"
+    },
+    {
+      "id": 493,
+      "filename": "PLC_R06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R06"
+    },
+    {
+      "id": 494,
+      "filename": "PLC_R07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R07"
+    },
+    {
+      "id": 495,
+      "filename": "PLC_R08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc R08"
+    },
+    {
+      "id": 496,
+      "filename": "PLC_S01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S01"
+    },
+    {
+      "id": 497,
+      "filename": "PLC_S02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S02"
+    },
+    {
+      "id": 498,
+      "filename": "PLC_S03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S03"
+    },
+    {
+      "id": 499,
+      "filename": "PLC_S04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S04"
+    },
+    {
+      "id": 500,
+      "filename": "PLC_S05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S05"
+    },
+    {
+      "id": 501,
+      "filename": "PLC_S06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S06"
+    },
+    {
+      "id": 502,
+      "filename": "PLC_S07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S07"
+    },
+    {
+      "id": 503,
+      "filename": "PLC_S08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc S08"
+    },
+    {
+      "id": 504,
+      "filename": "PLC_T01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T01"
+    },
+    {
+      "id": 505,
+      "filename": "PLC_T02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T02"
+    },
+    {
+      "id": 506,
+      "filename": "PLC_T03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T03"
+    },
+    {
+      "id": 507,
+      "filename": "PLC_T04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T04"
+    }
+  ]
+}

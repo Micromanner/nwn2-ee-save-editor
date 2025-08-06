@@ -1,0 +1,123 @@
+{
+  "belt": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 0"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 1"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 2"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 3"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 4"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 5"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 6"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.03,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 7"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.42,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 8"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.12,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 9"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 10"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 11"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.36,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 12"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 13"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 14"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 15"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "belt",
+      "name": "Belt 16"
+    }
+  ]
+}

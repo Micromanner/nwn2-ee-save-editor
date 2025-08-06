@@ -1,0 +1,270 @@
+{
+  "pelvis": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 0"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 1"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 2"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 3"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 4"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.24,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 5"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.6,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 6"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.48,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 7"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.84,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 8"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.06,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 9"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.19,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 10"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.84,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 11"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 12"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 13"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 14"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 15"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 16"
+    },
+    {
+      "id": 17,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 17"
+    },
+    {
+      "id": 18,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 18"
+    },
+    {
+      "id": 19,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 19"
+    },
+    {
+      "id": 20,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 20"
+    },
+    {
+      "id": 21,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 21"
+    },
+    {
+      "id": 22,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 22"
+    },
+    {
+      "id": 23,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 23"
+    },
+    {
+      "id": 24,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 24"
+    },
+    {
+      "id": 25,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 25"
+    },
+    {
+      "id": 26,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 26"
+    },
+    {
+      "id": 27,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 27"
+    },
+    {
+      "id": 28,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 28"
+    },
+    {
+      "id": 29,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 29"
+    },
+    {
+      "id": 30,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 30"
+    },
+    {
+      "id": 31,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 31"
+    },
+    {
+      "id": 32,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 32"
+    },
+    {
+      "id": 33,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 33"
+    },
+    {
+      "id": 34,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 34"
+    },
+    {
+      "id": 35,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 35"
+    },
+    {
+      "id": 36,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 36"
+    },
+    {
+      "id": 37,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "pelvis",
+      "name": "Pelvis 37"
+    }
+  ]
+}

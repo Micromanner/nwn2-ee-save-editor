@@ -1,0 +1,95 @@
+{
+  "foot": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 0"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 1"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 2"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.14,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 3"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.01,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 4"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 5"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 6"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.01,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 7"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 8"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 9"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 10"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 11"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "foot",
+      "name": "Foot 12"
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "rockgnome": [
+    {
+      "id": 0,
+      "hair": "7F5C20",
+      "hair_accessory": "7F5D54",
+      "skin": "A3855D",
+      "eyes": "BEDEE8",
+      "body_hair": "573B17"
+    },
+    {
+      "id": 1,
+      "hair": "52330D",
+      "hair_accessory": "550000",
+      "skin": "90653D",
+      "eyes": "A7C5CF",
+      "body_hair": "2E1E09"
+    },
+    {
+      "id": 2,
+      "hair": "CA7C27",
+      "hair_accessory": "B27989",
+      "skin": "9B724B",
+      "eyes": "84B4C4",
+      "body_hair": "875F2A"
+    },
+    {
+      "id": 3,
+      "hair": "A9610E",
+      "hair_accessory": "654051",
+      "skin": "A97A4B",
+      "eyes": "6C93A1",
+      "body_hair": "BA5B1C"
+    },
+    {
+      "id": 4,
+      "hair": "6B3004",
+      "hair_accessory": "503051",
+      "skin": "BC8755",
+      "eyes": "446B80",
+      "body_hair": "8F3F0A"
+    },
+    {
+      "id": 5,
+      "hair": "EBCB78",
+      "hair_accessory": "7C7DB0",
+      "skin": "5E4532",
+      "eyes": "546066",
+      "body_hair": "DEBA57"
+    },
+    {
+      "id": 6,
+      "hair": "B1974E",
+      "hair_accessory": "1D272D",
+      "skin": "463427",
+      "eyes": "2E5375",
+      "body_hair": "99803C"
+    },
+    {
+      "id": 7,
+      "hair": "877128",
+      "hair_accessory": "FFFFFF",
+      "skin": "39281C",
+      "eyes": "7EA36A",
+      "body_hair": "614F1D"
+    },
+    {
+      "id": 8,
+      "hair": "4A360D",
+      "hair_accessory": "2F736E",
+      "skin": "866340",
+      "eyes": "598740",
+      "body_hair": "292009"
+    },
+    {
+      "id": 9,
+      "hair": "D0A25E",
+      "hair_accessory": "74A485",
+      "skin": "A37D51",
+      "eyes": "4B6930",
+      "body_hair": "C28E4A"
+    },
+    {
+      "id": 10,
+      "hair": "E9E4DB",
+      "hair_accessory": "3B4935",
+      "skin": "B08852",
+      "eyes": "3B4A2D",
+      "body_hair": "BDB7B3"
+    },
+    {
+      "id": 11,
+      "hair": "ADA190",
+      "hair_accessory": "555B43",
+      "skin": "A07E4E",
+      "eyes": "7A623B",
+      "body_hair": "948D88"
+    },
+    {
+      "id": 12,
+      "hair": "8A8170",
+      "hair_accessory": "25311B",
+      "skin": "92703E",
+      "eyes": "755117",
+      "body_hair": "66615E"
+    },
+    {
+      "id": 13,
+      "hair": "5C5141",
+      "hair_accessory": "EFBF00",
+      "skin": "83663E",
+      "eyes": "523910",
+      "body_hair": "363231"
+    },
+    {
+      "id": 14,
+      "hair": "1A1817",
+      "hair_accessory": "ED5401",
+      "skin": "7A5C33",
+      "eyes": "3D2B15",
+      "body_hair": "1A1817"
+    },
+    {
+      "id": 15,
+      "hair": "6B3004",
+      "hair_accessory": "EB0100",
+      "skin": "6E5636",
+      "eyes": "170C01",
+      "body_hair": "421C03"
+    },
+    {
+      "id": 16,
+      "hair": "645F39",
+      "hair_accessory": "1353D6",
+      "skin": "624C2C",
+      "eyes": "6E6E6E",
+      "body_hair": "3C3D2B"
+    },
+    {
+      "id": 17,
+      "hair": "736947",
+      "hair_accessory": "14B308",
+      "skin": "513D20",
+      "eyes": "A6A4A4",
+      "body_hair": "4A4636"
+    }
+  ]
+}

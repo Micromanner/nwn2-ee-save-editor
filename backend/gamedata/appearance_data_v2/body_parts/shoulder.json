@@ -1,0 +1,202 @@
+{
+  "shoulder": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 0",
+      "body_model_type": "Default (Cloth)"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 1",
+      "body_model_type": "Padded"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 2",
+      "body_model_type": "Leather"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 3",
+      "body_model_type": "Studded Leather"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 4",
+      "body_model_type": "Chain Shirt"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 5",
+      "body_model_type": "Scale Mail"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 6",
+      "body_model_type": "Banded Mail"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 7",
+      "body_model_type": "Half-Plate"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 8",
+      "body_model_type": "Full Plate"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.12,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 9",
+      "body_model_type": "Hide"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.42,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 10",
+      "body_model_type": "Naked"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 11",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.12,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 12",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 0.42,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 13",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 0.12,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 14",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 0.12,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 15",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 16"
+    },
+    {
+      "id": 17,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 17"
+    },
+    {
+      "id": 18,
+      "ac_bonus": 0.03,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 18"
+    },
+    {
+      "id": 19,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 19"
+    },
+    {
+      "id": 20,
+      "ac_bonus": 0.14,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 20"
+    },
+    {
+      "id": 21,
+      "ac_bonus": 0.42,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 21"
+    },
+    {
+      "id": 22,
+      "ac_bonus": 0.42,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 22"
+    },
+    {
+      "id": 23,
+      "ac_bonus": 0.14,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 23"
+    },
+    {
+      "id": 24,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 24"
+    },
+    {
+      "id": 25,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "shoulder",
+      "name": "Shoulder 25"
+    }
+  ]
+}

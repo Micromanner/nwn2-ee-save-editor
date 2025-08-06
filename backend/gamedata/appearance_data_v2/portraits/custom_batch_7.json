@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 7,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 766,
+      "filename": "plc_x0_loo_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Loo"
+    },
+    {
+      "id": 767,
+      "filename": "plc_x0_win_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Win"
+    },
+    {
+      "id": 768,
+      "filename": "plc_x0_fr1_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Fr1"
+    },
+    {
+      "id": 769,
+      "filename": "plc_x0_frg_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Frg"
+    },
+    {
+      "id": 770,
+      "filename": "plc_x0_fr2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Fr2"
+    },
+    {
+      "id": 771,
+      "filename": "plc_x0_lad_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Lad"
+    },
+    {
+      "id": 772,
+      "filename": "plc_x0_bdb_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Bdb"
+    },
+    {
+      "id": 773,
+      "filename": "plc_x0_bfn_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Bfn"
+    },
+    {
+      "id": 774,
+      "filename": "plc_x0_skp_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Skp"
+    },
+    {
+      "id": 775,
+      "filename": "plc_x0_hea_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Hea"
+    },
+    {
+      "id": 776,
+      "filename": "plc_x0_rp1_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rp1"
+    },
+    {
+      "id": 777,
+      "filename": "plc_x0_rbo_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rbo"
+    },
+    {
+      "id": 778,
+      "filename": "plc_x0_rb2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rb2"
+    },
+    {
+      "id": 779,
+      "filename": "plc_x0_ivy_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Ivy"
+    },
+    {
+      "id": 780,
+      "filename": "plc_x0_law_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Law"
+    },
+    {
+      "id": 781,
+      "filename": "plc_x0_cau_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Cau"
+    },
+    {
+      "id": 782,
+      "filename": "plc_x0_tmb_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Tmb"
+    },
+    {
+      "id": 783,
+      "filename": "plc_x0_vbg_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Vbg"
+    },
+    {
+      "id": 784,
+      "filename": "plc_x0_dkl_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Dkl"
+    },
+    {
+      "id": 785,
+      "filename": "plc_x0_dtr_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Dtr"
+    },
+    {
+      "id": 786,
+      "filename": "plc_x0_bl2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Bl2"
+    },
+    {
+      "id": 787,
+      "filename": "plc_x0_ben_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Ben"
+    },
+    {
+      "id": 788,
+      "filename": "plc_x0_ptr_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Ptr"
+    },
+    {
+      "id": 789,
+      "filename": "plc_x0_dkw_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Dkw"
+    },
+    {
+      "id": 790,
+      "filename": "plc_x0_obe_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Obe"
+    },
+    {
+      "id": 791,
+      "filename": "plc_x0_rs1_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rs1"
+    },
+    {
+      "id": 792,
+      "filename": "plc_x0_rs2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rs2"
+    },
+    {
+      "id": 793,
+      "filename": "plc_x0_rs3_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rs3"
+    },
+    {
+      "id": 794,
+      "filename": "plc_x0_pn1_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Pn1"
+    },
+    {
+      "id": 795,
+      "filename": "plc_x0_pn2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Pn2"
+    },
+    {
+      "id": 796,
+      "filename": "plc_x0_pn3_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Pn3"
+    },
+    {
+      "id": 797,
+      "filename": "plc_x0_drf_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Drf"
+    },
+    {
+      "id": 798,
+      "filename": "plc_x0_csw_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Csw"
+    },
+    {
+      "id": 799,
+      "filename": "plc_x0_scr_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Scr"
+    },
+    {
+      "id": 800,
+      "filename": "plc_x0_rcr_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rcr"
+    },
+    {
+      "id": 801,
+      "filename": "plc_x0_trk_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Trk"
+    },
+    {
+      "id": 802,
+      "filename": "plc_x0_clg_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Clg"
+    },
+    {
+      "id": 803,
+      "filename": "plc_x0_ssp_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Ssp"
+    },
+    {
+      "id": 804,
+      "filename": "plc_x0_rg4_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rg4"
+    },
+    {
+      "id": 805,
+      "filename": "plc_x0_rg5_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Rg5"
+    },
+    {
+      "id": 806,
+      "filename": "plc_x0_tds_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Tds"
+    },
+    {
+      "id": 807,
+      "filename": "plc_x0_grs_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Grs"
+    },
+    {
+      "id": 808,
+      "filename": "plc_x0_bf1_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Bf1"
+    },
+    {
+      "id": 809,
+      "filename": "plc_x0_bt2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Bt2"
+    },
+    {
+      "id": 810,
+      "filename": "plc_x0_bf2_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Bf2"
+    },
+    {
+      "id": 811,
+      "filename": "plc_x0_hsh_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Hsh"
+    },
+    {
+      "id": 812,
+      "filename": "plc_x0_drt_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Drt"
+    },
+    {
+      "id": 813,
+      "filename": "plc_x0_spt_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Spt"
+    },
+    {
+      "id": 814,
+      "filename": "plc_x0_peb_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Peb"
+    },
+    {
+      "id": 815,
+      "filename": "plc_x0_wds_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Wds"
+    },
+    {
+      "id": 816,
+      "filename": "plc_x0_myt_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X0 Myt"
+    },
+    {
+      "id": 817,
+      "filename": "dwind_",
+      "sex": "4",
+      "race": "16",
+      "name": "Dwind"
+    },
+    {
+      "id": 900,
+      "filename": "goldem_",
+      "sex": "4",
+      "race": "20",
+      "name": "Goldem"
+    },
+    {
+      "id": 901,
+      "filename": "PX2_B04_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B04"
+    },
+    {
+      "id": 902,
+      "filename": "PX2_A01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A01"
+    },
+    {
+      "id": 903,
+      "filename": "PX2_A02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A02"
+    },
+    {
+      "id": 904,
+      "filename": "PX2_A04_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A04"
+    },
+    {
+      "id": 905,
+      "filename": "PX2_A05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A05"
+    },
+    {
+      "id": 906,
+      "filename": "PX2_A06_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A06"
+    },
+    {
+      "id": 907,
+      "filename": "PX2_A07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A07"
+    },
+    {
+      "id": 908,
+      "filename": "PX2_A08_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A08"
+    },
+    {
+      "id": 909,
+      "filename": "PX2_A10_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 A10"
+    },
+    {
+      "id": 910,
+      "filename": "PX2_B01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B01"
+    },
+    {
+      "id": 911,
+      "filename": "PX2_B02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B02"
+    },
+    {
+      "id": 912,
+      "filename": "PX2_B03_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B03"
+    },
+    {
+      "id": 913,
+      "filename": "PX2_B05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B05"
+    },
+    {
+      "id": 914,
+      "filename": "PX2_B06_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B06"
+    },
+    {
+      "id": 915,
+      "filename": "PX2_B07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B07"
+    },
+    {
+      "id": 916,
+      "filename": "PX2_B08_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B08"
+    },
+    {
+      "id": 917,
+      "filename": "PX2_B09_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B09"
+    },
+    {
+      "id": 918,
+      "filename": "PX2_B10_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 B10"
+    },
+    {
+      "id": 919,
+      "filename": "PX2_C01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C01"
+    },
+    {
+      "id": 920,
+      "filename": "PX2_C02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C02"
+    },
+    {
+      "id": 921,
+      "filename": "PX2_C03_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C03"
+    },
+    {
+      "id": 922,
+      "filename": "PX2_C04_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C04"
+    },
+    {
+      "id": 923,
+      "filename": "PX2_C05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C05"
+    },
+    {
+      "id": 924,
+      "filename": "PX2_C06_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C06"
+    },
+    {
+      "id": 925,
+      "filename": "PX2_C07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C07"
+    },
+    {
+      "id": 926,
+      "filename": "PX2_C08_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C08"
+    },
+    {
+      "id": 927,
+      "filename": "PX2_D01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D01"
+    },
+    {
+      "id": 928,
+      "filename": "PX2_D02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D02"
+    },
+    {
+      "id": 929,
+      "filename": "PX2_D03_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D03"
+    },
+    {
+      "id": 930,
+      "filename": "PX2_D04_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D04"
+    },
+    {
+      "id": 931,
+      "filename": "PX2_D05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D05"
+    },
+    {
+      "id": 932,
+      "filename": "PX2_D06_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D06"
+    },
+    {
+      "id": 933,
+      "filename": "PX2_D07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D07"
+    },
+    {
+      "id": 934,
+      "filename": "PX2_D08_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 D08"
+    },
+    {
+      "id": 935,
+      "filename": "beholdm_",
+      "sex": "4",
+      "race": "7",
+      "name": "Beholdm"
+    },
+    {
+      "id": 936,
+      "filename": "GateKeep_",
+      "sex": "1",
+      "race": "20",
+      "name": "Gatekeep"
+    },
+    {
+      "id": 937,
+      "filename": "jelly_",
+      "sex": "4",
+      "race": "29",
+      "name": "Jelly"
+    },
+    {
+      "id": 938,
+      "filename": "hu_m_40_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 40"
+    },
+    {
+      "id": 939,
+      "filename": "hu_m_41_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 41"
+    },
+    {
+      "id": 940,
+      "filename": "hu_m_42_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 42"
+    },
+    {
+      "id": 941,
+      "filename": "hu_m_43_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 43"
+    },
+    {
+      "id": 942,
+      "filename": "hu_m_44_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 44"
+    },
+    {
+      "id": 943,
+      "filename": "hu_m_45_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 45"
+    },
+    {
+      "id": 944,
+      "filename": "hu_m_46_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 46"
+    },
+    {
+      "id": 945,
+      "filename": "hu_m_47_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 47"
+    },
+    {
+      "id": 946,
+      "filename": "hu_m_48_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 48"
+    },
+    {
+      "id": 947,
+      "filename": "hu_f_29_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 29"
+    }
+  ]
+}

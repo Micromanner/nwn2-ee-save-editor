@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 5,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 508,
+      "filename": "PLC_T05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T05"
+    },
+    {
+      "id": 509,
+      "filename": "PLC_T06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T06"
+    },
+    {
+      "id": 510,
+      "filename": "PLC_T07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T07"
+    },
+    {
+      "id": 511,
+      "filename": "PLC_T08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T08"
+    },
+    {
+      "id": 512,
+      "filename": "PLC_T09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T09"
+    },
+    {
+      "id": 513,
+      "filename": "PLC_T10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc T10"
+    },
+    {
+      "id": 514,
+      "filename": "PLC_U01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U01"
+    },
+    {
+      "id": 515,
+      "filename": "PLC_U02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U02"
+    },
+    {
+      "id": 516,
+      "filename": "PLC_U03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U03"
+    },
+    {
+      "id": 517,
+      "filename": "PLC_U04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U04"
+    },
+    {
+      "id": 518,
+      "filename": "PLC_U05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U05"
+    },
+    {
+      "id": 519,
+      "filename": "PLC_U06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U06"
+    },
+    {
+      "id": 520,
+      "filename": "PLC_U07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U07"
+    },
+    {
+      "id": 521,
+      "filename": "PLC_U08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U08"
+    },
+    {
+      "id": 522,
+      "filename": "PLC_U09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U09"
+    },
+    {
+      "id": 523,
+      "filename": "PLC_U10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc U10"
+    },
+    {
+      "id": 524,
+      "filename": "PLC_V01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V01"
+    },
+    {
+      "id": 525,
+      "filename": "PLC_V02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V02"
+    },
+    {
+      "id": 526,
+      "filename": "PLC_V03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V03"
+    },
+    {
+      "id": 527,
+      "filename": "PLC_V04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V04"
+    },
+    {
+      "id": 528,
+      "filename": "PLC_V05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V05"
+    },
+    {
+      "id": 529,
+      "filename": "PLC_V06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V06"
+    },
+    {
+      "id": 530,
+      "filename": "PLC_V07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V07"
+    },
+    {
+      "id": 531,
+      "filename": "PLC_V08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V08"
+    },
+    {
+      "id": 532,
+      "filename": "PLC_V09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V09"
+    },
+    {
+      "id": 533,
+      "filename": "PLC_V10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc V10"
+    },
+    {
+      "id": 534,
+      "filename": "PLC_W01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc W01"
+    },
+    {
+      "id": 535,
+      "filename": "PLC_W02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc W02"
+    },
+    {
+      "id": 536,
+      "filename": "PLC_X01_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X01"
+    },
+    {
+      "id": 537,
+      "filename": "PLC_X02_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X02"
+    },
+    {
+      "id": 538,
+      "filename": "PLC_X03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X03"
+    },
+    {
+      "id": 539,
+      "filename": "PLC_X04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X04"
+    },
+    {
+      "id": 540,
+      "filename": "PLC_X05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X05"
+    },
+    {
+      "id": 541,
+      "filename": "PLC_X06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X06"
+    },
+    {
+      "id": 542,
+      "filename": "PLC_X07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc X07"
+    },
+    {
+      "id": 543,
+      "filename": "OgreB_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ogreb"
+    },
+    {
+      "id": 544,
+      "filename": "OgreChiefB_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ogrechiefb"
+    },
+    {
+      "id": 545,
+      "filename": "OgreMageB_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ogremageb"
+    },
+    {
+      "id": 546,
+      "filename": "Vampire_f_",
+      "sex": "4",
+      "race": "24",
+      "name": "Vampire F"
+    },
+    {
+      "id": 547,
+      "filename": "ha_m_07_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 07"
+    },
+    {
+      "id": 548,
+      "filename": "PLC_C03_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C03"
+    },
+    {
+      "id": 549,
+      "filename": "PLC_C04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C04"
+    },
+    {
+      "id": 550,
+      "filename": "PLC_C05_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C05"
+    },
+    {
+      "id": 551,
+      "filename": "PLC_C06_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C06"
+    },
+    {
+      "id": 552,
+      "filename": "PLC_C07_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C07"
+    },
+    {
+      "id": 553,
+      "filename": "PLC_C08_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C08"
+    },
+    {
+      "id": 554,
+      "filename": "PLC_C09_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C09"
+    },
+    {
+      "id": 555,
+      "filename": "cat_jag_",
+      "sex": "4",
+      "race": "8",
+      "name": "Cat Jag"
+    },
+    {
+      "id": 556,
+      "filename": "Hound_",
+      "sex": "4",
+      "race": "20",
+      "name": "Hound"
+    },
+    {
+      "id": 557,
+      "filename": "PLC_P04_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc P04"
+    },
+    {
+      "id": 558,
+      "filename": "door01_",
+      "sex": "4",
+      "race": "17",
+      "name": "Door01"
+    },
+    {
+      "id": 559,
+      "filename": "pixie_",
+      "sex": "4",
+      "race": "17",
+      "name": "Pixie"
+    },
+    {
+      "id": 560,
+      "filename": "BlkPanther_",
+      "sex": "4",
+      "race": "8",
+      "name": "Blkpanther"
+    },
+    {
+      "id": 561,
+      "filename": "Avenger_",
+      "sex": "4",
+      "race": "20",
+      "name": "Avenger"
+    },
+    {
+      "id": 562,
+      "filename": "mum_war03_",
+      "sex": "4",
+      "race": "24",
+      "name": "Mum War03"
+    },
+    {
+      "id": 563,
+      "filename": "mum_pre01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Mum Pre01"
+    },
+    {
+      "id": 564,
+      "filename": "a_penguin_",
+      "sex": "4",
+      "race": "8",
+      "name": "A Penguin"
+    },
+    {
+      "id": 565,
+      "filename": "Rakshasa_f_",
+      "sex": "4",
+      "race": "20",
+      "name": "Rakshasa F"
+    },
+    {
+      "id": 566,
+      "filename": "kobwizb_",
+      "sex": "4",
+      "race": "15",
+      "name": "Kobwizb"
+    },
+    {
+      "id": 567,
+      "filename": "kobwiza_",
+      "sex": "4",
+      "race": "15",
+      "name": "Kobwiza"
+    },
+    {
+      "id": 568,
+      "filename": "kobchiefb_",
+      "sex": "4",
+      "race": "15",
+      "name": "Kobchiefb"
+    },
+    {
+      "id": 569,
+      "filename": "kobchiefa_",
+      "sex": "4",
+      "race": "15",
+      "name": "Kobchiefa"
+    },
+    {
+      "id": 570,
+      "filename": "kobb_",
+      "sex": "4",
+      "race": "15",
+      "name": "Kobb"
+    },
+    {
+      "id": 571,
+      "filename": "koba_",
+      "sex": "4",
+      "race": "15",
+      "name": "Koba"
+    },
+    {
+      "id": 600,
+      "filename": "PLC_C10_",
+      "sex": "4",
+      "race": null,
+      "name": "Plc C10"
+    },
+    {
+      "id": 601,
+      "filename": "cat_mpanth_",
+      "sex": "4",
+      "race": "23",
+      "name": "Cat Mpanth"
+    },
+    {
+      "id": 602,
+      "filename": "Rat_",
+      "sex": "4",
+      "race": "8",
+      "name": "Rat"
+    },
+    {
+      "id": 603,
+      "filename": "DireRat_",
+      "sex": "4",
+      "race": "8",
+      "name": "Direrat"
+    },
+    {
+      "id": 604,
+      "filename": "Gnoll_",
+      "sex": "4",
+      "race": "14",
+      "name": "Gnoll"
+    },
+    {
+      "id": 605,
+      "filename": "GnollWiz_",
+      "sex": "4",
+      "race": "14",
+      "name": "Gnollwiz"
+    },
+    {
+      "id": 606,
+      "filename": "gntfrstfem_",
+      "sex": "4",
+      "race": "18",
+      "name": "Gntfrstfem"
+    },
+    {
+      "id": 607,
+      "filename": "gntfirefem_",
+      "sex": "4",
+      "race": "18",
+      "name": "Gntfirefem"
+    },
+    {
+      "id": 608,
+      "filename": "medusa_",
+      "sex": "4",
+      "race": "13",
+      "name": "Medusa"
+    },
+    {
+      "id": 609,
+      "filename": "asabchief_",
+      "sex": "4",
+      "race": "15",
+      "name": "Asabchief"
+    },
+    {
+      "id": 610,
+      "filename": "asabmage_",
+      "sex": "4",
+      "race": "15",
+      "name": "Asabmage"
+    },
+    {
+      "id": 611,
+      "filename": "asabwar_",
+      "sex": "4",
+      "race": "15",
+      "name": "Asabwar"
+    },
+    {
+      "id": 612,
+      "filename": "stinger_",
+      "sex": "4",
+      "race": "13",
+      "name": "Stinger"
+    },
+    {
+      "id": 613,
+      "filename": "stingwar_",
+      "sex": "4",
+      "race": "13",
+      "name": "Stingwar"
+    },
+    {
+      "id": 614,
+      "filename": "stingchief_",
+      "sex": "4",
+      "race": "13",
+      "name": "Stingchief"
+    },
+    {
+      "id": 615,
+      "filename": "stingmage_",
+      "sex": "4",
+      "race": "13",
+      "name": "Stingmage"
+    },
+    {
+      "id": 616,
+      "filename": "formwrk_",
+      "sex": "4",
+      "race": "20",
+      "name": "Formwrk"
+    },
+    {
+      "id": 617,
+      "filename": "formwar_",
+      "sex": "4",
+      "race": "20",
+      "name": "Formwar"
+    },
+    {
+      "id": 618,
+      "filename": "formmyr_",
+      "sex": "4",
+      "race": "20",
+      "name": "Formmyr"
+    },
+    {
+      "id": 619,
+      "filename": "formqueen_",
+      "sex": "4",
+      "race": "20",
+      "name": "Formqueen"
+    },
+    {
+      "id": 620,
+      "filename": "sphinx_",
+      "sex": "4",
+      "race": "19",
+      "name": "Sphinx"
+    },
+    {
+      "id": 621,
+      "filename": "gynosphinx_",
+      "sex": "4",
+      "race": "19",
+      "name": "Gynosphinx"
+    },
+    {
+      "id": 622,
+      "filename": "manticore_",
+      "sex": "4",
+      "race": "19",
+      "name": "Manticore"
+    },
+    {
+      "id": 623,
+      "filename": "gorgon_",
+      "sex": "4",
+      "race": "19",
+      "name": "Gorgon"
+    },
+    {
+      "id": 624,
+      "filename": "cocktrc_",
+      "sex": "4",
+      "race": "19",
+      "name": "Cocktrc"
+    },
+    {
+      "id": 625,
+      "filename": "basilisk_",
+      "sex": "4",
+      "race": "19",
+      "name": "Basilisk"
+    },
+    {
+      "id": 630,
+      "filename": "drgfaerie_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgfaerie"
+    },
+    {
+      "id": 631,
+      "filename": "drgpseud_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgpseud"
+    },
+    {
+      "id": 632,
+      "filename": "wyrmlred_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlred"
+    },
+    {
+      "id": 633,
+      "filename": "wyrmlblu_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlblu"
+    },
+    {
+      "id": 634,
+      "filename": "wyrmlblk_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlblk"
+    },
+    {
+      "id": 635,
+      "filename": "wyrmlgrn_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlgrn"
+    },
+    {
+      "id": 636,
+      "filename": "wyrmlwht_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlwht"
+    },
+    {
+      "id": 637,
+      "filename": "wyrmlbrs_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlbrs"
+    },
+    {
+      "id": 638,
+      "filename": "wyrmlcop_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlcop"
+    },
+    {
+      "id": 639,
+      "filename": "wyrmlbrz_",
+      "sex": "4",
+      "race": "11",
+      "name": "Wyrmlbrz"
+    }
+  ]
+}

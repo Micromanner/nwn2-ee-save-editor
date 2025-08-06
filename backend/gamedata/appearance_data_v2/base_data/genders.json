@@ -1,0 +1,32 @@
+[
+  {
+    "id": 0,
+    "name": "Male",
+    "code": "M",
+    "constant": "GENDER_MALE"
+  },
+  {
+    "id": 1,
+    "name": "Female",
+    "code": "F",
+    "constant": "GENDER_FEMALE"
+  },
+  {
+    "id": 2,
+    "name": "Both",
+    "code": "B",
+    "constant": "GENDER_BOTH"
+  },
+  {
+    "id": 3,
+    "name": "Other",
+    "code": "O",
+    "constant": "GENDER_OTHER"
+  },
+  {
+    "id": 4,
+    "name": "None",
+    "code": "N",
+    "constant": "GENDER_NONE"
+  }
+]

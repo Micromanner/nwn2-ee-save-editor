@@ -1,0 +1,146 @@
+{
+  "shin": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 0",
+      "body_model_type": "Default (Cloth)"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 1",
+      "body_model_type": "Padded"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 2",
+      "body_model_type": "Leather"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 3",
+      "body_model_type": "Studded Leather"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.08,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 4",
+      "body_model_type": "Chain Shirt"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.2,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 5",
+      "body_model_type": "Scale Mail"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.16,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 6",
+      "body_model_type": "Banded Mail"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.28,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 7",
+      "body_model_type": "Half-Plate"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.08,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 8",
+      "body_model_type": "Full Plate"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 9",
+      "body_model_type": "Hide"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.24,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 10",
+      "body_model_type": "Naked"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 11",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.34,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 12",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 13",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 14",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 15",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 0.02,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 16"
+    },
+    {
+      "id": 17,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "shin",
+      "name": "Shin 17"
+    }
+  ]
+}

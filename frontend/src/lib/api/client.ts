@@ -1,0 +1,52 @@
+export class ApiClient {
+  private baseUrl: string;
+  private cache: Map<string, { data: unknown; timestamp: number }>;
+  private cacheTimeout: number = 5 * 60 * 1000; // 5 minutes
+
+  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api') {
+    this.baseUrl = baseUrl;
+    this.cache = new Map();
+  }
+
+  private async fetchWithCache<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const cacheKey = `${endpoint}${JSON.stringify(options)}`;
+    const cached = this.cache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+      return cached.data as T;
+    }
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, options);
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    this.cache.set(cacheKey, { data, timestamp: Date.now() });
+    return data;
+  }
+
+  async get<T>(endpoint: string): Promise<T> {
+    return this.fetchWithCache<T>(endpoint);
+  }
+
+  async post<T>(endpoint: string, data: unknown): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
+  clearCache() {
+    this.cache.clear();
+  }
+}
+
+export const apiClient = new ApiClient();

@@ -1,0 +1,53 @@
+{
+  "neck": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 0"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 1"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 2"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.01,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 3"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 4"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 5"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.08,
+      "cost_modifier": 0.0,
+      "part_type": "neck",
+      "name": "Neck 6"
+    }
+  ]
+}

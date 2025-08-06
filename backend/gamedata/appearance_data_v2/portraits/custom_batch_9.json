@@ -1,0 +1,105 @@
+{
+  "category": "custom",
+  "batch": 9,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 1052,
+      "filename": "clspalemast_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clspalemast"
+    },
+    {
+      "id": 1053,
+      "filename": "clsranger_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsranger"
+    },
+    {
+      "id": 1054,
+      "filename": "clsranger_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsranger"
+    },
+    {
+      "id": 1055,
+      "filename": "clsrogue_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsrogue"
+    },
+    {
+      "id": 1056,
+      "filename": "clsroguef_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsroguef"
+    },
+    {
+      "id": 1057,
+      "filename": "clsshpshft_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsshpshft"
+    },
+    {
+      "id": 1058,
+      "filename": "clsshpshftf_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsshpshftf"
+    },
+    {
+      "id": 1059,
+      "filename": "clssorcerer_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clssorcerer"
+    },
+    {
+      "id": 1060,
+      "filename": "clssorcerer_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clssorcerer"
+    },
+    {
+      "id": 1061,
+      "filename": "clswizard_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clswizard"
+    },
+    {
+      "id": 1062,
+      "filename": "clswizard_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clswizard"
+    },
+    {
+      "id": 1063,
+      "filename": "clswpnmast_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clswpnmast"
+    },
+    {
+      "id": 1064,
+      "filename": "clswpnmast_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clswpnmast"
+    },
+    {
+      "id": 1065,
+      "filename": "el_f_17_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 17"
+    }
+  ]
+}

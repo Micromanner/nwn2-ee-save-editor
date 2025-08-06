@@ -1,0 +1,156 @@
+{
+  "body_model_types": [
+    {
+      "id": 0,
+      "label": "Cloth",
+      "name": "Default (Cloth)"
+    },
+    {
+      "id": 1,
+      "label": "ClothPadded",
+      "name": "Padded"
+    },
+    {
+      "id": 2,
+      "label": "Leather",
+      "name": "Leather"
+    },
+    {
+      "id": 3,
+      "label": "LeatherStudded",
+      "name": "Studded Leather"
+    },
+    {
+      "id": 4,
+      "label": "Chain",
+      "name": "Chain Shirt"
+    },
+    {
+      "id": 5,
+      "label": "Scale",
+      "name": "Scale Mail"
+    },
+    {
+      "id": 6,
+      "label": "Banded",
+      "name": "Banded Mail"
+    },
+    {
+      "id": 7,
+      "label": "Half-Plate",
+      "name": "Half-Plate"
+    },
+    {
+      "id": 8,
+      "label": "Full-Plate",
+      "name": "Full Plate"
+    },
+    {
+      "id": 9,
+      "label": "padding",
+      "name": "padding"
+    },
+    {
+      "id": 10,
+      "label": "padding",
+      "name": "padding"
+    },
+    {
+      "id": 11,
+      "label": "padding",
+      "name": "padding"
+    },
+    {
+      "id": 12,
+      "label": "padding",
+      "name": "padding"
+    },
+    {
+      "id": 13,
+      "label": "padding",
+      "name": "padding"
+    }
+  ],
+  "visual_armor_categories": [
+    {
+      "label": "Cloth",
+      "name": "Default (Cloth)",
+      "prefix": "CL"
+    },
+    {
+      "label": "ClothPadded",
+      "name": "Padded",
+      "prefix": "CP"
+    },
+    {
+      "label": "Leather",
+      "name": "Leather",
+      "prefix": "LE"
+    },
+    {
+      "label": "LeatherStudded",
+      "name": "Studded Leather",
+      "prefix": "LS"
+    },
+    {
+      "label": "Chain",
+      "name": "Chain Shirt",
+      "prefix": "CH"
+    },
+    {
+      "label": "Scale",
+      "name": "Scale Mail",
+      "prefix": "SC"
+    },
+    {
+      "label": "Banded",
+      "name": "Banded Mail",
+      "prefix": "BA"
+    },
+    {
+      "label": "Half-Plate",
+      "name": "Half-Plate",
+      "prefix": "PH"
+    },
+    {
+      "label": "Full-Plate",
+      "name": "Full Plate",
+      "prefix": "PF"
+    },
+    {
+      "label": "Hide",
+      "name": "Hide",
+      "prefix": "HD"
+    },
+    {
+      "label": "Naked",
+      "name": "Naked",
+      "prefix": "NK"
+    },
+    {
+      "label": "padding",
+      "name": "padding",
+      "prefix": null
+    },
+    {
+      "label": "padding",
+      "name": "padding",
+      "prefix": null
+    },
+    {
+      "label": "padding",
+      "name": "padding",
+      "prefix": null
+    },
+    {
+      "label": "padding",
+      "name": "padding",
+      "prefix": null
+    },
+    {
+      "label": "padding",
+      "name": "padding",
+      "prefix": null
+    }
+  ]
+}

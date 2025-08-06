@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 2,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 201,
+      "filename": "Dryad_",
+      "sex": "4",
+      "race": "17",
+      "name": "Dryad"
+    },
+    {
+      "id": 202,
+      "filename": "Earth_",
+      "sex": "4",
+      "race": "16",
+      "name": "Earth"
+    },
+    {
+      "id": 203,
+      "filename": "Earth_Eld_",
+      "sex": "4",
+      "race": "16",
+      "name": "Earth Eld"
+    },
+    {
+      "id": 204,
+      "filename": "Ettercap_",
+      "sex": "4",
+      "race": "7",
+      "name": "Ettercap"
+    },
+    {
+      "id": 205,
+      "filename": "Ettin_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ettin"
+    },
+    {
+      "id": 206,
+      "filename": "a_bird_rap_",
+      "sex": "4",
+      "race": "8",
+      "name": "A Bird Rap"
+    },
+    {
+      "id": 207,
+      "filename": "Fenhound_",
+      "sex": "4",
+      "race": "8",
+      "name": "Fenhound"
+    },
+    {
+      "id": 208,
+      "filename": "Fire_",
+      "sex": "4",
+      "race": "16",
+      "name": "Fire"
+    },
+    {
+      "id": 209,
+      "filename": "Fire_eld_",
+      "sex": "4",
+      "race": "16",
+      "name": "Fire Eld"
+    },
+    {
+      "id": 210,
+      "filename": "Gargoyle_",
+      "sex": "4",
+      "race": "19",
+      "name": "Gargoyle"
+    },
+    {
+      "id": 211,
+      "filename": "Ghast_",
+      "sex": "4",
+      "race": "24",
+      "name": "Ghast"
+    },
+    {
+      "id": 212,
+      "filename": "Ghost_",
+      "sex": "4",
+      "race": "24",
+      "name": "Ghost"
+    },
+    {
+      "id": 213,
+      "filename": "Ghoul_",
+      "sex": "4",
+      "race": "24",
+      "name": "Ghoul"
+    },
+    {
+      "id": 214,
+      "filename": "GhoulLord_",
+      "sex": "4",
+      "race": "24",
+      "name": "Ghoullord"
+    },
+    {
+      "id": 215,
+      "filename": "GntFire_",
+      "sex": "4",
+      "race": "18",
+      "name": "Gntfire"
+    },
+    {
+      "id": 216,
+      "filename": "GntFrost_",
+      "sex": "4",
+      "race": "18",
+      "name": "Gntfrost"
+    },
+    {
+      "id": 217,
+      "filename": "GntHill_",
+      "sex": "4",
+      "race": "18",
+      "name": "Gnthill"
+    },
+    {
+      "id": 218,
+      "filename": "GntMount_",
+      "sex": "4",
+      "race": "18",
+      "name": "Gntmount"
+    },
+    {
+      "id": 219,
+      "filename": "GobChiefA_",
+      "sex": "4",
+      "race": "12",
+      "name": "Gobchiefa"
+    },
+    {
+      "id": 220,
+      "filename": "GobChiefB_",
+      "sex": "4",
+      "race": "12",
+      "name": "Gobchiefb"
+    },
+    {
+      "id": 221,
+      "filename": "goblin_",
+      "sex": "4",
+      "race": "12",
+      "name": "Goblin"
+    },
+    {
+      "id": 222,
+      "filename": "GoblinA_",
+      "sex": "4",
+      "race": "12",
+      "name": "Goblina"
+    },
+    {
+      "id": 223,
+      "filename": "GoblinB_",
+      "sex": "4",
+      "race": "12",
+      "name": "Goblinb"
+    },
+    {
+      "id": 224,
+      "filename": "GobWizA_",
+      "sex": "4",
+      "race": "12",
+      "name": "Gobwiza"
+    },
+    {
+      "id": 225,
+      "filename": "GobWizB_",
+      "sex": "4",
+      "race": "12",
+      "name": "Gobwizb"
+    },
+    {
+      "id": 226,
+      "filename": "GolBone_",
+      "sex": "4",
+      "race": "10",
+      "name": "Golbone"
+    },
+    {
+      "id": 227,
+      "filename": "GolClay_",
+      "sex": "4",
+      "race": "10",
+      "name": "Golclay"
+    },
+    {
+      "id": 228,
+      "filename": "GolFlesh_",
+      "sex": "4",
+      "race": "10",
+      "name": "Golflesh"
+    },
+    {
+      "id": 229,
+      "filename": "GolIron_",
+      "sex": "4",
+      "race": "10",
+      "name": "Goliron"
+    },
+    {
+      "id": 230,
+      "filename": "GolStone_",
+      "sex": "4",
+      "race": "10",
+      "name": "Golstone"
+    },
+    {
+      "id": 231,
+      "filename": "GreyRend_",
+      "sex": "4",
+      "race": "20",
+      "name": "Greyrend"
+    },
+    {
+      "id": 232,
+      "filename": "Haedral_",
+      "sex": "4",
+      "race": "15",
+      "name": "Haedral"
+    },
+    {
+      "id": 233,
+      "filename": "headraline_",
+      "sex": "4",
+      "race": "15",
+      "name": "Headraline"
+    },
+    {
+      "id": 234,
+      "filename": "HellHound_",
+      "sex": "4",
+      "race": "20",
+      "name": "Hellhound"
+    },
+    {
+      "id": 235,
+      "filename": "HelmHorror_",
+      "sex": "4",
+      "race": "10",
+      "name": "Helmhorror"
+    },
+    {
+      "id": 236,
+      "filename": "Horror_",
+      "sex": "4",
+      "race": "7",
+      "name": "Horror"
+    },
+    {
+      "id": 237,
+      "filename": "InvStalk_",
+      "sex": "4",
+      "race": "16",
+      "name": "Invstalk"
+    },
+    {
+      "id": 238,
+      "filename": "kid_",
+      "sex": "4",
+      "race": "6",
+      "name": "Kid"
+    },
+    {
+      "id": 239,
+      "filename": "Krenshar_",
+      "sex": "4",
+      "race": "19",
+      "name": "Krenshar"
+    },
+    {
+      "id": 240,
+      "filename": "Leopard_",
+      "sex": "4",
+      "race": "8",
+      "name": "Leopard"
+    },
+    {
+      "id": 241,
+      "filename": "Lich_",
+      "sex": "4",
+      "race": "24",
+      "name": "Lich"
+    },
+    {
+      "id": 243,
+      "filename": "MepAir_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepair"
+    },
+    {
+      "id": 244,
+      "filename": "MepDust_",
+      "sex": "4",
+      "race": "20",
+      "name": "Mepdust"
+    },
+    {
+      "id": 245,
+      "filename": "MepEarth_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepearth"
+    },
+    {
+      "id": 246,
+      "filename": "MepFire_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepfire"
+    },
+    {
+      "id": 247,
+      "filename": "MepIce_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepice"
+    },
+    {
+      "id": 248,
+      "filename": "MepMagma_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepmagma"
+    },
+    {
+      "id": 249,
+      "filename": "MepOoze_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepooze"
+    },
+    {
+      "id": 250,
+      "filename": "MepSalt_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepsalt"
+    },
+    {
+      "id": 251,
+      "filename": "MepSteam_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepsteam"
+    },
+    {
+      "id": 252,
+      "filename": "MepWater_",
+      "sex": "4",
+      "race": "22",
+      "name": "Mepwater"
+    },
+    {
+      "id": 253,
+      "filename": "MinChief_",
+      "sex": "4",
+      "race": "13",
+      "name": "Minchief"
+    },
+    {
+      "id": 254,
+      "filename": "Minogon_",
+      "sex": "4",
+      "race": "19",
+      "name": "Minogon"
+    },
+    {
+      "id": 255,
+      "filename": "Minotaur_",
+      "sex": "4",
+      "race": "13",
+      "name": "Minotaur"
+    },
+    {
+      "id": 256,
+      "filename": "MinoWiz_",
+      "sex": "4",
+      "race": "13",
+      "name": "Minowiz"
+    },
+    {
+      "id": 257,
+      "filename": "Mohrg_",
+      "sex": "4",
+      "race": "24",
+      "name": "Mohrg"
+    },
+    {
+      "id": 258,
+      "filename": "Morag_",
+      "sex": "4",
+      "race": "15",
+      "name": "Morag"
+    },
+    {
+      "id": 259,
+      "filename": "mum_war02_",
+      "sex": "4",
+      "race": "24",
+      "name": "Mum War02"
+    },
+    {
+      "id": 260,
+      "filename": "mum_com01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Mum Com01"
+    },
+    {
+      "id": 261,
+      "filename": "Nymph_",
+      "sex": "4",
+      "race": "17",
+      "name": "Nymph"
+    },
+    {
+      "id": 262,
+      "filename": "OgreA_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ogrea"
+    },
+    {
+      "id": 263,
+      "filename": "OgreChiefA_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ogrechiefa"
+    },
+    {
+      "id": 264,
+      "filename": "OgreMageA_",
+      "sex": "4",
+      "race": "18",
+      "name": "Ogremagea"
+    },
+    {
+      "id": 265,
+      "filename": "OldChiefA_",
+      "sex": "4",
+      "race": "15",
+      "name": "Oldchiefa"
+    },
+    {
+      "id": 266,
+      "filename": "OldChiefB_",
+      "sex": "4",
+      "race": "15",
+      "name": "Oldchiefb"
+    },
+    {
+      "id": 267,
+      "filename": "OldWarA_",
+      "sex": "4",
+      "race": "15",
+      "name": "Oldwara"
+    },
+    {
+      "id": 268,
+      "filename": "OldWarB_",
+      "sex": "4",
+      "race": "15",
+      "name": "Oldwarb"
+    },
+    {
+      "id": 269,
+      "filename": "OldWizA_",
+      "sex": "4",
+      "race": "15",
+      "name": "Oldwiza"
+    },
+    {
+      "id": 270,
+      "filename": "OldWizB_",
+      "sex": "4",
+      "race": "15",
+      "name": "Oldwizb"
+    },
+    {
+      "id": 271,
+      "filename": "OrcA_",
+      "sex": "4",
+      "race": "14",
+      "name": "Orca"
+    },
+    {
+      "id": 272,
+      "filename": "OrcB_",
+      "sex": "4",
+      "race": "14",
+      "name": "Orcb"
+    },
+    {
+      "id": 273,
+      "filename": "OrcChiefA_",
+      "sex": "4",
+      "race": "14",
+      "name": "Orcchiefa"
+    },
+    {
+      "id": 274,
+      "filename": "OrcChiefB_",
+      "sex": "4",
+      "race": "14",
+      "name": "Orcchiefb"
+    },
+    {
+      "id": 277,
+      "filename": "orcwizA_",
+      "sex": "4",
+      "race": "14",
+      "name": "Orcwiza"
+    },
+    {
+      "id": 278,
+      "filename": "orcwizB_",
+      "sex": "4",
+      "race": "14",
+      "name": "Orcwizb"
+    },
+    {
+      "id": 279,
+      "filename": "Ox_",
+      "sex": "4",
+      "race": "8",
+      "name": "Ox"
+    },
+    {
+      "id": 280,
+      "filename": "archon_",
+      "sex": "4",
+      "race": "20",
+      "name": "Archon"
+    },
+    {
+      "id": 281,
+      "filename": "Rakshasa_",
+      "sex": "4",
+      "race": "20",
+      "name": "Rakshasa"
+    },
+    {
+      "id": 282,
+      "filename": "a_bird_rav_",
+      "sex": "4",
+      "race": "8",
+      "name": "A Bird Rav"
+    },
+    {
+      "id": 283,
+      "filename": "Shadow_",
+      "sex": "4",
+      "race": "24",
+      "name": "Shadow"
+    },
+    {
+      "id": 284,
+      "filename": "ShFiend_",
+      "sex": "4",
+      "race": "24",
+      "name": "Shfiend"
+    },
+    {
+      "id": 285,
+      "filename": "ShGuard_",
+      "sex": "4",
+      "race": "10",
+      "name": "Shguard"
+    },
+    {
+      "id": 286,
+      "filename": "ShMastif_",
+      "sex": "4",
+      "race": "20",
+      "name": "Shmastif"
+    },
+    {
+      "id": 287,
+      "filename": "skel01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Skel01"
+    },
+    {
+      "id": 288,
+      "filename": "Sk_Chief01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Sk Chief01"
+    },
+    {
+      "id": 289,
+      "filename": "Sk_Com01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Sk Com01"
+    },
+    {
+      "id": 290,
+      "filename": "Sk_Mage01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Sk Mage01"
+    },
+    {
+      "id": 291,
+      "filename": "Sk_Pre01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Sk Pre01"
+    },
+    {
+      "id": 292,
+      "filename": "Sk_War01_",
+      "sex": "4",
+      "race": "24",
+      "name": "Sk War01"
+    },
+    {
+      "id": 293,
+      "filename": "Sk_War02_",
+      "sex": "4",
+      "race": "24",
+      "name": "Sk War02"
+    },
+    {
+      "id": 294,
+      "filename": "SlaadBl_",
+      "sex": "4",
+      "race": "20",
+      "name": "Slaadbl"
+    },
+    {
+      "id": 295,
+      "filename": "Slaaddth_",
+      "sex": "4",
+      "race": "20",
+      "name": "Slaaddth"
+    },
+    {
+      "id": 296,
+      "filename": "SlaadGray_",
+      "sex": "4",
+      "race": "20",
+      "name": "Slaadgray"
+    },
+    {
+      "id": 297,
+      "filename": "SlaadGrn_",
+      "sex": "4",
+      "race": "20",
+      "name": "Slaadgrn"
+    },
+    {
+      "id": 298,
+      "filename": "SlaadRed_",
+      "sex": "4",
+      "race": "20",
+      "name": "Slaadred"
+    },
+    {
+      "id": 299,
+      "filename": "Spectre_",
+      "sex": "4",
+      "race": "24",
+      "name": "Spectre"
+    },
+    {
+      "id": 300,
+      "filename": "SpidDire_",
+      "sex": "4",
+      "race": "25",
+      "name": "Spiddire"
+    },
+    {
+      "id": 301,
+      "filename": "SpidGiant_",
+      "sex": "4",
+      "race": "25",
+      "name": "Spidgiant"
+    },
+    {
+      "id": 302,
+      "filename": "SpidPhase_",
+      "sex": "4",
+      "race": "19",
+      "name": "Spidphase"
+    },
+    {
+      "id": 303,
+      "filename": "SpidSwrd_",
+      "sex": "4",
+      "race": "25",
+      "name": "Spidswrd"
+    }
+  ]
+}

@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 8,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 948,
+      "filename": "hu_f_30_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 30"
+    },
+    {
+      "id": 949,
+      "filename": "hu_f_31_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 31"
+    },
+    {
+      "id": 950,
+      "filename": "hu_f_32_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 32"
+    },
+    {
+      "id": 951,
+      "filename": "hu_f_33_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 33"
+    },
+    {
+      "id": 952,
+      "filename": "el_m_12_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 12"
+    },
+    {
+      "id": 953,
+      "filename": "el_m_13_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 13"
+    },
+    {
+      "id": 954,
+      "filename": "el_f_16_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 16"
+    },
+    {
+      "id": 955,
+      "filename": "dw_m_11_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 11"
+    },
+    {
+      "id": 956,
+      "filename": "dw_f_10_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 10"
+    },
+    {
+      "id": 957,
+      "filename": "ha_m_07_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 07"
+    },
+    {
+      "id": 958,
+      "filename": "ha_f_08_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 08"
+    },
+    {
+      "id": 959,
+      "filename": "or_m_08_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 08"
+    },
+    {
+      "id": 960,
+      "filename": "or_f_05_",
+      "sex": "1",
+      "race": "5",
+      "name": "Or F 05"
+    },
+    {
+      "id": 962,
+      "filename": "gn_f_07_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 07"
+    },
+    {
+      "id": 963,
+      "filename": "durnan_",
+      "sex": "0",
+      "race": "6",
+      "name": "Durnan"
+    },
+    {
+      "id": 964,
+      "filename": "halaster_",
+      "sex": "0",
+      "race": "6",
+      "name": "Halaster"
+    },
+    {
+      "id": 965,
+      "filename": "hu_m_49_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 49"
+    },
+    {
+      "id": 966,
+      "filename": "matmother_",
+      "sex": "1",
+      "race": "1",
+      "name": "Matmother"
+    },
+    {
+      "id": 967,
+      "filename": "overmind_",
+      "sex": "0",
+      "race": "7",
+      "name": "Overmind"
+    },
+    {
+      "id": 969,
+      "filename": "drowpr_",
+      "sex": "1",
+      "race": "1",
+      "name": "Drowpr"
+    },
+    {
+      "id": 970,
+      "filename": "drowwar_",
+      "sex": "0",
+      "race": "1",
+      "name": "Drowwar"
+    },
+    {
+      "id": 971,
+      "filename": "drowwiz_",
+      "sex": "0",
+      "race": "1",
+      "name": "Drowwiz"
+    },
+    {
+      "id": 972,
+      "filename": "duergfem_",
+      "sex": "1",
+      "race": "0",
+      "name": "Duergfem"
+    },
+    {
+      "id": 973,
+      "filename": "duergmale_",
+      "sex": "0",
+      "race": "0",
+      "name": "Duergmale"
+    },
+    {
+      "id": 974,
+      "filename": "seer_",
+      "sex": "1",
+      "race": "1",
+      "name": "Seer"
+    },
+    {
+      "id": 975,
+      "filename": "nathyrra_",
+      "sex": "1",
+      "race": "1",
+      "name": "Nathyrra"
+    },
+    {
+      "id": 976,
+      "filename": "valen_",
+      "sex": "0",
+      "race": "20",
+      "name": "Valen"
+    },
+    {
+      "id": 977,
+      "filename": "astraldeva_",
+      "sex": "1",
+      "race": "20",
+      "name": "Astraldeva"
+    },
+    {
+      "id": 978,
+      "filename": "queenshao_",
+      "sex": "1",
+      "race": "6",
+      "name": "Queenshao"
+    },
+    {
+      "id": 979,
+      "filename": "jester_",
+      "sex": "0",
+      "race": "6",
+      "name": "Jester"
+    },
+    {
+      "id": 980,
+      "filename": "metcon_",
+      "sex": "0",
+      "race": "10",
+      "name": "Metcon"
+    },
+    {
+      "id": 981,
+      "filename": "metconchf_",
+      "sex": "0",
+      "race": "10",
+      "name": "Metconchf"
+    },
+    {
+      "id": 982,
+      "filename": "drowghost_",
+      "sex": "0",
+      "race": "24",
+      "name": "Drowghost"
+    },
+    {
+      "id": 983,
+      "filename": "sleepman_",
+      "sex": "0",
+      "race": "20",
+      "name": "Sleepman"
+    },
+    {
+      "id": 984,
+      "filename": "girl2_",
+      "sex": "1",
+      "race": "6",
+      "name": "Girl2"
+    },
+    {
+      "id": 985,
+      "filename": "boy2_",
+      "sex": "0",
+      "race": "6",
+      "name": "Boy2"
+    },
+    {
+      "id": 986,
+      "filename": "driderf_",
+      "sex": "4",
+      "race": "2",
+      "name": "Driderf"
+    },
+    {
+      "id": 988,
+      "filename": "PX2_E01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E01"
+    },
+    {
+      "id": 989,
+      "filename": "PX2_E02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E02"
+    },
+    {
+      "id": 990,
+      "filename": "PX2_E03_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E03"
+    },
+    {
+      "id": 991,
+      "filename": "PX2_E04_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E04"
+    },
+    {
+      "id": 992,
+      "filename": "PX2_E05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E05"
+    },
+    {
+      "id": 993,
+      "filename": "PX2_E06_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E06"
+    },
+    {
+      "id": 994,
+      "filename": "PX2_E07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E07"
+    },
+    {
+      "id": 995,
+      "filename": "PX2_E08_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E08"
+    },
+    {
+      "id": 996,
+      "filename": "PX2_E09_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E09"
+    },
+    {
+      "id": 997,
+      "filename": "PX2_F01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F01"
+    },
+    {
+      "id": 998,
+      "filename": "PX2_F02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F02"
+    },
+    {
+      "id": 999,
+      "filename": "PX2_F03_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F03"
+    },
+    {
+      "id": 1000,
+      "filename": "PX2_F04_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F04"
+    },
+    {
+      "id": 1001,
+      "filename": "PX2_F05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F05"
+    },
+    {
+      "id": 1002,
+      "filename": "PX2_F06_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F06"
+    },
+    {
+      "id": 1003,
+      "filename": "PX2_F07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F07"
+    },
+    {
+      "id": 1004,
+      "filename": "PX2_F08_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F08"
+    },
+    {
+      "id": 1005,
+      "filename": "PX2_F09_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F09"
+    },
+    {
+      "id": 1006,
+      "filename": "PX2_F10_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 F10"
+    },
+    {
+      "id": 1007,
+      "filename": "PX2_G01_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 G01"
+    },
+    {
+      "id": 1008,
+      "filename": "PX2_G02_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 G02"
+    },
+    {
+      "id": 1009,
+      "filename": "PX2_G03_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 G03"
+    },
+    {
+      "id": 1010,
+      "filename": "PX2_G05_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 G05"
+    },
+    {
+      "id": 1011,
+      "filename": "PX2_G07_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 G07"
+    },
+    {
+      "id": 1012,
+      "filename": "C_BoatHack_",
+      "sex": "4",
+      "race": null,
+      "name": "C Boathack"
+    },
+    {
+      "id": 1013,
+      "filename": "PX2_C10_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 C10"
+    },
+    {
+      "id": 1014,
+      "filename": "blackbld_",
+      "sex": "4",
+      "race": "2",
+      "name": "Blackbld"
+    },
+    {
+      "id": 1015,
+      "filename": "dagger_",
+      "sex": "4",
+      "race": "2",
+      "name": "Dagger"
+    },
+    {
+      "id": 1016,
+      "filename": "hu_m_50_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 50"
+    },
+    {
+      "id": 1018,
+      "filename": "PX2_E10_",
+      "sex": "4",
+      "race": null,
+      "name": "Px2 E10"
+    },
+    {
+      "id": 1019,
+      "filename": "drowfem_",
+      "sex": "1",
+      "race": "1",
+      "name": "Drowfem"
+    },
+    {
+      "id": 1020,
+      "filename": "drowmale_",
+      "sex": "0",
+      "race": "1",
+      "name": "Drowmale"
+    },
+    {
+      "id": 1021,
+      "filename": "barghest_",
+      "sex": "4",
+      "race": "20",
+      "name": "Barghest"
+    },
+    {
+      "id": 1022,
+      "filename": "archont_",
+      "sex": "4",
+      "race": "20",
+      "name": "Archont"
+    },
+    {
+      "id": 1023,
+      "filename": "clsarcher_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsarcher"
+    },
+    {
+      "id": 1024,
+      "filename": "clsarcher_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsarcher"
+    },
+    {
+      "id": 1025,
+      "filename": "clsbarb_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsbarb"
+    },
+    {
+      "id": 1026,
+      "filename": "clsbarb_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsbarb"
+    },
+    {
+      "id": 1027,
+      "filename": "clsassa_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsassa"
+    },
+    {
+      "id": 1028,
+      "filename": "clsassa_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsassa"
+    },
+    {
+      "id": 1029,
+      "filename": "clsbard_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsbard"
+    },
+    {
+      "id": 1030,
+      "filename": "clsbard_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsbard"
+    },
+    {
+      "id": 1031,
+      "filename": "clsblkgrd_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsblkgrd"
+    },
+    {
+      "id": 1032,
+      "filename": "clsblkgrd_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsblkgrd"
+    },
+    {
+      "id": 1033,
+      "filename": "clscleric_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clscleric"
+    },
+    {
+      "id": 1034,
+      "filename": "clscleric_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clscleric"
+    },
+    {
+      "id": 1035,
+      "filename": "clsdivchmp_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsdivchmp"
+    },
+    {
+      "id": 1036,
+      "filename": "clsdivchmp_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsdivchmp"
+    },
+    {
+      "id": 1037,
+      "filename": "clsdrgdisc_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsdrgdisc"
+    },
+    {
+      "id": 1038,
+      "filename": "clsdrgdisc_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsdrgdisc"
+    },
+    {
+      "id": 1039,
+      "filename": "clsdruid_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsdruid"
+    },
+    {
+      "id": 1040,
+      "filename": "clsdruid_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsdruid"
+    },
+    {
+      "id": 1041,
+      "filename": "clsdwfend_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsdwfend"
+    },
+    {
+      "id": 1042,
+      "filename": "clsdwfend_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsdwfend"
+    },
+    {
+      "id": 1043,
+      "filename": "clsfight_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsfight"
+    },
+    {
+      "id": 1044,
+      "filename": "clsfight_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsfight"
+    },
+    {
+      "id": 1045,
+      "filename": "clsfighter_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsfighter"
+    },
+    {
+      "id": 1046,
+      "filename": "clsfighter_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsfighter"
+    },
+    {
+      "id": 1047,
+      "filename": "clsmonk_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clsmonk"
+    },
+    {
+      "id": 1048,
+      "filename": "clsmonk_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clsmonk"
+    },
+    {
+      "id": 1049,
+      "filename": "clspaladin_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clspaladin"
+    },
+    {
+      "id": 1050,
+      "filename": "clspaladin_",
+      "sex": "1",
+      "race": "6",
+      "name": "Clspaladin"
+    },
+    {
+      "id": 1051,
+      "filename": "clspalemast_",
+      "sex": "0",
+      "race": "6",
+      "name": "Clspalemast"
+    }
+  ]
+}

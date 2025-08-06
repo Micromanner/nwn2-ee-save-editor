@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 1,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 101,
+      "filename": "hu_m_09_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 09"
+    },
+    {
+      "id": 102,
+      "filename": "hu_m_10_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 10"
+    },
+    {
+      "id": 103,
+      "filename": "hu_m_11_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 11"
+    },
+    {
+      "id": 104,
+      "filename": "hu_m_12_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 12"
+    },
+    {
+      "id": 105,
+      "filename": "hu_m_13_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 13"
+    },
+    {
+      "id": 106,
+      "filename": "hu_m_14_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 14"
+    },
+    {
+      "id": 107,
+      "filename": "hu_m_15_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 15"
+    },
+    {
+      "id": 108,
+      "filename": "hu_m_16_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 16"
+    },
+    {
+      "id": 109,
+      "filename": "hu_m_17_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 17"
+    },
+    {
+      "id": 110,
+      "filename": "hu_m_18_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 18"
+    },
+    {
+      "id": 111,
+      "filename": "hu_m_19_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 19"
+    },
+    {
+      "id": 112,
+      "filename": "hu_m_20_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 20"
+    },
+    {
+      "id": 113,
+      "filename": "villager2_",
+      "sex": "1",
+      "race": "6",
+      "name": "Villager2"
+    },
+    {
+      "id": 114,
+      "filename": "hu_m_21_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 21"
+    },
+    {
+      "id": 115,
+      "filename": "hu_m_22_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 22"
+    },
+    {
+      "id": 116,
+      "filename": "hu_m_23_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 23"
+    },
+    {
+      "id": 117,
+      "filename": "villager3_",
+      "sex": "0",
+      "race": "6",
+      "name": "Villager3"
+    },
+    {
+      "id": 118,
+      "filename": "hu_m_25_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 25"
+    },
+    {
+      "id": 119,
+      "filename": "hu_m_26_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 26"
+    },
+    {
+      "id": 120,
+      "filename": "hu_m_27_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 27"
+    },
+    {
+      "id": 121,
+      "filename": "hu_m_28_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 28"
+    },
+    {
+      "id": 122,
+      "filename": "hu_m_29_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 29"
+    },
+    {
+      "id": 123,
+      "filename": "hu_m_30_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 30"
+    },
+    {
+      "id": 124,
+      "filename": "hu_m_31_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 31"
+    },
+    {
+      "id": 125,
+      "filename": "hu_m_32_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 32"
+    },
+    {
+      "id": 126,
+      "filename": "hu_m_33_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 33"
+    },
+    {
+      "id": 127,
+      "filename": "hu_m_34_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 34"
+    },
+    {
+      "id": 128,
+      "filename": "hu_m_35_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 35"
+    },
+    {
+      "id": 129,
+      "filename": "hu_m_99_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 99"
+    },
+    {
+      "id": 130,
+      "filename": "or_f_01_",
+      "sex": "1",
+      "race": "5",
+      "name": "Or F 01"
+    },
+    {
+      "id": 131,
+      "filename": "or_f_02_",
+      "sex": "1",
+      "race": "5",
+      "name": "Or F 02"
+    },
+    {
+      "id": 132,
+      "filename": "or_f_03_",
+      "sex": "1",
+      "race": "5",
+      "name": "Or F 03"
+    },
+    {
+      "id": 133,
+      "filename": "or_f_04_",
+      "sex": "1",
+      "race": "5",
+      "name": "Or F 04"
+    },
+    {
+      "id": 134,
+      "filename": "or_m_01_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 01"
+    },
+    {
+      "id": 135,
+      "filename": "or_m_02_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 02"
+    },
+    {
+      "id": 136,
+      "filename": "or_m_03_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 03"
+    },
+    {
+      "id": 137,
+      "filename": "or_m_04_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 04"
+    },
+    {
+      "id": 138,
+      "filename": "or_m_05_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 05"
+    },
+    {
+      "id": 139,
+      "filename": "or_m_06_",
+      "sex": "0",
+      "race": "5",
+      "name": "Or M 06"
+    },
+    {
+      "id": 140,
+      "filename": "Air_",
+      "sex": "4",
+      "race": "16",
+      "name": "Air"
+    },
+    {
+      "id": 141,
+      "filename": "AirElder_",
+      "sex": "4",
+      "race": "16",
+      "name": "Airelder"
+    },
+    {
+      "id": 142,
+      "filename": "Allip_",
+      "sex": "4",
+      "race": "24",
+      "name": "Allip"
+    },
+    {
+      "id": 143,
+      "filename": "Aranea_",
+      "sex": "4",
+      "race": "23",
+      "name": "Aranea"
+    },
+    {
+      "id": 144,
+      "filename": "Badger_",
+      "sex": "4",
+      "race": "8",
+      "name": "Badger"
+    },
+    {
+      "id": 145,
+      "filename": "Bat_",
+      "sex": "4",
+      "race": "8",
+      "name": "Bat"
+    },
+    {
+      "id": 146,
+      "filename": "BatHorror_",
+      "sex": "4",
+      "race": "10",
+      "name": "Bathorror"
+    },
+    {
+      "id": 147,
+      "filename": "BearBlck_",
+      "sex": "4",
+      "race": "8",
+      "name": "Bearblck"
+    },
+    {
+      "id": 148,
+      "filename": "BearBrwn_",
+      "sex": "4",
+      "race": "8",
+      "name": "Bearbrwn"
+    },
+    {
+      "id": 149,
+      "filename": "BearPolar_",
+      "sex": "4",
+      "race": "8",
+      "name": "Bearpolar"
+    },
+    {
+      "id": 150,
+      "filename": "beetle_",
+      "sex": "4",
+      "race": "25",
+      "name": "Beetle"
+    },
+    {
+      "id": 151,
+      "filename": "BlinkDog_",
+      "sex": "4",
+      "race": "19",
+      "name": "Blinkdog"
+    },
+    {
+      "id": 152,
+      "filename": "Boar_",
+      "sex": "4",
+      "race": "8",
+      "name": "Boar"
+    },
+    {
+      "id": 153,
+      "filename": "Bodak_",
+      "sex": "4",
+      "race": "24",
+      "name": "Bodak"
+    },
+    {
+      "id": 154,
+      "filename": "Btlslicer_",
+      "sex": "4",
+      "race": "25",
+      "name": "Btlslicer"
+    },
+    {
+      "id": 155,
+      "filename": "BtlFire_",
+      "sex": "4",
+      "race": "25",
+      "name": "Btlfire"
+    },
+    {
+      "id": 156,
+      "filename": "BtlStag_",
+      "sex": "4",
+      "race": "25",
+      "name": "Btlstag"
+    },
+    {
+      "id": 157,
+      "filename": "BtlStink_",
+      "sex": "4",
+      "race": "25",
+      "name": "Btlstink"
+    },
+    {
+      "id": 158,
+      "filename": "BugbearA_",
+      "sex": "4",
+      "race": "12",
+      "name": "Bugbeara"
+    },
+    {
+      "id": 159,
+      "filename": "BugbearB_",
+      "sex": "4",
+      "race": "12",
+      "name": "Bugbearb"
+    },
+    {
+      "id": 160,
+      "filename": "BugChiefA_",
+      "sex": "4",
+      "race": "12",
+      "name": "Bugchiefa"
+    },
+    {
+      "id": 161,
+      "filename": "BugChiefB_",
+      "sex": "4",
+      "race": "12",
+      "name": "Bugchiefb"
+    },
+    {
+      "id": 162,
+      "filename": "BugWizA_",
+      "sex": "4",
+      "race": "12",
+      "name": "Bugwiza"
+    },
+    {
+      "id": 163,
+      "filename": "BugWizB_",
+      "sex": "4",
+      "race": "12",
+      "name": "Bugwizb"
+    },
+    {
+      "id": 164,
+      "filename": "Cat_",
+      "sex": "4",
+      "race": "8",
+      "name": "Cat"
+    },
+    {
+      "id": 165,
+      "filename": "cat_crag_",
+      "sex": "4",
+      "race": "8",
+      "name": "Cat Crag"
+    },
+    {
+      "id": 166,
+      "filename": "diretiger_",
+      "sex": "4",
+      "race": "8",
+      "name": "Diretiger"
+    },
+    {
+      "id": 167,
+      "filename": "lion_",
+      "sex": "4",
+      "race": "8",
+      "name": "Lion"
+    },
+    {
+      "id": 168,
+      "filename": "Chicken_",
+      "sex": "4",
+      "race": "8",
+      "name": "Chicken"
+    },
+    {
+      "id": 169,
+      "filename": "kid_",
+      "sex": "0",
+      "race": "6",
+      "name": "Kid"
+    },
+    {
+      "id": 170,
+      "filename": "girl_",
+      "sex": "1",
+      "race": "6",
+      "name": "Girl"
+    },
+    {
+      "id": 171,
+      "filename": "Lantern_",
+      "sex": "4",
+      "race": "21",
+      "name": "Lantern"
+    },
+    {
+      "id": 172,
+      "filename": "Cow_",
+      "sex": "4",
+      "race": "8",
+      "name": "Cow"
+    },
+    {
+      "id": 173,
+      "filename": "villager4_",
+      "sex": "1",
+      "race": "6",
+      "name": "Villager4"
+    },
+    {
+      "id": 174,
+      "filename": "Deer_",
+      "sex": "4",
+      "race": "8",
+      "name": "Deer"
+    },
+    {
+      "id": 175,
+      "filename": "DeerWhite_",
+      "sex": "4",
+      "race": "8",
+      "name": "Deerwhite"
+    },
+    {
+      "id": 176,
+      "filename": "demon_",
+      "sex": "4",
+      "race": "20",
+      "name": "Demon"
+    },
+    {
+      "id": 177,
+      "filename": "Devour_",
+      "sex": "4",
+      "race": "7",
+      "name": "Devour"
+    },
+    {
+      "id": 178,
+      "filename": "devo_01_",
+      "sex": "4",
+      "race": "7",
+      "name": "Devo 01"
+    },
+    {
+      "id": 179,
+      "filename": "Devo_02_",
+      "sex": "4",
+      "race": "24",
+      "name": "Devo 02"
+    },
+    {
+      "id": 180,
+      "filename": "DireBadger_",
+      "sex": "4",
+      "race": "8",
+      "name": "Direbadger"
+    },
+    {
+      "id": 181,
+      "filename": "BearDire_",
+      "sex": "4",
+      "race": "8",
+      "name": "Beardire"
+    },
+    {
+      "id": 182,
+      "filename": "DireBoar_",
+      "sex": "4",
+      "race": "8",
+      "name": "Direboar"
+    },
+    {
+      "id": 183,
+      "filename": "Morgh_",
+      "sex": "4",
+      "race": "24",
+      "name": "Morgh"
+    },
+    {
+      "id": 184,
+      "filename": "DireWolf_",
+      "sex": "4",
+      "race": "8",
+      "name": "Direwolf"
+    },
+    {
+      "id": 185,
+      "filename": "Imp_",
+      "sex": "4",
+      "race": "20",
+      "name": "Imp"
+    },
+    {
+      "id": 186,
+      "filename": "DmQuasit_",
+      "sex": "4",
+      "race": "20",
+      "name": "Dmquasit"
+    },
+    {
+      "id": 187,
+      "filename": "DmSucubus_",
+      "sex": "4",
+      "race": "20",
+      "name": "Dmsucubus"
+    },
+    {
+      "id": 188,
+      "filename": "DmVrock_",
+      "sex": "4",
+      "race": "20",
+      "name": "Dmvrock"
+    },
+    {
+      "id": 189,
+      "filename": "Dog_",
+      "sex": "4",
+      "race": "8",
+      "name": "Dog"
+    },
+    {
+      "id": 190,
+      "filename": "DoomKght_",
+      "sex": "4",
+      "race": "24",
+      "name": "Doomkght"
+    },
+    {
+      "id": 191,
+      "filename": "DrgBlack_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgblack"
+    },
+    {
+      "id": 192,
+      "filename": "DrgBlue_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgblue"
+    },
+    {
+      "id": 193,
+      "filename": "DrgBrass_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgbrass"
+    },
+    {
+      "id": 194,
+      "filename": "DrgBrnz_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgbrnz"
+    },
+    {
+      "id": 195,
+      "filename": "DrgCopp_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgcopp"
+    },
+    {
+      "id": 196,
+      "filename": "DrgGold_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drggold"
+    },
+    {
+      "id": 197,
+      "filename": "DrgGreen_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drggreen"
+    },
+    {
+      "id": 198,
+      "filename": "DrgRed_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgred"
+    },
+    {
+      "id": 199,
+      "filename": "DrgSilv_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgsilv"
+    },
+    {
+      "id": 200,
+      "filename": "DrgWhite_",
+      "sex": "4",
+      "race": "11",
+      "name": "Drgwhite"
+    }
+  ]
+}

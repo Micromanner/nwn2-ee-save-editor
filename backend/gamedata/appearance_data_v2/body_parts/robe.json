@@ -1,0 +1,53 @@
+{
+  "robe": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 0"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 1"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 2"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 3"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.5,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 4"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 1.0,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 5"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 2.0,
+      "cost_modifier": 0.0,
+      "part_type": "robe",
+      "name": "Robe 6"
+    }
+  ]
+}

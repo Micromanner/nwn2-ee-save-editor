@@ -1,0 +1,100 @@
+{
+  "ghostwise": [
+    {
+      "id": 0,
+      "hair": "FFFF00",
+      "hair_accessory": "FFFF00",
+      "skin": "FFFF00",
+      "eyes": "FFFF00",
+      "body_hair": "FFFF00"
+    },
+    {
+      "id": 1,
+      "hair": "FFFFFF",
+      "hair_accessory": "FFFFFF",
+      "skin": "FFFFFF",
+      "eyes": "FFFFFF",
+      "body_hair": "FFFFFF"
+    },
+    {
+      "id": 2,
+      "hair": "EE82EE",
+      "hair_accessory": "EE82EE",
+      "skin": "EE82EE",
+      "eyes": "EE82EE",
+      "body_hair": "EE82EE"
+    },
+    {
+      "id": 3,
+      "hair": "87CEEB",
+      "hair_accessory": "87CEEB",
+      "skin": "87CEEB",
+      "eyes": "87CEEB",
+      "body_hair": "87CEEB"
+    },
+    {
+      "id": 4,
+      "hair": "B0E0E6",
+      "hair_accessory": "B0E0E6",
+      "skin": "B0E0E6",
+      "eyes": "B0E0E6",
+      "body_hair": "B0E0E6"
+    },
+    {
+      "id": 5,
+      "hair": "32CD32",
+      "hair_accessory": "32CD32",
+      "skin": "32CD32",
+      "eyes": "32CD32",
+      "body_hair": "32CD32"
+    },
+    {
+      "id": 6,
+      "hair": "FF69B4",
+      "hair_accessory": "FF69B4",
+      "skin": "FF69B4",
+      "eyes": "FF69B4",
+      "body_hair": "FF69B4"
+    },
+    {
+      "id": 7,
+      "hair": "BDB76B",
+      "hair_accessory": "BDB76B",
+      "skin": "BDB76B",
+      "eyes": "BDB76B",
+      "body_hair": "BDB76B"
+    },
+    {
+      "id": 8,
+      "hair": "FF7F50",
+      "hair_accessory": "FF7F50",
+      "skin": "FF7F50",
+      "eyes": "FF7F50",
+      "body_hair": "FF7F50"
+    },
+    {
+      "id": 9,
+      "hair": "A52A2A",
+      "hair_accessory": "A52A2A",
+      "skin": "A52A2A",
+      "eyes": "A52A2A",
+      "body_hair": "A52A2A"
+    },
+    {
+      "id": 10,
+      "hair": "5F9EA0",
+      "hair_accessory": "5F9EA0",
+      "skin": "5F9EA0",
+      "eyes": "5F9EA0",
+      "body_hair": "5F9EA0"
+    },
+    {
+      "id": 11,
+      "hair": "FFA500",
+      "hair_accessory": "FFA500",
+      "skin": "FFA500",
+      "eyes": "FFA500",
+      "body_hair": "FFA500"
+    }
+  ]
+}

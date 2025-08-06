@@ -1,0 +1,188 @@
+{
+  "forearm": [
+    {
+      "id": 0,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 0",
+      "body_model_type": "Default (Cloth)"
+    },
+    {
+      "id": 1,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 1",
+      "body_model_type": "Padded"
+    },
+    {
+      "id": 2,
+      "ac_bonus": 0.0,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 2",
+      "body_model_type": "Leather"
+    },
+    {
+      "id": 3,
+      "ac_bonus": 0.01,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 3",
+      "body_model_type": "Studded Leather"
+    },
+    {
+      "id": 4,
+      "ac_bonus": 0.03,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 4",
+      "body_model_type": "Chain Shirt"
+    },
+    {
+      "id": 5,
+      "ac_bonus": 0.06,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 5",
+      "body_model_type": "Scale Mail"
+    },
+    {
+      "id": 6,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 6",
+      "body_model_type": "Banded Mail"
+    },
+    {
+      "id": 7,
+      "ac_bonus": 0.14,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 7",
+      "body_model_type": "Half-Plate"
+    },
+    {
+      "id": 8,
+      "ac_bonus": 0.01,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 8",
+      "body_model_type": "Full Plate"
+    },
+    {
+      "id": 9,
+      "ac_bonus": 0.1,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 9",
+      "body_model_type": "Hide"
+    },
+    {
+      "id": 10,
+      "ac_bonus": 0.01,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 10",
+      "body_model_type": "Naked"
+    },
+    {
+      "id": 11,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 11",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 12,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 12",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 13,
+      "ac_bonus": 0.08,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 13",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 14,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 14",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 15,
+      "ac_bonus": 0.17,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 15",
+      "body_model_type": "padding"
+    },
+    {
+      "id": 16,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 16"
+    },
+    {
+      "id": 17,
+      "ac_bonus": 0.05,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 17"
+    },
+    {
+      "id": 18,
+      "ac_bonus": 0.17,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 18"
+    },
+    {
+      "id": 19,
+      "ac_bonus": 0.17,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 19"
+    },
+    {
+      "id": 20,
+      "ac_bonus": 0.17,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 20"
+    },
+    {
+      "id": 21,
+      "ac_bonus": 0.17,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 21"
+    },
+    {
+      "id": 22,
+      "ac_bonus": 0.04,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 22"
+    },
+    {
+      "id": 23,
+      "ac_bonus": 0.14,
+      "cost_modifier": 0.0,
+      "part_type": "forearm",
+      "name": "Forearm 23"
+    }
+  ]
+}

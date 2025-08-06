@@ -1,0 +1,118 @@
+{
+  "structure": {
+    "body_parts": {
+      "directory": "body_parts/",
+      "files": [
+        "chest.json",
+        "legs.json",
+        "belt.json",
+        "foot.json",
+        "hand.json",
+        "neck.json",
+        "pelvis.json",
+        "bicep.json",
+        "forearm.json",
+        "shin.json",
+        "shoulder.json",
+        "robe.json"
+      ],
+      "reference": "body_parts/reference.json"
+    },
+    "colors": {
+      "directory": "colors/",
+      "race_files": [
+        "human_colors.json",
+        "halforc_colors.json",
+        "halfelf_colors.json",
+        "aasimar_colors.json",
+        "tiefling_colors.json",
+        "drow_colors.json",
+        "yuanti_colors.json",
+        "grayorc_colors.json",
+        "graydwarf_colors.json",
+        "golddwarf_colors.json",
+        "wildelf_colors.json",
+        "woodelf_colors.json",
+        "sunelf_colors.json",
+        "moonelf_colors.json",
+        "halfdrow_colors.json",
+        "shielddwarf_colors.json",
+        "deepgnome_colors.json",
+        "rockgnome_colors.json",
+        "strongheart_colors.json",
+        "lightfoot_colors.json",
+        "ghostwise_colors.json",
+        "earthgen_colors.json",
+        "airgen_colors.json",
+        "watergen_colors.json",
+        "firegen_colors.json"
+      ],
+      "reference": "colors/reference.json"
+    },
+    "portraits": {
+      "directory": "portraits/",
+      "description": "Split into batches of 100 entries"
+    },
+    "base_data": {
+      "directory": "base_data/",
+      "files": [
+        "appearance_types.json",
+        "soundsets.json",
+        "genders.json"
+      ]
+    }
+  },
+  "statistics": {
+    "appearance_types": {
+      "total_entries": 1051,
+      "subcategories": [
+        "player_races",
+        "creatures",
+        "npcs",
+        "other"
+      ]
+    },
+    "body_parts": {
+      "total_entries": 276,
+      "subcategories": [
+        "chest",
+        "legs",
+        "belt",
+        "foot",
+        "hand",
+        "neck",
+        "pelvis",
+        "bicep",
+        "forearm",
+        "shin",
+        "shoulder",
+        "robe",
+        "body_model_types",
+        "visual_armor_categories"
+      ]
+    },
+    "colors": {
+      "total_entries": 185,
+      "subcategories": [
+        "race_palettes",
+        "master_colors",
+        "item_colors"
+      ]
+    },
+    "portraits": {
+      "total_entries": 914,
+      "subcategories": [
+        "player",
+        "npc",
+        "custom"
+      ]
+    },
+    "soundsets": {
+      "total_entries": 0,
+      "subcategories": []
+    },
+    "genders": {
+      "total_entries": 5
+    }
+  }
+}

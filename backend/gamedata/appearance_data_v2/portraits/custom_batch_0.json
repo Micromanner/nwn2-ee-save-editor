@@ -1,0 +1,707 @@
+{
+  "category": "custom",
+  "batch": 0,
+  "total_batches": 10,
+  "portraits": [
+    {
+      "id": 1,
+      "filename": "dw_f_01_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 01"
+    },
+    {
+      "id": 2,
+      "filename": "dw_f_02_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 02"
+    },
+    {
+      "id": 3,
+      "filename": "dw_f_03_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 03"
+    },
+    {
+      "id": 4,
+      "filename": "dw_f_04_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 04"
+    },
+    {
+      "id": 5,
+      "filename": "dw_f_05_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 05"
+    },
+    {
+      "id": 6,
+      "filename": "dw_f_06_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 06"
+    },
+    {
+      "id": 7,
+      "filename": "dw_f_07_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 07"
+    },
+    {
+      "id": 8,
+      "filename": "dw_f_08_",
+      "sex": "1",
+      "race": "0",
+      "name": "Dw F 08"
+    },
+    {
+      "id": 9,
+      "filename": "dw_m_01_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 01"
+    },
+    {
+      "id": 10,
+      "filename": "dw_m_02_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 02"
+    },
+    {
+      "id": 11,
+      "filename": "dw_m_03_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 03"
+    },
+    {
+      "id": 12,
+      "filename": "dw_m_04_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 04"
+    },
+    {
+      "id": 13,
+      "filename": "dw_m_05_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 05"
+    },
+    {
+      "id": 14,
+      "filename": "dw_m_06_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 06"
+    },
+    {
+      "id": 15,
+      "filename": "dw_m_07_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 07"
+    },
+    {
+      "id": 16,
+      "filename": "dw_m_08_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 08"
+    },
+    {
+      "id": 17,
+      "filename": "dw_m_09_",
+      "sex": "0",
+      "race": "0",
+      "name": "Dw M 09"
+    },
+    {
+      "id": 18,
+      "filename": "el_f_01_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 01"
+    },
+    {
+      "id": 19,
+      "filename": "el_f_02_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 02"
+    },
+    {
+      "id": 20,
+      "filename": "el_f_03_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 03"
+    },
+    {
+      "id": 21,
+      "filename": "el_f_04_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 04"
+    },
+    {
+      "id": 22,
+      "filename": "el_f_05_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 05"
+    },
+    {
+      "id": 23,
+      "filename": "el_f_06_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 06"
+    },
+    {
+      "id": 24,
+      "filename": "el_f_07_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 07"
+    },
+    {
+      "id": 25,
+      "filename": "el_f_08_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 08"
+    },
+    {
+      "id": 26,
+      "filename": "el_f_09_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 09"
+    },
+    {
+      "id": 27,
+      "filename": "el_f_10_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 10"
+    },
+    {
+      "id": 28,
+      "filename": "el_f_11_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 11"
+    },
+    {
+      "id": 29,
+      "filename": "el_f_12_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 12"
+    },
+    {
+      "id": 30,
+      "filename": "el_f_13_",
+      "sex": "1",
+      "race": "1",
+      "name": "El F 13"
+    },
+    {
+      "id": 31,
+      "filename": "el_m_01_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 01"
+    },
+    {
+      "id": 32,
+      "filename": "el_m_02_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 02"
+    },
+    {
+      "id": 33,
+      "filename": "el_m_03_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 03"
+    },
+    {
+      "id": 34,
+      "filename": "el_m_04_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 04"
+    },
+    {
+      "id": 35,
+      "filename": "el_m_05_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 05"
+    },
+    {
+      "id": 36,
+      "filename": "el_m_06_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 06"
+    },
+    {
+      "id": 37,
+      "filename": "el_m_07_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 07"
+    },
+    {
+      "id": 38,
+      "filename": "el_m_08_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 08"
+    },
+    {
+      "id": 39,
+      "filename": "el_m_09_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 09"
+    },
+    {
+      "id": 40,
+      "filename": "el_m_10_",
+      "sex": "0",
+      "race": "1",
+      "name": "El M 10"
+    },
+    {
+      "id": 41,
+      "filename": "gn_f_01_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 01"
+    },
+    {
+      "id": 42,
+      "filename": "gn_f_02_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 02"
+    },
+    {
+      "id": 43,
+      "filename": "gn_f_03_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 03"
+    },
+    {
+      "id": 44,
+      "filename": "gn_f_04_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 04"
+    },
+    {
+      "id": 45,
+      "filename": "gn_f_05_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 05"
+    },
+    {
+      "id": 46,
+      "filename": "gn_f_06_",
+      "sex": "1",
+      "race": "2",
+      "name": "Gn F 06"
+    },
+    {
+      "id": 47,
+      "filename": "gn_m_01_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 01"
+    },
+    {
+      "id": 48,
+      "filename": "gn_m_02_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 02"
+    },
+    {
+      "id": 49,
+      "filename": "gn_m_03_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 03"
+    },
+    {
+      "id": 50,
+      "filename": "gn_m_04_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 04"
+    },
+    {
+      "id": 51,
+      "filename": "gn_m_05_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 05"
+    },
+    {
+      "id": 52,
+      "filename": "gn_m_06_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 06"
+    },
+    {
+      "id": 53,
+      "filename": "gn_m_07_",
+      "sex": "0",
+      "race": "2",
+      "name": "Gn M 07"
+    },
+    {
+      "id": 54,
+      "filename": "ha_f_01_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 01"
+    },
+    {
+      "id": 55,
+      "filename": "ha_f_02_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 02"
+    },
+    {
+      "id": 56,
+      "filename": "ha_f_03_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 03"
+    },
+    {
+      "id": 57,
+      "filename": "ha_f_04_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 04"
+    },
+    {
+      "id": 58,
+      "filename": "ha_f_05_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 05"
+    },
+    {
+      "id": 59,
+      "filename": "ha_f_06_",
+      "sex": "1",
+      "race": "3",
+      "name": "Ha F 06"
+    },
+    {
+      "id": 60,
+      "filename": "villager1_",
+      "sex": "0",
+      "race": "6",
+      "name": "Villager1"
+    },
+    {
+      "id": 61,
+      "filename": "ha_m_01_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 01"
+    },
+    {
+      "id": 62,
+      "filename": "ha_m_02_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 02"
+    },
+    {
+      "id": 63,
+      "filename": "ha_m_03_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 03"
+    },
+    {
+      "id": 64,
+      "filename": "ha_m_04_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 04"
+    },
+    {
+      "id": 65,
+      "filename": "ha_m_05_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 05"
+    },
+    {
+      "id": 66,
+      "filename": "ha_m_06_",
+      "sex": "0",
+      "race": "3",
+      "name": "Ha M 06"
+    },
+    {
+      "id": 67,
+      "filename": "hu_f_01_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 01"
+    },
+    {
+      "id": 68,
+      "filename": "hu_f_02_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 02"
+    },
+    {
+      "id": 69,
+      "filename": "hu_f_03_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 03"
+    },
+    {
+      "id": 70,
+      "filename": "hu_f_04_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 04"
+    },
+    {
+      "id": 71,
+      "filename": "hu_f_05_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 05"
+    },
+    {
+      "id": 72,
+      "filename": "hu_f_06_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 06"
+    },
+    {
+      "id": 73,
+      "filename": "hu_f_07_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 07"
+    },
+    {
+      "id": 74,
+      "filename": "hu_f_08_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 08"
+    },
+    {
+      "id": 75,
+      "filename": "hu_f_09_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 09"
+    },
+    {
+      "id": 76,
+      "filename": "hu_f_10_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 10"
+    },
+    {
+      "id": 77,
+      "filename": "hu_f_11_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 11"
+    },
+    {
+      "id": 78,
+      "filename": "hu_f_12_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 12"
+    },
+    {
+      "id": 79,
+      "filename": "hu_f_13_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 13"
+    },
+    {
+      "id": 80,
+      "filename": "hu_f_14_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 14"
+    },
+    {
+      "id": 81,
+      "filename": "hu_f_15_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 15"
+    },
+    {
+      "id": 82,
+      "filename": "hu_f_16_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 16"
+    },
+    {
+      "id": 83,
+      "filename": "hu_f_17_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 17"
+    },
+    {
+      "id": 84,
+      "filename": "hu_f_18_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 18"
+    },
+    {
+      "id": 85,
+      "filename": "hu_f_19_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 19"
+    },
+    {
+      "id": 86,
+      "filename": "hu_f_20_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 20"
+    },
+    {
+      "id": 87,
+      "filename": "hu_f_21_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 21"
+    },
+    {
+      "id": 88,
+      "filename": "hu_f_22_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 22"
+    },
+    {
+      "id": 89,
+      "filename": "hu_f_23_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 23"
+    },
+    {
+      "id": 90,
+      "filename": "hu_f_24_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 24"
+    },
+    {
+      "id": 91,
+      "filename": "hu_f_25_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 25"
+    },
+    {
+      "id": 92,
+      "filename": "hu_f_99_",
+      "sex": "1",
+      "race": "6",
+      "name": "Hu F 99"
+    },
+    {
+      "id": 93,
+      "filename": "hu_m_01_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 01"
+    },
+    {
+      "id": 94,
+      "filename": "hu_m_02_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 02"
+    },
+    {
+      "id": 95,
+      "filename": "hu_m_03_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 03"
+    },
+    {
+      "id": 96,
+      "filename": "hu_m_04_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 04"
+    },
+    {
+      "id": 97,
+      "filename": "hu_m_05_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 05"
+    },
+    {
+      "id": 98,
+      "filename": "hu_m_06_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 06"
+    },
+    {
+      "id": 99,
+      "filename": "hu_m_07_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 07"
+    },
+    {
+      "id": 100,
+      "filename": "hu_m_08_",
+      "sex": "0",
+      "race": "6",
+      "name": "Hu M 08"
+    }
+  ]
+}
