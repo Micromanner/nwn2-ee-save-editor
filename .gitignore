@@ -50,3 +50,4 @@ extracted_icons_for_debug_only
 .cspell.json
 legacy_java_editor
 backend/templates/characters
+backend/tests/fixtures/

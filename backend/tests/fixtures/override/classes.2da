@@ -1,4 +1,0 @@
-2DA V2.0
-
-LABEL           Name    HitDie  AttackBonusTable    SkillPointBase  SpellCaster SpellGainTable
-0               5001    12      CLS_ATK_1           4               0           ****
