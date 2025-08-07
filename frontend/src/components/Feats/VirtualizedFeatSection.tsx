@@ -34,6 +34,14 @@ interface VirtualizedFeatSectionProps {
   onDetails: (feat: FeatInfo) => void;
   onAdd: (featId: number) => void;
   onRemove: (featId: number) => void;
+  validationCache?: Record<number, {
+    can_take: boolean;
+    reason: string;
+    has_feat: boolean;
+    missing_requirements: string[];
+  }>;
+  validatingFeatId?: number | null;
+  onValidate?: (featId: number) => void;
 }
 
 export default function VirtualizedFeatSection({
@@ -43,7 +51,10 @@ export default function VirtualizedFeatSection({
   maxHeight = 400, // Default max height
   onDetails,
   onAdd,
-  onRemove
+  onRemove,
+  validationCache = {},
+  validatingFeatId = null,
+  onValidate
 }: VirtualizedFeatSectionProps) {
   
   // Calculate optimal height for virtualization
@@ -92,6 +103,9 @@ export default function VirtualizedFeatSection({
           onDetails={onDetails}
           onAdd={onAdd}
           onRemove={onRemove}
+          validationCache={validationCache}
+          validatingFeatId={validatingFeatId}
+          onValidate={onValidate}
         />
       ) : (
         <VirtualizedFeatList
@@ -101,6 +115,9 @@ export default function VirtualizedFeatSection({
           onDetails={onDetails}
           onAdd={onAdd}
           onRemove={onRemove}
+          validationCache={validationCache}
+          validatingFeatId={validatingFeatId}
+          onValidate={onValidate}
         />
       )}
     </div>

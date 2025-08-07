@@ -34,8 +34,7 @@ export default function FeatSummary({ featsData, availableFeatsCount }: FeatSumm
 
   return (
     <Card className="p-4" backgroundColor="rgb(var(--color-surface-1))" shadow="shadow-elevation-2">
-      <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-        <Info className="w-4 h-4 text-[rgb(var(--color-text-muted))]" />
+      <h4 className="font-semibold text-sm mb-3">
         Feat Summary
       </h4>
       <div className="space-y-3">
@@ -58,8 +57,7 @@ export default function FeatSummary({ featsData, availableFeatsCount }: FeatSumm
         
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-xs text-[rgb(var(--color-text-muted))] flex items-center gap-1">
-              <Shield className="w-3 h-3" />
+            <span className="text-xs text-[rgb(var(--color-text-muted))]">
               Protected
             </span>
             <span className="text-sm font-semibold">

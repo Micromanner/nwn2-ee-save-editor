@@ -33,6 +33,14 @@ interface VirtualizedFeatListProps {
   onDetails: (feat: FeatInfo) => void;
   onAdd: (featId: number) => void;
   onRemove: (featId: number) => void;
+  validationCache?: Record<number, {
+    can_take: boolean;
+    reason: string;
+    has_feat: boolean;
+    missing_requirements: string[];
+  }>;
+  validatingFeatId?: number | null;
+  onValidate?: (featId: number) => void;
 }
 
 // Row component for virtualized list
@@ -45,11 +53,19 @@ interface RowProps {
     onDetails: (feat: FeatInfo) => void;
     onAdd: (featId: number) => void;
     onRemove: (featId: number) => void;
+    validationCache?: Record<number, {
+      can_take: boolean;
+      reason: string;
+      has_feat: boolean;
+      missing_requirements: string[];
+    }>;
+    validatingFeatId?: number | null;
+    onValidate?: (featId: number) => void;
   };
 }
 
 const Row = ({ index, style, data }: RowProps) => {
-  const { feats, isActive, onDetails, onAdd, onRemove } = data;
+  const { feats, isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate } = data;
   const feat = feats[index];
 
   if (!feat) return null;
@@ -64,6 +80,9 @@ const Row = ({ index, style, data }: RowProps) => {
         onDetails={onDetails}
         onAdd={onAdd}
         onRemove={onRemove}
+        validationState={validationCache?.[feat.id]}
+        isValidating={validatingFeatId === feat.id}
+        onValidate={onValidate}
       />
     </div>
   );
@@ -75,15 +94,21 @@ export default function VirtualizedFeatList({
   height,
   onDetails,
   onAdd,
-  onRemove
+  onRemove,
+  validationCache,
+  validatingFeatId,
+  onValidate
 }: VirtualizedFeatListProps) {
   const itemData = useMemo(() => ({
     feats,
     isActive,
     onDetails,
     onAdd,
-    onRemove
-  }), [feats, isActive, onDetails, onAdd, onRemove]);
+    onRemove,
+    validationCache,
+    validatingFeatId,
+    onValidate
+  }), [feats, isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate]);
 
   if (feats.length === 0) {
     return null;

@@ -233,17 +233,15 @@ export class CharacterAPI {
       featType?: number; 
       category?: string;
       subcategory?: string;
-      onlyAvailable?: boolean;
       page?: number; 
       limit?: number; 
       search?: string; 
     } = {}
-  ): Promise<{ feats: any[]; pagination: any; search?: string; category?: string; subcategory?: string; onlyAvailable?: boolean }> {
+  ): Promise<{ feats: any[]; pagination: any; search?: string; category?: string; subcategory?: string }> {
     const params = new URLSearchParams();
     if (options.featType !== undefined) params.append('type', options.featType.toString());
     if (options.category) params.append('category', options.category);
     if (options.subcategory) params.append('subcategory', options.subcategory);
-    if (options.onlyAvailable !== undefined) params.append('only_available', options.onlyAvailable.toString());
     if (options.page !== undefined) params.append('page', options.page.toString());
     if (options.limit !== undefined) params.append('limit', options.limit.toString());
     if (options.search) params.append('search', options.search);
@@ -261,8 +259,7 @@ export class CharacterAPI {
       pagination: data.pagination || {},
       search: data.search,
       category: data.category,
-      subcategory: data.subcategory,
-      onlyAvailable: data.only_available
+      subcategory: data.subcategory
     };
   }
 
@@ -304,6 +301,20 @@ export class CharacterAPI {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/details/`);
     if (!response.ok) {
       throw new Error(`Failed to fetch feat details: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  static async validateFeat(characterId: number, featId: number): Promise<{
+    feat_id: number;
+    can_take: boolean;
+    reason: string;
+    has_feat: boolean;
+    missing_requirements: string[];
+  }> {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/validate/`);
+    if (!response.ok) {
+      throw new Error(`Failed to validate feat: ${response.statusText}`);
     }
     return response.json();
   }

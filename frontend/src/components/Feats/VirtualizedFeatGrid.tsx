@@ -33,6 +33,14 @@ interface VirtualizedFeatGridProps {
   onDetails: (feat: FeatInfo) => void;
   onAdd: (featId: number) => void;
   onRemove: (featId: number) => void;
+  validationCache?: Record<number, {
+    can_take: boolean;
+    reason: string;
+    has_feat: boolean;
+    missing_requirements: string[];
+  }>;
+  validatingFeatId?: number | null;
+  onValidate?: (featId: number) => void;
 }
 
 // Hook to detect screen size and calculate columns
@@ -81,11 +89,19 @@ interface RowProps {
     onDetails: (feat: FeatInfo) => void;
     onAdd: (featId: number) => void;
     onRemove: (featId: number) => void;
+    validationCache?: Record<number, {
+      can_take: boolean;
+      reason: string;
+      has_feat: boolean;
+      missing_requirements: string[];
+    }>;
+    validatingFeatId?: number | null;
+    onValidate?: (featId: number) => void;
   };
 }
 
 const Row = ({ index, style, data }: RowProps) => {
-  const { rows, columns, isActive, onDetails, onAdd, onRemove } = data;
+  const { rows, columns, isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate } = data;
   const rowFeats = rows[index];
 
   if (!rowFeats) return null;
@@ -106,6 +122,9 @@ const Row = ({ index, style, data }: RowProps) => {
             onDetails={onDetails}
             onAdd={onAdd}
             onRemove={onRemove}
+            validationState={validationCache?.[feat.id]}
+            isValidating={validatingFeatId === feat.id}
+            onValidate={onValidate}
           />
         ))}
         {/* Fill empty cells in partial rows */}
@@ -123,7 +142,10 @@ export default function VirtualizedFeatGrid({
   height,
   onDetails,
   onAdd,
-  onRemove
+  onRemove,
+  validationCache,
+  validatingFeatId,
+  onValidate
 }: VirtualizedFeatGridProps) {
   const columns = useGridColumns();
   const rows = useGridRows(feats, columns);
@@ -139,8 +161,11 @@ export default function VirtualizedFeatGrid({
     isActive,
     onDetails,
     onAdd,
-    onRemove
-  }), [rows, columns, isActive, onDetails, onAdd, onRemove]);
+    onRemove,
+    validationCache,
+    validatingFeatId,
+    onValidate
+  }), [rows, columns, isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate]);
 
   if (feats.length === 0) {
     return null;
