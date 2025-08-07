@@ -27,6 +27,7 @@ class EventType(Enum):
     ABILITY_CHANGED = 'ability_changed'
     ATTRIBUTE_CHANGED = 'attribute_changed'
     ALIGNMENT_CHANGED = 'alignment_changed'
+    STATE_CHANGED = 'state_changed'  # Generic state change event for cache invalidation
 
 
 @dataclass

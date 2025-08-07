@@ -49,6 +49,7 @@ urlpatterns = [
         path('<int:pk>/prerequisites/', FeatViewSet.as_view({'get': 'feat_prerequisites'}), name='character-feat-prerequisites'),
         path('<int:pk>/check/', FeatViewSet.as_view({'get': 'check_prerequisites'}), name='character-feat-check'),
         path('<int:pk>/details/', FeatViewSet.as_view({'get': 'feat_details'}), name='character-feat-details'),
+        path('<int:pk>/validate/', FeatViewSet.as_view({'get': 'validate_feat'}), name='character-feat-validate'),
         path('by-category/', FeatViewSet.as_view({'get': 'feats_by_category'}), name='character-feats-by-category'),
     ])),
     

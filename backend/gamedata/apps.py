@@ -93,8 +93,8 @@ class GamedataConfig(AppConfig):
                     
                     # Create progress callback that updates initialization status
                     def game_data_progress(message, percent):
-                        # Map the internal progress (0-100%) to our range (65-95%)
-                        mapped_progress = 65 + int(percent * 0.30)  # 30% of range (95-65=30)
+                        # Map the internal progress (0-100%) to our range (65-90%)
+                        mapped_progress = 65 + int(percent * 0.25)  # 25% of range (90-65=25)
                         update_initialization_status('game_data', mapped_progress, f'Game data: {message}')
                     
                     # Get shared ResourceManager and pass it to the loader
@@ -106,11 +106,44 @@ class GamedataConfig(AppConfig):
                     
                     init_time = time.time() - start_time
                     initialization_status['details']['game_data'] = True
-                    update_initialization_status('game_data', 95, f'Game data loaded')
+                    update_initialization_status('game_data', 90, f'Game data loaded')
                     logger.info(f"Background: Game data loader initialized in {init_time:.2f}s with {len(loader.table_data)} tables")
                 except Exception as e:
                     logger.error(f"Background: Failed to initialize game data loader: {e}")
-                    update_initialization_status('game_data', 95, f'Game data failed: {e}', error=str(e))
+                    update_initialization_status('game_data', 90, f'Game data failed: {e}', error=str(e))
+                
+                # Stage 4: Build Prerequisite Graph (optional optimization)
+                try:
+                    # Check if prerequisite graph is enabled
+                    import os
+                    use_graph = os.environ.get('USE_PREREQUISITE_GRAPH', 'true').lower() == 'true'
+                    
+                    if use_graph and 'loader' in locals() and loader:
+                        update_initialization_status('prereq_graph', 92, 'Building prerequisite graph...')
+                        logger.info("Background: Building feat prerequisite graph...")
+                        from character.managers.prerequisite_graph import get_prerequisite_graph
+                        start_time = time.time()
+                        
+                        # Build the graph with the game data loader
+                        graph = get_prerequisite_graph(game_data_loader=loader)
+                        
+                        if graph and graph.is_built:
+                            init_time = time.time() - start_time
+                            stats = graph.get_statistics()
+                            initialization_status['details']['prerequisite_graph'] = True
+                            update_initialization_status('prereq_graph', 98, 
+                                f'Prerequisite graph built ({stats["feats_with_prerequisites"]} feats with prereqs)')
+                            logger.info(f"Background: Prerequisite graph built in {init_time:.2f}s - "
+                                      f"{stats['total_feats']} feats, max chain depth: {stats['max_chain_depth']}")
+                        else:
+                            logger.warning("Background: Prerequisite graph failed to build")
+                            update_initialization_status('prereq_graph', 98, 'Prerequisite graph skipped')
+                    else:
+                        logger.info("Prerequisite graph disabled (USE_PREREQUISITE_GRAPH=false)")
+                        update_initialization_status('prereq_graph', 98, 'Prerequisite graph disabled')
+                except Exception as e:
+                    logger.error(f"Background: Failed to build prerequisite graph: {e}")
+                    update_initialization_status('prereq_graph', 98, f'Prerequisite graph failed: {e}', error=str(e))
                 
                 # All done
                 update_initialization_status('ready', 100, 'All systems ready!')
