@@ -387,34 +387,17 @@ class RaceManager(EventEmitter):
         return None
     
     def validate_race_change(self, new_race_id: int) -> Tuple[bool, List[str]]:
-        """Validate if race change is allowed using dynamic data"""
+        """Validate race change - only check for race ID existence (crash prevention)"""
         errors = []
         
-        # Check if race exists using dynamic data
+        # Check if race exists using dynamic data - this prevents crashes/corruption
         race_data = self._get_race_data(new_race_id)
         if not race_data:
             errors.append(f"Unknown race ID: {new_race_id}")
             return False, errors
         
-        # Check if it's a player race (try different field names)
-        is_player_race = True  # Default to allowing race
-        for field in ['player_race', 'PlayerRace', 'is_playable', 'playable']:
-            value = getattr(race_data, field, None)
-            if value is not None:
-                try:
-                    # Handle boolean, string, or integer values
-                    if isinstance(value, bool):
-                        is_player_race = value
-                    elif isinstance(value, str):
-                        is_player_race = value.lower() in ['true', '1', 'yes', 'y']
-                    else:
-                        is_player_race = bool(int(value))
-                    break
-                except (ValueError, TypeError):
-                    continue
-        
-        if not is_player_race:
-            errors.append("Cannot change to non-player race")
+        # Remove game rule validations - users can change to any race that exists
+        # This includes non-player races if they exist in the data files
         
         return len(errors) == 0, errors
     
@@ -440,20 +423,17 @@ class RaceManager(EventEmitter):
         return props
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate current race configuration using dynamic data"""
+        """Validate current race configuration - only check for corruption prevention"""
         errors = []
         
         race_id = self.gff.get('Race', -1)
         
-        # Check if race is valid using dynamic data
+        # Check if race exists using dynamic data - prevents crashes/corruption
         race_data = self._get_race_data(race_id)
         if not race_data:
             errors.append(f"Invalid race ID: {race_id}")
         
-        # Check if size matches race using dynamic data
-        expected_size = self._get_race_size(race_id)
-        actual_size = self.gff.get('CreatureSize', 4)
-        if actual_size != expected_size:
-            errors.append(f"Size mismatch: expected {expected_size}, got {actual_size}")
+        # Remove game rule validations like size matching - users can set any size
+        # Size mismatches don't corrupt saves, they just create unusual characters
         
         return len(errors) == 0, errors

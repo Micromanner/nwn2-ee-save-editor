@@ -537,10 +537,10 @@ class TestRaceValidation:
         assert "Unknown race ID: 999" in errors
     
     def test_validate_race_change_non_player_race(self, race_manager):
-        """Test validation for non-player race"""
+        """Test validation allows non-player race (validation cleanup)"""
         is_valid, errors = race_manager.validate_race_change(100)
-        assert is_valid is False
-        assert "Cannot change to non-player race" in errors
+        assert is_valid is True  # Now allows non-player races
+        assert len(errors) == 0  # No restrictions
 
 
 class TestRaceManagerSummary:
@@ -582,12 +582,12 @@ class TestRaceManagerValidation:
         assert "Invalid race ID: 999" in errors
     
     def test_validate_size_mismatch(self, race_manager):
-        """Test validation with size mismatch"""
+        """Test validation allows size mismatch (validation cleanup)"""
         race_manager.gff.set('Race', 3)  # Halfling (Small)
         race_manager.gff.set('CreatureSize', 4)  # Medium
         is_valid, errors = race_manager.validate()
-        assert is_valid is False
-        assert "Size mismatch" in errors[0]
+        assert is_valid is True  # Now allows size mismatches
+        assert len(errors) == 0  # No size restrictions
 
 
 class TestRaceManagerReverting:
