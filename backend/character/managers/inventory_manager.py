@@ -1,7 +1,8 @@
 """
-Data-Driven Inventory Manager - handles equipment validation, proficiency checks, and item management
-Uses DynamicGameDataLoader for mod-compatible item and proficiency data
-Responds to class changes to validate equipment requirements
+Data-Driven Inventory Manager - handles equipment effects, calculations, and item management
+Uses DynamicGameDataLoader for mod-compatible item data
+Provides informational data about proficiencies and requirements (no restrictions)
+Focuses on save corruption prevention rather than game rule enforcement
 """
 
 from typing import Dict, List, Set, Tuple, Optional, Any
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class InventoryManager(EventEmitter):
-    """Data-driven manager for character inventory, equipment, and item validation"""
+    """Data-driven manager for character inventory, equipment effects, and item information"""
     
     # Equipment slot names in GFF
     EQUIPMENT_SLOTS = {
@@ -112,16 +113,12 @@ class InventoryManager(EventEmitter):
         """Handle class change event"""
         logger.info(f"InventoryManager handling class change: {event.old_class_id} -> {event.new_class_id}")
         
-        # Update proficiency cache
+        # Update proficiency cache (for informational purposes)
         self._update_proficiency_cache()
         
-        # Validate all equipped items
-        validation_results = self.validate_all_equipment()
-        
-        # Log any items that are no longer usable
-        for slot, result in validation_results.items():
-            if not result['valid']:
-                logger.warning(f"Equipped item in {slot} no longer meets requirements: {result['errors']}")
+        # Just log the change - no validation blocking
+        equipment_info = self.get_equipment_info()
+        logger.info(f"Class changed - equipment remains equipped: {len(equipment_info)} items")
     
     def on_feat_added(self, event: FeatChangedEvent):
         """Handle feat addition event"""
@@ -136,7 +133,7 @@ class InventoryManager(EventEmitter):
         if self._is_proficiency_feat(event.feat_id):
             logger.info(f"InventoryManager updating proficiencies after feat removal {event.feat_id}")
             self._update_proficiency_cache()
-            self.validate_all_equipment()
+            # No validation - just update cache for informational purposes
     
     def get_equipped_item(self, slot: str) -> Optional[Dict[str, Any]]:
         """
@@ -156,19 +153,20 @@ class InventoryManager(EventEmitter):
     
     def equip_item(self, item_data: Dict[str, Any], slot: str) -> Tuple[bool, List[str]]:
         """
-        Equip an item in a specific slot
+        Equip an item in a specific slot (no restrictions)
         
         Args:
             item_data: Item data to equip
             slot: Slot to equip in
             
         Returns:
-            (success, list_of_errors)
+            (success, list_of_warnings_or_errors)
         """
-        # Validate item can be equipped
-        is_valid, errors = self.validate_item_requirements(item_data, slot)
-        if not is_valid:
-            return False, errors
+        warnings = []
+        
+        # Only check for corruption prevention - item ID existence
+        id_exists, id_messages = self.check_item_id_exists(item_data)
+        warnings.extend(id_messages)
         
         # Get GFF slot name
         gff_slot = self.EQUIPMENT_SLOTS.get(slot)
@@ -178,15 +176,15 @@ class InventoryManager(EventEmitter):
         # Store current item if any
         current_item = self.gff.get(gff_slot)
         
-        # Equip new item
+        # Equip new item (no restrictions - user freedom!)
         self.gff.set(gff_slot, item_data)
         
         # If there was an item, add it to inventory
         if current_item:
             self.add_to_inventory(current_item)
         
-        logger.info(f"Equipped item in {slot}")
-        return True, []
+        logger.info(f"Equipped item in {slot} (no restrictions)")
+        return True, warnings
     
     def unequip_item(self, slot: str) -> Optional[Dict[str, Any]]:
         """
@@ -263,61 +261,46 @@ class InventoryManager(EventEmitter):
         
         return None
     
-    def validate_item_requirements(self, item_data: Dict[str, Any], slot: str) -> Tuple[bool, List[str]]:
+    def check_item_id_exists(self, item_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
-        Validate if character can use an item using dynamic data
+        Check if the item's BaseItem ID exists to prevent crashes
+        This is the only validation we keep - prevents corruption/crashes
         
         Returns:
-            (is_valid, list_of_errors)
+            (id_exists, list_of_errors)
         """
         errors = []
         base_item = item_data.get('BaseItem', 0)
         base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
         
         if not base_item_data:
-            # Unknown item - could be custom content, allow but warn
-            logger.warning(f"Unknown base item type: {base_item}")
-            return True, []
+            # Log warning but allow custom content to be equipped
+            logger.warning(f"Unknown base item type: {base_item} - may be custom content")
+            # Return True to allow custom items but note it in error for UI info
+            return True, [f"Custom/unknown item type: {base_item}"]
         
-        # Check if item fits in slot
-        if not self._validate_slot_compatibility(base_item_data, slot):
-            errors.append(f"Item cannot be equipped in {slot} slot")
-        
-        # Check proficiency requirements
-        proficiency_errors = self._check_proficiency_requirements(base_item_data)
-        errors.extend(proficiency_errors)
-        
-        # Check ability requirements
-        ability_errors = self._check_ability_requirements(item_data)
-        errors.extend(ability_errors)
-        
-        # Check class requirements
-        class_errors = self._check_class_requirements(item_data)
-        errors.extend(class_errors)
-        
-        # Check alignment requirements
-        alignment_errors = self._check_alignment_requirements(item_data)
-        errors.extend(alignment_errors)
-        
-        return len(errors) == 0, errors
+        return True, []
     
-    def validate_all_equipment(self) -> Dict[str, Dict[str, Any]]:
+    def get_equipment_info(self) -> Dict[str, Dict[str, Any]]:
         """
-        Validate all currently equipped items
+        Get information about all currently equipped items (no validation)
         
         Returns:
-            Dict mapping slot to validation result
+            Dict mapping slot to item info
         """
         results = {}
         
         for slot, gff_slot in self.EQUIPMENT_SLOTS.items():
             item = self.gff.get(gff_slot)
             if item:
-                is_valid, errors = self.validate_item_requirements(item, slot)
+                base_item = item.get('BaseItem', 0)
+                base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+                
                 results[slot] = {
-                    'valid': is_valid,
-                    'errors': errors,
-                    'item': item
+                    'item': item,
+                    'base_item': base_item,
+                    'is_custom': base_item_data is None,
+                    'name': field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}') if base_item_data else f'Custom Item {base_item}'
                 }
         
         return results
@@ -433,12 +416,15 @@ class InventoryManager(EventEmitter):
         
         return proficiencies
     
-    def _validate_slot_compatibility(self, base_item_data: Any, slot: str) -> bool:
-        """Check if item type matches slot using dynamic data"""
+    def get_item_slot_info(self, base_item_data: Any, slot: str) -> Dict[str, Any]:
+        """Get informational data about item-slot compatibility (no restrictions)"""
+        if not base_item_data:
+            return {'item_type': 0, 'is_typical_for_slot': False, 'slot_name': slot}
+        
         item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
         
-        # Map item types to valid slots - these are base item type IDs from baseitems.2da
-        slot_requirements = {
+        # Typical item types for slots (informational only - no restrictions)
+        typical_types = {
             'head': [85],  # Helmet
             'chest': [16], # Armor
             'boots': [26], # Boots
@@ -452,14 +438,29 @@ class InventoryManager(EventEmitter):
             'left_hand': list(range(0, 60)) + [29],  # Weapons + Shield
         }
         
-        valid_types = slot_requirements.get(slot, [])
-        return item_type in valid_types
+        typical_for_slot = item_type in typical_types.get(slot, [])
+        
+        return {
+            'item_type': item_type,
+            'is_typical_for_slot': typical_for_slot,
+            'slot_name': slot,
+            'note': 'This item type is not typical for this slot' if not typical_for_slot else None
+        }
     
-    def _check_proficiency_requirements(self, base_item_data: Any) -> List[str]:
-        """Check weapon/armor proficiency requirements using dynamic data"""
-        errors = []
+    def get_item_proficiency_info(self, base_item_data: Any) -> Dict[str, Any]:
+        """Get informational data about item proficiency requirements (no restrictions)"""
+        if not base_item_data:
+            return {'has_proficiency_requirements': False}
+        
         item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
         weapon_type = field_mapper.get_field_value(base_item_data, 'weapon_type', 0)
+        
+        info = {
+            'has_proficiency_requirements': False,
+            'required_proficiencies': [],
+            'character_has_proficiencies': [],
+            'missing_proficiencies': []
+        }
         
         # Helper function to find proficiency feat ID by type
         def get_prof_feat_id(prof_type: str) -> Optional[int]:
@@ -469,83 +470,89 @@ class InventoryManager(EventEmitter):
             return None
         
         # Check weapon proficiencies
-        if item_type < 60:  # Weapons (based on NWN2 base item numbering)
-            required_prof_type = None
-            
-            # Determine required proficiency type
-            if weapon_type == 1:  # Simple
-                required_prof_type = 'weapon_simple'
-            elif weapon_type == 2:  # Martial
-                required_prof_type = 'weapon_martial'
-            elif weapon_type == 3:  # Exotic
-                required_prof_type = 'weapon_exotic'
-            
-            if required_prof_type:
-                required_prof = get_prof_feat_id(required_prof_type)
-                if required_prof and required_prof not in self._proficiency_cache:
-                    weapon_names = {1: 'simple', 2: 'martial', 3: 'exotic'}
-                    weapon_name = weapon_names.get(weapon_type, 'unknown')
-                    errors.append(f"Requires {weapon_name} weapon proficiency")
+        if item_type < 60:  # Weapons
+            if weapon_type in [1, 2, 3]:  # Simple, Martial, Exotic
+                info['has_proficiency_requirements'] = True
+                weapon_names = {1: 'Simple Weapon', 2: 'Martial Weapon', 3: 'Exotic Weapon'}
+                prof_name = weapon_names.get(weapon_type, 'Unknown Weapon')
+                info['required_proficiencies'].append(prof_name)
+                
+                # Check if character has it (informational only)
+                prof_types = {1: 'weapon_simple', 2: 'weapon_martial', 3: 'weapon_exotic'}
+                required_prof = get_prof_feat_id(prof_types[weapon_type])
+                if required_prof and required_prof in self._proficiency_cache:
+                    info['character_has_proficiencies'].append(prof_name)
+                else:
+                    info['missing_proficiencies'].append(prof_name)
         
         # Check armor proficiencies
         elif item_type == 16:  # Armor
             ac_type = field_mapper.get_field_value(base_item_data, 'ac_type', 0)
-            required_prof_type = None
+            info['has_proficiency_requirements'] = True
             
-            if ac_type <= 3:  # Light armor
-                required_prof_type = 'armor_light'
-            elif ac_type <= 6:  # Medium armor
-                required_prof_type = 'armor_medium'
-            else:  # Heavy armor
-                required_prof_type = 'armor_heavy'
+            if ac_type <= 3:
+                prof_name = 'Light Armor'
+                prof_type = 'armor_light'
+            elif ac_type <= 6:
+                prof_name = 'Medium Armor'
+                prof_type = 'armor_medium'
+            else:
+                prof_name = 'Heavy Armor'
+                prof_type = 'armor_heavy'
             
-            if required_prof_type:
-                required_prof = get_prof_feat_id(required_prof_type)
-                if required_prof and required_prof not in self._proficiency_cache:
-                    armor_names = {1: 'light', 2: 'medium', 3: 'heavy'}
-                    armor_name = armor_names.get((ac_type + 2) // 3, 'unknown')
-                    errors.append(f"Requires {armor_name} armor proficiency")
+            info['required_proficiencies'].append(prof_name)
+            required_prof = get_prof_feat_id(prof_type)
+            if required_prof and required_prof in self._proficiency_cache:
+                info['character_has_proficiencies'].append(prof_name)
+            else:
+                info['missing_proficiencies'].append(prof_name)
         
         # Check shield proficiencies
         elif item_type == 29:  # Shield
+            info['has_proficiency_requirements'] = True
+            info['required_proficiencies'].append('Shield')
             shield_prof = get_prof_feat_id('shield')
-            if shield_prof and shield_prof not in self._proficiency_cache:
-                errors.append("Requires shield proficiency")
+            if shield_prof and shield_prof in self._proficiency_cache:
+                info['character_has_proficiencies'].append('Shield')
+            else:
+                info['missing_proficiencies'].append('Shield')
         
-        return errors
+        return info
     
-    def _check_ability_requirements(self, item_data: Dict[str, Any]) -> List[str]:
-        """Check ability score requirements from item properties"""
-        errors = []
+    def get_item_ability_requirements(self, item_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get informational data about ability score requirements (no restrictions)"""
+        requirements = []
         
-        # Would need to parse item properties for requirements
-        # This is a simplified version
+        # Parse item properties for ability requirements (informational only)
         properties = item_data.get('PropertiesList', [])
         
         for prop in properties:
-            # Check for ability requirements in properties
+            # Parse property for ability requirements - this would need full implementation
+            # For now, return empty list (no restrictions applied)
             pass
         
-        return errors
+        return requirements
     
-    def _check_class_requirements(self, item_data: Dict[str, Any]) -> List[str]:
-        """Check class-specific requirements"""
-        errors = []
+    def get_item_class_requirements(self, item_data: Dict[str, Any]) -> List[str]:
+        """Get informational data about class requirements (no restrictions)"""
+        requirements = []
         
-        # Check item properties for class restrictions
+        # Parse item properties for class requirements (informational only)
         properties = item_data.get('PropertiesList', [])
         
         # Would need to parse USE_LIMITATION properties
+        # For now, return empty list (no restrictions applied)
         
-        return errors
+        return requirements
     
-    def _check_alignment_requirements(self, item_data: Dict[str, Any]) -> List[str]:
-        """Check alignment requirements"""
-        errors = []
+    def get_item_alignment_requirements(self, item_data: Dict[str, Any]) -> List[str]:
+        """Get informational data about alignment requirements (no restrictions)"""
+        requirements = []
         
-        # Would need to check item properties for alignment restrictions
+        # Parse item properties for alignment requirements (informational only)
+        # For now, return empty list (no restrictions applied)
         
-        return errors
+        return requirements
     
     def calculate_encumbrance(self) -> Dict[str, Any]:
         """Calculate character's encumbrance level using dynamic data"""
@@ -784,25 +791,32 @@ class InventoryManager(EventEmitter):
         return bonuses
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate current equipment and inventory"""
+        """Validate inventory for corruption prevention only"""
         errors = []
         
-        # Validate all equipped items
-        validation_results = self.validate_all_equipment()
+        # Only check for data corruption issues
+        # Check equipped items for valid IDs
+        equipment_info = self.get_equipment_info()
+        for slot, info in equipment_info.items():
+            if info['is_custom']:
+                # Custom items are allowed but noted
+                logger.info(f"Custom item in {slot}: BaseItem {info['base_item']}")
         
-        for slot, result in validation_results.items():
-            if not result['valid']:
-                errors.extend([f"{slot}: {e}" for e in result['errors']])
-        
-        # Check for duplicate unique items
-        # Would need to implement unique item checking
+        # Check inventory items for stack size corruption
+        item_list = self.gff.get('ItemList', [])
+        for idx, item in enumerate(item_list):
+            stack_size = item.get('StackSize', 1)
+            if stack_size < 0:
+                errors.append(f"Inventory item {idx}: Invalid negative stack size {stack_size}")
+            elif stack_size > 999:  # Reasonable max to prevent GFF issues
+                errors.append(f"Inventory item {idx}: Stack size {stack_size} too large (max 999)")
         
         return len(errors) == 0, errors
     
-    # Filter utility methods for item queries
-    def get_usable_weapons(self) -> List[Dict[str, Any]]:
-        """Get all base weapons the character can use"""
-        usable_weapons = []
+    # Information utility methods for item queries (no restrictions)
+    def get_all_weapons(self) -> List[Dict[str, Any]]:
+        """Get all available weapons (no proficiency restrictions)"""
+        all_weapons = []
         base_items = self.game_data_loader.get_table('baseitems')
         
         for item_id, base_item_data in enumerate(base_items):
@@ -813,22 +827,22 @@ class InventoryManager(EventEmitter):
             
             # Check if it's a weapon (type < 60)
             if item_type < 60:
-                # Check if character has proficiency
-                proficiency_errors = self._check_proficiency_requirements(base_item_data)
-                if not proficiency_errors:
-                    weapon_name = field_mapper.get_field_value(base_item_data, 'label', f'Weapon {item_id}')
-                    usable_weapons.append({
-                        'id': item_id,
-                        'name': weapon_name,
-                        'type': item_type,
-                        'weapon_type': field_mapper.get_field_value(base_item_data, 'weapon_type', 0)
-                    })
+                weapon_name = field_mapper.get_field_value(base_item_data, 'label', f'Weapon {item_id}')
+                proficiency_info = self.get_item_proficiency_info(base_item_data)
+                
+                all_weapons.append({
+                    'id': item_id,
+                    'name': weapon_name,
+                    'type': item_type,
+                    'weapon_type': field_mapper.get_field_value(base_item_data, 'weapon_type', 0),
+                    'proficiency_info': proficiency_info
+                })
         
-        return usable_weapons
+        return all_weapons
     
-    def get_usable_armor(self) -> List[Dict[str, Any]]:
-        """Get all armor the character can use"""
-        usable_armor = []
+    def get_all_armor(self) -> List[Dict[str, Any]]:
+        """Get all available armor and shields (no proficiency restrictions)"""
+        all_armor = []
         base_items = self.game_data_loader.get_table('baseitems')
         
         for item_id, base_item_data in enumerate(base_items):
@@ -839,19 +853,19 @@ class InventoryManager(EventEmitter):
             
             # Check if it's armor (type 16) or shield (type 29)
             if item_type in [16, 29]:
-                # Check if character has proficiency
-                proficiency_errors = self._check_proficiency_requirements(base_item_data)
-                if not proficiency_errors:
-                    armor_name = field_mapper.get_field_value(base_item_data, 'label', f'Armor {item_id}')
-                    usable_armor.append({
-                        'id': item_id,
-                        'name': armor_name,
-                        'type': item_type,
-                        'ac_type': field_mapper.get_field_value(base_item_data, 'ac_type', 0),
-                        'ac_value': field_mapper.get_field_value(base_item_data, 'base_ac', 0)
-                    })
+                armor_name = field_mapper.get_field_value(base_item_data, 'label', f'Armor {item_id}')
+                proficiency_info = self.get_item_proficiency_info(base_item_data)
+                
+                all_armor.append({
+                    'id': item_id,
+                    'name': armor_name,
+                    'type': item_type,
+                    'ac_type': field_mapper.get_field_value(base_item_data, 'ac_type', 0),
+                    'ac_value': field_mapper.get_field_value(base_item_data, 'base_ac', 0),
+                    'proficiency_info': proficiency_info
+                })
         
-        return usable_armor
+        return all_armor
     
     def filter_items_by_type(self, item_type: int) -> List[Dict[str, Any]]:
         """Filter base items by type"""
