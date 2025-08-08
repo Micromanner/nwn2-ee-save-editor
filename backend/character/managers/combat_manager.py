@@ -640,9 +640,9 @@ class CombatManager(EventEmitter):
         """
         old_value = self.character_manager.character_data.get('NaturalAC', 0)
         
-        # Basic bounds checking to prevent GFF corruption only
-        # Allow users to set any reasonable value they want
-        value = max(-1000, min(1000, int(value)))
+        # Engine limit - NWN2 engine caps natural armor at 255
+        # This is an engine constraint, not a game rule
+        value = max(0, min(255, int(value)))
         
         # Update the character data
         self.character_manager.character_data['NaturalAC'] = value
