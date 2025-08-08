@@ -18,8 +18,8 @@ class AttributeManager(EventEmitter):
     # Core attributes
     ATTRIBUTES = ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']
     
-    # Note: Point buy is not directly supported in NWN2 game data
-    # This would typically be handled by campaign-specific rules
+    # Note: Point-buy validation has been removed to allow user freedom
+    # Users can set attributes freely within engine limits (3-50)
     
     def __init__(self, character_manager):
         """
@@ -70,7 +70,10 @@ class AttributeManager(EventEmitter):
     
     def validate_attribute_value(self, attribute: str, value: int, context: str = "") -> Dict[str, Any]:
         """
-        Validate an attribute value and return detailed validation info
+        Validate an attribute value for corruption prevention only
+        
+        CRITICAL: Maintains 3-50 range validation as this is a base game engine limit
+        that prevents bugs. All other game rule validations have been removed.
         
         Args:
             attribute: Attribute name (Str, Dex, etc.)
@@ -95,30 +98,27 @@ class AttributeManager(EventEmitter):
             result['errors'].append(f"Unknown attribute '{attribute}'. Valid attributes: {', '.join(self.ATTRIBUTES)}")
             return result
         
-        # Check minimum value (D&D 3.5 minimum is 3)
+        # CRITICAL: Keep 3-50 range - this is a base game engine limit to prevent bugs
         if value < 3:
             result['valid'] = False
-            result['errors'].append(f"{attribute} cannot be less than 3 (got {value}). This violates D&D 3.5 rules.")
+            result['errors'].append(f"{attribute} cannot be less than 3 (got {value}). This is a base game engine limit.")
             result['corrected_value'] = 3
-        
-        # Check reasonable maximum (epic characters can go higher but 50 is reasonable limit)
         elif value > 50:
-            if value > 100:
-                result['valid'] = False
-                result['errors'].append(f"{attribute} value {value} is unreasonably high (max 100). This likely indicates corrupted data.")
-                result['corrected_value'] = 50
-            else:
-                result['warnings'].append(f"{attribute} value {value} is very high (above 50). This is unusual but possible for epic characters.")
+            result['valid'] = False
+            result['errors'].append(f"{attribute} cannot be greater than 50 (got {value}). This is a base game engine limit.")
+            result['corrected_value'] = 50
         
-        # Additional context-specific warnings
-        if value > 18 and context.lower() in ['character_creation', 'import']:
-            result['warnings'].append(f"{attribute} {value} is above typical starting range (8-18). This may indicate racial bonuses or magic items are included.")
+        # Keep corruption prevention for extreme values
+        elif value > 100:
+            result['valid'] = False
+            result['errors'].append(f"{attribute} value {value} is unreasonably high (max 100). This likely indicates corrupted data.")
+            result['corrected_value'] = 50
         
         return result
     
     def validate_all_attributes(self, attributes: Dict[str, int], context: str = "") -> Dict[str, Any]:
         """
-        Validate all attributes and return comprehensive validation results
+        Validate all attributes for corruption prevention only
         
         Args:
             attributes: Dict mapping attribute names to values
@@ -1112,8 +1112,9 @@ class AttributeManager(EventEmitter):
         return {attr: 0 for attr in self.ATTRIBUTES}
     
     def calculate_point_buy_total(self) -> int:
-        """Calculate total point buy cost for current attributes"""
+        """Calculate total point buy cost for current attributes (informational only)"""
         # Standard NWN2 point buy costs (28-point buy system)
+        # This is now purely informational - no validation is performed
         POINT_BUY_COSTS = {
             8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 6,
             15: 8, 16: 10, 17: 13, 18: 16
@@ -1124,8 +1125,13 @@ class AttributeManager(EventEmitter):
         
         for attr in self.ATTRIBUTES:
             value = base_attributes.get(attr, 10)
-            # Clamp value to valid range
-            value = max(8, min(18, value))
-            total_cost += POINT_BUY_COSTS.get(value, 0)
+            # Calculate cost for any value, even outside normal ranges
+            if value <= 8:
+                cost = 0
+            elif value >= 18:
+                cost = 16
+            else:
+                cost = POINT_BUY_COSTS.get(value, 0)
+            total_cost += cost
         
         return total_cost
