@@ -162,17 +162,20 @@ class FeatManager(EventEmitter):
         Returns:
             True if feat was added
         """
-        # Check if already has feat
+        # Check if already has feat (duplicate prevention - corruption prevention)
         if self.has_feat(feat_id):
             logger.debug(f"Character already has feat {feat_id}")
             return False
         
-        # Validate prerequisites
-        if source == 'manual':
-            is_valid, errors = self.validate_feat_prerequisites(feat_id)
-            if not is_valid:
-                logger.warning(f"Cannot add feat {feat_id}: {errors}")
-                return False
+        # Check if feat ID exists (corruption prevention)
+        feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+        if not feat_data and feat_id >= 0:  # Allow custom/unknown feats with negative IDs
+            logger.warning(f"Feat ID {feat_id} not found in feat table")
+            # Still allow it - might be custom content
+        
+        # NOTE: Prerequisite validation removed per validation cleanup plan
+        # Users can now add any feat regardless of prerequisites
+        # Prerequisites are still available for informational display via get_detailed_prerequisites()
         
         # Add to feat list
         feat_list = self.gff.get('FeatList', [])
@@ -329,7 +332,7 @@ class FeatManager(EventEmitter):
             
             # Get prerequisites and check if character meets them
             prereqs = field_mapper.get_feat_prerequisites(feat_data)
-            can_take, missing_reqs = self.validate_feat_prerequisites(feat_id, feat_data)
+            can_take, missing_reqs = self.get_feat_prerequisites_info(feat_id, feat_data)
             
             # Get description
             description = field_mapper.get_field_value(feat_data, 'description', '')
@@ -493,15 +496,15 @@ class FeatManager(EventEmitter):
                 del self._feat_cache[feat_id]['missing_requirements']
         logger.debug("Feat validation cache invalidated due to character state change")
     
-    def validate_feat_prerequisites_batch(self, feat_ids: List[int]) -> Dict[int, Tuple[bool, List[str]]]:
+    def get_feat_prerequisites_info_batch(self, feat_ids: List[int]) -> Dict[int, Tuple[bool, List[str]]]:
         """
-        Validate prerequisites for multiple feats at once (optimized batch processing)
+        Get prerequisite information for multiple feats at once (INFORMATIONAL ONLY)\n        NOTE: This method provides information for UI display but does NOT block feat selection.\n        Users can add any feat regardless of the prerequisites shown here.
         
         Args:
-            feat_ids: List of feat IDs to validate
+            feat_ids: List of feat IDs to check
             
         Returns:
-            Dictionary mapping feat_id to (is_valid, list_of_errors)
+            Dictionary mapping feat_id to (meets_requirements, list_of_missing_requirements)
         """
         # Try to use PrerequisiteGraph for fast batch validation if available
         if self._prerequisite_graph and self._prerequisite_graph.is_built:
@@ -628,16 +631,18 @@ class FeatManager(EventEmitter):
         
         return results
     
-    def validate_feat_prerequisites(self, feat_id: int, feat_data=None) -> Tuple[bool, List[str]]:
+    def get_feat_prerequisites_info(self, feat_id: int, feat_data=None) -> Tuple[bool, List[str]]:
         """
-        Validate if character meets prerequisites for a feat
+        Get prerequisite information for a feat (INFORMATIONAL ONLY)
+        NOTE: This method provides information for UI display but does NOT block feat selection.
+        Users can add any feat regardless of the prerequisites shown here.
         
         Args:
-            feat_id: ID of the feat to validate
+            feat_id: ID of the feat to check
             feat_data: Optional pre-loaded feat data to avoid redundant lookups
         
         Returns:
-            (is_valid, list_of_errors)
+            (meets_requirements, list_of_missing_requirements)
         """
         # Try to use PrerequisiteGraph for fast validation if available
         if self._prerequisite_graph and self._prerequisite_graph.is_built:
@@ -736,12 +741,12 @@ class FeatManager(EventEmitter):
     
     def get_detailed_prerequisites(self, feat_id: int) -> Dict[str, Any]:
         """
-        Get detailed prerequisite information in a user-friendly format
+        Get detailed prerequisite information in a user-friendly format (INFORMATIONAL ONLY)\n        NOTE: This provides prerequisite information for UI display but does NOT block feat selection.\n        Users can add any feat regardless of the prerequisites shown here.
         
         Returns:
             Dict with detailed prerequisite breakdown
         """
-        feat_data = self._get_feat_data_cached(feat_id)
+        feat_data = self.game_data_loader.get_by_id('feat', feat_id)
         if not feat_data:
             return {'requirements': [], 'met': [], 'unmet': []}
         
@@ -1030,7 +1035,7 @@ class FeatManager(EventEmitter):
             total_checked += 1
             
             # Check prerequisites - this is the expensive part, do it last
-            is_valid, _ = self.validate_feat_prerequisites(feat_id, feat_data)
+            is_valid, _ = self.get_feat_prerequisites_info(feat_id, feat_data)
             prereq_checked += 1
             
             if is_valid:
@@ -1220,7 +1225,7 @@ class FeatManager(EventEmitter):
         
         # Batch validate all prerequisites at once
         if feats_to_validate:
-            validation_results = self.validate_feat_prerequisites_batch(feats_to_validate)
+            validation_results = self.get_feat_prerequisites_info_batch(feats_to_validate)
             
             # Add only valid feats to available list
             for feat_id, (is_valid, _) in validation_results.items():
@@ -1258,22 +1263,28 @@ class FeatManager(EventEmitter):
         return categorized
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate current feat configuration"""
+        """Validate current feat configuration for corruption prevention only"""
         errors = []
         feat_list = self.gff.get('FeatList', [])
         
-        # Check for duplicate feats
+        # Check for duplicate feats (corruption prevention)
         feat_ids = [f.get('Feat', 0) for f in feat_list]
         if len(feat_ids) != len(set(feat_ids)):
-            errors.append("Duplicate feats detected")
+            errors.append("Duplicate feats detected - this can cause save corruption")
         
-        # Validate each feat's prerequisites
+        # Check for invalid feat IDs (corruption prevention)
         for feat in feat_list:
             feat_id = feat.get('Feat', 0)
-            is_valid, feat_errors = self.validate_feat_prerequisites(feat_id)
-            if not is_valid:
-                feat_name = self.get_feat_info(feat_id)['name']
-                errors.extend([f"{feat_name}: {e}" for e in feat_errors])
+            if feat_id < 0:  # Negative IDs might be custom content, allow them
+                continue
+            
+            # Check if feat exists in the data (prevents crash on load)
+            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            if not feat_data:
+                errors.append(f"Feat ID {feat_id} not found in feat table - may cause load errors")
+        
+        # NOTE: Prerequisite validation removed per validation cleanup plan
+        # Users can now have any feat regardless of prerequisites
         
         return len(errors) == 0, errors
     
@@ -1392,7 +1403,7 @@ class FeatManager(EventEmitter):
                         feat_id = field_mapper.get_field_value(feat_data, 'id', -1)
                         if feat_id >= 0:
                             has_feat = self.has_feat(feat_id)
-                            can_take, _ = self.validate_feat_prerequisites(feat_id)
+                            can_take, _ = self.get_feat_prerequisites_info(feat_id)
                             
                             chain_feats.append({
                                 'id': feat_id,
@@ -1424,10 +1435,8 @@ class FeatManager(EventEmitter):
         if self.is_feat_protected(old_feat_id):
             raise ValueError(f"Cannot swap protected feat {old_feat_id}")
         
-        # Check if new feat can be taken
-        can_take, errors = self.validate_feat_prerequisites(new_feat_id)
-        if not can_take:
-            raise ValueError(f"Cannot take new feat: {'; '.join(errors)}")
+        # NOTE: Prerequisite validation removed per validation cleanup plan
+        # Users can now swap to any feat regardless of prerequisites
         
         # Start transaction
         txn = self.character_manager.begin_transaction()
@@ -1470,7 +1479,7 @@ class FeatManager(EventEmitter):
             return False, "Already has this feat"
         
         # Check prerequisites
-        can_take, errors = self.validate_feat_prerequisites(feat_id)
+        can_take, errors = self.get_feat_prerequisites_info(feat_id)
         
         if can_take:
             return True, "All requirements met"
