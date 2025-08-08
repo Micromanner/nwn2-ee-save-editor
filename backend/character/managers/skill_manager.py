@@ -145,25 +145,32 @@ class SkillManager(EventEmitter):
         Returns:
             True if successful
         """
-        # Validate ranks
-        max_ranks = self.get_max_skill_ranks(skill_id)
-        if ranks > max_ranks:
-            logger.warning(f"Cannot set {ranks} ranks in skill {skill_id} (max: {max_ranks})")
+        # Validate skill ID exists (prevent crashes)
+        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        if not skill_data:
+            logger.warning(f"Invalid skill ID: {skill_id}")
+            return False
+            
+        # Prevent negative ranks (GFF integrity)
+        if ranks < 0:
+            logger.warning(f"Cannot set negative ranks ({ranks}) in skill {skill_id}")
             return False
         
-        # Calculate cost
-        is_class_skill = self.is_class_skill(skill_id)
-        cost = self.calculate_skill_cost(skill_id, ranks)
-        
-        # Check available points
+        # Calculate cost and points (for tracking purposes)
         available_points = self.gff.get('SkillPoints', 0)
         current_ranks = self.get_skill_ranks(skill_id)
         current_cost = self.calculate_skill_cost(skill_id, current_ranks)
+        new_cost = self.calculate_skill_cost(skill_id, ranks)
+        net_cost = new_cost - current_cost
         
-        net_cost = cost - current_cost
+        # Informational warnings (don't block action)
+        max_ranks = self.get_max_skill_ranks(skill_id)
+        if ranks > max_ranks:
+            logger.info(f"Setting {ranks} ranks in skill {skill_id} exceeds normal maximum of {max_ranks}")
+        
         if net_cost > available_points:
-            logger.warning(f"Not enough skill points (need {net_cost}, have {available_points})")
-            return False
+            logger.info(f"Skill allocation uses {net_cost} points (have {available_points} available) - overspending by {net_cost - available_points}")
+        
         
         # Update skill list
         skill_list = self.gff.get('SkillList', [])
@@ -207,7 +214,7 @@ class SkillManager(EventEmitter):
         
         self.gff.set('SkillList', skill_list)
         
-        # Update available points
+        # Update available points (can go negative - user freedom)
         self.gff.set('SkillPoints', available_points - net_cost)
         
         logger.info(f"Set skill {skill_id} to {ranks} ranks")
@@ -255,16 +262,13 @@ class SkillManager(EventEmitter):
         return False
     
     def calculate_skill_cost(self, skill_id: int, ranks: int) -> int:
-        """Calculate skill point cost for ranks"""
+        """Calculate skill point cost for ranks - removed cross-class penalties for user freedom"""
         if ranks == 0:
             return 0
         
-        if self.is_class_skill(skill_id):
-            # Class skills: 1 point per rank
-            return ranks
-        else:
-            # Cross-class skills: 2 points per rank
-            return ranks * 2
+        # All skills cost 1 point per rank - no cross-class penalties
+        # This allows users to freely allocate skill points without restrictions
+        return ranks
     
     def calculate_skill_modifier(self, skill_id: int) -> int:
         """Calculate total skill modifier including ranks and ability bonus"""
@@ -437,6 +441,13 @@ class SkillManager(EventEmitter):
         try:
             skill_list = self.gff.get('SkillList', [])
             available_points = self.gff.get('SkillPoints', 0)
+            spent_points = self._calculate_spent_skill_points()
+            
+            # Calculate total available points for comparison
+            total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
+            primary_class = self.gff.get('ClassList', [{}])[0].get('Class', 0) if self.gff.get('ClassList') else 0
+            total_available = self.calculate_total_skill_points(primary_class, total_level)
+            overspent = max(0, spent_points - total_available)
             
             # Check format first
             is_positional = False
@@ -451,6 +462,9 @@ class SkillManager(EventEmitter):
             
             summary = {
                 'available_points': available_points,
+                'total_available': total_available,
+                'spent_points': spent_points,
+                'overspent': overspent,
                 'total_ranks': sum(s.get('Rank', 0) for s in skill_list if isinstance(s, dict)),
                 'skills_with_ranks': skills_with_ranks,
                 'class_skills': [],
@@ -499,6 +513,9 @@ class SkillManager(EventEmitter):
             # Return minimal safe summary
             return {
                 'available_points': 0,
+                'total_available': 0,
+                'spent_points': 0,
+                'overspent': 0,
                 'total_ranks': 0,
                 'skills_with_ranks': 0,
                 'class_skills': [],
@@ -544,61 +561,58 @@ class SkillManager(EventEmitter):
         return total_spent
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate current skill configuration"""
+        """Validate current skill configuration - only check for corruption issues"""
         errors = []
         
         skill_list = self.gff.get('SkillList', [])
-        total_cost = 0
         
         # Check if we have positional format
         is_positional = False
         if skill_list and isinstance(skill_list[0], dict):
             is_positional = 'Skill' not in skill_list[0]
         
-        # Check each skill
+        # Check each skill for corruption issues only
         if is_positional:
             # Handle positional format
             for skill_id, skill_entry in enumerate(skill_list):
                 if not isinstance(skill_entry, dict):
+                    errors.append(f"Invalid skill entry at position {skill_id}: not a dictionary")
                     continue
+                
                 ranks = skill_entry.get('Rank', 0)
                 
+                # Only check for corruption issues
+                if ranks < 0:
+                    errors.append(f"Skill {skill_id}: negative ranks ({ranks}) can cause save corruption")
+                
+                # Verify skill ID exists (prevent crash on load)
                 if ranks > 0:
-                    # Check max ranks
-                    max_ranks = self.get_max_skill_ranks(skill_id)
-                    if ranks > max_ranks:
-                        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
-                        skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
-                        errors.append(f"{skill_name}: {ranks} ranks exceeds maximum of {max_ranks}")
-                    
-                    # Calculate cost
-                    total_cost += self.calculate_skill_cost(skill_id, ranks)
+                    skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                    if not skill_data:
+                        errors.append(f"Invalid skill ID {skill_id}: skill does not exist in game data")
         else:
             # Handle old format
             for skill in skill_list:
                 if not isinstance(skill, dict):
+                    errors.append(f"Invalid skill entry: not a dictionary")
                     continue
+                    
                 skill_id = skill.get('Skill')
                 if skill_id is None:
+                    errors.append(f"Skill entry missing 'Skill' field")
                     continue
+                    
                 ranks = skill.get('Rank', 0)
                 
+                # Only check for corruption issues
+                if ranks < 0:
+                    errors.append(f"Skill {skill_id}: negative ranks ({ranks}) can cause save corruption")
+                
+                # Verify skill ID exists (prevent crash on load)
                 if ranks > 0:
-                    # Check max ranks
-                    max_ranks = self.get_max_skill_ranks(skill_id)
-                    if ranks > max_ranks:
-                        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
-                        skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
-                        errors.append(f"{skill_name}: {ranks} ranks exceeds maximum of {max_ranks}")
-                    
-                    # Calculate cost
-                    total_cost += self.calculate_skill_cost(skill_id, ranks)
-        
-        # Check if spent points match expected
-        total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
-        if total_level > 0:
-            # Would need to calculate expected total skill points
-            pass
+                    skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                    if not skill_data:
+                        errors.append(f"Invalid skill ID {skill_id}: skill does not exist in game data")
         
         return len(errors) == 0, errors
     
@@ -900,40 +914,39 @@ class SkillManager(EventEmitter):
     
     def get_unspent_points(self) -> int:
         """
-        Calculate unspent skill points
+        Calculate unspent skill points (can be negative if overspending)
         
         Returns:
-            Number of unspent skill points
+            Number of unspent skill points (negative if overspending)
         """
         # Calculate total available points
         total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
         primary_class = self.gff.get('ClassList', [{}])[0].get('Class', 0) if self.gff.get('ClassList') else 0
         
         total_available = self.calculate_total_skill_points(primary_class, total_level)
+        total_spent = self._calculate_spent_skill_points()
         
-        # Calculate spent points
-        total_spent = 0
-        skill_list = self.gff.get('SkillList', [])
+        return total_available - total_spent
+    
+    def get_skill_spending_info(self) -> Dict[str, int]:
+        """
+        Get detailed skill point spending information
         
-        # Check if we have positional format
-        is_positional = False
-        if skill_list and isinstance(skill_list[0], dict):
-            is_positional = 'Skill' not in skill_list[0]
+        Returns:
+            Dict with spending breakdown
+        """
+        total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
+        primary_class = self.gff.get('ClassList', [{}])[0].get('Class', 0) if self.gff.get('ClassList') else 0
         
-        if is_positional:
-            # Handle positional format
-            for skill_id, skill_entry in enumerate(skill_list):
-                if isinstance(skill_entry, dict):
-                    ranks = skill_entry.get('Rank', 0)
-                    if ranks > 0:
-                        total_spent += self.calculate_skill_cost(skill_id, ranks)
-        else:
-            # Handle old format
-            for skill_entry in skill_list:
-                if isinstance(skill_entry, dict):
-                    skill_id = skill_entry.get('Skill')
-                    ranks = skill_entry.get('Rank', 0)
-                    if skill_id is not None and skill_id >= 0:
-                        total_spent += self.calculate_skill_cost(skill_id, ranks)
+        total_available = self.calculate_total_skill_points(primary_class, total_level)
+        spent_points = self._calculate_spent_skill_points()
+        available_points = self.gff.get('SkillPoints', 0)
+        overspent = max(0, spent_points - total_available)
         
-        return max(0, total_available - total_spent)
+        return {
+            'total_available': total_available,
+            'spent_points': spent_points, 
+            'available_points': available_points,
+            'overspent': overspent,
+            'unspent': max(0, total_available - spent_points)
+        }
