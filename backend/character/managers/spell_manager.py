@@ -1,6 +1,14 @@
 """
 Data-Driven Spell Manager - handles spell slots, spell lists, domain spells, and caster progression
 Uses CharacterManager and DynamicGameDataLoader for all spell data access
+
+VALIDATION CLEANUP APPLIED:
+- Removed spell slot limits (users can memorize more spells than slots)
+- Removed class spell access restrictions (any class can memorize any spell)
+- Kept spell ID existence checks to prevent crashes on save load
+- Kept all spell calculations (slots, DCs, caster levels, metamagic costs)
+- Kept all data access methods and live functionality
+- validate() now only checks for data corruption prevention
 """
 
 from typing import Dict, List, Tuple, Optional, Any
@@ -459,19 +467,13 @@ class SpellManager(EventEmitter):
         Returns:
             True if spell was prepared
         """
-        # Validate we have slots available
-        slots = self.calculate_spell_slots().get(class_id, {})
-        available_slots = slots.get(spell_level, 0)
-        
-        # Count currently memorized spells
-        memorized = self.get_memorized_spells(class_id)
-        current_count = len(memorized.get(spell_level, []))
-        
-        if current_count >= available_slots:
-            logger.warning(f"No available slots at level {spell_level}")
+        # Validate spell ID exists to prevent crashes
+        spell_data = self.game_data_loader.get_by_id('spells', spell_id)
+        if not spell_data:
+            logger.warning(f"Cannot prepare spell - invalid spell ID: {spell_id}")
             return False
         
-        # Add to memorized list
+        # Add to memorized list (no slot restrictions - let users memorize as many as they want)
         memorized_list = self.gff.get(f'MemorizedList{spell_level}', [])
         memorized_list.append({
             'Spell': spell_id,
@@ -944,7 +946,7 @@ class SpellManager(EventEmitter):
         return base_sr + feat_sr + item_sr
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate current spell configuration"""
+        """Validate current spell configuration - only check for data corruption prevention"""
         errors = []
         
         # Check each caster class
@@ -956,20 +958,24 @@ class SpellManager(EventEmitter):
                 errors.append(f"Invalid class ID: {class_id}")
                 continue
             
-            # Validate memorized spells don't exceed slots
+            # Validate spell IDs exist to prevent crashes on load
             memorized = self.get_memorized_spells(class_id)
             for spell_level, spell_list in memorized.items():
-                max_slots = slots.get(spell_level, 0)
-                if len(spell_list) > max_slots:
-                    errors.append(f"Class {class_id} has {len(spell_list)} spells "
-                                  f"memorized at level {spell_level} but only {max_slots} slots")
+                for spell_entry in spell_list:
+                    spell_id = spell_entry.get('spell_id', -1)
+                    if spell_id >= 0:  # -1 is valid empty slot
+                        spell_data = self.game_data_loader.get_by_id('spells', spell_id)
+                        if not spell_data:
+                            errors.append(f"Invalid spell ID {spell_id} found in memorized spells")
             
-            # Validate known spells for spontaneous casters
-            if self._is_prepared_caster(class_data):
-                continue
-                
-            # TODO: Validate against spells known table for spontaneous casters
-            # _ = self.get_known_spells(class_id)
+            # Validate known spell IDs exist
+            known = self.get_known_spells(class_id)
+            for spell_level, spell_list in known.items():
+                for spell_id in spell_list:
+                    if spell_id >= 0:  # -1 is valid empty slot
+                        spell_data = self.game_data_loader.get_by_id('spells', spell_id)
+                        if not spell_data:
+                            errors.append(f"Invalid spell ID {spell_id} found in known spells")
         
         return len(errors) == 0, errors
     
