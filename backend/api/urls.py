@@ -137,7 +137,6 @@ urlpatterns = [
     # Character creation endpoints
     path('characters/create/', character_creation_views.create_character, name='create-character'),
     path('characters/templates/', character_creation_views.get_character_templates, name='get-character-templates'),
-    path('characters/validate/', character_creation_views.validate_character_build, name='validate-character-build'),
     
     # Character export endpoints
     path('characters/export/localvault/', character_export_views.export_to_localvault, name='export-to-localvault'),

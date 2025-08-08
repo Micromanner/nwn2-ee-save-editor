@@ -1,10 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views.views import GameDataViewSet, HotReloadView, CustomOverrideDirectoriesView, WorkshopModsView, CacheStatsView
-from .views.views_rules import (
-    GameRulesView, ValidateFeatView, AvailableFeatsView,
-    ValidateClassChangeView, CalculateStatsView, ClassSkillsView
-)
 from .views.icon_views import (
     IconView, IconStatsView, IconListView,
     ModuleIconView, LegacyIconView
@@ -28,13 +24,6 @@ urlpatterns = [
     path('icons/module/', ModuleIconView.as_view(), name='module-icons'),
     path('icons/<path:icon_path>/', IconView.as_view(), name='icon-detail'),  # Catch-all must be last
     
-    # Game rules endpoints
-    path('rules/', GameRulesView.as_view(), name='game-rules'),
-    path('rules/validate-feat/', ValidateFeatView.as_view(), name='validate-feat'),
-    path('rules/available-feats/', AvailableFeatsView.as_view(), name='available-feats'),
-    path('rules/validate-class-change/', ValidateClassChangeView.as_view(), name='validate-class-change'),
-    path('rules/calculate-stats/', CalculateStatsView.as_view(), name='calculate-stats'),
-    path('rules/class-skills/<int:class_id>/', ClassSkillsView.as_view(), name='class-skills'),
     
     # Hot reload endpoint (dev only)
     path('hot-reload/', HotReloadView.as_view(), name='hot-reload'),

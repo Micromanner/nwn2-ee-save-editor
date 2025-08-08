@@ -17,7 +17,6 @@ import logging
 from character.models import Character
 from character.services import CharacterImportService
 from character.factory import get_or_create_character_manager, invalidate_character_cache
-from character.validators import CharacterValidator
 from character.custom_content import CustomContentDetector
 from parsers.resource_manager import ResourceManager
 from ..serializers import (
@@ -249,29 +248,6 @@ class CharacterViewSet(BaseCharacterViewSet, viewsets.ModelViewSet):
         serializer = CharacterDetailSerializer(new_char)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['get'])
-    def validate(self, request, pk=None):
-        """Validate character data against game rules"""
-        character = self.get_object()
-
-        rm = ResourceManager('nwn2_ee_data')
-        try:
-            validator = CharacterValidator(rm)
-            errors = validator.validate_character(character)
-
-            if errors:
-                return Response({
-                    'valid': False,
-                    'errors': errors
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'valid': True,
-                    'errors': {}
-                }, status=status.HTTP_200_OK)
-
-        finally:
-            rm.close()
 
     @action(detail=True, methods=['get'])
     def raw_data(self, request, pk=None):
