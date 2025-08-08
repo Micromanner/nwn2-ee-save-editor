@@ -604,8 +604,8 @@ class SaveManager(EventEmitter):
         gff_field = save_field_map[save_type]
         old_value = self.character_manager.character_data.get(gff_field, 0)
         
-        # Clamp value to reasonable range
-        value = max(-10, min(20, int(value)))
+        # Clamp value to engine limits
+        value = max(-35, min(255, int(value)))
         
         # Update the character data
         self.character_manager.character_data[gff_field] = value
