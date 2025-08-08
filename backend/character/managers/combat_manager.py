@@ -527,16 +527,16 @@ class CombatManager(EventEmitter):
         }
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate combat statistics"""
+        """Validate combat statistics for save file integrity only"""
         errors = []
         
-        # Check if AC is reasonable
+        # Only check for values that would cause save corruption or loading failures
         ac_data = self.calculate_armor_class()
         if ac_data['total_ac'] < 0:
             errors.append("AC is negative - check for errors")
         
-        if ac_data['total_ac'] > 50:
-            errors.append("AC seems unusually high")
+        # Removed game rule validation: "AC seems unusually high" - users should be free to set any AC
+        # Keep only corruption prevention validations
         
         return len(errors) == 0, errors
     
@@ -640,8 +640,9 @@ class CombatManager(EventEmitter):
         """
         old_value = self.character_manager.character_data.get('NaturalAC', 0)
         
-        # Clamp value to reasonable range
-        value = max(0, min(20, int(value)))
+        # Basic bounds checking to prevent GFF corruption only
+        # Allow users to set any reasonable value they want
+        value = max(-1000, min(1000, int(value)))
         
         # Update the character data
         self.character_manager.character_data['NaturalAC'] = value
@@ -653,19 +654,20 @@ class CombatManager(EventEmitter):
         # Calculate new AC
         new_ac = self.calculate_armor_class()
         
-        # Emit change event
+        # Emit change event using STATE_CHANGED
         from ..events import EventType, EventData
         event_data = EventData(
-            event_type=EventType.COMBAT_CHANGED,
-            source='combat_manager',
-            data={
-                'field': 'NaturalAC',
-                'old_value': old_value,
-                'new_value': value,
-                'new_ac': new_ac
-            }
+            event_type=EventType.STATE_CHANGED,
+            source_manager='combat_manager',
+            timestamp=0
         )
-        self.emit(EventType.COMBAT_CHANGED, event_data)
+        # Also emit with data dict for compatibility
+        self.emit(EventType.STATE_CHANGED, {
+            'field': 'NaturalAC',
+            'old_value': old_value,
+            'new_value': value,
+            'new_ac': new_ac
+        })
         
         return {
             'field': 'NaturalAC',
