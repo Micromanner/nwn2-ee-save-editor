@@ -61,11 +61,11 @@ class ClassManager(EventEmitter):
             'custom_content_preserved': []
         }
         
-        # Validate the change
+        # Basic validation for save file integrity only
         if not cheat_mode:
-            is_valid, errors = self._validate_class_change(new_class_id)
-            if not is_valid:
-                raise ValueError(f"Class change not allowed: {', '.join(errors)}")
+            new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+            if not new_class:
+                raise ValueError(f"Invalid class ID: {new_class_id}")
         
         # Get class info
         new_class = self.game_data_loader.get_by_id('classes', new_class_id)
@@ -135,11 +135,11 @@ class ClassManager(EventEmitter):
         """
         logger.info(f"Adding level in class {class_id}")
         
-        # Validate multiclassing
+        # Basic validation for save file integrity only
         if not cheat_mode:
-            is_valid, errors = self._validate_multiclass(class_id)
-            if not is_valid:
-                raise ValueError(f"Cannot add class: {', '.join(errors)}")
+            new_class = self.game_data_loader.get_by_id('classes', class_id)
+            if not new_class:
+                raise ValueError(f"Invalid class ID: {class_id}")
         
         # Get class info
         new_class = self.game_data_loader.get_by_id('classes', class_id)
@@ -183,37 +183,7 @@ class ClassManager(EventEmitter):
             'multiclass': not class_found
         }
     
-    def _validate_class_change(self, new_class_id: int) -> Tuple[bool, List[str]]:
-        """Validate if class change is allowed"""
-        errors = []
-        
-        # Use CharacterManager's alignment validation
-        is_valid, error_msg = self.character_manager.validate_alignment_for_class(new_class_id)
-        if not is_valid:
-            errors.append(error_msg)
-        
-        return len(errors) == 0, errors
     
-    def _validate_multiclass(self, new_class_id: int) -> Tuple[bool, List[str]]:
-        """Validate if character can multiclass"""
-        errors = []
-        
-        # Check if already has this class
-        class_list = self.gff.get('ClassList', [])
-        existing_classes = {c.get('Class') for c in class_list}
-        
-        if new_class_id in existing_classes:
-            errors.append("Already has levels in this class")
-        
-        # Check multiclass limit (3 in NWN2)
-        if len(existing_classes) >= 3:
-            errors.append("Maximum of 3 classes allowed")
-        
-        # Check alignment
-        is_valid, align_errors = self._validate_class_change(new_class_id)
-        errors.extend(align_errors)
-        
-        return len(errors) == 0, errors
     
     def _update_class_list(self, new_class_id: int, total_level: int):
         """Update the character's class list"""
@@ -637,22 +607,24 @@ class ClassManager(EventEmitter):
         return False
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate current class configuration"""
+        """Validate current class configuration - corruption prevention only"""
         errors = []
         
         class_list = self.gff.get('ClassList', [])
         
-        # Check for valid classes
+        # Check for valid classes (prevent crashes from invalid class references)
         for class_entry in class_list:
             class_id = class_entry.get('Class', 0)
             class_data = self.game_data_loader.get_by_id('classes', class_id)
             if not class_data:
                 errors.append(f"Invalid class ID: {class_id}")
         
-        # Check level limits
+        # Check level bounds (prevent GFF corruption)
         total_level = sum(c.get('ClassLevel', 0) for c in class_list)
-        if total_level > 60:  # NWN2 max with epic levels
-            errors.append(f"Total level {total_level} exceeds maximum of 30")
+        if total_level > 60:  # NWN2 max with epic levels - prevent GFF corruption
+            errors.append(f"Total level {total_level} exceeds maximum of 60")
+        if total_level < 1:
+            errors.append("Total level must be at least 1")
         
         return len(errors) == 0, errors
     
