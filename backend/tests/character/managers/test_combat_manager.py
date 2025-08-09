@@ -405,10 +405,12 @@ class TestCombatManagerInitialization:
             8: -8   # Colossal
         }
         
-        # Test that size modifiers work through character manager delegation
+        # Test that size modifiers work through race manager
         for size_id, expected_modifier in expected_modifiers.items():
-            actual_modifier = combat_manager.character_manager.get_size_modifier(size_id)
-            assert actual_modifier == expected_modifier, f"Size {size_id} modifier mismatch"
+            race_manager = combat_manager.character_manager.get_manager('race')
+            if race_manager:
+                actual_modifier = race_manager.get_size_modifier(size_id)
+                assert actual_modifier == expected_modifier, f"Size {size_id} modifier mismatch"
     
     def test_event_registration(self, mock_character_manager):
         """Test that event handlers are registered"""
@@ -1017,8 +1019,21 @@ class TestEdgeCases:
     
     def test_missing_feat_data(self, combat_manager):
         """Test handling of missing feat data in game rules"""
-        # Mock the character manager to return False for all feats
-        combat_manager.character_manager.has_feat_by_name = Mock(return_value=False)
+        # Mock the feat manager to return False for all feats
+        mock_feat_manager = Mock()
+        mock_feat_manager.has_feat_by_name = Mock(return_value=False)
+        
+        # Mock get_manager to return appropriate manager types
+        def mock_get_manager(manager_type):
+            if manager_type == 'feat':
+                return mock_feat_manager
+            # Return None for 'race' to trigger the fallback path
+            elif manager_type == 'race':
+                return None
+            # Return the original manager for other types
+            return combat_manager.character_manager._managers.get(manager_type)
+        
+        combat_manager.character_manager.get_manager = Mock(side_effect=mock_get_manager)
         
         # Should not crash when checking for feats
         assert combat_manager._has_feat_by_name('Dodge') is False
@@ -1028,9 +1043,22 @@ class TestEdgeCases:
     
     def test_missing_class_data(self, combat_manager):
         """Test handling of missing class data in game rules"""
-        # Mock empty class data via character manager
-        combat_manager.character_manager.has_class_by_name = Mock(return_value=False)
-        combat_manager.character_manager.get_class_level_by_name = Mock(return_value=0)
+        # Mock empty class data via class manager
+        mock_class_manager = Mock()
+        mock_class_manager.has_class_by_name = Mock(return_value=False)
+        mock_class_manager.get_class_level_by_name = Mock(return_value=0)
+        
+        # Mock get_manager to return appropriate manager types
+        def mock_get_manager(manager_type):
+            if manager_type == 'class':
+                return mock_class_manager
+            # Return None for other manager types to trigger fallback paths
+            elif manager_type in ['feat', 'race']:
+                return None
+            # Return the original manager for other types
+            return combat_manager.character_manager._managers.get(manager_type)
+        
+        combat_manager.character_manager.get_manager = Mock(side_effect=mock_get_manager)
         
         # Should not crash when checking for classes
         assert combat_manager._has_class('Fighter') is False

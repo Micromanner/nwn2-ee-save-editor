@@ -87,7 +87,11 @@ class CombatManager(EventEmitter):
         
         # Get size modifier from game data
         size = self.gff.get('CreatureSize', 4)  # Default Medium
-        size_modifier = self.character_manager.get_size_modifier(size)
+        race_manager = self.character_manager.get_manager('race')
+        if race_manager:
+            size_modifier = race_manager.get_size_modifier(size)
+        else:
+            size_modifier = 0
         
         # Calculate total AC
         total_ac = (base_ac + armor_bonus + shield_bonus + effective_dex_bonus + 
@@ -161,7 +165,11 @@ class CombatManager(EventEmitter):
         
         # Get size modifier (opposite of AC size mod for CMB)
         size = self.gff.get('CreatureSize', 4)
-        size_mod = -self.character_manager.get_size_modifier(size)
+        race_manager = self.character_manager.get_manager('race')
+        if race_manager:
+            size_mod = -race_manager.get_size_modifier(size)
+        else:
+            size_mod = 0
         
         total_cmb = bab + str_mod + size_mod
         
@@ -402,8 +410,9 @@ class CombatManager(EventEmitter):
             return None
 
     def _has_feat_by_name(self, feat_label: str) -> bool:
-        """Check if character has a feat by its label using CharacterManager"""
-        return self.character_manager.has_feat_by_name(feat_label)
+        """Check if character has a feat by its label using FeatManager"""
+        feat_manager = self.character_manager.get_manager('feat')
+        return feat_manager.has_feat_by_name(feat_label) if feat_manager else False
 
     def _has_feat_by_id(self, feat_id: int) -> bool:
         """Check if character has a feat by its ID"""
@@ -437,12 +446,14 @@ class CombatManager(EventEmitter):
             return None
 
     def _has_class(self, class_name: str) -> bool:
-        """Check if character has levels in a class using CharacterManager"""
-        return self.character_manager.has_class_by_name(class_name)
+        """Check if character has levels in a class using ClassManager"""
+        class_manager = self.character_manager.get_manager('class')
+        return class_manager.has_class_by_name(class_name) if class_manager else False
     
     def _get_class_level(self, class_name: str) -> int:
-        """Get level in a specific class using CharacterManager"""
-        return self.character_manager.get_class_level_by_name(class_name)
+        """Get level in a specific class using ClassManager"""
+        class_manager = self.character_manager.get_manager('class')
+        return class_manager.get_class_level_by_name(class_name) if class_manager else 0
 
     def _has_class_by_id(self, class_id: int) -> bool:
         """Check if character has levels in a class by ID"""
@@ -561,7 +572,11 @@ class CombatManager(EventEmitter):
         
         # Get size modifier
         size = self.gff.get('CreatureSize', 4)  # Default Medium
-        size_modifier = self.character_manager.get_size_modifier(size)
+        race_manager = self.character_manager.get_manager('race')
+        if race_manager:
+            size_modifier = race_manager.get_size_modifier(size)
+        else:
+            size_modifier = 0
         
         # Calculate melee attack bonus
         melee_attack = {
@@ -764,7 +779,30 @@ class CombatManager(EventEmitter):
         return {'result': 'Not implemented'}
     
     def get_spell_resistance(self) -> int:
-        return 0
+        """
+        Get spell resistance value
+        
+        Returns:
+            Total spell resistance
+        """
+        # Base SR from race
+        race_id = self.gff.get('Race', 0)
+        race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+        base_sr = 0
+        
+        if race_data:
+            # Try different possible field names for spell resistance
+            for field in ['spell_resistance', 'spellresistance', 'sr']:
+                sr_value = getattr(race_data, field, 0)
+                if sr_value:
+                    try:
+                        base_sr = int(sr_value)
+                        break
+                    except (ValueError, TypeError):
+                        continue
+        
+        # TODO: Add SR from feats, items, class features
+        return base_sr
     
     def get_concealment(self) -> int:
         return 0

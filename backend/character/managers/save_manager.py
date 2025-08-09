@@ -119,8 +119,8 @@ class SaveManager(EventEmitter):
             if race_id is None:
                 continue
             
-            # Get racial save bonuses from CharacterManager
-            bonuses = self.character_manager.get_racial_saves(race_id)
+            # Get racial save bonuses using local method
+            bonuses = self.get_racial_saves(race_id)
             self._racial_cache[race_id] = bonuses
     
     def _register_event_handlers(self):
@@ -291,8 +291,8 @@ class SaveManager(EventEmitter):
         
         race_id = self.gff.get('Race', 0)
         
-        # Get racial bonuses from CharacterManager
-        racial_bonuses = self.character_manager.get_racial_saves(race_id)
+        # Get racial bonuses using local method
+        racial_bonuses = self.get_racial_saves(race_id)
         bonuses['fortitude'] += racial_bonuses['fortitude']
         bonuses['reflex'] += racial_bonuses['reflex']
         bonuses['will'] += racial_bonuses['will']
@@ -431,16 +431,19 @@ class SaveManager(EventEmitter):
         }
     
     def _has_feat_by_name(self, feat_label: str) -> bool:
-        """Check if character has a feat by its label using CharacterManager"""
-        return self.character_manager.has_feat_by_name(feat_label)
+        """Check if character has a feat by its label using FeatManager"""
+        feat_manager = self.character_manager.get_manager('feat')
+        return feat_manager.has_feat_by_name(feat_label) if feat_manager else False
     
     def _has_class_by_name(self, class_name: str) -> bool:
-        """Check if character has levels in a class using CharacterManager"""
-        return self.character_manager.has_class_by_name(class_name)
+        """Check if character has levels in a class using ClassManager"""
+        class_manager = self.character_manager.get_manager('class')
+        return class_manager.has_class_by_name(class_name) if class_manager else False
     
     def _get_class_level_by_name(self, class_name: str) -> int:
-        """Get level in a specific class using CharacterManager"""
-        return self.character_manager.get_class_level_by_name(class_name)
+        """Get level in a specific class using ClassManager"""
+        class_manager = self.character_manager.get_manager('class')
+        return class_manager.get_class_level_by_name(class_name) if class_manager else 0
     
     def _on_attribute_changed(self, event: EventData):
         """Handle attribute changes that affect saves"""
@@ -474,17 +477,18 @@ class SaveManager(EventEmitter):
         conditions = []
         
         # Check for specific save-related feats/abilities
-        if self.character_manager.has_feat_by_name('Evasion'):
+        feat_manager = self.character_manager.get_manager('feat')
+        if feat_manager and feat_manager.has_feat_by_name('Evasion'):
             conditions.append("Evasion (no damage on successful Reflex save)")
         
-        if self.character_manager.has_feat_by_name('ImprovedEvasion'):
+        if feat_manager and feat_manager.has_feat_by_name('ImprovedEvasion'):
             conditions.append("Improved Evasion (half damage on failed Reflex save)")
         
-        if self.character_manager.has_feat_by_name('SlipperyMind'):
+        if feat_manager and feat_manager.has_feat_by_name('SlipperyMind'):
             conditions.append("Slippery Mind (reroll failed Will saves vs mind-affecting)")
         
         # Check for other save conditions from feats
-        if self.character_manager.has_feat_by_name('DivineSpark'):
+        if feat_manager and feat_manager.has_feat_by_name('DivineSpark'):
             conditions.append("Divine Spark (immune to energy drain)")
         
         return conditions
@@ -494,20 +498,21 @@ class SaveManager(EventEmitter):
         immunities = []
         
         # Check for immunity feats
-        if self.character_manager.has_feat_by_name('DivineHealth'):
+        feat_manager = self.character_manager.get_manager('feat')
+        if feat_manager and feat_manager.has_feat_by_name('DivineHealth'):
             immunities.append("Disease immunity")
         
-        if self.character_manager.has_feat_by_name('AuraOfCourage'):
+        if feat_manager and feat_manager.has_feat_by_name('AuraOfCourage'):
             immunities.append("Fear immunity")
         
-        if self.character_manager.has_feat_by_name('PurityOfBody'):
+        if feat_manager and feat_manager.has_feat_by_name('PurityOfBody'):
             immunities.append("Disease immunity")
         
-        if self.character_manager.has_feat_by_name('DiamondBody'):
+        if feat_manager and feat_manager.has_feat_by_name('DiamondBody'):
             immunities.append("Poison immunity")
         
         # Check for other immunity feats
-        if self.character_manager.has_feat_by_name('StillMind'):
+        if feat_manager and feat_manager.has_feat_by_name('StillMind'):
             immunities.append("+2 vs Enchantment")
         
         return immunities
@@ -558,15 +563,24 @@ class SaveManager(EventEmitter):
     
     def _get_con_modifier(self) -> int:
         """Get constitution modifier"""
-        return self.character_manager._calculate_ability_modifiers().get('CON', 0)
+        attr_manager = self.character_manager.get_manager('attribute')
+        if attr_manager:
+            return attr_manager._calculate_ability_modifiers().get('CON', 0)
+        return 0
     
     def _get_dex_modifier(self) -> int:
         """Get dexterity modifier"""
-        return self.character_manager._calculate_ability_modifiers().get('DEX', 0)
+        attr_manager = self.character_manager.get_manager('attribute')
+        if attr_manager:
+            return attr_manager._calculate_ability_modifiers().get('DEX', 0)
+        return 0
     
     def _get_wis_modifier(self) -> int:
         """Get wisdom modifier"""
-        return self.character_manager._calculate_ability_modifiers().get('WIS', 0)
+        attr_manager = self.character_manager.get_manager('attribute')
+        if attr_manager:
+            return attr_manager._calculate_ability_modifiers().get('WIS', 0)
+        return 0
     
     def _get_misc_fortitude_bonus(self) -> int:
         """Get miscellaneous fortitude bonus"""
@@ -637,3 +651,25 @@ class SaveManager(EventEmitter):
             'new_value': value,
             'new_saves': new_saves
         }
+    
+    def get_racial_saves(self, race_id: int) -> Dict[str, int]:
+        """
+        Get racial save bonuses from race data using field mapping utility
+        
+        Args:
+            race_id: The race ID
+            
+        Returns:
+            Dict with fortitude, reflex, will save bonuses
+        """
+        from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+        
+        try:
+            race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+            if race_data:
+                return field_mapper.get_racial_saves(race_data)
+        except Exception as e:
+            logger.warning(f"Could not get racial saves for race {race_id}: {e}")
+        
+        # Return default values if no race data or error
+        return {'fortitude': 0, 'reflex': 0, 'will': 0}

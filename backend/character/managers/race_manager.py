@@ -437,3 +437,27 @@ class RaceManager(EventEmitter):
         # Size mismatches don't corrupt saves, they just create unusual characters
         
         return len(errors) == 0, errors
+    
+    def get_size_modifier(self, size_id: int) -> int:
+        """
+        Get AC/attack modifier for a creature size
+        
+        Args:
+            size_id: The size ID from creaturesize.2da
+            
+        Returns:
+            AC modifier for the size (positive = bonus, negative = penalty)
+        """
+        try:
+            size_data = self.game_data_loader.get_by_id('creaturesize', size_id)
+            if size_data:
+                # ACATTACKMOD column has the AC modifier
+                ac_mod = getattr(size_data, 'acattackmod', 0)
+                try:
+                    return int(ac_mod)
+                except (ValueError, TypeError):
+                    return 0
+        except Exception as e:
+            logger.warning(f"Could not get size modifier for size {size_id}: {e}")
+        
+        return 0

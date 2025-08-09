@@ -238,20 +238,26 @@ class ClassManager(EventEmitter):
         return changes
     
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
-        """Calculate ability modifiers"""
-        # Use CharacterManager's method if available
-        if hasattr(self.character_manager, 'get_ability_scores'):
-            scores = self.character_manager.get_ability_scores()
-            return {
-                'STR': (scores.get('strength', 10) - 10) // 2,
-                'DEX': (scores.get('dexterity', 10) - 10) // 2,
-                'CON': (scores.get('constitution', 10) - 10) // 2,
-                'INT': (scores.get('intelligence', 10) - 10) // 2,
-                'WIS': (scores.get('wisdom', 10) - 10) // 2,
-                'CHA': (scores.get('charisma', 10) - 10) // 2
-            }
+        """Calculate ability modifiers using AttributeManager"""
+        attr_manager = self.character_manager.get_manager('attribute')
+        if attr_manager:
+            return attr_manager._calculate_ability_modifiers()
         
-        # Fallback to direct GFF access
+        # Fallback: Use attribute manager
+        if hasattr(self.character_manager, 'get_manager'):
+            attribute_manager = self.character_manager.get_manager('attribute')
+            if attribute_manager:
+                scores = attribute_manager.get_ability_scores()
+                return {
+                    'STR': (scores.get('strength', 10) - 10) // 2,
+                    'DEX': (scores.get('dexterity', 10) - 10) // 2,
+                    'CON': (scores.get('constitution', 10) - 10) // 2,
+                    'INT': (scores.get('intelligence', 10) - 10) // 2,
+                    'WIS': (scores.get('wisdom', 10) - 10) // 2,
+                    'CHA': (scores.get('charisma', 10) - 10) // 2
+                }
+        
+        # Final fallback to direct GFF access
         abilities = {
             'STR': self.gff.get('Str', 10),
             'DEX': self.gff.get('Dex', 10),
@@ -438,7 +444,9 @@ class ClassManager(EventEmitter):
         preserved = set()
         
         # 1. Get epithet/story feats
-        epithet_feats = self.character_manager.detect_epithet_feats()
+        # Get feat manager to detect epithet feats
+        feat_manager = self.character_manager.get_manager('feat')
+        epithet_feats = feat_manager.detect_epithet_feats() if feat_manager else set()
         preserved.update(epithet_feats)
         
         # 2. Get custom content that should be preserved
@@ -539,9 +547,10 @@ class ClassManager(EventEmitter):
     
     def _has_feat_by_name(self, feat_label: str) -> bool:
         """Check if character has a feat by its label"""
-        # Use CharacterManager's method if available
-        if hasattr(self.character_manager, 'has_feat_by_name'):
-            return self.character_manager.has_feat_by_name(feat_label)
+        # Use FeatManager directly
+        feat_manager = self.character_manager.get_manager('feat')
+        if feat_manager:
+            return feat_manager.has_feat_by_name(feat_label)
         
         # Fallback implementation
         feat_list = self.gff.get('FeatList', [])
@@ -836,11 +845,11 @@ class ClassManager(EventEmitter):
             return features
         
         # Get feats granted at this level
-        feats = self.character_manager.get_class_feats_for_level(class_data, level)
+        feats = self.get_class_feats_for_level(class_data, level)
         features['feats'] = feats
         
         # Get special abilities
-        abilities = self.character_manager.get_class_abilities(class_id, level)
+        abilities = self.get_class_abilities(class_id, level)
         features['abilities'] = abilities
         
         # Calculate BAB increase
@@ -1183,3 +1192,241 @@ class ClassManager(EventEmitter):
             })
         
         return abilities
+    
+    def get_class_feats_for_level(self, class_data: Any, level: int) -> List[Dict[str, Any]]:
+        """
+        Get feats granted by a class at a specific level
+        
+        Args:
+            class_data: Class data object from dynamic loader
+            level: Character level to check
+            
+        Returns:
+            List of feat dictionaries with 'feat_id' and 'list_type' keys
+        """
+        feats_for_level = []
+        
+        # Get the feat table name from class data
+        feat_table_name = getattr(class_data, 'feats_table', None)
+        if not feat_table_name:
+            logger.debug(f"Class {getattr(class_data, 'label', 'Unknown')} has no feat table")
+            return feats_for_level
+        
+        # Load the feat table
+        feat_table = self.game_data_loader.get_table(feat_table_name.lower())
+        if not feat_table:
+            logger.warning(f"Feat table {feat_table_name} not found")
+            return feats_for_level
+        
+        # Look for feats at this level
+        # Class feat tables have columns like FeatIndex, GrantedOnLevel, List
+        for feat_entry in feat_table:
+            granted_level = getattr(feat_entry, 'granted_on_level', -1)
+            if granted_level == level:
+                feat_id = getattr(feat_entry, 'feat_index', -1)
+                list_type = getattr(feat_entry, 'list', 3)  # Default to general list
+                
+                if feat_id >= 0:
+                    feats_for_level.append({
+                        'feat_id': feat_id,
+                        'list_type': list_type,
+                        'granted_on_level': granted_level
+                    })
+        
+        return feats_for_level
+    
+    def get_class_abilities(self, class_id: int, level: int) -> List[Dict[str, Any]]:
+        """
+        Get special abilities granted by a class at a specific level
+        
+        Args:
+            class_id: The class ID
+            level: The level to check
+            
+        Returns:
+            List of ability info dicts
+        """
+        abilities = []
+        
+        try:
+            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            if not class_data:
+                return abilities
+            
+            # Check for ability table (like cls_bfeat_* tables)
+            ability_table_name = getattr(class_data, 'ability_table', None)
+            if not ability_table_name:
+                # Try alternate naming
+                label = getattr(class_data, 'label', '').lower()
+                ability_table_name = f'cls_bfeat_{label}'
+            
+            if ability_table_name:
+                ability_table = self.game_data_loader.get_table(ability_table_name.lower())
+                if ability_table:
+                    for ability in ability_table:
+                        granted_level = getattr(ability, 'granted_on_level', -1)
+                        if granted_level == level:
+                            ability_id = getattr(ability, 'feat_index', -1)
+                            if ability_id >= 0:
+                                abilities.append({
+                                    'ability_id': ability_id,
+                                    'type': 'feat',
+                                    'level': level
+                                })
+        except Exception as e:
+            logger.warning(f"Could not get class abilities for class {class_id} level {level}: {e}")
+        
+        return abilities
+    
+    def has_class_by_name(self, class_name: str) -> bool:
+        """
+        Check if character has levels in a class by name
+        
+        Args:
+            class_name: The class name to check
+            
+        Returns:
+            True if character has this class
+        """
+        class_list = self.gff.get('ClassList', [])
+        
+        for class_info in class_list:
+            class_id = class_info.get('Class', -1)
+            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            if class_data:
+                label = getattr(class_data, 'label', '')
+                if label.lower() == class_name.lower():
+                    return True
+        
+        return False
+    
+    def get_class_level_by_name(self, class_name: str) -> int:
+        """
+        Get level in a specific class by name
+        
+        Args:
+            class_name: The class name
+            
+        Returns:
+            Class level or 0 if not found
+        """
+        class_list = self.gff.get('ClassList', [])
+        
+        for class_info in class_list:
+            class_id = class_info.get('Class', -1)
+            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            if class_data:
+                label = getattr(class_data, 'label', '')
+                if label.lower() == class_name.lower():
+                    return class_info.get('ClassLevel', 0)
+        
+        return 0
+    
+    def _get_class_name(self, class_id: int) -> str:
+        """Get class name from dynamic data"""
+        return self._get_content_name('classes', class_id)
+    
+    def _get_content_name(self, table_name: str, content_id: int) -> str:
+        """Get content name from dynamic data"""
+        content_data = self.game_data_loader.get_by_id(table_name, content_id)
+        if content_data:
+            # Try multiple possible name fields
+            for field in ['label', 'name', 'Label', 'Name']:
+                name = getattr(content_data, field, '')
+                if name and str(name).strip() and str(name) != '****':
+                    return str(name)
+        return f'{table_name.title()}_{content_id}'
+    
+    def _get_total_level(self) -> int:
+        """Get total character level from all classes"""
+        return sum(
+            c.get('ClassLevel', 0) 
+            for c in self.gff.get('ClassList', []) 
+            if isinstance(c, dict)
+        )
+
+    def get_available_classes(self) -> List[Dict[str, Any]]:
+        """Get list of classes available for next level"""
+        char_summary = self._create_character_summary_for_rules()
+        return self.character_manager.rules_service.get_available_classes(char_summary)
+    
+    def get_class_progressions(self) -> Dict[str, Any]:
+        """Get class progression info for all character classes"""
+        progressions = {}
+        for class_entry in self.gff.get('ClassList', []):
+            if isinstance(class_entry, dict):
+                class_id = class_entry.get('Class', 0)
+                class_level = class_entry.get('ClassLevel', 0)
+                
+                progression = self.character_manager.rules_service.get_class_progression(
+                    class_id, 
+                    class_level
+                )
+                if progression:
+                    class_name = self.character_manager._get_class_name(class_id)
+                    progressions[class_name] = progression
+        
+        return progressions
+
+    def _create_character_summary_for_rules(self) -> Dict[str, Any]:
+        """Create character summary dict for rules service validation using dynamic data"""
+        # Get ability scores from attribute manager
+        attribute_manager = self.character_manager.get_manager('attribute')
+        if attribute_manager:
+            abilities = attribute_manager.get_ability_scores()
+            # Convert to expected format
+            abilities_formatted = {
+                'str': abilities.get('strength', 10),
+                'dex': abilities.get('dexterity', 10),
+                'con': abilities.get('constitution', 10),
+                'int': abilities.get('intelligence', 10),
+                'wis': abilities.get('wisdom', 10),
+                'cha': abilities.get('charisma', 10)
+            }
+        else:
+            # Fallback to direct access
+            abilities_formatted = {
+                'str': self.gff.get('Str', 10),
+                'dex': self.gff.get('Dex', 10),
+                'con': self.gff.get('Con', 10),
+                'int': self.gff.get('Int', 10),
+                'wis': self.gff.get('Wis', 10),
+                'cha': self.gff.get('Cha', 10)
+            }
+        
+        # Get skills summary from skill manager
+        skill_manager = self.character_manager.get_manager('skill')
+        if skill_manager:
+            skills = skill_manager._extract_skills_summary()
+        else:
+            # Fallback to direct extraction
+            skills = {}
+            skill_list = self.gff.get('SkillList', [])
+            for skill in skill_list:
+                if isinstance(skill, dict):
+                    skill_id = skill.get('Skill', -1)
+                    rank = skill.get('Rank', 0)
+                    if skill_id >= 0:
+                        skills[skill_id] = rank
+        
+        return {
+            'level': sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', [])),
+            'classes': [
+                {
+                    'id': c.get('Class', 0),
+                    'level': c.get('ClassLevel', 0)
+                }
+                for c in self.gff.get('ClassList', [])
+                if isinstance(c, dict)
+            ],
+            'race': self.gff.get('Race', 0),
+            'abilities': abilities_formatted,
+            'alignment': {
+                'law_chaos': self.gff.get('LawfulChaotic', 50),
+                'good_evil': self.gff.get('GoodEvil', 50)
+            },
+            'feats': [f.get('Feat', 0) for f in self.gff.get('FeatList', []) if isinstance(f, dict)],
+            'skills': skills,
+            'hit_points': self.gff.get('HitPoints', 0),
+            'base_attack_bonus': self.gff.get('BaseAttackBonus', 0)
+        }

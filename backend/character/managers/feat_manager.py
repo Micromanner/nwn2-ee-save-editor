@@ -76,6 +76,10 @@ class FeatManager(EventEmitter):
         self.character_manager.on(EventType.FEAT_REMOVED, self.on_feat_changed)
         self.character_manager.on(EventType.SKILL_UPDATED, self.on_skill_changed)
     
+    def _get_content_manager(self):
+        """Get the ContentManager from CharacterManager"""
+        return self.character_manager.get_manager('content')
+    
     def _update_protected_feats(self):
         """Update the set of protected feat IDs"""
         self._protected_feats.clear()
@@ -85,8 +89,8 @@ class FeatManager(EventEmitter):
             if info['type'] == 'feat' and info.get('protected', False):
                 self._protected_feats.add(info['id'])
         
-        # Use character manager's epithet feat detection
-        epithet_feats = self.character_manager.detect_epithet_feats()
+        # Use our own epithet feat detection
+        epithet_feats = self.detect_epithet_feats()
         self._protected_feats.update(epithet_feats)
         
         logger.debug(f"Protected feats updated: {len(self._protected_feats)} feats protected")
@@ -112,10 +116,14 @@ class FeatManager(EventEmitter):
         # Add feats for the new level using dynamic game data
         class_data = self.game_data_loader.get_by_id('classes', event.class_id)
         if class_data:
-            # Use character manager's method to get class feats for level
-            feats_at_level = self.character_manager.get_class_feats_for_level(
-                class_data, event.new_level
-            )
+            # Use class manager's method to get class feats for level
+            class_manager = self.character_manager.get_manager('class')
+            if class_manager:
+                feats_at_level = class_manager.get_class_feats_for_level(
+                    class_data, event.new_level
+                )
+            else:
+                feats_at_level = []
             
             for feat_info in feats_at_level:
                 if feat_info['list_type'] == 0:  # Auto-granted
@@ -241,6 +249,28 @@ class FeatManager(EventEmitter):
         feat_list = self.gff.get('FeatList', [])
         return any(f.get('Feat') == feat_id for f in feat_list)
     
+    def has_feat_by_name(self, feat_label: str) -> bool:
+        """
+        Check if character has a feat by its label
+        
+        Args:
+            feat_label: The feat label to check
+            
+        Returns:
+            True if character has the feat
+        """
+        feat_list = self.gff.get('FeatList', [])
+        
+        for feat in feat_list:
+            feat_id = feat.get('Feat', -1)
+            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            if feat_data:
+                label = getattr(feat_data, 'label', '')
+                if label == feat_label:
+                    return True
+        
+        return False
+    
     def is_feat_protected(self, feat_id: int) -> bool:
         """Check if a feat is protected from removal"""
         return feat_id in self._protected_feats
@@ -346,7 +376,7 @@ class FeatManager(EventEmitter):
                 'name': label,  # Use label as name since it's more readable
                 'type': getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0)),
                 'protected': self.is_feat_protected(feat_id),
-                'custom': self.character_manager.is_custom_content('feat', feat_id),
+                'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
                 'icon': icon,
                 'prerequisites': prereqs,
@@ -415,7 +445,7 @@ class FeatManager(EventEmitter):
                 'name': label,  # Use label as name since it's more readable
                 'type': getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0)),
                 'protected': self.is_feat_protected(feat_id),
-                'custom': self.character_manager.is_custom_content('feat', feat_id),
+                'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
                 'icon': icon,
                 'prerequisites': prereqs,
@@ -881,8 +911,12 @@ class FeatManager(EventEmitter):
         
         # Collect all auto-granted feats for this class
         feats_to_remove = []
+        class_manager = self.character_manager.get_manager('class')
         for lvl in range(1, level + 1):
-            feats_at_level = self.character_manager.get_class_feats_for_level(class_data, lvl)
+            if class_manager:
+                feats_at_level = class_manager.get_class_feats_for_level(class_data, lvl)
+            else:
+                feats_at_level = []
             for feat_info in feats_at_level:
                 if feat_info['list_type'] == 0:  # Auto-granted
                     feat_id = feat_info['feat_id']
@@ -908,8 +942,12 @@ class FeatManager(EventEmitter):
         
         # Add all auto-granted feats for this class
         added_count = 0
+        class_manager = self.character_manager.get_manager('class')
         for lvl in range(1, level + 1):
-            feats_at_level = self.character_manager.get_class_feats_for_level(class_data, lvl)
+            if class_manager:
+                feats_at_level = class_manager.get_class_feats_for_level(class_data, lvl)
+            else:
+                feats_at_level = []
             for feat_info in feats_at_level:
                 if feat_info['list_type'] == 0:  # Auto-granted
                     if self.add_feat(feat_info['feat_id'], source='class'):
@@ -1611,3 +1649,55 @@ class FeatManager(EventEmitter):
             return 'Class'
         else:
             return 'General'
+    
+    def detect_epithet_feats(self) -> Set[int]:
+        """
+        Detect epithet feats (special story/custom feats that should be protected)
+        
+        Returns:
+            Set of feat IDs that are epithet feats
+        """
+        epithet_feats = set()
+        
+        # Get all feats from character
+        feat_list = self.gff.get('FeatList', [])
+        
+        # Get vanilla feat data
+        feat_table = self.game_data_loader.get_table('feat')
+        if not feat_table:
+            logger.warning("Feat table not found, cannot detect epithet feats")
+            return epithet_feats
+        
+        # Build set of all vanilla feat IDs (using row indices which correspond to feat IDs)
+        vanilla_feat_ids = set(range(len(feat_table)))
+        
+        # Check each character feat
+        for feat_entry in feat_list:
+            if isinstance(feat_entry, dict):
+                feat_id = feat_entry.get('Feat', -1)
+                
+                # Check if this is a non-vanilla feat or has special properties
+                if feat_id not in vanilla_feat_ids:
+                    # This is a custom/mod feat
+                    epithet_feats.add(feat_id)
+                else:
+                    # Check if it's an epithet feat by looking at properties
+                    feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+                    if feat_data:
+                        # Epithet feats often have specific naming patterns or categories
+                        label = (getattr(feat_data, 'label', '') or '').lower()
+                        category = (getattr(feat_data, 'categories', '') or '').lower()
+                        
+                        # Common patterns for epithet/story feats
+                        epithet_patterns = [
+                            'epithet', 'story', 'history', 'background',
+                            'blessing', 'curse', 'gift', 'legacy'
+                        ]
+                        
+                        for pattern in epithet_patterns:
+                            if pattern in label or pattern in category:
+                                epithet_feats.add(feat_id)
+                                break
+        
+        logger.info(f"Detected {len(epithet_feats)} epithet feats: {epithet_feats}")
+        return epithet_feats

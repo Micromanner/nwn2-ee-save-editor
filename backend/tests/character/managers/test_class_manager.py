@@ -242,14 +242,7 @@ def mock_character_manager(mock_game_data_loader):
             'charisma': mock_gff_data.get('Cha', 10)
         }
     
-    def mock_validate_alignment_for_class(class_id):
-        # Simple mock validation - always valid unless class_id is 999
-        if class_id == 999:
-            return False, "Invalid class ID"
-        return True, None
-    
     manager.get_ability_scores = mock_get_ability_scores
-    manager.validate_alignment_for_class = mock_validate_alignment_for_class
     
     # Mock has_feat_by_name helper method
     def has_feat_by_name(feat_label):

@@ -756,7 +756,8 @@ class SpellManager(EventEmitter):
         """Get list of metamagic feat IDs the character has"""
         metamagic = []
         for feat_name, feat_id in self.METAMAGIC_FEATS.items():
-            if self.character_manager.has_feat(feat_id):
+            feat_manager = self.character_manager.get_manager('feat')
+            if feat_manager and feat_manager.has_feat(feat_id):
                 metamagic.append(feat_id)
         return metamagic
     

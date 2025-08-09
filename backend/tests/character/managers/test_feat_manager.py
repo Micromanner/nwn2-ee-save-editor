@@ -121,7 +121,6 @@ def mock_character_manager():
     }
     
     # Mock methods
-    manager.is_custom_content = Mock(return_value=False)
     manager.detect_epithet_feats = Mock(return_value=[10001])
     manager.get_class_feats_for_level = Mock(return_value=[])
     manager.on = Mock()  # Event registration
@@ -457,12 +456,15 @@ class TestFeatInfo:
     
     def test_get_feat_info_custom_content_detection(self, feat_manager):
         """Test custom content detection in feat info"""
-        feat_manager.character_manager.is_custom_content.return_value = True
+        # Mock the ContentManager to return custom content
+        mock_content_manager = Mock()
+        mock_content_manager.is_custom_content.return_value = True
+        feat_manager._get_content_manager = Mock(return_value=mock_content_manager)
         
         info = feat_manager.get_feat_info(10002)  # ModdedFeat
         
         assert info['custom'] is True
-        feat_manager.character_manager.is_custom_content.assert_called_with('feat', 10002)
+        mock_content_manager.is_custom_content.assert_called_with('feat', 10002)
 
 
 class TestEventHandling:

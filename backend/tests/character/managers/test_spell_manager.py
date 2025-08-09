@@ -475,8 +475,10 @@ class TestMetamagic:
     
     def test_get_metamagic_feats(self, spell_manager, mock_character_manager):
         """Test getting character's metamagic feats"""
-        # Mock has_feat to return True for some metamagic
-        mock_character_manager.has_feat.side_effect = lambda feat_id: feat_id in [11, 12, 25]
+        # Mock feat manager to return True for some metamagic
+        mock_feat_manager = Mock()
+        mock_feat_manager.has_feat.side_effect = lambda feat_id: feat_id in [11, 12, 25]
+        mock_character_manager.get_manager.return_value = mock_feat_manager
         
         metamagic = spell_manager.get_metamagic_feats()
         
@@ -674,7 +676,11 @@ class TestSpellSummary:
         }.get(key, default)
         
         mock_character_manager.game_data_loader.get_by_id.return_value = wizard_class_data
-        mock_character_manager.has_feat.side_effect = lambda feat_id: feat_id == 11  # Has Empower
+        
+        # Mock feat manager
+        mock_feat_manager = Mock()
+        mock_feat_manager.has_feat.side_effect = lambda feat_id: feat_id == 11  # Has Empower
+        mock_character_manager.get_manager.return_value = mock_feat_manager
         
         # Mock spell slots
         spell_manager.calculate_spell_slots = Mock(return_value={

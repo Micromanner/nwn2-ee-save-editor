@@ -1,5 +1,27 @@
 """
 Character creation service that modifies template .bic files
+
+################################################################################
+# TODO: MAJOR REFACTOR NEEDED - HARDCODED CALCULATIONS EVERYWHERE
+################################################################################
+# 
+# CRITICAL ISSUES:
+# 1. This service duplicates ALL the calculation logic that managers already do better
+# 2. Hardcoded save calculations (lines 241-281) vs ClassManager's dynamic 2DA lookups
+# 3. Hardcoded HP calculations (lines 283-318) vs ClassManager's proper hit die calculations  
+# 4. Hardcoded skill point calculations (lines 320-339) vs SkillManager's racial bonuses
+# 5. Hardcoded race assumptions (human = ID 6) vs RaceManager's dynamic lookups
+# 6. Creates inconsistency between created characters and manager-calculated stats
+#
+# SOLUTION: Replace all _calculate_* methods with manager calls:
+# - self._calculate_saves() → character_manager.get_manager('class').calculate_total_saves()
+# - self._calculate_hit_points() → character_manager.get_manager('combat').calculate_hit_points()
+# - self._calculate_skill_points() → character_manager.get_manager('skill').calculate_available_skill_points()
+#
+# This will eliminate ~200 lines of hardcoded calculations and make character 
+# creation consistent with the rest of the system.
+#
+################################################################################
 """
 import os
 import shutil

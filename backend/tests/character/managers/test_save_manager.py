@@ -375,18 +375,20 @@ class TestClassSpecificBonuses:
             'base_will': 0,
         }
         
-        # Update has_class_by_name to recognize Paladin
+        # Mock the class manager to recognize Paladin
         def new_has_class(class_name):
             if class_name == 'Paladin':
                 return True
             return False
-        save_manager.character_manager.has_class_by_name = new_has_class
         
         def new_get_level(class_name):
             if class_name == 'Paladin':
                 return 2
             return 0
-        save_manager.character_manager.get_class_level_by_name = new_get_level
+        
+        # Update the class manager mock
+        class_manager.has_class_by_name = new_has_class
+        class_manager.get_class_level_by_name = new_get_level
         
         saves = save_manager.calculate_saving_throws()
         
@@ -406,13 +408,16 @@ class TestClassSpecificBonuses:
             if class_name == 'Paladin':
                 return True
             return False
-        save_manager.character_manager.has_class_by_name = new_has_class
         
         def new_get_level(class_name):
             if class_name == 'Paladin':
                 return 1
             return 0
-        save_manager.character_manager.get_class_level_by_name = new_get_level
+        
+        # Mock the class manager
+        class_manager = save_manager.character_manager.get_manager('class')
+        class_manager.has_class_by_name = new_has_class
+        class_manager.get_class_level_by_name = new_get_level
         
         saves = save_manager.calculate_saving_throws()
         

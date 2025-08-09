@@ -101,11 +101,12 @@ class SaveViewSet(BaseCharacterViewSet):
             character, manager = self._get_character_manager(character_pk)
             save_manager = manager.get_manager('save')
             
+            combat_manager = manager.get_manager('combat')
             resistances = {
-                'damage_reduction': save_manager.get_damage_reduction(),
+                'damage_reduction': combat_manager.get_damage_reduction() if combat_manager else [],
                 'energy_resistances': save_manager.get_energy_resistances(),
                 'damage_immunities': save_manager.get_damage_immunities(),
-                'spell_resistance': save_manager.get_spell_resistance()
+                'spell_resistance': combat_manager.get_spell_resistance() if combat_manager else 0
             }
             
             return Response(resistances, status=status.HTTP_200_OK)

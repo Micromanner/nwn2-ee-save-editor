@@ -816,7 +816,8 @@ class AttributeManager(EventEmitter):
         Returns:
             True if character has the feat
         """
-        return self.character_manager.has_feat_by_name(feat_label)
+        feat_manager = self.character_manager.get_manager('feat')
+        return feat_manager.has_feat_by_name(feat_label) if feat_manager else False
     
     def _update_saving_throw(self, save_type: str, old_mod: int, new_mod: int) -> Optional[Dict[str, Any]]:
         """
@@ -858,6 +859,73 @@ class AttributeManager(EventEmitter):
             raise ValueError(f"Invalid attribute: {attribute}")
         
         return self.gff.get(attribute, 10)
+    
+    def get_ability_score(self, ability_name: str, default: int = 10) -> int:
+        """
+        Get ability score using standard name mapping
+        
+        Args:
+            ability_name: Standard ability name (strength, dexterity, etc.)
+            default: Default value if not found
+            
+        Returns:
+            Ability score value
+        """
+        # Map standard names to GFF field names
+        ability_mapping = {
+            'strength': 'Str',
+            'dexterity': 'Dex', 
+            'constitution': 'Con',
+            'intelligence': 'Int',
+            'wisdom': 'Wis',
+            'charisma': 'Cha'
+        }
+        
+        gff_field = ability_mapping.get(ability_name.lower())
+        if gff_field:
+            return self.gff.get(gff_field, default)
+        return default
+    
+    def get_ability_scores(self) -> Dict[str, int]:
+        """Get all ability scores using standard names"""
+        # Map standard names to GFF field names
+        ability_mapping = {
+            'strength': 'Str',
+            'dexterity': 'Dex', 
+            'constitution': 'Con',
+            'intelligence': 'Int',
+            'wisdom': 'Wis',
+            'charisma': 'Cha'
+        }
+        
+        return {
+            ability: self.gff.get(gff_field, 10)
+            for ability, gff_field in ability_mapping.items()
+        }
+    
+    def set_ability_score(self, ability_name: str, value: int):
+        """
+        Set ability score using standard name mapping
+        
+        Args:
+            ability_name: Standard ability name (strength, dexterity, etc.)
+            value: New ability score value
+        """
+        # Map standard names to GFF field names
+        ability_mapping = {
+            'strength': 'Str',
+            'dexterity': 'Dex', 
+            'constitution': 'Con',
+            'intelligence': 'Int',
+            'wisdom': 'Wis',
+            'charisma': 'Cha'
+        }
+        
+        gff_field = ability_mapping.get(ability_name.lower())
+        if gff_field:
+            self.set_attribute(gff_field, value)
+        else:
+            raise ValueError(f"Unknown ability name: {ability_name}")
     
     def get_attribute_modifier(self, attribute: str) -> int:
         """
@@ -1035,7 +1103,8 @@ class AttributeManager(EventEmitter):
             ])
             
             # Check for wizard spells
-            if self.character_manager.has_class_by_name('wizard'):
+            class_manager = self.character_manager.get_manager('class')
+            if class_manager and class_manager.has_class_by_name('wizard'):
                 effects['effects'].append({
                     'type': 'spells',
                     'description': 'Wizard spell slots and DCs will change'
@@ -1051,7 +1120,7 @@ class AttributeManager(EventEmitter):
             
             # Check for divine casters
             for class_name in ['cleric', 'druid', 'ranger', 'paladin']:
-                if self.character_manager.has_class_by_name(class_name):
+                if class_manager and class_manager.has_class_by_name(class_name):
                     effects['effects'].append({
                         'type': 'spells',
                         'description': f'{class_name.capitalize()} spell slots and DCs will change'
@@ -1061,7 +1130,7 @@ class AttributeManager(EventEmitter):
         elif attribute == 'Cha':
             # Check for charisma casters
             for class_name in ['sorcerer', 'bard', 'paladin', 'warlock']:
-                if self.character_manager.has_class_by_name(class_name):
+                if class_manager and class_manager.has_class_by_name(class_name):
                     effects['effects'].append({
                         'type': 'spells',
                         'description': f'{class_name.capitalize()} spell slots and DCs will change'
@@ -1097,7 +1166,23 @@ class AttributeManager(EventEmitter):
     # Missing methods called by views
     def get_all_modifiers(self) -> Dict[str, int]:
         """Get all ability modifiers"""
-        return self.character_manager._calculate_ability_modifiers()
+        return self._calculate_ability_modifiers()
+    
+    def _calculate_ability_modifiers(self) -> Dict[str, int]:
+        """Calculate ability modifiers from ability scores"""
+        abilities = {
+            'STR': self.gff.get('Str', 10),
+            'DEX': self.gff.get('Dex', 10),
+            'CON': self.gff.get('Con', 10),
+            'INT': self.gff.get('Int', 10),
+            'WIS': self.gff.get('Wis', 10),
+            'CHA': self.gff.get('Cha', 10)
+        }
+        
+        return {
+            ability: (value - 10) // 2
+            for ability, value in abilities.items()
+        }
     
     def get_base_attributes(self) -> Dict[str, int]:
         """Get base character attributes (before racial modifiers, items, etc.)"""
@@ -1135,3 +1220,109 @@ class AttributeManager(EventEmitter):
             total_cost += cost
         
         return total_cost
+    
+    def get_character_age(self) -> int:
+        """
+        Get character age
+        
+        Returns:
+            Character age in years
+        """
+        return self.gff.get('Age', 18)  # Default adult age
+    
+    def get_character_background(self) -> str:
+        """
+        Get character background/biography
+        
+        Returns:
+            Character background text
+        """
+        bio = self.gff.get('Description', {})
+        
+        # Handle localized string structure
+        if isinstance(bio, dict) and 'substrings' in bio:
+            substrings = bio.get('substrings', [])
+            if substrings and isinstance(substrings[0], dict):
+                return substrings[0].get('string', '')
+        elif isinstance(bio, str):
+            return bio
+        
+        return ''
+    
+    def get_experience_points(self) -> int:
+        """
+        Get current experience points
+        
+        Returns:
+            Current XP value
+        """
+        return self.gff.get('Experience', 0)
+    
+    def _get_character_name(self) -> str:
+        """Extract character name from localized string structure"""
+        first_name = self.gff.get('FirstName', {})
+        last_name = self.gff.get('LastName', {})
+        
+        # Handle localized string structure
+        if isinstance(first_name, dict) and 'substrings' in first_name:
+            first = first_name.get('substrings', [{}])[0].get('string', '')
+        else:
+            first = str(first_name)
+            
+        if isinstance(last_name, dict) and 'substrings' in last_name:
+            last = last_name.get('substrings', [{}])[0].get('string', '')
+        else:
+            last = str(last_name)
+            
+        full_name = f"{first} {last}".strip()
+        return full_name if full_name and full_name != " " else ""
+    
+    def validate(self) -> tuple[bool, List[str]]:
+        """
+        Validate all ability scores for corruption prevention only
+        
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+        
+        # Ability mapping from standard names to GFF field names
+        ability_mapping = {
+            'strength': 'Str',
+            'dexterity': 'Dex', 
+            'constitution': 'Con',
+            'intelligence': 'Int',
+            'wisdom': 'Wis',
+            'charisma': 'Cha'
+        }
+        
+        # Validate ability scores - keep engine limits to prevent corruption
+        for ability_name, gff_field in ability_mapping.items():
+            value = self.get_ability_score(ability_name)
+                
+            if value < 3 or value > 50:  # Engine limits - prevents GFF corruption
+                errors.append(f"{ability_name.title()} must be between 3 and 50 (engine limit, got {value})")
+        
+        return len(errors) == 0, errors
+    
+    def _build_ability_mapping(self) -> Dict[str, str]:
+        """
+        Build dynamic ability score mapping from game data
+        Maps standard names to GFF field names
+        """
+        # Try to get ability data from 2DA files
+        # In NWN2, abilities are typically stored as Str, Dex, Con, Int, Wis, Cha
+        default_mapping = {
+            'strength': 'Str',
+            'dexterity': 'Dex', 
+            'constitution': 'Con',
+            'intelligence': 'Int',
+            'wisdom': 'Wis',
+            'charisma': 'Cha'
+        }
+        
+        # TODO: In future, this could read from iprp_abilities.2da or similar
+        # for now, use the standard mapping but make it extensible
+        return default_mapping
+    
+    

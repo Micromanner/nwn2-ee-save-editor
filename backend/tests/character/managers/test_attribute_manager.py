@@ -1111,7 +1111,18 @@ class TestFeatDetection:
             
             return False
         
-        attribute_manager.character_manager.has_feat_by_name = Mock(side_effect=has_feat_by_name_empty)
+        # Mock feat manager
+        mock_feat_manager = Mock()
+        mock_feat_manager.has_feat_by_name = Mock(side_effect=has_feat_by_name_empty)
+        
+        # Mock get_manager to return appropriate manager types
+        def mock_get_manager(manager_type):
+            if manager_type == 'feat':
+                return mock_feat_manager
+            # Return the original manager for other types
+            return attribute_manager.character_manager._managers.get(manager_type)
+        
+        attribute_manager.character_manager.get_manager = Mock(side_effect=mock_get_manager)
         
         result = attribute_manager._has_feat_by_name('WeaponFinesse')
         

@@ -377,7 +377,11 @@ class SkillManager(EventEmitter):
             self._get_class_skills(class_id)
     
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
-        """Calculate ability modifiers"""
+        """Calculate ability modifiers using AttributeManager"""
+        attr_manager = self.character_manager.get_manager('attribute')
+        if attr_manager:
+            return attr_manager._calculate_ability_modifiers()
+        # Fallback if no AttributeManager available
         abilities = {
             'STR': self.gff.get('Str', 10),
             'DEX': self.gff.get('Dex', 10),
@@ -950,3 +954,31 @@ class SkillManager(EventEmitter):
             'overspent': overspent,
             'unspent': max(0, total_available - spent_points)
         }
+
+    def _extract_skills_summary(self) -> Dict[int, int]:
+        """Extract skills summary for rules validation"""
+        skills = {}
+        skill_list = self.gff.get('SkillList', [])
+        
+        # Check if we have positional format
+        is_positional = False
+        if skill_list and isinstance(skill_list[0], dict):
+            is_positional = 'Skill' not in skill_list[0]
+        
+        if is_positional:
+            # Handle positional format (index = skill ID)
+            for skill_id, skill_entry in enumerate(skill_list):
+                if isinstance(skill_entry, dict):
+                    rank = skill_entry.get('Rank', 0)
+                    if rank > 0:
+                        skills[skill_id] = rank
+        else:
+            # Handle old format (list of dicts with 'Skill' field)
+            for skill in skill_list:
+                if isinstance(skill, dict):
+                    skill_id = skill.get('Skill', -1)
+                    rank = skill.get('Rank', 0)
+                    if skill_id >= 0:
+                        skills[skill_id] = rank
+        
+        return skills
