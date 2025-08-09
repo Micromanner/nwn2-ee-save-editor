@@ -42,6 +42,11 @@ class FieldMappingUtility:
         'label': ['label', 'name', 'Label', 'Name', 'Description'],
         'name': ['name', 'label', 'Name', 'Label', 'NameRef'],
         
+        # Skill-specific fields
+        'key_ability': ['KeyAbility', 'key_ability', 'keyability', 'KEYABILITY'],
+        'skill_index': ['SkillIndex', 'skill_index', 'skillindex', 'SKILLINDEX', 'Skill'],
+        'class_skill': ['ClassSkill', 'class_skill', 'classskill', 'CLASSSKILL', 'IsClassSkill'],
+        
         # Feat prerequisites (NWN2 uses many variations)
         'prereq_str': ['prereq_str', 'PreReqStr', 'MinStr', 'min_str', 'ReqStr'],
         'prereq_dex': ['prereq_dex', 'PreReqDex', 'MinDex', 'min_dex', 'ReqDex'],

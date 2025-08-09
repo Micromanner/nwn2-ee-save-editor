@@ -38,9 +38,9 @@ class SkillViewSet(BaseCharacterViewSet):
                         
                         # Calculate ability modifier component
                         key_ability = getattr(skill_data, 'KeyAbility', 'STR').upper()
-                        attr_manager = character_manager.get_manager('attribute')
+                        attr_manager = manager.get_manager('attribute')
                         if attr_manager:
-                            modifiers = attr_manager._calculate_ability_modifiers()
+                            modifiers = attr_manager.get_all_modifiers()
                             ability_modifier = modifiers.get(key_ability, 0)
                         else:
                             ability_modifier = 0

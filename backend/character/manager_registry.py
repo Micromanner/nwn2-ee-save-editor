@@ -5,7 +5,7 @@ Defines the standard set of managers and their registration order.
 
 from typing import Type, List, Tuple
 from .managers import (
-    AttributeManager,
+    AbilityManager,
     RaceManager,
     ClassManager,
     FeatManager,
@@ -20,7 +20,7 @@ from .managers import (
 # Order matters for proper event setup - managers that emit events should come before listeners
 MANAGER_REGISTRY: List[Tuple[str, Type]] = [
     # Core managers that others depend on
-    ('attribute', AttributeManager),  # Emits ATTRIBUTE_CHANGED events
+    ('attribute', AbilityManager),  # Emits ATTRIBUTE_CHANGED events
     ('race', RaceManager),           # Provides racial modifiers
     ('class', ClassManager),         # Emits CLASS_CHANGED, LEVEL_GAINED events
     

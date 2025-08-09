@@ -118,7 +118,13 @@ class GamedataConfig(AppConfig):
                     import os
                     use_graph = os.environ.get('USE_PREREQUISITE_GRAPH', 'true').lower() == 'true'
                     
-                    if use_graph and 'loader' in locals() and loader:
+                    if not use_graph:
+                        logger.info("Prerequisite graph disabled (USE_PREREQUISITE_GRAPH=false)")
+                        update_initialization_status('prereq_graph', 98, 'Prerequisite graph disabled')
+                    elif 'loader' not in locals() or not loader:
+                        logger.warning("Prerequisite graph enabled but game data loader not available")
+                        update_initialization_status('prereq_graph', 98, 'Prerequisite graph skipped (no loader)')
+                    else:
                         update_initialization_status('prereq_graph', 92, 'Building prerequisite graph...')
                         logger.info("Background: Building feat prerequisite graph...")
                         from character.managers.prerequisite_graph import get_prerequisite_graph
@@ -138,9 +144,6 @@ class GamedataConfig(AppConfig):
                         else:
                             logger.warning("Background: Prerequisite graph failed to build")
                             update_initialization_status('prereq_graph', 98, 'Prerequisite graph skipped')
-                    else:
-                        logger.info("Prerequisite graph disabled (USE_PREREQUISITE_GRAPH=false)")
-                        update_initialization_status('prereq_graph', 98, 'Prerequisite graph disabled')
                 except Exception as e:
                     logger.error(f"Background: Failed to build prerequisite graph: {e}")
                     update_initialization_status('prereq_graph', 98, f'Prerequisite graph failed: {e}', error=str(e))

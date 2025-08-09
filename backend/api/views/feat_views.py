@@ -33,13 +33,7 @@ def log_performance(func):
             # Log performance data
             endpoint_name = func.__name__
             status_code = result.status_code if result else 'error'
-            logger.info(f"PERFORMANCE: {endpoint_name} completed in {duration_ms:.2f}ms (status: {status_code})")
-            
-            # Log warning if response time exceeds thresholds
-            if duration_ms > 500:
-                logger.warning(f"SLOW ENDPOINT: {endpoint_name} took {duration_ms:.2f}ms (threshold: 500ms)")
-            elif duration_ms > 200:
-                logger.debug(f"MODERATE ENDPOINT: {endpoint_name} took {duration_ms:.2f}ms")
+            logger.info(f"{endpoint_name}: {duration_ms:.2f}ms (status: {status_code})")
     return wrapper
 
 

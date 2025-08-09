@@ -49,6 +49,10 @@ class FeatData:
             try:
                 int_val = int(value)
                 # Only resolve if it's a reasonable string reference ID (NWN2 uses larger ranges)
+                # Special case: 0 is usually an invalid/null string reference
+                if int_val == 0:
+                    return value  # Don't try to resolve 0, return original value
+                
                 if 1 <= int_val <= 16777215:  # Expanded range for NWN2 string references
                     # Use cache first if available
                     if string_cache and int_val in string_cache:

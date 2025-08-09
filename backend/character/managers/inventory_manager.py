@@ -51,7 +51,7 @@ class InventoryManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
+        self.game_rules_service = character_manager.rules_service
         self.content_detector = CustomContentDetector(None)  # Will use dynamic detection
         
         # Register for events
@@ -72,7 +72,7 @@ class InventoryManager(EventEmitter):
         self._feat_proficiency_map.clear()
         
         # Get all feats and identify proficiency feats by name patterns
-        feats = self.game_data_loader.get_table('feat')
+        feats = self.game_rules_service.get_table('feat')
         
         proficiency_patterns = {
             'weapon_simple': ['weapon proficiency (simple)', 'simple weapon proficiency', 'wpnprofsimple'],
@@ -226,7 +226,7 @@ class InventoryManager(EventEmitter):
         
         # Check for stackable items using dynamic data
         base_item = item_data.get('BaseItem', 0)
-        base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
         
         if base_item_data:
             stacking = field_mapper.get_field_value(base_item_data, 'stacking', 0)
@@ -271,7 +271,7 @@ class InventoryManager(EventEmitter):
         """
         errors = []
         base_item = item_data.get('BaseItem', 0)
-        base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
         
         if not base_item_data:
             # Log warning but allow custom content to be equipped
@@ -294,7 +294,7 @@ class InventoryManager(EventEmitter):
             item = self.gff.get(gff_slot)
             if item:
                 base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 
                 results[slot] = {
                     'item': item,
@@ -312,7 +312,7 @@ class InventoryManager(EventEmitter):
             return True
         
         # Also check for weapon focus/specialization feats that affect equipment usage
-        feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+        feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         if feat_data:
             feat_label = field_mapper.get_field_value(feat_data, 'label', '').lower()
             return any(prof in feat_label for prof in [
@@ -343,7 +343,7 @@ class InventoryManager(EventEmitter):
     def _get_class_proficiencies(self, class_id: int) -> Set[int]:
         """Get proficiency feats granted by a class using dynamic data"""
         proficiencies = set()
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
         
         if not class_data:
             return proficiencies
@@ -448,76 +448,20 @@ class InventoryManager(EventEmitter):
         }
     
     def get_item_proficiency_info(self, base_item_data: Any) -> Dict[str, Any]:
-        """Get informational data about item proficiency requirements (no restrictions)"""
+        """Get informational data about item proficiency requirements (delegates to FeatManager)"""
         if not base_item_data:
             return {'has_proficiency_requirements': False}
         
-        item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
-        weapon_type = field_mapper.get_field_value(base_item_data, 'weapon_type', 0)
+        # Delegate proficiency checking to FeatManager to avoid duplication
+        feat_manager = self.character_manager.get_manager('feat')
+        if not feat_manager:
+            return {'has_proficiency_requirements': False, 'note': 'FeatManager not available'}
         
-        info = {
-            'has_proficiency_requirements': False,
-            'required_proficiencies': [],
-            'character_has_proficiencies': [],
-            'missing_proficiencies': []
-        }
+        item_type = field_mapper.get_field_value(base_item_data, 'BaseItem', 0)
+        weapon_type = field_mapper.get_field_value(base_item_data, 'WeaponType', 0)
         
-        # Helper function to find proficiency feat ID by type
-        def get_prof_feat_id(prof_type: str) -> Optional[int]:
-            for feat_id, mapped_type in self._feat_proficiency_map.items():
-                if mapped_type == prof_type:
-                    return feat_id
-            return None
-        
-        # Check weapon proficiencies
-        if item_type < 60:  # Weapons
-            if weapon_type in [1, 2, 3]:  # Simple, Martial, Exotic
-                info['has_proficiency_requirements'] = True
-                weapon_names = {1: 'Simple Weapon', 2: 'Martial Weapon', 3: 'Exotic Weapon'}
-                prof_name = weapon_names.get(weapon_type, 'Unknown Weapon')
-                info['required_proficiencies'].append(prof_name)
-                
-                # Check if character has it (informational only)
-                prof_types = {1: 'weapon_simple', 2: 'weapon_martial', 3: 'weapon_exotic'}
-                required_prof = get_prof_feat_id(prof_types[weapon_type])
-                if required_prof and required_prof in self._proficiency_cache:
-                    info['character_has_proficiencies'].append(prof_name)
-                else:
-                    info['missing_proficiencies'].append(prof_name)
-        
-        # Check armor proficiencies
-        elif item_type == 16:  # Armor
-            ac_type = field_mapper.get_field_value(base_item_data, 'ac_type', 0)
-            info['has_proficiency_requirements'] = True
-            
-            if ac_type <= 3:
-                prof_name = 'Light Armor'
-                prof_type = 'armor_light'
-            elif ac_type <= 6:
-                prof_name = 'Medium Armor'
-                prof_type = 'armor_medium'
-            else:
-                prof_name = 'Heavy Armor'
-                prof_type = 'armor_heavy'
-            
-            info['required_proficiencies'].append(prof_name)
-            required_prof = get_prof_feat_id(prof_type)
-            if required_prof and required_prof in self._proficiency_cache:
-                info['character_has_proficiencies'].append(prof_name)
-            else:
-                info['missing_proficiencies'].append(prof_name)
-        
-        # Check shield proficiencies
-        elif item_type == 29:  # Shield
-            info['has_proficiency_requirements'] = True
-            info['required_proficiencies'].append('Shield')
-            shield_prof = get_prof_feat_id('shield')
-            if shield_prof and shield_prof in self._proficiency_cache:
-                info['character_has_proficiencies'].append('Shield')
-            else:
-                info['missing_proficiencies'].append('Shield')
-        
-        return info
+        # Let FeatManager determine proficiency requirements and status
+        return feat_manager.get_item_proficiency_requirements(base_item_data, item_type, weapon_type)
     
     def get_item_ability_requirements(self, item_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get informational data about ability score requirements (no restrictions)"""
@@ -563,7 +507,7 @@ class InventoryManager(EventEmitter):
             item = self.gff.get(gff_slot)
             if item:
                 base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 if base_item_data:
                     weight = field_mapper.get_field_value(base_item_data, 'weight', 0.0)
                     if weight > 0:
@@ -574,7 +518,7 @@ class InventoryManager(EventEmitter):
         item_list = self.gff.get('ItemList', [])
         for item in item_list:
             base_item = item.get('BaseItem', 0)
-            base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             if base_item_data:
                 weight = field_mapper.get_field_value(base_item_data, 'weight', 0.0)
                 if weight > 0:
@@ -582,11 +526,26 @@ class InventoryManager(EventEmitter):
                     stack_size = item.get('StackSize', 1)
                     total_weight += weight * stack_size
         
-        # Calculate carrying capacity using NWN2 rules
+        # Calculate carrying capacity using game rules data
         strength = self.gff.get('Str', 10)
-        light_load = strength * 3.3
-        medium_load = strength * 6.6
-        heavy_load = strength * 10
+        
+        # Try to get encumbrance rules from game data instead of hardcoding
+        try:
+            encumbrance_data = self.game_rules_service.get_by_id('encumbrance', strength)
+            if encumbrance_data:
+                light_load = field_mapper.get_field_value(encumbrance_data, 'light', strength * 3.3)
+                medium_load = field_mapper.get_field_value(encumbrance_data, 'medium', strength * 6.6) 
+                heavy_load = field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 10)
+            else:
+                # Fallback to calculated values if no table data
+                light_load = strength * 3.3
+                medium_load = strength * 6.6
+                heavy_load = strength * 10
+        except Exception:
+            # Fallback to calculated values if game data unavailable
+            light_load = strength * 3.3
+            medium_load = strength * 6.6
+            heavy_load = strength * 10
         
         # Determine encumbrance level
         if total_weight <= light_load:
@@ -624,7 +583,7 @@ class InventoryManager(EventEmitter):
                 base_item = item.get('BaseItem', 0)
                 
                 # Check if item exists in base items data
-                base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 is_custom = base_item_data is None
                 
                 summary['equipped_items'][slot] = {
@@ -714,13 +673,13 @@ class InventoryManager(EventEmitter):
         
         # Get base item data for default bonuses
         base_item = item_data.get('BaseItem', 0)
-        base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
         
         if base_item_data:
             # Armor and shield AC bonuses
             ac_value = field_mapper.get_field_value(base_item_data, 'base_ac', 0)
             if ac_value > 0:
-                item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
+                item_type = field_mapper.get_field_value(base_item_data, 'BaseItem', 0)
                 if item_type == 16:  # Armor
                     bonuses['ac']['armor'] = ac_value
                 elif item_type == 29:  # Shield
@@ -817,7 +776,7 @@ class InventoryManager(EventEmitter):
     def get_all_weapons(self) -> List[Dict[str, Any]]:
         """Get all available weapons (no proficiency restrictions)"""
         all_weapons = []
-        base_items = self.game_data_loader.get_table('baseitems')
+        base_items = self.game_rules_service.get_table('baseitems')
         
         for item_id, base_item_data in enumerate(base_items):
             if base_item_data is None:
@@ -834,7 +793,7 @@ class InventoryManager(EventEmitter):
                     'id': item_id,
                     'name': weapon_name,
                     'type': item_type,
-                    'weapon_type': field_mapper.get_field_value(base_item_data, 'weapon_type', 0),
+                    'weapon_type': field_mapper.get_field_value(base_item_data, 'WeaponType', 0),
                     'proficiency_info': proficiency_info
                 })
         
@@ -843,7 +802,7 @@ class InventoryManager(EventEmitter):
     def get_all_armor(self) -> List[Dict[str, Any]]:
         """Get all available armor and shields (no proficiency restrictions)"""
         all_armor = []
-        base_items = self.game_data_loader.get_table('baseitems')
+        base_items = self.game_rules_service.get_table('baseitems')
         
         for item_id, base_item_data in enumerate(base_items):
             if base_item_data is None:
@@ -860,7 +819,7 @@ class InventoryManager(EventEmitter):
                     'id': item_id,
                     'name': armor_name,
                     'type': item_type,
-                    'ac_type': field_mapper.get_field_value(base_item_data, 'ac_type', 0),
+                    'ac_type': field_mapper.get_field_value(base_item_data, 'ACType', 0),
                     'ac_value': field_mapper.get_field_value(base_item_data, 'base_ac', 0),
                     'proficiency_info': proficiency_info
                 })
@@ -870,13 +829,13 @@ class InventoryManager(EventEmitter):
     def filter_items_by_type(self, item_type: int) -> List[Dict[str, Any]]:
         """Filter base items by type"""
         filtered_items = []
-        base_items = self.game_data_loader.get_table('baseitems')
+        base_items = self.game_rules_service.get_table('baseitems')
         
         for item_id, base_item_data in enumerate(base_items):
             if base_item_data is None:
                 continue
                 
-            if field_mapper.get_field_value(base_item_data, 'base_item', 0) == item_type:
+            if field_mapper.get_field_value(base_item_data, 'BaseItem', 0) == item_type:
                 item_name = field_mapper.get_field_value(base_item_data, 'label', f'Item {item_id}')
                 filtered_items.append({
                     'id': item_id,
@@ -895,7 +854,7 @@ class InventoryManager(EventEmitter):
             item = self.gff.get(gff_slot)
             if item:
                 base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 
                 if base_item_data is None:  # Custom item
                     custom_items.append({
@@ -908,7 +867,7 @@ class InventoryManager(EventEmitter):
         item_list = self.gff.get('ItemList', [])
         for idx, item in enumerate(item_list):
             base_item = item.get('BaseItem', 0)
-            base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             
             if base_item_data is None:  # Custom item
                 custom_items.append({
@@ -931,7 +890,7 @@ class InventoryManager(EventEmitter):
             item = self.gff.get(gff_slot)
             if item:
                 base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_data_loader.get_by_id('baseitems', base_item)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 
                 equipment_summary[slot] = {
                     'base_item': base_item,

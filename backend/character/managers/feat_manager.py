@@ -35,7 +35,7 @@ class FeatManager(EventEmitter):
         """
         super().__init__()
         self.character_manager = character_manager
-        self.game_data_loader = character_manager.game_data_loader
+        self.game_rules_service = character_manager.rules_service
         self.gff = character_manager.gff
         
         # Register for events
@@ -57,7 +57,8 @@ class FeatManager(EventEmitter):
         if USE_PREREQUISITE_GRAPH:
             try:
                 from .prerequisite_graph import get_prerequisite_graph
-                self._prerequisite_graph = get_prerequisite_graph()
+                # Pass the game_data_loader from GameRulesService
+                self._prerequisite_graph = get_prerequisite_graph(self.game_rules_service._loader)
                 if self._prerequisite_graph:
                     logger.info("FeatManager using PrerequisiteGraph for fast validation")
                 else:
@@ -113,8 +114,8 @@ class FeatManager(EventEmitter):
         """Handle level gain event"""
         logger.info(f"FeatManager handling level gain: Class {event.class_id}, Level {event.new_level}")
         
-        # Add feats for the new level using dynamic game data
-        class_data = self.game_data_loader.get_by_id('classes', event.class_id)
+        # Add feats for the new level using game rules service
+        class_data = self.game_rules_service.get_by_id('classes', event.class_id)
         if class_data:
             # Use class manager's method to get class feats for level
             class_manager = self.character_manager.get_manager('class')
@@ -176,7 +177,7 @@ class FeatManager(EventEmitter):
             return False
         
         # Check if feat ID exists (corruption prevention)
-        feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+        feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         if not feat_data and feat_id >= 0:  # Allow custom/unknown feats with negative IDs
             logger.warning(f"Feat ID {feat_id} not found in feat table")
             # Still allow it - might be custom content
@@ -263,9 +264,9 @@ class FeatManager(EventEmitter):
         
         for feat in feat_list:
             feat_id = feat.get('Feat', -1)
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if feat_data:
-                label = getattr(feat_data, 'label', '')
+                label = field_mapper.get_field_value(feat_data, 'label', '')
                 if label == feat_label:
                     return True
         
@@ -281,13 +282,13 @@ class FeatManager(EventEmitter):
         
         Returns the old feat ID that should be removed, or None
         """
-        # Get the new feat's data using dynamic game data
-        new_feat = self.game_data_loader.get_by_id('feat', new_feat_id)
+        # Get the new feat's data using game rules service
+        new_feat = self.game_rules_service.get_by_id('feat', new_feat_id)
         if not new_feat:
             return None
             
-        # Get label using dynamic data attributes
-        new_label = getattr(new_feat, 'label', getattr(new_feat, 'name', ''))
+        # Get label using field mapping utility
+        new_label = field_mapper.get_field_value(new_feat, 'label', '')
         
         # Try to parse progression from feat name
         # Patterns: "Something2", "Something_2", "FEAT_SOMETHING_2"
@@ -309,11 +310,11 @@ class FeatManager(EventEmitter):
         
         # Search for feats with same base name but lower number
         for feat_id in character_feat_ids:
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if not feat_data:
                 continue
                 
-            label = getattr(feat_data, 'label', getattr(feat_data, 'name', ''))
+            label = field_mapper.get_field_value(feat_data, 'label', '')
             
             # Check if it's the same feat family
             if label.startswith(base_name):
@@ -354,11 +355,11 @@ class FeatManager(EventEmitter):
         
         # Use provided feat_data or get from dynamic game data loader
         if feat_data is None:
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         
         if feat_data:
             # Use label as the primary name
-            label = getattr(feat_data, 'label', getattr(feat_data, 'name', f'Feat_{feat_id}'))
+            label = field_mapper.get_field_value(feat_data, 'label', f'Feat_{feat_id}')
             
             # Get prerequisites and check if character meets them
             prereqs = field_mapper.get_feat_prerequisites(feat_data)
@@ -374,7 +375,7 @@ class FeatManager(EventEmitter):
                 'id': feat_id,
                 'label': label,
                 'name': label,  # Use label as name since it's more readable
-                'type': getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0)),
+                'type': field_mapper.get_field_value(feat_data, 'type', 0),
                 'protected': self.is_feat_protected(feat_id),
                 'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
@@ -424,11 +425,11 @@ class FeatManager(EventEmitter):
         
         # Use provided feat_data or get from dynamic game data loader
         if feat_data is None:
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         
         if feat_data:
             # Use label as the primary name
-            label = getattr(feat_data, 'label', getattr(feat_data, 'name', f'Feat_{feat_id}'))
+            label = field_mapper.get_field_value(feat_data, 'label', f'Feat_{feat_id}')
             
             # Get static prerequisites (for display only, not validation)
             prereqs = field_mapper.get_feat_prerequisites(feat_data)
@@ -443,7 +444,7 @@ class FeatManager(EventEmitter):
                 'id': feat_id,
                 'label': label,
                 'name': label,  # Use label as name since it's more readable
-                'type': getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0)),
+                'type': field_mapper.get_field_value(feat_data, 'type', 0),
                 'protected': self.is_feat_protected(feat_id),
                 'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
@@ -555,7 +556,7 @@ class FeatManager(EventEmitter):
                 'Cha': self.gff.get('Cha', 10),
                 'classes': set(c.get('Class') for c in class_list),
                 'level': sum(c.get('ClassLevel', 0) for c in class_list),
-                'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if hasattr(self.character_manager, 'get_manager') else 0
+                'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
             }
             
             # Use graph for fast batch validation
@@ -569,7 +570,7 @@ class FeatManager(EventEmitter):
         # Pre-load all feat data at once
         feat_data_map = {}
         for feat_id in feat_ids:
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if feat_data:
                 feat_data_map[feat_id] = feat_data
         
@@ -624,7 +625,7 @@ class FeatManager(EventEmitter):
                     if prereq_feat_id in self._feat_cache:
                         prereq_name = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
                     else:
-                        prereq_feat_data = self.game_data_loader.get_by_id('feat', prereq_feat_id)
+                        prereq_feat_data = self.game_rules_service.get_by_id('feat', prereq_feat_id)
                         prereq_name = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
                         # Cache for future use
                         if prereq_feat_data:
@@ -638,7 +639,7 @@ class FeatManager(EventEmitter):
                 if class_id in self._class_cache:
                     class_name = self._class_cache[class_id]
                 else:
-                    class_data = self.game_data_loader.get_by_id('classes', class_id)
+                    class_data = self.game_rules_service.get_by_id('classes', class_id)
                     class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}') if class_data else f'Class {class_id}'
                     self._class_cache[class_id] = class_name
                 errors.append(f"Requires {class_name} class")
@@ -693,7 +694,7 @@ class FeatManager(EventEmitter):
                 'Cha': self.gff.get('Cha', 10),
                 'classes': set(c.get('Class') for c in class_list),
                 'level': sum(c.get('ClassLevel', 0) for c in class_list),
-                'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if hasattr(self.character_manager, 'get_manager') else 0
+                'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
             }
             
             # Use graph for fast validation
@@ -704,7 +705,7 @@ class FeatManager(EventEmitter):
         # Fallback to standard validation
         errors = []
         if feat_data is None:
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         
         if not feat_data:
             return True, []  # Allow unknown feats (custom content)
@@ -726,7 +727,7 @@ class FeatManager(EventEmitter):
                 if prereq_feat_id in self._feat_cache:
                     prereq_name = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
                 else:
-                    prereq_feat_data = self.game_data_loader.get_by_id('feat', prereq_feat_id)
+                    prereq_feat_data = self.game_rules_service.get_by_id('feat', prereq_feat_id)
                     if prereq_feat_data is None:
                         logger.warning(f"Prerequisite feat ID {prereq_feat_id} not found in feat table (for feat {feat_id})")
                     prereq_name = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
@@ -742,7 +743,7 @@ class FeatManager(EventEmitter):
                 if class_id in self._class_cache:
                     class_name = self._class_cache[class_id]
                 else:
-                    class_data = self.game_data_loader.get_by_id('classes', class_id)
+                    class_data = self.game_rules_service.get_by_id('classes', class_id)
                     class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}') if class_data else f'Class {class_id}'
                     self._class_cache[class_id] = class_name
                 errors.append(f"Requires {class_name} class")
@@ -776,7 +777,7 @@ class FeatManager(EventEmitter):
         Returns:
             Dict with detailed prerequisite breakdown
         """
-        feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+        feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         if not feat_data:
             return {'requirements': [], 'met': [], 'unmet': []}
         
@@ -812,7 +813,7 @@ class FeatManager(EventEmitter):
             if prereq_feat_id in self._feat_cache:
                 prereq_name = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
             else:
-                prereq_feat_data = self.game_data_loader.get_by_id('feat', prereq_feat_id)
+                prereq_feat_data = self.game_rules_service.get_by_id('feat', prereq_feat_id)
                 prereq_name = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
             
             detailed['requirements'].append({
@@ -836,7 +837,7 @@ class FeatManager(EventEmitter):
             if class_id in self._class_cache:
                 class_name = self._class_cache[class_id]
             else:
-                class_data = self.game_data_loader.get_by_id('classes', class_id)
+                class_data = self.game_rules_service.get_by_id('classes', class_id)
                 class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}') if class_data else f'Class {class_id}'
                 self._class_cache[class_id] = class_name
             
@@ -905,7 +906,7 @@ class FeatManager(EventEmitter):
     
     def _remove_class_feats(self, class_id: int, level: int, preserve_list: List[int]):
         """Remove feats granted by a class"""
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
         
@@ -931,12 +932,12 @@ class FeatManager(EventEmitter):
                 removed_count += 1
         
         if removed_count > 0:
-            class_name = getattr(class_data, 'label', getattr(class_data, 'name', f'Class {class_id}'))
+            class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
             logger.info(f"Removed {removed_count} feats from {class_name}")
     
     def _add_class_feats(self, class_id: int, level: int):
         """Add feats granted by a class"""
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
         
@@ -954,7 +955,7 @@ class FeatManager(EventEmitter):
                         added_count += 1
         
         if added_count > 0:
-            class_name = getattr(class_data, 'label', getattr(class_data, 'name', f'Class {class_id}'))
+            class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
             logger.info(f"Added {added_count} feats for {class_name}")
     
     def is_legitimate_feat(self, feat_data) -> bool:
@@ -1000,7 +1001,7 @@ class FeatManager(EventEmitter):
         legitimate = []
         
         # Get all feats from dynamic game data
-        all_feats = self.game_data_loader.get_table('feat')
+        all_feats = self.game_rules_service.get_table('feat')
         if not all_feats:
             return legitimate
         
@@ -1014,7 +1015,7 @@ class FeatManager(EventEmitter):
             
             # Skip if wrong type
             if feat_type is not None:
-                data_type = getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0))
+                data_type = field_mapper.get_field_value(feat_data, 'type', 0)
                 if data_type != feat_type:
                     continue
             
@@ -1038,7 +1039,7 @@ class FeatManager(EventEmitter):
         available = []
         
         # Get all feats from dynamic game data
-        all_feats = self.game_data_loader.get_table('feat')
+        all_feats = self.game_rules_service.get_table('feat')
         if not all_feats:
             return available
         
@@ -1066,7 +1067,7 @@ class FeatManager(EventEmitter):
             
             # Skip if wrong type (fast check)
             if feat_type is not None:
-                data_type = getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0))
+                data_type = field_mapper.get_field_value(feat_data, 'type', 0)
                 if data_type != feat_type:
                     continue
             
@@ -1187,7 +1188,7 @@ class FeatManager(EventEmitter):
         legitimate = []
         
         # Get all feats from dynamic game data
-        all_feats = self.game_data_loader.get_table('feat')
+        all_feats = self.game_rules_service.get_table('feat')
         if not all_feats:
             return legitimate
         
@@ -1213,7 +1214,7 @@ class FeatManager(EventEmitter):
             
             # Skip if wrong type
             if feat_type is not None:
-                data_type = getattr(feat_data, 'type', getattr(feat_data, 'feat_type', 0))
+                data_type = field_mapper.get_field_value(feat_data, 'type', 0)
                 if data_type != feat_type:
                     continue
             
@@ -1317,7 +1318,7 @@ class FeatManager(EventEmitter):
                 continue
             
             # Check if feat exists in the data (prevents crash on load)
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if not feat_data:
                 errors.append(f"Feat ID {feat_id} not found in feat table - may cause load errors")
         
@@ -1425,7 +1426,7 @@ class FeatManager(EventEmitter):
         }
         
         # Get all feats
-        feat_table = self.game_data_loader.get_table('feat')
+        feat_table = self.game_rules_service.get_table('feat')
         if not feat_table:
             return chains
         
@@ -1589,7 +1590,7 @@ class FeatManager(EventEmitter):
         for feat_entry in feat_list:
             feat_id = feat_entry.get('Feat', -1)
             if feat_id >= 0:
-                feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+                feat_data = self.game_rules_service.get_by_id('feat', feat_id)
                 if feat_data:
                     # Get category from feat data
                     category = field_mapper.get_field_value(feat_data, 'categories', 'General')
@@ -1663,7 +1664,7 @@ class FeatManager(EventEmitter):
         feat_list = self.gff.get('FeatList', [])
         
         # Get vanilla feat data
-        feat_table = self.game_data_loader.get_table('feat')
+        feat_table = self.game_rules_service.get_table('feat')
         if not feat_table:
             logger.warning("Feat table not found, cannot detect epithet feats")
             return epithet_feats
@@ -1682,7 +1683,7 @@ class FeatManager(EventEmitter):
                     epithet_feats.add(feat_id)
                 else:
                     # Check if it's an epithet feat by looking at properties
-                    feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+                    feat_data = self.game_rules_service.get_by_id('feat', feat_id)
                     if feat_data:
                         # Epithet feats often have specific naming patterns or categories
                         label = (getattr(feat_data, 'label', '') or '').lower()

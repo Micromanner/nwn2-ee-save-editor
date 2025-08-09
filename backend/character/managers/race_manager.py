@@ -39,7 +39,7 @@ class RaceManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
+        self.game_rules_service = character_manager.rules_service
         
         # Cache for performance
         self._race_data_cache = {}
@@ -65,7 +65,7 @@ class RaceManager(EventEmitter):
             return self._race_data_cache[race_id]
         
         try:
-            race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+            race_data = self.game_rules_service.get_by_id('racialtypes', race_id)
             self._race_data_cache[race_id] = race_data
             return race_data
         except Exception as e:
@@ -215,7 +215,7 @@ class RaceManager(EventEmitter):
         racial_mods = self._get_racial_ability_modifiers(new_race_id)
         logger.debug(f"Applying racial modifiers for race {new_race_id}: {racial_mods}")
         
-        # Use AttributeManager if available for proper cascading effects
+        # Always use AttributeManager for proper cascading effects
         attr_manager = self.character_manager.get_manager('attribute')
         
         for attr, mod in racial_mods.items():
@@ -227,7 +227,8 @@ class RaceManager(EventEmitter):
                     # Use AttributeManager to handle cascading effects
                     attr_manager.set_attribute(attr, new_value, validate=False)
                 else:
-                    # Direct set if no AttributeManager
+                    # Fallback only if AttributeManager is not available
+                    logger.warning(f"AttributeManager not available, setting {attr} directly")
                     self.gff.set(attr, new_value)
                 
                 changes['ability_changes'].append({
@@ -320,14 +321,13 @@ class RaceManager(EventEmitter):
         """Get size category name from game data using enhanced DynamicGameDataLoader"""
         try:
             # Use enhanced get_by_id method which now handles creaturesize.2da offset mapping
-            if hasattr(self.character_manager, 'game_data_loader'):
-                size_data = self.character_manager.game_data_loader.get_by_id('creaturesize', size)
-                if size_data:
-                    # Get label from the dynamic data instance
-                    label = getattr(size_data, 'LABEL', None)
-                    if label and label != 'INVALID':
-                        # Convert to proper case (SMALL -> Small)
-                        return label.title()
+            size_data = self.game_rules_service.get_by_id('creaturesize', size)
+            if size_data:
+                # Get label using field mapping utility for safe access
+                label = field_mapper.get_field_value(size_data, 'label')
+                if label and label != 'INVALID':
+                    # Convert to proper case (SMALL -> Small)
+                    return label.title()
         except Exception as e:
             logger.debug(f"Could not get size name from game data for size {size}: {e}")
         
@@ -449,10 +449,10 @@ class RaceManager(EventEmitter):
             AC modifier for the size (positive = bonus, negative = penalty)
         """
         try:
-            size_data = self.game_data_loader.get_by_id('creaturesize', size_id)
+            size_data = self.game_rules_service.get_by_id('creaturesize', size_id)
             if size_data:
-                # ACATTACKMOD column has the AC modifier
-                ac_mod = getattr(size_data, 'acattackmod', 0)
+                # Use field mapping utility for safe access to AC modifier column
+                ac_mod = field_mapper.get_field_value(size_data, 'ac_attack_mod', 0)
                 try:
                     return int(ac_mod)
                 except (ValueError, TypeError):
@@ -461,3 +461,18 @@ class RaceManager(EventEmitter):
             logger.warning(f"Could not get size modifier for size {size_id}: {e}")
         
         return 0
+    
+    def get_base_speed(self, race_id: int = None) -> int:
+        """
+        Get base movement speed for a race
+        
+        Args:
+            race_id: The race ID, if None uses current character race
+            
+        Returns:
+            Base movement speed in feet
+        """
+        if race_id is None:
+            race_id = self.gff.get('Race', 0)  # Remove hardcoded human race ID
+        
+        return self._get_base_speed(race_id)

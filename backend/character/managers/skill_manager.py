@@ -97,8 +97,10 @@ class SkillManager(EventEmitter):
         modifiers = self._calculate_ability_modifiers()
         int_modifier = modifiers['INT']
         
-        # Get base skill points per level from class
-        base_skill_points = getattr(class_data, 'skill_point_base', 2)
+        # Get base skill points per level from class using FieldMappingUtility
+        base_skill_points = field_mapper._safe_int(
+            field_mapper.get_field_value(class_data, 'skill_point_base', 2), 2
+        )
         
         # First level gets 4x skill points
         first_level_points = (base_skill_points + int_modifier) * 4
@@ -114,23 +116,23 @@ class SkillManager(EventEmitter):
         else:
             total_points = first_level_points
         
-        # Add human bonus if applicable
-        race_id = self.gff.get('Race', 0)
-        if race_id == 6:  # Human
-            total_points += total_level  # +1 per level
+        # Add racial skill point bonuses
+        racial_bonus = self._get_racial_skill_point_bonus(total_level)
+        total_points += racial_bonus
         
         return total_points
     
     def calculate_skill_points_for_level(self, class_data, int_modifier: int) -> int:
         """Calculate skill points gained for a single level"""
-        base_skill_points = getattr(class_data, 'skill_point_base', 2)
+        base_skill_points = field_mapper._safe_int(
+            field_mapper.get_field_value(class_data, 'skill_point_base', 2), 2
+        )
         base_points = base_skill_points + int_modifier
         base_points = max(1, base_points)  # Minimum 1
         
-        # Add human bonus
-        race_id = self.gff.get('Race', 0)
-        if race_id == 6:  # Human
-            base_points += 1
+        # Add racial skill point bonus for this level
+        racial_bonus = self._get_racial_skill_point_bonus(1)  # Bonus for single level
+        base_points += racial_bonus
         
         return base_points
     
@@ -192,9 +194,15 @@ class SkillManager(EventEmitter):
                 # Old format - find or create skill entry
                 skill_entry = None
                 for skill in skill_list:
-                    if skill.get('Skill') == skill_id:
-                        skill_entry = skill
-                        break
+                    stored_skill_id = skill.get('Skill')
+                    if stored_skill_id is not None:
+                        try:
+                            stored_skill_id = int(stored_skill_id)
+                        except (ValueError, TypeError):
+                            continue
+                        if stored_skill_id == skill_id:
+                            skill_entry = skill
+                            break
                 
                 if not skill_entry and ranks > 0:
                     skill_entry = {'Skill': skill_id}
@@ -232,8 +240,15 @@ class SkillManager(EventEmitter):
         
         # Fallback to old format (list of dicts with 'Skill' field)
         for skill in skill_list:
-            if isinstance(skill, dict) and skill.get('Skill') == skill_id:
-                return skill.get('Rank', 0)
+            if isinstance(skill, dict):
+                stored_skill_id = skill.get('Skill')
+                if stored_skill_id is not None:
+                    try:
+                        stored_skill_id = int(stored_skill_id)
+                    except (ValueError, TypeError):
+                        continue
+                    if stored_skill_id == skill_id:
+                        return skill.get('Rank', 0)
         
         return 0
     
@@ -277,7 +292,7 @@ class SkillManager(EventEmitter):
         
         # Get ability modifier using dynamic skill data
         skill_data = self.game_data_loader.get_by_id('skills', skill_id)
-        key_ability = getattr(skill_data, 'KeyAbility', 'STR').upper() if skill_data else 'STR'
+        key_ability = field_mapper.get_field_value(skill_data, 'key_ability', 'STR').upper() if skill_data else 'STR'
         
         modifiers = self._calculate_ability_modifiers()
         ability_mod = modifiers.get(key_ability, 0)
@@ -287,8 +302,12 @@ class SkillManager(EventEmitter):
         
         # Check for armor check penalty
         armor_penalty = 0
-        if skill_data and getattr(skill_data, 'armor_check_penalty', 0) > 0:
-            armor_penalty = self._get_armor_check_penalty()
+        if skill_data:
+            armor_check_penalty = field_mapper._safe_int(
+                field_mapper.get_field_value(skill_data, 'armor_check_penalty', 0), 0
+            )
+            if armor_check_penalty > 0:
+                armor_penalty = self._get_armor_check_penalty()
         
         total = ranks + ability_mod + synergy_bonus - armor_penalty
         
@@ -338,28 +357,29 @@ class SkillManager(EventEmitter):
         class_data = self.game_data_loader.get_by_id('classes', class_id)
         
         if class_data:
-            # Get the skills table name from class data
-            skills_table_name = getattr(class_data, 'SkillsTable', None)
+            # Get the skills table name from class data using FieldMappingUtility
+            skills_table_name = field_mapper.get_field_value(class_data, 'skills_table', None)
             if skills_table_name:
-                # Load the specific class skills table (e.g., "cls_skill_bard")
+                # Load the specific class skills table (e.g., "CLS_SKILL_BARD")
+                # Convert to lowercase for table lookup (tables are stored in lowercase)
                 class_skills_table = self.game_data_loader.get_table(skills_table_name.lower())
                 if class_skills_table:
                     for skill_entry in class_skills_table:
                         # Check for ClassSkill field to ensure it's actually a class skill
-                        is_class_skill = getattr(skill_entry, 'ClassSkill', '0')
+                        is_class_skill = field_mapper.get_field_value(skill_entry, 'class_skill', '0')
                         if is_class_skill == '1' or is_class_skill == 1:
-                            skill_id = getattr(skill_entry, 'SkillIndex', None)
+                            skill_id = field_mapper.get_field_value(skill_entry, 'skill_index', None)
                             if skill_id is not None:
-                                try:
-                                    class_skills.add(int(skill_id))
-                                except (ValueError, TypeError):
-                                    pass
+                                skill_id_int = field_mapper._safe_int(skill_id, -1)
+                                if skill_id_int >= 0:
+                                    class_skills.add(skill_id_int)
                 else:
                     logger.warning(f"Class skills table {skills_table_name} not found")
                 
                 # Log if no class skills were found
                 if not class_skills:
-                    logger.warning(f"No class skills found for class {field_mapper.get_field_value(class_data, 'label', 'Unknown')}")
+                    class_label = field_mapper.get_field_value(class_data, 'label', 'Unknown')
+                    logger.warning(f"No class skills found for class {class_label}")
         
         self._class_skills_cache[class_id] = class_skills
         return class_skills
@@ -376,11 +396,30 @@ class SkillManager(EventEmitter):
             class_id = class_entry.get('Class')
             self._get_class_skills(class_id)
     
+    def _get_racial_skill_point_bonus(self, level: int) -> int:
+        """Get racial skill point bonus from RaceManager"""
+        race_manager = self.character_manager.get_manager('race')
+        if race_manager:
+            # Get racial properties which includes skill point bonuses
+            racial_props = race_manager.get_racial_properties()
+            race_name = racial_props.get('race_name', '').lower()
+            
+            # In D&D/NWN2, humans get +1 skill point per level
+            # Use race name instead of hardcoded ID for better compatibility
+            if 'human' in race_name:
+                return level
+            
+            # TODO: Add other racial skill bonuses when race data includes them
+            # Example: Some subraces might get different bonuses
+        
+        # No racial skill point bonus for other races
+        return 0
+
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
-        """Calculate ability modifiers using AttributeManager"""
+        """Calculate ability modifiers using AbilityManager"""
         attr_manager = self.character_manager.get_manager('attribute')
         if attr_manager:
-            return attr_manager._calculate_ability_modifiers()
+            return attr_manager.get_all_modifiers()
         # Fallback if no AttributeManager available
         abilities = {
             'STR': self.gff.get('Str', 10),
@@ -427,9 +466,11 @@ class SkillManager(EventEmitter):
             info = {
                 'id': skill_id,
                 'label': field_mapper.get_field_value(skill_data, 'label', 'Unknown'),
-                'name': getattr(skill_data, 'name', 'Unknown'),
-                'key_ability': getattr(skill_data, 'KeyAbility', 'STR'),
-                'armor_check': getattr(skill_data, 'armor_check_penalty', 0) > 0,
+                'name': field_mapper.get_field_value(skill_data, 'name', 'Unknown'),
+                'key_ability': field_mapper.get_field_value(skill_data, 'key_ability', 'STR'),
+                'armor_check': field_mapper._safe_int(
+                    field_mapper.get_field_value(skill_data, 'armor_check_penalty', 0), 0
+                ) > 0,
                 'is_class_skill': self.is_class_skill(skill_id),
                 'current_ranks': self.get_skill_ranks(skill_id),
                 'max_ranks': self.get_max_skill_ranks(skill_id),
@@ -502,6 +543,13 @@ class SkillManager(EventEmitter):
                     if skill_id is None:
                         logger.warning(f"Skill entry missing 'Skill' field: {skill}")
                         continue
+                    
+                    # Ensure skill_id is an integer
+                    try:
+                        skill_id = int(skill_id)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid skill ID (not a number): {skill_id}")
+                        continue
                         
                     skill_info = self.get_skill_info(skill_id)
                     
@@ -513,7 +561,9 @@ class SkillManager(EventEmitter):
             
             return summary
         except Exception as e:
+            import traceback
             logger.error(f"Error in get_skill_summary: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             # Return minimal safe summary
             return {
                 'available_points': 0,
@@ -558,6 +608,11 @@ class SkillManager(EventEmitter):
                     ranks = skill.get('Rank', 0)
                     
                     if skill_id is not None and ranks > 0:
+                        # Ensure skill_id is an integer
+                        try:
+                            skill_id = int(skill_id)
+                        except (ValueError, TypeError):
+                            continue
                         # Calculate cost based on whether it's a class skill
                         cost = self.calculate_skill_cost(skill_id, ranks)
                         total_spent += cost
@@ -605,6 +660,13 @@ class SkillManager(EventEmitter):
                 if skill_id is None:
                     errors.append(f"Skill entry missing 'Skill' field")
                     continue
+                
+                # Ensure skill_id is an integer
+                try:
+                    skill_id = int(skill_id)
+                except (ValueError, TypeError):
+                    errors.append(f"Invalid skill ID (not a number): {skill_id}")
+                    continue
                     
                 ranks = skill.get('Rank', 0)
                 
@@ -635,7 +697,9 @@ class SkillManager(EventEmitter):
             return skills
         
         for skill_data in skills_table:
-            skill_id = field_mapper.get_field_value(skill_data, 'id', -1)
+            skill_id = field_mapper._safe_int(
+                field_mapper.get_field_value(skill_data, 'id', -1), -1
+            )
             if skill_id < 0:
                 continue
             
@@ -643,13 +707,17 @@ class SkillManager(EventEmitter):
                 'id': skill_id,
                 'name': field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}'),
                 'description': field_mapper.get_field_value(skill_data, 'description', ''),
-                'key_ability': getattr(skill_data, 'KeyAbility', ''),
+                'key_ability': field_mapper.get_field_value(skill_data, 'key_ability', 'STR'),
                 'ranks': self.get_skill_ranks(skill_id),
                 'modifier': self.calculate_skill_modifier(skill_id),
                 'is_class_skill': self.is_class_skill(skill_id),
                 'max_ranks': self.get_max_skill_ranks(skill_id),
-                'armor_check_penalty': field_mapper.get_field_value(skill_data, 'armor_check', 0) > 0,
-                'untrained': field_mapper.get_field_value(skill_data, 'untrained', 1) > 0
+                'armor_check_penalty': field_mapper._safe_int(
+                    field_mapper.get_field_value(skill_data, 'armor_check', 0), 0
+                ) > 0,
+                'untrained': field_mapper._safe_int(
+                    field_mapper.get_field_value(skill_data, 'untrained', 1), 1
+                ) > 0
             }
             
             skills.append(skill_info)
@@ -698,7 +766,7 @@ class SkillManager(EventEmitter):
         # Get ability modifier
         skill_data = self.game_data_loader.get_by_id('skills', skill_id)
         if skill_data:
-            key_ability = getattr(skill_data, 'KeyAbility', '')
+            key_ability = field_mapper.get_field_value(skill_data, 'key_ability', 'STR')
             if key_ability:
                 # Map to character's actual attribute field
                 ability_mapping = {'STR': 'Str', 'DEX': 'Dex', 'CON': 'Con', 
@@ -709,10 +777,14 @@ class SkillManager(EventEmitter):
                     breakdown['ability'] = ability_mod
         
         # Armor check penalty if applicable
-        if skill_data and field_mapper.get_field_value(skill_data, 'armor_check', 0) > 0:
-            armor_penalty = self._get_armor_check_penalty()
-            if armor_penalty < 0:
-                breakdown['armor_penalty'] = armor_penalty
+        if skill_data:
+            armor_check = field_mapper._safe_int(
+                field_mapper.get_field_value(skill_data, 'armor_check', 0), 0
+            )
+            if armor_check > 0:
+                armor_penalty = self._get_armor_check_penalty()
+                if armor_penalty < 0:
+                    breakdown['armor_penalty'] = armor_penalty
         
         # Synergy bonuses
         synergy_bonus = self._calculate_synergy_bonus(skill_id)
@@ -778,13 +850,11 @@ class SkillManager(EventEmitter):
         if not skill_data:
             return False
             
-        # Check the ArmorCheckPenalty field
-        armor_check = getattr(skill_data, 'ArmorCheckPenalty', 0)
-        # Convert string to int if needed
-        try:
-            return int(armor_check) == 1
-        except (ValueError, TypeError):
-            return bool(armor_check)
+        # Check the ArmorCheckPenalty field using FieldMappingUtility
+        armor_check = field_mapper._safe_int(
+            field_mapper.get_field_value(skill_data, 'armor_check_penalty', 0), 0
+        )
+        return armor_check == 1
     
     def get_skill_prerequisites(self, skill_id: int) -> Dict[str, Any]:
         """
@@ -868,15 +938,21 @@ class SkillManager(EventEmitter):
                 if isinstance(skill_entry, dict):
                     skill_id = skill_entry.get('Skill')
                     ranks = skill_entry.get('Rank', 0)
-                    if skill_id is not None and skill_id >= 0 and ranks > 0:
-                        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
-                        skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
-                        build['skills'][skill_name] = {
-                            'id': skill_id,
-                            'ranks': ranks,
-                            'is_class_skill': self.is_class_skill(skill_id),
-                            'cost': self.calculate_skill_cost(skill_id, ranks)
-                        }
+                    if skill_id is not None:
+                        # Ensure skill_id is an integer
+                        try:
+                            skill_id = int(skill_id)
+                        except (ValueError, TypeError):
+                            continue
+                        if skill_id >= 0 and ranks > 0:
+                            skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                            skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
+                            build['skills'][skill_name] = {
+                                'id': skill_id,
+                                'ranks': ranks,
+                                'is_class_skill': self.is_class_skill(skill_id),
+                                'cost': self.calculate_skill_cost(skill_id, ranks)
+                            }
         
         return build
     
@@ -977,6 +1053,11 @@ class SkillManager(EventEmitter):
             for skill in skill_list:
                 if isinstance(skill, dict):
                     skill_id = skill.get('Skill', -1)
+                    # Ensure skill_id is an integer
+                    try:
+                        skill_id = int(skill_id) if skill_id != -1 else -1
+                    except (ValueError, TypeError):
+                        continue
                     rank = skill.get('Rank', 0)
                     if skill_id >= 0:
                         skills[skill_id] = rank

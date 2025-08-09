@@ -9,6 +9,7 @@ import time
 
 from ..events import EventEmitter, EventType, EventData
 from ..custom_content import CustomContentDetector
+from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class CombatManager(EventEmitter):
         self._feat_cache = {}
         self._class_cache = {}
         
+        # Field mapping utility for 2DA access
+        self.field_mapper = field_mapper
+        
         # Register for relevant events
         self._register_event_handlers()
     
@@ -52,8 +56,9 @@ class CombatManager(EventEmitter):
         Returns:
             Dict with total AC and breakdown of all components
         """
-        # Base AC is always 10
-        base_ac = 10
+        # Base AC from game rules (D&D 3.5/NWN2 standard)
+        # TODO: This should come from game data if configurable
+        base_ac = 10  # Standard D&D base AC
         
         # Get DEX modifier
         dex_bonus = (self.gff.get('Dex', 10) - 10) // 2
@@ -265,11 +270,19 @@ class CombatManager(EventEmitter):
         # Handle raw GFF data
         base_item = item.get('BaseItem', 0)
         
-        # Simplified - would need full item property parsing
-        if base_item >= 0 and base_item <= 15:  # Armor range
+        # Use base item data to determine AC bonus
+        base_item_data = self._get_base_item_data(base_item)
+        if base_item_data:
+            # Get AC value using field mapping utility
+            ac_bonus = self.field_mapper.get_field_value(base_item_data, 'ac', 0)
+            try:
+                return int(ac_bonus) if ac_bonus else 0
+            except (ValueError, TypeError):
+                pass
+        
+        # Fallback: check if it has ArmorRulesType for old approach
+        if 'ArmorRulesType' in item:
             return item.get('ArmorRulesType', 0) + 1
-        elif base_item >= 63 and base_item <= 68:  # Shield range
-            return 2  # Default shield bonus
         
         return 0
     
@@ -300,15 +313,13 @@ class CombatManager(EventEmitter):
         if not base_item:
             return 0
         
-        # Use AC value from baseitems.2da if available
-        try:
-            if hasattr(base_item, 'ac'):
-                return int(getattr(base_item, 'ac', 0))
-            elif hasattr(base_item, 'armor_check_penalty'):
-                # Some items store AC in different columns
-                return int(getattr(base_item, 'base_ac', 0))
-        except (ValueError, AttributeError, TypeError):
-            pass
+        # Use AC value from baseitems.2da with proper field mapping
+        ac_patterns = ['ac', 'AC', 'base_ac', 'BaseAC']
+        ac_value = self.field_mapper.get_robust_field_value(
+            base_item, ac_patterns, 'int', 0
+        )
+        if ac_value > 0:
+            return ac_value
         
         return 0
     
@@ -328,25 +339,70 @@ class CombatManager(EventEmitter):
         base_item = self._get_base_item_data(base_item_id)
         if base_item:
             try:
-                # Try to get max dex from game data
-                if hasattr(base_item, 'dex_bonus'):
-                    return int(getattr(base_item, 'dex_bonus', 999))
-                elif hasattr(base_item, 'max_dex_bonus'):
-                    return int(getattr(base_item, 'max_dex_bonus', 999))
+                # Use field mapping utility for max DEX bonus
+                max_dex_patterns = ['dex_bonus', 'DexBonus', 'max_dex_bonus', 'MaxDexBonus']
+                max_dex_value = self.field_mapper.get_robust_field_value(
+                    base_item, max_dex_patterns, 'int', 999
+                )
+                return max_dex_value
             except (ValueError, AttributeError, TypeError):
                 pass
         
         return 999  # No limit if data not found
     
     def _is_shield(self, item) -> bool:
-        """Check if item is a shield"""
-        # Handle Django model
+        """Check if item is a shield using baseitems.2da data"""
+        # Get base item ID
         if hasattr(item, 'base_item_id'):
-            return 63 <= item.base_item_id <= 68  # Shield item range
+            base_item_id = item.base_item_id
+        else:
+            base_item_id = item.get('BaseItem', 0)
         
-        # Handle raw GFF data
-        base_item = item.get('BaseItem', 0)
-        return 63 <= base_item <= 68  # Shield item range
+        # Get base item data
+        base_item_data = self._get_base_item_data(base_item_id)
+        if base_item_data:
+            # Check if it's categorized as a shield
+            # Shields typically have ItemClass = 'Shield' or similar
+            item_class = self.field_mapper.get_field_value(base_item_data, 'item_class', '')
+            if isinstance(item_class, str) and 'shield' in item_class.lower():
+                return True
+                
+            # Alternative: check if it has shield-like properties
+            weapon_type = self.field_mapper.get_field_value(base_item_data, 'weapon_type', 0)
+            try:
+                # Shield weapon types are typically specific values
+                weapon_type_int = int(weapon_type) if weapon_type else 0
+                # This would need to be validated against actual 2DA data
+                # For now, use the old range as fallback
+                return 63 <= base_item_id <= 68
+            except (ValueError, TypeError):
+                pass
+        
+        # Fallback to old range check if no data available
+        return 63 <= base_item_id <= 68
+    
+    def _is_heavy_armor(self, base_item_data) -> bool:
+        """Check if armor type reduces movement speed"""
+        if not base_item_data:
+            return False
+            
+        # Check armor properties that would reduce speed
+        # Heavy armors typically have higher AC and lower max DEX
+        max_dex = self.field_mapper.get_field_value(base_item_data, 'max_dex_bonus', 999)
+        try:
+            max_dex_int = int(max_dex) if max_dex else 999
+            # Heavy armors typically have max DEX of 1 or less
+            return max_dex_int <= 1
+        except (ValueError, TypeError):
+            pass
+            
+        # Alternative: check by armor name/label for heavy types
+        label = self.field_mapper.get_field_value(base_item_data, 'label', '')
+        if isinstance(label, str):
+            heavy_keywords = ['chainmail', 'splint', 'banded', 'full plate', 'plate']
+            return any(keyword in label.lower() for keyword in heavy_keywords)
+            
+        return False
     
     def _calculate_dodge_bonus(self) -> int:
         """Calculate dodge AC bonus from feats"""
@@ -377,14 +433,12 @@ class CombatManager(EventEmitter):
         # Get data from baseitems.2da
         base_item = self._get_base_item_data(base_item_id)
         if base_item:
-            try:
-                # Try to get armor check penalty from game data
-                if hasattr(base_item, 'armor_check_penalty'):
-                    return int(getattr(base_item, 'armor_check_penalty', 0))
-                elif hasattr(base_item, 'acp'):
-                    return int(getattr(base_item, 'acp', 0))
-            except (ValueError, AttributeError, TypeError):
-                pass
+            # Use field mapping utility for armor check penalty
+            acp_patterns = ['armor_check_penalty', 'ArmorCheckPenalty', 'acp', 'ACP']
+            acp_value = self.field_mapper.get_robust_field_value(
+                base_item, acp_patterns, 'int', 0
+            )
+            return acp_value
         
         return 0  # No penalty if data not found
     
@@ -508,7 +562,14 @@ class CombatManager(EventEmitter):
     
     def _get_movement_speed(self) -> Dict[str, int]:
         """Get movement speed (affected by armor)"""
-        base_speed = 30  # Default medium creature
+        # Get base speed from race data via RaceManager
+        race_manager = self.character_manager.get_manager('race')
+        if race_manager:
+            race_id = self.gff.get('Race', 6)  # Default human if not found
+            base_speed = race_manager.get_base_speed(race_id)
+        else:
+            # Fallback if RaceManager not available
+            base_speed = 30
         
         # Check for heavy armor
         chest_item = self._get_equipped_item('Chest')
@@ -518,8 +579,9 @@ class CombatManager(EventEmitter):
                 base_item = chest_item.base_item_id
             else:
                 base_item = chest_item.get('BaseItem', 0)
-            # Heavy armors reduce speed
-            if base_item in [6, 8, 9, 10, 11]:  # Chainmail and heavier
+            # Check if armor reduces speed using baseitems.2da
+            base_item_data = self._get_base_item_data(base_item)
+            if base_item_data and self._is_heavy_armor(base_item_data):
                 base_speed = 20
         
         # Barbarian fast movement
@@ -607,19 +669,16 @@ class CombatManager(EventEmitter):
         }
     
     # Missing methods called by views - basic implementations
-    def get_combat_summary(self) -> Dict[str, Any]:
-        """Get combat summary"""
-        return {
-            'armor_class': self.calculate_armor_class(),
-            'base_attack_bonus': self.calculate_base_attack_bonus(),
-            'initiative': self.calculate_initiative()
-        }
     
     def calculate_base_attack_bonus(self) -> int:
         """Calculate base attack bonus from classes"""
         # Use existing get_attack_bonuses method
         attack_bonuses = self.get_attack_bonuses()
         return attack_bonuses.get('base_attack_bonus', 0)
+    
+    def get_base_attack_bonus(self) -> int:
+        """Get base attack bonus - alias for calculate_base_attack_bonus for compatibility"""
+        return self.calculate_base_attack_bonus()
         
     def _get_dex_modifier(self) -> int:
         """Get dexterity modifier"""  

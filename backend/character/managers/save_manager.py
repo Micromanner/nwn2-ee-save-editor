@@ -3,11 +3,11 @@ Save Manager - handles comprehensive saving throw calculations
 Includes base saves, ability modifiers, feats, and temporary effects
 """
 
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Any
 import logging
-import time
 
 from ..events import EventEmitter, EventType, EventData
+from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -61,23 +61,7 @@ class SaveManager(EventEmitter):
             self._racial_cache = {}
     
     def _build_save_affecting_feats_cache(self):
-        """Build cache of feats that affect saving throws"""
-        # Hardcoded mapping of feat IDs to save bonuses based on NWN2 rules
-        # These values are not in the 2DA files but are hardcoded in the game engine
-        FEAT_SAVE_BONUSES = {
-            14: {'type': 'fortitude', 'bonus': 2, 'label': 'GreatFortitude'},  # Great Fortitude
-            22: {'type': 'will', 'bonus': 2, 'label': 'IronWill'},  # Iron Will
-            24: {'type': 'reflex', 'bonus': 2, 'label': 'LightningReflexes'},  # Lightning Reflexes
-            # Epic save feats
-            695: {'type': 'fortitude', 'bonus': 4, 'label': 'EpicFortitude'},  # Epic Fortitude
-            696: {'type': 'reflex', 'bonus': 4, 'label': 'EpicReflexes'},  # Epic Reflexes
-            697: {'type': 'will', 'bonus': 4, 'label': 'EpicWill'},  # Epic Will
-            # Universal save bonuses
-            100: {'type': 'universal', 'bonus': 1, 'label': 'LuckOfHeroes'},  # Luck of Heroes (test ID)
-            1956: {'type': 'universal', 'bonus': 1, 'label': 'LuckOfHeroes'},  # Luck of Heroes
-            2196: {'type': 'universal', 'bonus': 2, 'label': 'SacredDefense'},  # Sacred Defense
-        }
-        
+        """Build cache of feats that affect saving throws using FeatManager"""
         self._save_affecting_feats = {
             'fortitude': [],
             'reflex': [],
@@ -85,28 +69,52 @@ class SaveManager(EventEmitter):
             'universal': []
         }
         
-        # Populate cache based on hardcoded values
-        for feat_id, info in FEAT_SAVE_BONUSES.items():
-            save_type = info['type']
-            self._save_affecting_feats[save_type].append({
-                'id': feat_id,
-                'label': info['label'],
-                'bonus': info['bonus']
-            })
+        # Get FeatManager to handle feat operations
+        feat_manager = self.character_manager.get_manager('feat')
+        if not feat_manager:
+            logger.warning("FeatManager not available for save affecting feats cache")
+            return
         
-        # Optionally validate against actual feat table to ensure feat exists
+        # Get all feats from game data
         try:
-            feats = self.game_data_loader.get_table('feat')
-            valid_feat_ids = {getattr(feat, 'id', None) for feat in feats if hasattr(feat, 'id')}
+            feats_table = self.game_data_loader.get_table('feat')
+            if not feats_table:
+                logger.warning("No feat table available")
+                return
             
-            # Filter out any invalid feat IDs
-            for save_type in self._save_affecting_feats:
-                self._save_affecting_feats[save_type] = [
-                    feat for feat in self._save_affecting_feats[save_type]
-                    if feat['id'] in valid_feat_ids
-                ]
+            # Map known save-affecting feat labels to their effects
+            # NOTE: These bonuses are hardcoded in the NWN2 game engine, not stored in 2DA files.
+            # They cannot be made data-driven as the engine itself defines these bonuses.
+            # This is correct behavior - we're matching the game's hardcoded logic.
+            SAVE_FEAT_BONUSES = {
+                'GreatFort': {'type': 'fortitude', 'bonus': 2},
+                'IronWill': {'type': 'will', 'bonus': 2},
+                'LightngRef': {'type': 'reflex', 'bonus': 2},
+                # Epic versions
+                'EpicFort': {'type': 'fortitude', 'bonus': 4},
+                'EpicReflexes': {'type': 'reflex', 'bonus': 4},
+                'EpicWill': {'type': 'will', 'bonus': 4},
+                # Universal bonuses
+                'LuckOfHeroes': {'type': 'universal', 'bonus': 1},
+                'SacredDefense': {'type': 'universal', 'bonus': 2}
+            }
+            
+            # Find feats by their labels and build cache
+            for feat in feats_table:
+                feat_id = field_mapper.get_field_value(feat, 'id', -1)
+                feat_label = field_mapper.get_field_value(feat, 'label', '')
+                
+                if feat_id >= 0 and feat_label in SAVE_FEAT_BONUSES:
+                    bonus_info = SAVE_FEAT_BONUSES[feat_label]
+                    save_type = bonus_info['type']
+                    self._save_affecting_feats[save_type].append({
+                        'id': feat_id,
+                        'label': feat_label,
+                        'bonus': bonus_info['bonus']
+                    })
+                    
         except Exception as e:
-            logger.debug(f"Could not validate feat IDs: {e}")
+            logger.warning(f"Could not build save affecting feats cache: {e}")
     
     
     def _build_racial_save_cache(self):
@@ -152,10 +160,18 @@ class SaveManager(EventEmitter):
                 'base_will': 0
             }
         
-        # Get ability modifiers (already included in base_saves, but track separately)
-        con_mod = (self.gff.get('Con', 10) - 10) // 2
-        dex_mod = (self.gff.get('Dex', 10) - 10) // 2
-        wis_mod = (self.gff.get('Wis', 10) - 10) // 2
+        # Get ability modifiers using AttributeManager
+        attr_manager = self.character_manager.get_manager('ability') or self.character_manager.get_manager('attribute')
+        if attr_manager:
+            all_modifiers = attr_manager.get_all_modifiers()
+            con_mod = all_modifiers.get('CON', 0)
+            dex_mod = all_modifiers.get('DEX', 0)
+            wis_mod = all_modifiers.get('WIS', 0)
+        else:
+            # Fallback if no AttributeManager available
+            con_mod = (self.gff.get('Con', 10) - 10) // 2
+            dex_mod = (self.gff.get('Dex', 10) - 10) // 2
+            wis_mod = (self.gff.get('Wis', 10) - 10) // 2
         
         # Get feat bonuses
         feat_bonuses = self._calculate_feat_bonuses()
@@ -224,7 +240,7 @@ class SaveManager(EventEmitter):
         }
     
     def _calculate_feat_bonuses(self) -> Dict[str, int]:
-        """Calculate save bonuses from feats using data-driven approach"""
+        """Calculate save bonuses from feats using FeatManager"""
         bonuses = {
             'fortitude': 0,
             'reflex': 0,
@@ -234,24 +250,22 @@ class SaveManager(EventEmitter):
         if not self._save_affecting_feats:
             return bonuses
         
-        # Get character's feat list
-        character_feats = set()
-        feat_list = self.gff.get('FeatList', [])
-        for feat_entry in feat_list:
-            feat_id = feat_entry.get('Feat', -1)
-            if feat_id >= 0:
-                character_feats.add(feat_id)
+        # Use FeatManager to get character's feats
+        feat_manager = self.character_manager.get_manager('feat')
+        if not feat_manager:
+            logger.warning("FeatManager not available for feat bonus calculation")
+            return bonuses
         
         # Check each save type for applicable feats
         for save_type in ['fortitude', 'reflex', 'will']:
             for feat_info in self._save_affecting_feats.get(save_type, []):
-                if feat_info['id'] in character_feats:
+                if feat_manager.has_feat(feat_info['id']):
                     bonuses[save_type] += feat_info['bonus']
                     logger.debug(f"Applied {feat_info['label']} bonus +{feat_info['bonus']} to {save_type}")
         
         # Universal save bonuses (affect all saves)
         for feat_info in self._save_affecting_feats.get('universal', []):
-            if feat_info['id'] in character_feats:
+            if feat_manager.has_feat(feat_info['id']):
                 bonuses['fortitude'] += feat_info['bonus']
                 bonuses['reflex'] += feat_info['bonus']
                 bonuses['will'] += feat_info['bonus']
@@ -264,20 +278,52 @@ class SaveManager(EventEmitter):
         return bonuses
     
     def _calculate_class_save_bonuses(self) -> Dict[str, int]:
-        """Calculate class-specific save bonuses (like Paladin Divine Grace)"""
+        """Calculate class-specific save bonuses using ClassManager and data-driven approach"""
         bonuses = {
             'fortitude': 0,
             'reflex': 0,
             'will': 0
         }
         
-        # Paladin Divine Grace (CHA to all saves at level 2+)
-        if self._has_class_by_name('Paladin') and self._get_class_level_by_name('Paladin') >= 2:
-            cha_mod = (self.gff.get('Cha', 10) - 10) // 2
-            if cha_mod > 0:  # Only positive modifiers
-                bonuses['fortitude'] += cha_mod
-                bonuses['reflex'] += cha_mod
-                bonuses['will'] += cha_mod
+        # Use ClassManager to check for classes and levels
+        class_manager = self.character_manager.get_manager('class')
+        if not class_manager:
+            return bonuses
+        
+        # Check for Paladin Divine Grace using data-driven approach
+        # NOTE: Divine Grace (level 2+ Paladin gets CHA to all saves) is a hardcoded
+        # game engine mechanic. The level requirement and bonus type cannot be made
+        # fully data-driven as this is core D&D 3.5 Paladin class feature logic.
+        try:
+            # Get all classes and check for Paladin-like class with Divine Grace
+            classes_table = self.game_data_loader.get_table('classes')
+            if classes_table:
+                for class_data in classes_table:
+                    class_label = field_mapper.get_field_value(class_data, 'label', '')
+                    class_id = field_mapper.get_field_value(class_data, 'id', -1)
+                    
+                    # Check if this is a Paladin class and character has it at level 2+
+                    if 'paladin' in class_label.lower() and class_id >= 0:
+                        # Check character's class list for this class ID
+                        class_level = self._get_character_class_level(class_id)
+                        if class_level >= 2:
+                            # Use AttributeManager for CHA modifier
+                            attr_manager = self.character_manager.get_manager('ability') or self.character_manager.get_manager('attribute')
+                            if attr_manager:
+                                all_modifiers = attr_manager.get_all_modifiers()
+                                cha_mod = all_modifiers.get('CHA', 0)
+                            else:
+                                # Fallback
+                                cha_mod = (self.gff.get('Cha', 10) - 10) // 2
+                            
+                            if cha_mod > 0:  # Only positive modifiers
+                                bonuses['fortitude'] += cha_mod
+                                bonuses['reflex'] += cha_mod
+                                bonuses['will'] += cha_mod
+                            break
+                            
+        except Exception as e:
+            logger.debug(f"Could not calculate class save bonuses: {e}")
         
         return bonuses
     
@@ -291,11 +337,16 @@ class SaveManager(EventEmitter):
         
         race_id = self.gff.get('Race', 0)
         
-        # Get racial bonuses using local method
-        racial_bonuses = self.get_racial_saves(race_id)
-        bonuses['fortitude'] += racial_bonuses['fortitude']
-        bonuses['reflex'] += racial_bonuses['reflex']
-        bonuses['will'] += racial_bonuses['will']
+        # Get racial bonuses using FieldMappingUtility and data-driven approach
+        try:
+            race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+            if race_data:
+                racial_bonuses = field_mapper.get_racial_saves(race_data)
+                bonuses['fortitude'] += racial_bonuses['fortitude']
+                bonuses['reflex'] += racial_bonuses['reflex']
+                bonuses['will'] += racial_bonuses['will']
+        except Exception as e:
+            logger.debug(f"Could not get racial save bonuses for race {race_id}: {e}")
         
         return bonuses
     
@@ -435,6 +486,11 @@ class SaveManager(EventEmitter):
         feat_manager = self.character_manager.get_manager('feat')
         return feat_manager.has_feat_by_name(feat_label) if feat_manager else False
     
+    def _has_feat_by_id(self, feat_id: int) -> bool:
+        """Check if character has a feat by its ID using FeatManager"""
+        feat_manager = self.character_manager.get_manager('feat')
+        return feat_manager.has_feat(feat_id) if feat_manager else False
+    
     def _has_class_by_name(self, class_name: str) -> bool:
         """Check if character has levels in a class using ClassManager"""
         class_manager = self.character_manager.get_manager('class')
@@ -444,6 +500,20 @@ class SaveManager(EventEmitter):
         """Get level in a specific class using ClassManager"""
         class_manager = self.character_manager.get_manager('class')
         return class_manager.get_class_level_by_name(class_name) if class_manager else 0
+    
+    def _get_character_class_level(self, class_id: int) -> int:
+        """Get level in a specific class by ID by checking character's ClassList"""
+        class_list = self.gff.get('ClassList', [])
+        
+        for class_info in class_list:
+            if class_info.get('Class', -1) == class_id:
+                return class_info.get('ClassLevel', 0)
+        
+        return 0
+    
+    def _has_character_class(self, class_id: int) -> bool:
+        """Check if character has levels in a class by ID"""
+        return self._get_character_class_level(class_id) > 0
     
     def _on_attribute_changed(self, event: EventData):
         """Handle attribute changes that affect saves"""
@@ -562,25 +632,25 @@ class SaveManager(EventEmitter):
         return saves['will']['base']
     
     def _get_con_modifier(self) -> int:
-        """Get constitution modifier"""
-        attr_manager = self.character_manager.get_manager('attribute')
+        """Get constitution modifier using AttributeManager"""
+        attr_manager = self.character_manager.get_manager('ability') or self.character_manager.get_manager('attribute')
         if attr_manager:
-            return attr_manager._calculate_ability_modifiers().get('CON', 0)
-        return 0
+            return attr_manager.get_all_modifiers().get('CON', 0)
+        return (self.gff.get('Con', 10) - 10) // 2
     
     def _get_dex_modifier(self) -> int:
-        """Get dexterity modifier"""
-        attr_manager = self.character_manager.get_manager('attribute')
+        """Get dexterity modifier using AttributeManager"""
+        attr_manager = self.character_manager.get_manager('ability') or self.character_manager.get_manager('attribute')
         if attr_manager:
-            return attr_manager._calculate_ability_modifiers().get('DEX', 0)
-        return 0
+            return attr_manager.get_all_modifiers().get('DEX', 0)
+        return (self.gff.get('Dex', 10) - 10) // 2
     
     def _get_wis_modifier(self) -> int:
-        """Get wisdom modifier"""
-        attr_manager = self.character_manager.get_manager('attribute')
+        """Get wisdom modifier using AttributeManager"""
+        attr_manager = self.character_manager.get_manager('ability') or self.character_manager.get_manager('attribute')
         if attr_manager:
-            return attr_manager._calculate_ability_modifiers().get('WIS', 0)
-        return 0
+            return attr_manager.get_all_modifiers().get('WIS', 0)
+        return (self.gff.get('Wis', 10) - 10) // 2
     
     def _get_misc_fortitude_bonus(self) -> int:
         """Get miscellaneous fortitude bonus"""

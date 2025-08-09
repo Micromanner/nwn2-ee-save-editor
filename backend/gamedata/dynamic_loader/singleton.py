@@ -15,7 +15,7 @@ _loader_instance: Optional[DynamicGameDataLoader] = None
 _loader_lock = threading.Lock()
 
 
-def get_dynamic_game_data_loader(force_reload: bool = False, resource_manager=None) -> DynamicGameDataLoader:
+def get_dynamic_game_data_loader(force_reload: bool = False, resource_manager=None, progress_callback=None) -> DynamicGameDataLoader:
     """
     Get the singleton DynamicGameDataLoader instance.
     
@@ -25,6 +25,7 @@ def get_dynamic_game_data_loader(force_reload: bool = False, resource_manager=No
     Args:
         force_reload: If True, creates a new instance (useful for testing/reloading)
         resource_manager: ResourceManager instance to use (only used on first creation)
+        progress_callback: Optional callback for progress updates (only used on first creation)
         
     Returns:
         The singleton DynamicGameDataLoader instance
@@ -47,7 +48,8 @@ def get_dynamic_game_data_loader(force_reload: bool = False, resource_manager=No
                 resource_manager=resource_manager,  # Use provided ResourceManager
                 use_async=False,  # Avoid async issues in Django
                 priority_only=False,  # Load all data upfront
-                validate_relationships=True
+                validate_relationships=True,
+                progress_callback=progress_callback  # Forward progress callback
             )
             
             logger.info(f"DynamicGameDataLoader singleton created with {len(_loader_instance.table_data)} tables")

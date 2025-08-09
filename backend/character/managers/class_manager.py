@@ -8,6 +8,7 @@ import logging
 import time
 
 from ..events import EventEmitter, EventType, ClassChangedEvent, LevelGainedEvent
+from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class ClassManager(EventEmitter):
         self.character_manager = character_manager
         self.gff = character_manager.gff
         self.game_data_loader = character_manager.game_data_loader
+        self.field_mapper = FieldMappingUtility()
         
         # Cache for performance
         self._class_cache = {}
@@ -238,10 +240,10 @@ class ClassManager(EventEmitter):
         return changes
     
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
-        """Calculate ability modifiers using AttributeManager"""
+        """Calculate ability modifiers using AbilityManager"""
         attr_manager = self.character_manager.get_manager('attribute')
         if attr_manager:
-            return attr_manager._calculate_ability_modifiers()
+            return attr_manager.get_all_modifiers()
         
         # Fallback: Use attribute manager
         if hasattr(self.character_manager, 'get_manager'):
@@ -275,10 +277,10 @@ class ClassManager(EventEmitter):
     def _calculate_hit_points(self, class_data, level: int, con_modifier: int) -> int:
         """Calculate total hit points for class and level"""
         # Max HP at level 1, average for other levels
-        # Get the correct attribute name (case-sensitive)
-        hit_die = getattr(class_data, 'HitDie', None) or getattr(class_data, 'hit_die', 4)
-        if isinstance(hit_die, str):
-            hit_die = int(hit_die)  # Convert string to int if necessary
+        # Use FieldMappingUtility for proper field access
+        hit_die = self.field_mapper._safe_int(
+            self.field_mapper.get_field_value(class_data, 'hit_die', 8), 8
+        )
         base_hp = hit_die
         if level > 1:
             avg_roll = (hit_die + 1) // 2
@@ -289,36 +291,32 @@ class ClassManager(EventEmitter):
     
     def _calculate_bab(self, class_data, level: int) -> int:
         """Calculate BAB for a single class and level"""
-        # Get the correct attribute name (case-sensitive)
-        bab_table_name = getattr(class_data, 'AttackBonusTable', '') or getattr(class_data, 'attack_bonus_table', '')
+        # Use FieldMappingUtility for proper field access
+        bab_table_name = self.field_mapper.get_field_value(class_data, 'attack_bonus_table', '')
         if not bab_table_name:
-            logger.warning(f"No BAB table found for class {getattr(class_data, 'Label', 'Unknown')}")
+            class_label = self.field_mapper.get_field_value(class_data, 'label', 'Unknown')
+            logger.warning(f"No BAB table found for class {class_label}")
             return 0
             
-        bab_table_name = bab_table_name.lower()
-        
-        # Cache BAB table data
-        if bab_table_name not in self._bab_table_cache:
-            bab_table = self.game_data_loader.get_table(bab_table_name)
+        # Cache BAB table data (convert to lowercase for lookup)
+        bab_table_name_lower = bab_table_name.lower()
+        if bab_table_name_lower not in self._bab_table_cache:
+            bab_table = self.game_data_loader.get_table(bab_table_name_lower)
             if bab_table:
-                self._bab_table_cache[bab_table_name] = bab_table
+                self._bab_table_cache[bab_table_name_lower] = bab_table
             else:
                 logger.warning(f"BAB table '{bab_table_name}' not found")
                 return 0
         
-        bab_table = self._bab_table_cache[bab_table_name]
+        bab_table = self._bab_table_cache[bab_table_name_lower]
         
         # Get BAB for level (level - 1 because tables are 0-indexed)
         level_idx = min(level - 1, 19)  # Cap at 20
         if level_idx < len(bab_table):
             bab_row = bab_table[level_idx]
-            # The BAB value is in the 'BAB' column (uppercase, values are strings)
-            bab_value = getattr(bab_row, 'BAB', '0')
-            try:
-                return int(bab_value)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid BAB value '{bab_value}' in table '{bab_table_name}' at level {level}")
-                return 0
+            # Use FieldMappingUtility to get BAB value with proper field mapping
+            bab_value = self.field_mapper.get_field_value(bab_row, 'bab', '0')
+            return self.field_mapper._safe_int(bab_value, 0)
         
         return 0
     
@@ -341,7 +339,7 @@ class ClassManager(EventEmitter):
                 if class_data:
                     class_bab = self._calculate_bab(class_data, class_level)
                     total_bab += class_bab
-                    class_label = getattr(class_data, 'label', f'Class {class_id}')
+                    class_label = self.field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
                     logger.debug(f"Class {class_label} (lvl {class_level}): BAB +{class_bab}")
         
         logger.info(f"Total BAB: {total_bab}")
@@ -349,23 +347,23 @@ class ClassManager(EventEmitter):
     
     def _calculate_saves(self, class_data, level: int, modifiers: Dict[str, int]) -> Dict[str, int]:
         """Calculate saving throws for a single class"""
-        # Get the correct attribute name (case-sensitive)
-        save_table_name = getattr(class_data, 'SavingThrowTable', '') or getattr(class_data, 'savingthrowtable', '')
+        # Use FieldMappingUtility for proper field access
+        save_table_name = self.field_mapper.get_field_value(class_data, 'saving_throw_table', '')
         if not save_table_name:
-            logger.warning(f"No save table found for class {getattr(class_data, 'Label', 'Unknown')}")
+            class_label = self.field_mapper.get_field_value(class_data, 'label', 'Unknown')
+            logger.warning(f"No save table found for class {class_label}")
             return {
                 'fortitude': modifiers['CON'],
                 'reflex': modifiers['DEX'],
                 'will': modifiers['WIS']
             }
             
-        save_table_name = save_table_name.lower()
-        
-        # Cache save table data
-        if save_table_name not in self._save_table_cache:
-            save_table = self.game_data_loader.get_table(save_table_name)
+        # Cache save table data (convert to lowercase for lookup)
+        save_table_name_lower = save_table_name.lower()
+        if save_table_name_lower not in self._save_table_cache:
+            save_table = self.game_data_loader.get_table(save_table_name_lower)
             if save_table:
-                self._save_table_cache[save_table_name] = save_table
+                self._save_table_cache[save_table_name_lower] = save_table
             else:
                 logger.warning(f"Save table '{save_table_name}' not found")
                 return {
@@ -374,20 +372,22 @@ class ClassManager(EventEmitter):
                     'will': modifiers['WIS']
                 }
         
-        save_table = self._save_table_cache[save_table_name]
+        save_table = self._save_table_cache[save_table_name_lower]
         
         # Get saves for level (level - 1 because tables are 0-indexed)
         level_idx = min(level - 1, 19)  # Cap at 20
         if level_idx < len(save_table):
             save_row = save_table[level_idx]
-            # The save values are in 'FortSave', 'RefSave', 'WillSave' columns (values are strings)
-            try:
-                fort_base = int(getattr(save_row, 'FortSave', '0'))
-                ref_base = int(getattr(save_row, 'RefSave', '0'))
-                will_base = int(getattr(save_row, 'WillSave', '0'))
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid save values in table '{save_table_name}' at level {level}: {e}")
-                fort_base = ref_base = will_base = 0
+            # Use FieldMappingUtility to get save values with proper field mapping
+            fort_base = self.field_mapper._safe_int(
+                self.field_mapper.get_field_value(save_row, 'fort_save_table', '0'), 0
+            )
+            ref_base = self.field_mapper._safe_int(
+                self.field_mapper.get_field_value(save_row, 'ref_save_table', '0'), 0
+            )
+            will_base = self.field_mapper._safe_int(
+                self.field_mapper.get_field_value(save_row, 'will_save_table', '0'), 0
+            )
         else:
             fort_base = ref_base = will_base = 0
         
@@ -486,7 +486,8 @@ class ClassManager(EventEmitter):
             
             # Safely get class name
             if class_data:
-                class_name = getattr(class_data, 'label', getattr(class_data, 'name', f"Unknown Class {class_id}"))
+                class_name = self.field_mapper.get_field_value(class_data, 'label', 
+                    self.field_mapper.get_field_value(class_data, 'name', f"Unknown Class {class_id}"))
             else:
                 class_name = f"Unknown Class {class_id}"
             
@@ -655,7 +656,7 @@ class ClassManager(EventEmitter):
                 return {
                     'id': class_id,
                     'level': class_entry.get('ClassLevel', 0),
-                    'name': getattr(class_data, 'label', 'Unknown') if class_data else 'Unknown',
+                    'name': self.field_mapper.get_field_value(class_data, 'label', 'Unknown') if class_data else 'Unknown',
                     'data': class_data
                 }
         
@@ -942,13 +943,14 @@ class ClassManager(EventEmitter):
         if not class_data:
             return {}
         
-        from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
-        field_mapper = FieldMappingUtility()
-        
-        # Get basic class info
-        class_name = field_mapper.get_field_value(class_data, 'Name', 'Unknown Class')
-        hit_die = int(field_mapper.get_field_value(class_data, 'HitDie', '8'))
-        skill_points = int(field_mapper.get_field_value(class_data, 'SkillPointBase', '2'))
+        # Get basic class info using instance field_mapper
+        class_name = self.field_mapper.get_field_value(class_data, 'name', 'Unknown Class')
+        hit_die = self.field_mapper._safe_int(
+            self.field_mapper.get_field_value(class_data, 'hit_die', '8'), 8
+        )
+        skill_points = self.field_mapper._safe_int(
+            self.field_mapper.get_field_value(class_data, 'skill_point_base', '2'), 2
+        )
         
         # Build level progression
         progression = []
@@ -985,7 +987,7 @@ class ClassManager(EventEmitter):
     
     def _get_saves_for_level_detailed(self, class_data, level: int) -> Dict[str, int]:
         """Get detailed save progression for a specific level"""
-        save_table_name = getattr(class_data, 'SavingThrowTable', '')
+        save_table_name = self.field_mapper.get_field_value(class_data, 'saving_throw_table', '')
         if not save_table_name:
             # Use standard progression if no table
             return {
@@ -994,17 +996,23 @@ class ClassManager(EventEmitter):
                 'will': level // 3        # Poor save
             }
         
-        save_table_name = save_table_name.lower()
-        save_table = self.game_data_loader.get_table(save_table_name)
+        # Convert to lowercase for table lookup
+        save_table = self.game_data_loader.get_table(save_table_name.lower())
         
         if not save_table or level > len(save_table):
             return {'fortitude': 0, 'reflex': 0, 'will': 0}
         
         row = save_table[level - 1]
         return {
-            'fortitude': int(getattr(row, 'FortSave', '0') or 0),
-            'reflex': int(getattr(row, 'RefSave', '0') or 0),
-            'will': int(getattr(row, 'WillSave', '0') or 0)
+            'fortitude': self.field_mapper._safe_int(
+                self.field_mapper.get_field_value(row, 'fort_save_table', '0'), 0
+            ),
+            'reflex': self.field_mapper._safe_int(
+                self.field_mapper.get_field_value(row, 'ref_save_table', '0'), 0
+            ),
+            'will': self.field_mapper._safe_int(
+                self.field_mapper.get_field_value(row, 'will_save_table', '0'), 0
+            )
         }
     
     def _get_level_features(self, class_data, level: int) -> List[Dict[str, Any]]:
@@ -1073,12 +1081,9 @@ class ClassManager(EventEmitter):
     
     def _analyze_class_type(self, class_data) -> Dict[str, Any]:
         """Analyze class characteristics"""
-        from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
-        field_mapper = FieldMappingUtility()
-        
-        has_arcane = field_mapper.get_field_value(class_data, 'HasArcane', '0') == '1'
-        has_divine = field_mapper.get_field_value(class_data, 'HasDivine', '0') == '1'
-        primary_ability = field_mapper.get_field_value(class_data, 'PrimaryAbil', 'STR')
+        has_arcane = self.field_mapper.get_field_value(class_data, 'has_arcane', '0') == '1'
+        has_divine = self.field_mapper.get_field_value(class_data, 'has_divine', '0') == '1'
+        primary_ability = self.field_mapper.get_field_value(class_data, 'primary_ability', 'STR')
         
         spell_type = 'none'
         if has_arcane:
@@ -1091,18 +1096,19 @@ class ClassManager(EventEmitter):
             'spell_type': spell_type,
             'primary_ability': primary_ability,
             'focus': self._get_class_focus(class_data),
-            'alignment_restricted': field_mapper.get_field_value(class_data, 'AlignRestrict', '0') != '0'
+            'alignment_restricted': self.field_mapper.get_field_value(class_data, 'align_restrict', '0') != '0'
         }
     
     def _get_class_focus(self, class_data) -> str:
         """Determine class focus/role"""
-        from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
-        field_mapper = FieldMappingUtility()
-        
-        has_arcane = field_mapper.get_field_value(class_data, 'HasArcane', '0') == '1'
-        has_divine = field_mapper.get_field_value(class_data, 'HasDivine', '0') == '1'
-        skill_points = int(field_mapper.get_field_value(class_data, 'SkillPointBase', '2'))
-        hit_die = int(field_mapper.get_field_value(class_data, 'HitDie', '8'))
+        has_arcane = self.field_mapper.get_field_value(class_data, 'has_arcane', '0') == '1'
+        has_divine = self.field_mapper.get_field_value(class_data, 'has_divine', '0') == '1'
+        skill_points = self.field_mapper._safe_int(
+            self.field_mapper.get_field_value(class_data, 'skill_point_base', '2'), 2
+        )
+        hit_die = self.field_mapper._safe_int(
+            self.field_mapper.get_field_value(class_data, 'hit_die', '8'), 8
+        )
         
         if has_arcane:
             return 'arcane_caster'
@@ -1117,16 +1123,13 @@ class ClassManager(EventEmitter):
     
     def _class_gets_bonus_feats(self, class_data) -> bool:
         """Check if class gets bonus feats (like Fighter)"""
-        class_name = getattr(class_data, 'Name', '').lower()
+        class_name = self.field_mapper.get_field_value(class_data, 'name', '').lower()
         return 'fighter' in class_name or 'warrior' in class_name
     
     def _is_spellcaster_class_data(self, class_data) -> bool:
         """Check if class data indicates spellcasting"""
-        from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
-        field_mapper = FieldMappingUtility()
-        
-        has_arcane = field_mapper.get_field_value(class_data, 'HasArcane', '0') == '1'
-        has_divine = field_mapper.get_field_value(class_data, 'HasDivine', '0') == '1'
+        has_arcane = self.field_mapper.get_field_value(class_data, 'has_arcane', '0') == '1'
+        has_divine = self.field_mapper.get_field_value(class_data, 'has_divine', '0') == '1'
         return has_arcane or has_divine
     
     def _get_spell_progression_at_level(self, class_data, level: int) -> Optional[Dict[str, Any]]:
@@ -1143,9 +1146,6 @@ class ClassManager(EventEmitter):
     
     def _get_class_proficiencies_detailed(self, class_data) -> Dict[str, Any]:
         """Get detailed weapon and armor proficiencies"""
-        from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
-        field_mapper = FieldMappingUtility()
-        
         # TODO: Parse actual proficiency data from class tables
         # This is a placeholder implementation
         class_focus = self._get_class_focus(class_data)
@@ -1176,7 +1176,7 @@ class ClassManager(EventEmitter):
         # TODO: Parse actual special abilities from class data
         abilities = []
         
-        class_name = getattr(class_data, 'Name', '').lower()
+        class_name = self.field_mapper.get_field_value(class_data, 'name', '').lower()
         
         if 'rogue' in class_name:
             abilities.append({
@@ -1430,3 +1430,70 @@ class ClassManager(EventEmitter):
             'hit_points': self.gff.get('HitPoints', 0),
             'base_attack_bonus': self.gff.get('BaseAttackBonus', 0)
         }
+    
+    def has_class_by_name(self, class_name: str) -> bool:
+        """
+        Check if character has levels in a class by name
+        
+        Args:
+            class_name: Class name to check (e.g., 'Barbarian', 'Monk')
+            
+        Returns:
+            True if character has levels in this class
+        """
+        class_id = self._get_class_id_by_name(class_name)
+        if class_id is None:
+            return False
+            
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            if class_entry.get('Class') == class_id:
+                return class_entry.get('ClassLevel', 0) > 0
+        
+        return False
+    
+    def get_class_level_by_name(self, class_name: str) -> int:
+        """
+        Get level in a specific class by name
+        
+        Args:
+            class_name: Class name to check (e.g., 'Barbarian', 'Monk')
+            
+        Returns:
+            Level in that class, or 0 if not found
+        """
+        class_id = self._get_class_id_by_name(class_name)
+        if class_id is None:
+            return 0
+            
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            if class_entry.get('Class') == class_id:
+                return class_entry.get('ClassLevel', 0)
+        
+        return 0
+    
+    def _get_class_id_by_name(self, class_name: str) -> Optional[int]:
+        """
+        Get class ID by name from classes.2da
+        
+        Args:
+            class_name: Class name to lookup
+            
+        Returns:
+            Class ID or None if not found
+        """
+        try:
+            # Search through classes.2da for matching name
+            classes_data = self.game_data_loader.get_table('classes')
+            for row_id, class_data in enumerate(classes_data):
+                if class_data:
+                    # Check different name fields
+                    for field_pattern in ['label', 'name']:
+                        class_label = self.field_mapper.get_field_value(class_data, field_pattern, '')
+                        if isinstance(class_label, str) and class_label.lower() == class_name.lower():
+                            return row_id
+        except Exception as e:
+            logger.warning(f"Could not lookup class ID for '{class_name}': {e}")
+        
+        return None

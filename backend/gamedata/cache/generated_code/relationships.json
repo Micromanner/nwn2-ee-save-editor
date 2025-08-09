@@ -1,9 +1,289 @@
 {
   "relationships": [
     {
+      "source_table": "racialtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_human",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_fight",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_rog",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_rog",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_fight",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_barb",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_fight",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_rog",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_gold",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SpellKnownTable",
+      "target_table": "cls_spkn_bard",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SpellKnownTable",
+      "target_table": "cls_spkn_sorc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "feat",
+      "source_column": "REQSKILL2",
+      "target_table": "skills",
+      "relationship_type": "lookup",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_bard",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_rog",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_rang",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_bard",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_sorc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_cler",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "AttackBonusTable",
+      "target_table": "cls_atk_3",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_monk",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SpontaneousConversionTable",
+      "target_table": "cls_spon_cler",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_fight",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_pal",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_barb",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_cler",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_pal",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_pal",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SpellGainTable",
+      "target_table": "cls_spgn_pal",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_bard",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_hforc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_sorc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_dru",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_sorc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_sorc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_pal",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "feat",
+      "source_column": "PREREQFEAT2",
+      "target_table": "feat",
+      "relationship_type": "lookup",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "FeatsTable",
+      "target_table": "cls_feat_rang",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
       "source_table": "classes",
       "source_column": "FeatsTable",
       "target_table": "cls_feat_druid",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_svirf",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_hfelf",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_gnome",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
@@ -12,6 +292,55 @@
       "source_column": "AttackBonusTable",
       "target_table": "cls_atk_1",
       "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_gnome",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_cler",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_gray",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_bard",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SpellGainTable",
+      "target_table": "cls_spgn_sorc",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SpellGainTable",
+      "target_table": "cls_spgn_rang",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "feat",
+      "source_column": "ReqSkillMinRanks",
+      "target_table": "skills",
+      "relationship_type": "lookup",
       "is_nullable": true
     },
     {
@@ -30,163 +359,30 @@
     },
     {
       "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_fight",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_hforc",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_rang",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
       "source_table": "feat",
-      "source_column": "REQSKILL",
+      "source_column": "ReqSkillMaxRanks",
       "target_table": "skills",
       "relationship_type": "lookup",
       "is_nullable": true
     },
     {
       "source_table": "classes",
-      "source_column": "SpellGainTable",
-      "target_table": "cls_spgn_pal",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_dru",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
       "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_bard",
+      "source_column": "SkillsTable",
+      "target_table": "cls_skill_rang",
       "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_pal",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_dwarf",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "AttackBonusTable",
-      "target_table": "cls_atk_3",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpontaneousConversionTable",
-      "target_table": "cls_spon_cler",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_barb",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_cler",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_human",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_elf",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_rog",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_dru",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpontaneousConversionTable",
-      "target_table": "cls_spon_dru",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_bard",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "feat",
-      "source_column": "ReqSkillMaxRanks2",
-      "target_table": "skills",
-      "relationship_type": "lookup",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpellKnownTable",
-      "target_table": "cls_spkn_sorc",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_gnome",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_bard",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_cler",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "feat",
-      "source_column": "REQSKILL2",
-      "target_table": "skills",
-      "relationship_type": "lookup",
       "is_nullable": true
     },
     {
@@ -198,50 +394,22 @@
     },
     {
       "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_sorc",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_gray",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_cler",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_svirf",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_rang",
+      "source_column": "BonusFeatsTable",
+      "target_table": "cls_bfeat_monk",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
       "source_table": "classes",
       "source_column": "SpellGainTable",
-      "target_table": "cls_spgn_sorc",
+      "target_table": "cls_spgn_cler",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_monk",
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_drow",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
@@ -255,217 +423,7 @@
     {
       "source_table": "classes",
       "source_column": "SkillsTable",
-      "target_table": "cls_skill_barb",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "feat",
-      "source_column": "ReqSkillMaxRanks",
-      "target_table": "skills",
-      "relationship_type": "lookup",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_rog",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_sorc",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_monk",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_fight",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_sorc",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_rang",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_dwarf",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_bard",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_dru",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpellKnownTable",
-      "target_table": "cls_spkn_bard",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "feat",
-      "source_column": "ReqSkillMinRanks2",
-      "target_table": "skills",
-      "relationship_type": "lookup",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_sorc",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
       "target_table": "cls_skill_cler",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SavingThrowTable",
-      "target_table": "cls_savthr_dru",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_fight",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_rog",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "feat",
-      "source_column": "PREREQFEAT1",
-      "target_table": "feat",
-      "relationship_type": "lookup",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_rang",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "feat",
-      "source_column": "ReqSkillMinRanks",
-      "target_table": "skills",
-      "relationship_type": "lookup",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_drow",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_pal",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_pal",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpellGainTable",
-      "target_table": "cls_spgn_bard",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_rang",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpellGainTable",
-      "target_table": "cls_spgn_dru",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "racialtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_elf",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "FeatsTable",
-      "target_table": "cls_feat_fight",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "SpellGainTable",
-      "target_table": "cls_spgn_rang",
-      "relationship_type": "table_reference",
-      "is_nullable": true
-    },
-    {
-      "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_pal",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
@@ -477,44 +435,79 @@
       "is_nullable": true
     },
     {
-      "source_table": "racialtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_half",
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_barb",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
-      "source_table": "racialsubtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_gold",
-      "relationship_type": "table_reference",
+      "source_table": "feat",
+      "source_column": "PREREQFEAT1",
+      "target_table": "feat",
+      "relationship_type": "lookup",
       "is_nullable": true
     },
     {
-      "source_table": "racialtypes",
-      "source_column": "FeatsTable",
-      "target_table": "race_feat_gnome",
+      "source_table": "feat",
+      "source_column": "ReqSkillMinRanks2",
+      "target_table": "skills",
+      "relationship_type": "lookup",
+      "is_nullable": true
+    },
+    {
+      "source_table": "classes",
+      "source_column": "SavingThrowTable",
+      "target_table": "cls_savthr_dru",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
       "source_table": "classes",
       "source_column": "SpellGainTable",
-      "target_table": "cls_spgn_cler",
+      "target_table": "cls_spgn_dru",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
       "source_table": "classes",
-      "source_column": "BonusFeatsTable",
-      "target_table": "cls_bfeat_barb",
+      "source_column": "SpontaneousConversionTable",
+      "target_table": "cls_spon_dru",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
       "source_table": "racialtypes",
       "source_column": "FeatsTable",
-      "target_table": "race_feat_hfelf",
+      "target_table": "race_feat_elf",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_dwarf",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "feat",
+      "source_column": "ReqSkillMaxRanks2",
+      "target_table": "skills",
+      "relationship_type": "lookup",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_elf",
+      "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "racialsubtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_dwarf",
       "relationship_type": "table_reference",
       "is_nullable": true
     },
@@ -526,17 +519,24 @@
       "is_nullable": true
     },
     {
-      "source_table": "feat",
-      "source_column": "PREREQFEAT2",
-      "target_table": "feat",
-      "relationship_type": "lookup",
+      "source_table": "classes",
+      "source_column": "SpellGainTable",
+      "target_table": "cls_spgn_bard",
+      "relationship_type": "table_reference",
       "is_nullable": true
     },
     {
-      "source_table": "classes",
-      "source_column": "SkillsTable",
-      "target_table": "cls_skill_rog",
+      "source_table": "racialtypes",
+      "source_column": "FeatsTable",
+      "target_table": "race_feat_half",
       "relationship_type": "table_reference",
+      "is_nullable": true
+    },
+    {
+      "source_table": "feat",
+      "source_column": "REQSKILL",
+      "target_table": "skills",
+      "relationship_type": "lookup",
       "is_nullable": true
     }
   ],
@@ -546,6 +546,54 @@
     "broken_references": [
       {
         "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_bfeat_parasumm",
+        "error": "Row 156 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 167,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 167 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 168 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_bfeat_spellcast",
+        "error": "Row 169 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_spellcast"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_bfeat_knight",
+        "error": "Row 186 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fershift",
+        "error": "Row 187 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fershift"
+      },
+      {
+        "source_table": "classes",
         "source_column": "FeatsTable",
         "source_row": 156,
         "target_table": "table",
@@ -626,723 +674,675 @@
       },
       {
         "source_table": "classes",
-        "source_column": "FeatsTable",
+        "source_column": "BonusFeatsTable",
         "source_row": 156,
         "target_table": "table",
-        "target_id": "cls_feat_parasumm",
-        "error": "Row 156 in classes.FeatsTable references non-existent table ID cls_feat_parasumm"
+        "target_id": "cls_bfeat_parasumm",
+        "error": "Row 156 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_parasumm"
       },
       {
         "source_table": "classes",
-        "source_column": "FeatsTable",
+        "source_column": "BonusFeatsTable",
+        "source_row": 167,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 167 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
         "source_row": 168,
         "target_table": "table",
-        "target_id": "cls_feat_favslayer",
-        "error": "Row 168 in classes.FeatsTable references non-existent table ID cls_feat_favslayer"
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 168 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
       },
       {
         "source_table": "classes",
-        "source_column": "FeatsTable",
+        "source_column": "BonusFeatsTable",
         "source_row": 169,
         "target_table": "table",
-        "target_id": "cls_feat_mystresv",
-        "error": "Row 169 in classes.FeatsTable references non-existent table ID cls_feat_mystresv"
+        "target_id": "cls_bfeat_spellcast",
+        "error": "Row 169 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_spellcast"
       },
       {
         "source_table": "classes",
-        "source_column": "FeatsTable",
+        "source_column": "BonusFeatsTable",
         "source_row": 186,
         "target_table": "table",
-        "target_id": "cls_feat_knight",
-        "error": "Row 186 in classes.FeatsTable references non-existent table ID cls_feat_knight"
+        "target_id": "cls_bfeat_knight",
+        "error": "Row 186 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_knight"
       },
       {
         "source_table": "classes",
-        "source_column": "FeatsTable",
+        "source_column": "BonusFeatsTable",
         "source_row": 187,
         "target_table": "table",
-        "target_id": "cls_feat_fershift",
-        "error": "Row 187 in classes.FeatsTable references non-existent table ID cls_feat_fershift"
+        "target_id": "cls_bfeat_fershift",
+        "error": "Row 187 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_skill_favslayer",
+        "error": "Row 168 in classes.SkillsTable references non-existent table ID cls_skill_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_skill_mystresv",
+        "error": "Row 169 in classes.SkillsTable references non-existent table ID cls_skill_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_skill_knight",
+        "error": "Row 186 in classes.SkillsTable references non-existent table ID cls_skill_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_skill_fershift",
+        "error": "Row 187 in classes.SkillsTable references non-existent table ID cls_skill_fershift"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 184,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 184 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 378,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 378 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 423,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 423 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 424,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 424 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 587,
-        "target_table": "skills",
-        "target_id": 0,
-        "error": "Row 587 in feat.REQSKILL references non-existent skills ID 0"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 588,
-        "target_table": "skills",
-        "target_id": 20,
-        "error": "Row 588 in feat.REQSKILL references non-existent skills ID 20"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 589,
-        "target_table": "skills",
-        "target_id": 1,
-        "error": "Row 589 in feat.REQSKILL references non-existent skills ID 1"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 590,
-        "target_table": "skills",
-        "target_id": 22,
-        "error": "Row 590 in feat.REQSKILL references non-existent skills ID 22"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 591,
-        "target_table": "skills",
-        "target_id": 2,
-        "error": "Row 591 in feat.REQSKILL references non-existent skills ID 2"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 592,
-        "target_table": "skills",
-        "target_id": 3,
-        "error": "Row 592 in feat.REQSKILL references non-existent skills ID 3"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 593,
-        "target_table": "skills",
-        "target_id": 4,
-        "error": "Row 593 in feat.REQSKILL references non-existent skills ID 4"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 594,
-        "target_table": "skills",
-        "target_id": 5,
-        "error": "Row 594 in feat.REQSKILL references non-existent skills ID 5"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 595,
-        "target_table": "skills",
-        "target_id": 6,
-        "error": "Row 595 in feat.REQSKILL references non-existent skills ID 6"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 596,
-        "target_table": "skills",
-        "target_id": 7,
-        "error": "Row 596 in feat.REQSKILL references non-existent skills ID 7"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 597,
-        "target_table": "skills",
-        "target_id": 8,
-        "error": "Row 597 in feat.REQSKILL references non-existent skills ID 8"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 598,
-        "target_table": "skills",
-        "target_id": 9,
-        "error": "Row 598 in feat.REQSKILL references non-existent skills ID 9"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 599,
-        "target_table": "skills",
-        "target_id": 10,
-        "error": "Row 599 in feat.REQSKILL references non-existent skills ID 10"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 600,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 600 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 601,
-        "target_table": "skills",
-        "target_id": 12,
-        "error": "Row 601 in feat.REQSKILL references non-existent skills ID 12"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 602,
-        "target_table": "skills",
-        "target_id": 13,
-        "error": "Row 602 in feat.REQSKILL references non-existent skills ID 13"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 603,
-        "target_table": "skills",
-        "target_id": 14,
-        "error": "Row 603 in feat.REQSKILL references non-existent skills ID 14"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 604,
-        "target_table": "skills",
-        "target_id": 15,
-        "error": "Row 604 in feat.REQSKILL references non-existent skills ID 15"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 605,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 605 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 606,
-        "target_table": "skills",
-        "target_id": 17,
-        "error": "Row 606 in feat.REQSKILL references non-existent skills ID 17"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 607,
-        "target_table": "skills",
-        "target_id": 18,
-        "error": "Row 607 in feat.REQSKILL references non-existent skills ID 18"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 608,
-        "target_table": "skills",
-        "target_id": 21,
-        "error": "Row 608 in feat.REQSKILL references non-existent skills ID 21"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 609,
-        "target_table": "skills",
-        "target_id": 19,
-        "error": "Row 609 in feat.REQSKILL references non-existent skills ID 19"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 696,
-        "target_table": "skills",
-        "target_id": 1,
-        "error": "Row 696 in feat.REQSKILL references non-existent skills ID 1"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
+        "source_column": "REQSKILL2",
         "source_row": 748,
         "target_table": "skills",
-        "target_id": 5,
-        "error": "Row 748 in feat.REQSKILL references non-existent skills ID 5"
+        "target_id": 21,
+        "error": "Row 748 in feat.REQSKILL2 references non-existent skills ID 21"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
+        "source_column": "REQSKILL2",
         "source_row": 749,
         "target_table": "skills",
-        "target_id": 5,
-        "error": "Row 749 in feat.REQSKILL references non-existent skills ID 5"
+        "target_id": 21,
+        "error": "Row 749 in feat.REQSKILL2 references non-existent skills ID 21"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
+        "source_column": "REQSKILL2",
         "source_row": 750,
         "target_table": "skills",
-        "target_id": 5,
-        "error": "Row 750 in feat.REQSKILL references non-existent skills ID 5"
+        "target_id": 21,
+        "error": "Row 750 in feat.REQSKILL2 references non-existent skills ID 21"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
+        "source_column": "REQSKILL2",
         "source_row": 751,
         "target_table": "skills",
-        "target_id": 5,
-        "error": "Row 751 in feat.REQSKILL references non-existent skills ID 5"
+        "target_id": 21,
+        "error": "Row 751 in feat.REQSKILL2 references non-existent skills ID 21"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
+        "source_column": "REQSKILL2",
         "source_row": 752,
         "target_table": "skills",
-        "target_id": 5,
-        "error": "Row 752 in feat.REQSKILL references non-existent skills ID 5"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 856,
-        "target_table": "skills",
         "target_id": 21,
-        "error": "Row 856 in feat.REQSKILL references non-existent skills ID 21"
+        "error": "Row 752 in feat.REQSKILL2 references non-existent skills ID 21"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 857,
+        "source_column": "REQSKILL2",
+        "source_row": 3330,
         "target_table": "skills",
         "target_id": 16,
-        "error": "Row 857 in feat.REQSKILL references non-existent skills ID 16"
+        "error": "Row 3330 in feat.REQSKILL2 references non-existent skills ID 16"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 858,
+        "source_column": "REQSKILL2",
+        "source_row": 3529,
         "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 858 in feat.REQSKILL references non-existent skills ID 16"
+        "target_id": 7,
+        "error": "Row 3529 in feat.REQSKILL2 references non-existent skills ID 7"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_skill_favslayer",
+        "error": "Row 168 in classes.SkillsTable references non-existent table ID cls_skill_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_skill_mystresv",
+        "error": "Row 169 in classes.SkillsTable references non-existent table ID cls_skill_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_skill_knight",
+        "error": "Row 186 in classes.SkillsTable references non-existent table ID cls_skill_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_skill_fershift",
+        "error": "Row 187 in classes.SkillsTable references non-existent table ID cls_skill_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_bfeat_parasumm",
+        "error": "Row 156 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 167,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 167 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 168 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_bfeat_spellcast",
+        "error": "Row 169 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_spellcast"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_bfeat_knight",
+        "error": "Row 186 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fershift",
+        "error": "Row 187 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_feat_parasumm",
+        "error": "Row 156 in classes.FeatsTable references non-existent table ID cls_feat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_feat_favslayer",
+        "error": "Row 168 in classes.FeatsTable references non-existent table ID cls_feat_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_feat_mystresv",
+        "error": "Row 169 in classes.FeatsTable references non-existent table ID cls_feat_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_feat_knight",
+        "error": "Row 186 in classes.FeatsTable references non-existent table ID cls_feat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_feat_fershift",
+        "error": "Row 187 in classes.FeatsTable references non-existent table ID cls_feat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_bfeat_parasumm",
+        "error": "Row 156 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 167,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 167 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 168 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_bfeat_spellcast",
+        "error": "Row 169 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_spellcast"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_bfeat_knight",
+        "error": "Row 186 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fershift",
+        "error": "Row 187 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_skill_favslayer",
+        "error": "Row 168 in classes.SkillsTable references non-existent table ID cls_skill_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_skill_mystresv",
+        "error": "Row 169 in classes.SkillsTable references non-existent table ID cls_skill_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_skill_knight",
+        "error": "Row 186 in classes.SkillsTable references non-existent table ID cls_skill_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_skill_fershift",
+        "error": "Row 187 in classes.SkillsTable references non-existent table ID cls_skill_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_skill_favslayer",
+        "error": "Row 168 in classes.SkillsTable references non-existent table ID cls_skill_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_skill_mystresv",
+        "error": "Row 169 in classes.SkillsTable references non-existent table ID cls_skill_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_skill_knight",
+        "error": "Row 186 in classes.SkillsTable references non-existent table ID cls_skill_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_skill_fershift",
+        "error": "Row 187 in classes.SkillsTable references non-existent table ID cls_skill_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_feat_parasumm",
+        "error": "Row 156 in classes.FeatsTable references non-existent table ID cls_feat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_feat_favslayer",
+        "error": "Row 168 in classes.FeatsTable references non-existent table ID cls_feat_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_feat_mystresv",
+        "error": "Row 169 in classes.FeatsTable references non-existent table ID cls_feat_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_feat_knight",
+        "error": "Row 186 in classes.FeatsTable references non-existent table ID cls_feat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_feat_fershift",
+        "error": "Row 187 in classes.FeatsTable references non-existent table ID cls_feat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_skill_favslayer",
+        "error": "Row 168 in classes.SkillsTable references non-existent table ID cls_skill_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_skill_mystresv",
+        "error": "Row 169 in classes.SkillsTable references non-existent table ID cls_skill_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_skill_knight",
+        "error": "Row 186 in classes.SkillsTable references non-existent table ID cls_skill_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_skill_fershift",
+        "error": "Row 187 in classes.SkillsTable references non-existent table ID cls_skill_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_bfeat_parasumm",
+        "error": "Row 156 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 167,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 167 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 168 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_bfeat_spellcast",
+        "error": "Row 169 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_spellcast"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_bfeat_knight",
+        "error": "Row 186 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fershift",
+        "error": "Row 187 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_bfeat_parasumm",
+        "error": "Row 156 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 167,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 167 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fullbonus",
+        "error": "Row 168 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fullbonus"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_bfeat_spellcast",
+        "error": "Row 169 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_spellcast"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_bfeat_knight",
+        "error": "Row 186 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "BonusFeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_bfeat_fershift",
+        "error": "Row 187 in classes.BonusFeatsTable references non-existent table ID cls_bfeat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_feat_parasumm",
+        "error": "Row 156 in classes.FeatsTable references non-existent table ID cls_feat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_feat_favslayer",
+        "error": "Row 168 in classes.FeatsTable references non-existent table ID cls_feat_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_feat_mystresv",
+        "error": "Row 169 in classes.FeatsTable references non-existent table ID cls_feat_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_feat_knight",
+        "error": "Row 186 in classes.FeatsTable references non-existent table ID cls_feat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_feat_fershift",
+        "error": "Row 187 in classes.FeatsTable references non-existent table ID cls_feat_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_skill_favslayer",
+        "error": "Row 168 in classes.SkillsTable references non-existent table ID cls_skill_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_skill_mystresv",
+        "error": "Row 169 in classes.SkillsTable references non-existent table ID cls_skill_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_skill_knight",
+        "error": "Row 186 in classes.SkillsTable references non-existent table ID cls_skill_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "SkillsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_skill_fershift",
+        "error": "Row 187 in classes.SkillsTable references non-existent table ID cls_skill_fershift"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 156,
+        "target_table": "table",
+        "target_id": "cls_feat_parasumm",
+        "error": "Row 156 in classes.FeatsTable references non-existent table ID cls_feat_parasumm"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 168,
+        "target_table": "table",
+        "target_id": "cls_feat_favslayer",
+        "error": "Row 168 in classes.FeatsTable references non-existent table ID cls_feat_favslayer"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 169,
+        "target_table": "table",
+        "target_id": "cls_feat_mystresv",
+        "error": "Row 169 in classes.FeatsTable references non-existent table ID cls_feat_mystresv"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 186,
+        "target_table": "table",
+        "target_id": "cls_feat_knight",
+        "error": "Row 186 in classes.FeatsTable references non-existent table ID cls_feat_knight"
+      },
+      {
+        "source_table": "classes",
+        "source_column": "FeatsTable",
+        "source_row": 187,
+        "target_table": "table",
+        "target_id": "cls_feat_fershift",
+        "error": "Row 187 in classes.FeatsTable references non-existent table ID cls_feat_fershift"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 859,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 859 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 860,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 860 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 861,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 861 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 862,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 862 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 863,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 863 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 864,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 864 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 865,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 865 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 870,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 870 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 871,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 871 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 874,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 874 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 875,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 875 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 876,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 876 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 877,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 877 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 878,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 878 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 913,
-        "target_table": "skills",
-        "target_id": 25,
-        "error": "Row 913 in feat.REQSKILL references non-existent skills ID 25"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 914,
-        "target_table": "skills",
-        "target_id": 26,
-        "error": "Row 914 in feat.REQSKILL references non-existent skills ID 26"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 917,
-        "target_table": "skills",
-        "target_id": 23,
-        "error": "Row 917 in feat.REQSKILL references non-existent skills ID 23"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 918,
-        "target_table": "skills",
-        "target_id": 24,
-        "error": "Row 918 in feat.REQSKILL references non-existent skills ID 24"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 989,
-        "target_table": "skills",
-        "target_id": 24,
-        "error": "Row 989 in feat.REQSKILL references non-existent skills ID 24"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 990,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 990 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1090,
-        "target_table": "skills",
+        "source_column": "PREREQFEAT2",
+        "source_row": 2,
+        "target_table": "feat",
         "target_id": 4,
-        "error": "Row 1090 in feat.REQSKILL references non-existent skills ID 4"
+        "error": "Row 2 in feat.PREREQFEAT2 references non-existent feat ID 4"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1106,
-        "target_table": "skills",
-        "target_id": 28,
-        "error": "Row 1106 in feat.REQSKILL references non-existent skills ID 28"
+        "source_column": "PREREQFEAT2",
+        "source_row": 391,
+        "target_table": "feat",
+        "target_id": 6,
+        "error": "Row 391 in feat.PREREQFEAT2 references non-existent feat ID 6"
       },
       {
         "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1107,
-        "target_table": "skills",
-        "target_id": 28,
-        "error": "Row 1107 in feat.REQSKILL references non-existent skills ID 28"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1246,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1246 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1247,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1247 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1248,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1248 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1249,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1249 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1250,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1250 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1251,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1251 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1252,
-        "target_table": "skills",
-        "target_id": 16,
-        "error": "Row 1252 in feat.REQSKILL references non-existent skills ID 16"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1334,
-        "target_table": "skills",
-        "target_id": 27,
-        "error": "Row 1334 in feat.REQSKILL references non-existent skills ID 27"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1336,
-        "target_table": "skills",
-        "target_id": 29,
-        "error": "Row 1336 in feat.REQSKILL references non-existent skills ID 29"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1466,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1466 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1467,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1467 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1468,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1468 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1469,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1469 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1470,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1470 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1471,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1471 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1472,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1472 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1473,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1473 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1474,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1474 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1475,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1475 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1476,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1476 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1477,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1477 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1478,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1478 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1479,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1479 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1480,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1480 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1481,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1481 in feat.REQSKILL references non-existent skills ID 11"
-      },
-      {
-        "source_table": "feat",
-        "source_column": "REQSKILL",
-        "source_row": 1482,
-        "target_table": "skills",
-        "target_id": 11,
-        "error": "Row 1482 in feat.REQSKILL references non-existent skills ID 11"
+        "source_column": "PREREQFEAT2",
+        "source_row": 392,
+        "target_table": "feat",
+        "target_id": 10,
+        "error": "Row 392 in feat.PREREQFEAT2 references non-existent feat ID 10"
       }
     ],
     "missing_tables": [
@@ -2096,6 +2096,6 @@
       "spells"
     ]
   },
-  "generated_at": "2025-08-05T20:44:57.741752",
+  "generated_at": "2025-08-09T13:19:33.445408",
   "table_structure_hash": "7e6ad149727fc1df5d08471a615da59688e1007b5ca7826d8b8ab2dc9cee5335"
 }

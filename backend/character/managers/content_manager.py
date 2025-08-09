@@ -3,13 +3,14 @@ Content Manager - handles custom content detection logic
 Manages detection and tracking of custom content (feats, spells, classes) vs vanilla content
 """
 
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Dict, List, Any, TYPE_CHECKING
 import logging
 
 from ..events import EventEmitter
+from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: ignore
 
 if TYPE_CHECKING:
-    from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class ContentManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
+        self.rules_service = character_manager.rules_service
         
         # Custom content tracking - initialized from character manager
         self.custom_content: Dict[str, Dict[str, Any]] = {}
@@ -55,7 +56,7 @@ class ContentManager(EventEmitter):
         """
         self.custom_content = {}
         
-        # Check feats using dynamic data
+        # Check feats using improved validation
         feat_list = self.gff.get('FeatList', [])
         for i, feat in enumerate(feat_list):
             if isinstance(feat, dict):
@@ -71,8 +72,9 @@ class ContentManager(EventEmitter):
                         'source': self._detect_content_source_dynamic('feat', feat_id)
                     }
         
-        # Check spells using dynamic data
-        for spell_level in range(10):  # Levels 0-9
+        # Check spells with dynamic spell level range
+        max_spell_level = self._get_max_spell_level()
+        for spell_level in range(max_spell_level + 1):
             spell_list = self.gff.get(f'KnownList{spell_level}', [])
             for i, spell in enumerate(spell_list):
                 if isinstance(spell, dict):
@@ -89,7 +91,7 @@ class ContentManager(EventEmitter):
                             'source': self._detect_content_source_dynamic('spells', spell_id)
                         }
         
-        # Check classes using dynamic data
+        # Check classes using improved validation
         for class_entry in self.gff.get('ClassList', []):
             if isinstance(class_entry, dict):
                 class_id = class_entry.get('Class', 0)
@@ -104,9 +106,27 @@ class ContentManager(EventEmitter):
                         'source': self._detect_content_source_dynamic('classes', class_id)
                     }
     
+    def _get_max_spell_level(self) -> int:
+        """
+        Dynamically determine the maximum spell level based on character data
+        
+        Returns:
+            Maximum spell level found in character data (defaults to 9)
+        """
+        max_level = 9  # Default NWN2 maximum
+        
+        # Check for highest spell level in known lists
+        for level in range(20):  # Check up to level 20 for custom content
+            if self.gff.get(f'KnownList{level}'):
+                max_level = max(max_level, level)
+            else:
+                break  # Stop at first missing level
+        
+        return max_level
+    
     def _is_vanilla_content(self, table_name: str, content_id: int) -> bool:
         """
-        Check if content ID exists in vanilla game data using DynamicGameDataLoader
+        Check if content ID exists in vanilla game data using rules service
         
         Args:
             table_name: 2DA table name (feat, spells, classes, etc.)
@@ -116,14 +136,14 @@ class ContentManager(EventEmitter):
             True if content exists in loaded game data
         """
         try:
-            content_data = self.game_data_loader.get_by_id(table_name, content_id)
+            content_data = self.rules_service.get_by_id(table_name, content_id)
             return content_data is not None
         except Exception:
             return False
     
     def _get_content_name(self, table_name: str, content_id: int) -> str:
         """
-        Get content name from game data or fallback to generic name
+        Get content name from game data using FieldMappingUtility or fallback to generic name
         
         Args:
             table_name: 2DA table name
@@ -133,14 +153,15 @@ class ContentManager(EventEmitter):
             Content name or generic fallback
         """
         try:
-            content_data = self.game_data_loader.get_by_id(table_name, content_id)
+            content_data = self.rules_service.get_by_id(table_name, content_id)
             if content_data:
-                # Try different name fields depending on table
-                for name_field in ['name', 'label', 'feat', 'spellname']:
-                    if hasattr(content_data, name_field):
-                        name = getattr(content_data, name_field)
-                        if name and name.strip():
-                            return name
+                # Use FieldMappingUtility to handle different name field variations
+                # cspell:ignore spellname strref
+                name_fields = ['name', 'label', 'feat', 'spellname', 'strref']
+                for name_field in name_fields:
+                    name = field_mapper.get_field_value(content_data, name_field, '')
+                    if name and str(name).strip() and str(name) != '****':
+                        return str(name)
         except Exception:
             pass
         
