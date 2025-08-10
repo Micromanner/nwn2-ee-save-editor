@@ -1673,7 +1673,6 @@ class ResourceManager:
         if self._modules_indexed:
             return
         
-        logger.info("Building module-to-HAK index...")
         start_time = time.time()
         
         self._module_to_haks.clear()
@@ -1691,6 +1690,7 @@ class ResourceManager:
         
         modules_found = 0
         modules_skipped = 0
+        total_haks = 0
         for module_dir in module_dirs:
             if not module_dir.exists():
                 continue
@@ -1717,6 +1717,7 @@ class ResourceManager:
                         }
                         
                         modules_found += 1
+                        total_haks += len(hak_list)
                         logger.debug(f"Indexed custom module '{module_name}' with {len(hak_list)} HAKs")
                         
                 except Exception as e:
@@ -1725,7 +1726,7 @@ class ResourceManager:
         
         self._modules_indexed = True
         elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"Module index built: {modules_found} custom modules ({modules_skipped} vanilla skipped) in {elapsed_ms}ms")
+        logger.info(f"Module scanning: found {modules_found} custom modules with {total_haks} total HAKs in {elapsed_ms}ms")
     
     def _extract_module_info(self, mod_file: Path) -> Optional[Dict[str, Any]]:
         """

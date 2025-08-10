@@ -597,6 +597,49 @@ class GameDataViewSet(viewsets.ViewSet):
                 'error': str(e),
                 'type': type(e).__name__
             }, status=500)
+    
+    @action(detail=False, methods=['get'])
+    def modules(self, request):
+        """Get list of discovered modules"""
+        try:
+            rm = self.rm
+            if not rm:
+                return Response({'error': 'ResourceManager not initialized'}, status=500)
+            
+            # Ensure module index is built
+            if not rm._modules_indexed:
+                rm._build_module_hak_index()
+            
+            # Get module data
+            modules = []
+            for module_name, module_info in rm._module_to_haks.items():
+                modules.append({
+                    'name': module_name,
+                    'mod_file': module_info['mod_file'],
+                    'hak_count': len(module_info['haks']),
+                    'haks': module_info['haks'],
+                    'custom_tlk': module_info.get('custom_tlk', '')
+                })
+            
+            return Response({
+                'modules': modules,
+                'count': len(modules)
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+    
+    @action(detail=False, methods=['get'], url_path='modules/stats')
+    def modules_stats(self, request):
+        """Get module index statistics"""
+        try:
+            rm = self.rm
+            if not rm:
+                return Response({'error': 'ResourceManager not initialized'}, status=500)
+            
+            stats = rm.get_module_index_stats()
+            return Response(stats)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 
 
 # Keep other views that don't deal with 2DA data unchanged
