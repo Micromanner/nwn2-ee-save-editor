@@ -1,9 +1,7 @@
 """
 Python wrapper for NWN2 Rust Extensions
 
-Provides a clean Python interface to the Rust performance optimizations,
-with fallback to the original Python implementation if Rust extensions
-are not available.
+Provides a clean Python interface to the Rust performance optimizations.
 """
 
 import sys
@@ -13,15 +11,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Try to import the Rust extension
-try:
-    import nwn2_rust_extensions
-    RUST_AVAILABLE = True
-    logger.info("Rust extensions loaded successfully")
-except ImportError as e:
-    RUST_AVAILABLE = False
-    logger.warning(f"Rust extensions not available: {e}")
-    logger.info("Falling back to Python implementation")
+# Import the compiled Rust module directly (not the Python package)
+from . import nwn2_rust_extensions
+
+# We always require Rust extensions now
+RUST_AVAILABLE = True
 
 
 class ResourceLocation:
@@ -61,51 +55,49 @@ class PathTiming:
         self.paths_found = paths_found
     
     def __repr__(self):
-        return f"PathTiming(op={self.operation}, time={self.duration_ms}ms, checked={self.paths_checked}, found={self.paths_found})"
+        return f"PathTiming({self.operation}: {self.duration_ms}ms, found {self.paths_found}/{self.paths_checked})"
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'PathTiming':
+        """Create PathTiming from dictionary (from Rust)"""
+        return cls(
+            operation=data['operation'],
+            duration_ms=data['duration_ms'],
+            paths_checked=data['paths_checked'],
+            paths_found=data['paths_found']
+        )
 
 
 class DiscoveryResult:
     """Python representation of DiscoveryResult from Rust"""
     
-    def __init__(self, nwn2_paths: List[str], steam_paths: List[str], gog_paths: List[str],
-                 total_time_ms: int, timing_breakdown: List[PathTiming]):
+    def __init__(self, nwn2_paths: List[str], is_steam: bool, is_gog: bool,
+                 steam_workshop_path: Optional[str], timings: List[PathTiming]):
         self.nwn2_paths = nwn2_paths
-        self.steam_paths = steam_paths
-        self.gog_paths = gog_paths
-        self.total_time_ms = total_time_ms
-        self.timing_breakdown = timing_breakdown
-    
-    @property
-    def total_time_seconds(self) -> float:
-        """Get total time in seconds"""
-        return self.total_time_ms / 1000.0
+        self.is_steam = is_steam
+        self.is_gog = is_gog
+        self.steam_workshop_path = steam_workshop_path
+        self.timings = timings
     
     def __repr__(self):
-        return f"DiscoveryResult(nwn2={len(self.nwn2_paths)}, steam={len(self.steam_paths)}, gog={len(self.gog_paths)}, time={self.total_time_ms}ms)"
+        platform = "Steam" if self.is_steam else "GOG" if self.is_gog else "Unknown"
+        return f"DiscoveryResult({len(self.nwn2_paths)} paths, {platform})"
     
     @classmethod
-    def from_rust_result(cls, rust_result) -> 'DiscoveryResult':
-        """Create DiscoveryResult from Rust result object"""
-        timing_breakdown = []
-        for timing in rust_result.timing_breakdown:
-            timing_breakdown.append(PathTiming(
-                operation=timing.operation,
-                duration_ms=timing.duration_ms,
-                paths_checked=timing.paths_checked,
-                paths_found=timing.paths_found
-            ))
-        
+    def from_dict(cls, data: Dict[str, Any]) -> 'DiscoveryResult':
+        """Create DiscoveryResult from dictionary (from Rust)"""
+        timings = [PathTiming.from_dict(t) for t in data.get('timings', [])]
         return cls(
-            nwn2_paths=list(rust_result.nwn2_paths),
-            steam_paths=list(rust_result.steam_paths),
-            gog_paths=list(rust_result.gog_paths),
-            total_time_ms=rust_result.total_time_ms,
-            timing_breakdown=timing_breakdown
+            nwn2_paths=data['nwn2_paths'],
+            is_steam=data['is_steam'],
+            is_gog=data['is_gog'],
+            steam_workshop_path=data.get('steam_workshop_path'),
+            timings=timings
         )
 
 
 class ScanResults:
-    """Python representation of ScanResults from Rust"""
+    """Results from comprehensive resource scanning"""
     
     def __init__(self, scan_time_ms: int, resources_found: int,
                  zip_files_scanned: int, directories_scanned: int,
@@ -118,15 +110,9 @@ class ScanResults:
         self.workshop_items_found = workshop_items_found
         self.resource_locations = resource_locations
     
-    @property
-    def scan_time_seconds(self) -> float:
-        """Get scan time in seconds"""
-        return self.scan_time_ms / 1000.0
-    
     def __repr__(self):
-        return (f"ScanResults(time={self.scan_time_ms}ms, "
-                f"resources={self.resources_found}, "
-                f"zips={self.zip_files_scanned})")
+        return (f"ScanResults({self.resources_found} resources, "
+                f"{self.scan_time_ms}ms)")
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ScanResults':
@@ -150,18 +136,8 @@ class RustResourceScanner:
     """High-level Python interface to Rust ResourceScanner"""
     
     def __init__(self):
-        if RUST_AVAILABLE:
-            self._scanner = nwn2_rust_extensions.ResourceScanner()
-            self._using_rust = True
-        else:
-            self._scanner = None
-            self._using_rust = False
-            logger.warning("Rust scanner not available, using fallback")
-    
-    @property
-    def using_rust(self) -> bool:
-        """Check if using Rust implementation"""
-        return self._using_rust
+        """Initialize the Rust scanner (required)"""
+        self._scanner = nwn2_rust_extensions.ResourceScanner()
     
     def scan_zip_files(self, zip_paths: List[Union[str, Path]]) -> Dict[str, ResourceLocation]:
         """
@@ -173,26 +149,14 @@ class RustResourceScanner:
         Returns:
             Dictionary mapping resource names to ResourceLocation objects
         """
-        if not self._using_rust:
-            return self._fallback_scan_zip_files(zip_paths)
-        
         # Convert paths to strings
         str_paths = [str(path) for path in zip_paths]
         
-        try:
-            rust_results = self._scanner.scan_zip_files(str_paths)
-            
-            # Convert Rust results to Python objects
-            results = {}
-            for name, location_data in rust_results.items():
-                results[name] = ResourceLocation.from_dict(location_data)
-            
-            logger.debug(f"Rust ZIP scan found {len(results)} resources")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Rust ZIP scanning failed: {e}")
-            return self._fallback_scan_zip_files(zip_paths)
+        rust_results = self._scanner.scan_zip_files(str_paths)
+        
+        # The Rust module returns native ResourceLocation objects directly
+        logger.debug(f"Rust ZIP scan found {len(rust_results)} resources")
+        return rust_results
     
     def scan_workshop_directories(self, workshop_dirs: List[Union[str, Path]]) -> Dict[str, ResourceLocation]:
         """
@@ -204,56 +168,32 @@ class RustResourceScanner:
         Returns:
             Dictionary mapping resource names to ResourceLocation objects
         """
-        if not self._using_rust:
-            return self._fallback_scan_workshop_directories(workshop_dirs)
-        
         # Convert paths to strings
         str_paths = [str(path) for path in workshop_dirs]
         
-        try:
-            rust_results = self._scanner.scan_workshop_directories(str_paths)
-            
-            # Convert Rust results to Python objects
-            results = {}
-            for name, location_data in rust_results.items():
-                results[name] = ResourceLocation.from_dict(location_data)
-            
-            logger.debug(f"Rust workshop scan found {len(results)} resources")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Rust workshop scanning failed: {e}")
-            return self._fallback_scan_workshop_directories(workshop_dirs)
+        rust_results = self._scanner.scan_workshop_directories(str_paths)
+        
+        # The Rust module returns native ResourceLocation objects directly
+        logger.debug(f"Rust workshop scan found {len(rust_results)} resources")
+        return rust_results
     
     def index_directory(self, directory_path: Union[str, Path], 
                        recursive: bool = True) -> Dict[str, ResourceLocation]:
         """
-        Index directory for 2DA files
+        Index a directory for resources
         
         Args:
             directory_path: Directory path to index
-            recursive: Whether to scan recursively
+            recursive: Whether to scan subdirectories
             
         Returns:
             Dictionary mapping resource names to ResourceLocation objects
         """
-        if not self._using_rust:
-            return self._fallback_index_directory(directory_path, recursive)
+        rust_results = self._scanner.index_directory(str(directory_path), recursive)
         
-        try:
-            rust_results = self._scanner.index_directory(str(directory_path), recursive)
-            
-            # Convert Rust results to Python objects
-            results = {}
-            for name, location_data in rust_results.items():
-                results[name] = ResourceLocation.from_dict(location_data)
-            
-            logger.debug(f"Rust directory indexing found {len(results)} resources")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Rust directory indexing failed: {e}")
-            return self._fallback_index_directory(directory_path, recursive)
+        # The Rust module returns native ResourceLocation objects directly
+        logger.debug(f"Rust directory indexing found {len(rust_results)} resources")
+        return rust_results
     
     def comprehensive_scan(self, nwn2_data_dir: Union[str, Path],
                           enhanced_data_dir: Optional[Union[str, Path]] = None,
@@ -269,203 +209,64 @@ class RustResourceScanner:
             custom_override_dirs: List of custom override directories
             
         Returns:
-            ScanResults object with timing and resource information
+            ScanResults object with detailed information
         """
-        if not self._using_rust:
-            return self._fallback_comprehensive_scan(
-                nwn2_data_dir, enhanced_data_dir, workshop_dirs, custom_override_dirs
-            )
+        # Convert paths to strings
+        str_data_dir = str(nwn2_data_dir)
+        str_enhanced_dir = str(enhanced_data_dir) if enhanced_data_dir else None
+        str_workshop_dirs = [str(d) for d in workshop_dirs] if workshop_dirs else []
+        str_custom_dirs = [str(d) for d in custom_override_dirs] if custom_override_dirs else []
         
-        # Convert paths to strings and handle defaults
-        workshop_paths = [str(path) for path in (workshop_dirs or [])]
-        custom_paths = [str(path) for path in (custom_override_dirs or [])]
-        enhanced_path = str(enhanced_data_dir) if enhanced_data_dir else None
-        
-        try:
-            rust_results = self._scanner.comprehensive_scan(
-                str(nwn2_data_dir),
-                enhanced_path,
-                workshop_paths,
-                custom_paths
-            )
-            
-            results = ScanResults.from_dict(rust_results)
-            logger.info(f"Rust comprehensive scan completed in {results.scan_time_ms}ms, "
-                       f"found {results.resources_found} resources")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Rust comprehensive scan failed: {e}")
-            return self._fallback_comprehensive_scan(
-                nwn2_data_dir, enhanced_data_dir, workshop_dirs, custom_override_dirs
-            )
-    
-    def get_performance_stats(self) -> Dict[str, int]:
-        """Get performance statistics from the last scan"""
-        if not self._using_rust:
-            return {}
-        
-        try:
-            return self._scanner.get_performance_stats()
-        except Exception as e:
-            logger.error(f"Failed to get Rust performance stats: {e}")
-            return {}
-    
-    # Fallback implementations (using original Python logic)
-    
-    def _fallback_scan_zip_files(self, zip_paths: List[Union[str, Path]]) -> Dict[str, ResourceLocation]:
-        """Fallback ZIP scanning using Python implementation"""
-        logger.info("Using Python fallback for ZIP scanning")
-        
-        # Import here to avoid circular imports
-        try:
-            from parsers.resource_manager import ResourceManager
-            
-            # Create a temporary ResourceManager to use its ZIP scanning logic
-            rm = ResourceManager()
-            
-            # This is a simplified fallback - in practice you'd extract the 
-            # specific ZIP scanning logic from ResourceManager
-            results = {}
-            
-            # For now, return empty results as a placeholder
-            # Real implementation would extract and adapt the ResourceManager logic
-            logger.warning("Python ZIP scanning fallback not fully implemented")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Python ZIP scanning fallback failed: {e}")
-            return {}
-    
-    def _fallback_scan_workshop_directories(self, workshop_dirs: List[Union[str, Path]]) -> Dict[str, ResourceLocation]:
-        """Fallback workshop scanning using Python implementation"""
-        logger.info("Using Python fallback for workshop scanning")
-        # Placeholder - would implement Python fallback logic here
-        return {}
-    
-    def _fallback_index_directory(self, directory_path: Union[str, Path], 
-                                 recursive: bool) -> Dict[str, ResourceLocation]:
-        """Fallback directory indexing using Python implementation"""
-        logger.info("Using Python fallback for directory indexing")
-        # Placeholder - would implement Python fallback logic here
-        return {}
-    
-    def _fallback_comprehensive_scan(self, *args, **kwargs) -> ScanResults:
-        """Fallback comprehensive scan using Python implementation"""
-        logger.info("Using Python fallback for comprehensive scan")
-        
-        # Return minimal results
-        return ScanResults(
-            scan_time_ms=0,
-            resources_found=0,
-            zip_files_scanned=0,
-            directories_scanned=0,
-            workshop_items_found=0,
-            resource_locations={}
+        rust_results = self._scanner.comprehensive_scan(
+            str_data_dir,
+            str_enhanced_dir,
+            str_workshop_dirs,
+            str_custom_dirs
         )
+        
+        # Convert to Python ScanResults
+        return ScanResults.from_dict(rust_results)
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """
+        Get performance statistics from scanner
+        
+        Returns:
+            Dictionary with performance metrics
+        """
+        return self._scanner.get_performance_stats()
 
 
-# Path Discovery Functions
 def discover_nwn2_paths(search_paths: Optional[List[Union[str, Path]]] = None) -> DiscoveryResult:
     """
     Discover NWN2 installation paths using Rust implementation
     
     Args:
-        search_paths: Optional list of paths to search. If None, uses default paths.
+        search_paths: Optional list of paths to search
         
     Returns:
-        DiscoveryResult object with found paths and timing information
-        
-    Raises:
-        RuntimeError: If Rust extensions are not available
+        DiscoveryResult with found paths and metadata
     """
-    if not RUST_AVAILABLE:
-        raise RuntimeError("Rust extensions are required for path discovery. "
-                          "Please ensure nwn2_rust_extensions is properly installed.")
-    
-    # Convert paths to strings if provided
-    str_paths = None
-    if search_paths is not None:
-        str_paths = [str(path) for path in search_paths]
-    
-    try:
-        rust_result = nwn2_rust_extensions.discover_nwn2_paths_rust(str_paths)
-        return DiscoveryResult.from_rust_result(rust_result)
-    except Exception as e:
-        raise RuntimeError(f"Rust path discovery failed: {e}")
+    str_paths = [str(p) for p in search_paths] if search_paths else None
+    rust_result = nwn2_rust_extensions.discover_nwn2_paths_rust(str_paths)
+    return DiscoveryResult.from_dict(rust_result)
 
 
-def profile_path_discovery(iterations: int = 100) -> Dict[str, float]:
+def profile_path_discovery(search_paths: Optional[List[Union[str, Path]]] = None) -> DiscoveryResult:
     """
-    Profile path discovery performance using Rust implementation
+    Profile NWN2 path discovery with detailed timing
     
     Args:
-        iterations: Number of iterations to run for profiling
+        search_paths: Optional list of paths to search
         
     Returns:
-        Dictionary with performance statistics
-        
-    Raises:
-        RuntimeError: If Rust extensions are not available
+        DiscoveryResult with detailed timing information
     """
-    if not RUST_AVAILABLE:
-        raise RuntimeError("Rust extensions are required for path discovery profiling. "
-                          "Please ensure nwn2_rust_extensions is properly installed.")
-    
-    try:
-        return nwn2_rust_extensions.profile_path_discovery_rust(iterations)
-    except Exception as e:
-        raise RuntimeError(f"Rust path discovery profiling failed: {e}")
+    str_paths = [str(p) for p in search_paths] if search_paths else None
+    rust_result = nwn2_rust_extensions.profile_path_discovery_rust(str_paths)
+    return DiscoveryResult.from_dict(rust_result)
 
 
-# Convenience function for easy integration
 def create_resource_scanner() -> RustResourceScanner:
-    """Create a resource scanner instance (Rust if available, Python fallback otherwise)"""
+    """Create a new RustResourceScanner instance"""
     return RustResourceScanner()
-
-
-# Performance comparison utilities
-def compare_performance(python_scanner, rust_scanner, test_paths: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Compare performance between Python and Rust implementations
-    
-    Args:
-        python_scanner: Original Python ResourceManager instance
-        rust_scanner: RustResourceScanner instance
-        test_paths: Dictionary with test paths and parameters
-        
-    Returns:
-        Performance comparison results
-    """
-    import time
-    
-    comparison_results = {
-        'python_times': {},
-        'rust_times': {},
-        'speedup_factors': {},
-        'rust_available': rust_scanner.using_rust
-    }
-    
-    if not rust_scanner.using_rust:
-        logger.warning("Rust not available for performance comparison")
-        return comparison_results
-    
-    # Test ZIP scanning
-    if 'zip_paths' in test_paths:
-        zip_paths = test_paths['zip_paths']
-        
-        # Python timing (would need to extract specific methods from ResourceManager)
-        python_start = time.perf_counter()
-        # python_results = python_scanner.scan_zip_files(zip_paths)  # hypothetical
-        python_time = time.perf_counter() - python_start
-        
-        # Rust timing
-        rust_start = time.perf_counter()
-        rust_results = rust_scanner.scan_zip_files(zip_paths)
-        rust_time = time.perf_counter() - rust_start
-        
-        comparison_results['python_times']['zip_scanning'] = python_time
-        comparison_results['rust_times']['zip_scanning'] = rust_time
-        comparison_results['speedup_factors']['zip_scanning'] = python_time / rust_time if rust_time > 0 else 0
-    
-    return comparison_results

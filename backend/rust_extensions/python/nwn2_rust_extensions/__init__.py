@@ -14,7 +14,6 @@ from .nwn2_rust_wrapper import (
     discover_nwn2_paths,
     profile_path_discovery,
     create_resource_scanner,
-    compare_performance,
     RUST_AVAILABLE
 )
 
@@ -27,6 +26,5 @@ __all__ = [
     'discover_nwn2_paths',
     'profile_path_discovery',
     'create_resource_scanner',
-    'compare_performance',
     'RUST_AVAILABLE'
 ]

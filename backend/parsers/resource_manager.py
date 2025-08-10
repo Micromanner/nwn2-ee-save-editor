@@ -39,9 +39,10 @@ class ERFResourceType:
 
 from .gff import GFFParser
 from .cache_helper import TDACacheHelper
-from .python_resource_scanner import PythonResourceScanner
-from .python_zip_indexer import PythonZipIndexer
-from .python_directory_walker import PythonDirectoryWalker
+
+# Rust extensions (required)
+from nwn2_rust_extensions import create_resource_scanner
+from .rust_adapter import RustScannerAdapter
 
 # Config and services
 from config.nwn2_settings import nwn2_paths
@@ -225,10 +226,14 @@ class ResourceManager:
             'westgate_ar1800.mod'
         }
         
-        # High-performance Python scanners
-        self._python_scanner = PythonResourceScanner()
-        self._zip_indexer = PythonZipIndexer()
-        self._directory_walker = PythonDirectoryWalker()
+        # Use Rust extensions for high-performance resource scanning
+        logger.info("Using Rust extensions for high-performance resource scanning")
+        # Create adapter to make Rust scanner compatible with Python interface
+        rust_scanner = create_resource_scanner()
+        adapter = RustScannerAdapter(rust_scanner)
+        self._python_scanner = adapter  # Has scan_zip_files, index_directory, etc.
+        self._zip_indexer = adapter     # Same object, compatible interface
+        self._directory_walker = adapter # Same object, compatible interface
         
         # In-memory cache settings
         self._memory_cache_enabled = getattr(settings, 'NWN2_MEMORY_CACHE', False)

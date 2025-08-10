@@ -115,12 +115,16 @@ function AppContent() {
   };
 
 
-  // Poll Django initialization status
+  // Poll Django initialization status with exponential backoff
   useEffect(() => {
     if (!api) return;
     
-    let intervalId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout;
     let isActive = true;
+    let pollDelay = 500; // Start at 500ms
+    const maxDelay = 5000; // Max 5 seconds between polls
+    const maxTotalTime = 60000; // 60 second total timeout
+    const startTime = Date.now();
     
     const checkInitStatus = async () => {
       try {
@@ -138,21 +142,35 @@ function AppContent() {
           
           if (data.stage === 'ready') {
             setBackendReady(true);
-            clearInterval(intervalId);
+            return; // Stop polling
           }
         }
       } catch (err) {
-        // Django might not be ready yet, keep trying
+        // Django might not be ready yet
+      }
+      
+      // Check total timeout
+      if (Date.now() - startTime > maxTotalTime) {
+        console.error('Backend initialization timeout after 60 seconds');
+        return;
+      }
+      
+      // Schedule next poll with exponential backoff
+      if (isActive) {
+        timeoutId = setTimeout(() => {
+          checkInitStatus();
+          // Increase delay for next poll (exponential backoff)
+          pollDelay = Math.min(pollDelay * 1.5, maxDelay);
+        }, pollDelay);
       }
     };
     
-    // Start polling with more frequent updates during loading
+    // Start polling
     checkInitStatus();
-    intervalId = setInterval(checkInitStatus, 250); // Poll every 250ms for smoother progress
     
     return () => {
       isActive = false;
-      clearInterval(intervalId);
+      clearTimeout(timeoutId);
     };
   }, [api]);
   
@@ -335,10 +353,14 @@ function AppContent() {
 export default function ClientOnlyApp() {
   const [backendReady, setBackendReady] = useState(false);
 
-  // Same backend readiness detection logic as AppContent
+  // Backend readiness detection with exponential backoff (same as AppContent)
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout;
     let isActive = true;
+    let pollDelay = 500; // Start at 500ms
+    const maxDelay = 5000; // Max 5 seconds between polls
+    const maxTotalTime = 60000; // 60 second total timeout
+    const startTime = Date.now();
     
     const checkInitStatus = async () => {
       try {
@@ -349,19 +371,34 @@ export default function ClientOnlyApp() {
         
         if (isActive && data.stage === 'ready') {
           setBackendReady(true);
-          clearInterval(intervalId);
+          return; // Stop polling
         }
       } catch (err) {
-        // Django might not be ready yet, keep trying
+        // Django might not be ready yet
+      }
+      
+      // Check total timeout
+      if (Date.now() - startTime > maxTotalTime) {
+        console.error('Backend initialization timeout after 60 seconds');
+        return;
+      }
+      
+      // Schedule next poll with exponential backoff
+      if (isActive) {
+        timeoutId = setTimeout(() => {
+          checkInitStatus();
+          // Increase delay for next poll (exponential backoff)
+          pollDelay = Math.min(pollDelay * 1.5, maxDelay);
+        }, pollDelay);
       }
     };
     
     // Start polling
-    intervalId = setInterval(checkInitStatus, 500);
+    checkInitStatus();
     
     return () => {
       isActive = false;
-      clearInterval(intervalId);
+      clearTimeout(timeoutId);
     };
   }, []);
 
