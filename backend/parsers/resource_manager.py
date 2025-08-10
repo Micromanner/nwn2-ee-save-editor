@@ -302,10 +302,18 @@ class ResourceManager:
         start_time = time.time()
         zip_paths_obj = [Path(p) for p in zip_paths]
         
-        if len(zip_paths_obj) > 1:
+        # Only use parallel processing for 5+ ZIPs (overhead not worth it for fewer)
+        if len(zip_paths_obj) >= 5:
             resource_locations = self._zip_indexer.index_zips_parallel(zip_paths_obj)
         else:
-            resource_locations = self._zip_indexer.index_zip(zip_paths_obj[0])
+            # Sequential processing is faster for small numbers of ZIPs
+            resource_locations = {}
+            for zip_path in zip_paths_obj:
+                try:
+                    locations = self._zip_indexer.index_zip(zip_path)
+                    resource_locations.update(locations)
+                except Exception as e:
+                    logger.warning(f"Failed to index ZIP {zip_path}: {e}")
         
         # Convert ResourceLocation objects to the legacy format
         # No longer keep ZIP files open - they'll be opened on-demand

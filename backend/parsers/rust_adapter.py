@@ -6,7 +6,7 @@ from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
-
+ 
 
 class RustScannerAdapter:
     """Adapter to make RustResourceScanner compatible with Python scanner interfaces"""
@@ -18,6 +18,10 @@ class RustScannerAdapter:
     def index_zips_parallel(self, zip_paths: List[Path]) -> Dict:
         """Adapter for index_zips_parallel -> scan_zip_files"""
         return self.rust_scanner.scan_zip_files(zip_paths)
+    
+    def index_zip(self, zip_path: Path) -> Dict:
+        """Adapter for index_zip -> scan_zip_files with single file"""
+        return self.rust_scanner.scan_zip_files([zip_path])
     
     # Methods for PythonDirectoryWalker compatibility  
     def scan_directories_parallel(self, directories: List[Path], recursive: bool = True) -> Dict:
