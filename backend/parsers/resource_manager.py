@@ -25,7 +25,18 @@ from .rust_tlk_parser import TLKParser
 logger_tlk = logging.getLogger(__name__ + '.tlk')
 logger_tlk.info("Using high-performance Rust TLK parser")
 
-from .erf import ERFParser, ERFResourceType
+# Import Rust ERF parser
+from rust_erf_parser import ErfParser as ERFParser
+logger_erf = logging.getLogger(__name__ + '.erf')
+logger_erf.info("Using high-performance Rust ERF parser")
+
+# Define resource types for compatibility
+class ERFResourceType:
+    TDA = 2017  # 2DA files
+    TLK = 2018  # Talk table files
+    GFF = 2037  # Generic file format
+    IFO = 2014  # Module info files
+
 from .gff import GFFParser
 from .cache_helper import TDACacheHelper
 from .python_resource_scanner import PythonResourceScanner
@@ -37,6 +48,7 @@ from config.nwn2_settings import nwn2_paths
 from gamedata.services.workshop_service import SteamWorkshopService
 from gamedata.cache.safe_cache import SafeCache
 from gamedata.data_fetching_rules import with_retry_limit
+from utils.performance_profiler import get_profiler
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +112,14 @@ class ResourceManager:
     """
     
     def __init__(self, nwn2_path: Optional[str] = None, cache_dir: str = "cache", suppress_warnings: bool = False):
-        # Use provided path or default from nwn2_settings
-        self.nwn2_path = Path(nwn2_path) if nwn2_path else nwn2_paths.game_folder
+        profiler = get_profiler()
         
-        # Make cache_dir absolute - if relative, make it relative to backend directory
-        cache_path = Path(cache_dir)
+        with profiler.profile("ResourceManager.__init__"):
+            # Use provided path or default from nwn2_settings
+            self.nwn2_path = Path(nwn2_path) if nwn2_path else nwn2_paths.game_folder
+            
+            # Make cache_dir absolute - if relative, make it relative to backend directory
+            cache_path = Path(cache_dir)
         if not cache_path.is_absolute():
             # Find backend directory (parent of parsers directory)
             backend_dir = Path(__file__).parent.parent.resolve()
@@ -230,19 +245,23 @@ class ResourceManager:
         self._compression_count = 0
         
         # Initialize
-        self._scan_zip_files()
+        with profiler.profile("Scan ZIP Files"):
+            self._scan_zip_files()
         
         # Scan override directories immediately for save compatibility
         # This ensures custom mod content is available for DynamicGameDataLoader
-        self._scan_override_directories()
+        with profiler.profile("Scan Override Directories"):
+            self._scan_override_directories()
         
         # Build module-to-HAK index for save-context-aware loading
         # This is fast (just reads module.ifo from .mod files) but enables precise loading
-        self._build_module_hak_index()
+        with profiler.profile("Build Module HAK Index"):
+            self._build_module_hak_index()
         
         # Preload 2DAs if enabled
         if self._memory_cache_enabled and self._preload_on_init:
-            self._preload_all_base_2das()
+            with profiler.profile("Preload Base 2DAs"):
+                self._preload_all_base_2das()
         
     def _scan_zip_files(self):
         """Scan ZIP files to build index of 2DA locations using optimized Python scanner"""

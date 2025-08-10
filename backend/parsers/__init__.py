@@ -14,10 +14,10 @@ from .gff_streaming import (
     StreamingGFFParser, StreamingOptions, LazyGFFElement,
     extract_character_name, count_module_areas
 )
-# Import Rust TDA parser only
+# Import Rust parsers
 from rust_tda_parser import TDAParser
 from .rust_tlk_parser import TLKParser
-from .erf import ERFParser
+from rust_erf_parser import ErfParser as ERFParser
 from .resource_manager import ResourceManager
 
 __all__ = [
