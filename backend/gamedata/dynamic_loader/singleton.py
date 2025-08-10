@@ -7,6 +7,7 @@ import threading
 import logging
 from typing import Optional
 from .dynamic_game_data_loader import DynamicGameDataLoader
+from utils.performance_profiler import get_profiler
 
 logger = logging.getLogger(__name__)
 
@@ -40,19 +41,23 @@ def get_dynamic_game_data_loader(force_reload: bool = False, resource_manager=No
     with _loader_lock:
         # Double-check pattern
         if _loader_instance is None or force_reload:
-            logger.info("Creating singleton DynamicGameDataLoader instance...")
+            profiler = get_profiler()
             
-            # Create with priority_only=False for full data loading
-            # This is better than lazy loading since we'll need most data anyway
-            _loader_instance = DynamicGameDataLoader(
-                resource_manager=resource_manager,  # Use provided ResourceManager
-                use_async=False,  # Avoid async issues in Django
-                priority_only=False,  # Load all data upfront
-                validate_relationships=True,
-                progress_callback=progress_callback  # Forward progress callback
-            )
-            
-            logger.info(f"DynamicGameDataLoader singleton created with {len(_loader_instance.table_data)} tables")
+            with profiler.profile("Create DynamicGameDataLoader Singleton"):
+                logger.info("Creating singleton DynamicGameDataLoader instance...")
+                
+                # Create with priority_only=False for full data loading
+                # This is better than lazy loading since we'll need most data anyway
+                _loader_instance = DynamicGameDataLoader(
+                    resource_manager=resource_manager,  # Use provided ResourceManager
+                    use_async=False,  # Avoid async issues in Django
+                    priority_only=False,  # Load all data upfront
+                    validate_relationships=True,
+                    progress_callback=progress_callback  # Forward progress callback
+                )
+                
+                profiler.add_metadata("table_count", len(_loader_instance.table_data))
+                logger.info(f"DynamicGameDataLoader singleton created with {len(_loader_instance.table_data)} tables")
             
     return _loader_instance
 

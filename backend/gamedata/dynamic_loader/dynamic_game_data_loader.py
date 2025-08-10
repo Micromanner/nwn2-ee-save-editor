@@ -14,6 +14,7 @@ from parsers.resource_manager import ResourceManager
 from gamedata.dynamic_loader.data_model_loader import DataModelLoader
 from gamedata.dynamic_loader.runtime_class_generator import RuntimeDataClassGenerator
 from gamedata.data_fetching_rules import with_retry_limit
+from utils.performance_profiler import get_profiler
 
 logger = logging.getLogger(__name__)
 
@@ -43,69 +44,75 @@ class DynamicGameDataLoader:
             validate_relationships: Whether to validate table relationships
             priority_only: If None, check FAST_STARTUP env var (default True for faster startup)
         """
-        # Create resource manager if not provided
-        if resource_manager:
-            self.rm = resource_manager
-        else:
-            self.rm = ResourceManager(suppress_warnings=True)
+        profiler = get_profiler()
         
-        # Check environment variable for fast startup (priority-only loading)
-        # Default to eager loading (FAST_STARTUP=false) for better UX
-        if priority_only is None:
-            priority_only = os.environ.get('FAST_STARTUP', 'false').lower() == 'true'
-            if priority_only:
-                logger.info("Fast startup enabled - loading only priority tables initially")
+        with profiler.profile("DynamicGameDataLoader.__init__"):
+            # Create resource manager if not provided
+            if resource_manager:
+                self.rm = resource_manager
             else:
-                logger.info("Eager loading enabled - loading all game data at startup")
+                with profiler.profile("Create ResourceManager"):
+                    self.rm = ResourceManager(suppress_warnings=True)
+            
+            # Check environment variable for fast startup (priority-only loading)
+            # Default to eager loading (FAST_STARTUP=false) for better UX
+            if priority_only is None:
+                priority_only = os.environ.get('FAST_STARTUP', 'false').lower() == 'true'
+                if priority_only:
+                    logger.info("Fast startup enabled - loading only priority tables initially")
+                else:
+                    logger.info("Eager loading enabled - loading all game data at startup")
+            
+            # Create data model loader
+            with profiler.profile("Create DataModelLoader"):
+                self.loader = DataModelLoader(
+                    self.rm,
+                    progress_callback=progress_callback,
+                    validate_relationships=validate_relationships,
+                    priority_only=priority_only
+                )
         
-        # Create data model loader
-        self.loader = DataModelLoader(
-            self.rm,
-            progress_callback=progress_callback,
-            validate_relationships=validate_relationships,
-            priority_only=priority_only
-        )
-        
-        # Storage for dynamically loaded data
-        self.table_data: Dict[str, List[Any]] = {}
-        
-        # Cache for O(1) ID lookups - table_name -> {id -> data}
-        self._id_lookup_cache: Dict[str, Dict[int, Any]] = {}
-        
-        # Track initialization state
-        self._is_ready = False
-        self._initialization_error: Optional[Exception] = None
-        
-        # Load data with better error handling
-        if use_async:
-            # Run async load in event loop with robust error handling
-            try:
-                try:
-                    # Try to get existing event loop
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # If we're already in an async context, we can't run another loop
-                        # Fall back to sync loading
-                        logger.warning("Event loop is already running, falling back to synchronous loading")
+            # Storage for dynamically loaded data
+            self.table_data: Dict[str, List[Any]] = {}
+            
+            # Cache for O(1) ID lookups - table_name -> {id -> data}
+            self._id_lookup_cache: Dict[str, Dict[int, Any]] = {}
+            
+            # Track initialization state
+            self._is_ready = False
+            self._initialization_error: Optional[Exception] = None
+            
+            # Load data with better error handling
+            with profiler.profile("Load Game Data", async_mode=use_async):
+                if use_async:
+                    # Run async load in event loop with robust error handling
+                    try:
+                        try:
+                            # Try to get existing event loop
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                # If we're already in an async context, we can't run another loop
+                                # Fall back to sync loading
+                                logger.warning("Event loop is already running, falling back to synchronous loading")
+                                self._load_all_rules()
+                            else:
+                                # Run in existing event loop
+                                loop.run_until_complete(self._load_async())
+                        except RuntimeError as e:
+                            if "no running event loop" in str(e).lower() or "no current event loop" in str(e).lower():
+                                # No event loop exists, create one
+                                logger.info("No event loop found, creating new one for data loading")
+                                asyncio.run(self._load_async())
+                            else:
+                                # Other RuntimeError, fall back to sync
+                                logger.warning(f"Event loop error ({e}), falling back to synchronous loading")
+                                self._load_all_rules()
+                    except Exception as e:
+                        logger.error(f"Async loading failed: {e}, falling back to synchronous loading")
                         self._load_all_rules()
-                    else:
-                        # Run in existing event loop
-                        loop.run_until_complete(self._load_async())
-                except RuntimeError as e:
-                    if "no running event loop" in str(e).lower() or "no current event loop" in str(e).lower():
-                        # No event loop exists, create one
-                        logger.info("No event loop found, creating new one for data loading")
-                        asyncio.run(self._load_async())
-                    else:
-                        # Other RuntimeError, fall back to sync
-                        logger.warning(f"Event loop error ({e}), falling back to synchronous loading")
-                        self._load_all_rules()
-            except Exception as e:
-                logger.error(f"Async loading failed: {e}, falling back to synchronous loading")
-                self._load_all_rules()
-        else:
-            # Synchronous loading
-            self._load_all_rules()
+                else:
+                    # Synchronous loading
+                    self._load_all_rules()
     
     async def _load_async(self):
         """Load all data asynchronously."""

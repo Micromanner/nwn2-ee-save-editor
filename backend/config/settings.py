@@ -154,11 +154,27 @@ LOGGING = {
             'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
+        'module_first': {
+            # Module/logger name first, then the message - much cleaner!
+            'format': '[{name:30}] {message}',
+            'style': '{',
+        },
+        'simple': {
+            # Simpler format for production/sidecar - no level prefix since Rust adds it
+            'format': '{asctime} {name} {message}',
+            'style': '{',
+            'datefmt': '%H:%M:%S',
+        },
+        'minimal': {
+            # Even more minimal - just the message
+            'format': '{message}',
+            'style': '{',
+        },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose'
+            'formatter': 'module_first'  # Use module-first format for cleaner logs
         },
     },
     'root': {

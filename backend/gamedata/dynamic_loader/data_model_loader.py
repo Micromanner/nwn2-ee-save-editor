@@ -17,6 +17,7 @@ from gamedata.dynamic_loader.code_cache import SecureCodeCache
 from gamedata.dynamic_loader.column_sanitizer import ColumnNameSanitizer
 from gamedata.dynamic_loader.relationship_validator import RelationshipValidator, ValidationReport
 from parsers.resource_manager import ResourceManager
+from utils.performance_profiler import get_profiler
 
 logger = logging.getLogger(__name__)
 
@@ -111,40 +112,48 @@ class DataModelLoader:
         Returns:
             Dictionary of table_name -> list of data instances
         """
+        profiler = get_profiler()
         start_time = time.time()
         
-        try:
-            # Step 1: Scan for 2DA files
-            self.progress.update("Scanning game files...", 10)
-            tables = await self._scan_2da_files()
-            
-            # Step 2: Sort tables by dependency order (if possible) or priority
-            self.progress.update("Analyzing dependencies...", 15)
-            tables = await self._sort_by_dependency_order(tables)
-            
-            # Step 3: Generate classes (potentially in parallel)
-            self.progress.update("Building data models...", 30)
-            await self._generate_classes(tables)
-            
-            # Step 4: Load data into instances
-            self.progress.update("Loading game data...", 60)
-            await self._load_table_data(tables)
-            
-            # Step 5: Post-processing and validation
-            self.progress.update("Finalizing...", 90)
-            await self._finalize_data()
-            
-            # Done!
-            self.progress.update("Complete!", 100)
-            
-            elapsed = time.time() - start_time
-            logger.info(f"Loaded {len(self.table_data)} tables in {elapsed:.2f}s")
-            
-            return self.table_data
-            
-        except Exception as e:
-            logger.error(f"Failed to load game data: {e}")
-            raise
+        with profiler.profile("DataModelLoader.load_game_data"):
+            try:
+                # Step 1: Scan for 2DA files
+                self.progress.update("Scanning game files...", 10)
+                with profiler.profile("Scan 2DA Files"):
+                    tables = await self._scan_2da_files()
+                    profiler.add_metadata("table_count", len(tables))
+                
+                # Step 2: Sort tables by dependency order (if possible) or priority
+                self.progress.update("Analyzing dependencies...", 15)
+                with profiler.profile("Sort by Dependencies"):
+                    tables = await self._sort_by_dependency_order(tables)
+                
+                # Step 3: Generate classes (potentially in parallel)
+                self.progress.update("Building data models...", 30)
+                with profiler.profile("Generate Runtime Classes"):
+                    await self._generate_classes(tables)
+                
+                # Step 4: Load data into instances
+                self.progress.update("Loading game data...", 60)
+                with profiler.profile("Load Table Data"):
+                    await self._load_table_data(tables)
+                
+                # Step 5: Post-processing and validation
+                self.progress.update("Finalizing...", 90)
+                with profiler.profile("Finalize Data"):
+                    await self._finalize_data()
+                
+                # Done!
+                self.progress.update("Complete!", 100)
+                
+                elapsed = time.time() - start_time
+                logger.info(f"Loaded {len(self.table_data)} tables in {elapsed:.2f}s")
+                
+                return self.table_data
+                
+            except Exception as e:
+                logger.error(f"Failed to load game data: {e}")
+                raise
     
     def _get_base_character_files(self) -> List[str]:
         """Get the base list of character-related 2DA files."""
@@ -459,6 +468,7 @@ class DataModelLoader:
     
     async def _generate_classes(self, tables: List[Dict[str, Any]]):
         """Generate Python classes for all tables."""
+        profiler = get_profiler()
         total_tables = len(tables)
         
         # Separate priority tables for faster processing
@@ -466,47 +476,51 @@ class DataModelLoader:
         other_tables = [t for t in tables if t['name'] not in self.PRIORITY_TABLES]
         
         # Process priority tables first (serial for immediate availability)
-        for i, table_info in enumerate(priority_tables):
-            await self._generate_class_for_table(table_info)
-            progress = 30 + int((i / total_tables) * 15)  # First half of class generation progress
-            self.progress.update(f"Generated priority class: {table_info['name']}", progress)
+        with profiler.profile("Generate Priority Classes", count=len(priority_tables)):
+            for i, table_info in enumerate(priority_tables):
+                with profiler.profile(f"Generate Class: {table_info['name']}"):
+                    await self._generate_class_for_table(table_info)
+                progress = 30 + int((i / total_tables) * 15)  # First half of class generation progress
+                self.progress.update(f"Generated priority class: {table_info['name']}", progress)
         
         # Decide whether to use parallel processing for remaining tables
-        if len(other_tables) < self.PARALLEL_THRESHOLD:
-            # Serial processing for small workloads
-            for i, table_info in enumerate(other_tables):
-                await self._generate_class_for_table(table_info)
-                # Update progress
-                progress = 45 + int((i / len(other_tables)) * 15)  # Second half of progress
-                if i % 10 == 0 or i == len(other_tables) - 1:  # Reduce progress update frequency
-                    self.progress.update(f"Generated class for {table_info['name']}", progress)
-        else:
-            # Parallel processing for large workloads
-            # Use ThreadPoolExecutor since we're mostly doing string manipulation
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                loop = asyncio.get_event_loop()
-                
-                # Create tasks for parallel execution
-                tasks = []
-                for table_info in other_tables:
-                    task = loop.run_in_executor(
-                        executor,
-                        self._generate_class_sync,
-                        table_info
-                    )
-                    tasks.append(task)
-                
-                # Wait for all tasks with progress updates
-                completed_count = 0
-                for task in asyncio.as_completed(tasks):
-                    table_name, generated_class = await task
-                    self.generated_classes[table_name] = generated_class
-                    completed_count += 1
+        with profiler.profile("Generate Other Classes", count=len(other_tables)):
+            if len(other_tables) < self.PARALLEL_THRESHOLD:
+                # Serial processing for small workloads
+                for i, table_info in enumerate(other_tables):
+                    with profiler.profile(f"Generate Class: {table_info['name']}"):
+                        await self._generate_class_for_table(table_info)
+                    # Update progress
+                    progress = 45 + int((i / len(other_tables)) * 15)  # Second half of progress
+                    if i % 10 == 0 or i == len(other_tables) - 1:  # Reduce progress update frequency
+                        self.progress.update(f"Generated class for {table_info['name']}", progress)
+            else:
+                # Parallel processing for large workloads
+                # Use ThreadPoolExecutor since we're mostly doing string manipulation
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    loop = asyncio.get_event_loop()
                     
-                    # Update progress less frequently for performance
-                    if completed_count % 25 == 0 or completed_count == len(other_tables):
-                        progress = 45 + int((completed_count / len(other_tables)) * 15)
-                        self.progress.update(f"Generated classes ({completed_count}/{len(other_tables)})", progress)
+                    # Create tasks for parallel execution
+                    tasks = []
+                    for table_info in other_tables:
+                        task = loop.run_in_executor(
+                            executor,
+                            self._generate_class_sync,
+                            table_info
+                        )
+                        tasks.append(task)
+                    
+                    # Wait for all tasks with progress updates
+                    completed_count = 0
+                    for task in asyncio.as_completed(tasks):
+                        table_name, generated_class = await task
+                        self.generated_classes[table_name] = generated_class
+                        completed_count += 1
+                        
+                        # Update progress less frequently for performance
+                        if completed_count % 25 == 0 or completed_count == len(other_tables):
+                            progress = 45 + int((completed_count / len(other_tables)) * 15)
+                            self.progress.update(f"Generated classes ({completed_count}/{len(other_tables)})", progress)
     
     async def _generate_class_for_table(self, table_info: Dict[str, Any]):
         """Generate a class for a single table (async wrapper)."""

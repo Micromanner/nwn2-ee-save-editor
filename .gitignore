@@ -52,3 +52,4 @@ legacy_java_editor
 backend/templates/characters
 backend/tests/fixtures/
 frontend/tsconfig.tsbuildinfo
+backend/logs
