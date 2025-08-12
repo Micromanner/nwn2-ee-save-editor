@@ -136,12 +136,13 @@ class ResourceManager:
     """
     Centralized manager for NWN2 game resources.
     
-    Features:
-    - Lazy loading of 2DA files from ZIP archives
-    - In-memory caching of parsed data
-    - Disk cache for faster startup
-    - Efficient ZIP reading (keeps file open)
+    Coordinates all NWN2 file parsers (GFF, 2DA, TLK, ERF/HAK) with caching,
+    mod detection, and resource scanning capabilities.
     """
+    
+    # ============================================================================
+    # INITIALIZATION & CONFIGURATION
+    # ============================================================================
     
     def __init__(self, nwn2_path: Optional[str] = None, cache_dir: str = "cache", suppress_warnings: bool = False):
         profiler = get_profiler()
@@ -166,10 +167,9 @@ class ResourceManager:
         # No longer kept open to make ResourceManager pickle-safe
         self._zip_files: Dict[str, zipfile.ZipFile] = {}
         
-        # In-memory cache - now using OrderedDict for proper LRU
-        # TODO: Remove memory cache - not needed with manager pattern
+        # In-memory cache - using OrderedDict for proper LRU
         # self._2da_cache: OrderedDict[str, Union[TDAParser, bytes]] = OrderedDict()
-        # self._2da_compressed: Dict[str, bool] = {}  # Track which entries are compressed
+        # self._2da_compressed: Dict[str, bool] = {}  # Track compressed entries
         self._tlk_cache: Optional[TLKParser] = None
         self._custom_tlk_cache: Optional[TLKParser] = None
         
@@ -188,10 +188,10 @@ class ResourceManager:
         self._workshop_overrides: Dict[str, TDAParser] = {}  # Steam Workshop
         
         # File path indexes for on-demand parsing
-        self._override_file_paths: Dict[str, Path] = {}  # Maps 2da name to file path
-        self._workshop_file_paths: Dict[str, Path] = {}  # Maps 2da name to file path
-        self._custom_override_paths: Dict[str, Path] = {}  # Maps 2da name to file path for custom dirs
-        self._custom_override_dirs: List[Path] = []  # User-specified additional override directories
+        self._override_file_paths: Dict[str, Path] = {}
+        self._workshop_file_paths: Dict[str, Path] = {}
+        self._custom_override_paths: Dict[str, Path] = {}
+        self._custom_override_dirs: List[Path] = []
         
         # Module information
         self._current_module: Optional[str] = None
@@ -289,7 +289,6 @@ class ResourceManager:
         self._precompiled_cache = PrecompiledCacheIntegration(self)
         
         # Track memory usage and cache statistics
-        # TODO: Remove memory cache tracking - not needed with manager pattern
         # self._cache_memory_bytes = 0
         self._cache_hits = 0
         self._cache_misses = 0
@@ -352,28 +351,26 @@ class ResourceManager:
                     logger.info("Pre-compiled cache is valid, skipping preload")
                 else:
                     # Preload if cache not valid
-                    # TODO: Remove preloading - not needed with manager pattern
-                    # if self._memory_cache_enabled and self._preload_on_init:
-                    #     with profiler.profile("Preload Base 2DAs"):
-                    #         self._preload_all_base_2das()
+                    # Preloading disabled - not needed with manager pattern
                     pass
             else:
                 # Preload if no precompiled cache
-                # TODO: Remove preloading - not needed with manager pattern
-                # if self._memory_cache_enabled and self._preload_on_init:
-                #     with profiler.profile("Preload Base 2DAs"):
-                #         self._preload_all_base_2das()
+                # Preloading disabled - not needed with manager pattern
                 pass
             
             # Now that ResourceManager is fully initialized, ensure cache is built
             with profiler.profile("Ensure Precompiled Cache"):
                 self._precompiled_cache.ensure_cache_built()
         
+    # ============================================================================
+    # RESOURCE SCANNING & DISCOVERY
+    # ============================================================================
+    
     def _scan_zip_files(self):
         """Scan ZIP files to build index of 2DA locations using optimized Python scanner"""
         data_dir = self.nwn2_path / "data"
         
-        # Order matters - later zips override earlier ones
+        # Later zips override earlier ones
         zip_files = [
             "2da.zip",      # Base game
             "2da_x1.zip",   # Mask of the Betrayer
@@ -383,7 +380,6 @@ class ResourceManager:
         # Build list of ZIP paths to scan
         zip_paths = []
         
-        # Also check enhanced edition data if available
         if nwn2_paths.is_enhanced_edition:
             data_dirs = [data_dir, nwn2_paths.enhanced_data]
         else:
@@ -399,29 +395,25 @@ class ResourceManager:
             logger.warning("No ZIP files found for indexing")
             return
         
-        # Use optimized ZIP indexer with parallel processing
         start_time = time.time()
         
         # Always use parallel processing - even 3 ZIPs benefit from it
         # The Rust parallel implementation is highly optimized
         resource_locations = self._python_scanner.scan_zip_files(zip_paths)
         
-        # Pre-open ZIP archives in Rust reader for efficient access
         self._zip_reader.preopen_zip_archives(zip_paths)
         
         # Convert ResourceLocation objects to the legacy format
-        # No longer keep ZIP files open - they'll be opened on-demand
         for resource_name, resource_location in resource_locations.items():
             zip_path_str = resource_location.source_path
             internal_path = resource_location.internal_path
             
-            # Store location info for on-demand access
             self._2da_locations[resource_name.lower()] = (zip_path_str, internal_path)
         
         scan_time_ms = int((time.time() - start_time) * 1000)
         logger.info(f"ZIP scan completed: {len(resource_locations)} 2DA files from {len(zip_paths)} ZIPs in {scan_time_ms}ms")
         
-        # Debug expansion loading: Check if critical expansion files were found
+        # Check if critical expansion files were found
         expansion_files = ['classes.2da', 'spells.2da', 'feat.2da']
         expansion_files_detected = []
         for filename in expansion_files:
@@ -430,13 +422,11 @@ class ResourceManager:
                 zip_name = Path(zip_path).name
                 logger.info(f"Expansion check: {filename} loaded from {zip_name} ({internal_path})")
                 
-                # Check if this is from an expansion ZIP
                 if 'x1' in zip_name.lower() or 'x2' in zip_name.lower():
                     expansion_files_detected.append(filename)
             else:
                 logger.warning(f"Expansion check: {filename} NOT FOUND in ZIP locations")
         
-        # Also check for workshop mod overrides that need cache invalidation
         self._invalidate_cache_for_overrides(expansion_files_detected, 'expansion')
     
     def _invalidate_cache_for_overrides(self, override_files: List[str], source_type: str = 'unknown'):
@@ -449,13 +439,11 @@ class ResourceManager:
         
         for filename in override_files:
             # Remove from memory cache
-            # TODO: Remove memory cache invalidation - not needed with manager pattern
             # if filename in self._2da_cache:
             #     del self._2da_cache[filename]
             #     logger.debug(f"Removed {filename} from memory cache")
             #     invalidated_count += 1
             # 
-            # # Remove compressed cache entry
             # if filename in self._2da_compressed:
             #     del self._2da_compressed[filename]
             
@@ -643,6 +631,12 @@ class ResourceManager:
         # This ensures expansion files don't take precedence over workshop files
         if workshop_overrides:
             self._invalidate_cache_for_overrides(workshop_overrides, 'workshop_mod')
+    
+    # ============================================================================
+    # HAK/ERF & MODULE OPERATIONS
+    # ============================================================================
+    
+    # Module Loading & Management
     
     def set_module(self, module_path: str) -> bool:
         """
@@ -1114,6 +1108,323 @@ class ResourceManager:
         self._update_cache_memory_usage()
         logger.info(f"Current 2DA cache memory usage: {self._cache_memory_bytes / 1024 / 1024:.1f} MB")
     
+    # HAK Discovery & Loading
+    
+    def _find_hakpak(self, hakpak_name: str) -> Optional[Path]:
+        """Find hakpak in standard locations"""
+        # Check custom HAK folders first (highest priority)
+        for custom_hak_dir in nwn2_paths.custom_hak_folders:
+            custom_hak = custom_hak_dir / hakpak_name
+            if custom_hak.exists():
+                return custom_hak
+        
+        # Check user hak directory
+        user_hak = nwn2_paths.user_hak / hakpak_name
+        if user_hak.exists():
+            return user_hak
+        
+        # Check NWN2 installation hak directory
+        install_hak = nwn2_paths.hak / hakpak_name
+        if install_hak.exists():
+            return install_hak
+        
+        return None
+
+    def find_module(self, module_name: str) -> Optional[str]:
+        """
+        Find a module file or campaign module in standard locations
+        
+        Args:
+            module_name: Name of module (with or without .mod extension)
+                        Can also be a campaign module directory name
+            
+        Returns:
+            Full path to module file or campaign module directory, or None
+        """
+        # First check if it's a .mod file
+        if not module_name.endswith('.mod'):
+            mod_file_name = module_name + '.mod'
+        else:
+            mod_file_name = module_name
+            module_name = module_name[:-4]  # Remove .mod for campaign search
+        
+        # Check custom module folders first (highest priority)
+        for custom_module_dir in nwn2_paths.custom_module_folders:
+            custom_module = custom_module_dir / mod_file_name
+            if custom_module.exists():
+                return str(custom_module)
+        
+        # Check user modules
+        user_modules = nwn2_paths.user_modules / mod_file_name
+        if user_modules.exists():
+            return str(user_modules)
+        
+        # Check NWN2 installation modules
+        install_modules = nwn2_paths.modules / mod_file_name
+        if install_modules.exists():
+            return str(install_modules)
+        
+        # Check campaign modules (unpacked directories with MODULE.IFO)
+        campaigns_dirs = [
+            nwn2_paths.campaigns,
+            nwn2_paths.game_folder / 'campaigns'  # lowercase version
+        ]
+        
+        for campaigns_dir in campaigns_dirs:
+            if campaigns_dir.exists():
+                # Look in each campaign directory
+                for campaign_dir in campaigns_dir.iterdir():
+                    if campaign_dir.is_dir():
+                        # Check for .mod file in campaign
+                        module_path = campaign_dir / mod_file_name
+                        if module_path.exists():
+                            return str(module_path)
+                        
+                        # Check for unpacked module directory
+                        module_dir = campaign_dir / module_name
+                        if module_dir.is_dir():
+                            # Verify it has MODULE.IFO
+                            module_ifo = module_dir / 'MODULE.IFO'
+                            if module_ifo.exists():
+                                return str(module_dir)
+        
+        return None
+
+    def _build_module_hak_index(self):
+        """
+        Build an index mapping module names to their required HAKs.
+        This enables save-context-aware loading without performance overhead.
+        """
+        if self._modules_indexed:
+            return
+        
+        start_time = time.time()
+        
+        self._module_to_haks.clear()
+        
+        # Search all module directories
+        module_dirs = [
+            nwn2_paths.modules,           # Installation modules
+            nwn2_paths.user_modules,      # User modules  
+            nwn2_paths.campaigns,         # Campaign modules
+        ]
+        
+        # Add custom module folders
+        for custom_dir in nwn2_paths.custom_module_folders:
+            module_dirs.append(custom_dir)
+        
+        modules_found = 0
+        modules_skipped = 0
+        total_haks = 0
+        for module_dir in module_dirs:
+            if not module_dir.exists():
+                continue
+                
+            # Scan for .mod files
+            for mod_file in module_dir.glob('*.mod'):
+                # Skip vanilla modules - we already have their content
+                if mod_file.name in self._vanilla_modules:
+                    logger.debug(f"Skipping vanilla module: {mod_file.name}")
+                    modules_skipped += 1
+                    continue
+                
+                try:
+                    extraction_result = self._extract_module_info(mod_file)
+                    if extraction_result:
+                        module_info = extraction_result['info']
+                        module_name = module_info['name']
+                        hak_list = module_info['haks']
+                        
+                        self._module_to_haks[module_name] = {
+                            'mod_file': str(mod_file),
+                            'haks': hak_list,
+                            'custom_tlk': module_info.get('custom_tlk', ''),
+                            'indexed_at': time.time()
+                        }
+                        
+                        modules_found += 1
+                        total_haks += len(hak_list)
+                        logger.debug(f"Indexed custom module '{module_name}' with {len(hak_list)} HAKs")
+                        
+                except Exception as e:
+                    logger.debug(f"Error indexing module {mod_file}: {e}")
+                    continue
+        
+        self._modules_indexed = True
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        logger.info(f"Module scanning: found {modules_found} custom modules with {total_haks} total HAKs in {elapsed_ms}ms")
+
+    # Module Information Extraction
+    
+    def _extract_gff_string(self, gff_data: Any, default: str = '') -> str:
+        """
+        Extract a string from a potentially localized GFF data structure.
+        
+        Args:
+            gff_data: The GFF field data which might be a string or localized dict
+            default: Default value if extraction fails
+            
+        Returns:
+            Extracted string value
+        """
+        if isinstance(gff_data, dict) and 'substrings' in gff_data:
+            substrings = gff_data.get('substrings', [])
+            if substrings and len(substrings) > 0:
+                return substrings[0].get('string', default)
+            return default
+        elif isinstance(gff_data, str):
+            return gff_data
+        return default
+
+    def _extract_module_info(self, mod_file: Path) -> Optional[Dict[str, Any]]:
+        """
+        Extract module name and HAK list from a .mod file.
+        
+        Args:
+            mod_file: Path to .mod file
+            
+        Returns:
+            Dict with 'info' containing module info and 'parser' containing the ERFParser instance,
+            or None if extraction fails
+        """
+        try:
+            # Parse .mod file as ERF archive
+            parser = ERFParser()
+            parser.read(str(mod_file))
+            
+            # Extract module.ifo
+            module_ifo_data = parser.extract_resource('module.ifo')
+            if not module_ifo_data:
+                logger.debug(f"No module.ifo found in {mod_file}")
+                return None
+            
+            # Parse module.ifo as GFF
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.ifo', delete=False) as tmp:
+                tmp.write(module_ifo_data)
+                tmp_path = tmp.name
+            
+            gff_parser = GFFParser()
+            gff_parser.read(tmp_path)
+            os.unlink(tmp_path)
+            
+            # Extract module data
+            module_data = gff_parser.top_level_struct.to_dict()
+            
+            # Get module name using helper
+            mod_name = self._extract_gff_string(module_data.get('Mod_Name'), '')
+            
+            # Get HAK list
+            hak_list = module_data.get('Mod_HakList', [])
+            hak_names = []
+            for hak_entry in hak_list:
+                hak_name = hak_entry.get('Mod_Hak', '')
+                if hak_name:
+                    hak_names.append(hak_name)
+            
+            # Get custom TLK
+            custom_tlk = module_data.get('Mod_CustomTlk', '')
+            
+            module_info = {
+                'name': mod_name,
+                'haks': hak_names,
+                'custom_tlk': custom_tlk,
+                'mod_id': module_data.get('Mod_ID', ''),
+                'entry_area': module_data.get('Mod_Entry_Area', '')
+            }
+            
+            return {'info': module_info, 'parser': parser}
+            
+        except Exception as e:
+            logger.debug(f"Error extracting info from {mod_file}: {e}")
+            return None
+
+    def load_save_context(self, save_folder_path: Union[str, Path]) -> bool:
+        """
+        Load module context from a save folder for accurate content loading.
+        
+        This method reads CURRENTMODULE.TXT from a save folder and loads
+        the appropriate module and its HAKs for save compatibility.
+        
+        Args:
+            save_folder_path: Path to save folder containing CURRENTMODULE.TXT
+            
+        Returns:
+            True if context was loaded successfully
+        """
+        save_path = Path(save_folder_path)
+        
+        if not save_path.exists() or not save_path.is_dir():
+            logger.warning(f"Save folder not found: {save_path}")
+            return False
+        
+        # Build module index if not already done
+        self._build_module_hak_index()
+        
+        # Read current module from save
+        current_module_file = save_path / "CURRENTMODULE.TXT"
+        if not current_module_file.exists():
+            logger.info(f"No CURRENTMODULE.TXT found in {save_path} - using base game content only")
+            return True  # Not an error - might be base campaign save
+        
+        try:
+            module_name = current_module_file.read_text(encoding='utf-8').strip()
+            logger.info(f"Save was created in module: '{module_name}'")
+            
+            # Find module in our index
+            if module_name not in self._module_to_haks:
+                logger.warning(f"Module '{module_name}' not found in index. Available modules: {list(self._module_to_haks.keys())[:5]}...")
+                return False
+            
+            # Load the module and its HAKs
+            module_info = self._module_to_haks[module_name]
+            mod_file_path = module_info['mod_file']
+            required_haks = module_info['haks']
+            
+            logger.info(f"Loading module context: {len(required_haks)} HAKs required")
+            for hak in required_haks:
+                logger.debug(f"  - {hak}")
+            
+            # Use existing set_module method to load everything
+            success = self.set_module(mod_file_path)
+            if success:
+                logger.info(f"Successfully loaded save context for module '{module_name}'")
+            else:
+                logger.error(f"Failed to load module '{module_name}' from {mod_file_path}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error loading save context from {save_path}: {e}")
+            return False
+
+    def get_module_index_stats(self) -> Dict[str, Any]:
+        """Get statistics about the module-to-HAK index."""
+        if not self._modules_indexed:
+            self._build_module_hak_index()
+        
+        total_haks = 0
+        modules_with_haks = 0
+        
+        for module_info in self._module_to_haks.values():
+            hak_count = len(module_info['haks'])
+            total_haks += hak_count
+            if hak_count > 0:
+                modules_with_haks += 1
+        
+        return {
+            'total_modules': len(self._module_to_haks),
+            'modules_with_haks': modules_with_haks,
+            'total_haks_referenced': total_haks,
+            'vanilla_modules_skipped': len(self._vanilla_modules),
+            'indexed': self._modules_indexed,
+            'sample_modules': list(self._module_to_haks.keys())[:10]
+        }
+    
+    # ============================================================================
+    # CACHE MANAGEMENT
+    # ============================================================================
+    
     def _compress_parser(self, parser: TDAParser) -> Tuple[bytes, int, int]:
         """Compress a TDAParser object using zlib.
         
@@ -1234,6 +1545,66 @@ class ResourceManager:
             
         logger.info(f"Evicted {len(keys_to_remove)} items from cache")
         self._update_cache_memory_usage()
+
+    def _is_file_modified(self, filepath: Path) -> bool:
+        """Check if a file has been modified since it was cached"""
+        str_path = str(filepath)
+        
+        # Get current modification time
+        try:
+            current_mtime = filepath.stat().st_mtime
+        except (OSError, IOError):
+            # File might have been deleted
+            return True
+        
+        # Check if we have a recorded modification time
+        if str_path not in self._file_mod_times:
+            # First time seeing this file
+            self._file_mod_times[str_path] = current_mtime
+            return False
+        
+        # Compare modification times with small tolerance for file system precision
+        cached_mtime = self._file_mod_times[str_path]
+        if abs(current_mtime - cached_mtime) < 0.001:  # Less than 1ms difference
+            # File hasn't changed (within tolerance)
+            return False
+        elif current_mtime > cached_mtime:
+            # File has been modified
+            self._file_mod_times[str_path] = current_mtime
+            return True
+        
+        return False
+
+    def _invalidate_cache_for_file(self, filepath: Path):
+        """Invalidate caches related to a modified file"""
+        filename = filepath.name.lower()
+        
+        # Remove from override caches
+        if filename in self._override_dir_overrides:
+            del self._override_dir_overrides[filename]
+            logger.info(f"Invalidated override cache for {filename}")
+        
+        if filename in self._workshop_overrides:
+            del self._workshop_overrides[filename]
+            logger.info(f"Invalidated workshop cache for {filename}")
+        
+        # Also remove from main 2DA cache if present
+        if filename.endswith('.2da'):
+            # Need to check all cache keys that might contain this file
+            keys_to_remove = []
+            for cache_key in list(self._2da_cache.keys()):
+                if cache_key.endswith(filename) or cache_key.endswith(filename[:-4]):
+                    keys_to_remove.append(cache_key)
+            
+            for key in keys_to_remove:
+                del self._2da_cache[key]
+                if key in self._2da_compressed:
+                    del self._2da_compressed[key]
+                logger.info(f"Invalidated cache for {key}")
+    
+    # ============================================================================
+    # 2DA OPERATIONS
+    # ============================================================================
     
     def _parse_2da_file(self, file_path: Path) -> Optional[TDAParser]:
         """Parse a single 2DA file from disk"""
@@ -1293,18 +1664,8 @@ class ResourceManager:
             return cached_parser
         
         # Check memory cache next
-        # TODO: Remove memory cache lookup - not needed with manager pattern
         # if self._memory_cache_enabled and name in self._2da_cache:
         #     self._cache_hits += 1
-        #     # Move to end for LRU (most recently used)
-        #     self._2da_cache.move_to_end(name)
-        #     
-        #     # Check if it's compressed
-        #     if name in self._2da_compressed and self._2da_compressed[name]:
-        #         # Decompress on access and replace with decompressed version for identity
-        #         decompressed = self._decompress_parser(self._2da_cache[name])
-        #         # Replace compressed version with decompressed for identity consistency
-        #         self._2da_cache[name] = decompressed
         #         self._2da_compressed[name] = False
         #         return decompressed
         #     return self._2da_cache[name]
@@ -1327,13 +1688,11 @@ class ResourceManager:
             expansion_key = 'x1' if 'x1' in zip_name.lower() else 'x2'
             self._expansion_files_loaded[expansion_key] = self._expansion_files_loaded.get(expansion_key, 0) + 1
         
-        # Use Rust ZIP reader for efficient access (keeps ZIPs open)
         parser = TDAParser()
         try:
             # Read file using Rust reader
             data = self._zip_reader.read_file_from_zip(zip_path_str, file_path)
             
-            # Store for debugging
             self._last_successful_content = (name, data.decode('utf-8', errors='ignore')[:200])
             
             parser.parse_from_bytes(data)
@@ -1357,7 +1716,6 @@ class ResourceManager:
                 logger.error(f"Its first 200 chars: {repr(prev_content)}")
             raise
             
-        # Add to memory cache
         self._add_to_cache(name, parser)
         
         # Log expansion summary if this was an expansion file
@@ -1377,7 +1735,6 @@ class ResourceManager:
             self._2da_cache[name] = compressed
             self._2da_compressed[name] = True
             
-            # Track compression stats
             compression_ratio = 1.0 - (compressed_size / original_size)
             self._compression_ratio_sum += compression_ratio
             self._compression_count += 1
@@ -1387,11 +1744,11 @@ class ResourceManager:
             self._2da_cache[name] = parser
             self._2da_compressed[name] = False
             
-        # Check if we need to evict items
         self._update_cache_memory_usage()
         if self._cache_memory_bytes > self._cache_max_mb * 1024 * 1024:
             self._evict_lru_items()
     
+
     def _log_expansion_summary(self):
         """Log a summary of loaded expansion files, called only once"""
         if self._expansion_summary_logged or not self._expansion_files_loaded:
@@ -1408,6 +1765,12 @@ class ResourceManager:
             
             logger.info(f"Loaded expansion campaign 2da files {total_files}/{total_files} successfully ({', '.join(details)})")
             self._expansion_summary_logged = True
+    
+    # ============================================================================
+    # TLK OPERATIONS
+    # ============================================================================
+    
+    # Core TLK Access
     
     def get_tlk(self, language: str = "english") -> Optional[TLKParser]:
         """Get the TLK parser for game text"""
@@ -1514,6 +1877,7 @@ class ResourceManager:
         
         return result
     
+    
     # Old disk cache methods removed - using precompiled cache instead
     
     def _smart_preload_2das(self):
@@ -1604,6 +1968,8 @@ class ResourceManager:
         for table in common_tables:
             self.get_2da(table)
     
+    # String Resolution & Utilities
+    
     def get_race_name(self, race_id: int) -> str:
         """Get race name from ID"""
         races = self.get_2da('racialtypes')  # Correct table name
@@ -1631,25 +1997,7 @@ class ResourceManager:
         # Clear ERF parsers
         self._erf_parsers.clear()
     
-    def _find_hakpak(self, hakpak_name: str) -> Optional[Path]:
-        """Find hakpak in standard locations"""
-        # Check custom HAK folders first (highest priority)
-        for custom_hak_dir in nwn2_paths.custom_hak_folders:
-            custom_hak = custom_hak_dir / hakpak_name
-            if custom_hak.exists():
-                return custom_hak
-        
-        # Check user hak directory
-        user_hak = nwn2_paths.user_hak / hakpak_name
-        if user_hak.exists():
-            return user_hak
-        
-        # Check NWN2 installation hak directory
-        install_hak = nwn2_paths.hak / hakpak_name
-        if install_hak.exists():
-            return install_hak
-        
-        return None
+    # TLK Discovery & Loading
     
     def _check_for_hak_tlk(self, hakpak_path: Path):
         """Check for TLK file associated with a HAK file"""
@@ -1782,295 +2130,6 @@ class ResourceManager:
         except Exception as e:
             logger.warning(f"Error during fast workshop TLK scan: {e}")
     
-    def find_module(self, module_name: str) -> Optional[str]:
-        """
-        Find a module file or campaign module in standard locations
-        
-        Args:
-            module_name: Name of module (with or without .mod extension)
-                        Can also be a campaign module directory name
-            
-        Returns:
-            Full path to module file or campaign module directory, or None
-        """
-        # First check if it's a .mod file
-        if not module_name.endswith('.mod'):
-            mod_file_name = module_name + '.mod'
-        else:
-            mod_file_name = module_name
-            module_name = module_name[:-4]  # Remove .mod for campaign search
-        
-        # Check custom module folders first (highest priority)
-        for custom_module_dir in nwn2_paths.custom_module_folders:
-            custom_module = custom_module_dir / mod_file_name
-            if custom_module.exists():
-                return str(custom_module)
-        
-        # Check user modules
-        user_modules = nwn2_paths.user_modules / mod_file_name
-        if user_modules.exists():
-            return str(user_modules)
-        
-        # Check NWN2 installation modules
-        install_modules = nwn2_paths.modules / mod_file_name
-        if install_modules.exists():
-            return str(install_modules)
-        
-        # Check campaign modules (unpacked directories with MODULE.IFO)
-        campaigns_dirs = [
-            nwn2_paths.campaigns,
-            nwn2_paths.game_folder / 'campaigns'  # lowercase version
-        ]
-        
-        for campaigns_dir in campaigns_dirs:
-            if campaigns_dir.exists():
-                # Look in each campaign directory
-                for campaign_dir in campaigns_dir.iterdir():
-                    if campaign_dir.is_dir():
-                        # Check for .mod file in campaign
-                        module_path = campaign_dir / mod_file_name
-                        if module_path.exists():
-                            return str(module_path)
-                        
-                        # Check for unpacked module directory
-                        module_dir = campaign_dir / module_name
-                        if module_dir.is_dir():
-                            # Verify it has MODULE.IFO
-                            module_ifo = module_dir / 'MODULE.IFO'
-                            if module_ifo.exists():
-                                return str(module_dir)
-        
-        return None
-    
-    def _build_module_hak_index(self):
-        """
-        Build an index mapping module names to their required HAKs.
-        This enables save-context-aware loading without performance overhead.
-        """
-        if self._modules_indexed:
-            return
-        
-        start_time = time.time()
-        
-        self._module_to_haks.clear()
-        
-        # Search all module directories
-        module_dirs = [
-            nwn2_paths.modules,           # Installation modules
-            nwn2_paths.user_modules,      # User modules  
-            nwn2_paths.campaigns,         # Campaign modules
-        ]
-        
-        # Add custom module folders
-        for custom_dir in nwn2_paths.custom_module_folders:
-            module_dirs.append(custom_dir)
-        
-        modules_found = 0
-        modules_skipped = 0
-        total_haks = 0
-        for module_dir in module_dirs:
-            if not module_dir.exists():
-                continue
-                
-            # Scan for .mod files
-            for mod_file in module_dir.glob('*.mod'):
-                # Skip vanilla modules - we already have their content
-                if mod_file.name in self._vanilla_modules:
-                    logger.debug(f"Skipping vanilla module: {mod_file.name}")
-                    modules_skipped += 1
-                    continue
-                
-                try:
-                    extraction_result = self._extract_module_info(mod_file)
-                    if extraction_result:
-                        module_info = extraction_result['info']
-                        module_name = module_info['name']
-                        hak_list = module_info['haks']
-                        
-                        self._module_to_haks[module_name] = {
-                            'mod_file': str(mod_file),
-                            'haks': hak_list,
-                            'custom_tlk': module_info.get('custom_tlk', ''),
-                            'indexed_at': time.time()
-                        }
-                        
-                        modules_found += 1
-                        total_haks += len(hak_list)
-                        logger.debug(f"Indexed custom module '{module_name}' with {len(hak_list)} HAKs")
-                        
-                except Exception as e:
-                    logger.debug(f"Error indexing module {mod_file}: {e}")
-                    continue
-        
-        self._modules_indexed = True
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"Module scanning: found {modules_found} custom modules with {total_haks} total HAKs in {elapsed_ms}ms")
-    
-    def _extract_gff_string(self, gff_data: Any, default: str = '') -> str:
-        """
-        Extract a string from a potentially localized GFF data structure.
-        
-        Args:
-            gff_data: The GFF field data which might be a string or localized dict
-            default: Default value if extraction fails
-            
-        Returns:
-            Extracted string value
-        """
-        if isinstance(gff_data, dict) and 'substrings' in gff_data:
-            substrings = gff_data.get('substrings', [])
-            if substrings and len(substrings) > 0:
-                return substrings[0].get('string', default)
-            return default
-        elif isinstance(gff_data, str):
-            return gff_data
-        return default
-    
-    def _extract_module_info(self, mod_file: Path) -> Optional[Dict[str, Any]]:
-        """
-        Extract module name and HAK list from a .mod file.
-        
-        Args:
-            mod_file: Path to .mod file
-            
-        Returns:
-            Dict with 'info' containing module info and 'parser' containing the ERFParser instance,
-            or None if extraction fails
-        """
-        try:
-            # Parse .mod file as ERF archive
-            parser = ERFParser()
-            parser.read(str(mod_file))
-            
-            # Extract module.ifo
-            module_ifo_data = parser.extract_resource('module.ifo')
-            if not module_ifo_data:
-                logger.debug(f"No module.ifo found in {mod_file}")
-                return None
-            
-            # Parse module.ifo as GFF
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix='.ifo', delete=False) as tmp:
-                tmp.write(module_ifo_data)
-                tmp_path = tmp.name
-            
-            gff_parser = GFFParser()
-            gff_parser.read(tmp_path)
-            os.unlink(tmp_path)
-            
-            # Extract module data
-            module_data = gff_parser.top_level_struct.to_dict()
-            
-            # Get module name using helper
-            mod_name = self._extract_gff_string(module_data.get('Mod_Name'), '')
-            
-            # Get HAK list
-            hak_list = module_data.get('Mod_HakList', [])
-            hak_names = []
-            for hak_entry in hak_list:
-                hak_name = hak_entry.get('Mod_Hak', '')
-                if hak_name:
-                    hak_names.append(hak_name)
-            
-            # Get custom TLK
-            custom_tlk = module_data.get('Mod_CustomTlk', '')
-            
-            module_info = {
-                'name': mod_name,
-                'haks': hak_names,
-                'custom_tlk': custom_tlk,
-                'mod_id': module_data.get('Mod_ID', ''),
-                'entry_area': module_data.get('Mod_Entry_Area', '')
-            }
-            
-            return {'info': module_info, 'parser': parser}
-            
-        except Exception as e:
-            logger.debug(f"Error extracting info from {mod_file}: {e}")
-            return None
-    
-    def load_save_context(self, save_folder_path: Union[str, Path]) -> bool:
-        """
-        Load module context from a save folder for accurate content loading.
-        
-        This method reads CURRENTMODULE.TXT from a save folder and loads
-        the appropriate module and its HAKs for save compatibility.
-        
-        Args:
-            save_folder_path: Path to save folder containing CURRENTMODULE.TXT
-            
-        Returns:
-            True if context was loaded successfully
-        """
-        save_path = Path(save_folder_path)
-        
-        if not save_path.exists() or not save_path.is_dir():
-            logger.warning(f"Save folder not found: {save_path}")
-            return False
-        
-        # Build module index if not already done
-        self._build_module_hak_index()
-        
-        # Read current module from save
-        current_module_file = save_path / "CURRENTMODULE.TXT"
-        if not current_module_file.exists():
-            logger.info(f"No CURRENTMODULE.TXT found in {save_path} - using base game content only")
-            return True  # Not an error - might be base campaign save
-        
-        try:
-            module_name = current_module_file.read_text(encoding='utf-8').strip()
-            logger.info(f"Save was created in module: '{module_name}'")
-            
-            # Find module in our index
-            if module_name not in self._module_to_haks:
-                logger.warning(f"Module '{module_name}' not found in index. Available modules: {list(self._module_to_haks.keys())[:5]}...")
-                return False
-            
-            # Load the module and its HAKs
-            module_info = self._module_to_haks[module_name]
-            mod_file_path = module_info['mod_file']
-            required_haks = module_info['haks']
-            
-            logger.info(f"Loading module context: {len(required_haks)} HAKs required")
-            for hak in required_haks:
-                logger.debug(f"  - {hak}")
-            
-            # Use existing set_module method to load everything
-            success = self.set_module(mod_file_path)
-            if success:
-                logger.info(f"Successfully loaded save context for module '{module_name}'")
-            else:
-                logger.error(f"Failed to load module '{module_name}' from {mod_file_path}")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"Error loading save context from {save_path}: {e}")
-            return False
-    
-    def get_module_index_stats(self) -> Dict[str, Any]:
-        """Get statistics about the module-to-HAK index."""
-        if not self._modules_indexed:
-            self._build_module_hak_index()
-        
-        total_haks = 0
-        modules_with_haks = 0
-        
-        for module_info in self._module_to_haks.values():
-            hak_count = len(module_info['haks'])
-            total_haks += hak_count
-            if hak_count > 0:
-                modules_with_haks += 1
-        
-        return {
-            'total_modules': len(self._module_to_haks),
-            'modules_with_haks': modules_with_haks,
-            'total_haks_referenced': total_haks,
-            'vanilla_modules_skipped': len(self._vanilla_modules),
-            'indexed': self._modules_indexed,
-            'sample_modules': list(self._module_to_haks.keys())[:10]
-        }
-    
     @with_retry_limit(table_name_param="name")
     def get_2da_with_overrides(self, name: str) -> Optional[TDAParser]:
         """
@@ -2193,7 +2252,6 @@ class ResourceManager:
             self._add_to_cache(cache_key, result)
             # Update memory usage
             self._update_cache_memory_usage()
-            # Check if we need to evict items
             if self._cache_memory_bytes > self._cache_max_mb * 1024 * 1024:
                 self._evict_lru_items()
         
@@ -2405,6 +2463,11 @@ class ResourceManager:
     def cleanup_workshop_cache(self):
         """Remove cache entries for uninstalled workshop mods"""
         return self._workshop_service.cleanup_cache()
+    
+    # ============================================================================
+    # UTILITY & STATS METHODS
+    # ============================================================================
+    
     
     def get_cache_size_mb(self) -> float:
         """Get current cache size in MB"""
