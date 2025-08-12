@@ -13,7 +13,6 @@ import time
 
 from gamedata.dynamic_loader.runtime_class_generator import RuntimeDataClassGenerator
 from gamedata.dynamic_loader.code_cache import SecureCodeCache
-from gamedata.dynamic_loader.column_sanitizer import ColumnNameSanitizer
 from gamedata.dynamic_loader.relationship_validator import RelationshipValidator, ValidationReport
 from parsers.resource_manager import ResourceManager
 from utils.performance_profiler import get_profiler
@@ -553,7 +552,6 @@ class DataModelLoader:
             
             # Import the vanilla class dynamically
             import importlib.util
-            import sys
             
             # Create module spec
             spec = importlib.util.spec_from_file_location(f"vanilla_{table_name}", vanilla_file)
@@ -580,17 +578,9 @@ class DataModelLoader:
             return None
     
     async def _load_table_data(self, tables: List[Dict[str, Any]]):
-        """Load actual data into class instances with optimized batch creation, object pooling, and pre-allocated lists."""
+        """Load actual data into class instances with universal batch creation for maximum performance."""
         total_tables = len(tables)
         
-        # Define small tables that benefit from object pooling (typically < 100 rows)
-        POOLED_TABLES = {
-            'classes', 'racialtypes', 'racialsubtypes', 'skills', 'gender', 
-            'alignment', 'backgrounds', 'domains', 'spellschools', 'categories'
-        }
-        
-        # Object pool for small tables
-        object_pool = {}
         
         for i, table_info in enumerate(tables):
             table_name = table_info['name']
@@ -626,71 +616,24 @@ class DataModelLoader:
             # Optimization 3: Pre-populate string cache using batch TLK lookups
             string_cache = self._create_string_cache(row_data_list, table_name)
             
-            # Optimization 4: Object pooling for small tables (35-50% faster)
-            if table_name in POOLED_TABLES and row_count < 100:
-                # Use object pooling for small, frequently accessed tables
-                pool_key = (table_name, data_class)
+            # Optimization 4: Universal batch creation for ALL tables (2.5x faster)
+            try:
+                # All generated classes have create_batch() method - use it universally
+                created_instances = data_class.create_batch(row_data_list, self.rm, string_cache)
                 
-                if pool_key not in object_pool:
-                    # Create pool with pre-allocated objects using __new__
-                    pool = []
-                    for _ in range(row_count * 2):  # Create 2x needed for future reuse
-                        obj = object.__new__(data_class)
-                        pool.append(obj)
-                    object_pool[pool_key] = pool
-                
-                # Get objects from pool
-                pool = object_pool[pool_key]
-                created_instances = []
-                
-                for j, row_dict in enumerate(row_data_list):
-                    if pool:
-                        # Reuse pooled object
-                        instance = pool.pop()
-                        # Reset and initialize the pooled object
-                        self._initialize_pooled_object(instance, data_class, row_dict, self.rm, string_cache)
-                    else:
-                        # Pool exhausted, create new using batch method
-                        instance = object.__new__(data_class)
-                        self._initialize_pooled_object(instance, data_class, row_dict, self.rm, string_cache)
-                    
-                    created_instances.append(instance)
-                    # Place in pre-allocated list at correct index
+                # Place instances in pre-allocated list
+                for j, instance in enumerate(created_instances):
                     if j < len(valid_indices):
                         instances[valid_indices[j]] = instance
                 
-                # Remove None entries from pre-allocated list
+                # Remove None entries
                 instances = [inst for inst in instances if inst is not None]
                 
-            else:
-                # Optimization 5: Use batch creation with __new__ for larger tables
-                try:
-                    # Use specialized batch constructor if available
-                    if hasattr(data_class, 'create_batch'):
-                        created_instances = data_class.create_batch(row_data_list, self.rm, string_cache)
-                    else:
-                        # Fallback to optimized list comprehension
-                        created_instances = [data_class(_resource_manager=self.rm, _string_cache=string_cache, **row_dict) 
-                                    for row_dict in row_data_list]
-                    
-                    # Place instances in pre-allocated list
-                    for j, instance in enumerate(created_instances):
-                        if j < len(valid_indices):
-                            instances[valid_indices[j]] = instance
-                    
-                    # Remove None entries
-                    instances = [inst for inst in instances if inst is not None]
-                    
-                except Exception as e:
-                    logger.warning(f"Optimized batch creation failed for {table_name}, using standard method: {e}")
-                    # Fallback to standard creation
-                    instances = []
-                    for row_dict in row_data_list:
-                        try:
-                            instance = data_class(_resource_manager=self.rm, **row_dict)
-                            instances.append(instance)
-                        except Exception as e2:
-                            logger.warning(f"Failed to create instance for {table_name}: {e2}")
+            except Exception as e:
+                logger.error(f"Batch creation failed for {table_name}: {e}")
+                # If batch creation fails, something is seriously wrong - re-raise the error
+                # This ensures we don't silently fall back to slow individual creation
+                raise RuntimeError(f"Failed to create instances for table {table_name} using batch method: {e}") from e
             
             # Store instances
             self.table_data[table_name] = instances
@@ -710,45 +653,6 @@ class DataModelLoader:
             if i % 50 == 0:
                 await asyncio.sleep(0)
     
-    def _initialize_pooled_object(self, instance, data_class, row_dict, resource_manager, string_cache):
-        """Initialize a pooled object by directly setting its attributes."""
-        # Set resource manager
-        object.__setattr__(instance, '_resource_manager', resource_manager)
-        
-        # Get column mapping from class
-        column_mapping = data_class._column_mapping
-        slot_names = {orig: '_' + safe for orig, safe in column_mapping.items()}
-        
-        # Common string reference fields
-        string_ref_fields = {
-            'name', 'description', 'plural', 'lower', 'label',
-            'displaynametext', 'desc', 'tooltip', 'help'
-        }
-        
-        # Reset all slots to None first (for pooled objects)
-        for slot in data_class.__slots__:
-            object.__setattr__(instance, slot, None)
-        
-        # Set attributes from row data
-        for orig_col, value in row_dict.items():
-            if orig_col in slot_names:
-                slot_name = slot_names[orig_col]
-                
-                # Inline string resolution
-                if string_cache and orig_col.lower() in string_ref_fields and isinstance(value, (str, int)):
-                    try:
-                        int_val = int(value)
-                        if int_val > 0 and int_val in string_cache:
-                            value = string_cache[int_val]
-                        elif int_val > 0 and int_val <= 16777215 and resource_manager:
-                            resolved = resource_manager.get_string(int_val)
-                            if resolved and resolved != str(int_val):
-                                value = resolved
-                    except (ValueError, TypeError):
-                        pass
-                
-                # Direct assignment
-                object.__setattr__(instance, slot_name, value)
     
     async def _finalize_data(self):
         """Perform any final validation or post-processing."""
