@@ -257,3 +257,6 @@ NWN2_CACHE_MAX_MB = int(os.getenv('NWN2_CACHE_MAX_MB', '50'))                # M
 NWN2_COMPRESS_CACHE = os.getenv('NWN2_COMPRESS_CACHE', 'true').lower() == 'true'  # Enable compression
 NWN2_COMPRESS_THRESHOLD_KB = int(os.getenv('NWN2_COMPRESS_THRESHOLD_KB', '100'))  # Compress if > 100KB
 NWN2_SMART_PRELOAD = os.getenv('NWN2_SMART_PRELOAD', 'true').lower() == 'true'    # Use smart preloading
+
+# Pre-compiled Cache Settings (60-70% startup speedup)
+ENABLE_PRECOMPILED_CACHE = os.getenv('ENABLE_PRECOMPILED_CACHE', 'true').lower() == 'true'

@@ -27,6 +27,8 @@ image = { version = "0.24", features = ["webp", "png", "tga"] }
 webp = "0.2"
 dashmap = "5.5"
 parking_lot = "0.12"
+rmp-serde = "1.1"
+sha2 = "0.10"
 
 [build-dependencies]
 pyo3-build-config = "0.20"

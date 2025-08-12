@@ -1214,17 +1214,6 @@ class TestHelperMethods:
         assert resource_manager.get_cached_count() == 2
 
 
-class TestLoadModuleContent:
-    """Test load_module_content functionality"""
-    
-    # REMOVED: test_load_module_content_basic - uses runtime-generated data
-    def test_load_module_content_missing_module(self, resource_manager):
-        """Test loading content without setting module first"""
-        # Should handle gracefully
-        resource_manager.load_module_content("NonExistent", [])
-        # No crash expected
-
-
 class TestInternalMethods:
     """Test internal helper methods"""
     

@@ -80,28 +80,41 @@ impl ResourceScanner {
     /// Returns:
     ///     Dictionary mapping resource names to ResourceLocation objects
     pub fn scan_zip_files(&mut self, zip_paths: Vec<String>) -> PyResult<HashMap<String, ResourceLocation>> {
-        let mut results = HashMap::new();
+        // Convert strings to paths and filter existing ones
+        let valid_paths: Vec<&Path> = zip_paths.iter()
+            .map(|s| Path::new(s))
+            .filter(|p| p.exists())
+            .collect();
         
-        for zip_path_str in zip_paths {
-            let zip_path = Path::new(&zip_path_str);
-            
-            if !zip_path.exists() {
-                continue;
-            }
-            
-            match self.zip_indexer.index_zip(zip_path) {
-                Ok(zip_resources) => {
-                    for (resource_name, location) in zip_resources {
-                        results.insert(resource_name, location);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Warning: Failed to index ZIP {}: {}", zip_path_str, e);
-                }
-            }
+        if valid_paths.is_empty() {
+            return Ok(HashMap::new());
         }
         
-        Ok(results)
+        // Always use parallel processing for maximum speed
+        match self.zip_indexer.index_zips_parallel(valid_paths) {
+            Ok(results) => Ok(results),
+            Err(e) => {
+                eprintln!("Warning: ZIP parallel scanning failed, falling back to sequential: {}", e);
+                // Fallback to sequential if parallel fails
+                let mut results = HashMap::new();
+                for zip_path_str in zip_paths {
+                    let zip_path = Path::new(&zip_path_str);
+                    if !zip_path.exists() {
+                        continue;
+                    }
+                    
+                    match self.zip_indexer.index_zip(zip_path) {
+                        Ok(zip_resources) => {
+                            results.extend(zip_resources);
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to index ZIP {}: {}", zip_path_str, e);
+                        }
+                    }
+                }
+                Ok(results)
+            }
+        }
     }
     
     /// Scan workshop directories for override files

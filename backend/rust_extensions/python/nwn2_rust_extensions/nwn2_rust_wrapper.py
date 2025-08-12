@@ -12,7 +12,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Import the compiled Rust module directly (not the Python package)
-from . import nwn2_rust_extensions
+try:
+    from . import nwn2_rust_extensions
+except ImportError:
+    # Fallback - try to import from parent
+    import nwn2_rust_extensions
 
 # We always require Rust extensions now
 RUST_AVAILABLE = True

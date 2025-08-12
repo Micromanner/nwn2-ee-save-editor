@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::time::{Instant, UNIX_EPOCH};
 use zip::ZipArchive;
@@ -40,9 +41,11 @@ impl ZipIndexer {
             .unwrap_or_default()
             .as_secs();
         
-        // Open ZIP file
+        // Open ZIP file with buffered reader for better performance
         let zip_file = File::open(zip_path)?;
-        let mut archive = ZipArchive::new(zip_file)?;
+        const BUFFER_SIZE: usize = 64 * 1024; // 64KB buffer
+        let buffered_reader = BufReader::with_capacity(BUFFER_SIZE, zip_file);
+        let mut archive = ZipArchive::new(buffered_reader)?;
         
         let mut files_processed = 0;
         let mut tda_files_found = 0;

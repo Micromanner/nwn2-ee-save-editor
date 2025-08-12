@@ -53,3 +53,6 @@ backend/templates/characters
 backend/tests/fixtures/
 frontend/tsconfig.tsbuildinfo
 backend/logs
+django_nuitka_runner.py
+nuitka-crash-report.xml
+binaries

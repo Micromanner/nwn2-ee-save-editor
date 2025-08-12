@@ -104,7 +104,16 @@ class ModuleGameRulesLoader:
         
         # Use ResourceManager to load hakpak content
         with ResourceManager() as rm:
-            rm.load_module_content(module_name, hakpak_list)
+            # Find the module by name first
+            module_path = rm.find_module(module_name)
+            if not module_path:
+                logger.warning(f"Module '{module_name}' not found")
+                return None
+            
+            # Load the module and its HAKs
+            if not rm.set_module(module_path):
+                logger.warning(f"Failed to load module '{module_name}'")
+                return None
             
             # Get overridden 2DA files
             override_tables = [

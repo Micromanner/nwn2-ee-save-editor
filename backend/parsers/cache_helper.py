@@ -1,69 +1,48 @@
 """
-Helper functions for caching TDAParser objects safely using msgpack.
+Helper functions for caching TDAParser objects using msgpack.
+Simplified to only use Rust-based serialization.
 """
-from typing import Any, Optional, Union
+from typing import Optional, Union
 from pathlib import Path
-from gamedata.cache.safe_cache import SafeCache
+import logging
 # Use the imported TDAParser (now Rust-based) from __init__.py
 from . import TDAParser
 
+logger = logging.getLogger(__name__)
+
 
 class TDACacheHelper:
-    """Helper for safely caching TDAParser objects."""
+    """Helper for caching TDAParser objects using Rust msgpack serialization."""
     
     @staticmethod
     def save_tda(filepath: Union[str, Path], parser: TDAParser) -> None:
-        """Save a TDAParser to cache."""
+        """Save a TDAParser to cache using Rust msgpack serialization."""
         try:
-            # Try Rust parser serialization first
             if hasattr(parser, 'to_msgpack_bytes'):
                 cache_data = parser.to_msgpack_bytes()
                 Path(filepath).with_suffix('.msgpack').write_bytes(cache_data)
             else:
-                # Fallback to SafeCache for compatibility
-                SafeCache.save(filepath, parser)
-        except Exception:
-            # Fallback to SafeCache for any issues
-            SafeCache.save(filepath, parser)
+                logger.warning(f"Parser doesn't support msgpack serialization, not caching")
+        except Exception as e:
+            logger.error(f"Failed to save TDA cache: {e}")
     
     @staticmethod
     def load_tda(filepath: Union[str, Path]) -> Optional[TDAParser]:
-        """Load a TDAParser from cache, reconstructing the object."""
+        """Load a TDAParser from msgpack cache."""
         try:
-            # Try loading Rust parser serialization first
             cache_file = Path(filepath).with_suffix('.msgpack')
             if cache_file.exists():
                 cache_data = cache_file.read_bytes()
                 if hasattr(TDAParser, 'from_msgpack_bytes'):
                     return TDAParser.from_msgpack_bytes(cache_data)
-        except Exception:
-            pass
-        
-        # Fallback to SafeCache
-        data = SafeCache.load(filepath)
-        if data is None:
-            return None
-        
-        # If it's already a TDAParser (legacy cache), return as-is
-        if isinstance(data, TDAParser):
-            return data
-        
-        # Otherwise reconstruct from dict
-        if isinstance(data, dict):
-            try:
-                parser = TDAParser()
-                # Restore attributes from the dict
-                for key, value in data.items():
-                    setattr(parser, key, value)
-                return parser
-            except Exception:
-                return None
+                else:
+                    logger.warning("TDAParser doesn't support msgpack deserialization")
+        except Exception as e:
+            logger.error(f"Failed to load TDA cache: {e}")
         
         return None
     
     @staticmethod
     def exists(filepath: Union[str, Path]) -> bool:
         """Check if cache file exists."""
-        # Check both Rust serialization and SafeCache formats
-        rust_cache = Path(filepath).with_suffix('.msgpack')
-        return rust_cache.exists() or SafeCache.exists(filepath)
+        return Path(filepath).with_suffix('.msgpack').exists()
