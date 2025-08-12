@@ -258,6 +258,62 @@ class PrecompiledCacheIntegration:
             'override_files': sorted(override_files)   # Sort for consistent ordering
         }
     
+    def get_new_custom_tables(self) -> List[str]:
+        """
+        Get list of new custom 2DA tables that weren't in the previous cache.
+        Uses cache key comparison to identify newly added mod content.
+        
+        Returns:
+            List of table names (without .2da extension) that are new custom tables
+        """
+        if not self.cache_enabled or not self.cache_manager:
+            return []
+        
+        try:
+            # Get current mod files
+            current_workshop = list(self.resource_manager._workshop_file_paths.keys()) if hasattr(self.resource_manager, '_workshop_file_paths') else []
+            current_override = list(self.resource_manager._override_file_paths.keys()) if hasattr(self.resource_manager, '_override_file_paths') else []
+            
+            # Try to get previous mod state from cache metadata
+            cache_dir = Path(settings.BASE_DIR) / 'cache' / 'compiled_cache'
+            metadata_file = cache_dir / "cache_metadata.json"
+            
+            previous_workshop = []
+            previous_override = []
+            
+            if metadata_file.exists():
+                import json
+                try:
+                    with open(metadata_file, 'r') as f:
+                        cache_metadata = json.load(f)
+                    
+                    # Extract previous file lists from cache metadata
+                    previous_workshop = cache_metadata.get('mod_state', {}).get('workshop_files', [])
+                    previous_override = cache_metadata.get('mod_state', {}).get('override_files', [])
+                    
+                except Exception as e:
+                    logger.warning(f"Could not read previous cache metadata: {e}")
+            
+            # Find NEW files (in current but not in previous)
+            new_workshop = set(current_workshop) - set(previous_workshop)
+            new_override = set(current_override) - set(previous_override)
+            
+            # Combine and clean up names (remove .2da extension)
+            new_tables = []
+            for filename in new_workshop | new_override:
+                table_name = filename.replace('.2da', '') if filename.endswith('.2da') else filename
+                new_tables.append(table_name)
+            
+            if new_tables:
+                logger.info(f"Detected {len(new_tables)} new custom tables: {new_tables}")
+            
+            return sorted(new_tables)
+            
+        except Exception as e:
+            logger.error(f"Failed to detect new custom tables: {e}")
+            return []
+    
+    
     def _collect_tables_for_caching(self) -> Dict[str, Dict[str, Any]]:
         """Collect all 2DA tables for caching."""
         tables_data = {}

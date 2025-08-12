@@ -45,7 +45,7 @@ overall_docs/
 .claude/
 .benchmarks/
 .pytest_cache/
-backend/gamedata/cache/generated_code/
+backend/gamedata/cache 
 extracted_icons_for_debug_only
 .cspell.json
 legacy_java_editor
