@@ -317,11 +317,14 @@ class InMemoryCharacterSession:
             )
             
             if self.character_manager:
-                # Factory already registered all managers, just log success
                 logger.info("Character editing session ready with all managers")
                 return True
+            else:
+                logger.error("Character manager is None after creation")
+                return False
         except Exception as e:
             logger.error(f"Failed to initialize character session: {e}", exc_info=True)
+            return False
         
         return False
     

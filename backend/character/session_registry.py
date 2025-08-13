@@ -20,7 +20,8 @@ _character_sessions: Dict[int, InMemoryCharacterSession] = {}
 _registry_lock = threading.Lock()
 
 
-def get_character_session(character_id: int) -> InMemoryCharacterSession:
+
+def get_character_session(character_id) -> InMemoryCharacterSession:
     """
     Get or create a character editing session.
     
@@ -29,7 +30,7 @@ def get_character_session(character_id: int) -> InMemoryCharacterSession:
     the same session and managers.
     
     Args:
-        character_id: Character database ID
+        character_id: Character database ID (will be converted to int)
         
     Returns:
         InMemoryCharacterSession instance
@@ -38,11 +39,15 @@ def get_character_session(character_id: int) -> InMemoryCharacterSession:
         Http404: If character not found
         ValueError: If session creation fails
     """
+    # Ensure character_id is always an integer
+    character_id = int(character_id)
+    
     with _registry_lock:
+        
         # Check if session already exists
         if character_id in _character_sessions:
             session = _character_sessions[character_id]
-            if session.character_manager:  # Verify session is still valid
+            if hasattr(session, 'character_manager') and session.character_manager:  # Verify session is still valid
                 logger.debug(f"Reusing existing session for character {character_id}")
                 return session
             else:
@@ -74,16 +79,19 @@ def get_character_session(character_id: int) -> InMemoryCharacterSession:
             raise ValueError(f"Unable to load character: {str(e)}")
 
 
-def close_character_session(character_id: int) -> bool:
+def close_character_session(character_id) -> bool:
     """
     Close and cleanup a character editing session.
     
     Args:
-        character_id: Character database ID
+        character_id: Character database ID (will be converted to int)
         
     Returns:
         True if session was closed, False if no session existed
     """
+    # Ensure character_id is always an integer
+    character_id = int(character_id)
+    
     with _registry_lock:
         session = _character_sessions.pop(character_id, None)
         if session:
@@ -99,16 +107,19 @@ def close_character_session(character_id: int) -> bool:
             return False
 
 
-def has_active_session(character_id: int) -> bool:
+def has_active_session(character_id) -> bool:
     """
     Check if character has an active session.
     
     Args:
-        character_id: Character database ID
+        character_id: Character database ID (will be converted to int)
         
     Returns:
         True if active session exists
     """
+    # Ensure character_id is always an integer
+    character_id = int(character_id)
+    
     with _registry_lock:
         return character_id in _character_sessions
 
@@ -134,17 +145,20 @@ def get_active_sessions() -> Dict[int, dict]:
         return info
 
 
-def save_character_session(character_id: int, create_backup: bool = True) -> bool:
+def save_character_session(character_id, create_backup: bool = True) -> bool:
     """
     Save changes in a character session to disk.
     
     Args:
-        character_id: Character database ID
+        character_id: Character database ID (will be converted to int)
         create_backup: Whether to create backup before saving
         
     Returns:
         True if saved successfully, False otherwise
     """
+    # Ensure character_id is always an integer
+    character_id = int(character_id)
+    
     with _registry_lock:
         session = _character_sessions.get(character_id)
         if not session:
