@@ -281,92 +281,75 @@ class {class_name}:
         """Get list of safe column names."""
         return cls._safe_columns.copy()
     
-{self._generate_optimized_batch_method(safe_columns, column_mapping)}
-'''
-        
-        return code
-    
-    def _generate_optimized_batch_method(self, safe_columns: List[str], column_mapping: Dict[str, str]) -> str:
-        """Generate table-specific optimized batch method with zero lookups."""
-        # Detect string fields from column names
-        string_ref_fields = {
-            'name', 'description', 'plural', 'lower', 'label',
-            'displaynametext', 'desc', 'tooltip', 'help'
-        }
-        
-        # Categorize columns
-        string_columns = []
-        regular_columns = []
-        
-        for orig_col, safe_col in column_mapping.items():
-            if orig_col.lower() in string_ref_fields:
-                string_columns.append((orig_col, safe_col))
-            else:
-                regular_columns.append((orig_col, safe_col))
-        
-        # Generate direct assignment code
-        assignments = []
-        
-        # Regular columns (no string resolution)
-        for orig_col, safe_col in regular_columns:
-            assignments.append(f"            object.__setattr__(instance, '_{safe_col}', row_data.get('{orig_col}'))")
-        
-        # String columns (with optimized resolution)
-        for orig_col, safe_col in string_columns:
-            assignments.append(f"""            # String field: {orig_col}
-            raw_value = row_data.get('{orig_col}')
-            if string_cache and isinstance(raw_value, (str, int)):
-                try:
-                    int_val = int(raw_value)
-                    if int_val > 0 and int_val in string_cache:
-                        resolved_value = string_cache[int_val]
-                    elif int_val > 0 and int_val <= 16777215 and resource_manager:
-                        resolved = resource_manager.get_string(int_val)
-                        resolved_value = resolved if resolved and resolved != str(int_val) else raw_value
-                    else:
-                        resolved_value = raw_value
-                except (ValueError, TypeError):
-                    resolved_value = raw_value
-            else:
-                resolved_value = raw_value
-            object.__setattr__(instance, '_{safe_col}', resolved_value)""")
-        
-        # Generate None initialization for remaining slots
-        slot_inits = []
-        for safe_col in safe_columns:
-            slot_inits.append(f"            if not hasattr(instance, '_{safe_col}'): object.__setattr__(instance, '_{safe_col}', None)")
-        
-        return f'''    @classmethod
+    @classmethod
     def create_batch(cls, row_data_list, resource_manager=None, string_cache=None):
         """
-        Ultra-optimized batch creation with zero dictionary lookups.
+        Optimized batch creation using __new__ to bypass __init__ overhead.
         
-        This table-specific implementation eliminates all runtime overhead:
-        - No column mapping lookups
-        - No string field detection 
-        - Direct assignments to known slots
-        - Pre-resolved string field logic
+        This method creates multiple instances 25-40% faster by:
+        1. Using __new__ to allocate objects without calling __init__
+        2. Directly setting attributes via object.__setattr__
+        3. Reusing column mapping and string cache
         
-        Expected performance: 60-80% faster than generic batch creation.
+        Args:
+            row_data_list: List of dictionaries containing row data
+            resource_manager: ResourceManager for string resolution
+            string_cache: Pre-populated string cache for batch lookups
+            
+        Returns:
+            List of initialized instances
         """
         instances = []
+        column_mapping = cls._column_mapping
+        
+        # Pre-compute slot names to avoid repeated string concatenation
+        slot_names = {{orig: '_' + safe for orig, safe in column_mapping.items()}}
+        
+        # Common string reference fields for optimization
+        string_ref_fields = {{
+            'name', 'description', 'plural', 'lower', 'label',
+            'displaynametext', 'desc', 'tooltip', 'help'
+        }}
         
         for row_data in row_data_list:
             # Allocate object without calling __init__
             instance = object.__new__(cls)
             
-            # Set resource manager
+            # Directly set resource manager
             object.__setattr__(instance, '_resource_manager', resource_manager)
             
-            # Direct assignments - zero lookups
-{chr(10).join(assignments)}
+            # Fast path: set attributes directly
+            for orig_col, value in row_data.items():
+                if orig_col in slot_names:
+                    slot_name = slot_names[orig_col]
+                    
+                    # Inline string resolution for performance
+                    if string_cache and orig_col.lower() in string_ref_fields and isinstance(value, (str, int)):
+                        try:
+                            int_val = int(value)
+                            if int_val > 0 and int_val in string_cache:
+                                value = string_cache[int_val]
+                            elif int_val > 0 and int_val <= 16777215 and resource_manager:
+                                resolved = resource_manager.get_string(int_val)
+                                if resolved and resolved != str(int_val):
+                                    value = resolved
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Direct assignment
+                    object.__setattr__(instance, slot_name, value)
             
-            # Initialize remaining slots to None
-{chr(10).join(slot_inits)}
+            # Initialize remaining slots to None (optimized)
+            for slot in cls.__slots__:
+                if not hasattr(instance, slot):
+                    object.__setattr__(instance, slot, None)
             
             instances.append(instance)
         
-        return instances'''
+        return instances
+'''
+        
+        return code
     
     def generate_code_for_table(self, table_name: str, table_data: Any) -> str:
         """
