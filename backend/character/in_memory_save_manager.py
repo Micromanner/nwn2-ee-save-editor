@@ -39,6 +39,7 @@ class InMemorySaveManager:
         
         # In-memory character data (from player.bic)
         self.character_data: Optional[Dict[str, Any]] = None
+        self.character_gff_element: Optional[Any] = None  # Store original GFF element
         
         # Track changes
         self.is_dirty = False
@@ -68,6 +69,7 @@ class InMemorySaveManager:
             # Parse player.bic into dict for CharacterManager
             parser = GFFParser()
             bic_gff = parser.load(BytesIO(playerbic_data))
+            self.character_gff_element = bic_gff  # Store original GFF element
             self.character_data = bic_gff.to_dict()
             
             # Mark as loaded
@@ -103,7 +105,7 @@ class InMemorySaveManager:
                 
                 self._character_manager = create_character_manager(
                     self.character_data,
-                    gff_element=None,  # In-memory doesn't use direct GFF element
+                    gff_element=self.character_gff_element,  # Pass the original GFF element
                     game_data_loader=game_data_loader,
                     rules_service=rules_service,
                     lazy=True  # Use lazy loading for better performance
@@ -155,17 +157,17 @@ class InMemorySaveManager:
             logger.info(f"Saving changes to disk (backup={create_backup})")
             
             if self._character_manager:
-                # Get updated character data
-                updated_data = self._character_manager.character_data
-                
-                # Convert back to GFF format for saving
-                from parsers.gff import GFFWriter, dict_to_gff
-                
-                # Create player.bic content
-                bic_gff = dict_to_gff(updated_data, 'BIC ')
-                playerbic_output = BytesIO()
-                bic_writer = GFFWriter('BIC ')
-                bic_writer.save(playerbic_output, bic_gff)
+                # Use the original GFFElement which has been updated in-place
+                if hasattr(self._character_manager, 'gff_element') and self._character_manager.gff_element:
+                    # Create player.bic content using the original GFFElement
+                    from parsers.gff import GFFWriter
+                    
+                    playerbic_output = BytesIO()
+                    bic_writer = GFFWriter('BIC ')
+                    bic_writer.save(playerbic_output, self._character_manager.gff_element)
+                else:
+                    logger.error("No GFFElement available - cannot save character data")
+                    return False
                 
                 # We need to also sync changes to playerlist.ifo
                 # First, load the current playerlist.ifo to update it
@@ -183,9 +185,10 @@ class InMemorySaveManager:
                         # Update player struct with changes from character data
                         # Only update fields that exist in playerlist.ifo
                         player_dict = player_struct.to_dict()
+                        character_dict = self._character_manager.gff_element.to_dict()
                         for key in player_dict:
-                            if key in updated_data:
-                                player_struct.set_field(key, updated_data[key])
+                            if key in character_dict:
+                                player_struct.set_field(key, character_dict[key])
                         
                         # Write updated playerlist.ifo
                         playerlist_output = BytesIO()

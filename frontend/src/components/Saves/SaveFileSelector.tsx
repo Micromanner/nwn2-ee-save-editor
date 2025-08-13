@@ -88,8 +88,8 @@ export function SaveFileSelector() {
     setError(null);
 
     try {
-      // For now, save with empty updates - the backend will sync current character state
-      const result = await CharacterAPI.saveCharacter(character.id, {});
+      // Send sync signal to save current character state
+      const result = await CharacterAPI.saveCharacter(character.id, { sync_current_state: true });
       console.log('Character saved successfully:', result);
       
       // Show launch dialog after successful save (if enabled in settings)

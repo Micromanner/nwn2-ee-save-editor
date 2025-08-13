@@ -315,11 +315,13 @@ def update_savegame_character(request, character_id):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         
-        # Get the CharacterManager updates
+        # Check if this is a sync operation (save current state without updates)
+        sync_current_state = request.data.get('sync_current_state', False)
         updates = request.data.get('updates', {})
-        if not updates:
+        
+        if not sync_current_state and not updates:
             return error_response(
-                'No updates provided',
+                'No updates provided and sync_current_state not requested',
                 code='MISSING_UPDATES',
                 details={'character_id': character_id}
             )
@@ -346,31 +348,19 @@ def update_savegame_character(request, character_id):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Register managers based on what's being updated
-        if 'attributes' in updates:
-            manager.register_manager('attribute', AttributeManager)
-            manager.register_manager('combat', CombatManager)
-            manager.register_manager('save', SaveManager)
-        
-        if 'class' in updates or 'classes' in updates:
-            manager.register_manager('class', ClassManager)
-            manager.register_manager('feat', FeatManager)
-            manager.register_manager('spell', SpellManager)
-            manager.register_manager('skill', SkillManager)
-        
-        if 'feats' in updates:
-            manager.register_manager('feat', FeatManager)
-        
-        if 'spells' in updates:
-            manager.register_manager('spell', SpellManager)
-        
-        if 'skills' in updates:
-            manager.register_manager('skill', SkillManager)
+        # Note: Managers are registered on-demand by other API endpoints when needed
+        # For save operations, we just use whatever managers are already registered
+        # No need to register managers again here
         
         # Apply updates
         changes = {}
         
-        # Example: Update attributes
+        if sync_current_state:
+            # For sync operations, we don't apply new updates - just save current state
+            changes['sync_operation'] = True
+            logger.info(f"Sync operation - saving current character state: character_id={character_id}")
+        
+        # Apply specific updates if provided
         if 'attributes' in updates:
             attr_manager = manager.get_manager('attribute')
             for attr, value in updates['attributes'].items():
