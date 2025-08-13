@@ -88,9 +88,7 @@ def import_savegame(request):
             details={'parameter': 'save_path'}
         )
     
-    # Convert Windows path to WSL path if needed
-    if save_path.startswith('C:\\'):
-        save_path = save_path.replace('C:\\', '/mnt/c/').replace('\\', '/')
+    # No path conversion needed for native Windows
     
     try:
         # Verify the save directory exists and has resgff.zip

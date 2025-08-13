@@ -863,9 +863,12 @@ class DataModelLoader:
                 self._string_lookup_stats['total_lookups'] += len(str_refs_list)
                 self._string_lookup_stats['batch_time_ms'] += batch_time
                 
+                # Calculate strings/sec safely (avoid division by zero)
+                strings_per_sec = (len(str_refs_list) / batch_time * 1000) if batch_time > 0 else float('inf')
                 logger.debug(f"TLK batch lookup for {table_name}: "
                            f"{len(str_refs_list)} strings in {batch_time:.2f}ms "
-                           f"({len(str_refs_list)/batch_time*1000:.0f} strings/sec)")
+                           f"({strings_per_sec:.0f} strings/sec)" if strings_per_sec != float('inf') else
+                           f"{len(str_refs_list)} strings in {batch_time:.2f}ms (instant)")
                 
             except Exception as e:
                 logger.warning(f"Batch TLK lookup failed for {table_name}, falling back to individual lookups: {e}")

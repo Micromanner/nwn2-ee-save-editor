@@ -48,6 +48,11 @@ class NWN2PathFinder:
     def find_nwn2_installation(cls) -> Optional[Path]:
         """Try to auto-detect NWN2 installation using Rust-powered search"""
         discovered = cls.auto_discover_nwn2_paths()
+        # Prioritize non-Documents folders (actual game installations)
+        for path in discovered:
+            if 'Documents' not in str(path) and 'My Documents' not in str(path):
+                return path
+        # Fallback to first discovered path
         return discovered[0] if discovered else None
     
     @classmethod
@@ -83,54 +88,25 @@ class NWN2PathFinder:
     @classmethod
     def find_documents_folder(cls) -> Optional[Path]:
         """Try to auto-detect NWN2 documents folder using standard locations"""
-        # For WSL2, check Windows user folders
-        if Path('/mnt/c/Users').exists():
-            # Get current Windows username from WSL
-            import subprocess
-            try:
-                # Try to get Windows username
-                result = subprocess.run(['cmd.exe', '/c', 'echo %USERNAME%'], 
-                                      capture_output=True, text=True)
-                if result.returncode == 0:
-                    username = result.stdout.strip()
-                    # Try specific user folder first
-                    user_dir = Path(f'/mnt/c/Users/{username}')
-                    if user_dir.exists():
-                        docs_candidates = [
-                            user_dir / 'Documents' / 'Neverwinter Nights 2',
-                            user_dir / 'My Documents' / 'Neverwinter Nights 2',
-                        ]
-                        for candidate in docs_candidates:
-                            if candidate.exists():
-                                return candidate
-            except:
-                pass
-            
-            # Fallback to scanning all user directories
-            for user_dir in Path('/mnt/c/Users').iterdir():
-                if user_dir.is_dir() and user_dir.name not in ['Public', 'Default', 'Default User', 'All Users']:
-                    docs_candidates = [
-                        user_dir / 'Documents' / 'Neverwinter Nights 2',
-                        user_dir / 'My Documents' / 'Neverwinter Nights 2',
-                    ]
-                    for candidate in docs_candidates:
-                        if candidate.exists():
-                            return candidate
-        
-        # Try Linux paths
-        docs_candidates = [
-            Path.home() / 'Documents' / 'Neverwinter Nights 2',
-            Path.home() / '.local' / 'share' / 'Neverwinter Nights 2',
-        ]
-        for candidate in docs_candidates:
-            if candidate.exists():
-                return candidate
-        
-        # Windows native (non-WSL)
+        # Windows native
         if platform.system() == 'Windows':
             docs_path = Path(os.environ.get('USERPROFILE', '')) / 'Documents' / 'Neverwinter Nights 2'
             if docs_path.exists():
                 return docs_path
+            # Also try My Documents
+            my_docs_path = Path(os.environ.get('USERPROFILE', '')) / 'My Documents' / 'Neverwinter Nights 2'
+            if my_docs_path.exists():
+                return my_docs_path
+        
+        # Try Linux paths
+        else:
+            docs_candidates = [
+                Path.home() / 'Documents' / 'Neverwinter Nights 2',
+                Path.home() / '.local' / 'share' / 'Neverwinter Nights 2',
+            ]
+            for candidate in docs_candidates:
+                if candidate.exists():
+                    return candidate
         
         return None
     
@@ -152,13 +128,6 @@ class NWN2PathFinder:
             search_paths = [
                 home / '.steam' / 'steam' / 'steamapps' / 'workshop' / 'content' / '2738630',
             ]
-            
-            # WSL2 support
-            if Path('/mnt/c').exists():
-                search_paths.extend([
-                    Path('/mnt/c/Program Files/Steam/steamapps/workshop/content/2738630'),
-                    Path('/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/2738630'),
-                ])
         
         for path in search_paths:
             if path.exists() and path.is_dir():
@@ -183,7 +152,7 @@ class NWN2Paths:
     - Steam/GOG installation detection and categorization
     - Performance timing and profiling
     - Enhanced Edition detection
-    - Multi-platform support (Windows, Linux, macOS, WSL2)
+    - Multi-platform support (Windows, Linux, macOS)
     """
     
     def __init__(self):
@@ -350,21 +319,7 @@ class NWN2Paths:
             return self._documents_folder
             
         # Otherwise auto-detect
-        # Check for WSL2 first - Windows user folders are accessible via /mnt/c/Users/
-        if Path('/mnt/c/Users').exists():
-            # Try to find the Windows user folder
-            for user_dir in Path('/mnt/c/Users').iterdir():
-                if user_dir.is_dir() and user_dir.name not in ['Public', 'Default', 'Default User', 'All Users']:
-                    # Check common Documents locations
-                    docs_candidates = [
-                        user_dir / 'Documents' / 'Neverwinter Nights 2',
-                        user_dir / 'My Documents' / 'Neverwinter Nights 2',
-                    ]
-                    for candidate in docs_candidates:
-                        if candidate.exists():
-                            return candidate
-        
-        # Fallback to Linux home if not in WSL2 or Windows path not found
+        # Fallback to home directory
         docs_candidates = [
             Path.home() / 'Documents' / 'Neverwinter Nights 2',
             Path.home() / 'My Documents' / 'Neverwinter Nights 2',

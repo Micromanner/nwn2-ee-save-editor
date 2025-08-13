@@ -253,7 +253,8 @@ def discover_nwn2_paths(search_paths: Optional[List[Union[str, Path]]] = None) -
     """
     str_paths = [str(p) for p in search_paths] if search_paths else None
     rust_result = nwn2_rust_extensions.discover_nwn2_paths_rust(str_paths)
-    return DiscoveryResult.from_dict(rust_result)
+    # Rust already returns a proper DiscoveryResult object, not a dict
+    return rust_result
 
 
 def profile_path_discovery(search_paths: Optional[List[Union[str, Path]]] = None) -> DiscoveryResult:
@@ -268,7 +269,8 @@ def profile_path_discovery(search_paths: Optional[List[Union[str, Path]]] = None
     """
     str_paths = [str(p) for p in search_paths] if search_paths else None
     rust_result = nwn2_rust_extensions.profile_path_discovery_rust(str_paths)
-    return DiscoveryResult.from_dict(rust_result)
+    # Rust already returns a proper DiscoveryResult object, not a dict
+    return rust_result
 
 
 def create_resource_scanner() -> RustResourceScanner:

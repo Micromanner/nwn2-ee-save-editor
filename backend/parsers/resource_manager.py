@@ -21,7 +21,7 @@ from django.conf import settings
 from rust_tda_parser import TDAParser
 
 # Parser imports - Use Rust TLK parser for performance
-from .rust_tlk_parser import TLKParser
+from rust_tlk_parser import TLKParser
 logger_tlk = logging.getLogger(__name__ + '.tlk')
 logger_tlk.info("Using high-performance Rust TLK parser")
 

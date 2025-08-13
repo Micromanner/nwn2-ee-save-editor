@@ -43,11 +43,11 @@ pub async fn start_django_sidecar(app: tauri::AppHandle) -> Result<String, Strin
         // Prevent concurrent startups
         let _guard = sidecar.startup_mutex.lock().await;
         
-        // Quick health check first
+        // Check if Django is already running
         if let Ok(response) = reqwest::get("http://127.0.0.1:8000/api/health/").await {
             if response.status().is_success() {
-                info!("Django server already running and healthy");
-                return Ok("Django sidecar already running".to_string());
+                info!("Django already running, stopping it first");
+                let _ = stop_django_sidecar(app.clone()).await;
             }
         }
         
@@ -68,24 +68,53 @@ pub async fn start_django_sidecar(app: tauri::AppHandle) -> Result<String, Strin
     // Kill any orphaned processes on port 8000
     if cfg!(debug_assertions) {
         info!("Attempting to kill any processes on port 8000");
-        let kill_result = app.shell()
-            .command("python3")
-            .args(["../../backend/scripts/kill_django_port.py"])
-            .output()
-            .await;
+        
+        // Use native OS commands to find and kill process on port 8000
+        let kill_result = if cfg!(target_os = "windows") {
+            // Windows: Use netstat and taskkill
+            // First find the PID
+            let netstat_output = app.shell()
+                .command("cmd")
+                .args(["/C", "netstat -ano | findstr :8000"])
+                .output()
+                .await;
+                
+            if let Ok(output) = netstat_output {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                // Parse PID from netstat output (last column)
+                if let Some(line) = output_str.lines().find(|l| l.contains("LISTENING")) {
+                    if let Some(pid) = line.split_whitespace().last() {
+                        info!("Found process {} on port 8000, killing it", pid);
+                        app.shell()
+                            .command("cmd")
+                            .args(["/C", &format!("taskkill /F /PID {}", pid)])
+                            .output()
+                            .await
+                    } else {
+                        Ok(output)
+                    }
+                } else {
+                    Ok(output)
+                }
+            } else {
+                netstat_output
+            }
+        } else {
+            // Unix: Use lsof or ss and kill
+            app.shell()
+                .command("sh")
+                .args(["-c", "lsof -ti:8000 | xargs kill -9 2>/dev/null || true"])
+                .output()
+                .await
+        };
         
         match kill_result {
             Ok(output) => {
                 if !output.stdout.is_empty() {
                     info!("Kill port output: {}", String::from_utf8_lossy(&output.stdout));
                 }
-                if !output.stderr.is_empty() {
-                    info!("Kill port stderr: {}", String::from_utf8_lossy(&output.stderr));
-                }
-                // Wait a bit after killing
-                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
             }
-            Err(e) => error!("Failed to run kill port script: {}", e),
+            Err(e) => error!("Failed to kill process on port: {}", e),
         }
         
         // Double-check that port is free with retries
@@ -119,10 +148,32 @@ pub async fn start_django_sidecar(app: tauri::AppHandle) -> Result<String, Strin
     
     let sidecar_command = if cfg!(debug_assertions) {
         // In development, run Django directly with Python from venv
-        app.shell()
-            .command("bash")
-            .args(["-c", "source venv/bin/activate && python3 manage.py runserver 127.0.0.1:8000 --noreload"])
-            .current_dir("../../backend") // Relative to src-tauri
+        if cfg!(target_os = "windows") {
+            info!("Starting Django on Windows with python.exe from venv");
+            // Use absolute path to backend directory
+            let backend_dir = std::env::current_dir()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("backend");
+            let python_exe = backend_dir.join("venv").join("Scripts").join("python.exe");
+            
+            info!("Python path: {:?}", python_exe);
+            info!("Backend dir: {:?}", backend_dir);
+            
+            app.shell()
+                .command(python_exe.to_string_lossy().to_string())
+                .args(["manage.py", "runserver", "127.0.0.1:8000", "--noreload"])
+                .current_dir(backend_dir)
+        } else {
+            info!("Starting Django on Unix with venv/bin/python3");
+            app.shell()
+                .command("venv/bin/python3")
+                .args(["manage.py", "runserver", "127.0.0.1:8000", "--noreload"])
+                .current_dir("../../backend") // Relative to src-tauri
+        }
     } else {
         // In production, run the bundled Django executable
         app.shell()
