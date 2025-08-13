@@ -8,7 +8,11 @@ export interface Attribute {
   shortName: string;
   value: number;
   modifier: number;
-  tempValue?: number;
+  baseValue?: number;
+  breakdown?: {
+    racial: number;
+    equipment: number;
+  };
 }
 
 export interface CharacterStats {
@@ -46,6 +50,10 @@ export interface AttributeState {
   attribute_modifiers: Record<string, number>;
   point_buy_cost: number;
   racial_modifiers: Record<string, number>;
+  item_modifiers: Record<string, number>;
+  level_up_modifiers: Record<string, number>;
+  effective_attributes: Record<string, number>;
+  total_modifiers: Record<string, number>;
   derived_stats: {
     hit_points: {
       current: number;
@@ -89,13 +97,92 @@ export function useAttributes(attributeData?: AttributeState | null) {
   const attributes = useMemo((): Attribute[] => {
     if (!attributeData) return [];
     
+    // For editing: use base attributes + local overrides
+    // For display: show effective attributes (which include all modifiers)
+    const getDisplayValue = (attrKey: string) => {
+      // If we have local overrides (user is editing), calculate effective value
+      if (localAttributeOverrides[attrKey] !== undefined) {
+        const baseValue = localAttributeOverrides[attrKey];
+        const racial = attributeData.racial_modifiers?.[attrKey] ?? 0;
+        const item = attributeData.item_modifiers?.[attrKey] ?? 0;
+        const levelup = attributeData.level_up_modifiers?.[attrKey] ?? 0;
+        return baseValue + racial + item + levelup;
+      }
+      // Otherwise use the backend's calculated effective attributes
+      return attributeData.effective_attributes?.[attrKey] ?? attributeData.base_attributes[attrKey] ?? 10;
+    };
+
+    const getEditValue = (attrKey: string) => {
+      return localAttributeOverrides[attrKey] ?? attributeData.base_attributes[attrKey] ?? 10;
+    };
+    
     return [
-      { name: t('attributes.strength'), shortName: 'STR', value: localAttributeOverrides.Str ?? attributeData.base_attributes.Str ?? 10, modifier: calculateModifier(localAttributeOverrides.Str ?? attributeData.base_attributes.Str ?? 10) },
-      { name: t('attributes.dexterity'), shortName: 'DEX', value: localAttributeOverrides.Dex ?? attributeData.base_attributes.Dex ?? 10, modifier: calculateModifier(localAttributeOverrides.Dex ?? attributeData.base_attributes.Dex ?? 10) },
-      { name: t('attributes.constitution'), shortName: 'CON', value: localAttributeOverrides.Con ?? attributeData.base_attributes.Con ?? 10, modifier: calculateModifier(localAttributeOverrides.Con ?? attributeData.base_attributes.Con ?? 10) },
-      { name: t('attributes.intelligence'), shortName: 'INT', value: localAttributeOverrides.Int ?? attributeData.base_attributes.Int ?? 10, modifier: calculateModifier(localAttributeOverrides.Int ?? attributeData.base_attributes.Int ?? 10) },
-      { name: t('attributes.wisdom'), shortName: 'WIS', value: localAttributeOverrides.Wis ?? attributeData.base_attributes.Wis ?? 10, modifier: calculateModifier(localAttributeOverrides.Wis ?? attributeData.base_attributes.Wis ?? 10) },
-      { name: t('attributes.charisma'), shortName: 'CHA', value: localAttributeOverrides.Cha ?? attributeData.base_attributes.Cha ?? 10, modifier: calculateModifier(localAttributeOverrides.Cha ?? attributeData.base_attributes.Cha ?? 10) },
+      { 
+        name: t('abilities.strength'), 
+        shortName: 'STR', 
+        value: getDisplayValue('Str'), 
+        modifier: attributeData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')), 
+        baseValue: getEditValue('Str'),
+        breakdown: {
+          racial: attributeData.racial_modifiers?.Str ?? 0,
+          equipment: attributeData.item_modifiers?.Str ?? 0
+        }
+      },
+      { 
+        name: t('abilities.dexterity'), 
+        shortName: 'DEX', 
+        value: getDisplayValue('Dex'), 
+        modifier: attributeData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')), 
+        baseValue: getEditValue('Dex'),
+        breakdown: {
+          racial: attributeData.racial_modifiers?.Dex ?? 0,
+          equipment: attributeData.item_modifiers?.Dex ?? 0
+        }
+      },
+      { 
+        name: t('abilities.constitution'), 
+        shortName: 'CON', 
+        value: getDisplayValue('Con'), 
+        modifier: attributeData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')), 
+        baseValue: getEditValue('Con'),
+        breakdown: {
+          racial: attributeData.racial_modifiers?.Con ?? 0,
+          equipment: attributeData.item_modifiers?.Con ?? 0
+        }
+      },
+      { 
+        name: t('abilities.intelligence'), 
+        shortName: 'INT', 
+        value: getDisplayValue('Int'), 
+        modifier: attributeData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')), 
+        baseValue: getEditValue('Int'),
+        breakdown: {
+          racial: attributeData.racial_modifiers?.Int ?? 0,
+          equipment: attributeData.item_modifiers?.Int ?? 0
+        }
+      },
+      { 
+        name: t('abilities.wisdom'), 
+        shortName: 'WIS', 
+        value: getDisplayValue('Wis'), 
+        modifier: attributeData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')), 
+        baseValue: getEditValue('Wis'),
+        breakdown: {
+          racial: attributeData.racial_modifiers?.Wis ?? 0,
+          equipment: attributeData.item_modifiers?.Wis ?? 0
+        }
+      },
+      { 
+        name: t('abilities.charisma'), 
+        shortName: 'CHA', 
+        value: getDisplayValue('Cha'), 
+        modifier: attributeData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')), 
+        baseValue: getEditValue('Cha'),
+        breakdown: {
+          racial: attributeData.racial_modifiers?.Cha ?? 0,
+          equipment: attributeData.item_modifiers?.Cha ?? 0
+        }
+      },
     ];
   }, [attributeData, localAttributeOverrides, t, calculateModifier]);
 
@@ -193,6 +280,7 @@ export function useAttributes(attributeData?: AttributeState | null) {
   const updateAttribute = useCallback(async (index: number, newValue: number) => {
     if (!characterId || !attributes[index]) return;
     
+    // Note: newValue is the new BASE attribute value (before racial/item bonuses)
     const clampedValue = Math.max(3, Math.min(50, newValue));
     const attr = attributes[index];
     const attributeMapping = {

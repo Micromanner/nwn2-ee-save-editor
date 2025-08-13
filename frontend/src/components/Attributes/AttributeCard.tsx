@@ -10,7 +10,11 @@ interface AttributeCardProps {
   shortName: string;
   value: number;
   modifier: number;
-  tempValue?: number;
+  baseValue?: number;
+  breakdown?: {
+    racial: number;
+    equipment: number;
+  };
   onIncrease: () => void;
   onDecrease: () => void;
   onChange: (value: number) => void;
@@ -23,14 +27,14 @@ export default function AttributeCard({
   shortName,
   value,
   modifier,
-  tempValue,
+  baseValue,
+  breakdown,
   onIncrease,
   onDecrease,
   onChange,
   min = 3,
   max = 40
 }: AttributeCardProps) {
-  const [isChanging, setIsChanging] = useState(false);
   const [clickedButton, setClickedButton] = useState<'increase' | 'decrease' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,66 +45,70 @@ export default function AttributeCard({
     return 'zero';
   }, [modifier]);
 
+  // Helper function to get value modifier class
+  const getValueClass = useCallback((value: number) => {
+    if (value > 0) return 'positive';
+    if (value < 0) return 'negative';
+    return 'zero';
+  }, []);
+
   // Handle input change with validation
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parseInt(e.target.value) || min;
     const clampedValue = Math.max(min, Math.min(max, newValue));
     
-    setIsChanging(true);
     onChange(clampedValue);
-    
-    // Reset animation state
-    setTimeout(() => setIsChanging(false), 200);
   }, [min, max, onChange]);
 
   // Handle button press with animation
   const handleIncrease = useCallback(() => {
-    setIsChanging(true);
     setClickedButton('increase');
     onIncrease();
+    
+    // Clear visual feedback
     setTimeout(() => {
-      setIsChanging(false);
       setClickedButton(null);
     }, 200);
   }, [onIncrease]);
 
   const handleDecrease = useCallback(() => {
-    setIsChanging(true);
     setClickedButton('decrease');
     onDecrease();
+    
+    // Clear visual feedback
     setTimeout(() => {
-      setIsChanging(false);
       setClickedButton(null);
     }, 200);
   }, [onDecrease]);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const currentValue = baseValue !== undefined ? baseValue : value;
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault();
-        if (value < max) handleIncrease();
+        if (currentValue < max) handleIncrease();
         break;
       case 'ArrowDown':
         e.preventDefault();
-        if (value > min) handleDecrease();
+        if (currentValue > min) handleDecrease();
         break;
       case '+':
       case '=':
         e.preventDefault();
-        if (value < max) handleIncrease();
+        if (currentValue < max) handleIncrease();
         break;
       case '-':
         e.preventDefault();
-        if (value > min) handleDecrease();
+        if (currentValue > min) handleDecrease();
         break;
     }
-  }, [value, min, max, handleIncrease, handleDecrease]);
+  }, [value, baseValue, min, max, handleIncrease, handleDecrease]);
 
   return (
     <Card 
-      variant="container"
-      className="attribute-card-responsive"
+      variant="interactive"
+      className="flex flex-col h-full"
       role="group"
       aria-labelledby={`${shortName}-label`}
     >
@@ -125,8 +133,8 @@ export default function AttributeCard({
         <Button
           onClick={handleDecrease}
           variant="outline"
-          size="md"
-          disabled={value <= min}
+          size="sm"
+          disabled={(baseValue !== undefined ? baseValue : value) <= min}
           clicked={clickedButton === 'decrease'}
           aria-label={`Decrease ${name}`}
           title={`Decrease ${name} (min: ${min})`}
@@ -137,22 +145,22 @@ export default function AttributeCard({
         <input
           ref={inputRef}
           type="number"
-          value={value}
+          value={baseValue !== undefined ? baseValue : value}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           className="attribute-input-responsive"
           min={min}
           max={max}
-          aria-label={`${name} value`}
-          title={`${name}: ${value} (${formatModifier(modifier)})`}
+          aria-label={`${name} base value`}
+          title={`${name} base: ${baseValue !== undefined ? baseValue : value}, effective: ${value} (${formatModifier(modifier)})`}
           aria-describedby={`${shortName}-help`}
         />
         
         <Button
           onClick={handleIncrease}
           variant="outline"
-          size="md"
-          disabled={value >= max}
+          size="sm"
+          disabled={(baseValue !== undefined ? baseValue : value) >= max}
           clicked={clickedButton === 'increase'}
           aria-label={`Increase ${name}`}
           title={`Increase ${name} (max: ${max})`}
@@ -161,15 +169,44 @@ export default function AttributeCard({
         </Button>
       </div>
 
-      {tempValue && tempValue !== value && (
+      {/* Always show breakdown */}
+      <div 
+        className="attribute-breakdown"
+        role="region"
+        aria-labelledby={`${shortName}-breakdown-label`}
+      >
         <div 
-          className="attribute-temp-value"
-          aria-label={`Temporary ${name} modifier`}
-          title={`Temporary value: ${tempValue} (${formatModifier(tempValue - value, false)} difference)`}
+          id={`${shortName}-breakdown-label`}
+          className="sr-only"
         >
-          Temp: {tempValue} ({formatModifier(tempValue - value, false)})
+          {name} breakdown details
         </div>
-      )}
+        <div className="breakdown-row">
+          <span className="breakdown-label">Base:</span>
+          <span className="breakdown-value">{baseValue !== undefined ? baseValue : value}</span>
+        </div>
+        {breakdown && (
+          <>
+            <div className="breakdown-row">
+              <span className="breakdown-label">Racial:</span>
+              <span className={`breakdown-value ${getValueClass(breakdown.racial)}`}>
+                {formatModifier(breakdown.racial)}
+              </span>
+            </div>
+            <div className="breakdown-row">
+              <span className="breakdown-label">Equipment:</span>
+              <span className={`breakdown-value ${getValueClass(breakdown.equipment)}`}>
+                {formatModifier(breakdown.equipment)}
+              </span>
+            </div>
+            <hr className="breakdown-divider" />
+            <div className="breakdown-row breakdown-total">
+              <span className="breakdown-label">Effective:</span>
+              <span className="breakdown-value">{value}</span>
+            </div>
+          </>
+        )}
+      </div>
       
       {/* Hidden help text for screen readers */}
       <div 

@@ -33,8 +33,10 @@ class AttributeViewSet(BaseCharacterViewSet):
                 'attribute_modifiers': attr_manager.get_all_modifiers(),
                 'point_buy_cost': attr_manager.calculate_point_buy_total(),
                 'racial_modifiers': attr_manager.get_racial_modifiers(),
-                'item_modifiers': {},  # TODO: Get from inventory
-                'total_modifiers': {},
+                'item_modifiers': attr_manager.get_item_modifiers(),
+                'level_up_modifiers': attr_manager.get_level_up_modifiers(),
+                'effective_attributes': attr_manager.get_effective_attributes(),
+                'total_modifiers': attr_manager.get_total_modifiers(),
                 'derived_stats': {
                     'hit_points': {
                         'current': manager.character_data.get('CurrentHitPoints', 1),
@@ -42,12 +44,6 @@ class AttributeViewSet(BaseCharacterViewSet):
                     }
                 }
             }
-            
-            # Calculate total modifiers
-            for attr in ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']:
-                base = state['base_attributes'][attr]
-                modifier = (base - 10) // 2
-                state['total_modifiers'][attr] = modifier
             
             # Add combat and save summaries if managers available
             if 'combat' in manager._managers:

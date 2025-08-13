@@ -1167,9 +1167,146 @@ class AbilityManager(EventEmitter):
 
     def get_racial_modifiers(self) -> Dict[str, int]:
         """Get racial attribute modifiers"""
-        # Return zero modifiers for all attributes as placeholder
-        # In a full implementation, this would look up racial bonuses from racialtypes.2da
+        race_id = self.gff.get('Race', 0)
+        race = self.game_rules_service.get_by_id('racialtypes', race_id)
+        if not race:
+            logger.warning(f"Unknown race ID: {race_id}")
+            return {attr: 0 for attr in self.ATTRIBUTES}
+        
+        # Get racial modifiers using field mapping utility for safe access
+        from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+        racial_mods = field_mapper.get_ability_modifiers(race)
+        
+        # Ensure all attributes are present with default 0
+        result = {attr: 0 for attr in self.ATTRIBUTES}
+        result.update(racial_mods)
+        
+        return result
+    
+    def get_item_modifiers(self) -> Dict[str, int]:
+        """Get attribute modifiers from equipped items"""
+        inventory_manager = self.character_manager.get_manager('inventory')
+        if not inventory_manager:
+            return {attr: 0 for attr in self.ATTRIBUTES}
+        
+        equipment_bonuses = inventory_manager.get_equipment_bonuses()
+        attribute_bonuses = equipment_bonuses.get('attributes', {})
+        
+        # Ensure all attributes are present with default 0
+        result = {attr: 0 for attr in self.ATTRIBUTES}
+        result.update(attribute_bonuses)
+        
+        return result
+    
+    def get_enhancement_modifiers(self) -> Dict[str, int]:
+        """Get enhancement modifiers (temporary or magical bonuses)"""
+        # TODO: Implement enhancement modifiers from spells/effects
         return {attr: 0 for attr in self.ATTRIBUTES}
+    
+    def get_temporary_modifiers(self) -> Dict[str, int]:
+        """Get temporary modifiers (spells, effects, etc.)"""
+        # TODO: Implement temporary modifiers from active effects
+        return {attr: 0 for attr in self.ATTRIBUTES}
+    
+    def get_level_up_modifiers(self) -> Dict[str, int]:
+        """Get level-up attribute bonuses (every 4 levels)"""
+        # In NWN2, every 4 levels you get a +1 to an attribute of your choice
+        # These bonuses are stored in the character's level-up history
+        
+        # Get total character level
+        class_list = self.gff.get('ClassList', [])
+        total_level = sum(
+            cls.get('ClassLevel', 0) 
+            for cls in class_list 
+            if isinstance(cls, dict)
+        )
+        
+        # Calculate how many ability score increases the character should have
+        ability_increases_available = total_level // 4
+        
+        # Check for level-up choices in LevelUpList or similar structure
+        levelup_bonuses = {attr: 0 for attr in self.ATTRIBUTES}
+        
+        # Look for level-up data in GFF - common fields include:
+        # LevelUpList, StatGainList, AbilityGainList, etc.
+        levelup_list = self.gff.get('LevelUpList', [])
+        
+        for levelup_entry in levelup_list:
+            if not isinstance(levelup_entry, dict):
+                continue
+                
+            # Check for ability score increases in this level
+            # Common fields: StatGain, AbilityGain, SkillPoints, etc.
+            for attr in self.ATTRIBUTES:
+                # Check various possible field names for ability gains
+                attr_gain = 0
+                for field_name in [f'{attr}Gain', f'Ability{attr}', attr]:
+                    if field_name in levelup_entry:
+                        attr_gain += levelup_entry.get(field_name, 0)
+                
+                if attr_gain > 0:
+                    levelup_bonuses[attr] += attr_gain
+        
+        # If no explicit level-up data found, try to infer from character progression
+        # This is a fallback for characters created outside our editor
+        if all(bonus == 0 for bonus in levelup_bonuses.values()) and ability_increases_available > 0:
+            # Try to detect ability increases by comparing to racial base + point buy
+            logger.debug(f"No explicit level-up data found, attempting to infer {ability_increases_available} ability increases")
+            
+            # Get current effective scores without level-up bonuses
+            base_attrs = self.get_attributes()
+            racial_mods = self.get_racial_modifiers()
+            
+            # Assume standard starting attributes and try to infer increases
+            # This is imperfect but better than showing wrong values
+            # The user can always correct these in the UI
+            
+        return levelup_bonuses
+    
+    def get_total_modifiers(self) -> Dict[str, int]:
+        """Get total effective modifiers from all sources"""
+        base_attrs = self.get_attributes()
+        racial_mods = self.get_racial_modifiers()
+        item_mods = self.get_item_modifiers()
+        enhancement_mods = self.get_enhancement_modifiers()
+        temp_mods = self.get_temporary_modifiers()
+        # Note: Level-up bonuses are already included in base_attrs from GFF
+        
+        total_modifiers = {}
+        for attr in self.ATTRIBUTES:
+            # Calculate effective ability score
+            effective_score = (
+                base_attrs[attr] + 
+                racial_mods[attr] + 
+                item_mods[attr] + 
+                enhancement_mods[attr] + 
+                temp_mods[attr]
+            )
+            # Convert to D&D modifier
+            total_modifiers[attr] = (effective_score - 10) // 2
+        
+        return total_modifiers
+    
+    def get_effective_attributes(self) -> Dict[str, int]:
+        """Get effective attribute scores (what the game actually uses)"""
+        base_attrs = self.get_attributes()
+        racial_mods = self.get_racial_modifiers()
+        item_mods = self.get_item_modifiers()
+        enhancement_mods = self.get_enhancement_modifiers()
+        temp_mods = self.get_temporary_modifiers()
+        # Note: Level-up bonuses are already included in base_attrs from GFF
+        
+        effective_attrs = {}
+        for attr in self.ATTRIBUTES:
+            effective_attrs[attr] = (
+                base_attrs[attr] + 
+                racial_mods[attr] + 
+                item_mods[attr] + 
+                enhancement_mods[attr] + 
+                temp_mods[attr]
+            )
+        
+        return effective_attrs
     
     def calculate_point_buy_total(self) -> int:
         """Calculate total point buy cost for current attributes (informational only)"""

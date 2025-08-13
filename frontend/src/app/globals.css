@@ -589,6 +589,152 @@
   color: rgb(var(--color-error));
 }
 
+/* Attribute Breakdown Display */
+.attribute-breakdown {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border) / 0.3);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.breakdown-row:hover {
+  background: rgb(var(--color-surface-3) / 0.3);
+  border-radius: 0.25rem;
+}
+
+.breakdown-label {
+  color: rgb(var(--color-text-muted));
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.breakdown-value {
+  color: rgb(var(--color-text-primary));
+  font-weight: 600;
+  font-family: monospace;
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.breakdown-divider {
+  margin: 0.5rem 0;
+  border: none;
+  border-top: 1px solid rgb(var(--color-surface-border) / 0.5);
+  opacity: 0.7;
+}
+
+.breakdown-total {
+  font-weight: 600;
+  background: rgb(var(--color-primary) / 0.08);
+  border-radius: 0.375rem;
+  margin: 0.25rem 0 0;
+  padding: 0.5rem 1rem !important;
+  border: 1.5px solid rgb(var(--color-primary) / 0.3);
+  box-shadow: 0 1px 3px rgb(var(--color-primary) / 0.1);
+}
+
+.breakdown-total .breakdown-label {
+  color: rgb(var(--color-text-primary));
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.breakdown-total .breakdown-value {
+  color: rgb(var(--color-primary));
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Modifier value styling within breakdown */
+.breakdown-value.positive {
+  color: rgb(var(--color-success));
+}
+
+.breakdown-value.negative {
+  color: rgb(var(--color-error));
+}
+
+.breakdown-value.zero {
+  color: rgb(var(--color-text-muted));
+  opacity: 0.8;
+}
+
+/* Responsive breakdown adjustments */
+@media (max-width: 480px) {
+  .attribute-breakdown {
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    font-size: 0.6875rem;
+  }
+  
+  .breakdown-row {
+    padding: 0.1875rem 0;
+  }
+  
+  .breakdown-value {
+    min-width: 2rem;
+    font-size: 0.6875rem;
+  }
+  
+  .breakdown-total {
+    padding: 0.375rem 0.1875rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .attribute-breakdown {
+    margin-top: 1.25rem;
+    padding: 1rem;
+  }
+  
+  .breakdown-row {
+    padding: 0.375rem 0;
+  }
+}
+
+/* Accessibility and interaction enhancements */
+.attribute-breakdown:focus-within {
+  border-color: rgb(var(--color-primary) / 0.5);
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.15);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .breakdown-value.positive {
+    background: rgb(var(--color-success));
+    color: white;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+  }
+  
+  .breakdown-value.negative {
+    background: rgb(var(--color-error));
+    color: white;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .attribute-breakdown,
+  .breakdown-row {
+    transition: none;
+  }
+}
+
 .vital-stat-input {
   background: rgb(var(--color-surface-2));
   border: 1px solid rgb(var(--color-surface-border) / 0.7);
@@ -782,9 +928,12 @@
   display: grid;
   gap: 0.75rem;
   grid-template-columns: 1fr;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-/* Mobile: 1 column */
+/* Mobile small: 2 columns */
 @media (min-width: 480px) {
   .attribute-grid-adaptive {
     grid-template-columns: repeat(2, 1fr);
@@ -800,12 +949,27 @@
   }
 }
 
-/* Desktop: 6 columns */
-@media (min-width: 1280px) {
+/* Desktop small: 3 columns in 2 rows */
+@media (min-width: 1024px) {
+  .attribute-grid-adaptive {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/* Desktop large: 6 columns only on very wide screens */
+@media (min-width: 1800px) {
   .attribute-grid-adaptive {
     grid-template-columns: repeat(6, 1fr);
     gap: 1.5rem;
   }
+}
+
+/* Ensure attribute cards have equal height in grid and don't overflow */
+.attribute-grid-adaptive > * {
+  min-height: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 
@@ -871,6 +1035,7 @@
 .attribute-controls-mobile {
   display: flex;
   align-items: stretch;
+  justify-content: center;
   gap: 0.5rem;
   margin-top: auto;
 }
@@ -888,19 +1053,20 @@
   border: 1px solid rgb(var(--color-surface-border) / 0.7);
   border-radius: 0.375rem;
   color: rgb(var(--color-text-primary));
-  padding: 0.75rem 0.5rem;
-  font-size: 1rem;
+  padding: 0.4rem 0.3rem;
+  font-size: 0.875rem;
   font-weight: 600;
   transition: all 0.2s ease;
   flex: 1;
   min-width: 0;
+  max-width: 3.5rem;
   appearance: textfield;
 }
 
 @media (min-width: 768px) {
   .attribute-input-responsive {
-    padding: 0.5rem;
-    font-size: 0.9375rem;
+    padding: 0.35rem 0.25rem;
+    font-size: 0.825rem;
   }
 }
 
@@ -926,6 +1092,9 @@
   max-width: 90rem;
   margin: 0 auto;
   padding: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 @media (min-width: 768px) {
