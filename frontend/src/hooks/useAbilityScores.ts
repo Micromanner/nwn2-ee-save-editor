@@ -3,7 +3,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
 
-export interface Attribute {
+export interface AbilityScore {
   name: string;
   shortName: string;
   value: number;
@@ -18,7 +18,8 @@ export interface Attribute {
 export interface CharacterStats {
   hitPoints: number;
   maxHitPoints: number;
-
+  experience: number;
+  level: number;
   
   // Combat stats with base (editable) and total (calculated)
   armorClass: {
@@ -45,7 +46,7 @@ export interface CharacterStats {
   };
 }
 
-export interface AttributeState {
+export interface AbilityScoreState {
   base_attributes: Record<string, number>;
   attribute_modifiers: Record<string, number>;
   point_buy_cost: number;
@@ -76,17 +77,17 @@ export interface Alignment {
   goodEvil: number;
 }
 
-export function useAttributes(attributeData?: AttributeState | null) {
+export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   const t = useTranslations();
   const { characterId } = useCharacterContext();
 
   // Local state for optimistic updates
-  const [localAttributeOverrides, setLocalAttributeOverrides] = useState<Record<string, number>>({});
+  const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
 
-  // Reset local overrides when attributeData changes (new character loaded)
+  // Reset local overrides when abilityScoreData changes (new character loaded)
   useEffect(() => {
-    setLocalAttributeOverrides({});
-  }, [attributeData]);
+    setLocalAbilityScoreOverrides({});
+  }, [abilityScoreData]);
 
   // Utility function to calculate ability modifier
   const calculateModifier = useCallback((value: number): number => {
@@ -94,104 +95,106 @@ export function useAttributes(attributeData?: AttributeState | null) {
   }, []);
 
   // Transform attributeData into frontend format with local overrides
-  const attributes = useMemo((): Attribute[] => {
-    if (!attributeData) return [];
+  const abilityScores = useMemo((): AbilityScore[] => {
+    if (!abilityScoreData) return [];
     
     // For editing: use base attributes + local overrides
     // For display: show effective attributes (which include all modifiers)
     const getDisplayValue = (attrKey: string) => {
       // If we have local overrides (user is editing), calculate effective value
-      if (localAttributeOverrides[attrKey] !== undefined) {
-        const baseValue = localAttributeOverrides[attrKey];
-        const racial = attributeData.racial_modifiers?.[attrKey] ?? 0;
-        const item = attributeData.item_modifiers?.[attrKey] ?? 0;
-        const levelup = attributeData.level_up_modifiers?.[attrKey] ?? 0;
+      if (localAbilityScoreOverrides[attrKey] !== undefined) {
+        const baseValue = localAbilityScoreOverrides[attrKey];
+        const racial = abilityScoreData.racial_modifiers?.[attrKey] ?? 0;
+        const item = abilityScoreData.item_modifiers?.[attrKey] ?? 0;
+        const levelup = abilityScoreData.level_up_modifiers?.[attrKey] ?? 0;
         return baseValue + racial + item + levelup;
       }
       // Otherwise use the backend's calculated effective attributes
-      return attributeData.effective_attributes?.[attrKey] ?? attributeData.base_attributes[attrKey] ?? 10;
+      return abilityScoreData.effective_attributes?.[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
     };
 
     const getEditValue = (attrKey: string) => {
-      return localAttributeOverrides[attrKey] ?? attributeData.base_attributes[attrKey] ?? 10;
+      return localAbilityScoreOverrides[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
     };
     
     return [
       { 
-        name: t('abilities.strength'), 
+        name: t('abilityScores.strength'), 
         shortName: 'STR', 
         value: getDisplayValue('Str'), 
-        modifier: attributeData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')), 
+        modifier: abilityScoreData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')), 
         baseValue: getEditValue('Str'),
         breakdown: {
-          racial: attributeData.racial_modifiers?.Str ?? 0,
-          equipment: attributeData.item_modifiers?.Str ?? 0
+          racial: abilityScoreData.racial_modifiers?.Str ?? 0,
+          equipment: abilityScoreData.item_modifiers?.Str ?? 0
         }
       },
       { 
-        name: t('abilities.dexterity'), 
+        name: t('abilityScores.dexterity'), 
         shortName: 'DEX', 
         value: getDisplayValue('Dex'), 
-        modifier: attributeData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')), 
+        modifier: abilityScoreData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')), 
         baseValue: getEditValue('Dex'),
         breakdown: {
-          racial: attributeData.racial_modifiers?.Dex ?? 0,
-          equipment: attributeData.item_modifiers?.Dex ?? 0
+          racial: abilityScoreData.racial_modifiers?.Dex ?? 0,
+          equipment: abilityScoreData.item_modifiers?.Dex ?? 0
         }
       },
       { 
-        name: t('abilities.constitution'), 
+        name: t('abilityScores.constitution'), 
         shortName: 'CON', 
         value: getDisplayValue('Con'), 
-        modifier: attributeData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')), 
+        modifier: abilityScoreData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')), 
         baseValue: getEditValue('Con'),
         breakdown: {
-          racial: attributeData.racial_modifiers?.Con ?? 0,
-          equipment: attributeData.item_modifiers?.Con ?? 0
+          racial: abilityScoreData.racial_modifiers?.Con ?? 0,
+          equipment: abilityScoreData.item_modifiers?.Con ?? 0
         }
       },
       { 
-        name: t('abilities.intelligence'), 
+        name: t('abilityScores.intelligence'), 
         shortName: 'INT', 
         value: getDisplayValue('Int'), 
-        modifier: attributeData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')), 
+        modifier: abilityScoreData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')), 
         baseValue: getEditValue('Int'),
         breakdown: {
-          racial: attributeData.racial_modifiers?.Int ?? 0,
-          equipment: attributeData.item_modifiers?.Int ?? 0
+          racial: abilityScoreData.racial_modifiers?.Int ?? 0,
+          equipment: abilityScoreData.item_modifiers?.Int ?? 0
         }
       },
       { 
-        name: t('abilities.wisdom'), 
+        name: t('abilityScores.wisdom'), 
         shortName: 'WIS', 
         value: getDisplayValue('Wis'), 
-        modifier: attributeData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')), 
+        modifier: abilityScoreData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')), 
         baseValue: getEditValue('Wis'),
         breakdown: {
-          racial: attributeData.racial_modifiers?.Wis ?? 0,
-          equipment: attributeData.item_modifiers?.Wis ?? 0
+          racial: abilityScoreData.racial_modifiers?.Wis ?? 0,
+          equipment: abilityScoreData.item_modifiers?.Wis ?? 0
         }
       },
       { 
-        name: t('abilities.charisma'), 
+        name: t('abilityScores.charisma'), 
         shortName: 'CHA', 
         value: getDisplayValue('Cha'), 
-        modifier: attributeData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')), 
+        modifier: abilityScoreData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')), 
         baseValue: getEditValue('Cha'),
         breakdown: {
-          racial: attributeData.racial_modifiers?.Cha ?? 0,
-          equipment: attributeData.item_modifiers?.Cha ?? 0
+          racial: abilityScoreData.racial_modifiers?.Cha ?? 0,
+          equipment: abilityScoreData.item_modifiers?.Cha ?? 0
         }
       },
     ];
-  }, [attributeData, localAttributeOverrides, t, calculateModifier]);
+  }, [abilityScoreData, localAbilityScoreOverrides, t, calculateModifier]);
 
   // Transform stats from attributeData
   const stats = useMemo((): CharacterStats => {
-    if (!attributeData) {
+    if (!abilityScoreData) {
       return {
         hitPoints: 0,
         maxHitPoints: 0,
+        experience: 0,
+        level: 1,
         armorClass: { base: 10, total: 10 },
         fortitude: { base: 0, total: 0 },
         reflex: { base: 0, total: 0 },
@@ -241,15 +244,17 @@ export function useAttributes(attributeData?: AttributeState | null) {
     };
     
     return {
-      hitPoints: attributeData.derived_stats.hit_points.current,
-      maxHitPoints: attributeData.derived_stats.hit_points.maximum,
-      armorClass: extractBaseTotal(attributeData.combat_stats?.armor_class, 'ac'),
-      fortitude: extractBaseTotal(attributeData.saving_throws?.fortitude, 'fortitude'),
-      reflex: extractBaseTotal(attributeData.saving_throws?.reflex, 'reflex'),
-      will: extractBaseTotal(attributeData.saving_throws?.will, 'will'),
-      initiative: extractBaseTotal(attributeData.combat_stats?.initiative, 'initiative'),
+      hitPoints: abilityScoreData.derived_stats.hit_points.current,
+      maxHitPoints: abilityScoreData.derived_stats.hit_points.maximum,
+      experience: 0, // TODO: Add experience field to backend data
+      level: 1, // TODO: Add level field to backend data
+      armorClass: extractBaseTotal(abilityScoreData.combat_stats?.armor_class, 'ac'),
+      fortitude: extractBaseTotal(abilityScoreData.saving_throws?.fortitude, 'fortitude'),
+      reflex: extractBaseTotal(abilityScoreData.saving_throws?.reflex, 'reflex'),
+      will: extractBaseTotal(abilityScoreData.saving_throws?.will, 'will'),
+      initiative: extractBaseTotal(abilityScoreData.combat_stats?.initiative, 'initiative'),
     };
-  }, [attributeData]);
+  }, [abilityScoreData]);
 
   // Alignment state - fetched from backend
   const [alignment, setAlignment] = useState<Alignment>({
@@ -276,13 +281,13 @@ export function useAttributes(attributeData?: AttributeState | null) {
     fetchAlignment();
   }, [characterId]);
 
-  // Real-time attribute updates with optimistic UI updates
-  const updateAttribute = useCallback(async (index: number, newValue: number) => {
-    if (!characterId || !attributes[index]) return;
+  // Real-time ability score updates with optimistic UI updates
+  const updateAbilityScore = useCallback(async (index: number, newValue: number) => {
+    if (!characterId || !abilityScores[index]) return;
     
     // Note: newValue is the new BASE attribute value (before racial/item bonuses)
     const clampedValue = Math.max(3, Math.min(50, newValue));
-    const attr = attributes[index];
+    const attr = abilityScores[index];
     const attributeMapping = {
       'STR': 'Str',
       'DEX': 'Dex', 
@@ -296,7 +301,7 @@ export function useAttributes(attributeData?: AttributeState | null) {
     if (!backendAttrName) return;
     
     // Optimistic update - immediately update UI
-    setLocalAttributeOverrides(prev => ({
+    setLocalAbilityScoreOverrides(prev => ({
       ...prev,
       [backendAttrName]: clampedValue
     }));
@@ -307,29 +312,29 @@ export function useAttributes(attributeData?: AttributeState | null) {
         [backendAttrName]: clampedValue
       });
       
-      console.log('Attribute update result:', result);
+      console.log('Ability score update result:', result);
       
       // Backend confirmed the change - keep local override for now
       // It will be cleared when new data is loaded from backend
       
     } catch (err) {
-      console.error('Failed to update attribute:', err);
+      console.error('Failed to update ability score:', err);
       // Revert optimistic update on error
-      setLocalAttributeOverrides(prev => {
+      setLocalAbilityScoreOverrides(prev => {
         const updated = { ...prev };
         delete updated[backendAttrName];
         return updated;
       });
       throw err;
     }
-  }, [characterId, attributes]);
+  }, [characterId, abilityScores]);
 
-  const updateAttributeByShortName = useCallback(async (shortName: string, newValue: number) => {
-    const index = attributes.findIndex(attr => attr.shortName === shortName);
+  const updateAbilityScoreByShortName = useCallback(async (shortName: string, newValue: number) => {
+    const index = abilityScores.findIndex(attr => attr.shortName === shortName);
     if (index !== -1) {
-      await updateAttribute(index, newValue);
+      await updateAbilityScore(index, newValue);
     }
-  }, [attributes, updateAttribute]);
+  }, [abilityScores, updateAbilityScore]);
 
   // Stats management - calls backend APIs for specific stats
   const updateStats = useCallback(async (updates: Partial<CharacterStats>) => {
@@ -400,27 +405,27 @@ export function useAttributes(attributeData?: AttributeState | null) {
   }, [characterId, alignment]);
 
   // Get specific attribute by short name
-  const getAttribute = useCallback((shortName: string): Attribute | undefined => {
-    return attributes.find(attr => attr.shortName === shortName);
-  }, [attributes]);
+  const getAbilityScore = useCallback((shortName: string): AbilityScore | undefined => {
+    return abilityScores.find(attr => attr.shortName === shortName);
+  }, [abilityScores]);
 
-  // Get specific attribute modifier
-  const getAttributeModifier = useCallback((shortName: string): number => {
-    const attr = getAttribute(shortName);
+  // Get specific ability score modifier
+  const getAbilityScoreModifier = useCallback((shortName: string): number => {
+    const attr = getAbilityScore(shortName);
     return attr ? attr.modifier : 0;
-  }, [getAttribute]);
+  }, [getAbilityScore]);
 
   return {
     // State
-    attributes,
+    abilityScores,
     stats,
     alignment,
 
-    // Attribute functions
-    updateAttribute,
-    updateAttributeByShortName,
-    getAttribute,
-    getAttributeModifier,
+    // Ability Score functions
+    updateAbilityScore,
+    updateAbilityScoreByShortName,
+    getAbilityScore,
+    getAbilityScoreModifier,
     calculateModifier,
 
     // Stats functions (read-only, updated by backend)

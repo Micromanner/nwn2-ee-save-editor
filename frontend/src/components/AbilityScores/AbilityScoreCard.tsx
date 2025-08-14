@@ -5,7 +5,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
-interface AttributeCardProps {
+interface AbilityScoreCardProps {
   name: string;
   shortName: string;
   value: number;
@@ -22,7 +22,7 @@ interface AttributeCardProps {
   max?: number;
 }
 
-export default function AttributeCard({
+export default function AbilityScoreCard({
   name,
   shortName,
   value,
@@ -34,7 +34,7 @@ export default function AttributeCard({
   onChange,
   min = 3,
   max = 40
-}: AttributeCardProps) {
+}: AbilityScoreCardProps) {
   const [clickedButton, setClickedButton] = useState<'increase' | 'decrease' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -120,56 +120,9 @@ export default function AttributeCard({
         >
           {name}
         </span>
-        <span 
-          className={`attribute-modifier-responsive ${getModifierClass()}`}
-          aria-label={`${name} modifier: ${formatModifier(modifier)}`}
-          title={`Modifier: ${formatModifier(modifier)}`}
-        >
-          {formatModifier(modifier)}
-        </span>
       </div>
 
-      <div className="attribute-controls-mobile">
-        <Button
-          onClick={handleDecrease}
-          variant="outline"
-          size="sm"
-          disabled={(baseValue !== undefined ? baseValue : value) <= min}
-          clicked={clickedButton === 'decrease'}
-          aria-label={`Decrease ${name}`}
-          title={`Decrease ${name} (min: ${min})`}
-        >
-          −
-        </Button>
-        
-        <input
-          ref={inputRef}
-          type="number"
-          value={baseValue !== undefined ? baseValue : value}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          className="attribute-input-responsive"
-          min={min}
-          max={max}
-          aria-label={`${name} base value`}
-          title={`${name} base: ${baseValue !== undefined ? baseValue : value}, effective: ${value} (${formatModifier(modifier)})`}
-          aria-describedby={`${shortName}-help`}
-        />
-        
-        <Button
-          onClick={handleIncrease}
-          variant="outline"
-          size="sm"
-          disabled={(baseValue !== undefined ? baseValue : value) >= max}
-          clicked={clickedButton === 'increase'}
-          aria-label={`Increase ${name}`}
-          title={`Increase ${name} (max: ${max})`}
-        >
-          +
-        </Button>
-      </div>
-
-      {/* Always show breakdown */}
+      {/* Integrated breakdown with controls */}
       <div 
         className="attribute-breakdown"
         role="region"
@@ -181,28 +134,85 @@ export default function AttributeCard({
         >
           {name} breakdown details
         </div>
-        <div className="breakdown-row">
+        
+        {/* Base row with integrated controls */}
+        <div className="breakdown-row breakdown-base">
           <span className="breakdown-label">Base:</span>
-          <span className="breakdown-value">{baseValue !== undefined ? baseValue : value}</span>
+          <div className="breakdown-controls">
+            <Button
+              onClick={handleDecrease}
+              variant="outline"
+              size="xs"
+              disabled={(baseValue !== undefined ? baseValue : value) <= min}
+              clicked={clickedButton === 'decrease'}
+              aria-label={`Decrease ${name}`}
+              title={`Decrease ${name} (min: ${min})`}
+              className="breakdown-button"
+            >
+              −
+            </Button>
+            
+            <input
+              ref={inputRef}
+              type="number"
+              value={baseValue !== undefined ? baseValue : value}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              className="breakdown-input"
+              min={min}
+              max={max}
+              aria-label={`${name} base value`}
+              title={`${name} base: ${baseValue !== undefined ? baseValue : value}, effective: ${value} (${formatModifier(modifier)})`}
+              aria-describedby={`${shortName}-help`}
+            />
+            
+            <Button
+              onClick={handleIncrease}
+              variant="outline"
+              size="xs"
+              disabled={(baseValue !== undefined ? baseValue : value) >= max}
+              clicked={clickedButton === 'increase'}
+              aria-label={`Increase ${name}`}
+              title={`Increase ${name} (max: ${max})`}
+              className="breakdown-button"
+            >
+              +
+            </Button>
+          </div>
         </div>
+        
         {breakdown && (
           <>
             <div className="breakdown-row">
               <span className="breakdown-label">Racial:</span>
-              <span className={`breakdown-value ${getValueClass(breakdown.racial)}`}>
-                {formatModifier(breakdown.racial)}
-              </span>
+              <div className="breakdown-value-container">
+                <span className={`breakdown-value ${getValueClass(breakdown.racial)}`}>
+                  {formatModifier(breakdown.racial)}
+                </span>
+              </div>
             </div>
             <div className="breakdown-row">
               <span className="breakdown-label">Equipment:</span>
-              <span className={`breakdown-value ${getValueClass(breakdown.equipment)}`}>
-                {formatModifier(breakdown.equipment)}
-              </span>
+              <div className="breakdown-value-container">
+                <span className={`breakdown-value ${getValueClass(breakdown.equipment)}`}>
+                  {formatModifier(breakdown.equipment)}
+                </span>
+              </div>
             </div>
             <hr className="breakdown-divider" />
-            <div className="breakdown-row breakdown-total">
+            <div className="breakdown-row breakdown-effective-row">
               <span className="breakdown-label">Effective:</span>
-              <span className="breakdown-value">{value}</span>
+              <div className="breakdown-value-container">
+                <span className="breakdown-value breakdown-effective">{value}</span>
+              </div>
+            </div>
+            <div className="breakdown-row">
+              <span className="breakdown-label">Modifier:</span>
+              <div className="breakdown-value-container">
+                <span className={`breakdown-value ${getModifierClass()}`}>
+                  {formatModifier(modifier)}
+                </span>
+              </div>
             </div>
           </>
         )}

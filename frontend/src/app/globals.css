@@ -591,22 +591,25 @@
 
 /* Attribute Breakdown Display */
 .attribute-breakdown {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background: rgb(var(--color-surface-2));
-  border: 1px solid rgb(var(--color-surface-border) / 0.3);
-  border-radius: 0.375rem;
+  margin-top: 0.375rem;
+  padding: 0;
   font-size: 0.75rem;
-  transition: all 0.2s ease;
 }
 
 .breakdown-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.35rem 0;
+  padding: 0.5rem 0;
   transition: all 0.2s ease;
   font-size: 0.9rem;
+}
+
+.breakdown-value-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 6rem;
 }
 
 .breakdown-row:hover {
@@ -624,8 +627,8 @@
   color: rgb(var(--color-text-primary));
   font-weight: 600;
   font-family: monospace;
-  min-width: 2.5rem;
-  text-align: right;
+  text-align: center;
+  width: 2.5rem;
 }
 
 .breakdown-divider {
@@ -655,6 +658,18 @@
   color: rgb(var(--color-primary));
   font-weight: 700;
   font-size: 1rem;
+}
+
+.breakdown-effective-row {
+  font-weight: 600;
+  margin: 0.25rem 0 0;
+  padding: 0.35rem 0;
+}
+
+.breakdown-effective-row .breakdown-label {
+  color: rgb(var(--color-primary));
+  font-weight: 600;
+  font-size: 0.95rem;
 }
 
 /* Modifier value styling within breakdown */
@@ -695,20 +710,70 @@
 
 @media (min-width: 768px) {
   .attribute-breakdown {
-    margin-top: 1.25rem;
-    padding: 1rem;
+    margin-top: 0.375rem;
+    padding: 0;
   }
   
   .breakdown-row {
-    padding: 0.375rem 0;
+    padding: 0.5rem 0;
   }
 }
 
-/* Accessibility and interaction enhancements */
-.attribute-breakdown:focus-within {
-  border-color: rgb(var(--color-primary) / 0.5);
-  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.15);
+/* Integrated breakdown controls */
+.breakdown-base {
+  align-items: center;
 }
+
+.breakdown-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 6rem;
+  justify-content: center;
+}
+
+.breakdown-button {
+  padding: 0.125rem 0.375rem !important;
+  font-size: 0.75rem !important;
+  line-height: 1 !important;
+  min-width: 1.5rem !important;
+  height: 1.5rem !important;
+}
+
+.breakdown-input {
+  width: 2.5rem;
+  text-align: center;
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border) / 0.7);
+  border-radius: 0.25rem;
+  color: rgb(var(--color-text-primary));
+  padding: 0.125rem 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  appearance: textfield;
+  height: 1.5rem;
+}
+
+.breakdown-input:focus {
+  outline: none;
+  border-color: rgb(var(--color-primary));
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.2);
+  background: rgb(var(--color-surface-1));
+}
+
+.breakdown-input::-webkit-inner-spin-button,
+.breakdown-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.breakdown-effective {
+  font-weight: 700;
+  color: rgb(var(--color-primary));
+}
+
+/* Accessibility and interaction enhancements */
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {
@@ -977,7 +1042,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
   flex-shrink: 0;
 }
 
@@ -1047,6 +1112,23 @@
 }
 
 
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  flex: 1;
+  max-width: 3.5rem;
+}
+
+.input-label {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgb(var(--color-text-muted));
+  font-weight: 500;
+}
+
 .attribute-input-responsive {
   text-align: center;
   background: rgb(var(--color-surface-2));
@@ -1057,9 +1139,7 @@
   font-size: 0.875rem;
   font-weight: 600;
   transition: all 0.2s ease;
-  flex: 1;
-  min-width: 0;
-  max-width: 3.5rem;
+  width: 100%;
   appearance: textfield;
 }
 
@@ -1109,6 +1189,13 @@
   }
 }
 
+@media (min-width: 1800px) {
+  .attribute-section-responsive {
+    margin: 0;
+    max-width: none;
+  }
+}
+
 /* Animation and Interaction Enhancements */
 
 .attribute-input-responsive:invalid {
@@ -1139,6 +1226,111 @@
   .attribute-input-responsive {
     transition: none;
   }
+}
+
+/* Vital Statistics Grid */
+.vital-stats-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+  width: 100%;
+}
+
+/* Mobile: 2 columns */
+@media (min-width: 480px) {
+  .vital-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+}
+
+/* Tablet: 3 columns */
+@media (min-width: 768px) {
+  .vital-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+/* Desktop: 6 columns */
+@media (min-width: 1800px) {
+  .vital-stats-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/* Health Bar Components */
+.health-bar-container {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.health-bar-track {
+  position: relative;
+  background: rgb(var(--color-surface-3));
+  border-radius: 9999px;
+  height: 1.5rem;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-surface-border) / 0.5);
+}
+
+.health-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.health-high {
+  background: rgb(34, 197, 94); /* green-500 */
+}
+
+.health-medium {
+  background: rgb(234, 179, 8); /* yellow-500 */
+}
+
+.health-low {
+  background: rgb(239, 68, 68); /* red-500 */
+}
+
+.health-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* HP Controls */
+.hp-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hp-separator {
+  color: rgb(var(--color-text-muted));
+  font-weight: 600;
+  margin: 0 0.125rem;
+}
+
+/* Calculation Components */
+.breakdown-calculated {
+  color: rgb(var(--color-text-muted));
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+.calculation-hint {
+  font-size: 0.65rem;
+  color: rgb(var(--color-text-muted));
+  text-align: center;
+  margin-top: 0.25rem;
+  font-style: italic;
 }
 
 /* Loading and Skeleton States */

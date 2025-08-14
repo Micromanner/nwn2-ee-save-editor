@@ -6,7 +6,7 @@
   "navigation": {
     "overview": "Overview",
     "characterBuilder": "Character Builder",
-    "attributes": "Attributes & Stats",
+    "abilityScores": "Ability Scores & Stats",
     "appearance": "Appearance",
     "classes": "Classes & Levels",
     "skills": "Skills",
@@ -71,12 +71,14 @@
     "journalEntries": "Journal Entries",
     "companionsRecruited": "Companions",
     "deaths": "Deaths",
-    "enemiesDefeated": "Enemies Defeated"
+    "enemiesDefeated": "Enemies Defeated",
+    "physicalAttributes": "Physical Attributes"
   },
-  "attributes": {
-    "coreAttributes": "Core Attributes",
+  "abilityScores": {
+    "title": "Ability Scores",
+    "coreAbilities": "Core Ability Scores",
     "coreStatistics": "Core Statistics",
-    "abilities": "Abilities",
+    "abilityScores": "Ability Scores",
     "strength": "Strength",
     "dexterity": "Dexterity",
     "constitution": "Constitution",
@@ -141,7 +143,7 @@
   },
   "placeholders": {
     "noCharacterOverview": "No character loaded. Open a save file to begin editing.",
-    "attributesEditor": "Attributes editor will appear here",
+    "abilitiesEditor": "Ability Scores editor will appear here",
     "classManagement": "Class management will appear here",
     "skillsEditor": "Skills editor will appear here",
     "featsManagement": "Feats management will appear here",

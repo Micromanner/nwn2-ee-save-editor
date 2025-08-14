@@ -6,7 +6,7 @@ import { useTauri } from '@/providers/TauriProvider';
 import { TauriAPI } from '@/lib/tauri-api';
 import CustomTitleBar from '@/components/ui/CustomTitleBar';
 import Sidebar from '@/components/ui/Sidebar';
-import AttributesEditor from '@/components/Attributes/AttributesEditor';
+import AbilityScoresEditor from '@/components/AbilityScores/AbilityScoresEditor';
 import AppearanceEditor from '@/components/Appearance/AppearanceEditor';
 import ClassAndLevelsEditor from '@/components/ClassesLevel/ClassAndLevelsEditor';
 import InventoryEditor from '@/components/Inventory/InventoryEditor';
@@ -80,9 +80,9 @@ function AppContent() {
             console.log('Fetching fresh classes data...');
             await loadSubsystem('classes');
             break;
-          case 'attributes':
-            console.log('Fetching fresh attributes data...');
-            await loadSubsystem('attributes');
+          case 'abilityScores':
+            console.log('Fetching fresh ability scores data...');
+            await loadSubsystem('abilityScores');
             break;
           case 'feats':
             console.log('Fetching fresh feats data...');
@@ -260,10 +260,10 @@ function AppContent() {
               </div>
             )}
             
-            {activeTab === 'attributes' && (
+            {activeTab === 'abilityScores' && (
               <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.attributes')}</h2>
-                <AttributesEditor />
+                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.abilityScores')}</h2>
+                <AbilityScoresEditor />
               </div>
             )}
             

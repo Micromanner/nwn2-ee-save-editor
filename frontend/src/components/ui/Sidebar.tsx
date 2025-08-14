@@ -21,8 +21,8 @@ const baseNavItems: NavItem[] = [
     icon: 'b_character'
   },
   {
-    id: 'attributes',
-    labelKey: 'navigation.attributes',
+    id: 'abilityScores',
+    labelKey: 'navigation.abilityScores',
     icon: 'ia_appear'
   },
   {

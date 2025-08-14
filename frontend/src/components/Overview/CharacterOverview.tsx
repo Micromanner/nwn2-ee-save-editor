@@ -333,9 +333,9 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
       {/* Progressive Disclosure Sections */}
       <div className="space-y-4">
         
-        {/* Core Attributes - Always important for RPG */}
+        {/* Core Abilities - Always important for RPG */}
         <CollapsibleSection 
-          title="Attributes" 
+          title={t('navigation.abilityScores')} 
           defaultOpen={true}
           badge={character.abilities ? formatModifier(Object.values(character.abilities).reduce((sum, val) => sum + Math.floor((val - 10) / 2), 0)) : '-'}
         >
@@ -346,7 +346,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
               return (
                 <div key={key} className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)] hover:border-[rgb(var(--color-primary)/0.3)] transition-colors">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs text-[rgb(var(--color-text-muted))] uppercase tracking-wider">{t(`attributes.${key}`)}</span>
+                    <span className="text-xs text-[rgb(var(--color-text-muted))] uppercase tracking-wider">{t(`abilityScores.${key}`)}</span>
                     <span className={`text-xs font-medium text-[rgb(${modifierColor})]`}>
                       {modifier >= 0 ? '+' : ''}{modifier}
                     </span>
@@ -384,19 +384,19 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                 </div>
               </div>
               
-              <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">{t('attributes.savingThrows')}</p>
+              <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">{t('abilityScores.savingThrows')}</p>
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
                   <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.saves?.fortitude)}</div>
-                  <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('attributes.fortitude')}</div>
+                  <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.fortitude')}</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
                   <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.saves?.reflex)}</div>
-                  <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('attributes.reflex')}</div>
+                  <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.reflex')}</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
                   <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.saves?.will)}</div>
-                  <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('attributes.will')}</div>
+                  <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.will')}</div>
                 </div>
               </div>
             </div>
@@ -423,7 +423,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
 
               {/* Movement & Physical Stats */}
               <div className="pt-4 border-t border-[rgb(var(--color-surface-border)/0.6)]">
-                <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">Physical Attributes</p>
+                <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">{t('character.physicalAttributes')}</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
                     <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{display(character.movementSpeed)} ft</div>

@@ -12,7 +12,7 @@ interface SubsystemData<T = unknown> {
 }
 
 // Define available subsystems
-export type SubsystemType = 'feats' | 'spells' | 'skills' | 'inventory' | 'attributes' | 'combat' | 'saves' | 'classes';
+export type SubsystemType = 'feats' | 'spells' | 'skills' | 'inventory' | 'abilityScores' | 'combat' | 'saves' | 'classes';
 
 // Subsystem configuration - no caching, always fetch fresh
 const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
@@ -20,7 +20,7 @@ const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
   spells: { endpoint: 'spells/state' },
   skills: { endpoint: 'skills/state' },
   inventory: { endpoint: 'inventory/state' },
-  attributes: { endpoint: 'attributes/state' },
+  abilityScores: { endpoint: 'attributes/state' },
   combat: { endpoint: 'combat/state' },
   saves: { endpoint: 'saves/state' },
   classes: { endpoint: 'classes/state' },

@@ -11,7 +11,7 @@ const cardVariants = cva(
         container: 'bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-lg p-4',
         
         // Interactive item cards (spell cards, attribute cards)
-        interactive: 'bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border)/0.5)] rounded-md p-3 hover:border-[rgb(var(--color-primary)/0.5)] hover:shadow-elevation-2 hover:bg-[rgb(var(--color-surface-2))]',
+        interactive: 'bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border)/0.5)] rounded-md p-3 hover:border-[rgb(var(--color-primary)/0.5)] hover:shadow-elevation-2 hover:bg-[rgb(var(--color-surface-2))] max-w-full box-border overflow-hidden',
         
         // List items (save items, spell list items)  
         listItem: 'p-3 hover:bg-[rgb(var(--color-surface-1))]',

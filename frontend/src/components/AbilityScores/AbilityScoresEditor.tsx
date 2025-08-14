@@ -2,15 +2,15 @@
 
 import { useEffect, useCallback } from 'react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
-import { useAttributes, AttributeState } from '@/hooks/useAttributes';
-import CoreAttributesSection from './CoreAttributesSection';
+import { useAbilityScores, AbilityScoreState } from '@/hooks/useAbilityScores';
+import CoreAbilityScoresSection from './CoreAbilityScoresSection';
 import VitalStatisticsSection from './VitalStatisticsSection';
 import AlignmentSection from './AlignmentSection';
 import { Card } from '@/components/ui/Card';
 
-export default function AttributesEditor() {
+export default function AbilityScoresEditor() {
   const { character } = useCharacterContext();
-  const attributesData = useSubsystem<AttributeState>('attributes');
+  const attributesData = useSubsystem<AbilityScoreState>('abilityScores');
   
   // Load attributes data when component mounts
   useEffect(() => {
@@ -19,20 +19,20 @@ export default function AttributesEditor() {
     }
   }, [character, attributesData]);
   
-  // Initialize attribute management with subsystem data
+  // Initialize ability score management with subsystem data
   const {
-    attributes,
+    abilityScores,
     stats,
     alignment,
-    updateAttribute,
+    updateAbilityScore,
     updateStats,
     updateAlignment
-  } = useAttributes(attributesData.data);
+  } = useAbilityScores(attributesData.data);
   
-  // Wrap updateAttribute - no data refresh needed due to backend cache
-  const handleAttributeUpdate = useCallback(async (index: number, newValue: number) => {
-    await updateAttribute(index, newValue);
-  }, [updateAttribute]);
+  // Wrap updateAbilityScore - no data refresh needed due to backend cache
+  const handleAbilityScoreUpdate = useCallback(async (index: number, newValue: number) => {
+    await updateAbilityScore(index, newValue);
+  }, [updateAbilityScore]);
 
   // Early return for loading/error states
   if (attributesData.isLoading) {
@@ -61,9 +61,9 @@ export default function AttributesEditor() {
 
   return (
     <div className="space-y-6">
-      <CoreAttributesSection 
-        attributes={attributes}
-        onAttributeChange={handleAttributeUpdate}
+      <CoreAbilityScoresSection 
+        abilityScores={abilityScores}
+        onAbilityScoreChange={handleAbilityScoreUpdate}
       />
       
       <VitalStatisticsSection 
