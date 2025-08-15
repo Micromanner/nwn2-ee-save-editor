@@ -176,8 +176,9 @@ export class CharacterAPI {
     }
     
     const data = await response.json();
-    // The API returns the character data directly, not wrapped in a 'character' property
-    return this.mapBackendToFrontend(data);
+    // FastAPI returns SavegameImportResponse with character wrapped in 'character' property
+    const characterData = data.character || data;
+    return this.mapBackendToFrontend(characterData);
   }
 
   // Update character data

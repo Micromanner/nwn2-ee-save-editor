@@ -4,9 +4,9 @@ Bridges ResourceManager with high-performance Rust cache implementation.
 """
 import logging
 import time
+import os
 from pathlib import Path
 from typing import Dict, Optional, List, Any
-from django.conf import settings
 
 # Import Rust cache components
 try:
@@ -29,14 +29,16 @@ class PrecompiledCacheIntegration:
     
     def __init__(self, resource_manager):
         self.resource_manager = resource_manager
-        self.cache_enabled = getattr(settings, 'ENABLE_PRECOMPILED_CACHE', True) and RUST_CACHE_AVAILABLE
+        # Use environment variable or default to True
+        self.cache_enabled = os.environ.get('ENABLE_PRECOMPILED_CACHE', 'true').lower() == 'true' and RUST_CACHE_AVAILABLE
         
         if not self.cache_enabled:
             self.cache_manager = None
             return
         
-        # Initialize Rust cache manager
-        cache_dir = Path(settings.BASE_DIR) / 'cache'
+        # Initialize Rust cache manager - use backend directory as base
+        backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
+        cache_dir = backend_dir / 'cache'
         self.cache_manager = CacheManager(str(cache_dir))
         self.cache_builder = CacheBuilder(str(cache_dir))
         
@@ -170,7 +172,8 @@ class PrecompiledCacheIntegration:
             
         try:
             # Check if cache files exist at all
-            cache_dir = Path(settings.BASE_DIR) / 'cache' / 'compiled_cache' 
+            backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
+            cache_dir = backend_dir / 'cache' / 'compiled_cache' 
             metadata_file = cache_dir / "cache_metadata.json"
             
             if not metadata_file.exists():
@@ -192,7 +195,8 @@ class PrecompiledCacheIntegration:
             
         try:
             # Check if cache files exist
-            cache_dir = Path(settings.BASE_DIR) / 'cache' / 'compiled_cache' 
+            backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
+            cache_dir = backend_dir / 'cache' / 'compiled_cache' 
             metadata_file = cache_dir / "cache_metadata.json"
             
             if metadata_file.exists():
@@ -275,7 +279,8 @@ class PrecompiledCacheIntegration:
             current_override = list(self.resource_manager._override_file_paths.keys()) if hasattr(self.resource_manager, '_override_file_paths') else []
             
             # Try to get previous mod state from cache metadata
-            cache_dir = Path(settings.BASE_DIR) / 'cache' / 'compiled_cache'
+            backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
+            cache_dir = backend_dir / 'cache' / 'compiled_cache'
             metadata_file = cache_dir / "cache_metadata.json"
             
             previous_workshop = []

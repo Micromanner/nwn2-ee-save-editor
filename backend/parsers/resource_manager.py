@@ -15,20 +15,32 @@ from collections import OrderedDict
 import time
 import zlib
 import sys
-from django.conf import settings
 
-# Import Rust TDA parser
-from rust_tda_parser import TDAParser
+# Django settings import - optional for standalone mode
+# Get base directory for the project
+BASE_DIR = Path(__file__).parent.parent
+
+# Import Rust parsers - optional for standalone mode
+try:
+    from rust_tda_parser import TDAParser
+except ImportError:
+    TDAParser = None
 
 # Parser imports - Use Rust TLK parser for performance
-from rust_tlk_parser import TLKParser
-logger_tlk = logging.getLogger(__name__ + '.tlk')
-logger_tlk.info("Using high-performance Rust TLK parser")
+try:
+    from rust_tlk_parser import TLKParser
+    logger_tlk = logging.getLogger(__name__ + '.tlk')
+    logger_tlk.info("Using high-performance Rust TLK parser")
+except ImportError:
+    TLKParser = None
 
 # Import Rust ERF parser
-from rust_erf_parser import ErfParser as ERFParser
-logger_erf = logging.getLogger(__name__ + '.erf')
-logger_erf.info("Using high-performance Rust ERF parser")
+try:
+    from rust_erf_parser import ErfParser as ERFParser
+    logger_erf = logging.getLogger(__name__ + '.erf')
+    logger_erf.info("Using high-performance Rust ERF parser")
+except ImportError:
+    ERFParser = None
 
 # Define resource types for compatibility
 class ERFResourceType:
@@ -40,12 +52,17 @@ class ERFResourceType:
 from .gff import GFFParser
 from .cache_helper import TDACacheHelper
 
-# Rust extensions (required)
-from rust_extensions.python.nwn2_rust_extensions import (
-    RustResourceScanner,
-    ZipContentReader
-)
-from .rust_adapter import RustScannerAdapter
+# Rust extensions (optional for standalone mode)
+try:
+    from rust_extensions.python.nwn2_rust_extensions import (
+        RustResourceScanner,
+        ZipContentReader
+    )
+    from .rust_adapter import RustScannerAdapter
+except ImportError:
+    RustResourceScanner = None
+    ZipContentReader = None
+    RustScannerAdapter = None
 
 def create_resource_scanner():
     """Create a resource scanner from Rust extensions"""
@@ -77,7 +94,11 @@ def create_resource_scanner():
 
 # Config and services
 from config.nwn2_settings import nwn2_paths
-from gamedata.services.workshop_service import SteamWorkshopService
+# Optional workshop service for standalone mode
+try:
+    from gamedata.services.workshop_service import SteamWorkshopService
+except ImportError:
+    SteamWorkshopService = None
 from gamedata.cache.safe_cache import SafeCache
 from gamedata.data_fetching_rules import with_retry_limit
 from utils.performance_profiler import get_profiler
@@ -465,8 +486,7 @@ class ResourceManager:
         try:
             # First check if cache files actually exist
             from pathlib import Path
-            from django.conf import settings
-            cache_dir = Path(settings.BASE_DIR) / 'cache' / 'compiled_cache' 
+            cache_dir = BASE_DIR / 'cache' / 'compiled_cache' 
             metadata_file = cache_dir / "cache_metadata.json"
             
             if not metadata_file.exists():

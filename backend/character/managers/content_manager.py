@@ -1,10 +1,12 @@
 """
-Content Manager - handles custom content detection logic
+Content Manager - handles custom content detection logic and campaign/module info
 Manages detection and tracking of custom content (feats, spells, classes) vs vanilla content
+Also extracts and manages campaign, module, and quest information from save files
 """
 
-from typing import Dict, List, Any, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 import logging
+import os
 
 from ..events import EventEmitter
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: ignore
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class ContentManager(EventEmitter):
-    """Manages custom content detection and tracking"""
+    """Manages custom content detection, campaign info, and quest tracking"""
     
     def __init__(self, character_manager):
         """
@@ -32,6 +34,16 @@ class ContentManager(EventEmitter):
         
         # Custom content tracking - initialized from character manager
         self.custom_content: Dict[str, Dict[str, Any]] = {}
+        
+        # Campaign/module/quest data
+        self.campaign_data: Dict[str, Any] = {}
+        self.module_info: Dict[str, Any] = {}
+        
+        # Extract campaign data if this is from a savegame
+        self._extract_campaign_data()
+        
+        # Initialize custom content detection
+        self._detect_custom_content_dynamic()
         
         logger.info("ContentManager initialized")
     
@@ -263,3 +275,276 @@ class ContentManager(EventEmitter):
             errors.append(f"Error validating custom content: {str(e)}")
         
         return len(errors) == 0, errors
+    
+    def _extract_campaign_data(self) -> None:
+        """Extract campaign, module, and quest data from save files"""
+        # Check if we have a save path (only for savegames)
+        if not hasattr(self.character_manager, 'save_path'):
+            logger.info("ContentManager: No save_path on character_manager - skipping campaign data extraction")
+            return
+            
+        save_path = self.character_manager.save_path
+        logger.info(f"ContentManager: Checking save_path: {save_path}")
+        
+        if not save_path or not os.path.exists(save_path):
+            logger.warning(f"ContentManager: Save path doesn't exist or is None: {save_path}")
+            return
+            
+        logger.info(f"ContentManager: Starting campaign data extraction from {save_path}")
+        
+        try:
+            from parsers.savegame_handler import SaveGameHandler
+            handler = SaveGameHandler(save_path)
+            logger.info("ContentManager: Created SaveGameHandler")
+            
+            # Extract module info from module.ifo
+            self._extract_module_info(handler)
+            
+            # Extract quest data from globals.xml
+            self._extract_quest_data(handler)
+            
+            # Detect current module from currentmodule.txt
+            self._detect_current_module(save_path)
+            
+            logger.info(f"ContentManager: Campaign data extraction complete - module: {self.module_info.get('module_name', 'None')}, campaign: {self.module_info.get('campaign', 'None')}")
+            
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to extract campaign data: {e}", exc_info=True)
+    
+    def _extract_module_info(self, handler) -> None:
+        """Extract module information from module.ifo"""
+        logger.info("ContentManager: Attempting to extract module.ifo")
+        try:
+            # First get the current module name
+            current_module = handler.extract_current_module()
+            if not current_module:
+                logger.warning("ContentManager: No current module found in save")
+                return
+            
+            logger.info(f"ContentManager: Current module is '{current_module}'")
+            
+            # Use shared ResourceManager to find the module file
+            from parsers.erf import ERFParser
+            
+            # Use the shared ResourceManager from rules_service
+            rm = self.rules_service.rm
+            module_path = rm.find_module(f"{current_module}.mod")
+            if not module_path:
+                logger.warning(f"ContentManager: Could not find {current_module}.mod")
+                return
+            
+            logger.info(f"ContentManager: Found module at {module_path}")
+            
+            # Parse .mod file as ERF archive and extract module.ifo
+            parser = ERFParser()
+            parser.read(module_path)
+            module_ifo_bytes = parser.extract_resource('module.ifo')
+            
+            if not module_ifo_bytes:
+                logger.warning(f"ContentManager: Could not find module.ifo in {current_module}.mod")
+                return
+            
+            # Parse the module.ifo GFF file
+            from parsers.gff import GFFParser
+            from io import BytesIO
+            gff_parser = GFFParser()
+            module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
+            module_ifo = module_gff.to_dict()
+            
+            if not module_ifo:
+                logger.warning("ContentManager: Failed to parse module.ifo")
+                return
+            
+            logger.info(f"ContentManager: module.ifo has {len(module_ifo)} fields")
+            
+            # Get module name (localized string)
+            mod_name_data = module_ifo.get('Mod_Name', {})
+            logger.info(f"ContentManager: Raw Mod_Name data: {mod_name_data}")
+            
+            if isinstance(mod_name_data, dict) and 'substrings' in mod_name_data:
+                module_name = mod_name_data.get('substrings', [{}])[0].get('string', '')
+                logger.info(f"ContentManager: Extracted module name from substrings: '{module_name}'")
+            elif isinstance(mod_name_data, str):
+                module_name = mod_name_data
+                logger.info(f"ContentManager: Module name is direct string: '{module_name}'")
+            else:
+                module_name = ''
+                logger.warning(f"ContentManager: Could not parse module name, type: {type(mod_name_data)}")
+                
+            # Get entry area
+            area_name = module_ifo.get('Mod_Entry_Area', '')
+            logger.info(f"ContentManager: Entry area: '{area_name}'")
+            
+            # Get some other interesting fields for debugging
+            logger.info(f"ContentManager: Mod_ID: {module_ifo.get('Mod_ID', 'Not found')}")
+            logger.info(f"ContentManager: Mod_Version: {module_ifo.get('Mod_Version', 'Not found')}")
+            logger.info(f"ContentManager: Mod_Creator_ID: {module_ifo.get('Mod_Creator_ID', 'Not found')}")
+            
+            # Determine campaign from module name
+            campaign = ''
+            if module_name:
+                if 'Neverwinter' in module_name or 'West Harbor' in module_name:
+                    campaign = 'Original Campaign'
+                    logger.info(f"ContentManager: Detected Original Campaign from module name")
+                elif 'Rashemen' in module_name or 'Mulsantir' in module_name:
+                    campaign = 'Mask of the Betrayer'
+                    logger.info(f"ContentManager: Detected Mask of the Betrayer from module name")
+                elif 'Samarach' in module_name or 'Samargol' in module_name:
+                    campaign = 'Storm of Zehir'
+                    logger.info(f"ContentManager: Detected Storm of Zehir from module name")
+                else:
+                    logger.info(f"ContentManager: Could not determine campaign from module name: '{module_name}'")
+                    
+            self.module_info = {
+                'module_name': module_name,
+                'area_name': area_name,
+                'campaign': campaign,
+                'entry_area': area_name,
+                'module_description': str(module_ifo.get('Mod_Description', ''))[:100]  # Truncate for logging
+            }
+            
+            logger.info(f"ContentManager: Successfully extracted module info: {module_name} ({campaign})")
+            
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to extract module info: {e}", exc_info=True)
+    
+    def _extract_quest_data(self, handler) -> None:
+        """Extract quest data from globals.xml"""
+        logger.info("ContentManager: Attempting to extract quest data from globals.xml")
+        try:
+            # Extract globals.xml as string
+            globals_xml = handler.extract_globals_xml()
+            if not globals_xml:
+                logger.warning("ContentManager: No globals.xml data returned from handler")
+                return
+            
+            # Parse the XML data
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(globals_xml)
+            
+            # Extract global variables into a dictionary
+            globals_data = {}
+            for var in root.findall('.//Variable'):
+                name = var.get('name', '')
+                value = var.get('value', '')
+                if name:
+                    globals_data[name] = value
+            
+            logger.info(f"ContentManager: globals.xml has {len(globals_data)} variables")
+            
+            # Parse quest variables from globals.xml
+            # This is simplified - actual quest parsing would be more complex
+            quest_count = 0
+            completed_count = 0
+            quest_examples = []  # Track some examples for logging
+            
+            # Count quest-related variables (simplified heuristic)
+            for key, value in globals_data.items():
+                if 'quest' in key.lower() or 'q_' in key.lower():
+                    quest_count += 1
+                    if str(value).lower() in ['true', '1', 'complete', 'done']:
+                        completed_count += 1
+                    
+                    # Log first 5 quest variables as examples
+                    if len(quest_examples) < 5:
+                        quest_examples.append(f"{key}={value}")
+            
+            logger.info(f"ContentManager: Found {quest_count} quest-related variables")
+            if quest_examples:
+                logger.info(f"ContentManager: Quest variable examples: {quest_examples}")
+            
+            # Also look for some known quest patterns
+            story_vars = [k for k in globals_data.keys() if k.startswith('STORY_') or k.startswith('MAIN_')]
+            if story_vars:
+                logger.info(f"ContentManager: Found {len(story_vars)} story variables: {story_vars[:5]}")
+            
+            self.campaign_data = {
+                'total_quests': quest_count,
+                'completed_quests': completed_count,
+                'active_quests': quest_count - completed_count,
+                'quest_completion_rate': round((completed_count / max(quest_count, 1)) * 100, 1),
+                'quest_details': {
+                    'summary': {
+                        'completed_quests': completed_count,
+                        'active_quests': quest_count - completed_count,
+                        'total_quest_variables': quest_count
+                    },
+                    'progress_stats': {
+                        'total_completion_rate': round((completed_count / max(quest_count, 1)) * 100, 1)
+                    }
+                }
+            }
+            
+            logger.info(f"ContentManager: Extracted quest data: {completed_count}/{quest_count} quests completed ({self.campaign_data['quest_completion_rate']}%)")
+            
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to extract quest data: {e}", exc_info=True)
+            # Set default values
+            self.campaign_data = {
+                'total_quests': 0,
+                'completed_quests': 0,
+                'active_quests': 0,
+                'quest_completion_rate': 0,
+                'quest_details': {
+                    'summary': {
+                        'completed_quests': 0,
+                        'active_quests': 0,
+                        'total_quest_variables': 0
+                    },
+                    'progress_stats': {
+                        'total_completion_rate': 0
+                    }
+                }
+            }
+    
+    def _detect_current_module(self, save_path: str) -> None:
+        """Detect current module from currentmodule.txt or extract from save"""
+        logger.info("ContentManager: Looking for current module info")
+        try:
+            # Try to extract from SaveGameHandler first
+            from parsers.savegame_handler import SaveGameHandler
+            handler = SaveGameHandler(save_path)
+            current_module = handler.extract_current_module()
+            
+            if current_module:
+                self.module_info['current_module'] = current_module
+                logger.info(f"ContentManager: Current module from save: '{current_module}'")
+            else:
+                # Fallback to checking currentmodule.txt file
+                from pathlib import Path
+                save_dir = Path(save_path)
+                module_txt = save_dir / "currentmodule.txt"
+                
+                logger.info(f"ContentManager: Checking for {module_txt}")
+                
+                if module_txt.exists():
+                    current_module = module_txt.read_text().strip()
+                    self.module_info['current_module'] = current_module
+                    logger.info(f"ContentManager: Current module from currentmodule.txt: '{current_module}'")
+                else:
+                    logger.info(f"ContentManager: currentmodule.txt not found at {module_txt}")
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to detect current module: {e}", exc_info=True)
+    
+    def get_campaign_info(self) -> Dict[str, Any]:
+        """Get campaign and module information"""
+        return {
+            **self.module_info,
+            **self.campaign_data
+        }
+    
+    def get_module_name(self) -> str:
+        """Get the module name"""
+        return self.module_info.get('module_name', '')
+    
+    def get_campaign_name(self) -> str:
+        """Get the campaign name"""
+        return self.module_info.get('campaign', '')
+    
+    def get_area_name(self) -> str:
+        """Get the current area name"""
+        return self.module_info.get('area_name', '')
+    
+    def get_quest_summary(self) -> Dict[str, Any]:
+        """Get quest summary data"""
+        return self.campaign_data.get('quest_details', {})

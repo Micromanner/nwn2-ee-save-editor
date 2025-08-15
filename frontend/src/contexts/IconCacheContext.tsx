@@ -76,12 +76,8 @@ export function IconCacheProvider({ children, backendReady = false }: IconCacheP
     setPreloadedIcons(prev => new Set([...prev, iconName]));
   }, []);
 
-  // Initial cache status check - only when backend is ready
-  useEffect(() => {
-    if (backendReady) {
-      checkCacheStatus();
-    }
-  }, [backendReady, checkCacheStatus]);
+  // Removed automatic cache status check at startup
+  // Cache will only be checked when explicitly requested
 
   const value: IconCacheContextValue = {
     cacheStats,

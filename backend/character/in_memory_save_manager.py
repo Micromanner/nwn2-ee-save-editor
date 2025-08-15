@@ -35,6 +35,7 @@ class InMemorySaveManager:
         Args:
             save_path: Path to save game directory containing resgff.zip
         """
+        self.save_path = save_path  # Store the save path
         self.save_handler = SaveGameHandler(save_path)
         
         # In-memory character data (from player.bic)
@@ -108,7 +109,8 @@ class InMemorySaveManager:
                     gff_element=self.character_gff_element,  # Pass the original GFF element
                     game_data_loader=game_data_loader,
                     rules_service=rules_service,
-                    lazy=True  # Use lazy loading for better performance
+                    lazy=True,  # Use lazy loading for better performance
+                    save_path=self.save_path  # Pass save path for campaign data extraction
                 )
                 
                 # Track changes by wrapping the gff.set method
@@ -311,8 +313,19 @@ class InMemoryCharacterSession:
         from gamedata.services.game_rules_service import GameRulesService
         
         try:
-            game_data_loader = get_dynamic_game_data_loader()
-            rules_service = GameRulesService()
+            # Get shared ResourceManager from FastAPI singleton
+            try:
+                # Try to import FastAPI context to get shared ResourceManager
+                from fastapi_server import get_shared_resource_manager
+                shared_rm = get_shared_resource_manager()
+                logger.info("Using shared ResourceManager from FastAPI")
+            except ImportError:
+                # Fallback to None if not in FastAPI context
+                shared_rm = None
+                logger.info("No shared ResourceManager available, using default")
+            
+            game_data_loader = get_dynamic_game_data_loader(resource_manager=shared_rm)
+            rules_service = GameRulesService(resource_manager=shared_rm)
             
             self.character_manager = self.save_manager.get_character_manager(
                 game_data_loader=game_data_loader,

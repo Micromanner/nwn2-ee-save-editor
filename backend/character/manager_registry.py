@@ -13,16 +13,21 @@ from .managers import (
     SpellManager,
     CombatManager,
     SaveManager,
-    InventoryManager
+    InventoryManager,
+    ContentManager,
+    CharacterStateManager
 )
 
 # Define all managers and their registration order
 # Order matters for proper event setup - managers that emit events should come before listeners
 MANAGER_REGISTRY: List[Tuple[str, Type]] = [
     # Core managers that others depend on
-    ('attribute', AbilityManager),  # Emits ATTRIBUTE_CHANGED events
+    ('ability', AbilityManager),  # Emits ATTRIBUTE_CHANGED events
     ('race', RaceManager),           # Provides racial modifiers
     ('class', ClassManager),         # Emits CLASS_CHANGED, LEVEL_GAINED events
+    
+    # Content detection and campaign data
+    ('content', ContentManager),     # Detects custom content and extracts campaign data
     
     # Feature managers
     ('feat', FeatManager),           # Emits FEAT_ADDED/REMOVED events
@@ -33,6 +38,9 @@ MANAGER_REGISTRY: List[Tuple[str, Type]] = [
     ('combat', CombatManager),       # Listens to attribute/class changes
     ('save', SaveManager),           # Listens to attribute/class/feat changes
     ('inventory', InventoryManager),  # May emit ITEM_EQUIPPED/UNEQUIPPED events
+    
+    # State management
+    ('state', CharacterStateManager), # Manages character state changes and validation
 ]
 
 

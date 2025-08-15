@@ -18,9 +18,9 @@ pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String>
     
     let mut initial_dir = None;
     
-    // Try to get saves path from Django backend first  
-    // Ensure Django sidecar is running (ignore errors for fallback)
-    let _ = crate::sidecar_manager::ensure_django_running(app.clone()).await;
+    // Try to get saves path from FastAPI backend first  
+    // Ensure FastAPI sidecar is running (ignore errors for fallback)
+    let _ = crate::sidecar_manager::ensure_fastapi_running(app.clone()).await;
     
     if let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build() {
         if let Ok(response) = client.get("http://localhost:8000/api/gamedata/paths/").send().await {
@@ -112,31 +112,31 @@ pub async fn select_nwn2_directory(app: tauri::AppHandle) -> Result<String, Stri
 pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, String> {
     use std::time::Instant;
     let start_time = Instant::now();
-    log::info!("[Rust] Finding available NWN2 saves via Django backend.");
+    log::info!("[Rust] Finding available NWN2 saves via FastAPI backend.");
     
-    // Only ensure Django is running if health check fails
+    // Only ensure FastAPI is running if health check fails
     let sidecar_start = Instant::now();
-    let health_check = crate::sidecar_manager::check_django_health().await;
+    let health_check = crate::sidecar_manager::check_fastapi_health().await;
     match health_check {
         Ok(true) => {
-            log::info!("[Rust] Django already running and healthy, skipping startup");
+            log::info!("[Rust] FastAPI already running and healthy, skipping startup");
         }
         _ => {
-            log::info!("[Rust] Django not healthy, ensuring startup");
-            crate::sidecar_manager::ensure_django_running(app).await
-                .map_err(|e| format!("Failed to start Django sidecar: {}", e))?;
+            log::info!("[Rust] FastAPI not healthy, ensuring startup");
+            crate::sidecar_manager::ensure_fastapi_running(app).await
+                .map_err(|e| format!("Failed to start FastAPI sidecar: {}", e))?;
         }
     }
-    log::info!("[Rust] Django sidecar check/startup took: {:?}", sidecar_start.elapsed());
+    log::info!("[Rust] FastAPI sidecar check/startup took: {:?}", sidecar_start.elapsed());
     
-    // Call Django backend to get the proper save path using nwn2_settings.py
+    // Call FastAPI backend to get the proper save path using nwn2_settings.py
     let backend_start = Instant::now();
     let client = reqwest::Client::new();
     let response = client
         .get("http://localhost:8000/api/gamedata/paths/")
         .send()
         .await
-        .map_err(|e| format!("Failed to connect to Django backend: {}", e))?;
+        .map_err(|e| format!("Failed to connect to FastAPI backend: {}", e))?;
     log::info!("[Rust] Backend API call took: {:?}", backend_start.elapsed());
     
     if !response.status().is_success() {
@@ -292,18 +292,18 @@ pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String
 
 #[tauri::command]
 pub async fn detect_nwn2_installation(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    log::info!("[Rust] Detecting NWN2:EE installation using Django backend");
+    log::info!("[Rust] Detecting NWN2:EE installation using FastAPI backend");
     
-    // Ensure Django sidecar is running
-    let _ = crate::sidecar_manager::ensure_django_running(app).await;
+    // Ensure FastAPI sidecar is running
+    let _ = crate::sidecar_manager::ensure_fastapi_running(app).await;
     
-    // Use Django backend's Rust-powered path discovery
+    // Use FastAPI backend's Rust-powered path discovery
     let client = reqwest::Client::new();
     let response = client
         .get("http://localhost:8000/api/gamedata/paths/")
         .send()
         .await
-        .map_err(|e| format!("Failed to connect to Django backend: {}", e))?;
+        .map_err(|e| format!("Failed to connect to FastAPI backend: {}", e))?;
     
     if !response.status().is_success() {
         return Err("Failed to get NWN2 paths from backend".to_string());
@@ -319,13 +319,13 @@ pub async fn detect_nwn2_installation(app: tauri::AppHandle) -> Result<Option<St
     if let Some(paths) = paths_info.get("paths") {
         if let Some(game_folder) = paths.get("game_folder") {
             if let Some(installation_path) = game_folder.get("path").and_then(|p| p.as_str()) {
-                log::info!("[Rust] Found NWN2 installation via Django backend: {}", installation_path);
+                log::info!("[Rust] Found NWN2 installation via FastAPI backend: {}", installation_path);
                 return Ok(Some(installation_path.to_string()));
             }
         }
     }
     
-    log::info!("[Rust] No NWN2 installation found via Django backend");
+    log::info!("[Rust] No NWN2 installation found via FastAPI backend");
     Ok(None)
 }
 

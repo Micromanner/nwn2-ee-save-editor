@@ -189,9 +189,20 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
-      const data = await CharacterAPI.importCharacter(savePath);
-      setCharacter(data);
-      setCharacterId(data.id || null);
+      // Step 1: Import the save game (creates backend session)
+      const importResponse = await CharacterAPI.importCharacter(savePath);
+      const characterId = importResponse.id;
+      
+      if (!characterId) {
+        throw new Error('Import successful but no character ID returned');
+      }
+      
+      // Step 2: Fetch complete character state from backend session
+      const characterData = await CharacterAPI.getCharacterState(characterId);
+      
+      // Step 3: Populate frontend context with complete data
+      setCharacter(characterData);
+      setCharacterId(characterId);
       
       // Reset subsystems
       setSubsystems(initializeSubsystems());

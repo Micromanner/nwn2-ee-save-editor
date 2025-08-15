@@ -3,10 +3,12 @@ Character State Manager - handles character state manipulation and persistence
 Manages reset, clone, import/export operations and file I/O
 """
 
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 import copy
 import logging
+from pathlib import Path
 
+from parsers import gff
 from ..events import EventEmitter, EventType, EventData
 
 if TYPE_CHECKING:
@@ -61,10 +63,22 @@ class CharacterStateManager(EventEmitter):
             # Clear feats except racial/epithet
             feat_mgr = self.character_manager.get_manager('feat')
             if feat_mgr:
-                racial_feats = feat_mgr.detect_epithet_feats()  # Preserve special feats
+                # Try to get racial/special feats that should be preserved
+                racial_feats = []
+                if hasattr(feat_mgr, 'detect_epithet_feats'):
+                    racial_feats = feat_mgr.detect_epithet_feats()
+                elif hasattr(feat_mgr, 'get_racial_feats'):
+                    racial_feats = feat_mgr.get_racial_feats()
+                elif hasattr(feat_mgr, 'get_automatic_feats'):
+                    racial_feats = feat_mgr.get_automatic_feats()
+                
                 feat_list = self.gff.get('FeatList', [])
-                preserved_feats = [f for f in feat_list if f.get('Feat', -1) in racial_feats]
-                self.gff.set('FeatList', preserved_feats)
+                if racial_feats:
+                    preserved_feats = [f for f in feat_list if f.get('Feat', -1) in racial_feats]
+                    self.gff.set('FeatList', preserved_feats)
+                else:
+                    # No racial feats detected, clear all feats
+                    self.gff.set('FeatList', [])
             else:
                 # Fallback: clear all feats
                 self.gff.set('FeatList', [])
@@ -170,11 +184,9 @@ class CharacterStateManager(EventEmitter):
         Args:
             filepath: Path to save the character file
         """
-        from parsers import gff
-        
         try:
             # If we have a gff_element, use it for direct write
-            if self.character_manager.gff_element:
+            if hasattr(self.character_manager, 'gff_element') and self.character_manager.gff_element:
                 gff.write_gff(self.character_manager.gff_element, filepath)
             else:
                 # Convert dict data back to GFF format
@@ -194,8 +206,6 @@ class CharacterStateManager(EventEmitter):
         Args:
             filepath: Path to the character file
         """
-        from parsers import gff
-        
         try:
             # Parse the GFF file
             gff_element = gff.parse_gff(filepath)
@@ -206,9 +216,18 @@ class CharacterStateManager(EventEmitter):
             
             # Store the gff_element for direct updates
             self.character_manager.gff_element = gff_element
-            from ..gff_direct_wrapper import DirectGFFWrapper
-            self.character_manager.gff = DirectGFFWrapper(gff_element)
-            self.gff = self.character_manager.gff  # Update our reference
+            
+            # Try to use DirectGFFWrapper if available, otherwise keep existing wrapper
+            try:
+                from ..gff_direct_wrapper import DirectGFFWrapper
+                self.character_manager.gff = DirectGFFWrapper(gff_element)
+                self.gff = self.character_manager.gff  # Update our reference
+            except ImportError:
+                logger.warning("DirectGFFWrapper not available, keeping existing GFF wrapper")
+                # Update existing wrapper with new data
+                from ..character_manager import GFFDataWrapper
+                self.character_manager.gff = GFFDataWrapper(character_data)
+                self.gff = self.character_manager.gff
             
             logger.info(f"Character loaded from {filepath}")
             
@@ -216,7 +235,7 @@ class CharacterStateManager(EventEmitter):
             logger.error(f"Failed to load character from {filepath}: {e}")
             raise
     
-    def validate(self) -> tuple[bool, List[str]]:
+    def validate(self) -> Tuple[bool, List[str]]:
         """
         Validate character state manager
         
@@ -236,3 +255,74 @@ class CharacterStateManager(EventEmitter):
             errors.append("Missing game_data_loader reference")
         
         return len(errors) == 0, errors
+    
+    def get_alignment(self) -> Dict[str, Any]:
+        """Get character alignment"""
+        law_chaos = self.gff.get('LawfulChaotic', 50)
+        good_evil = self.gff.get('GoodEvil', 50)
+        
+        return {
+            'lawChaos': law_chaos,
+            'goodEvil': good_evil,
+            'alignment_string': self._get_alignment_string(law_chaos, good_evil)
+        }
+    
+    def set_alignment(self, law_chaos: int = None, good_evil: int = None) -> Dict[str, Any]:
+        """Set character alignment"""
+        if law_chaos is not None:
+            if not (0 <= law_chaos <= 100):
+                raise ValueError("lawChaos must be between 0 and 100")
+            self.gff.set('LawfulChaotic', law_chaos)
+        else:
+            law_chaos = self.gff.get('LawfulChaotic', 50)
+            
+        if good_evil is not None:
+            if not (0 <= good_evil <= 100):
+                raise ValueError("goodEvil must be between 0 and 100")
+            self.gff.set('GoodEvil', good_evil)
+        else:
+            good_evil = self.gff.get('GoodEvil', 50)
+            
+        return self.get_alignment()
+    
+    def shift_alignment(self, law_chaos_shift: int = 0, good_evil_shift: int = 0) -> Dict[str, Any]:
+        """Shift alignment by relative amounts"""
+        current_law_chaos = self.gff.get('LawfulChaotic', 50)
+        current_good_evil = self.gff.get('GoodEvil', 50)
+        
+        new_law_chaos = max(0, min(100, current_law_chaos + law_chaos_shift))
+        new_good_evil = max(0, min(100, current_good_evil + good_evil_shift))
+        
+        self.gff.set('LawfulChaotic', new_law_chaos)
+        self.gff.set('GoodEvil', new_good_evil)
+        
+        result = self.get_alignment()
+        result['shifted'] = {
+            'lawChaos': law_chaos_shift,
+            'goodEvil': good_evil_shift
+        }
+        return result
+    
+    def _get_alignment_string(self, law_chaos: int, good_evil: int) -> str:
+        """Convert numeric alignment values to D&D alignment string"""
+        # Determine Law/Chaos axis
+        if law_chaos <= 30:
+            law_axis = "Chaotic"
+        elif law_chaos >= 70:
+            law_axis = "Lawful"
+        else:
+            law_axis = "Neutral"
+        
+        # Determine Good/Evil axis
+        if good_evil <= 30:
+            evil_axis = "Evil"
+        elif good_evil >= 70:
+            evil_axis = "Good"
+        else:
+            evil_axis = "Neutral"
+        
+        # Handle True Neutral case
+        if law_axis == "Neutral" and evil_axis == "Neutral":
+            return "True Neutral"
+        
+        return f"{law_axis} {evil_axis}"

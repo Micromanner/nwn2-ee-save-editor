@@ -1,0 +1,394 @@
+"""
+FastAPI router for saving throw operations.
+Handles fortitude, reflex, will saves and resistances.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from typing import Dict, Any
+
+from .dependencies import get_character_manager, get_character_session_dep, CharacterManagerDep, CharacterSessionDep
+from fastapi_models import (
+    SaveSummaryResponse,
+    SaveBreakdownResponse, 
+    SaveTotalsResponse,
+    SaveCheckRequest,
+    SaveCheckResponse,
+    TemporaryModifierRequest,
+    TemporaryModifierResponse,
+    MiscSaveBonusRequest,
+    MiscSaveBonusResponse,
+    RacialSavesResponse,
+    ClearModifiersResponse
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["Saves"])
+
+
+@router.get("/characters/{character_id}/saves/summary/", response_model=SaveSummaryResponse)
+def get_save_summary(
+    character_id: int,
+    manager: CharacterManagerDep = Depends(get_character_manager)
+):
+    """
+    Get saving throw summary using existing SaveManager method.
+    
+    Returns:
+    - Fortitude, reflex, will save totals and breakdowns
+    - Save conditions and immunities
+    """
+    try:
+            save_manager = manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        save_summary = save_manager.get_save_summary()
+        
+        return save_summary
+        
+    except Exception as e:
+        logger.error(f"Failed to get save summary for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get save summary: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/saves/breakdown/", response_model=SaveBreakdownResponse)
+def get_save_breakdown(
+    character_id: int,
+    manager: CharacterManagerDep = Depends(get_character_manager)
+):
+    """
+    Get detailed saving throw breakdown using SaveManager method.
+    
+    Returns:
+    - Complete breakdown of all saves with components
+    """
+    try:
+            save_manager = manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        save_breakdown = save_manager.calculate_saving_throws()
+        
+        return save_breakdown
+        
+    except Exception as e:
+        logger.error(f"Failed to get save breakdown for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get save breakdown: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/saves/totals/", response_model=SaveTotalsResponse)
+def get_save_totals(
+    character_id: int,
+    manager: CharacterManagerDep = Depends(get_character_manager)
+):
+    """
+    Get individual save totals using SaveManager methods.
+    
+    Returns:
+    - Individual fortitude, reflex, will totals
+    """
+    try:
+            save_manager = manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use individual SaveManager methods
+        totals = {
+            'fortitude': save_manager.calculate_fortitude_save(),
+            'reflex': save_manager.calculate_reflex_save(),
+            'will': save_manager.calculate_will_save()
+        }
+        
+        return totals
+        
+    except Exception as e:
+        logger.error(f"Failed to get save totals for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get save totals: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/saves/check/", response_model=SaveCheckResponse)
+def check_save(
+    character_id: int,
+    request: SaveCheckRequest,
+    manager: CharacterManagerDep = Depends(get_character_manager)
+):
+    """
+    Check if a saving throw would succeed using SaveManager method.
+    
+    Args:
+        request: Save check parameters
+    
+    Returns:
+        Save check result with success probability and details
+    """
+    try:
+            save_manager = manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        check_result = save_manager.check_save(
+            request.save_type, 
+            request.dc, 
+            request.modifier, 
+            request.take_20
+        )
+        
+        # Ensure success_chance is present for non-take_20 checks
+        if not request.take_20 and 'success_chance' not in check_result:
+            check_result['success_chance'] = None
+        
+        return check_result
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to check save for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check save: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/saves/temporary-modifier/", response_model=TemporaryModifierResponse)
+def add_temporary_modifier(
+    character_id: int,
+    request: TemporaryModifierRequest,
+    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+):
+    """
+    Add temporary save modifier using SaveManager method.
+    
+    Args:
+        request: Temporary modifier parameters
+    """
+    try:
+        character, session = char_session
+        if not session or not session.character_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Character session not available"
+            )
+        save_manager = session.character_manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        save_manager.add_temporary_modifier(request.save_type, request.modifier, request.duration)
+        
+        return {
+            "success": True,
+            "message": f"Added {request.modifier:+d} temporary {request.save_type} save modifier",
+            "save_type": request.save_type,
+            "modifier": request.modifier,
+            "duration": request.duration
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to add temporary modifier for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add temporary modifier: {str(e)}"
+        )
+
+
+@router.delete("/characters/{character_id}/saves/temporary-modifier/", response_model=TemporaryModifierResponse)
+def remove_temporary_modifier(
+    character_id: int,
+    request: TemporaryModifierRequest,
+    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+):
+    """
+    Remove temporary save modifier using SaveManager method.
+    
+    Args:
+        request: Temporary modifier parameters (duration ignored for removal)
+    """
+    try:
+        character, session = char_session
+        if not session or not session.character_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Character session not available"
+            )
+        save_manager = session.character_manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        save_manager.remove_temporary_modifier(request.save_type, request.modifier)
+        
+        return {
+            "success": True,
+            "message": f"Removed {request.modifier:+d} temporary {request.save_type} save modifier",
+            "save_type": request.save_type,
+            "modifier": request.modifier
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to remove temporary modifier for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove temporary modifier: {str(e)}"
+        )
+
+
+@router.delete("/characters/{character_id}/saves/temporary-modifiers/", response_model=ClearModifiersResponse)
+def clear_temporary_modifiers(
+    character_id: int,
+    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+):
+    """
+    Clear all temporary save modifiers using SaveManager method.
+    """
+    try:
+        character, session = char_session
+        if not session or not session.character_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Character session not available"
+            )
+        save_manager = session.character_manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        save_manager.clear_temporary_modifiers()
+        
+        return {
+            "success": True,
+            "message": "Cleared all temporary save modifiers"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to clear temporary modifiers for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear temporary modifiers: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/saves/misc-bonus/", response_model=MiscSaveBonusResponse)
+def set_misc_save_bonus(
+    character_id: int,
+    request: MiscSaveBonusRequest,
+    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+):
+    """
+    Set miscellaneous saving throw bonus using SaveManager method.
+    
+    Args:
+        request: Misc save bonus parameters
+    """
+    try:
+        character, session = char_session
+        if not session or not session.character_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Character session not available"
+            )
+        save_manager = session.character_manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        result = save_manager.set_misc_save_bonus(request.save_type, request.value)
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to set misc save bonus for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set misc save bonus: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/saves/racial/{race_id}/", response_model=RacialSavesResponse)
+def get_racial_saves(
+    character_id: int,
+    race_id: int,
+    manager: CharacterManagerDep = Depends(get_character_manager)
+):
+    """
+    Get racial save bonuses using SaveManager method.
+    
+    Args:
+        race_id: The race ID to get saves for
+    
+    Returns:
+        Dict with fortitude, reflex, will save bonuses
+    """
+    try:
+            save_manager = manager.get_manager('save')
+        
+        if not save_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Save manager not available"
+            )
+        
+        # Use existing SaveManager method
+        racial_saves = save_manager.get_racial_saves(race_id)
+        
+        return racial_saves
+        
+    except Exception as e:
+        logger.error(f"Failed to get racial saves for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get racial saves: {str(e)}"
+        )

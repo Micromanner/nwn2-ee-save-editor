@@ -7,6 +7,8 @@ from .ability_manager import AbilityManager
 from .combat_manager import CombatManager
 from .save_manager import SaveManager
 from .race_manager import RaceManager
+from .content_manager import ContentManager
+from .character_state_manager import CharacterStateManager
 
 __all__ = [
     'ClassManager',
@@ -18,4 +20,6 @@ __all__ = [
     'CombatManager',
     'SaveManager',
     'RaceManager',
+    'ContentManager',
+    'CharacterStateManager',
 ]

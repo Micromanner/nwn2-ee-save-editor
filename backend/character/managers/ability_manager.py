@@ -280,21 +280,60 @@ class AbilityManager(EventEmitter):
     
     def set_all_attributes(self, attributes: Dict[str, int], validate: bool = True) -> List[Dict[str, Any]]:
         """
-        Set multiple attributes at once
+        Set multiple attributes at once with cascading effects
         
         Args:
-            attributes: Dict mapping attribute names to values
+            attributes: Dict mapping attribute names to values (both standard names and GFF field names supported)
             validate: Whether to validate the changes
             
         Returns:
-            List of change details
+            List of change details with cascading effects
         """
         changes = []
+        all_cascading_changes = []
         
+        # Convert standard ability names to GFF field names if needed
+        converted_attributes = {}
         for attr, value in attributes.items():
-            if attr in self.ATTRIBUTES:
+            # Check if this is a standard ability name (strength, dexterity, etc.) 
+            gff_field = self.ABILITY_MAPPING.get(attr.lower())
+            if gff_field:
+                converted_attributes[gff_field] = value
+            elif attr in self.ATTRIBUTES:
+                # Already a GFF field name (Str, Dex, etc.)
+                converted_attributes[attr] = value
+            else:
+                logger.warning(f"Unknown attribute name: {attr}")
+                continue
+        
+        # Apply all attribute changes
+        for attr, value in converted_attributes.items():
+            try:
                 change = self.set_attribute(attr, value, validate)
                 changes.append(change)
+                
+                # Collect any cascading effects from this change
+                if hasattr(change, 'cascading_effects') and change.cascading_effects:
+                    all_cascading_changes.extend(change.cascading_effects)
+                    
+            except Exception as e:
+                logger.error(f"Failed to set attribute {attr} to {value}: {e}")
+                # Add error to changes list for reporting
+                changes.append({
+                    'attribute': attr,
+                    'old_value': self.gff.get(attr, 10),
+                    'new_value': value,
+                    'error': str(e),
+                    'success': False
+                })
+        
+        # If we collected cascading effects, add them to the last successful change
+        if all_cascading_changes and changes:
+            # Find the last successful change and add cascading effects
+            for change in reversed(changes):
+                if change.get('success', True):  # Default to True for backward compatibility
+                    change['all_cascading_effects'] = all_cascading_changes
+                    break
         
         return changes
     
@@ -1388,6 +1427,10 @@ class AbilityManager(EventEmitter):
             
         full_name = f"{first} {last}".strip()
         return full_name if full_name and full_name != " " else ""
+    
+    def get_character_name(self) -> str:
+        """Public method to get character name (for character summary)"""
+        return self._get_character_name()
     
     def validate(self) -> Tuple[bool, List[str]]:
         """

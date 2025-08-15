@@ -35,6 +35,7 @@ backend/cache/
 *.dll
 *.dylib
 *.pyi
+*.pyd
 Cargo.lock
 *_profile*.json
 *analysis*.json

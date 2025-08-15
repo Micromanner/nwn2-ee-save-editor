@@ -3,7 +3,7 @@
 import { HelpCircle, Loader2 } from 'lucide-react';
 import { buildIconUrl, getIconCategory } from '@/lib/api/enhanced-icons';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useIconCache } from '@/contexts/IconCacheContext';
 
 interface NWN2IconProps {
@@ -36,7 +36,14 @@ export default function NWN2Icon({
   const checkCacheStatus = iconCache?.checkCacheStatus;
   const [loadError, setLoadError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [showFallback, setShowFallback] = useState(false);
 
+  // Show fallback immediately if cache is not ready
+  useEffect(() => {
+    if (useEnhanced && cacheReady === null && !iconUrl) {
+      setShowFallback(true);
+    }
+  }, [useEnhanced, cacheReady, iconUrl]);
 
   if (!icon) {
     return (
@@ -45,37 +52,49 @@ export default function NWN2Icon({
       </div>
     );
   }
-  
-  // Show loading state while cache is initializing
-  if (useEnhanced && cacheReady === false && !iconUrl) {
+
+  // If we've determined to show fallback, show it immediately
+  if (showFallback) {
     return (
-      <div className={`${sizeMap[size].class} bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center ${className}`}>
-        <Loader2 className="w-4 h-4 text-[rgb(var(--color-text-muted))] animate-spin" />
-      </div>
+      <div 
+        className={`${sizeMap[size].class} rounded flex items-center justify-center ${className} fallback-icon relative`}
+        dangerouslySetInnerHTML={{ __html: getFallbackContent(icon) }}
+      />
     );
   }
-
+  
   // Build the icon URL
   let fullIconUrl = iconUrl;
   
   if (!fullIconUrl && icon) {
-    // If using enhanced mode and cache is not ready, don't build URL yet
-    if (useEnhanced && cacheReady !== true) {
-      return (
-        <div className={`${sizeMap[size].class} bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center ${className}`}>
-          <Loader2 className="w-4 h-4 text-[rgb(var(--color-text-muted))] animate-spin" />
-        </div>
-      );
-    }
-    
     // If no URL provided, build one using the enhanced system
     if (useEnhanced) {
-      fullIconUrl = buildIconUrl(icon, { useEnhanced: true });
+      try {
+        fullIconUrl = buildIconUrl(icon, { useEnhanced: true });
+      } catch (error) {
+        setShowFallback(true);
+        return (
+          <div 
+            className={`${sizeMap[size].class} rounded flex items-center justify-center ${className} fallback-icon relative`}
+            dangerouslySetInnerHTML={{ __html: getFallbackContent(icon) }}
+          />
+        );
+      }
     } else {
       // Legacy mode - try to detect category from prefix
       const category = getIconCategory(icon);
       if (category) {
-        fullIconUrl = buildIconUrl(icon, { useEnhanced: false, category });
+        try {
+          fullIconUrl = buildIconUrl(icon, { useEnhanced: false, category });
+        } catch (error) {
+          setShowFallback(true);
+          return (
+            <div 
+              className={`${sizeMap[size].class} rounded flex items-center justify-center ${className} fallback-icon relative`}
+              dangerouslySetInnerHTML={{ __html: getFallbackContent(icon) }}
+            />
+          );
+        }
       }
     }
   } else if (fullIconUrl && !fullIconUrl.startsWith('http')) {
@@ -96,27 +115,8 @@ export default function NWN2Icon({
           height={sizeConfig.px}
           className="w-full h-full object-cover"
           onError={(e) => {
-            // If image fails to load and we're using enhanced mode, try to retry after cache initialization
-            if (useEnhanced && !loadError && retryCount < 2) {
-              setLoadError(true);
-              // Retry after a delay to give cache time to initialize
-              setTimeout(() => {
-                setRetryCount(prev => prev + 1);
-                setLoadError(false);
-                if (checkCacheStatus) {
-                  checkCacheStatus(); // Re-check cache status
-                }
-              }, 2000);
-              return;
-            }
-            
-            // If retries exhausted or not using enhanced mode, show fallback
-            const container = e.currentTarget.parentElement;
-            if (container) {
-              container.classList.add('fallback');
-              // Replace img with fallback content
-              container.innerHTML = getFallbackContent(icon);
-            }
+            // If image fails to load, show fallback immediately
+            setShowFallback(true);
           }}
         />
       </div>

@@ -417,7 +417,7 @@ class SkillManager(EventEmitter):
 
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
         """Calculate ability modifiers using AbilityManager"""
-        attr_manager = self.character_manager.get_manager('attribute')
+        attr_manager = self.character_manager.get_manager('ability')
         if attr_manager:
             return attr_manager.get_all_modifiers()
         # Fallback if no AttributeManager available

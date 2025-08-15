@@ -3,7 +3,7 @@ mod file_operations;
 mod window_manager;
 
 use tauri::Manager;
-use sidecar_manager::{DjangoSidecar, start_django_sidecar, stop_django_sidecar, check_django_health, check_background_loading_status};
+use sidecar_manager::{FastAPISidecar, start_fastapi_sidecar, stop_fastapi_sidecar, check_fastapi_health, check_background_loading_status};
 use file_operations::{
     select_save_file, 
     select_nwn2_directory, 
@@ -18,7 +18,7 @@ use window_manager::{open_settings_window, close_settings_window};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let django_sidecar = DjangoSidecar::new();
+  let fastapi_sidecar = FastAPISidecar::new();
 
   tauri::Builder::default()
     .plugin(tauri_plugin_process::init())
@@ -35,23 +35,23 @@ pub fn run() {
         )?;
       }
 
-      // Auto-start Django sidecar in development
+      // Auto-start FastAPI sidecar in development
       if cfg!(debug_assertions) {
         let app_handle = app.handle().clone();
         tauri::async_runtime::spawn(async move {
-          if let Err(e) = start_django_sidecar(app_handle).await {
-            log::error!("Failed to start Django sidecar: {}", e);
+          if let Err(e) = start_fastapi_sidecar(app_handle).await {
+            log::error!("Failed to start FastAPI sidecar: {}", e);
           }
         });
       }
 
       Ok(())
     })
-    .manage(django_sidecar)
+    .manage(fastapi_sidecar)
     .invoke_handler(tauri::generate_handler![
-      start_django_sidecar,
-      stop_django_sidecar,
-      check_django_health,
+      start_fastapi_sidecar,
+      stop_fastapi_sidecar,
+      check_fastapi_health,
       check_background_loading_status,
       select_save_file,
       select_nwn2_directory,
@@ -66,11 +66,11 @@ pub fn run() {
     ])
     .on_window_event(|window, event| match event {
       tauri::WindowEvent::CloseRequested { .. } => {
-        // Stop Django sidecar when window is closing
+        // Stop FastAPI sidecar when window is closing
         let window_clone = window.clone();
         tauri::async_runtime::spawn(async move {
-          if let Err(e) = stop_django_sidecar(window_clone.app_handle().clone()).await {
-            log::error!("Failed to stop Django sidecar on exit: {}", e);
+          if let Err(e) = stop_fastapi_sidecar(window_clone.app_handle().clone()).await {
+            log::error!("Failed to stop FastAPI sidecar on exit: {}", e);
           }
         });
       }

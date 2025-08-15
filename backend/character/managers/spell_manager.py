@@ -723,8 +723,8 @@ class SpellManager(EventEmitter):
                     'level': level,
                     'spell_id': spell.get('Spell'),
                     'class_id': spell.get('SpellClass'),
-                    'metamagic': spell.get('SpellMetaMagic', 0),
-                    'ready': spell.get('Ready', False)
+                    'metamagic': spell.get('SpellMetaMagicN2', 0),
+                    'ready': spell.get('Ready', 1) == 1
                 })
         
         return memorized
@@ -737,8 +737,10 @@ class SpellManager(EventEmitter):
             return metamagic
             
         # Get all character feats and check which ones are metamagic
-        for feat_id in feat_manager.get_all_feat_ids():
-            if self._is_metamagic_feat(feat_id):
+        feat_list = self.character_manager.character_data.get('FeatList', [])
+        for feat in feat_list:
+            feat_id = feat.get('Feat')
+            if feat_id and self._is_metamagic_feat(feat_id):
                 metamagic.append(feat_id)
         return metamagic
     
@@ -1079,17 +1081,20 @@ class SpellManager(EventEmitter):
                     # Get spell metadata
                     spell_name = field_mapper.get_field_value(spell_data, 'Label', f'Spell_{spell_id}')
                     spell_icon = field_mapper.get_field_value(spell_data, 'IconResRef', '')
-                    school_id = field_mapper.get_field_value(spell_data, 'School', 0)
+                    school_id_raw = field_mapper.get_field_value(spell_data, 'School', 0)
                     
-                    # Get school name from spellschools table
+                    # Convert school_id to integer properly
+                    school_id = None
                     school_name = None
-                    if school_id is not None and school_id != '':
+                    if school_id_raw not in [None, '', '****']:
                         try:
-                            school_data = self.rules_service.get_by_id('spellschools', int(school_id))
+                            school_id = int(school_id_raw)
+                            # Get school name from spellschools table
+                            school_data = self.rules_service.get_by_id('spellschools', school_id)
                             if school_data:
                                 school_name = field_mapper.get_field_value(school_data, 'Label', None)
                         except (ValueError, TypeError):
-                            pass
+                            school_id = None
                     
                     # Get additional spell details
                     spell_desc = field_mapper.get_field_value(spell_data, 'SpellDesc', '')

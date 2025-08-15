@@ -546,18 +546,74 @@ class CombatManager(EventEmitter):
         logger.info("Item unequipped - recalculating AC")
     
     def get_combat_summary(self) -> Dict[str, Any]:
-        """Get comprehensive combat statistics summary"""
-        # Get attack bonuses from ClassManager
-        class_manager = self.character_manager.get_manager('class')
-        attack_bonuses = class_manager.get_attack_bonuses() if class_manager else {}
+        """Get combat summary for CombatSummary model"""
+        # Get basic data
+        ac_data = self.calculate_armor_class()
+        initiative_data = self.calculate_initiative()
+        attack_bonuses = self.get_attack_bonuses()
         
+        # Get hit points
+        current_hp = self.gff.get('CurrentHitPoints', 0)
+        max_hp = self.gff.get('MaxHitPoints', 0)
+        temp_hp = self.gff.get('TempHitPoints', 0)
+        
+        # Get speed
+        speed_data = self._get_movement_speed()
+        
+        # Get damage reduction summary
+        dr_list = self.get_damage_reduction()
+        dr_summary = None
+        if dr_list:
+            dr_parts = [f"{dr['amount']}/{dr['bypass']}" for dr in dr_list]
+            dr_summary = ", ".join(dr_parts)
+        
+        # Get spell resistance
+        spell_resistance = self.get_spell_resistance()
+        
+        # Return data that matches CombatSummary model
         return {
-            'armor_class': self.calculate_armor_class(),
-            'initiative': self.calculate_initiative(),
+            'hit_points': current_hp,
+            'max_hit_points': max_hp,
+            'temporary_hit_points': temp_hp,
+            'armor_class': ac_data.get('total_ac', 10),
+            'touch_ac': ac_data.get('touch_ac', 10),
+            'flat_footed_ac': ac_data.get('flatfooted_ac', 10),
+            'base_attack_bonus': attack_bonuses.get('base_attack_bonus', 0),
+            'initiative': initiative_data.get('total', 0),
+            'speed': speed_data.get('current', 30),
+            'damage_reduction': dr_summary,
+            'spell_resistance': spell_resistance,
+            'main_attack_bonus': attack_bonuses.get('melee_attack_bonus', 0),
+            'main_damage': '1d8',  # Would get from equipped weapon
+            'is_flat_footed': False,
+            'is_flanked': False,
+            'is_prone': False,
+            'is_stunned': False,
+            # Additional data for the router
+            'bab_info': {
+                'total_bab': attack_bonuses.get('base_attack_bonus', 0),
+                'class_breakdown': {},  # Would implement
+                'attack_sequence': self.get_attack_sequence(),
+                'iterative_attacks': len(self.get_attack_sequence()) - 1,
+                'progression_type': 'Average'  # Would calculate
+            },
             'attack_bonuses': attack_bonuses,
+            'damage_bonuses': self.get_damage_bonuses(),
+            'weapons': self.get_equipped_weapons(),
+            'defensive_abilities': {
+                'damage_reduction': dr_list,
+                'energy_resistance': {},
+                'damage_immunity': [],
+                'spell_resistance': spell_resistance,
+                'concealment': 0,
+                'fortification': 0,
+                'evasion': False,
+                'improved_evasion': False,
+                'uncanny_dodge': False,
+                'improved_uncanny_dodge': False
+            },
             'combat_maneuvers': self.calculate_combat_maneuver_bonus(),
-            'damage_reduction': self.get_damage_reduction(),
-            'speed': self._get_movement_speed()
+            'initiative': initiative_data
         }
     
     def _get_movement_speed(self) -> Dict[str, int]:
@@ -625,7 +681,7 @@ class CombatManager(EventEmitter):
             Dict with melee and ranged attack bonuses and their components
         """
         # Get BAB from ClassManager
-        class_manager = self.character_manager.get_manager('classes')
+        class_manager = self.character_manager.get_manager('class')
         bab = class_manager.calculate_total_bab() if class_manager else 0
         
         # Get ability modifiers
@@ -686,14 +742,14 @@ class CombatManager(EventEmitter):
     
     def _get_armor_bonus(self) -> int:
         """Get armor bonus to AC"""
-        armor = self._get_equipped_item('armor')
+        armor = self._get_equipped_item('Chest')
         if armor:
             return self._get_item_ac_bonus(armor)
         return 0
     
     def _get_shield_bonus(self) -> int:
         """Get shield bonus to AC"""
-        shield = self._get_equipped_item('shield')
+        shield = self._get_equipped_item('LeftHand')
         if shield and self._is_shield(shield):
             return self._get_item_ac_bonus(shield)
         return 0
@@ -702,7 +758,7 @@ class CombatManager(EventEmitter):
         """Get natural armor bonus"""
         return self.character_manager.character_data.get('NaturalAC', 0)
     
-    def set_natural_armor(self, value: int) -> Dict[str, Any]:
+    def update_natural_armor(self, value: int) -> Dict[str, Any]:
         """
         Set natural armor bonus
         
@@ -759,6 +815,138 @@ class CombatManager(EventEmitter):
         """Calculate ranged attack bonus"""
         attack_bonuses = self.get_attack_bonuses()
         return attack_bonuses.get('ranged_attack_bonus', 0)
+    
+    def get_damage_bonuses(self) -> Dict[str, Any]:
+        """
+        Get damage bonuses for different weapon types
+        
+        Returns:
+            Dict with damage bonuses by weapon type
+        """
+        # Get ability modifiers
+        str_mod = (self.gff.get('Str', 10) - 10) // 2
+        dex_mod = (self.gff.get('Dex', 10) - 10) // 2
+        
+        # Basic melee damage (STR modifier)
+        melee_damage = {
+            'base': 0,
+            'ability': str_mod,
+            'weapon_enhancement': 0,  # Would come from equipped weapon
+            'weapon_specialization': 0,  # Would come from feats
+            'misc': 0,
+            'total': str_mod
+        }
+        
+        # Basic ranged damage (usually no ability modifier)
+        ranged_damage = {
+            'base': 0,
+            'ability': 0,  # Most ranged weapons don't add ability modifier
+            'weapon_enhancement': 0,
+            'weapon_specialization': 0,
+            'misc': 0,
+            'total': 0
+        }
+        
+        # Two-handed weapons get 1.5x STR
+        two_handed_damage = {
+            'base': 0,
+            'ability': int(str_mod * 1.5),
+            'weapon_enhancement': 0,
+            'weapon_specialization': 0,
+            'misc': 0,
+            'total': int(str_mod * 1.5)
+        }
+        
+        return {
+            'melee': melee_damage,
+            'ranged': ranged_damage,
+            'two_handed': two_handed_damage,
+            'off_hand': {
+                'base': 0,
+                'ability': str_mod // 2,  # Half STR for off-hand
+                'weapon_enhancement': 0,
+                'weapon_specialization': 0,
+                'misc': 0,
+                'total': str_mod // 2
+            }
+        }
+    
+    def get_equipped_weapons(self) -> Dict[str, Any]:
+        """
+        Get information about currently equipped weapons
+        
+        Returns:
+            Dict with equipped weapon information
+        """
+        main_hand = self._get_equipped_item('RightHand')
+        off_hand = self._get_equipped_item('LeftHand')
+        
+        # Get main hand weapon info
+        main_hand_info = None
+        if main_hand:
+            main_hand_info = {
+                'name': 'Equipped Weapon',  # Would get from item data
+                'base_item_id': main_hand.get('BaseItem', 0) if hasattr(main_hand, 'get') else getattr(main_hand, 'base_item_id', 0),
+                'damage_dice': '1d8',  # Would get from baseitems.2da
+                'threat_range': '20',
+                'critical_multiplier': 2,
+                'enhancement_bonus': 0,
+                'weapon_type': 'Simple',
+                'damage_type': 'Slashing',
+                'size': 'Medium',
+                'weight': 0.0,
+                'two_handed': False,
+                'finesseable': False,
+                'properties': []
+            }
+        
+        # Get off hand weapon info (if not shield)
+        off_hand_info = None
+        if off_hand and not self._is_shield(off_hand):
+            off_hand_info = {
+                'name': 'Off-hand Weapon',
+                'base_item_id': off_hand.get('BaseItem', 0) if hasattr(off_hand, 'get') else getattr(off_hand, 'base_item_id', 0),
+                'damage_dice': '1d6',
+                'threat_range': '20',
+                'critical_multiplier': 2,
+                'enhancement_bonus': 0,
+                'weapon_type': 'Simple',
+                'damage_type': 'Slashing',
+                'size': 'Medium',
+                'weight': 0.0,
+                'two_handed': False,
+                'finesseable': False,
+                'properties': []
+            }
+        
+        # Unarmed strike is always available
+        unarmed_strike = {
+            'name': 'Unarmed Strike',
+            'base_item_id': 0,  # Special case
+            'damage_dice': '1d3',
+            'threat_range': '20',
+            'critical_multiplier': 2,
+            'enhancement_bonus': 0,
+            'weapon_type': 'Simple',
+            'damage_type': 'Bludgeoning',
+            'size': 'Medium',
+            'weight': 0.0,
+            'two_handed': False,
+            'finesseable': False,
+            'properties': []
+        }
+        
+        return {
+            'main_hand': main_hand_info,
+            'off_hand': off_hand_info,
+            'ranged': None,  # Would check for ranged weapon
+            'ammunition': None,
+            'unarmed_strike': unarmed_strike,
+            'two_weapon_fighting': main_hand_info is not None and off_hand_info is not None,
+            'weapon_finesse_active': False,  # Would check for feat
+            'power_attack_active': False,
+            'combat_expertise_active': False
+        }
     
     def calculate_melee_damage_bonus(self) -> int:
         """Calculate melee damage bonus"""
@@ -831,11 +1019,6 @@ class CombatManager(EventEmitter):
     def can_use_weapon_finesse(self) -> bool:
         return False
     
-    def simulate_ranged_attack(self, target_ac: int) -> Dict[str, Any]:
-        return {'result': 'Not implemented'}
-    
-    def simulate_melee_attack(self, target_ac: int) -> Dict[str, Any]:
-        return {'result': 'Not implemented'}
     
     def get_spell_resistance(self) -> int:
         """

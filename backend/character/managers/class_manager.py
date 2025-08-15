@@ -241,13 +241,13 @@ class ClassManager(EventEmitter):
     
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
         """Calculate ability modifiers using AbilityManager"""
-        attr_manager = self.character_manager.get_manager('attribute')
+        attr_manager = self.character_manager.get_manager('ability')
         if attr_manager:
             return attr_manager.get_all_modifiers()
         
         # Fallback: Use attribute manager
         if hasattr(self.character_manager, 'get_manager'):
-            attribute_manager = self.character_manager.get_manager('attribute')
+            attribute_manager = self.character_manager.get_manager('ability')
             if attribute_manager:
                 scores = attribute_manager.get_ability_scores()
                 return {
@@ -1326,6 +1326,10 @@ class ClassManager(EventEmitter):
         """Get class name from dynamic data"""
         return self._get_content_name('classes', class_id)
     
+    def get_class_name(self, class_id: int) -> str:
+        """Public method to get class name (for character summary)"""
+        return self._get_class_name(class_id)
+    
     def _get_content_name(self, table_name: str, content_id: int) -> str:
         """Get content name from dynamic data"""
         content_data = self.game_data_loader.get_by_id(table_name, content_id)
@@ -1344,6 +1348,10 @@ class ClassManager(EventEmitter):
             for c in self.gff.get('ClassList', []) 
             if isinstance(c, dict)
         )
+    
+    def get_total_level(self) -> int:
+        """Public method to get total character level (for character summary)"""
+        return self._get_total_level()
 
     def get_available_classes(self) -> List[Dict[str, Any]]:
         """Get list of classes available for next level"""
@@ -1371,7 +1379,7 @@ class ClassManager(EventEmitter):
     def _create_character_summary_for_rules(self) -> Dict[str, Any]:
         """Create character summary dict for rules service validation using dynamic data"""
         # Get ability scores from attribute manager
-        attribute_manager = self.character_manager.get_manager('attribute')
+        attribute_manager = self.character_manager.get_manager('ability')
         if attribute_manager:
             abilities = attribute_manager.get_ability_scores()
             # Convert to expected format
@@ -1431,47 +1439,6 @@ class ClassManager(EventEmitter):
             'base_attack_bonus': self.gff.get('BaseAttackBonus', 0)
         }
     
-    def has_class_by_name(self, class_name: str) -> bool:
-        """
-        Check if character has levels in a class by name
-        
-        Args:
-            class_name: Class name to check (e.g., 'Barbarian', 'Monk')
-            
-        Returns:
-            True if character has levels in this class
-        """
-        class_id = self._get_class_id_by_name(class_name)
-        if class_id is None:
-            return False
-            
-        class_list = self.gff.get('ClassList', [])
-        for class_entry in class_list:
-            if class_entry.get('Class') == class_id:
-                return class_entry.get('ClassLevel', 0) > 0
-        
-        return False
-    
-    def get_class_level_by_name(self, class_name: str) -> int:
-        """
-        Get level in a specific class by name
-        
-        Args:
-            class_name: Class name to check (e.g., 'Barbarian', 'Monk')
-            
-        Returns:
-            Level in that class, or 0 if not found
-        """
-        class_id = self._get_class_id_by_name(class_name)
-        if class_id is None:
-            return 0
-            
-        class_list = self.gff.get('ClassList', [])
-        for class_entry in class_list:
-            if class_entry.get('Class') == class_id:
-                return class_entry.get('ClassLevel', 0)
-        
-        return 0
     
     def _get_class_id_by_name(self, class_name: str) -> Optional[int]:
         """

@@ -335,20 +335,8 @@ class CharacterManager(EventEmitter):
             'charisma': 'Cha'
         }
         
-        # Register ContentManager to handle custom content detection
-        from .managers.content_manager import ContentManager
-        self.register_manager('content', ContentManager)
-        
-        # Register CharacterStateManager to handle state manipulation
-        from .managers.character_state_manager import CharacterStateManager
-        self.register_manager('state', CharacterStateManager)
-        
-        # Initialize custom content detection through ContentManager
-        content_manager = self.get_manager('content')
-        if content_manager:
-            content_manager._detect_custom_content_dynamic()
-            self.custom_content = content_manager.custom_content
-        logger.info(f"CharacterManager initialized with {len(self.custom_content)} custom items")
+        # Custom content will be detected when ContentManager is registered by factory
+        logger.info(f"CharacterManager initialized")
     
     def register_manager(self, name: str, manager_class: Type, 
                         on_register: Optional[Callable] = None,
@@ -510,14 +498,14 @@ class CharacterManager(EventEmitter):
     def get_character_summary(self) -> Dict[str, Any]:
         """Get a summary of the character's current state aggregated from managers"""
         # Get managers
-        attr_manager = self.get_manager('attribute')
+        ability_manager = self.get_manager('ability')  # AbilityManager handles ability scores (strength, dex, etc.)
         class_manager = self.get_manager('class')
         race_manager = self.get_manager('race')
         
         summary = {
-            'name': attr_manager._get_character_name() if attr_manager else '',
-            'level': class_manager._get_total_level() if class_manager else 1,
-            'race': race_manager._get_race_name(self.gff.get('Race', 0)) if race_manager else f"Race_{self.gff.get('Race', 0)}",
+            'name': ability_manager.get_character_name() if ability_manager else '',
+            'level': class_manager.get_total_level() if class_manager else 1,
+            'race': race_manager.get_race_name(self.gff.get('Race', 0)) if race_manager else f"Race_{self.gff.get('Race', 0)}",
             'alignment': {
                 'law_chaos': self.gff.get('LawfulChaotic', 50),
                 'good_evil': self.gff.get('GoodEvil', 50)
@@ -534,17 +522,20 @@ class CharacterManager(EventEmitter):
                 {
                     'class_id': c.get('Class', 0),
                     'level': c.get('ClassLevel', 0),
-                    'name': class_manager._get_class_name(c.get('Class', 0)) if class_manager else f"Class_{c.get('Class', 0)}"
+                    'name': class_manager.get_class_name(c.get('Class', 0)) if class_manager else f"Class_{c.get('Class', 0)}"
                 }
                 for c in self.gff.get('ClassList', [])
                 if isinstance(c, dict)
             ]
         
-        # Aggregate ability scores from AttributeManager
-        attribute_manager = self.get_manager('attribute')
-        if attribute_manager and hasattr(attribute_manager, 'get_attributes'):
-            # Convert attribute manager format to expected format
-            attributes = attribute_manager.get_attributes()
+        # Aggregate ability scores from AbilityManager (using correct NWN2 terminology)
+        ability_manager = self.get_manager('ability')
+        if ability_manager and hasattr(ability_manager, 'get_ability_scores'):
+            # Use the standardized ability scores method that returns proper format
+            summary['abilities'] = ability_manager.get_ability_scores()
+        elif ability_manager and hasattr(ability_manager, 'get_attributes'):
+            # Fallback: convert attribute manager format to expected format
+            attributes = ability_manager.get_attributes()
             summary['abilities'] = {
                 'strength': attributes.get('Str', 10),
                 'dexterity': attributes.get('Dex', 10),
@@ -554,20 +545,27 @@ class CharacterManager(EventEmitter):
                 'charisma': attributes.get('Cha', 10)
             }
         else:
-            # Fallback to direct access via attribute manager
-            attribute_manager = self.get_manager('attribute')
-            if attribute_manager:
-                summary['abilities'] = attribute_manager.get_ability_scores()
-            else:
-                # Last resort - direct GFF access
-                summary['abilities'] = {
-                    'strength': self.gff.get('Str', 10),
-                    'dexterity': self.gff.get('Dex', 10),
-                    'constitution': self.gff.get('Con', 10),
-                    'intelligence': self.gff.get('Int', 10),
-                    'wisdom': self.gff.get('Wis', 10),
-                    'charisma': self.gff.get('Cha', 10)
-                }
+            # Last resort - direct GFF access
+            summary['abilities'] = {
+                'strength': self.gff.get('Str', 10),
+                'dexterity': self.gff.get('Dex', 10),
+                'constitution': self.gff.get('Con', 10),
+                'intelligence': self.gff.get('Int', 10),
+                'wisdom': self.gff.get('Wis', 10),
+                'charisma': self.gff.get('Cha', 10)
+            }
+        
+        # Add campaign/module/quest data if ContentManager is available
+        content_manager = self.get_manager('content')
+        if content_manager:
+            summary['campaign_name'] = content_manager.get_campaign_name()
+            summary['module_name'] = content_manager.get_module_name()
+            summary['area_name'] = content_manager.get_area_name()
+            summary['quest_details'] = content_manager.get_quest_summary()
+            
+            # Also add the full campaign info
+            campaign_info = content_manager.get_campaign_info()
+            summary.update(campaign_info)
         
         return summary
     
@@ -611,7 +609,7 @@ class CharacterManager(EventEmitter):
                 update_type = update.get('type')
                 
                 if update_type == 'attribute':
-                    attribute_manager = self.get_manager('attribute')
+                    attribute_manager = self.get_manager('ability')
                     if attribute_manager:
                         attribute_manager.set_ability_score(update['attribute'], update['value'])
                     results.append({'type': 'attribute', 'success': True})
@@ -784,6 +782,270 @@ class CharacterManager(EventEmitter):
                 }
                 for e in self.get_event_history()
             ]
+        }
+    
+    def get_character_state(self) -> Dict[str, Any]:
+        """
+        Get comprehensive character state from all managers
+        
+        Returns:
+            Dict containing aggregated character state data from all subsystem managers
+        """
+        # Start with basic info
+        character_info = self.get_character_summary()
+        
+        state_data = {
+            'info': {
+                'id': getattr(self, '_character_id', 'unknown'),
+                'file_path': getattr(self, '_file_path', ''),
+                'file_name': '',  # Will be populated from file_path if available
+                'file_type': 'bic',  # Default, can be overridden
+                'first_name': character_info.get('name', '').split()[0] if character_info.get('name') else '',
+                'last_name': ' '.join(character_info.get('name', '').split()[1:]) if len(character_info.get('name', '').split()) > 1 else '',
+                'full_name': character_info.get('name', ''),
+                'level': character_info.get('level', 1),
+                'experience': self.gff.get('Experience', 0),
+                'race_name': character_info.get('race', ''),
+                'alignment': character_info.get('alignment', {}),
+                'alignment_string': character_info.get('alignment_string', ''),
+                'is_savegame': False,
+                'is_companion': False
+            },
+            'summary': character_info
+        }
+        
+        # Populate file info if available
+        if hasattr(self, '_file_path') and self._file_path:
+            from pathlib import Path
+            file_path = Path(self._file_path)
+            state_data['info']['file_name'] = file_path.name
+            if file_path.suffix.lower() in ['.ros']:
+                state_data['info']['file_type'] = 'ros'
+                state_data['info']['is_companion'] = True
+            elif file_path.suffix.lower() in ['.ifo']:
+                state_data['info']['file_type'] = 'ifo'
+                state_data['info']['is_savegame'] = True
+        
+        # Get data from all managers
+        manager_data = {}
+        
+        # Abilities
+        ability_manager = self.get_manager('ability')
+        if ability_manager:
+            try:
+                if hasattr(ability_manager, 'get_ability_scores'):
+                    manager_data['abilities'] = ability_manager.get_ability_scores()
+                elif hasattr(ability_manager, 'get_attributes'):
+                    manager_data['abilities'] = ability_manager.get_attributes()
+            except Exception as e:
+                logger.warning(f"Failed to get ability data: {e}")
+        
+        # Combat stats
+        combat_manager = self.get_manager('combat')
+        if combat_manager:
+            try:
+                if hasattr(combat_manager, 'get_combat_stats'):
+                    manager_data['combat'] = combat_manager.get_combat_stats()
+            except Exception as e:
+                logger.warning(f"Failed to get combat data: {e}")
+        
+        # Skills
+        skill_manager = self.get_manager('skill')
+        if skill_manager:
+            try:
+                if hasattr(skill_manager, 'get_all_skills'):
+                    manager_data['skills'] = skill_manager.get_all_skills()
+                elif hasattr(skill_manager, 'get_skills'):
+                    manager_data['skills'] = skill_manager.get_skills()
+            except Exception as e:
+                logger.warning(f"Failed to get skill data: {e}")
+        
+        # Feats
+        feat_manager = self.get_manager('feat')
+        if feat_manager:
+            try:
+                if hasattr(feat_manager, 'get_all_feats'):
+                    manager_data['feats'] = feat_manager.get_all_feats()
+                elif hasattr(feat_manager, 'get_feats'):
+                    manager_data['feats'] = feat_manager.get_feats()
+            except Exception as e:
+                logger.warning(f"Failed to get feat data: {e}")
+        
+        # Spells
+        spell_manager = self.get_manager('spell')
+        if spell_manager:
+            try:
+                if hasattr(spell_manager, 'get_all_spells'):
+                    manager_data['spells'] = spell_manager.get_all_spells()
+                elif hasattr(spell_manager, 'get_spells'):
+                    manager_data['spells'] = spell_manager.get_spells()
+            except Exception as e:
+                logger.warning(f"Failed to get spell data: {e}")
+        
+        # Inventory
+        inventory_manager = self.get_manager('inventory')
+        if inventory_manager:
+            try:
+                if hasattr(inventory_manager, 'get_inventory_state'):
+                    manager_data['inventory'] = inventory_manager.get_inventory_state()
+                elif hasattr(inventory_manager, 'get_inventory'):
+                    manager_data['inventory'] = inventory_manager.get_inventory()
+            except Exception as e:
+                logger.warning(f"Failed to get inventory data: {e}")
+        
+        # Classes
+        class_manager = self.get_manager('class')
+        if class_manager:
+            try:
+                if hasattr(class_manager, 'get_all_classes'):
+                    manager_data['classes'] = class_manager.get_all_classes()
+                elif hasattr(class_manager, 'get_classes'):
+                    manager_data['classes'] = class_manager.get_classes()
+            except Exception as e:
+                logger.warning(f"Failed to get class data: {e}")
+        
+        # Race
+        race_manager = self.get_manager('race')
+        if race_manager:
+            try:
+                if hasattr(race_manager, 'get_race_info'):
+                    manager_data['race'] = race_manager.get_race_info()
+                elif hasattr(race_manager, 'get_race'):
+                    manager_data['race'] = race_manager.get_race()
+            except Exception as e:
+                logger.warning(f"Failed to get race data: {e}")
+        
+        # Save/Saving throws
+        save_manager = self.get_manager('save')
+        if save_manager:
+            try:
+                if hasattr(save_manager, 'get_saving_throws'):
+                    manager_data['saves'] = save_manager.get_saving_throws()
+                elif hasattr(save_manager, 'get_saves'):
+                    manager_data['saves'] = save_manager.get_saves()
+            except Exception as e:
+                logger.warning(f"Failed to get save data: {e}")
+        
+        # Content
+        content_manager = self.get_manager('content')
+        if content_manager:
+            try:
+                if hasattr(content_manager, 'get_content_summary'):
+                    manager_data['content'] = content_manager.get_content_summary()
+            except Exception as e:
+                logger.warning(f"Failed to get content data: {e}")
+        
+        # Add manager data to state
+        state_data.update(manager_data)
+        
+        # Add metadata
+        state_data['custom_content'] = self.custom_content or {}
+        state_data['manager_status'] = self.get_manager_status()
+        state_data['has_unsaved_changes'] = len(self._transaction_history) > 0
+        
+        return state_data
+    
+    def validate_character(self) -> Dict[str, Any]:
+        """
+        Validate character data across all managers
+        
+        Returns:
+            Dict containing validation results with errors and warnings
+        """
+        all_errors = []
+        all_warnings = []
+        manager_errors = {}
+        corruption_risks = []
+        
+        # Validate each manager
+        for name, manager in self._managers.items():
+            try:
+                if hasattr(manager, 'validate'):
+                    is_valid, errors = manager.validate()
+                    if not is_valid:
+                        manager_errors[name] = errors
+                        all_errors.extend([f"{name}: {error}" for error in errors])
+                elif hasattr(manager, 'validate_data'):
+                    result = manager.validate_data()
+                    if isinstance(result, dict) and not result.get('valid', True):
+                        errors = result.get('errors', [])
+                        manager_errors[name] = errors
+                        all_errors.extend([f"{name}: {error}" for error in errors])
+            except Exception as e:
+                error_msg = f"Validation failed for {name}: {str(e)}"
+                manager_errors[name] = [error_msg]
+                all_errors.append(error_msg)
+                corruption_risks.append(f"{name} manager validation threw exception")
+        
+        # Run basic GFF validation
+        try:
+            # Check critical fields exist
+            required_fields = ['FirstName', 'Race', 'ClassList']
+            for field in required_fields:
+                if not self.gff.has_field(field):
+                    all_errors.append(f"Missing critical field: {field}")
+                    corruption_risks.append(f"Missing {field} could cause game crashes")
+            
+            # Check class list integrity
+            class_list = self.gff.get('ClassList', [])
+            if not class_list:
+                all_errors.append("Empty ClassList - character needs at least one class")
+                corruption_risks.append("Empty ClassList will cause game crashes")
+            else:
+                for i, char_class in enumerate(class_list):
+                    if not isinstance(char_class, dict):
+                        all_errors.append(f"ClassList[{i}] is not a valid class structure")
+                        corruption_risks.append(f"Invalid class structure at index {i}")
+                    else:
+                        if 'Class' not in char_class:
+                            all_errors.append(f"ClassList[{i}] missing 'Class' field")
+                        if 'ClassLevel' not in char_class:
+                            all_errors.append(f"ClassList[{i}] missing 'ClassLevel' field")
+            
+            # Check ability scores
+            for ability in ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']:
+                value = self.gff.get(ability, None)
+                if value is None:
+                    all_errors.append(f"Missing ability score: {ability}")
+                elif not isinstance(value, int) or value < 1 or value > 255:
+                    all_warnings.append(f"Unusual {ability} value: {value}")
+            
+            # Check alignment values
+            law_chaos = self.gff.get('LawfulChaotic', None)
+            good_evil = self.gff.get('GoodEvil', None)
+            if law_chaos is None:
+                all_errors.append("Missing LawfulChaotic alignment value")
+            elif not (0 <= law_chaos <= 100):
+                all_errors.append(f"Invalid LawfulChaotic value: {law_chaos} (must be 0-100)")
+            
+            if good_evil is None:
+                all_errors.append("Missing GoodEvil alignment value")
+            elif not (0 <= good_evil <= 100):
+                all_errors.append(f"Invalid GoodEvil value: {good_evil} (must be 0-100)")
+                
+        except Exception as e:
+            error_msg = f"GFF validation failed: {str(e)}"
+            all_errors.append(error_msg)
+            corruption_risks.append("GFF structure validation failed - data may be corrupted")
+        
+        # Check custom content integrity
+        if self.custom_content:
+            try:
+                content_manager = self.get_manager('content')
+                if content_manager and hasattr(content_manager, 'validate_custom_content'):
+                    content_result = content_manager.validate_custom_content()
+                    if not content_result.get('valid', True):
+                        content_errors = content_result.get('errors', [])
+                        all_warnings.extend(content_errors)
+            except Exception as e:
+                all_warnings.append(f"Custom content validation failed: {str(e)}")
+        
+        return {
+            'valid': len(all_errors) == 0,
+            'errors': all_errors,
+            'warnings': all_warnings,
+            'manager_errors': manager_errors,
+            'corruption_risks': corruption_risks
         }
     
     

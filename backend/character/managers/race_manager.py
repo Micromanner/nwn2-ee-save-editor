@@ -216,7 +216,7 @@ class RaceManager(EventEmitter):
         logger.debug(f"Applying racial modifiers for race {new_race_id}: {racial_mods}")
         
         # Always use AttributeManager for proper cascading effects
-        attr_manager = self.character_manager.get_manager('attribute')
+        attr_manager = self.character_manager.get_manager('ability')
         
         for attr, mod in racial_mods.items():
             if mod != 0:
@@ -301,6 +301,12 @@ class RaceManager(EventEmitter):
             if name and str(name).strip():
                 return str(name)
         return f'Race_{race_id}'
+    
+    def get_race_name(self, race_id: int = None) -> str:
+        """Public method to get race name (for character summary)"""
+        if race_id is None:
+            race_id = self.gff.get('Race', 0)
+        return self._get_race_name(race_id)
     
     def _get_race_size(self, race_id: int) -> int:
         """Get race size from dynamic data using field mapping utility"""

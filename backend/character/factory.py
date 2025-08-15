@@ -17,7 +17,8 @@ def create_character_manager(
     gff_element=None,
     game_data_loader: Optional[DynamicGameDataLoader] = None,
     rules_service: Optional[GameRulesService] = None,
-    lazy: bool = True
+    lazy: bool = True,
+    save_path: Optional[str] = None
 ) -> CharacterManager:
     """
     Factory function that creates a fully-configured CharacterManager with all managers registered.
@@ -31,6 +32,7 @@ def create_character_manager(
         game_data_loader: Optional DynamicGameDataLoader instance
         rules_service: Optional GameRulesService instance
         lazy: If True (default), use lazy loading for managers
+        save_path: Optional path to save directory (for campaign data extraction)
         
     Returns:
         CharacterManager instance with all managers registered
@@ -43,6 +45,10 @@ def create_character_manager(
         rules_service=rules_service
     )
     
+    # Set save_path if provided (for ContentManager to extract campaign data)
+    if save_path:
+        manager.save_path = save_path
+    
     # Register ALL managers to ensure proper event communication
     # This is critical for caching - all instances must have the same managers
     for name, manager_class in get_all_manager_specs():
@@ -53,6 +59,13 @@ def create_character_manager(
             logger.error(f"Failed to register {name} manager: {e}")
             # Continue with other managers rather than failing completely
             # This allows partial functionality if some managers have issues
+    
+    # Initialize custom content detection through ContentManager after it's registered
+    content_manager = manager.get_manager('content')
+    if content_manager:
+        content_manager._detect_custom_content_dynamic()
+        manager.custom_content = content_manager.custom_content
+        logger.info(f"Detected {len(manager.custom_content)} custom content items")
     
     logger.info(f"Created CharacterManager with {len(manager._managers)} managers registered")
     
