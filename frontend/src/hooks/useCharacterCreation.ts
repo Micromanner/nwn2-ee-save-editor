@@ -42,23 +42,8 @@ export const useCharacterCreation = () => {
     setError(null);
     
     try {
-      // Validate the build first
-      const validationResponse = await fetch('http://localhost:8000/api/characters/validate/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(characterData)
-      });
-      
-      const validation = await validationResponse.json();
-      
-      if (!validation.valid) {
-        throw new Error(validation.errors.join(', '));
-      }
-      
-      // Create the character
-      const response = await fetch('http://localhost:8000/api/characters/create/', {
+      // Create the character (no separate validation endpoint)
+      const response = await fetch('http://localhost:8000/api/characters/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +69,7 @@ export const useCharacterCreation = () => {
 
   const getTemplates = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/characters/templates/', {
+      const response = await fetch('http://localhost:8000/api/characters/templates', {
         method: 'GET'
       });
       if (response.status < 200 || response.status >= 300) {
@@ -100,7 +85,7 @@ export const useCharacterCreation = () => {
 
   const exportToLocalVault = async (sourcePath: string, backupExisting: boolean = true) => {
     try {
-      const response = await fetch('http://localhost:8000/api/characters/export/localvault/', {
+      const response = await fetch('http://localhost:8000/api/characters/export/localvault', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

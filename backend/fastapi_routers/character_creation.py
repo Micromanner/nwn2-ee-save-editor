@@ -91,7 +91,7 @@ class ExportForModuleResponse(BaseModel):
     exported_path: str
 
 
-@router.post("/characters/create/", response_model=CreateCharacterResponse)
+@router.post("/characters/create", response_model=CreateCharacterResponse)
 def create_character(
     request: CreateCharacterRequest,
     _: None = Depends(check_system_ready)
@@ -169,7 +169,7 @@ def create_character(
         )
 
 
-@router.get("/characters/templates/", response_model=List[CharacterTemplate])
+@router.get("/characters/templates", response_model=List[CharacterTemplate])
 def get_character_templates(
     _: None = Depends(check_system_ready)
 ):
@@ -249,7 +249,7 @@ def get_character_templates(
     return templates
 
 
-@router.post("/characters/export/localvault/", response_model=ExportToLocalVaultResponse)
+@router.post("/characters/export/localvault", response_model=ExportToLocalVaultResponse)
 def export_to_localvault(
     request: ExportToLocalVaultRequest,
     _: None = Depends(check_system_ready)
@@ -315,7 +315,7 @@ def export_to_localvault(
         )
 
 
-@router.post("/characters/export/module/", response_model=ExportForModuleResponse)
+@router.post("/characters/export/module", response_model=ExportForModuleResponse)
 def export_for_module(
     request: ExportForModuleRequest,
     _: None = Depends(check_system_ready)

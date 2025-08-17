@@ -922,6 +922,7 @@ class SpellManager(EventEmitter):
         except (ValueError, TypeError):
             return default
     
+    
     def get_spell_resistance(self) -> int:
         """
         Calculate total spell resistance
@@ -1078,8 +1079,8 @@ class SpellManager(EventEmitter):
                 
                 # If spell is available at this level, add it to results
                 if spell_available:
-                    # Get spell metadata
-                    spell_name = field_mapper.get_field_value(spell_data, 'Label', f'Spell_{spell_id}')
+                    # Get spell metadata - use Name field for display name
+                    spell_name = field_mapper.get_field_value(spell_data, 'Name', f'Spell_{spell_id}')
                     spell_icon = field_mapper.get_field_value(spell_data, 'IconResRef', '')
                     school_id_raw = field_mapper.get_field_value(spell_data, 'School', 0)
                     

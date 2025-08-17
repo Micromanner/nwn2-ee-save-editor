@@ -216,9 +216,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
     
     try {
-      await apiClient.post(`/characters/${characterId}/classes/remove/`, {
-        class_id: classId
-      });
+      await apiClient.post(`/characters/${characterId}/classes/remove/${classId}`);
     } catch (err) {
       console.error('Error removing class:', err);
       throw err;

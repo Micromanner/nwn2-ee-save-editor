@@ -9,38 +9,31 @@ from typing import Optional
 
 from fastapi_routers.dependencies import (
     get_character_manager, 
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-from fastapi_models import (
-    SpellsState,
-    AvailableSpellsResponse,
-    AllSpellsResponse,
-    SpellManageRequest,
-    SpellManageResponse,
-    SpellInfo,
-    SpellcastingClass,
-    MemorizedSpell,
-    SpellSummary,
-    SpellSummaryClass,
-    MetamagicFeat
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/characters/{character_id}/spells/state/", response_model=SpellsState)
+@router.get("/characters/{character_id}/spells/state")
 def get_spells_state(
     character_id: int,
-    include_available: bool = Query(False, description="Include available spells (expensive operation)"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep,
+    include_available: bool = Query(False, description="Include available spells (expensive operation)")
 ):
     """Get current spells and spellbook state for the spells editor"""
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models import (
+            SpellsState, SpellcastingClass, SpellSummaryClass, MetamagicFeat,
+            SpellSummary, MemorizedSpell, SpellInfo
+        )
+        
         spell_manager = manager.get_manager('spell')
         
         # Get spellcasting classes
@@ -143,15 +136,14 @@ def get_spells_state(
         )
 
 
-@router.get("/characters/{character_id}/spells/available/", response_model=AvailableSpellsResponse)
+@router.get("/characters/{character_id}/spells/available")
 def get_available_spells(
     character_id: int,
+    manager: CharacterManagerDep,
     level: int = Query(..., description="Spell level (0-9)"),
-    class_id: Optional[int] = Query(None, description="Optional class ID to filter spells"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    class_id: Optional[int] = Query(None, description="Optional class ID to filter spells")
 ):
     """Get spells available for learning at a specific level"""
-    
     if not 0 <= level <= 9:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -159,6 +151,9 @@ def get_available_spells(
         )
     
     try:
+        # Lazy imports for performance
+        from fastapi_models import AvailableSpellsResponse, SpellInfo
+        
         spell_manager = manager.get_manager('spell')
         
         # Get available spells using the implemented method
@@ -199,14 +194,16 @@ def get_available_spells(
         )
 
 
-@router.get("/characters/{character_id}/spells/all/", response_model=AllSpellsResponse)
+@router.get("/characters/{character_id}/spells/all")
 def get_all_spells(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get all legitimate spells (filtered) for spell browsing"""
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models import AllSpellsResponse, SpellInfo
+        
         spell_manager = manager.get_manager('spell')
         
         # Get all spells by level - let manager handle the data
@@ -253,16 +250,21 @@ def get_all_spells(
         )
 
 
-@router.post("/characters/{character_id}/spells/manage/", response_model=SpellManageResponse)
+@router.post("/characters/{character_id}/spells/manage")
 def manage_spells(
     character_id: int,
-    spell_request: SpellManageRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    spell_request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """Add or remove spells from character's spellbook"""
-    character, session = char_session
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models import (
+            SpellManageRequest, SpellManageResponse, SpellSummaryClass,
+            MetamagicFeat, SpellSummary
+        )
+        
+        session = char_session
         manager = session.character_manager
         spell_manager = manager.get_manager('spell')
         

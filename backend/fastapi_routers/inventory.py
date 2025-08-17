@@ -8,46 +8,25 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from fastapi_routers.dependencies import (
     get_character_manager, 
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-from fastapi_models.inventory_models import (
-    EquipItemRequest,
-    EquipItemResponse,
-    UnequipItemRequest,
-    UnequipItemResponse,
-    AddToInventoryRequest,
-    AddToInventoryResponse,
-    RemoveFromInventoryRequest,
-    RemoveFromInventoryResponse,
-    EquipmentInfoResponse,
-    EquipmentBonusesResponse,
-    AllWeaponsResponse,
-    AllArmorResponse,
-    CustomItemsResponse,
-    FilterItemsResponse,
-    EquipmentSummaryResponse,
-    EncumbranceResponse,
-    ACBonusResponse,
-    SaveBonusesResponse,
-    AttributeBonusesResponse,
-    SkillBonusesResponse,
-    InventorySummaryResponse
-)
+# from fastapi_models.inventory_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/characters/{character_id}/inventory/equipment/", response_model=EquipmentInfoResponse)
+@router.get("/characters/{character_id}/inventory/equipment")
 def get_equipment_info(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get information about all equipped items"""
-    character, session = char_session
+    from fastapi_models.inventory_models import EquipmentInfoResponse
+    session = char_session
     manager = session.character_manager
     
     try:
@@ -64,16 +43,18 @@ def get_equipment_info(
         )
 
 
-@router.get("/characters/{character_id}/inventory/summary/", response_model=InventorySummaryResponse)
+@router.get("/characters/{character_id}/inventory/summary")
 def get_inventory_summary(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get summary of character's inventory"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import InventorySummaryResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         summary = inventory_manager.get_inventory_summary()
         
@@ -87,16 +68,18 @@ def get_inventory_summary(
         )
 
 
-@router.get("/characters/{character_id}/inventory/encumbrance/", response_model=EncumbranceResponse)
+@router.get("/characters/{character_id}/inventory/encumbrance")
 def get_encumbrance(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Calculate character's encumbrance"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import EncumbranceResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         encumbrance = inventory_manager.calculate_encumbrance()
         
@@ -110,16 +93,18 @@ def get_encumbrance(
         )
 
 
-@router.get("/characters/{character_id}/inventory/bonuses/", response_model=EquipmentBonusesResponse)
+@router.get("/characters/{character_id}/inventory/bonuses")
 def get_equipment_bonuses(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get all equipment bonuses"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import EquipmentBonusesResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         bonuses = inventory_manager.get_equipment_bonuses()
         
@@ -133,16 +118,18 @@ def get_equipment_bonuses(
         )
 
 
-@router.get("/characters/{character_id}/inventory/bonuses/ac/", response_model=ACBonusResponse)
+@router.get("/characters/{character_id}/inventory/bonuses/ac")
 def get_ac_bonus(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get AC bonus from equipment"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import ACBonusResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         ac_bonus = inventory_manager.get_ac_bonus()
         
@@ -156,16 +143,18 @@ def get_ac_bonus(
         )
 
 
-@router.get("/characters/{character_id}/inventory/bonuses/saves/", response_model=SaveBonusesResponse)
+@router.get("/characters/{character_id}/inventory/bonuses/saves")
 def get_save_bonuses(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get saving throw bonuses from equipment"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import SaveBonusesResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         save_bonuses = inventory_manager.get_save_bonuses()
         
@@ -179,16 +168,18 @@ def get_save_bonuses(
         )
 
 
-@router.get("/characters/{character_id}/inventory/bonuses/attributes/", response_model=AttributeBonusesResponse)
+@router.get("/characters/{character_id}/inventory/bonuses/attributes")
 def get_attribute_bonuses(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get attribute bonuses from equipment"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import AttributeBonusesResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         attribute_bonuses = inventory_manager.get_attribute_bonuses()
         
@@ -202,16 +193,18 @@ def get_attribute_bonuses(
         )
 
 
-@router.get("/characters/{character_id}/inventory/bonuses/skills/", response_model=SkillBonusesResponse)
+@router.get("/characters/{character_id}/inventory/bonuses/skills")
 def get_skill_bonuses(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get skill bonuses from equipment"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import SkillBonusesResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         skill_bonuses = inventory_manager.get_skill_bonuses()
         
@@ -225,17 +218,19 @@ def get_skill_bonuses(
         )
 
 
-@router.post("/characters/{character_id}/inventory/equip/", response_model=EquipItemResponse)
+@router.post("/characters/{character_id}/inventory/equip")
 def equip_item(
     character_id: int,
-    request: EquipItemRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """Equip an item in a slot"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import EquipItemRequest, EquipItemResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         success, warnings = inventory_manager.equip_item(request.item_data, request.slot)
         
@@ -256,17 +251,19 @@ def equip_item(
         )
 
 
-@router.post("/characters/{character_id}/inventory/unequip/", response_model=UnequipItemResponse)
+@router.post("/characters/{character_id}/inventory/unequip")
 def unequip_item(
     character_id: int,
-    request: UnequipItemRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """Unequip an item from a slot"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import UnequipItemRequest, UnequipItemResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         item_data = inventory_manager.unequip_item(request.slot)
         
@@ -288,17 +285,19 @@ def unequip_item(
         )
 
 
-@router.post("/characters/{character_id}/inventory/add/", response_model=AddToInventoryResponse)
+@router.post("/characters/{character_id}/inventory/add")
 def add_to_inventory(
     character_id: int,
-    request: AddToInventoryRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """Add an item to inventory"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import AddToInventoryRequest, AddToInventoryResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         success = inventory_manager.add_to_inventory(request.item_data)
         
@@ -318,17 +317,19 @@ def add_to_inventory(
         )
 
 
-@router.delete("/characters/{character_id}/inventory/{item_index}/", response_model=RemoveFromInventoryResponse)
+@router.delete("/characters/{character_id}/inventory/{item_index}")
 def remove_from_inventory(
     character_id: int,
     item_index: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Remove an item from inventory by index"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import RemoveFromInventoryResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         item_data = inventory_manager.remove_from_inventory(item_index)
         
@@ -350,16 +351,18 @@ def remove_from_inventory(
         )
 
 
-@router.get("/characters/{character_id}/inventory/weapons/", response_model=AllWeaponsResponse)
+@router.get("/characters/{character_id}/inventory/weapons")
 def get_all_weapons(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get all available weapons"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import AllWeaponsResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         weapons = inventory_manager.get_all_weapons()
         
@@ -373,16 +376,18 @@ def get_all_weapons(
         )
 
 
-@router.get("/characters/{character_id}/inventory/armor/", response_model=AllArmorResponse)
+@router.get("/characters/{character_id}/inventory/armor")
 def get_all_armor(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get all available armor and shields"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import AllArmorResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         armor = inventory_manager.get_all_armor()
         
@@ -396,16 +401,18 @@ def get_all_armor(
         )
 
 
-@router.get("/characters/{character_id}/inventory/custom/", response_model=CustomItemsResponse)
+@router.get("/characters/{character_id}/inventory/custom")
 def get_custom_items(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get all custom/mod items in character's possession"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import CustomItemsResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         custom_items = inventory_manager.get_custom_items()
         
@@ -419,17 +426,19 @@ def get_custom_items(
         )
 
 
-@router.get("/characters/{character_id}/inventory/filter/{item_type}/", response_model=FilterItemsResponse)
+@router.get("/characters/{character_id}/inventory/filter/{item_type}")
 def filter_items_by_type(
     character_id: int,
     item_type: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Filter base items by type"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import FilterItemsResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         items = inventory_manager.filter_items_by_type(item_type)
         
@@ -443,16 +452,18 @@ def filter_items_by_type(
         )
 
 
-@router.get("/characters/{character_id}/inventory/equipment-summary/", response_model=EquipmentSummaryResponse)
+@router.get("/characters/{character_id}/inventory/equipment-summary")
 def get_equipment_summary_by_slot(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get detailed summary of equipped items by slot"""
-    character, session = char_session
-    manager = session.character_manager
-    
     try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import EquipmentSummaryResponse
+        
+        session = char_session
+        manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
         equipment_summary = inventory_manager.get_equipment_summary_by_slot()
         
@@ -466,14 +477,14 @@ def get_equipment_summary_by_slot(
         )
 
 
-@router.get("/characters/{character_id}/inventory/equipped/{slot}/")
+@router.get("/characters/{character_id}/inventory/equipped/{slot}")
 def get_equipped_item(
     character_id: int,
     slot: str,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Get item equipped in a specific slot"""
-    character, session = char_session
+    session = char_session
     manager = session.character_manager
     
     try:

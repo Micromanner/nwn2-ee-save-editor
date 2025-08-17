@@ -2,7 +2,7 @@
 Character creation service that modifies template .bic files
 
 ################################################################################
-# TODO: MAJOR REFACTOR NEEDED - HARDCODED CALCULATIONS EVERYWHERE
+# TODO: MAJOR REFACTOR NEEDED - HARDCODED CALCULATIONS EVERYWHERE. No time for this now.
 ################################################################################
 # 
 # CRITICAL ISSUES:
@@ -26,9 +26,6 @@ Character creation service that modifies template .bic files
 import os
 import shutil
 from typing import Dict, Any, Optional, List
-from django.db import transaction
-
-from .models import Character, CharacterClass, CharacterFeat, CharacterSkill
 from parsers.gff import GFFParser, GFFWriter, GFFFieldType
 from parsers.resource_manager import ResourceManager
 from gamedata.services.game_rules_service import GameRulesService
@@ -41,7 +38,7 @@ class CharacterCreationService:
         self.rm = resource_manager or ResourceManager()
         self.game_rules = GameRulesService(self.rm)
         
-    def create_character(self, character_data: Dict[str, Any], template_path: str, output_path: str) -> Character:
+    def create_character(self, character_data: Dict[str, Any], template_path: str, output_path: str) -> str:
         """
         Create a new character by modifying a template .bic file
         
@@ -51,7 +48,7 @@ class CharacterCreationService:
             output_path: Where to save the new .bic file
             
         Returns:
-            Character model instance
+            Path to the created character file
         """
         # Copy template to output location
         shutil.copy2(template_path, output_path)
@@ -79,12 +76,11 @@ class CharacterCreationService:
         writer = GFFWriter()
         writer.write(output_path, gff_data)
         
-        # Import to database
-        from .services import CharacterImportService
-        import_service = CharacterImportService(self.rm)
-        character = import_service.import_character(output_path)
-        
-        return character
+        # Character creation now uses FastAPI session-based approach
+        # The character file has been created, but database import is now handled
+        # by the FastAPI savegame router and session registry
+        # Return the output path instead of a Django model
+        return output_path
     
     def _update_basic_info(self, gff_data: Dict[str, Any], character_data: Dict[str, Any]):
         """Update basic character information"""

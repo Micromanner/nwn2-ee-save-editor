@@ -23,13 +23,13 @@ export class GameDataService {
 
   // Simple endpoints that return dictionaries
   private async getDict<T = Record<string, unknown>>(endpoint: string): Promise<T> {
-    return apiClient.get<T>(`${this.basePath}/${endpoint}/`);
+    return apiClient.get<T>(`${this.basePath}/${endpoint}`);
   }
 
   // Paged endpoints that return results arrays
   private async getPaged<T = unknown>(endpoint: string, page?: number): Promise<PagedResponse<T>> {
     const params = page ? `?page=${page}` : '';
-    return apiClient.get<PagedResponse<T>>(`${this.basePath}/${endpoint}/${params}`);
+    return apiClient.get<PagedResponse<T>>(`${this.basePath}/${endpoint}${params}`);
   }
 
   // Appearance endpoints
@@ -58,7 +58,7 @@ export class GameDataService {
   // Character progression endpoints
   feats = async (characterId: number, featType?: number) => {
     const typeParam = featType !== undefined ? `?type=${featType}` : '';
-    const response = await apiClient.get<{legitimate_feats: GameDataItem[], total: number}>(`/characters/${characterId}/feats/legitimate/${typeParam}`);
+    const response = await apiClient.get<{legitimate_feats: GameDataItem[], total: number}>(`/characters/${characterId}/feats/legitimate${typeParam}`);
     return response.legitimate_feats;
   };
   skills = () => this.getPaged('skills');
@@ -79,7 +79,7 @@ export class GameDataService {
       metamagic: string;
       target_type: string;
     }
-    const response = await apiClient.get<{spells: SpellResponse[], count: number, total_by_level: Record<string, number>}>(`/characters/${characterId}/spells/all/`);
+    const response = await apiClient.get<{spells: SpellResponse[], count: number, total_by_level: Record<string, number>}>(`/characters/${characterId}/spells/all`);
     return response.spells;
   };
   abilities = () => this.getPaged('abilities');

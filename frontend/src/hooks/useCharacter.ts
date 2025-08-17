@@ -48,9 +48,9 @@ export function useCharacter(): UseCharacterResult {
     setError(null);
     
     try {
-      const characterData = await CharacterAPI.importCharacter(savePath);
-      setCharacter(characterData);
-      setCurrentCharacterId(characterData.id || null);
+      const importResult = await CharacterAPI.importCharacter(savePath);
+      // After import, load the full character data
+      await loadCharacter(importResult.id);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';
       setError(errorMessage);
@@ -58,7 +58,7 @@ export function useCharacter(): UseCharacterResult {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadCharacter]);
 
   // Refresh current character
   const refreshCharacter = useCallback(async () => {

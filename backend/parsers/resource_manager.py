@@ -227,7 +227,7 @@ class ResourceManager:
         self._override_dirs: List[Path] = []
         
         # Steam Workshop service
-        self._workshop_service = SteamWorkshopService(cache_dir=self.cache_dir)
+        self._workshop_service = SteamWorkshopService(cache_dir=self.cache_dir) if SteamWorkshopService else None
         
         # Module-to-HAK mapping for save-context-aware loading
         self._module_to_haks: Dict[str, Dict[str, Any]] = {}

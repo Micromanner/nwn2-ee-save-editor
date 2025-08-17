@@ -3,7 +3,7 @@ mod file_operations;
 mod window_manager;
 
 use tauri::Manager;
-use sidecar_manager::{FastAPISidecar, start_fastapi_sidecar, stop_fastapi_sidecar, check_fastapi_health, check_background_loading_status};
+use sidecar_manager::{FastAPISidecar, start_fastapi_sidecar, stop_fastapi_sidecar, check_fastapi_health, check_background_loading_status, graceful_shutdown_on_exit};
 use file_operations::{
     select_save_file, 
     select_nwn2_directory, 
@@ -53,6 +53,7 @@ pub fn run() {
       stop_fastapi_sidecar,
       check_fastapi_health,
       check_background_loading_status,
+      graceful_shutdown_on_exit,
       select_save_file,
       select_nwn2_directory,
       find_nwn2_saves,
@@ -66,11 +67,14 @@ pub fn run() {
     ])
     .on_window_event(|window, event| match event {
       tauri::WindowEvent::CloseRequested { .. } => {
-        // Stop FastAPI sidecar when window is closing
+        // Gracefully shutdown FastAPI when window is closing
         let window_clone = window.clone();
         tauri::async_runtime::spawn(async move {
-          if let Err(e) = stop_fastapi_sidecar(window_clone.app_handle().clone()).await {
-            log::error!("Failed to stop FastAPI sidecar on exit: {}", e);
+          log::info!("Window close requested - initiating graceful FastAPI shutdown");
+          if let Err(e) = graceful_shutdown_on_exit(window_clone.app_handle().clone()).await {
+            log::error!("Failed to gracefully shutdown FastAPI on exit: {}", e);
+            // Fallback to force stop
+            let _ = stop_fastapi_sidecar(window_clone.app_handle().clone()).await;
           }
         });
       }

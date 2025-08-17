@@ -313,16 +313,14 @@ class InMemoryCharacterSession:
         from gamedata.services.game_rules_service import GameRulesService
         
         try:
-            # Get shared ResourceManager from FastAPI singleton
-            try:
-                # Try to import FastAPI context to get shared ResourceManager
-                from fastapi_server import get_shared_resource_manager
-                shared_rm = get_shared_resource_manager()
-                logger.info("Using shared ResourceManager from FastAPI")
-            except ImportError:
-                # Fallback to None if not in FastAPI context
-                shared_rm = None
-                logger.info("No shared ResourceManager available, using default")
+            # Get shared ResourceManager from FastAPI singleton without triggering router imports
+            from fastapi_core.shared_services import get_shared_resource_manager
+            
+            shared_rm = get_shared_resource_manager()
+            if shared_rm is not None:
+                logger.info("Using shared ResourceManager from FastAPI (via independent registry)")
+            else:
+                logger.warning("No shared ResourceManager available, DynamicGameDataLoader will create one")
             
             game_data_loader = get_dynamic_game_data_loader(resource_manager=shared_rm)
             rules_service = GameRulesService(resource_manager=shared_rm)

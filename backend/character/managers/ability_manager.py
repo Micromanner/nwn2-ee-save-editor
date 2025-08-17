@@ -43,8 +43,8 @@ class AbilityManager(EventEmitter):
         self.game_rules_service = character_manager.rules_service
         
         # Register for events
-        self.on(EventType.CLASS_CHANGED, self._on_class_changed)
-        self.on(EventType.LEVEL_GAINED, self._on_level_gained)
+        self.character_manager.on(EventType.CLASS_CHANGED, self._on_class_changed)
+        self.character_manager.on(EventType.LEVEL_GAINED, self._on_level_gained)
     
     def get_attributes(self) -> Dict[str, int]:
         """
@@ -402,9 +402,12 @@ class AbilityManager(EventEmitter):
     
     def _on_class_changed(self, event: ClassChangedEvent):
         """Handle class change events"""
-        # Some classes might have attribute requirements
-        # This is where we'd validate or adjust attributes
-        logger.info(f"AbilityManager handling class change to {event.new_class_id}")
+        logger.info(f"🔥 AbilityManager handling class change to {event.new_class_id}, level {event.level}")
+        logger.info(f"🔥 Event details: old_class={event.old_class_id}, new_class={event.new_class_id}, level={event.level}")
+        
+        # When level changes (especially reductions), adjust level-up bonuses
+        logger.info(f"🔥 Calling _adjust_level_up_bonuses_for_level({event.level})")
+        self._adjust_level_up_bonuses_for_level(event.level)
     
     def _on_level_gained(self, event: LevelGainedEvent):
         """Handle level gained events"""
@@ -412,6 +415,20 @@ class AbilityManager(EventEmitter):
         if event.new_level % 4 == 0:
             logger.info(f"Level {event.new_level} grants ability score increase")
             # Note: The actual increase would be handled by user choice
+    
+    def get_hit_points(self) -> Dict[str, int]:
+        """
+        Get character hit points
+        
+        Returns:
+            Dict with current and max hit points
+        """
+        current_hp = self.gff.get('CurrentHitPoints', 0)
+        max_hp = self.gff.get('MaxHitPoints', 0)
+        return {
+            'current': current_hp,
+            'max': max_hp
+        }
     
     def get_saving_throw_modifiers(self) -> Dict[str, int]:
         """
@@ -470,7 +487,7 @@ class AbilityManager(EventEmitter):
         # Get character level
         class_list = self.gff.get('ClassList', [])
         total_level = sum(
-            cls.get('ClassLevel', 0) 
+            int(cls.get('ClassLevel', 0)) if cls.get('ClassLevel', 0) else 0
             for cls in class_list 
             if isinstance(cls, dict)
         )
@@ -525,7 +542,8 @@ class AbilityManager(EventEmitter):
         Returns:
             Dict with encumbrance thresholds and current status
         """
-        strength = self.gff.get('Str', 10)
+        strength_raw = self.gff.get('Str', 10)
+        strength = int(strength_raw) if strength_raw is not None else 10
         
         # Try to get encumbrance data from game rules service using field mapping
         from gamedata.dynamic_loader.field_mapping_utility import field_mapper
@@ -533,8 +551,8 @@ class AbilityManager(EventEmitter):
             encumbrance_data = self.game_rules_service.get_by_id('encumbrance', strength)
             
             if encumbrance_data:
-                normal_capacity = field_mapper.get_field_value(encumbrance_data, 'normal', strength * 10)
-                heavy_threshold = field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 20)
+                normal_capacity = int(field_mapper.get_field_value(encumbrance_data, 'normal', strength * 10))
+                heavy_threshold = int(field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 20))
             else:
                 # Use D&D 3.5 standard calculation if no table
                 normal_capacity = strength * 10  # Light load
@@ -1114,7 +1132,7 @@ class AbilityManager(EventEmitter):
             ])
         
         elif attribute == 'Con':
-            total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
+            total_level = sum(int(c.get('ClassLevel', 0)) if c.get('ClassLevel', 0) else 0 for c in self.gff.get('ClassList', []))
             hp_change = modifier_change * total_level
             effects['effects'].extend([
                 {
@@ -1289,18 +1307,191 @@ class AbilityManager(EventEmitter):
         # If no explicit level-up data found, try to infer from character progression
         # This is a fallback for characters created outside our editor
         if all(bonus == 0 for bonus in levelup_bonuses.values()) and ability_increases_available > 0:
-            # Try to detect ability increases by comparing to racial base + point buy
-            logger.debug(f"No explicit level-up data found, attempting to infer {ability_increases_available} ability increases")
+            logger.info(f"🔥 No explicit level-up data found, attempting to infer {ability_increases_available} ability increases")
             
-            # Get current effective scores without level-up bonuses
+            # For imported characters, we need to reverse-engineer the level-up bonuses
+            # by comparing current attributes to expected base values
             base_attrs = self.get_attributes()
             racial_mods = self.get_racial_modifiers()
             
-            # Assume standard starting attributes and try to infer increases
-            # This is imperfect but better than showing wrong values
-            # The user can always correct these in the UI
+            # Try to determine starting ability scores by working backwards
+            # Standard NWN2 point-buy range is typically 8-18 before racial modifiers
+            # We'll assume the character started with reasonable stats and infer increases
+            
+            # Calculate what the "base" scores might have been (before level-up bonuses)
+            inferred_bonuses = {attr: 0 for attr in self.ATTRIBUTES}
+            total_inferred_increases = 0
+            
+            for attr in self.ATTRIBUTES:
+                current_score = base_attrs[attr]
+                racial_mod = racial_mods[attr]
+                
+                # Estimate the starting score (current - racial - estimated level bonuses)
+                # We'll distribute the available increases to best explain the current scores
+                estimated_starting = current_score - racial_mod
+                
+                # If the score seems too high for a reasonable starting value, 
+                # assume some level-up bonuses were applied to this attribute
+                if estimated_starting > 18:  # Very high starting score, likely has bonuses
+                    bonus_estimate = min(ability_increases_available, estimated_starting - 16)
+                    inferred_bonuses[attr] = bonus_estimate
+                    total_inferred_increases += bonus_estimate
+                elif estimated_starting > 16:  # Moderately high, possible bonus
+                    bonus_estimate = min(ability_increases_available - total_inferred_increases, 1)
+                    inferred_bonuses[attr] = bonus_estimate
+                    total_inferred_increases += bonus_estimate
+                
+                # Stop if we've allocated all available increases
+                if total_inferred_increases >= ability_increases_available:
+                    break
+            
+            # If we couldn't account for all increases, put remaining in primary stats
+            remaining = ability_increases_available - total_inferred_increases
+            if remaining > 0:
+                # Prioritize STR, DEX, CON as commonly boosted stats
+                for attr in ['Str', 'Dex', 'Con', 'Wis', 'Int', 'Cha']:
+                    if remaining > 0 and inferred_bonuses[attr] < 2:  # Don't over-allocate
+                        additional = min(remaining, 1)
+                        inferred_bonuses[attr] += additional
+                        remaining -= additional
+            
+            # Create synthetic LevelUpList entries for these inferred bonuses
+            self._create_synthetic_levelup_entries(inferred_bonuses, total_level)
+            
+            logger.info(f"Inferred level-up bonuses for imported character: {inferred_bonuses}")
+            levelup_bonuses = inferred_bonuses
             
         return levelup_bonuses
+    
+    def _create_synthetic_levelup_entries(self, inferred_bonuses: Dict[str, int], total_level: int):
+        """
+        Create synthetic LevelUpList entries for imported characters without level-up history
+        
+        Args:
+            inferred_bonuses: Dict of attribute bonuses to create entries for
+            total_level: Total character level
+        """
+        levelup_list = self.gff.get('LevelUpList', [])
+        
+        # Distribute the bonuses across the appropriate levels (every 4 levels)
+        bonus_levels = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]  # Up to level 60
+        available_levels = [level for level in bonus_levels if level <= total_level]
+        
+        # Create entries for each bonus level, distributing the inferred bonuses
+        remaining_bonuses = inferred_bonuses.copy()
+        
+        for level in available_levels:
+            # Check if we already have an entry for this level
+            existing_entry = None
+            for entry in levelup_list:
+                if isinstance(entry, dict) and entry.get('Level') == level:
+                    existing_entry = entry
+                    break
+            
+            if existing_entry:
+                continue  # Skip if we already have this level
+            
+            # Find an attribute that still needs bonuses allocated
+            chosen_attr = None
+            for attr, remaining in remaining_bonuses.items():
+                if remaining > 0:
+                    chosen_attr = attr
+                    break
+            
+            if chosen_attr:
+                # Create synthetic entry
+                new_entry = {
+                    'Level': level,
+                    f'{chosen_attr}Gain': 1,  # Standard +1 bonus
+                    'Source': 'imported_character_inference'  # Mark as inferred
+                }
+                levelup_list.append(new_entry)
+                remaining_bonuses[chosen_attr] -= 1
+                
+                logger.debug(f"Created synthetic level-up entry: Level {level}, +1 {chosen_attr}")
+        
+        # Update the GFF with the new entries
+        self.gff.set('LevelUpList', levelup_list)
+        logger.info(f"Created {len(available_levels)} synthetic level-up entries for imported character")
+    
+    def _adjust_level_up_bonuses_for_level(self, new_total_level: int):
+        """
+        Adjust level-up bonuses to match the new character level
+        This properly removes attribute bonuses from levels that are no longer valid
+        
+        Args:
+            new_total_level: The new total character level
+        """
+        logger.info(f"🔥 _adjust_level_up_bonuses_for_level called with new_total_level={new_total_level}")
+        
+        # Get current level-up list
+        levelup_list = self.gff.get('LevelUpList', [])
+        logger.info(f"🔥 Current LevelUpList: {levelup_list}")
+        
+        # Track which attribute bonuses need to be removed
+        bonuses_to_remove = {attr: 0 for attr in self.ATTRIBUTES}
+        valid_levelup_entries = []
+        
+        for levelup_entry in levelup_list:
+            if not isinstance(levelup_entry, dict):
+                continue
+                
+            # Check the level this entry was gained at
+            entry_level = levelup_entry.get('Level', 0)
+            
+            # Only keep entries from levels we still have
+            if entry_level <= new_total_level:
+                valid_levelup_entries.append(levelup_entry)
+            else:
+                # This entry is from a level we no longer have - track what bonuses to remove
+                logger.info(f"Removing level-up entry from level {entry_level} (new max level: {new_total_level})")
+                
+                # Count ability increases in this entry that need to be removed
+                for attr in self.ATTRIBUTES:
+                    for field_name in [f'{attr}Gain', f'Ability{attr}', attr]:
+                        if field_name in levelup_entry:
+                            bonus_amount = levelup_entry.get(field_name, 0)
+                            if bonus_amount > 0:
+                                bonuses_to_remove[attr] += bonus_amount
+                                logger.debug(f"Will remove +{bonus_amount} {attr} from level {entry_level}")
+        
+        # Actually remove the bonuses from character attributes
+        if any(bonus > 0 for bonus in bonuses_to_remove.values()):
+            logger.info(f"Removing level-up bonuses: {bonuses_to_remove}")
+            
+            # Get current base attributes (these include level-up bonuses)
+            current_attrs = self.get_attributes()
+            
+            # Remove the bonuses from the base attributes
+            for attr in self.ATTRIBUTES:
+                if bonuses_to_remove[attr] > 0:
+                    old_value = current_attrs[attr]
+                    new_value = max(3, old_value - bonuses_to_remove[attr])  # Min 3 ability score
+                    
+                    # Update the GFF directly
+                    self.gff.set(attr, new_value)
+                    logger.info(f"Reduced {attr}: {old_value} -> {new_value} (-{bonuses_to_remove[attr]})")
+            
+            # Update the LevelUpList to only include valid entries
+            self.gff.set('LevelUpList', valid_levelup_entries)
+            logger.info(f"Adjusted level-up entries: {len(levelup_list)} -> {len(valid_levelup_entries)} entries")
+            
+            # Emit event to notify other managers of attribute changes
+            event = EventData(
+                event_type=EventType.ATTRIBUTE_CHANGED,
+                source_manager='ability',
+                timestamp=time.time()
+            )
+            # Add level reduction context
+            event.level_reduction = True
+            event.new_level = new_total_level
+            event.removed_bonuses = bonuses_to_remove
+            event.removed_entries = len(levelup_list) - len(valid_levelup_entries)
+            self.character_manager.emit(event)
+        elif len(valid_levelup_entries) != len(levelup_list):
+            # No bonuses to remove, but still update the list
+            self.gff.set('LevelUpList', valid_levelup_entries)
+            logger.info(f"Updated level-up entries: {len(levelup_list)} -> {len(valid_levelup_entries)} entries")
     
     def get_total_modifiers(self) -> Dict[str, int]:
         """Get total effective modifiers from all sources"""

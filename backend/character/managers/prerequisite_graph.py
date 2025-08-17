@@ -40,10 +40,23 @@ class PrerequisiteGraph:
         # Create Rust graph
         self.rust_graph = create_prerequisite_graph()
         
-        # Get feat table
-        feat_table = self.game_data_loader.get_table('feat')
+        # Get feat table with retry logic
+        feat_table = None
+        max_retries = 3
+        retry_delay = 0.5
+
+        for attempt in range(max_retries):
+            feat_table = self.game_data_loader.get_table('feat')
+            if feat_table:
+                break
+            
+            if attempt < max_retries - 1:
+                logger.warning(f"Feat table not ready, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+
         if not feat_table:
-            raise ValueError("No feat table found in game data!")
+            raise ValueError(f"No feat table found in game data after {max_retries} attempts!")
         
         # Convert feat table to format expected by Rust
         feat_data = []

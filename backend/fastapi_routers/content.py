@@ -9,22 +9,19 @@ from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep
 )
-from fastapi_models import (
-    CustomContentSummary,
-    CustomContentItem,
-    CampaignInfoResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["content"])
+router = APIRouter(tags=["content"])
 
 
-@router.get("/characters/{character_id}/campaign-info/", response_model=CampaignInfoResponse)
+@router.get("/characters/{character_id}/campaign-info")
 def get_campaign_info(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get campaign, module, and quest information for a character"""
+    from fastapi_models import CustomContentSummary, CampaignInfoResponse
     
     try:
         content_manager = manager.get_manager('content')
@@ -47,12 +44,13 @@ def get_campaign_info(
         )
 
 
-@router.get("/characters/{character_id}/custom-content/", response_model=CustomContentSummary)
+@router.get("/characters/{character_id}/custom-content")
 def get_custom_content(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get detailed custom content information for a character"""
+    from fastapi_models import CustomContentSummary
     
     try:
         content_manager = manager.get_manager('content')
@@ -69,13 +67,14 @@ def get_custom_content(
         )
 
 
-@router.get("/characters/{character_id}/custom-content/{content_type}/", response_model=List[CustomContentItem])
+@router.get("/characters/{character_id}/custom-content/{content_type}")
 def get_custom_content_by_type(
     character_id: int,
     content_type: str,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get custom content filtered by type (feat, spell, class)"""
+    from fastapi_models import CustomContentItem
     
     try:
         content_manager = manager.get_manager('content')
@@ -97,12 +96,13 @@ def get_custom_content_by_type(
         )
 
 
-@router.post("/characters/{character_id}/refresh-content/", response_model=Dict[str, Any])
+@router.post("/characters/{character_id}/refresh-content")
 def refresh_custom_content(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Refresh custom content detection for a character"""
+    from fastapi_models import CustomContentSummary
     
     try:
         content_manager = manager.get_manager('content')

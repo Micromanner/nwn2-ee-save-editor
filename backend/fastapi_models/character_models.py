@@ -37,12 +37,13 @@ class CharacterInfo(BaseModel):
 
 class CharacterSummary(BaseModel):
     """High-level character summary from get_character_summary()"""
+    id: Optional[Union[int, str]] = None  # Character ID for frontend compatibility
     name: str
     level: int
     race: str
     alignment: Dict[str, int]
-    classes: List[Dict[str, Any]]
-    abilities: Dict[str, int]
+    classes: Dict[str, Any]  # Changed to match actual return from get_class_summary()
+    abilities: Optional[Dict[str, int]] = None  # Made optional since not always populated
     
     # Additional info from content manager
     campaign_name: Optional[str] = None
@@ -127,11 +128,11 @@ class CharacterState(BaseModel):
     info: CharacterInfo
     summary: CharacterSummary
     
-    # Manager states (populated on demand)
+    # Manager states (populated on demand) - match actual manager return types
     abilities: Optional[Dict[str, Any]] = None
     combat: Optional[Dict[str, Any]] = None
-    skills: Optional[Dict[str, Any]] = None
-    feats: Optional[Dict[str, Any]] = None
+    skills: Optional[List[Dict[str, Any]]] = None  # Skills return a list
+    feats: Optional[List[Dict[str, Any]]] = None   # Feats return a list
     spells: Optional[Dict[str, Any]] = None
     inventory: Optional[Dict[str, Any]] = None
     saves: Optional[Dict[str, Any]] = None

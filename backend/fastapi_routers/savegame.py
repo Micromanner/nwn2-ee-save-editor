@@ -1,6 +1,7 @@
 """
 Savegame router - Save game import, export, backup, and management operations
 Handles operations on NWN2 save game directories and files
+All operations use SaveGameHandler to ensure NWN2 save file integrity
 """
 
 import logging
@@ -8,30 +9,23 @@ import os
 import glob
 import shutil
 import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi_core.session_registry import get_character_session, save_character_session, get_path_from_id
-# Removed character_info dependency - use session_registry directly
-from parsers.savegame_handler import SaveGameHandler
-from character.in_memory_save_manager import InMemorySaveManager
+# Heavy imports moved to lazy loading to improve startup time
+# from parsers.savegame_handler import SaveGameHandler, SaveGameError
 from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep,
     check_system_ready
 )
-from fastapi_models import (
-    SavegameImportRequest,
-    SavegameImportResponse,
-    SavegameCompanionsResponse,
-    SavegameInfoResponse,
-    SavegameUpdateRequest,
-    SavegameUpdateResponse,
-    SavegameRestoreRequest,
-    SavegameRestoreResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["savegame"])
+
+
 
 
 def _validate_savegame_character(character_id: int) -> str:
@@ -86,24 +80,31 @@ def _validate_save_directory(save_path: str) -> str:
 
 
 
-@router.post("/savegames/import/", response_model=SavegameImportResponse)
+@router.post("/savegames/import")
 def import_savegame(
-    import_request: SavegameImportRequest,
+    import_request: dict,  # Use dict instead of forward reference
     system_ready: bool = Depends(check_system_ready)
 ):
     """Import a character from a save game directory"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import SavegameImportRequest, SavegameImportResponse
+        from parsers.savegame_handler import SaveGameHandler
+        
+        # Type validation at runtime
+        if 'save_path' not in import_request:
+            raise HTTPException(status_code=400, detail="Invalid import request")
+        
         # Use helper function - no duplicated logic
-        save_path = _validate_save_directory(import_request.save_path)
+        save_path = _validate_save_directory(import_request['save_path'])
         
         # Create savegame handler to handle import - no duplicated logic
-        from parsers.savegame_handler import SaveGameHandler
         from parsers.parallel_gff import extract_and_parse_save_gff_files
         
         savegame_handler = SaveGameHandler(save_path)
         
-        # Extract and parse all GFF files
-        gff_results = extract_and_parse_save_gff_files(savegame_handler, max_workers=4)
+        # Use single-threaded parsing to avoid multiprocessing duplicate imports
+        gff_results = extract_and_parse_save_gff_files(savegame_handler, max_workers=1)
         
         # Get playerlist.ifo data
         if 'playerlist.ifo' not in gff_results or not gff_results['playerlist.ifo']['success']:
@@ -118,8 +119,7 @@ def import_savegame(
         character_data = mod_player_list[0]  # First player in the list
         
         # Register character path and create session properly
-        from fastapi_core.session_registry import register_character_path, get_character_session
-        import os
+        from fastapi_core.session_registry import register_character_path
         
         # Get integer ID for the character path
         character_id = register_character_path(save_path)
@@ -160,15 +160,33 @@ def import_savegame(
         )
 
 
-@router.get("/{character_id}/companions/", response_model=SavegameCompanionsResponse)
+@router.get("/{character_id}/companions")
 def list_savegame_companions(character_id: int):
     """List all companions available in a save game"""
     try:
+        # Lazy imports for performance
+        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from fastapi_models import SavegameCompanionsResponse, CompanionInfo
+        
         # Use helper function - no duplicated logic
         file_path = _validate_savegame_character(character_id)
         
         handler = SaveGameHandler(file_path)
-        companions = handler.list_companions()
+        companion_names = handler.list_companions()
+        
+        # Build companion info list
+        companions = []
+        for comp_name in companion_names:
+            companion_info = CompanionInfo(
+                name=comp_name,
+                file_name=f"{comp_name}.ros",
+                tag=comp_name,
+                level=None,  # Would need to parse ROS file for details
+                class_name=None,
+                is_active=False,
+                influence=None
+            )
+            companions.append(companion_info)
         
         logger.info(
             f"Listed savegame companions: character_id={character_id}, "
@@ -177,9 +195,16 @@ def list_savegame_companions(character_id: int):
         
         return SavegameCompanionsResponse(
             companions=companions,
-            count=len(companions)
+            count=len(companions),
+            active_companions=0  # Would need parsing to determine active companions
         )
         
+    except SaveGameError as e:
+        logger.error(f"SaveGameHandler error listing companions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list companions: {str(e)}"
+        )
     except Exception as e:
         logger.error(f"Failed to list companions: {e}")
         raise HTTPException(
@@ -188,23 +213,30 @@ def list_savegame_companions(character_id: int):
         )
 
 
-@router.get("/{character_id}/info/", response_model=SavegameInfoResponse)
+@router.get("/{character_id}/info")
 def get_savegame_info(character_id: int):
-    """Get information about the save game, including backup status"""
+    """Get basic save game information using SaveGameHandler"""
     try:
-        # Use helper function - no duplicated logic
+        # Lazy imports for performance
+        from parsers.savegame_handler import SaveGameHandler
+        from fastapi_models import SavegameInfoResponse
+        
         file_path = _validate_savegame_character(character_id)
+        handler = SaveGameHandler(file_path)
         
-        # Use savegame service - no duplicated logic
-        from character.services.savegame_service import SavegameService
-        savegame_service = SavegameService()
+        # Simple relay to SaveGameHandler methods
+        files_in_save = handler.list_files()
+        companion_names = handler.list_companions()
+        module_name = handler.extract_current_module()
         
-        info_result = savegame_service.get_savegame_info(file_path)
-        
-        logger.info(
-            f"Retrieved savegame info: character_id={character_id}, "
-            f"backups_count={len(info_result['backups'])}"
-        )
+        info_result = {
+            'save_directory': file_path,
+            'character_name': "Character",  # Would need session data for actual name
+            'files_in_save': files_in_save,
+            'module_name': module_name,
+            'companions': [{'name': name, 'file_name': f'{name}.ros'} for name in companion_names],
+            'backups': [],  # SaveGameHandler doesn't list backups - would need to be added there
+        }
         
         return SavegameInfoResponse(**info_result)
         
@@ -216,39 +248,52 @@ def get_savegame_info(character_id: int):
         )
 
 
-@router.post("/{character_id}/update/", response_model=SavegameUpdateResponse)
+@router.post("/{character_id}/update")
 def update_savegame_character(
     character_id: int,
-    update_request: SavegameUpdateRequest,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    update_request,  # Type removed for lazy loading
+    manager: CharacterManagerDep
 ):
-    """Update character data in a save game"""
+    """Update character data in save game using existing session save"""
     try:
-        # Use helper function - no duplicated logic
+        # Lazy imports for performance
+        from parsers.savegame_handler import SaveGameHandler
+        from fastapi_models import SavegameUpdateResponse
+        
         file_path = _validate_savegame_character(character_id)
         
-        if not update_request.sync_current_state and not update_request.updates:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No updates provided and sync_current_state not requested"
+        if update_request.sync_current_state:
+            # Simple relay to existing session save functionality
+            success = save_character_session(character_id, create_backup=update_request.create_backup)
+            
+            return SavegameUpdateResponse(
+                success=success,
+                message="Character state synchronized to save files",
+                changes={'sync_current_state': 'Completed'},
+                files_updated=['playerlist.ifo', 'player.bic'],
+                backup_created=update_request.create_backup
             )
         
-        # Use savegame service - no duplicated logic
-        from character.services.savegame_service import SavegameService
-        savegame_service = SavegameService()
+        # For direct file updates, use SaveGameHandler
+        if update_request.updates:
+            handler = SaveGameHandler(file_path)
+            for filename, content in update_request.updates.items():
+                if isinstance(content, str):
+                    content = content.encode('utf-8')
+                handler.update_file(filename, content, backup=update_request.create_backup)
+            
+            return SavegameUpdateResponse(
+                success=True,
+                message="Files updated",
+                changes={f: "Updated" for f in update_request.updates.keys()},
+                files_updated=list(update_request.updates.keys()),
+                backup_created=update_request.create_backup
+            )
         
-        update_result = savegame_service.update_savegame(
-            character_id, 
-            update_request.sync_current_state, 
-            update_request.updates
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No updates provided"
         )
-        
-        logger.info(
-            f"Updated savegame character: character_id={character_id}, "
-            f"changes={update_result['changes']}, backup_created={update_result['backup_created']}"
-        )
-        
-        return SavegameUpdateResponse(**update_result)
         
     except Exception as e:
         logger.error(f"Failed to update savegame: {e}")
@@ -258,42 +303,13 @@ def update_savegame_character(
         )
 
 
-@router.post("/{character_id}/restore/", response_model=SavegameRestoreResponse)
+@router.post("/{character_id}/restore")
 def restore_savegame_backup(
     character_id: int,
-    restore_request: SavegameRestoreRequest
+    restore_request  # Type removed for lazy loading
 ):
-    """Restore a save game from a backup"""
-    try:
-        # Use helper function - no duplicated logic
-        file_path = _validate_savegame_character(character_id)
-        
-        # Use savegame service - no duplicated logic
-        from character.services.savegame_service import SavegameService
-        savegame_service = SavegameService()
-        
-        restore_result = savegame_service.restore_backup(
-            file_path,
-            restore_request.backup_path
-        )
-        
-        logger.info(
-            f"Restored savegame from backup: character_id={character_id}, "
-            f"backup_path={restore_request.backup_path}, "
-            f"pre_restore_backup={restore_result['pre_restore_backup']}"
-        )
-        
-        return SavegameRestoreResponse(**restore_result)
-        
-    except Exception as e:
-        logger.error(f"Failed to restore backup: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restore backup: {str(e)}"
-        )
-
-
-
-
-
-
+    """Restore functionality not implemented - SaveGameHandler needs restore methods"""
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Restore functionality requires SaveGameHandler.restore_from_backup() method to be implemented"
+    )

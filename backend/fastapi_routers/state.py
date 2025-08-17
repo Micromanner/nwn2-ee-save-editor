@@ -10,21 +10,17 @@ from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep
 )
-from fastapi_models.character_models import (
-    CharacterState,
-    CharacterSummary,
-    ValidationResult
-)
+# from fastapi_models.character_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["state"])
+router = APIRouter(tags=["state"])
 
 
-@router.get("/characters/{character_id}/state/", response_model=CharacterState)
+@router.get("/characters/{character_id}/state")
 def get_character_state(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
-) -> CharacterState:
+    manager: CharacterManagerDep
+):  # Return type removed for lazy loading
     """
     Get comprehensive character state with all subsystem information
     
@@ -46,6 +42,13 @@ def get_character_state(
         # Use character manager method - no duplicated logic
         state_data = manager.get_character_state()
         
+        # Ensure correct character ID is set (override manager default)
+        if 'info' in state_data:
+            state_data['info']['id'] = character_id
+        
+        # Lazy import to avoid circular dependencies
+        from fastapi_models import CharacterState
+        
         # Validate and convert to proper response model
         return CharacterState(**state_data)
         
@@ -57,11 +60,11 @@ def get_character_state(
         )
 
 
-@router.get("/characters/{character_id}/summary/", response_model=CharacterSummary)
+@router.get("/characters/{character_id}/summary")
 def get_character_summary(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
-) -> CharacterSummary:
+    manager: CharacterManagerDep
+):
     """
     Get basic character summary
     
@@ -71,6 +74,13 @@ def get_character_summary(
     try:
         # Use character manager method - no duplicated logic
         summary_data = manager.get_character_summary()
+        
+        # Ensure we have an ID field for the frontend
+        if 'id' not in summary_data:
+            summary_data['id'] = character_id
+        
+        # Lazy import to avoid circular dependencies
+        from fastapi_models import CharacterSummary
         
         # Validate and convert to proper response model
         return CharacterSummary(**summary_data)
@@ -83,11 +93,11 @@ def get_character_summary(
         )
 
 
-@router.get("/characters/{character_id}/validation/", response_model=ValidationResult)
+@router.get("/characters/{character_id}/validation")
 def validate_character(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
-) -> ValidationResult:
+    manager: CharacterManagerDep
+):
     """
     Validate character data for corruption or issues
     
@@ -97,6 +107,9 @@ def validate_character(
     try:
         # Use character manager method - no duplicated logic
         validation_result = manager.validate_character()
+        
+        # Lazy import to avoid circular dependencies
+        from fastapi_models import ValidationResult
         
         # Validate and convert to proper response model
         return ValidationResult(**validation_result)

@@ -204,8 +204,13 @@ class DynamicGameDataLoader:
         
         try:
             table = self.table_data.get(table_name, None)
+            if table_name == 'skills':
+                logger.debug(f"DynamicGameDataLoader.get_table('{table_name}'): Available tables: {list(self.table_data.keys())}")
+                logger.debug(f"DynamicGameDataLoader.get_table('{table_name}'): table from cache = {table}")
             if table is not None:
                 # Table found in cache (could be empty list or populated list)
+                if table_name == 'skills':
+                    logger.debug(f"DynamicGameDataLoader.get_table('{table_name}'): returning cached table with {len(table)} items")
                 return table
             
             # Table not in cache - try to load on-demand for prerequisite tables

@@ -78,11 +78,12 @@ def parse_gff_files_parallel(gff_files: List[Tuple[str, bytes]], max_workers: in
     if not gff_files:
         return results
     
-    # For single files, don't use multiprocessing (overhead not worth it)
-    if len(gff_files) == 1:
-        filename, data_bytes = gff_files[0]
-        result = parse_gff_data(filename, data_bytes)
-        results[filename] = result
+    # For single files or max_workers=1, don't use multiprocessing (overhead not worth it)
+    if len(gff_files) == 1 or max_workers == 1:
+        # Process files sequentially in the main process
+        for filename, data_bytes in gff_files:
+            result = parse_gff_data(filename, data_bytes)
+            results[filename] = result
         return results
     
     # Use multiprocessing for multiple files

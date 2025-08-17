@@ -133,24 +133,24 @@ pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, Str
     let backend_start = Instant::now();
     let client = reqwest::Client::new();
     let response = client
-        .get("http://localhost:8000/api/gamedata/paths/")
+        .get("http://localhost:8000/api/gamedata/config/")
         .send()
         .await
         .map_err(|e| format!("Failed to connect to FastAPI backend: {}", e))?;
     log::info!("[Rust] Backend API call took: {:?}", backend_start.elapsed());
     
     if !response.status().is_success() {
-        return Err("Failed to get NWN2 paths from backend".to_string());
+        return Err("Failed to get NWN2 configuration from backend".to_string());
     }
     
-    let paths_info: serde_json::Value = response
+    let config_info: serde_json::Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse paths response: {}", e))?;
+        .map_err(|e| format!("Failed to parse config response: {}", e))?;
     
     // Extract saves path from backend response
-    let saves_path_str = paths_info
-        .get("saves")
+    let saves_path_str = config_info
+        .get("saves_path")
         .and_then(|p| p.as_str())
         .ok_or("Backend did not return saves path")?;
     

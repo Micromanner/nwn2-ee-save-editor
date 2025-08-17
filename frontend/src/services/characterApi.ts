@@ -122,13 +122,13 @@ export interface CharacterData {
   updatedAt?: string;
 }
 
-// Base API URL - assumes Django is running on localhost:8000
+// Base API URL - FastAPI server running on localhost:8000
 const API_BASE_URL = 'http://localhost:8000/api';
 
 export class CharacterAPI {
   // Get character state (comprehensive data)
   static async getCharacterState(characterId: number): Promise<CharacterData> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/character_state/`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/state`);
     if (!response.ok) {
       throw new Error(`Failed to fetch character state: ${response.statusText}`);
     }
@@ -139,7 +139,8 @@ export class CharacterAPI {
 
   // Get character details (basic data)
   static async getCharacterDetails(characterId: number): Promise<CharacterData> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/`);
+    // Use summary endpoint instead of non-existent basic details endpoint
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/summary`);
     if (!response.ok) {
       throw new Error(`Failed to fetch character details: ${response.statusText}`);
     }
@@ -150,18 +151,15 @@ export class CharacterAPI {
 
   // List all characters
   static async listCharacters(): Promise<CharacterData[]> {
-    const response = await fetch(`${API_BASE_URL}/characters/`);
-    if (!response.ok) {
-      throw new Error(`Failed to list characters: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    return data.map((char: Record<string, unknown>) => this.mapBackendToFrontend(char));
+    // Backend doesn't have a list characters endpoint - this would need to be implemented
+    // For now, return empty array
+    console.warn('listCharacters() called but no backend endpoint exists');
+    return [];
   }
 
   // Import character from save game
-  static async importCharacter(savePath: string): Promise<CharacterData> {
-    const response = await fetch(`${API_BASE_URL}/savegames/import/`, {
+  static async importCharacter(savePath: string): Promise<{id: number; name: string}> {
+    const response = await fetch(`${API_BASE_URL}/savegames/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -171,47 +169,51 @@ export class CharacterAPI {
     
     if (!response.ok) {
       const errorData = await response.json();
-      const errorMessage = errorData.error?.message || `Failed to import character: ${response.statusText}`;
+      const errorMessage = errorData.detail || `Failed to import character: ${response.statusText}`;
       throw new Error(errorMessage);
     }
     
     const data = await response.json();
-    // FastAPI returns SavegameImportResponse with character wrapped in 'character' property
-    const characterData = data.character || data;
-    return this.mapBackendToFrontend(characterData);
+    // FastAPI returns character_id as string, convert to number and return proper format
+    const characterId = parseInt(data.character_id);
+    if (!characterId) {
+      throw new Error('Import successful but no character ID returned');
+    }
+    
+    return {
+      id: characterId,
+      name: data.character_name || 'Unknown Character'
+    };
   }
 
   // Update character data
   static async updateCharacter(characterId: number, updates: Partial<{ first_name: string; last_name: string; [key: string]: unknown }>): Promise<CharacterData> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
+    // Backend doesn't have a generic update character endpoint
+    // Use the savegame update endpoint with sync_current_state for now
+    console.warn('updateCharacter() called but no backend endpoint exists, using save instead');
+    await this.saveCharacter(characterId, updates);
     
-    if (!response.ok) {
-      throw new Error(`Failed to update character: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    return this.mapBackendToFrontend(data);
+    // Return updated character state
+    return this.getCharacterState(characterId);
   }
 
   // Save character changes to save game
   static async saveCharacter(characterId: number, updates: Record<string, unknown> = {}): Promise<{ success: boolean; changes: any; backup_created: boolean }> {
-    const response = await fetch(`${API_BASE_URL}/savegames/${characterId}/update/`, {
+    const response = await fetch(`${API_BASE_URL}/${characterId}/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ updates }),
+      body: JSON.stringify({ 
+        sync_current_state: true,
+        create_backup: true,
+        updates 
+      }),
     });
     
     if (!response.ok) {
       const errorData = await response.json();
-      const errorMessage = errorData.error?.message || `Failed to save character: ${response.statusText}`;
+      const errorMessage = errorData.detail || `Failed to save character: ${response.statusText}`;
       throw new Error(errorMessage);
     }
     
@@ -221,7 +223,7 @@ export class CharacterAPI {
   // Feat management methods
   static async getCharacterFeats(characterId: number, featType?: number): Promise<any> {
     const typeParam = featType !== undefined ? `?type=${featType}` : '';
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/state/${typeParam}`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/state${typeParam}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch character feats: ${response.statusText}`);
     }
@@ -265,7 +267,7 @@ export class CharacterAPI {
   }
 
   static async addFeat(characterId: number, featId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/add/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -275,14 +277,14 @@ export class CharacterAPI {
     
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || `Failed to add feat: ${response.statusText}`);
+      throw new Error(errorData.detail || `Failed to add feat: ${response.statusText}`);
     }
     
     return response.json();
   }
 
   static async removeFeat(characterId: number, featId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/remove/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/remove`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -292,14 +294,14 @@ export class CharacterAPI {
     
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || `Failed to remove feat: ${response.statusText}`);
+      throw new Error(errorData.detail || `Failed to remove feat: ${response.statusText}`);
     }
     
     return response.json();
   }
 
   static async getFeatDetails(characterId: number, featId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/details/`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/details`);
     if (!response.ok) {
       throw new Error(`Failed to fetch feat details: ${response.statusText}`);
     }
@@ -313,7 +315,7 @@ export class CharacterAPI {
     has_feat: boolean;
     missing_requirements: string[];
   }> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/validate/`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/validate`);
     if (!response.ok) {
       throw new Error(`Failed to validate feat: ${response.statusText}`);
     }
@@ -322,7 +324,7 @@ export class CharacterAPI {
 
   // Skills API methods
   static async getSkillsState(characterId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/state/`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/state`);
     if (!response.ok) {
       throw new Error(`Failed to fetch skills state: ${response.statusText}`);
     }
@@ -330,7 +332,7 @@ export class CharacterAPI {
   }
 
   static async updateSkills(characterId: number, skills: Record<number, number>): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/update/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -345,11 +347,15 @@ export class CharacterAPI {
   }
 
   static async resetSkills(characterId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/reset/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/reset`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        preserve_class_skills: false,
+        refund_percentage: 100
+      }),
     });
     
     if (!response.ok) {
@@ -360,31 +366,31 @@ export class CharacterAPI {
 
   // Attributes API methods
   static async getAttributesState(characterId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/attributes/`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/abilities`);
     if (!response.ok) {
-      throw new Error(`Failed to fetch attributes state: ${response.statusText}`);
+      throw new Error(`Failed to fetch abilities state: ${response.statusText}`);
     }
     return response.json();
   }
 
   static async updateAttributes(characterId: number, attributes: Record<string, number>): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/attributes/update/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/abilities/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ attributes }),
+      body: JSON.stringify({ attributes: attributes }),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to update attributes: ${response.statusText}`);
+      throw new Error(`Failed to update abilities: ${response.statusText}`);
     }
     return response.json();
   }
 
   // Alignment API methods
   static async getAlignment(characterId: number): Promise<{ lawChaos: number; goodEvil: number }> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment/`);
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment`);
     if (!response.ok) {
       throw new Error(`Failed to fetch alignment: ${response.statusText}`);
     }
@@ -392,7 +398,7 @@ export class CharacterAPI {
   }
 
   static async updateAlignment(characterId: number, alignment: { lawChaos: number; goodEvil: number }): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/update_alignment/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -408,7 +414,7 @@ export class CharacterAPI {
 
   // Combat stats API methods
   static async updateArmorClass(characterId: number, naturalAC: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-ac/`, {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-ac`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -422,20 +428,43 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Saving throws API methods
-  static async updateSavingThrows(characterId: number, saveUpdates: Record<string, number>): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/saves/update/`, {
+  // Initiative API methods
+  static async updateInitiativeBonus(characterId: number, initiativeBonus: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-initiative`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ save_bonuses: saveUpdates }),
+      body: JSON.stringify({ initiative_bonus: initiativeBonus }),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to update saving throws: ${response.statusText}`);
+      throw new Error(`Failed to update initiative bonus: ${response.statusText}`);
     }
     return response.json();
+  }
+
+  // Saving throws API methods
+  static async updateSavingThrows(characterId: number, saveUpdates: Record<string, number>): Promise<any> {
+    // Use misc-bonus endpoint for each save type (backend doesn't have bulk update)
+    const promises = Object.entries(saveUpdates).map(([saveType, value]) =>
+      fetch(`${API_BASE_URL}/characters/${characterId}/saves/misc-bonus`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ save_type: saveType, value }),
+      })
+    );
+    
+    const responses = await Promise.all(promises);
+    const failedResponses = responses.filter(r => !r.ok);
+    
+    if (failedResponses.length > 0) {
+      throw new Error(`Failed to update saving throws: ${failedResponses[0].statusText}`);
+    }
+    
+    return { success: true, updated: Object.keys(saveUpdates) };
   }
 
   // Map backend data structure to frontend interface
@@ -445,93 +474,89 @@ export class CharacterAPI {
       throw new Error('No character data received from backend');
     }
     
-    // Calculate derived values
-    const classes = (backendData.classes as Array<Record<string, unknown>>) || [];
-    const totalLevel = classes.reduce((sum: number, cls: { class_level?: number; level?: number }) => sum + (cls.class_level || cls.level || 0), 0);
+    console.log('Mapping backend data:', backendData);
+    
+    // Handle FastAPI response format - extract from nested structure
+    const summary = (backendData.summary as Record<string, unknown>) || backendData;
+    const info = (backendData.info as Record<string, unknown>) || {};
+    const abilities = (backendData.abilities as Record<string, unknown>) || summary.abilities || {};
+    const classesData = (backendData.classes as Record<string, unknown>) || summary.classes || {};
+    const alignmentData = (backendData.alignment as Record<string, unknown>) || summary.alignment || {};
+    
+    // Extract character ID - prefer from info, then summary, then root
+    const characterId = info.id || summary.id || backendData.id;
+    
+    // Extract name - prefer from summary, then info, then construct from parts
+    const name = summary.name || info.full_name || 
+                 `${info.first_name || ''} ${info.last_name || ''}`.trim() || 
+                 'Unknown Character';
+    
+    // Extract classes array
+    const classesArray = (classesData.classes as Array<Record<string, unknown>>) || [];
     
     // Map alignment from law_chaos and good_evil
     const alignmentMap: { [key: string]: string } = {
-      '0_0': 'True Neutral',
-      '0_1': 'Neutral Good',
-      '0_2': 'Neutral Evil',
-      '1_0': 'Lawful Neutral',
-      '1_1': 'Lawful Good',
-      '1_2': 'Lawful Evil',
-      '2_0': 'Chaotic Neutral',
-      '2_1': 'Chaotic Good',
-      '2_2': 'Chaotic Evil',
+      '0_0': 'True Neutral', '0_1': 'Neutral Good', '0_2': 'Neutral Evil',
+      '1_0': 'Lawful Neutral', '1_1': 'Lawful Good', '1_2': 'Lawful Evil', 
+      '2_0': 'Chaotic Neutral', '2_1': 'Chaotic Good', '2_2': 'Chaotic Evil',
     };
     
-    const alignmentKey = `${backendData.law_chaos || 0}_${backendData.good_evil || 0}`;
-    const alignment = backendData.alignment || alignmentMap[alignmentKey] || 'True Neutral';
-
+    const lawChaos = alignmentData.law_chaos || 0;
+    const goodEvil = alignmentData.good_evil || 0;
+    const alignmentKey = `${Math.floor(lawChaos / 50)}_${Math.floor(goodEvil / 50)}`;
+    const alignmentString = alignmentData.alignment_string || alignmentMap[alignmentKey] || 'True Neutral';
+    
     return {
-      id: backendData.id as number | undefined,
-      name: `${backendData.first_name || '-'} ${backendData.last_name || ''}`.trim() || 'Unknown',
-      race: String(backendData.race_name || backendData.race || 'Unknown'),
-      subrace: backendData.subrace_name ? String(backendData.subrace_name) : backendData.subrace ? String(backendData.subrace) : undefined,
-      gender: backendData.gender === 0 ? 'Male' : 'Female',
-      classes: classes.map((cls) => ({
-        name: String(cls.class_name || cls.name || 'Unknown Class'),
-        level: Number(cls.class_level || cls.level || 1)
+      id: typeof characterId === 'string' ? parseInt(characterId) : (characterId as number) || undefined,
+      name: String(name),
+      race: String(summary.race || info.race_name || 'Unknown'),
+      subrace: summary.subrace ? String(summary.subrace) : undefined,
+      gender: info.gender === 0 || info.gender === 'Male' ? 'Male' : 'Female',
+      classes: classesArray.map((cls) => ({
+        name: String(cls.name || 'Unknown Class'),
+        level: Number(cls.level || 1)
       })),
-      alignment: String(alignment),
-      deity: String(backendData.deity || 'None'),
-      level: Number(backendData.character_level || totalLevel || 1),
-      experience: Number(backendData.experience || 0),
-      hitPoints: Number(backendData.hit_points || backendData.current_hit_points || 10),
-      maxHitPoints: Number(backendData.max_hit_points || 10),
+      alignment: String(alignmentString),
+      deity: String(summary.deity || 'None'),
+      level: Number(summary.level || classesData.total_level || info.level || 1),
+      experience: Number(summary.experience || info.experience || 0),
+      hitPoints: Number(summary.current_hit_points || summary.hit_points || 10),
+      maxHitPoints: Number(summary.max_hit_points || 10),
       abilities: {
-        strength: Number(backendData.strength || 10),
-        dexterity: Number(backendData.dexterity || 10),
-        constitution: Number(backendData.constitution || 10),
-        intelligence: Number(backendData.intelligence || 10),
-        wisdom: Number(backendData.wisdom || 10),
-        charisma: Number(backendData.charisma || 10)
+        strength: Number(abilities.strength || 10),
+        dexterity: Number(abilities.dexterity || 10),
+        constitution: Number(abilities.constitution || 10),
+        intelligence: Number(abilities.intelligence || 10),
+        wisdom: Number(abilities.wisdom || 10),
+        charisma: Number(abilities.charisma || 10)
       },
       saves: {
-        fortitude: Number(backendData.fortitude_save || 0),
-        reflex: Number(backendData.reflex_save || 0),
-        will: Number(backendData.will_save || 0)
+        fortitude: Number((backendData.saves as any)?.fortitude || 0),
+        reflex: Number((backendData.saves as any)?.reflex || 0),
+        will: Number((backendData.saves as any)?.will || 0)
       },
-      armorClass: Number(backendData.armor_class || 10),
-      gold: Number(backendData.gold || 0),
-      location: backendData.current_area ? String(backendData.current_area) : backendData.area_name ? String(backendData.area_name) : backendData.module_name ? String(backendData.module_name) : undefined,
-      portrait: backendData.portrait ? String(backendData.portrait) : undefined,
-      customPortrait: backendData.custom_portrait ? String(backendData.custom_portrait) : undefined,
+      armorClass: Number(summary.armor_class || 10),
+      gold: Number(summary.gold || 0),
+      location: String(summary.area_name || backendData.area_name || ''),
+      portrait: summary.portrait ? String(summary.portrait) : undefined,
+      customPortrait: summary.custom_portrait ? String(summary.custom_portrait) : undefined,
       // Combat stats
-      baseAttackBonus: Number(backendData.base_attack_bonus || 0),
-      // Character progress (from character_state if available)
-      totalSkillPoints: backendData.skill_points_total ? Number(backendData.skill_points_total) : undefined,
-      availableSkillPoints: backendData.skill_points_available ? Number(backendData.skill_points_available) : undefined,
-      totalFeats: (backendData.feats as Array<unknown>)?.length || 0,
+      baseAttackBonus: Number(summary.base_attack_bonus || 0),
+      // Character progress
+      totalSkillPoints: summary.skill_points_total ? Number(summary.skill_points_total) : undefined,
+      availableSkillPoints: summary.skill_points_available ? Number(summary.skill_points_available) : undefined,
+      totalFeats: Number(summary.total_feats || 0),
       // Physical stats
-      movementSpeed: 30, // Default, as it's not in the backend data
-      size: 'Medium', // Default, as it's not in the backend data
-      initiative: Math.floor(((backendData.dexterity as number) - 10) / 2) || 0,
-      // Campaign info from backend
-      ...(backendData.campaign_name ? {
-        campaignName: String(backendData.campaign_name),
-        moduleName: String(backendData.module_name || ''),
-        campaignModules: backendData.campaign_modules as string[] || [],
-      } : {}),
-      // Quest data from globals.xml
-      ...(backendData.completed_quests_count !== undefined ? {
-        completedQuests: Number(backendData.completed_quests_count),
-        currentQuests: Number(backendData.active_quests_count || 0),
-        companionInfluence: backendData.companion_influence as Record<string, number> || {},
-        unlockedLocations: backendData.unlocked_locations as string[] || [],
-      } : {}),
-      // Enhanced campaign data
-      ...(backendData.game_act !== undefined ? {
-        gameAct: Number(backendData.game_act),
-        difficultyLevel: Number(backendData.difficulty_level || 1),
-        lastSavedTimestamp: Number(backendData.last_saved_timestamp || 0),
-        companionStatus: backendData.companion_status as Record<string, {name: string, influence: number, status: string, influence_found: boolean}> || {},
-        hiddenStatistics: backendData.hidden_statistics as Record<string, number> || {},
-        storyMilestones: backendData.story_milestones as Record<string, {name: string, milestones: Array<{description: string, completed: boolean, variable: string}>}> || {},
-        questDetails: backendData.quest_details as any || undefined,
-      } : {})
+      movementSpeed: 30,
+      size: 'Medium',
+      initiative: Math.floor(((abilities.dexterity as number || 10) - 10) / 2),
+      // Campaign info
+      campaignName: String(backendData.campaign_name || ''),
+      moduleName: String(backendData.module_name || ''),
+      // Quest data
+      completedQuests: Number((backendData.quest_details as any)?.summary?.completed_quests || 0),
+      currentQuests: Number((backendData.quest_details as any)?.summary?.active_quests || 0),
+      questDetails: backendData.quest_details as any
     };
   }
 }

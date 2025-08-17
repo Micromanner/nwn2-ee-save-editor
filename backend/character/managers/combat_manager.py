@@ -37,6 +37,10 @@ class CombatManager(EventEmitter):
         self._feat_cache = {}
         self._class_cache = {}
         
+        # BAB calculation cache to prevent redundant calculations during character loading
+        self._bab_cache = None
+        self._bab_cache_dirty = True
+        
         # Field mapping utility for 2DA access
         self.field_mapper = field_mapper
         
@@ -142,7 +146,11 @@ class CombatManager(EventEmitter):
         improved_init = 4 if self._has_feat_by_name('ImprovedInitiative') else 0
         
         # Check for other initiative bonuses (items, etc.)
-        misc_bonus = 0  # Would come from items/spells
+        # Try to get from character_data first, then fall back to GFF wrapper
+        misc_bonus = self.character_manager.character_data.get('initbonus', 0)
+        if misc_bonus == 0:
+            # Fallback to GFF wrapper for backwards compatibility
+            misc_bonus = self.gff.get('initbonus', 0)
         
         total_initiative = dex_mod + improved_init + misc_bonus
         
@@ -161,9 +169,8 @@ class CombatManager(EventEmitter):
         Returns:
             Dict with CMB and components
         """
-        # Get BAB from ClassManager
-        class_manager = self.character_manager.get_manager('class')
-        bab = class_manager.calculate_total_bab() if class_manager else 0
+        # Use our own BAB calculation
+        bab = self.calculate_base_attack_bonus()
         
         # Get STR modifier
         str_mod = (self.gff.get('Str', 10) - 10) // 2
@@ -680,9 +687,8 @@ class CombatManager(EventEmitter):
         Returns:
             Dict with melee and ranged attack bonuses and their components
         """
-        # Get BAB from ClassManager
-        class_manager = self.character_manager.get_manager('class')
-        bab = class_manager.calculate_total_bab() if class_manager else 0
+        # Use our own BAB calculation
+        bab = self.calculate_base_attack_bonus()
         
         # Get ability modifiers
         str_mod = (self.gff.get('Str', 10) - 10) // 2
@@ -727,14 +733,76 @@ class CombatManager(EventEmitter):
     # Missing methods called by views - basic implementations
     
     def calculate_base_attack_bonus(self) -> int:
-        """Calculate base attack bonus from classes"""
-        # Use existing get_attack_bonuses method
-        attack_bonuses = self.get_attack_bonuses()
-        return attack_bonuses.get('base_attack_bonus', 0)
+        """
+        Calculate base attack bonus from all classes with caching to prevent redundant calculations.
+        This is the authoritative BAB calculation method - moved from ClassManager.
+        """
+        # Use cache if available and not dirty
+        if not self._bab_cache_dirty and self._bab_cache is not None:
+            return self._bab_cache
+        
+        # Calculate BAB from all classes
+        class_list = self.gff.get('ClassList', [])
+        total_bab = 0
+        
+        for class_info in class_list:
+            class_id = class_info.get('Class', 0)
+            class_level = class_info.get('ClassLevel', 0)
+            
+            if class_level > 0:
+                class_data = self.game_data_loader.get_by_id('classes', class_id)
+                if class_data:
+                    class_bab = self._calculate_class_bab(class_data, class_level)
+                    total_bab += class_bab
+        
+        # Cache the result and mark as clean
+        self._bab_cache = total_bab
+        self._bab_cache_dirty = False
+        
+        # Only log once per character session, not on every calculation
+        if total_bab != self.gff.get('BaseAttackBonus', 0):
+            logger.info(f"Calculated total BAB: {total_bab}")
+        
+        return total_bab
     
     def get_base_attack_bonus(self) -> int:
         """Get base attack bonus - alias for calculate_base_attack_bonus for compatibility"""
         return self.calculate_base_attack_bonus()
+        
+    def _calculate_class_bab(self, class_data, level: int) -> int:
+        """Calculate BAB for a single class and level (moved from ClassManager)"""
+        # Use FieldMappingUtility for proper field access
+        bab_table_name = self.field_mapper.get_field_value(class_data, 'attack_bonus_table', '')
+        if not bab_table_name:
+            class_label = self.field_mapper.get_field_value(class_data, 'label', 'Unknown')
+            logger.warning(f"No BAB table found for class {class_label}")
+            return 0
+        
+        # Cache BAB table data (convert to lowercase for lookup)
+        bab_table_name_lower = bab_table_name.lower()
+        if bab_table_name_lower not in self._class_cache:
+            bab_table = self.game_data_loader.get_table(bab_table_name_lower)
+            if bab_table:
+                self._class_cache[bab_table_name_lower] = bab_table
+            else:
+                logger.warning(f"BAB table '{bab_table_name}' not found")
+                return 0
+        
+        bab_table = self._class_cache[bab_table_name_lower]
+        
+        # Get BAB for level (level - 1 because tables are 0-indexed)
+        level_idx = min(level - 1, 19)  # Cap at 20
+        if level_idx < len(bab_table):
+            bab_row = bab_table[level_idx]
+            # Use FieldMappingUtility to get BAB value with proper field mapping
+            bab_value = self.field_mapper.get_field_value(bab_row, 'bab', '0')
+            return self.field_mapper._safe_int(bab_value, 0)
+        
+        return 0
+        
+    def invalidate_bab_cache(self):
+        """Invalidate BAB cache when class data changes"""
+        self._bab_cache_dirty = True
         
     def _get_dex_modifier(self) -> int:
         """Get dexterity modifier"""  
@@ -804,6 +872,55 @@ class CombatManager(EventEmitter):
             'old_value': old_value,
             'new_value': value,
             'new_ac': new_ac
+        }
+    
+    def update_initiative_bonus(self, value: int) -> Dict[str, Any]:
+        """
+        Set initiative misc bonus
+        
+        Args:
+            value: The initiative misc bonus to set
+            
+        Returns:
+            Dict with old/new values and updated initiative
+        """
+        old_value = self.character_manager.character_data.get('initbonus', 0)
+        logger.info(f"DEBUG: old_value from character_data: {old_value}")
+        
+        # Engine limit - NWN2 engine uses BYTE for bonus fields (-128 to +127)
+        # This is an engine constraint, not a game rule
+        value = max(-128, min(127, int(value)))
+        
+        # Update the character data
+        self.character_manager.character_data['initbonus'] = value
+        
+        # Also update the GFF element if available
+        if hasattr(self.character_manager, '_gff_element') and self.character_manager._gff_element:
+            self.character_manager._gff_element.set_field('initbonus', value)
+        
+        # Calculate new initiative
+        new_initiative = self.calculate_initiative()
+        
+        # Emit change event using STATE_CHANGED
+        from ..events import EventType, EventData
+        event_data = EventData(
+            event_type=EventType.STATE_CHANGED,
+            source_manager='combat_manager',
+            timestamp=0
+        )
+        # Also emit with data dict for compatibility
+        self.emit(EventType.STATE_CHANGED, {
+            'field': 'initbonus',
+            'old_value': old_value,
+            'new_value': value,
+            'new_initiative': new_initiative
+        })
+        
+        return {
+            'field': 'initbonus',
+            'old_value': old_value,
+            'new_value': value,
+            'new_initiative': new_initiative
         }
     
     def calculate_melee_attack_bonus(self) -> int:

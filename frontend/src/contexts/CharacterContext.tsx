@@ -19,10 +19,10 @@ const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
   feats: { endpoint: 'feats/state' },
   spells: { endpoint: 'spells/state' },
   skills: { endpoint: 'skills/state' },
-  inventory: { endpoint: 'inventory/state' },
-  abilityScores: { endpoint: 'attributes/state' },
+  inventory: { endpoint: 'inventory/summary' }, // Updated to get inventory summary
+  abilityScores: { endpoint: 'abilities' },
   combat: { endpoint: 'combat/state' },
-  saves: { endpoint: 'saves/state' },
+  saves: { endpoint: 'saves/summary' }, // Updated to match backend
   classes: { endpoint: 'classes/state' },
 };
 
@@ -92,7 +92,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }));
 
     try {
-      const response = await fetch(`http://localhost:8000/api/characters/${characterId}/${config.endpoint}/`);
+      const response = await fetch(`http://localhost:8000/api/characters/${characterId}/${config.endpoint}`);
       
       if (!response.ok) {
         throw new Error(`Failed to load ${subsystem}: ${response.statusText}`);
@@ -145,7 +145,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
     // Here you would also send the update to the backend
     try {
-      const response = await fetch(`http://localhost:8000/api/characters/${characterId}/${SUBSYSTEM_CONFIG[subsystem].endpoint}/`, {
+      const response = await fetch(`http://localhost:8000/api/characters/${characterId}/${SUBSYSTEM_CONFIG[subsystem].endpoint}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -166,9 +166,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const loadCharacter = useCallback(async (id: number) => {
     setIsLoading(true);
     setError(null);
+    console.log('CharacterContext - Loading character with ID:', id);
     
     try {
       const data = await CharacterAPI.getCharacterState(id);
+      console.log('CharacterContext - Received character data:', data);
       setCharacter(data);
       setCharacterId(id);
       
@@ -177,7 +179,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load character';
       setError(errorMessage);
-      console.error('Failed to load character:', err);
+      console.error('CharacterContext - Failed to load character:', err);
     } finally {
       setIsLoading(false);
     }

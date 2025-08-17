@@ -28,7 +28,7 @@ class SkillManager(EventEmitter):
         """
         super().__init__()
         self.character_manager = character_manager
-        self.game_data_loader = character_manager.game_data_loader
+        self.game_rules_service = character_manager.rules_service
         self.gff = character_manager.gff
         
         # Register for events
@@ -66,7 +66,7 @@ class SkillManager(EventEmitter):
         logger.info(f"SkillManager handling level gain: Level {event.new_level}")
         
         # Calculate skill points for this level
-        class_data = self.game_data_loader.get_by_id('classes', event.class_id)
+        class_data = self.game_rules_service.get_by_id('classes', event.class_id)
         if class_data:
             modifiers = self._calculate_ability_modifiers()
             skill_points_gained = self.calculate_skill_points_for_level(
@@ -90,7 +90,7 @@ class SkillManager(EventEmitter):
         Returns:
             Total skill points
         """
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return 0
         
@@ -148,7 +148,7 @@ class SkillManager(EventEmitter):
             True if successful
         """
         # Validate skill ID exists (prevent crashes)
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         if not skill_data:
             logger.warning(f"Invalid skill ID: {skill_id}")
             return False
@@ -222,8 +222,13 @@ class SkillManager(EventEmitter):
         
         self.gff.set('SkillList', skill_list)
         
+        
         # Update available points (can go negative - user freedom)
         self.gff.set('SkillPoints', available_points - net_cost)
+        
+        # CRITICAL FIX: Clear skill cache to prevent stale data
+        if skill_id in self._skill_cache:
+            del self._skill_cache[skill_id]
         
         logger.info(f"Set skill {skill_id} to {ranks} ranks")
         return True
@@ -291,7 +296,7 @@ class SkillManager(EventEmitter):
         ranks = self.get_skill_ranks(skill_id)
         
         # Get ability modifier using dynamic skill data
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         key_ability = field_mapper.get_field_value(skill_data, 'key_ability', 'STR').upper() if skill_data else 'STR'
         
         modifiers = self._calculate_ability_modifiers()
@@ -350,19 +355,24 @@ class SkillManager(EventEmitter):
     
     def _get_class_skills(self, class_id: int) -> Set[int]:
         """Get set of class skills for a class using dynamic data"""
+        logger.info(f"_get_class_skills called for class_id={class_id}")
         if class_id in self._class_skills_cache:
+            logger.info(f"Found cached class skills for class_id={class_id}")
             return self._class_skills_cache[class_id]
         
         class_skills = set()
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
+        logger.info(f"Class data for class_id={class_id}: {class_data}")
         
         if class_data:
             # Get the skills table name from class data using FieldMappingUtility
             skills_table_name = field_mapper.get_field_value(class_data, 'skills_table', None)
+            logger.info(f"Skills table name for class_id={class_id}: {skills_table_name}")
             if skills_table_name:
                 # Load the specific class skills table (e.g., "CLS_SKILL_BARD")
                 # Convert to lowercase for table lookup (tables are stored in lowercase)
-                class_skills_table = self.game_data_loader.get_table(skills_table_name.lower())
+                class_skills_table = self.game_rules_service.get_table(skills_table_name.lower())
+                logger.info(f"Class skills table '{skills_table_name.lower()}' loaded: {class_skills_table is not None}")
                 if class_skills_table:
                     for skill_entry in class_skills_table:
                         # Check for ClassSkill field to ensure it's actually a class skill
@@ -461,7 +471,7 @@ class SkillManager(EventEmitter):
         if skill_id in self._skill_cache:
             return self._skill_cache[skill_id]
         
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         if skill_data:
             info = {
                 'id': skill_id,
@@ -517,47 +527,27 @@ class SkillManager(EventEmitter):
             }
             
             
-            if is_positional:
-                # Handle positional format (index = skill ID)
-                for skill_id, skill_entry in enumerate(skill_list):
-                    if not isinstance(skill_entry, dict):
-                        continue
-                    
-                    rank = skill_entry.get('Rank', 0)
-                    if rank > 0:
-                        skill_info = self.get_skill_info(skill_id)
-                        if skill_info:
-                            if skill_info['is_class_skill']:
-                                summary['class_skills'].append(skill_info)
-                            else:
-                                summary['cross_class_skills'].append(skill_info)
-            else:
-                # Handle old format (list of dicts with 'Skill' field)
-                for skill in skill_list:
-                    # Validate skill entry
-                    if not isinstance(skill, dict):
-                        logger.warning(f"Invalid skill entry in SkillList: {skill}")
-                        continue
-                        
-                    skill_id = skill.get('Skill')
-                    if skill_id is None:
-                        logger.warning(f"Skill entry missing 'Skill' field: {skill}")
-                        continue
-                    
-                    # Ensure skill_id is an integer
-                    try:
-                        skill_id = int(skill_id)
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid skill ID (not a number): {skill_id}")
-                        continue
-                        
-                    skill_info = self.get_skill_info(skill_id)
-                    
-                    if skill_info:
-                        if skill_info['is_class_skill']:
-                            summary['class_skills'].append(skill_info)
-                        else:
-                            summary['cross_class_skills'].append(skill_info)
+            # Get all skills using the working get_all_skills method
+            logger.debug("About to call get_all_skills() from get_skill_summary()")
+            all_skills = self.get_all_skills()
+            logger.debug(f"get_all_skills() returned {len(all_skills)} skills")
+            for skill in all_skills:
+                skill_info = {
+                    'id': skill['id'],
+                    'label': skill['name'],  # Add required label field
+                    'name': skill['name'],
+                    'key_ability': skill['key_ability'],
+                    'current_ranks': skill['ranks'],
+                    'max_ranks': skill['max_ranks'],
+                    'total_modifier': skill['modifier'],
+                    'is_class_skill': skill['is_class_skill'],
+                    'armor_check': skill.get('armor_check_penalty', False)
+                }
+                
+                if skill['is_class_skill']:
+                    summary['class_skills'].append(skill_info)
+                else:
+                    summary['cross_class_skills'].append(skill_info)
             
             return summary
         except Exception as e:
@@ -646,7 +636,7 @@ class SkillManager(EventEmitter):
                 
                 # Verify skill ID exists (prevent crash on load)
                 if ranks > 0:
-                    skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                    skill_data = self.game_rules_service.get_by_id('skills', skill_id)
                     if not skill_data:
                         errors.append(f"Invalid skill ID {skill_id}: skill does not exist in game data")
         else:
@@ -676,7 +666,7 @@ class SkillManager(EventEmitter):
                 
                 # Verify skill ID exists (prevent crash on load)
                 if ranks > 0:
-                    skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                    skill_data = self.game_rules_service.get_by_id('skills', skill_id)
                     if not skill_data:
                         errors.append(f"Invalid skill ID {skill_id}: skill does not exist in game data")
         
@@ -692,14 +682,12 @@ class SkillManager(EventEmitter):
         skills = []
         
         # Get all skills from game data
-        skills_table = self.game_data_loader.get_table('skills')
+        skills_table = self.game_rules_service.get_table('skills')
         if not skills_table:
             return skills
         
-        for skill_data in skills_table:
-            skill_id = field_mapper._safe_int(
-                field_mapper.get_field_value(skill_data, 'id', -1), -1
-            )
+        for skill_id, skill_data in enumerate(skills_table):
+            # Use table index as skill ID (standard for 2DA files)
             if skill_id < 0:
                 continue
             
@@ -741,7 +729,7 @@ class SkillManager(EventEmitter):
         total = roll + modifier
         
         # Get skill name
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
         
         return {
@@ -764,7 +752,7 @@ class SkillManager(EventEmitter):
         breakdown['ranks'] = ranks
         
         # Get ability modifier
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         if skill_data:
             key_ability = field_mapper.get_field_value(skill_data, 'key_ability', 'STR')
             if key_ability:
@@ -846,7 +834,7 @@ class SkillManager(EventEmitter):
         Returns:
             True if skill has armor check penalty
         """
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         if not skill_data:
             return False
             
@@ -875,7 +863,7 @@ class SkillManager(EventEmitter):
         # but some special cases exist
         
         # Knowledge skills might require literacy
-        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         if skill_data:
             skill_name = field_mapper.get_field_value(skill_data, 'label', '')
             
@@ -924,7 +912,7 @@ class SkillManager(EventEmitter):
                 if isinstance(skill_entry, dict):
                     ranks = skill_entry.get('Rank', 0)
                     if ranks > 0:
-                        skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                        skill_data = self.game_rules_service.get_by_id('skills', skill_id)
                         skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
                         build['skills'][skill_name] = {
                             'id': skill_id,
@@ -945,7 +933,7 @@ class SkillManager(EventEmitter):
                         except (ValueError, TypeError):
                             continue
                         if skill_id >= 0 and ranks > 0:
-                            skill_data = self.game_data_loader.get_by_id('skills', skill_id)
+                            skill_data = self.game_rules_service.get_by_id('skills', skill_id)
                             skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}') if skill_data else f'Skill {skill_id}'
                             build['skills'][skill_name] = {
                                 'id': skill_id,

@@ -69,6 +69,12 @@ class EncumbranceLimits(BaseModel):
     current_weight: int = Field(..., description="Current carried weight")
 
 
+class HitPoints(BaseModel):
+    """Character hit points"""
+    current: int = Field(..., description="Current hit points")
+    max: int = Field(..., description="Maximum hit points")
+
+
 class CharacterBiography(BaseModel):
     """Character background and biographical information"""
     name: str = ""
@@ -89,6 +95,7 @@ class AttributeState(BaseModel):
     
     # Derived statistics
     point_buy_cost: int = Field(..., description="Total point buy cost of current scores")
+    derived_stats: Dict[str, Any] = Field(..., description="Derived statistics including hit_points")
     encumbrance_limits: EncumbranceLimits
     saving_throw_modifiers: Dict[str, int]
     skill_modifiers: Dict[int, int] = Field(default_factory=dict, description="Skill ID -> modifier from abilities")

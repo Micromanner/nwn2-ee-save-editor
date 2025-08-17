@@ -487,6 +487,12 @@ class DataModelLoader:
                 progress = 45 + int((i / len(other_tables)) * 15)
                 if i % 10 == 0 or i == len(other_tables) - 1:
                     self.progress.update(f"Loaded class for {table_info['name']}", progress)
+        
+        # Log summary of vanilla vs dynamic classes
+        vanilla_count = sum(1 for name in self.generated_classes.keys() 
+                           if self._has_vanilla_class(name))
+        total_count = len(self.generated_classes)
+        logger.info(f"Class loading complete: {vanilla_count} vanilla classes, {total_count - vanilla_count} dynamic classes")
     
     def _load_class_for_table(self, table_info: Dict[str, Any]):
         """Load a class for a single table (synchronous for speed)."""
@@ -541,9 +547,10 @@ class DataModelLoader:
         try:
             # Try to import vanilla class from vanilla_classes directory
             from pathlib import Path
-            from django.conf import settings
             
-            vanilla_dir = Path(settings.BASE_DIR) / "gamedata" / "cache" / "vanilla_classes"
+            # Get backend directory (FastAPI app, not Django)
+            backend_dir = Path(__file__).parent.parent.parent
+            vanilla_dir = backend_dir / "gamedata" / "cache" / "vanilla_classes"
             vanilla_file = vanilla_dir / f"{table_name}.py"
             
             if not vanilla_file.exists():
@@ -567,15 +574,22 @@ class DataModelLoader:
             
             if hasattr(vanilla_module, class_name):
                 vanilla_class = getattr(vanilla_module, class_name)
-                logger.debug(f"Successfully loaded vanilla class {class_name} for {table_name}")
+                logger.debug(f"Loaded vanilla class for {table_name}")
                 return vanilla_class
             else:
-                logger.warning(f"Vanilla module for {table_name} doesn't contain expected class {class_name}")
+                logger.debug(f"Vanilla class not found for {table_name}, using dynamic generation")
                 return None
                 
         except Exception as e:
             logger.debug(f"Could not load vanilla class for {table_name}: {e}")
             return None
+    
+    def _has_vanilla_class(self, table_name: str) -> bool:
+        """Check if a table has a vanilla class available."""
+        backend_dir = Path(__file__).parent.parent.parent
+        vanilla_dir = backend_dir / "gamedata" / "cache" / "vanilla_classes"
+        vanilla_file = vanilla_dir / f"{table_name}.py"
+        return vanilla_file.exists()
     
     async def _load_table_data(self, tables: List[Dict[str, Any]]):
         """Load actual data into class instances with universal batch creation for maximum performance."""

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NWN2EE Save Editor",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.nwn2ee.saveeditor",
   "build": {
     "frontendDist": "../out",
@@ -10,6 +10,14 @@
     "beforeBuildCommand": "npm run build"
   },
   "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://api.github.com/repos/Micrommanner/nwn2_ee_editor/releases/latest"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEREQTE5OTY4NjY3QkNERDIKUldUU3pYdG1hSm1oM2YvbUZQNjZ3Qlc2RXhTNzRTYkpQTUhJL0pBdGJVeEtHOUNoWFIzaHI2NysK"
+    },
     "core": {
       "injectIpcScript": true
     }

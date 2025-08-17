@@ -5,30 +5,25 @@ Handles D&D alignment system operations
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 
 from fastapi_routers.dependencies import (
     get_character_manager,
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-from fastapi_models.shared_models import (
-    AlignmentResponse,
-    AlignmentUpdateRequest,
-    AlignmentShiftRequest,
-    AlignmentShiftResponse
-)
+# from fastapi_models.shared_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["alignment"])
+router = APIRouter(tags=["alignment"])
 
 
-@router.get("/characters/{character_id}/alignment/", response_model=AlignmentResponse)
+@router.get("/characters/{character_id}/alignment")
 def get_alignment(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
-) -> AlignmentResponse:
+    manager: CharacterManagerDep
+):  # Return type removed for lazy loading
     """
     Get character alignment
     
@@ -37,6 +32,7 @@ def get_alignment(
     - goodEvil: 0-100 scale (0=Evil, 50=Neutral, 100=Good)
     - alignment_string: Human readable alignment (e.g., "Lawful Good", "Chaotic Neutral")
     """
+    from fastapi_models.shared_models import AlignmentResponse
     
     try:
         # Use CharacterStateManager - no duplicated logic
@@ -54,12 +50,12 @@ def get_alignment(
         )
 
 
-@router.post("/characters/{character_id}/alignment/", response_model=AlignmentResponse)
+@router.post("/characters/{character_id}/alignment")
 def update_alignment(
     character_id: int,
-    alignment_data: AlignmentUpdateRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
-) -> AlignmentResponse:
+    char_session: CharacterSessionDep,
+    alignment_data = Body(...)  # Request body parameter
+):  # Return type removed for lazy loading
     """
     Update character alignment
     
@@ -68,7 +64,8 @@ def update_alignment(
     
     Returns updated alignment with unsaved changes flag
     """
-    character_info, session = char_session
+    from fastapi_models.shared_models import AlignmentUpdateRequest, AlignmentResponse
+    session = char_session
     
     try:
         manager = session.character_manager
@@ -76,8 +73,8 @@ def update_alignment(
         
         # Use CharacterStateManager - no duplicated logic
         result = state_manager.set_alignment(
-            law_chaos=alignment_data.lawChaos,
-            good_evil=alignment_data.goodEvil
+            law_chaos=alignment_data.get('lawChaos'),
+            good_evil=alignment_data.get('goodEvil')
         )
         
         # Add unsaved changes flag and validate response
@@ -97,12 +94,12 @@ def update_alignment(
         )
 
 
-@router.post("/characters/{character_id}/alignment/shift/", response_model=AlignmentShiftResponse)
+@router.post("/characters/{character_id}/alignment/shift")
 def shift_alignment(
     character_id: int,
-    shift_data: AlignmentShiftRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
-) -> AlignmentShiftResponse:
+    char_session: CharacterSessionDep,
+    shift_data = Body(...)  # Request body parameter
+):  # Return type removed for lazy loading
     """
     Shift alignment by a relative amount
     
@@ -112,7 +109,8 @@ def shift_alignment(
     
     Returns updated alignment
     """
-    character_info, session = char_session
+    from fastapi_models.shared_models import AlignmentShiftRequest, AlignmentShiftResponse
+    session = char_session
     
     try:
         manager = session.character_manager
@@ -120,8 +118,8 @@ def shift_alignment(
         
         # Use CharacterStateManager - no duplicated logic
         result = state_manager.shift_alignment(
-            law_chaos_shift=shift_data.lawChaosShift,
-            good_evil_shift=shift_data.goodEvilShift
+            law_chaos_shift=shift_data.get('lawChaosShift', 0),
+            good_evil_shift=shift_data.get('goodEvilShift', 0)
         )
         
         # Add unsaved changes flag and validate response
@@ -136,10 +134,10 @@ def shift_alignment(
         )
 
 
-@router.get("/characters/{character_id}/alignment/history/")
+@router.get("/characters/{character_id}/alignment/history")
 def get_alignment_history(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get alignment shift history (if tracked)

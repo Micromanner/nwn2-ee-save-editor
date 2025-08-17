@@ -24,24 +24,11 @@ cache = SimpleCache()
 
 from fastapi_routers.dependencies import (
     get_character_manager, 
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-from fastapi_models import (
-    FeatState,
-    FeatAddRequest,
-    FeatRemoveRequest,
-    FeatInfo,
-    AvailableFeatsResponse,
-    LegitimateFeatsResponse,
-    FeatAddResponse,
-    FeatRemoveResponse,
-    FeatPrerequisites,
-    FeatValidationResponse,
-    FeatDetails,
-    FeatsByCategoryResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +65,11 @@ def _get_feat_cache_key(character_id: int, operation: str, **params):
 def log_performance(func):
     """Decorator to log performance metrics for FastAPI endpoints"""
     @wraps(func)
-    async def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         start_time = time.time()
         result = None
         try:
-            result = await func(*args, **kwargs)
+            result = func(*args, **kwargs)  # Remove await since functions are sync
             return result
         finally:
             end_time = time.time()
@@ -95,15 +82,16 @@ def log_performance(func):
     return wrapper
 
 
-@router.get("/characters/{character_id}/feats/state/", response_model=FeatState)
+@router.get("/characters/{character_id}/feats/state")
 @log_performance
 def get_feats_state(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get current feats state (no expensive available_feats calculation)"""
+    from fastapi_models import FeatState
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         # Use existing manager methods to build feat state (fast version - no expensive operations)
         feat_summary = feat_manager.get_feat_summary_fast()
@@ -132,15 +120,16 @@ def get_feats_state(
         )
 
 
-@router.get("/characters/{character_id}/feats/available/", response_model=AvailableFeatsResponse)
+@router.get("/characters/{character_id}/feats/available")
 def get_available_feats(
     character_id: int,
-    feat_type: Optional[int] = Query(None, description="Filter by feat type"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep,
+    feat_type: Optional[int] = Query(None, description="Filter by feat type")
 ):
     """Get feats available for selection based on current state"""
+    from fastapi_models import AvailableFeatsResponse
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         # Use feat manager method - no duplicated logic
         available = feat_manager.get_available_feats(feat_type=feat_type)
@@ -158,19 +147,20 @@ def get_available_feats(
         )
 
 
-@router.get("/characters/{character_id}/feats/legitimate/", response_model=LegitimateFeatsResponse)
+@router.get("/characters/{character_id}/feats/legitimate")
 @log_performance
 def get_legitimate_feats(
     character_id: int,
+    manager: CharacterManagerDep,
     feat_type: Optional[int] = Query(None, description="Filter by feat type"),
     category: str = Query("", description="Filter by category"),
     subcategory: str = Query("", description="Filter by subcategory"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=200, description="Items per page"),
-    search: str = Query("", description="Search term"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    search: str = Query("", description="Search term")
 ):
     """Get legitimate feats with pagination and smart filtering (no validation for performance)"""
+    from fastapi_models import LegitimateFeatsResponse
     # Use helper function to generate cache key - no duplicated logic
     cache_key = _get_feat_cache_key(
         character_id, 
@@ -189,7 +179,7 @@ def get_legitimate_feats(
         return LegitimateFeatsResponse(**cached_response)
     
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         # Use existing manager method and apply pagination manually
         if category or subcategory:
@@ -235,16 +225,17 @@ def get_legitimate_feats(
         )
 
 
-@router.post("/characters/{character_id}/feats/add/", response_model=FeatAddResponse)
+@router.post("/characters/{character_id}/feats/add")
 @log_performance
 def add_feat(
     character_id: int,
-    feat_request: FeatAddRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    feat_request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """Add a feat to character"""
+    from fastapi_models import FeatAddRequest, FeatAddResponse
     try:
-        character, session = char_session
+        session = char_session
         manager = session.character_manager
         feat_manager = manager.get_manager('feat')
         
@@ -290,15 +281,16 @@ def add_feat(
         )
 
 
-@router.post("/characters/{character_id}/feats/remove/", response_model=FeatRemoveResponse)
+@router.post("/characters/{character_id}/feats/remove")
 def remove_feat(
     character_id: int,
-    feat_request: FeatRemoveRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    feat_request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """Remove a feat from character"""
+    from fastapi_models import FeatRemoveRequest, FeatRemoveResponse
     try:
-        character, session = char_session
+        session = char_session
         manager = session.character_manager
         feat_manager = manager.get_manager('feat')
         
@@ -344,15 +336,16 @@ def remove_feat(
         )
 
 
-@router.get("/characters/{character_id}/feats/{feat_id}/prerequisites/", response_model=FeatPrerequisites)
+@router.get("/characters/{character_id}/feats/{feat_id}/prerequisites")
 def get_feat_prerequisites(
     character_id: int,
     feat_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get prerequisites for a specific feat"""
+    from fastapi_models import FeatPrerequisites
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         can_take, missing_reqs = feat_manager.get_feat_prerequisites_info(feat_id)
         feat_info = feat_manager.get_feat_info(feat_id)
@@ -382,15 +375,16 @@ def get_feat_prerequisites(
         )
 
 
-@router.get("/characters/{character_id}/feats/{feat_id}/check/", response_model=FeatValidationResponse)
+@router.get("/characters/{character_id}/feats/{feat_id}/check")
 def check_feat_prerequisites(
     character_id: int,
     feat_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Check if character meets prerequisites for a feat"""
+    from fastapi_models import FeatValidationResponse
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         can_take, reason = feat_manager.can_take_feat(feat_id)
         has_feat = feat_manager.has_feat(feat_id)
@@ -424,15 +418,16 @@ def check_feat_prerequisites(
         )
 
 
-@router.get("/characters/{character_id}/feats/{feat_id}/details/", response_model=FeatDetails)
+@router.get("/characters/{character_id}/feats/{feat_id}/details")
 def get_feat_details(
     character_id: int,
     feat_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get detailed information about a specific feat including description and prerequisites"""
+    from fastapi_models import FeatDetails
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         # Get detailed feat information
         feat_info = feat_manager.get_feat_info(feat_id)
@@ -463,20 +458,21 @@ def get_feat_details(
         )
 
 
-@router.get("/characters/{character_id}/feats/{feat_id}/validate/", response_model=FeatValidationResponse)
+@router.get("/characters/{character_id}/feats/{feat_id}/validate")
 @log_performance
 def validate_feat(
     character_id: int,
     feat_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Validate if character can take a specific feat (on-demand validation).
     This is the performance-optimized replacement for checking prerequisites
     during list loading. Call this when user hovers/clicks on a feat.
     """
+    from fastapi_models import FeatValidationResponse, FeatPrerequisites
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         # Check if character already has the feat
         if feat_manager.has_feat(feat_id):
@@ -536,15 +532,16 @@ def validate_feat(
         )
 
 
-@router.get("/characters/{character_id}/feats/by-category/", response_model=FeatsByCategoryResponse)
+@router.get("/characters/{character_id}/feats/by-category")
 @log_performance
 def get_feats_by_category(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get feats organized by category (fast display version, no validation)"""
+    from fastapi_models import FeatsByCategoryResponse
     try:
-            feat_manager = manager.get_manager('feat')
+        feat_manager = manager.get_manager('feat')
         
         # Use existing manager method to get categories
         categories = feat_manager.get_feat_categories_fast() or {}

@@ -16,11 +16,7 @@ from fastapi_core.session_registry import (
 )
 # Removed character_info dependency - use actual session instead
 from fastapi_routers.dependencies import check_system_ready
-from fastapi_models import (
-    SessionStatus,
-    ActiveSessionsList,
-    SessionInfo
-)
+# Lazy import for startup performance - models loaded in background
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +48,16 @@ def _get_character_name_from_session(session, character_id: int) -> str:
         return f"Character {character_id}"
 
 
-@router.post("/characters/{character_id}/session/start/", response_model=SessionStatus)
+@router.post("/characters/{character_id}/session/start")
 def start_session(
     character_id: int,
     ready_check: None = Depends(check_system_ready)
 ):
     """Start or get existing character session"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import SessionInfo, SessionStatus
+        
         # Use helper functions - no duplicated logic
         file_path = _get_file_path(character_id)
         
@@ -95,7 +94,7 @@ def start_session(
         )
 
 
-@router.delete("/characters/{character_id}/session/stop/")
+@router.delete("/characters/{character_id}/session/stop")
 def stop_session(character_id: int):
     """Stop character session"""
     try:
@@ -125,10 +124,13 @@ def stop_session(character_id: int):
         )
 
 
-@router.get("/characters/{character_id}/session/status/", response_model=SessionStatus)
+@router.get("/characters/{character_id}/session/status")
 def get_session_status(character_id: int):
     """Get session status for a character"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import SessionInfo, SessionStatus
+        
         # Use helper function - no duplicated logic
         try:
             file_path = _get_file_path(character_id)
@@ -166,7 +168,7 @@ def get_session_status(character_id: int):
         )
 
 
-@router.post("/characters/{character_id}/session/save/")
+@router.post("/characters/{character_id}/session/save")
 def save_session(character_id: int):
     """Save character session to disk"""
     try:
@@ -201,10 +203,11 @@ def save_session(character_id: int):
         )
 
 
-@router.get("/characters/session/list/", response_model=ActiveSessionsList)
+@router.get("/characters/session/list")
 def list_character_sessions():
     """List all active character sessions"""
     try:
+        from fastapi_models import ActiveSessionsList, SessionInfo
         active_sessions = get_active_sessions()
         
         # Convert to SessionInfo objects - character name already extracted by get_active_sessions()

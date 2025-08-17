@@ -286,7 +286,7 @@ class DefensiveStats(BaseModel):
 
 class NaturalArmorUpdateRequest(BaseModel):
     """Request to update natural armor value"""
-    natural_ac: int = Field(..., ge=0, le=20, description="New natural armor bonus")
+    natural_ac: int = Field(..., ge=0, le=255, description="New natural armor bonus")
 
 
 class NaturalArmorUpdateResponse(BaseModel):
@@ -299,3 +299,17 @@ class NaturalArmorUpdateResponse(BaseModel):
     
     # Legacy field for compatibility
     updated_ac: Optional[Dict[str, Any]] = Field(None, description="Updated AC calculation (deprecated name)")
+
+
+class InitiativeBonusUpdateRequest(BaseModel):
+    """Request to update initiative misc bonus value"""
+    initiative_bonus: int = Field(..., ge=-128, le=127, description="New initiative misc bonus")
+
+
+class InitiativeBonusUpdateResponse(BaseModel):
+    """Response after updating initiative bonus - matches manager output"""
+    field: str = "initbonus"
+    old_value: int
+    new_value: int
+    new_initiative: Dict[str, Any] = Field(default_factory=dict, description="New initiative calculation from manager")
+    has_unsaved_changes: bool = True

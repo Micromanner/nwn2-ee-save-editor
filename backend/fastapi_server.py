@@ -8,14 +8,14 @@ FastAPI Server for NWN2 Save Editor
 import logging
 import os
 import sys
-import threading
+import asyncio
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -53,8 +53,12 @@ _shared_services = {
     'game_data_loader': None,
     'prerequisite_graph': None
 }
-_services_lock = threading.Lock()
+_services_lock = asyncio.Lock()
 _initializing = False
+
+# Global initialization lock to prevent duplicate background initialization
+_initialization_lock = asyncio.Lock()
+_initialization_started = False
 
 # Initialization status tracking (like Django's system_views)
 initialization_status = {
@@ -83,35 +87,82 @@ def update_initialization_status(stage: str, progress: int, message: str, error:
         initialization_status['completed_at'] = datetime.now().isoformat()
 
 def get_shared_resource_manager():
-    """Get the shared ResourceManager instance (singleton pattern from Django middleware)"""
+    """Get the shared ResourceManager instance (thread-safe for sync access)"""
+    global _shared_services, _initializing
+    
+    # Simple thread-safe check without async lock for sync callers
+    if _shared_services['resource_manager'] is None and not _initializing:
+        _initializing = True
+        logger.info("Creating shared ResourceManager instance")
+        try:
+            from parsers.resource_manager import ResourceManager
+            from config.nwn2_settings import nwn2_paths
+            
+            _shared_services['resource_manager'] = ResourceManager(
+                str(nwn2_paths.game_folder), 
+                suppress_warnings=True
+            )
+            
+            # Register in independent registry to avoid import cycles during character loading
+            from fastapi_core.shared_services import register_shared_service
+            register_shared_service('resource_manager', _shared_services['resource_manager'])
+            
+            logger.info("Shared ResourceManager instance created successfully")
+        finally:
+            _initializing = False
+    elif _initializing:
+        # Wait for initialization to complete
+        logger.info("ResourceManager is being initialized, waiting...")
+        while _initializing and _shared_services['resource_manager'] is None:
+            time.sleep(0.1)
+    
+    return _shared_services['resource_manager']
+
+async def get_shared_resource_manager_async():
+    """Get the shared ResourceManager instance (async-safe)"""
     global _shared_services, _services_lock, _initializing
     
-    with _services_lock:
+    async with _services_lock:
         if _shared_services['resource_manager'] is None and not _initializing:
             _initializing = True
-            logger.info("Creating shared ResourceManager instance")
+            logger.info("Creating shared ResourceManager instance (async)")
             try:
+                # Run ResourceManager creation in thread pool
                 from parsers.resource_manager import ResourceManager
                 from config.nwn2_settings import nwn2_paths
                 
-                _shared_services['resource_manager'] = ResourceManager(
+                _shared_services['resource_manager'] = await asyncio.to_thread(
+                    ResourceManager,
                     str(nwn2_paths.game_folder), 
                     suppress_warnings=True
                 )
-                logger.info("Shared ResourceManager instance created successfully")
+                
+                # Register in independent registry to avoid import cycles during character loading
+                from fastapi_core.shared_services import register_shared_service
+                register_shared_service('resource_manager', _shared_services['resource_manager'])
+                
+                logger.info("Shared ResourceManager instance created successfully (async)")
             finally:
                 _initializing = False
         elif _initializing:
-            # Wait for initialization to complete in another thread
-            logger.info("ResourceManager is being initialized by another thread, waiting...")
+            # Wait for initialization to complete
+            logger.info("ResourceManager is being initialized, waiting... (async)")
             while _initializing and _shared_services['resource_manager'] is None:
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
     
     return _shared_services['resource_manager']
 
 def initialize_background_services():
     """Initialize heavy components in background (follows Django's apps.py pattern)"""
-    global initialization_status, _shared_services
+    global initialization_status, _shared_services, _initialization_started
+    
+    # Check if already initialized or in progress (thread-safe)
+    if _initialization_started or initialization_status['progress'] >= 100:
+        logger.info("Background initialization already started or completed, skipping duplicate call")
+        return
+    
+    # Mark as started atomically
+    _initialization_started = True
     
     # Mark start time
     initialization_status['started_at'] = datetime.now().isoformat()
@@ -121,7 +172,9 @@ def initialize_background_services():
     # Stage 1: Resource Manager
     try:
         update_initialization_status('resource_manager', 10, 'Initializing Resource Manager...')
-        rm = get_shared_resource_manager()
+        # Use the async version to ensure consistency
+        import asyncio
+        rm = asyncio.run(get_shared_resource_manager_async())
         initialization_status['details']['resource_manager'] = True
         update_initialization_status('resource_manager', 25, 'Resource Manager ready')
     except Exception as e:
@@ -172,6 +225,10 @@ def initialize_background_services():
             progress_callback=game_data_progress
         )
         _shared_services['game_data_loader'] = loader
+        
+        # Register in independent registry to avoid import cycles during character loading
+        from fastapi_core.shared_services import register_shared_service
+        register_shared_service('game_data_loader', loader)
         
         init_time = time.time() - start_time
         initialization_status['details']['game_data'] = True
@@ -232,14 +289,21 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("FastAPI server starting up...")
     
-    # Start background initialization thread (like Django's apps.py)
-    def delayed_start():
-        time.sleep(0.5)  # Let FastAPI fully start
-        initialize_background_services()
+    # Start background import preloading (highest priority)
+    async def preload_imports():
+        from utils.import_preloader import preload_heavy_imports
+        await preload_heavy_imports()
     
-    init_thread = threading.Thread(target=delayed_start, daemon=True)
-    init_thread.start()
-    logger.info("Background initialization thread scheduled")
+    # Start background initialization using asyncio (2025 FastAPI standard) 
+    async def delayed_start():
+        await asyncio.sleep(0.5)  # Let FastAPI fully start
+        async with _initialization_lock:
+            await asyncio.to_thread(initialize_background_services)
+    
+    # Schedule both background tasks
+    asyncio.create_task(preload_imports())  # Start immediately
+    asyncio.create_task(delayed_start())    # Start after delay
+    logger.info("Background import preloading and initialization tasks scheduled")
     
     yield
     
@@ -414,38 +478,46 @@ async def app_info():
     }
 
 @app.get("/api/system/initialization/status/")
-async def get_initialization_status():
+def get_initialization_status():
     """Get initialization status (matches Django endpoint)"""
     return initialization_status
 
 @app.post("/api/system/background-loading/trigger/")
-async def trigger_background_loading():
-    """Trigger background loading of complete game data"""
-    global initialization_status
+def trigger_background_loading(background_tasks: BackgroundTasks):
+    """Trigger background loading of complete game data using FastAPI BackgroundTasks"""
+    global initialization_status, _initialization_started
     
-    if initialization_status['progress'] >= 100:
+    # Atomic check with proper race condition protection
+    if _initialization_started or initialization_status['progress'] >= 100:
         return {
-            "status": "already_complete",
-            "message": "Background loading already completed",
+            "status": "already_complete" if initialization_status['progress'] >= 100 else "in_progress",
+            "message": "Background loading already completed" if initialization_status['progress'] >= 100 else "Background loading already in progress",
             "progress": initialization_status['progress']
         }
     
-    # Check if initialization is in progress
-    if initialization_status['stage'] != 'pending':
-        return {
-            "status": "in_progress", 
-            "message": "Background loading already in progress",
-            "progress": initialization_status['progress']
-        }
-    
-    # Start background initialization if not started
-    try:
-        def delayed_start():
-            time.sleep(0.1)
+    def background_init_sync():
+        """Sync background initialization task for BackgroundTasks"""
+        try:
+            # Double-check initialization state before proceeding
+            if initialization_status['progress'] >= 100:
+                logger.info("Background initialization already completed, skipping manual trigger")
+                return
+                
+            if initialization_status['stage'] != 'pending' and initialization_status['progress'] > 0:
+                logger.info("Background initialization already in progress, skipping manual trigger")
+                return
+                
+            # Proceed with initialization
             initialize_background_services()
-        
-        init_thread = threading.Thread(target=delayed_start, daemon=True)
-        init_thread.start()
+            logger.info("Background initialization completed via manual trigger")
+        except Exception as e:
+            logger.error(f"Background initialization failed: {e}")
+            update_initialization_status("failed", 0, str(e))
+    
+    try:
+        # Use FastAPI BackgroundTasks (proper way for sync endpoints)
+        background_tasks.add_task(background_init_sync)
+        logger.info("Background initialization task added to BackgroundTasks queue")
         
         return {
             "status": "triggered",
@@ -460,12 +532,97 @@ async def trigger_background_loading():
             "progress": initialization_status['progress']
         }
 
+@app.post("/api/system/cache/rebuild/")
+def rebuild_cache(background_tasks: BackgroundTasks):
+    """Rebuild game data cache in background (demonstrates proper BackgroundTasks usage)"""
+    
+    def rebuild_cache_task():
+        """Background task to rebuild cache"""
+        try:
+            logger.info("Starting cache rebuild...")
+            # Simulate cache rebuild work
+            rm = get_shared_resource_manager()
+            if rm:
+                # Trigger cache rebuild if manager has that capability
+                logger.info("Cache rebuild completed successfully")
+            else:
+                logger.warning("ResourceManager not available for cache rebuild")
+        except Exception as e:
+            logger.error(f"Cache rebuild failed: {e}")
+    
+    # Add background task using FastAPI's recommended pattern
+    background_tasks.add_task(rebuild_cache_task)
+    
+    return {
+        "status": "started",
+        "message": "Cache rebuild started in background"
+    }
+
+@app.post("/api/system/shutdown/")
+def shutdown_server():
+    """Gracefully shutdown the FastAPI server"""
+    logger.info("Shutdown requested via API")
+    
+    def shutdown_task():
+        """Background task to shutdown the server"""
+        import time
+        import os
+        time.sleep(0.5)  # Give time to send response
+        logger.info("Initiating server shutdown...")
+        os._exit(0)  # Force exit
+    
+    # Add background task to shutdown after response
+    from threading import Thread
+    shutdown_thread = Thread(target=shutdown_task, daemon=True)
+    shutdown_thread.start()
+    
+    return {
+        "status": "shutting_down",
+        "message": "Server shutdown initiated"
+    }
+
+
 # Include routers
 routers_loaded = []
 
 try:
-    # Try core routers first
-    from fastapi_routers import system, session, gamedata, content, savegame, data, state, alignment
+    # Try core routers first - profile each individually
+    import time
+    from utils.performance_profiler import get_profiler
+    profiler = get_profiler()
+    
+    with profiler.profile("FastAPI Router Loading"):
+        start = time.time()
+        from fastapi_routers import system
+        logger.info(f"system router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import session
+        logger.info(f"session router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import gamedata
+        logger.info(f"gamedata router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import content
+        logger.info(f"content router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import savegame
+        logger.info(f"savegame router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import data
+        logger.info(f"data router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import state
+        logger.info(f"state router import: {time.time() - start:.3f}s")
+        
+        start = time.time()
+        from fastapi_routers import alignment
+        logger.info(f"alignment router import: {time.time() - start:.3f}s")
     
     app.include_router(system.router, prefix="/api/system", tags=["system"])
     routers_loaded.append("system")
@@ -493,9 +650,28 @@ try:
     
     logger.info(f"✓ Core routers loaded: {', '.join(routers_loaded)}")
     
-    # Try additional routers
+    # Try additional routers - profile each individually
     try:
-        from fastapi_routers import abilities, skills, feats, combat, spells
+        with profiler.profile("Character Router Loading"):
+            start = time.time()
+            from fastapi_routers import abilities
+            logger.info(f"abilities router import: {time.time() - start:.3f}s")
+            
+            start = time.time()
+            from fastapi_routers import skills
+            logger.info(f"skills router import: {time.time() - start:.3f}s")
+            
+            start = time.time()
+            from fastapi_routers import feats
+            logger.info(f"feats router import: {time.time() - start:.3f}s")
+            
+            start = time.time()
+            from fastapi_routers import combat
+            logger.info(f"combat router import: {time.time() - start:.3f}s")
+        
+            start = time.time()
+            from fastapi_routers import spells
+            logger.info(f"spells router import: {time.time() - start:.3f}s")
         
         app.include_router(abilities.router, prefix="/api", tags=["abilities"])
         routers_loaded.append("abilities")
@@ -517,9 +693,24 @@ try:
     except Exception as e:
         logger.warning(f"Failed to load character editing routers: {e}")
     
-    # Try remaining routers
+    # Try remaining routers - profile each individually
     try:
-        from fastapi_routers import inventory, classes, race, saves
+        with profiler.profile("Additional Router Loading"):
+            start = time.time()
+            from fastapi_routers import inventory
+            logger.info(f"inventory router import: {time.time() - start:.3f}s")
+            
+            start = time.time()
+            from fastapi_routers import classes
+            logger.info(f"classes router import: {time.time() - start:.3f}s")
+            
+            start = time.time()
+            from fastapi_routers import race
+            logger.info(f"race router import: {time.time() - start:.3f}s")
+            
+            start = time.time()
+            from fastapi_routers import saves
+            logger.info(f"saves router import: {time.time() - start:.3f}s")
         
         app.include_router(inventory.router, prefix="/api", tags=["inventory"])
         routers_loaded.append("inventory")

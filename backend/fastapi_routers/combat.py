@@ -4,36 +4,29 @@ Handles BAB, AC, attack bonuses, damage, and combat statistics
 """
 
 import logging
+from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from fastapi_routers.dependencies import (
     get_character_manager, 
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-from fastapi_models import (
-    CombatState,
-    BaseAttackBonusInfo,
-    ArmorClassBreakdown,
-    AttackBonusBreakdown,
-    DamageBonusBreakdown,
-    EquippedWeapons,
-    NaturalArmorUpdateRequest,
-    NaturalArmorUpdateResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/characters/{character_id}/combat/state/", response_model=CombatState)
+@router.get("/characters/{character_id}/combat/state")
 def get_combat_state(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get current combat statistics for the combat editor"""
+    from fastapi_models import CombatState
     
     try:
         combat_manager = manager.get_manager('combat')
@@ -74,12 +67,13 @@ def get_combat_state(
         )
 
 
-@router.get("/characters/{character_id}/combat/bab/", response_model=BaseAttackBonusInfo)
+@router.get("/characters/{character_id}/combat/bab")
 def get_base_attack_bonus(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get detailed base attack bonus breakdown"""
+    from fastapi_models import BaseAttackBonusInfo
     
     try:
         combat_manager = manager.get_manager('combat')
@@ -110,12 +104,13 @@ def get_base_attack_bonus(
         )
 
 
-@router.get("/characters/{character_id}/combat/ac/", response_model=ArmorClassBreakdown)
+@router.get("/characters/{character_id}/combat/ac")
 def get_armor_class(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get detailed armor class breakdown"""
+    from fastapi_models import ArmorClassBreakdown
     
     try:
         combat_manager = manager.get_manager('combat')
@@ -134,10 +129,10 @@ def get_armor_class(
         )
 
 
-@router.get("/characters/{character_id}/combat/attacks/")
+@router.get("/characters/{character_id}/combat/attacks")
 def get_attack_bonuses(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get detailed attack bonus breakdown"""
     
@@ -157,14 +152,18 @@ def get_attack_bonuses(
         )
 
 
-@router.post("/characters/{character_id}/combat/update-ac/", response_model=NaturalArmorUpdateResponse)
+@router.post("/characters/{character_id}/combat/update-ac")
 def update_natural_armor(
     character_id: int,
-    request: NaturalArmorUpdateRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
 ):
     """Update character's natural armor bonus"""
-    character, session = char_session
+    from fastapi_models import NaturalArmorUpdateRequest, NaturalArmorUpdateResponse
+    session = char_session
+    
+    # Create NaturalArmorUpdateRequest from raw data
+    natural_armor_data = NaturalArmorUpdateRequest(**request_data)
     
     try:
         manager = session.character_manager
@@ -172,12 +171,12 @@ def update_natural_armor(
         
         # Use combat manager method - no duplicated logic
         old_value = manager.gff.get('NaturalAC', 0)
-        result = combat_manager.update_natural_armor(request.natural_ac)
+        result = combat_manager.update_natural_armor(natural_armor_data.natural_ac)
         
         return NaturalArmorUpdateResponse(
             field='NaturalAC',
             old_value=old_value,
-            new_value=request.natural_ac,
+            new_value=natural_armor_data.natural_ac,
             new_ac=result.get('new_ac', {}),
             has_unsaved_changes=session.has_unsaved_changes()
         )
@@ -190,10 +189,47 @@ def update_natural_armor(
         )
 
 
-@router.get("/characters/{character_id}/combat/damage/")
+@router.post("/characters/{character_id}/combat/update-initiative")
+def update_initiative_bonus(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
+):
+    """Update character's initiative misc bonus"""
+    from fastapi_models import InitiativeBonusUpdateRequest, InitiativeBonusUpdateResponse
+    session = char_session
+    
+    # Create InitiativeBonusUpdateRequest from raw data
+    initiative_data = InitiativeBonusUpdateRequest(**request_data)
+    
+    try:
+        manager = session.character_manager
+        combat_manager = manager.get_manager('combat')
+        
+        # Use combat manager method - no duplicated logic
+        old_value = manager.gff.get('initbonus', 0)
+        result = combat_manager.update_initiative_bonus(initiative_data.initiative_bonus)
+        
+        return InitiativeBonusUpdateResponse(
+            field='initbonus',
+            old_value=old_value,
+            new_value=initiative_data.initiative_bonus,
+            new_initiative=result.get('new_initiative', {}),
+            has_unsaved_changes=session.has_unsaved_changes()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to update initiative bonus for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update initiative bonus: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/combat/damage")
 def get_damage_bonuses(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get detailed damage bonus breakdown"""
     
@@ -213,12 +249,13 @@ def get_damage_bonuses(
         )
 
 
-@router.get("/characters/{character_id}/combat/weapons/", response_model=EquippedWeapons)
+@router.get("/characters/{character_id}/combat/weapons")
 def get_equipped_weapons(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get information about equipped weapons"""
+    from fastapi_models import EquippedWeapons
     
     try:
         combat_manager = manager.get_manager('combat')

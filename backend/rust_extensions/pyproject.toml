@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "nwn2-rust-extensions"
-version = "0.1.0"
+version = "1.0.0"
 description = "Rust performance extensions for NWN2 Save Editor"
 requires-python = ">=3.8"
 classifiers = [

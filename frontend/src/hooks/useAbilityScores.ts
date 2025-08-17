@@ -83,10 +83,12 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
 
   // Local state for optimistic updates
   const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
+  const [localStatsOverrides, setLocalStatsOverrides] = useState<Partial<CharacterStats>>({});
 
   // Reset local overrides when abilityScoreData changes (new character loaded)
   useEffect(() => {
     setLocalAbilityScoreOverrides({});
+    setLocalStatsOverrides({});
   }, [abilityScoreData]);
 
   // Utility function to calculate ability modifier
@@ -187,7 +189,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
     ];
   }, [abilityScoreData, localAbilityScoreOverrides, t, calculateModifier]);
 
-  // Transform stats from attributeData
+  // Transform stats from attributeData with local overrides
   const stats = useMemo((): CharacterStats => {
     if (!abilityScoreData) {
       return {
@@ -243,7 +245,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       return { base: 0, total: 0 };
     };
     
-    return {
+    const baseStats = {
       hitPoints: abilityScoreData.derived_stats.hit_points.current,
       maxHitPoints: abilityScoreData.derived_stats.hit_points.maximum,
       experience: 0, // TODO: Add experience field to backend data
@@ -254,7 +256,10 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       will: extractBaseTotal(abilityScoreData.saving_throws?.will, 'will'),
       initiative: extractBaseTotal(abilityScoreData.combat_stats?.initiative, 'initiative'),
     };
-  }, [abilityScoreData]);
+
+    // Apply local overrides for optimistic updates
+    return { ...baseStats, ...localStatsOverrides };
+  }, [abilityScoreData, localStatsOverrides]);
 
   // Alignment state - fetched from backend
   const [alignment, setAlignment] = useState<Alignment>({
@@ -342,6 +347,9 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
     
     console.log('Stats update requested:', updates);
     
+    // Optimistic update - immediately update UI
+    setLocalStatsOverrides(prev => ({ ...prev, ...updates }));
+    
     try {
       // Handle Natural Armor (AC base) updates
       if (updates.armorClass?.base !== undefined) {
@@ -349,7 +357,14 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         console.log('Natural armor update result:', result);
       }
       
-      // Handle saving throw bonus updates
+      
+      // Handle Initiative misc bonus updates
+      if (updates.initiative?.base !== undefined) {
+        const result = await CharacterAPI.updateInitiativeBonus(characterId, updates.initiative.base);
+        console.log('Initiative bonus update result:', result);
+      }
+      
+      // Handle Saving Throw misc bonus updates
       const saveUpdates: Record<string, number> = {};
       if (updates.fortitude?.base !== undefined) saveUpdates.fortitude = updates.fortitude.base;
       if (updates.reflex?.base !== undefined) saveUpdates.reflex = updates.reflex.base;
@@ -360,11 +375,6 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         console.log('Saving throws update result:', result);
       }
       
-      // Initiative doesn't have a direct GFF field in NWN2 - it's calculated from DEX + feats
-      if (updates.initiative?.base !== undefined) {
-        console.warn('Initiative bonus updates not yet implemented - NWN2 calculates from DEX + feats');
-      }
-      
       // Other stats like HP are handled differently
       if (updates.hitPoints !== undefined || updates.maxHitPoints !== undefined) {
         console.warn('Hit points updates not yet implemented - need separate endpoint');
@@ -372,6 +382,12 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       
     } catch (err) {
       console.error('Failed to update stats:', err);
+      // Revert optimistic update on error
+      setLocalStatsOverrides(prev => {
+        const reverted = { ...prev };
+        Object.keys(updates).forEach(key => delete reverted[key as keyof CharacterStats]);
+        return reverted;
+      });
       throw err;
     }
   }, [characterId]);

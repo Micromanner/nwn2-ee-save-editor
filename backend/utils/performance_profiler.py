@@ -195,7 +195,7 @@ class PerformanceProfiler:
             if entry.duration_ms < min_duration_ms:
                 return
             
-            prefix = "  " * indent + ("├─ " if indent > 0 else "")
+            prefix = "  " * indent + ("|- " if indent > 0 else "")
             
             # Calculate percentage of parent time
             percentage = ""
@@ -220,7 +220,12 @@ class PerformanceProfiler:
                 if meta_parts:
                     metadata_str = f" [{', '.join(meta_parts)}]"
             
-            print(f"{prefix}{entry.name}: {duration_str}{percentage}{metadata_str}")
+            try:
+                print(f"{prefix}{entry.name}: {duration_str}{percentage}{metadata_str}")
+            except UnicodeEncodeError:
+                # Fallback for Windows cp1252 encoding issues
+                safe_name = entry.name.encode('ascii', 'ignore').decode('ascii')
+                print(f"{prefix}{safe_name}: {duration_str}{percentage}{metadata_str}")
             
             # Print children
             for child in sorted(entry.children, key=lambda x: x.duration_ms, reverse=True):
@@ -299,7 +304,7 @@ def get_profiler() -> PerformanceProfiler:
     """Get or create the global profiler instance."""
     global _global_profiler
     if _global_profiler is None:
-        _global_profiler = PerformanceProfiler("Django Startup")
+        _global_profiler = PerformanceProfiler("FastAPI Startup")
     return _global_profiler
 
 

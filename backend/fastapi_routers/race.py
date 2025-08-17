@@ -7,14 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 import logging
 from typing import Optional
 
-from fastapi_models import (
-    RaceChangeRequest,
-    RaceChangeResponse,
-    CurrentRace,
-    RaceValidationResponse,
-    RaceSummary
-)
-from .dependencies import get_character_manager, get_character_session_dep, CharacterManagerDep, CharacterSessionDep
+# from fastapi_models import (...) - moved to lazy loading
+from .dependencies import get_character_manager, get_character_session, CharacterManagerDep, CharacterSessionDep
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +16,11 @@ router = APIRouter(tags=["Race"])
 
 
 
-@router.post("/characters/{character_id}/race/change/", response_model=RaceChangeResponse)
+@router.post("/characters/{character_id}/race/change")
 def change_character_race(
     character_id: int,
-    request: RaceChangeRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,  # Type removed for lazy loading
+    char_session: CharacterSessionDep
 ):
     """
     Change character race with all associated effects.
@@ -37,8 +31,9 @@ def change_character_race(
     
     Returns cascading changes to attributes, feats, and other systems.
     """
+    from fastapi_models import RaceChangeRequest, RaceChangeResponse
     try:
-        character, session = char_session
+        session = char_session
         manager = session.character_manager
         race_manager = manager.get_manager('race')
         
@@ -69,10 +64,10 @@ def change_character_race(
         )
 
 
-@router.get("/characters/{character_id}/race/current/", response_model=CurrentRace)
+@router.get("/characters/{character_id}/race/current")
 def get_current_race(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get current race information.
@@ -86,7 +81,10 @@ def get_current_race(
     - Racial feats
     """
     try:
-            race_manager = manager.get_manager('race')
+        # Lazy imports for performance
+        from fastapi_models import CurrentRace
+        
+        race_manager = manager.get_manager('race')
         
         # Use existing race manager method - get_racial_properties()
         racial_properties = race_manager.get_racial_properties()
@@ -101,11 +99,11 @@ def get_current_race(
         )
 
 
-@router.get("/characters/{character_id}/race/{race_id}/validate/", response_model=RaceValidationResponse)
+@router.get("/characters/{character_id}/race/{race_id}/validate")
 def validate_race_change(
     character_id: int,
     race_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Validate if race change is allowed.
@@ -118,7 +116,10 @@ def validate_race_change(
     Returns validation status and any errors.
     """
     try:
-            race_manager = manager.get_manager('race')
+        # Lazy imports for performance
+        from fastapi_models import RaceValidationResponse
+        
+        race_manager = manager.get_manager('race')
         
         # Use existing race manager validation method
         valid, errors = race_manager.validate_race_change(race_id)
@@ -141,10 +142,10 @@ def validate_race_change(
         )
 
 
-@router.get("/characters/{character_id}/race/summary/", response_model=RaceSummary)
+@router.get("/characters/{character_id}/race/summary")
 def get_race_summary(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get race summary with formatted ability modifier strings.
@@ -154,7 +155,10 @@ def get_race_summary(
     - Complete racial property details
     """
     try:
-            race_manager = manager.get_manager('race')
+        # Lazy imports for performance
+        from fastapi_models import RaceSummary
+        
+        race_manager = manager.get_manager('race')
         
         race_summary = race_manager.get_race_summary()
         
@@ -168,10 +172,10 @@ def get_race_summary(
         )
 
 
-@router.post("/characters/{character_id}/race/revert/", response_model=RaceChangeResponse)
+@router.post("/characters/{character_id}/race/revert")
 def revert_to_original_race(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """
     Revert character to their original race.
@@ -179,7 +183,10 @@ def revert_to_original_race(
     Restores the race that was set when the character was first loaded.
     """
     try:
-        character, session = char_session
+        # Lazy imports for performance
+        from fastapi_models import RaceChangeResponse
+        
+        session = char_session
         manager = session.character_manager
         race_manager = manager.get_manager('race')
         

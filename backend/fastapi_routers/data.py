@@ -11,22 +11,17 @@ from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep
 )
-from fastapi_models import (
-    RawDataResponse,
-    FieldStructureResponse,
-    RawFieldUpdateRequest,
-    RawFieldUpdateResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/data", tags=["data"])
+router = APIRouter(prefix="/data", tags=["data"])
 
 
-@router.get("/characters/{character_id}/raw/", response_model=RawDataResponse)
+@router.get("/characters/{character_id}/raw")
 def get_raw_character_data(
     character_id: int,
-    path: Optional[str] = Query(None, description="GFF path to specific data (e.g., 'ClassList.0.Class')"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep,
+    path: Optional[str] = Query(None, description="GFF path to specific data (e.g., 'ClassList.0.Class')")
 ):
     """
     Get raw GFF data for a character
@@ -38,6 +33,7 @@ def get_raw_character_data(
     - 'ClassList.0' - Get first class
     - 'ClassList.0.Class' - Get class ID of first class
     """
+    from fastapi_models import RawDataResponse
     
     try:
         if path:
@@ -77,12 +73,12 @@ def get_raw_character_data(
         )
 
 
-@router.get("/characters/{character_id}/structure/", response_model=FieldStructureResponse)
+@router.get("/characters/{character_id}/structure")
 def get_field_structure(
     character_id: int,
+    manager: CharacterManagerDep,
     path: Optional[str] = Query(None, description="GFF path to analyze structure"),
-    max_depth: int = Query(2, description="Maximum depth to explore", ge=1, le=5),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    max_depth: int = Query(2, description="Maximum depth to explore", ge=1, le=5)
 ):
     """
     Get the field structure of character data
@@ -90,6 +86,7 @@ def get_field_structure(
     Returns information about field types, sizes, and nested structures.
     Useful for understanding the GFF data organization.
     """
+    from fastapi_models import FieldStructureResponse
     
     try:
         # Get the data at the specified path
@@ -255,11 +252,11 @@ def count_fields(structure: Dict[str, Any]) -> int:
     return count
 
 
-@router.post("/characters/{character_id}/raw/", response_model=RawFieldUpdateResponse)
+@router.post("/characters/{character_id}/raw")
 def update_raw_field(
     character_id: int,
-    request: RawFieldUpdateRequest,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    request,  # Type removed for lazy loading
+    manager: CharacterManagerDep
 ):
     """
     Update a raw GFF field value
@@ -267,6 +264,7 @@ def update_raw_field(
     WARNING: This is a low-level operation that bypasses validation.
     Use with caution as it can corrupt save files if used incorrectly.
     """
+    from fastapi_models import RawFieldUpdateRequest, RawFieldUpdateResponse
     
     try:
         # Check if field exists

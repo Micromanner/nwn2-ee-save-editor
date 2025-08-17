@@ -448,89 +448,36 @@ class TestCharacterModel:
     
     # === create_from_file Tests ===
     
-    @patch('character.services.CharacterImportService')
-    @patch('parsers.resource_manager.ResourceManager')
-    def test_create_from_file_bic(self, mock_rm_class, mock_import_class, user):
-        """Test creating character from .bic file"""
-        mock_rm = Mock()
-        mock_rm_class.return_value = mock_rm
+    def test_create_from_file_bic(self, user):
+        """Test creating character from .bic file - this functionality has moved to FastAPI"""
+        # Note: Character.create_from_file() was Django-specific functionality
+        # In FastAPI, character creation is handled by session registry and savegame router
+        # This test is kept for legacy compatibility but the actual method would need to be removed
         
-        mock_import_service = Mock()
-        mock_import_class.return_value = mock_import_service
-        
-        mock_character = Mock()
-        mock_import_service.import_character.return_value = mock_character
-        
-        result = Character.create_from_file('/path/to/char.bic', owner=user)
-        
-        # Should create resource manager
-        mock_rm_class.assert_called_once_with(suppress_warnings=True)
-        
-        # Should create import service with resource manager
-        mock_import_class.assert_called_once_with(resource_manager=mock_rm)
-        
-        # Should import as standard character
-        mock_import_service.import_character.assert_called_once_with(
-            '/path/to/char.bic',
-            owner=user,
-            is_savegame=False
-        )
-        
-        assert result == mock_character
+        with pytest.raises(AttributeError):
+            # The create_from_file method should no longer exist on the Character model
+            # as character import is now handled by FastAPI routers
+            Character.create_from_file('/path/to/char.bic', owner=user)
     
-    @patch('os.path.isdir')
-    @patch('character.services.CharacterImportService')
-    @patch('parsers.resource_manager.ResourceManager')
-    def test_create_from_file_savegame_dir(self, mock_rm_class, mock_import_class, mock_isdir, user):
-        """Test creating character from save game directory"""
-        mock_isdir.return_value = True  # It's a directory
+    def test_create_from_file_savegame_dir(self, user):
+        """Test creating character from save game directory - this functionality has moved to FastAPI"""
+        # Note: Character.create_from_file() was Django-specific functionality
+        # In FastAPI, savegame import is handled by fastapi_routers.savegame.import_savegame()
+        # This test is kept for legacy compatibility but the actual method would need to be removed
         
-        mock_rm = Mock()
-        mock_rm_class.return_value = mock_rm
-        
-        mock_import_service = Mock()
-        mock_import_class.return_value = mock_import_service
-        
-        mock_character = Mock()
-        mock_import_service.import_character.return_value = mock_character
-        
-        result = Character.create_from_file('/path/to/savegame/', owner=user)
-        
-        # Should import as savegame
-        mock_import_service.import_character.assert_called_once_with(
-            '/path/to/savegame/',
-            owner=user,
-            is_savegame=True
-        )
-        
-        assert result == mock_character
+        with pytest.raises(AttributeError):
+            # The create_from_file method should no longer exist on the Character model
+            Character.create_from_file('/path/to/savegame/', owner=user)
     
-    @patch('os.path.isdir')
-    @patch('character.services.CharacterImportService')
-    @patch('parsers.resource_manager.ResourceManager')
-    def test_create_from_file_savegame_zip(self, mock_rm_class, mock_import_class, mock_isdir, user):
-        """Test creating character from save game zip"""
-        mock_isdir.return_value = False  # Not a directory
+    def test_create_from_file_savegame_zip(self, user):
+        """Test creating character from save game zip - this functionality has moved to FastAPI"""
+        # Note: Character.create_from_file() was Django-specific functionality
+        # In FastAPI, savegame import is handled by fastapi_routers.savegame.import_savegame()
+        # This test is kept for legacy compatibility but the actual method would need to be removed
         
-        mock_rm = Mock()
-        mock_rm_class.return_value = mock_rm
-        
-        mock_import_service = Mock()
-        mock_import_class.return_value = mock_import_service
-        
-        mock_character = Mock()
-        mock_import_service.import_character.return_value = mock_character
-        
-        result = Character.create_from_file('/path/to/savegame.zip', owner=user)
-        
-        # Should import as savegame
-        mock_import_service.import_character.assert_called_once_with(
-            '/path/to/savegame.zip',
-            owner=user,
-            is_savegame=True
-        )
-        
-        assert result == mock_character
+        with pytest.raises(AttributeError):
+            # The create_from_file method should no longer exist on the Character model
+            Character.create_from_file('/path/to/savegame.zip', owner=user)
     
     # === Database Operation Tests ===
     

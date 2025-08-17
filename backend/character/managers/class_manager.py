@@ -185,7 +185,95 @@ class ClassManager(EventEmitter):
             'multiclass': not class_found
         }
     
-    
+    def adjust_class_level(self, class_id: int, level_change: int, cheat_mode: bool = False) -> Dict[str, Any]:
+        """
+        Adjust levels in a specific class (add or remove levels)
+        
+        Args:
+            class_id: Class to adjust level in
+            level_change: Number of levels to add (+) or remove (-)
+            cheat_mode: Bypass validation
+            
+        Returns:
+            Dict with changes made
+        """
+        if level_change == 0:
+            return {}
+        
+        if level_change > 0:
+            # Add levels one by one
+            changes = {}
+            for _ in range(level_change):
+                changes = self.add_class_level(class_id, cheat_mode)
+            return changes
+        else:
+            # Remove levels - find the class and reduce level
+            class_list = self.gff.get('ClassList', [])
+            
+            # Begin transaction if not already in one
+            transaction_started = False
+            if not self.character_manager._current_transaction:
+                self.character_manager.begin_transaction()
+                transaction_started = True
+            
+            try:
+                for class_entry in class_list:
+                    if class_entry.get('Class') == class_id:
+                        current_level = class_entry.get('ClassLevel', 0)
+                        new_level = max(0, current_level + level_change)  # level_change is negative
+                        
+                        if new_level == 0:
+                            # Remove class entirely
+                            if transaction_started:
+                                self.character_manager.rollback_transaction()
+                            return self.remove_class(class_id)
+                        else:
+                            # Just reduce level
+                            class_entry['ClassLevel'] = new_level
+                            self.gff.set('ClassList', class_list)
+                            
+                            # Recalculate stats
+                            new_class = self.game_data_loader.get_by_id('classes', class_id)
+                            total_level = sum(c.get('ClassLevel', 0) for c in class_list)
+                            changes = self._update_class_stats(new_class, total_level)
+                            
+                            # Emit class changed event to notify other managers
+                            event = ClassChangedEvent(
+                                event_type=EventType.CLASS_CHANGED,
+                                source_manager='class',
+                                timestamp=time.time(),
+                                old_class_id=class_id,
+                                new_class_id=class_id,  # Same class, different level
+                                level=total_level,
+                                preserve_feats=self._get_preserved_feats()
+                            )
+                            self.character_manager.emit(event)
+                            
+                            # Commit transaction if we started it
+                            if transaction_started:
+                                self.character_manager.commit_transaction()
+                            
+                            return {
+                                'class_id': class_id,
+                                'level_change': level_change,
+                                'new_class_level': new_level,
+                                'new_total_level': total_level,
+                                **changes
+                            }
+                
+                # Rollback if we started transaction but didn't find class
+                if transaction_started:
+                    self.character_manager.rollback_transaction()
+                    
+            except Exception as e:
+                # Rollback on error if we started the transaction
+                if transaction_started:
+                    self.character_manager.rollback_transaction()
+                logger.error(f"Error during level adjustment: {e}")
+                raise
+            
+            # Class not found
+            raise ValueError(f"Character does not have class {class_id}")
     
     def _update_class_list(self, new_class_id: int, total_level: int):
         """Update the character's class list"""
@@ -213,9 +301,14 @@ class ClassManager(EventEmitter):
         self.gff.set('CurrentHitPoints', new_hp)
         changes['hit_points'] = {'old': old_hp, 'new': new_hp}
         
-        # 2. Base Attack Bonus - use total from all classes for multiclass
+        # 2. Base Attack Bonus - get from CombatManager (proper separation of concerns)
         old_bab = self.gff.get('BaseAttackBonus', 0)
-        new_bab = self.calculate_total_bab()
+        combat_manager = self.character_manager.get_manager('combat')
+        if combat_manager:
+            combat_manager.invalidate_bab_cache()  # Ensure fresh calculation after class change
+            new_bab = combat_manager.calculate_base_attack_bonus()
+        else:
+            new_bab = self.calculate_total_bab()  # Fallback if no combat manager
         self.gff.set('BaseAttackBonus', new_bab)
         changes['bab'] = {'old': old_bab, 'new': new_bab}
         
@@ -322,11 +415,15 @@ class ClassManager(EventEmitter):
     
     def calculate_total_bab(self) -> int:
         """
-        Calculate total BAB from all classes (for multiclass characters)
+        DEPRECATED: BAB calculation moved to CombatManager for proper separation of concerns.
+        Use combat_manager.calculate_base_attack_bonus() instead.
+        
+        This method is kept for backward compatibility only.
         
         Returns:
             Total base attack bonus
         """
+        logger.warning("calculate_total_bab() is deprecated. Use CombatManager.calculate_base_attack_bonus() instead.")
         class_list = self.gff.get('ClassList', [])
         total_bab = 0
         
@@ -342,7 +439,7 @@ class ClassManager(EventEmitter):
                     class_label = self.field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
                     logger.debug(f"Class {class_label} (lvl {class_level}): BAB +{class_bab}")
         
-        logger.info(f"Total BAB: {total_bab}")
+        # Removed excessive logging - now handled by CombatManager
         return total_bab
     
     def _calculate_saves(self, class_data, level: int, modifiers: Dict[str, int]) -> Dict[str, int]:
@@ -511,7 +608,9 @@ class ClassManager(EventEmitter):
         Returns:
             Dict with melee, ranged, and touch attack bonuses
         """
-        bab = self.calculate_total_bab()
+        # Get BAB from CombatManager (proper separation of concerns)
+        combat_manager = self.character_manager.get_manager('combat')
+        bab = combat_manager.calculate_base_attack_bonus() if combat_manager else self.calculate_total_bab()
         
         # Get ability modifiers
         modifiers = self._calculate_ability_modifiers()
@@ -702,6 +801,7 @@ class ClassManager(EventEmitter):
             event = ClassChangedEvent(
                 event_type=EventType.CLASS_CHANGED,
                 source_manager='class',
+                timestamp=time.time(),
                 old_class_id=class_id,
                 new_class_id=-1,  # Indicates removal
                 level=removed_class.get('ClassLevel', 0)
@@ -899,8 +999,13 @@ class ClassManager(EventEmitter):
     
     def _recalculate_all_stats(self):
         """Recalculate all class-dependent stats after class change"""
-        # Recalculate BAB
-        total_bab = self.calculate_total_bab()
+        # Recalculate BAB using CombatManager
+        combat_manager = self.character_manager.get_manager('combat')
+        if combat_manager:
+            combat_manager.invalidate_bab_cache()  # Ensure fresh calculation after class change
+            total_bab = combat_manager.calculate_base_attack_bonus()
+        else:
+            total_bab = self.calculate_total_bab()  # Fallback if no combat manager
         self.gff.set('BaseAttackBonus', total_bab)
         
         # Recalculate saves

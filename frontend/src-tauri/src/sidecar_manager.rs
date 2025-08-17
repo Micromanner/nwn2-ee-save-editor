@@ -28,9 +28,35 @@ impl FastAPISidecar {
 impl Drop for FastAPISidecar {
     fn drop(&mut self) {
         // Clean up FastAPI process when app exits
+        info!("FastAPISidecar Drop called - attempting graceful shutdown");
+        
+        // Try graceful shutdown first
+        let rt = tokio::runtime::Runtime::new();
+        if let Ok(runtime) = rt {
+            let _ = runtime.block_on(async {
+                // Try to send shutdown signal to FastAPI
+                match reqwest::Client::new()
+                    .post("http://127.0.0.1:8000/api/system/shutdown/")
+                    .timeout(std::time::Duration::from_secs(2))
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        info!("Sent graceful shutdown signal to FastAPI");
+                        // Wait a bit for graceful shutdown
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                    }
+                    Err(e) => {
+                        info!("Could not send graceful shutdown (server may already be down): {}", e);
+                    }
+                }
+            });
+        }
+        
+        // Force kill if still running
         if let Ok(mut child_lock) = self.child.lock() {
             if let Some(child) = child_lock.take() {
-                info!("Cleaning up FastAPI sidecar on exit");
+                info!("Force killing FastAPI sidecar on exit");
                 let _ = child.kill();
             }
         }
@@ -46,8 +72,8 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         // Check if FastAPI is already running
         if let Ok(response) = reqwest::get("http://127.0.0.1:8000/api/health/").await {
             if response.status().is_success() {
-                info!("FastAPI already running, stopping it first");
-                let _ = stop_fastapi_sidecar(app.clone()).await;
+                info!("FastAPI already running, force killing it for fresh start");
+                let _ = force_kill_fastapi_sidecar(app.clone()).await;
             }
         }
         
@@ -58,18 +84,32 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
             error!("Failed to create FastAPI lock: {}", e);
         }
         
-        // Only kill if we're really starting fresh
-        let _ = stop_fastapi_sidecar(app.clone()).await;
+        // Only kill if we're really starting fresh - use force kill during startup
+        let _ = force_kill_fastapi_sidecar(app.clone()).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     } else {
         return Err("FastAPI sidecar state not initialized".to_string());
     }
     
-    // Kill any orphaned processes on port 8000
+    // Check if port 8000 is actually in use before trying to kill anything
     if cfg!(debug_assertions) {
-        info!("Attempting to kill any processes on port 8000");
+        // Quick check if port is already free
+        let port_in_use = match reqwest::Client::new()
+            .get("http://127.0.0.1:8000/api/health/")
+            .timeout(std::time::Duration::from_millis(500))
+            .send()
+            .await 
+        {
+            Ok(_) => true,
+            Err(_) => false,
+        };
         
-        // Use native OS commands to find and kill process on port 8001
+        if !port_in_use {
+            info!("Port 8000 is free, skipping kill process - proceeding directly to startup");
+        } else {
+            info!("Port 8000 is in use, attempting to kill existing process");
+            
+            // Use native OS commands to find and kill process on port 8000
         let kill_result = if cfg!(target_os = "windows") {
             // Windows: Use netstat and taskkill
             // First find the PID
@@ -141,9 +181,10 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
             }
         }
         
-        if port_check_attempts >= 5 {
-            return Err("Failed to free port 8000 after multiple attempts".to_string());
-        }
+            if port_check_attempts >= 5 {
+                return Err("Failed to free port 8000 after multiple attempts".to_string());
+            }
+        } // End of port_in_use check
     }
     
     let sidecar_command = if cfg!(debug_assertions) {
@@ -315,10 +356,51 @@ async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, Str
 
 #[tauri::command]
 pub async fn stop_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, String> {
+    info!("Attempting graceful FastAPI shutdown...");
+    
+    // Try graceful shutdown first
+    match reqwest::Client::new()
+        .post("http://127.0.0.1:8000/api/system/shutdown/")
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            info!("Graceful shutdown signal sent successfully");
+            // Wait for graceful shutdown
+            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            
+            // Check if server actually stopped
+            match reqwest::get("http://127.0.0.1:8000/api/health/").await {
+                Ok(_) => {
+                    info!("Server still responding, will force kill");
+                }
+                Err(_) => {
+                    info!("Server stopped gracefully");
+                    // Clear stored PID/child
+                    if let Some(sidecar) = app.try_state::<FastAPISidecar>() {
+                        let mut child_lock = sidecar.child.lock().unwrap();
+                        *child_lock = None;
+                        let mut pid = sidecar.pid.lock().unwrap();
+                        *pid = None;
+                    }
+                    return Ok("FastAPI sidecar stopped gracefully".to_string());
+                }
+            }
+        }
+        Ok(response) => {
+            info!("Graceful shutdown failed with status: {}", response.status());
+        }
+        Err(e) => {
+            info!("Could not send graceful shutdown: {}", e);
+        }
+    }
+    
+    // Force kill if graceful shutdown failed
     if let Some(sidecar) = app.try_state::<FastAPISidecar>() {
         let mut child_lock = sidecar.child.lock().unwrap();
         if let Some(child) = child_lock.take() {
-            info!("Stopping FastAPI sidecar with PID: {}", child.pid());
+            info!("Force stopping FastAPI sidecar with PID: {}", child.pid());
             if let Err(e) = child.kill() {
                 error!("Failed to kill FastAPI sidecar: {}", e);
                 return Err(format!("Failed to stop FastAPI sidecar: {}", e));
@@ -328,7 +410,42 @@ pub async fn stop_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Strin
         let mut pid = sidecar.pid.lock().unwrap();
         *pid = None;
     }
-    Ok("FastAPI sidecar stopped".to_string())
+    
+    Ok("FastAPI sidecar stopped (forced)".to_string())
+}
+
+/// Force kill FastAPI without graceful shutdown - used during startup
+pub async fn force_kill_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, String> {
+    info!("Force killing FastAPI sidecar (startup cleanup)");
+    
+    // Skip graceful shutdown, go straight to force kill
+    if let Some(sidecar) = app.try_state::<FastAPISidecar>() {
+        let mut child_lock = sidecar.child.lock().unwrap();
+        if let Some(child) = child_lock.take() {
+            info!("Force killing FastAPI sidecar with PID: {}", child.pid());
+            if let Err(e) = child.kill() {
+                error!("Failed to kill FastAPI sidecar: {}", e);
+            }
+        }
+        
+        let mut pid = sidecar.pid.lock().unwrap();
+        *pid = None;
+    }
+    
+    // Also kill any process on port 8000 directly
+    if cfg!(target_os = "windows") {
+        let _ = tokio::process::Command::new("cmd")
+            .args(["/C", "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do taskkill /F /PID %a 2>nul"])
+            .output()
+            .await;
+    } else {
+        let _ = tokio::process::Command::new("sh")
+            .args(["-c", "lsof -ti:8000 | xargs -r kill -9 2>/dev/null || true"])
+            .output()
+            .await;
+    }
+    
+    Ok("FastAPI sidecar force killed".to_string())
 }
 
 #[tauri::command]
@@ -445,4 +562,44 @@ pub async fn ensure_fastapi_running(app: tauri::AppHandle) -> Result<(), String>
     info!("Starting new FastAPI instance");
     start_fastapi_sidecar(app).await?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn graceful_shutdown_on_exit(app: tauri::AppHandle) -> Result<String, String> {
+    // Called when Tauri app is about to exit - ensures FastAPI shuts down properly
+    info!("App exit detected - ensuring FastAPI shutdown");
+    
+    // Try graceful shutdown with shorter timeout since we're exiting
+    match reqwest::Client::new()
+        .post("http://127.0.0.1:8000/api/system/shutdown/")
+        .timeout(std::time::Duration::from_secs(2))
+        .send()
+        .await
+    {
+        Ok(_) => {
+            info!("Graceful shutdown signal sent on app exit");
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+        Err(_) => {
+            info!("Could not send graceful shutdown on exit (server may already be down)");
+        }
+    }
+    
+    // Also kill process directly
+    let _ = stop_fastapi_sidecar(app).await;
+    
+    // Final fallback: kill any remaining Python processes on port 8000
+    if cfg!(target_os = "windows") {
+        let _ = tokio::process::Command::new("cmd")
+            .args(["/C", "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do taskkill /F /PID %a 2>nul"])
+            .output()
+            .await;
+    } else {
+        let _ = tokio::process::Command::new("sh")
+            .args(["-c", "lsof -ti:8000 | xargs -r kill -9 2>/dev/null || true"])
+            .output()
+            .await;
+    }
+    
+    Ok("Shutdown complete".to_string())
 }

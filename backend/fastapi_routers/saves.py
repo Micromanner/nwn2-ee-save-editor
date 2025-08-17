@@ -7,30 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 import logging
 from typing import Dict, Any
 
-from .dependencies import get_character_manager, get_character_session_dep, CharacterManagerDep, CharacterSessionDep
-from fastapi_models import (
-    SaveSummaryResponse,
-    SaveBreakdownResponse, 
-    SaveTotalsResponse,
-    SaveCheckRequest,
-    SaveCheckResponse,
-    TemporaryModifierRequest,
-    TemporaryModifierResponse,
-    MiscSaveBonusRequest,
-    MiscSaveBonusResponse,
-    RacialSavesResponse,
-    ClearModifiersResponse
-)
+from .dependencies import get_character_manager, get_character_session, CharacterManagerDep, CharacterSessionDep
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Saves"])
 
 
-@router.get("/characters/{character_id}/saves/summary/", response_model=SaveSummaryResponse)
+@router.get("/characters/{character_id}/saves/summary")
 def get_save_summary(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get saving throw summary using existing SaveManager method.
@@ -40,7 +28,7 @@ def get_save_summary(
     - Save conditions and immunities
     """
     try:
-            save_manager = manager.get_manager('save')
+        save_manager = manager.get_manager('save')
         
         if not save_manager:
             raise HTTPException(
@@ -61,10 +49,10 @@ def get_save_summary(
         )
 
 
-@router.get("/characters/{character_id}/saves/breakdown/", response_model=SaveBreakdownResponse)
+@router.get("/characters/{character_id}/saves/breakdown")
 def get_save_breakdown(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get detailed saving throw breakdown using SaveManager method.
@@ -73,7 +61,7 @@ def get_save_breakdown(
     - Complete breakdown of all saves with components
     """
     try:
-            save_manager = manager.get_manager('save')
+        save_manager = manager.get_manager('save')
         
         if not save_manager:
             raise HTTPException(
@@ -94,10 +82,10 @@ def get_save_breakdown(
         )
 
 
-@router.get("/characters/{character_id}/saves/totals/", response_model=SaveTotalsResponse)
+@router.get("/characters/{character_id}/saves/totals")
 def get_save_totals(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get individual save totals using SaveManager methods.
@@ -106,7 +94,7 @@ def get_save_totals(
     - Individual fortitude, reflex, will totals
     """
     try:
-            save_manager = manager.get_manager('save')
+        save_manager = manager.get_manager('save')
         
         if not save_manager:
             raise HTTPException(
@@ -131,11 +119,11 @@ def get_save_totals(
         )
 
 
-@router.post("/characters/{character_id}/saves/check/", response_model=SaveCheckResponse)
+@router.post("/characters/{character_id}/saves/check")
 def check_save(
     character_id: int,
-    request: SaveCheckRequest,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    request,
+    manager: CharacterManagerDep
 ):
     """
     Check if a saving throw would succeed using SaveManager method.
@@ -146,8 +134,10 @@ def check_save(
     Returns:
         Save check result with success probability and details
     """
+    from fastapi_models.save_models import SaveCheckRequest
+    
     try:
-            save_manager = manager.get_manager('save')
+        save_manager = manager.get_manager('save')
         
         if not save_manager:
             raise HTTPException(
@@ -182,11 +172,11 @@ def check_save(
         )
 
 
-@router.post("/characters/{character_id}/saves/temporary-modifier/", response_model=TemporaryModifierResponse)
+@router.post("/characters/{character_id}/saves/temporary-modifier")
 def add_temporary_modifier(
     character_id: int,
-    request: TemporaryModifierRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,
+    char_session: CharacterSessionDep
 ):
     """
     Add temporary save modifier using SaveManager method.
@@ -194,8 +184,10 @@ def add_temporary_modifier(
     Args:
         request: Temporary modifier parameters
     """
+    from fastapi_models.save_models import TemporaryModifierRequest
+    
     try:
-        character, session = char_session
+        session = char_session
         if not session or not session.character_manager:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -228,11 +220,11 @@ def add_temporary_modifier(
         )
 
 
-@router.delete("/characters/{character_id}/saves/temporary-modifier/", response_model=TemporaryModifierResponse)
+@router.delete("/characters/{character_id}/saves/temporary-modifier")
 def remove_temporary_modifier(
     character_id: int,
-    request: TemporaryModifierRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,
+    char_session: CharacterSessionDep
 ):
     """
     Remove temporary save modifier using SaveManager method.
@@ -240,8 +232,10 @@ def remove_temporary_modifier(
     Args:
         request: Temporary modifier parameters (duration ignored for removal)
     """
+    from fastapi_models.save_models import TemporaryModifierRequest
+    
     try:
-        character, session = char_session
+        session = char_session
         if not session or not session.character_manager:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -273,16 +267,16 @@ def remove_temporary_modifier(
         )
 
 
-@router.delete("/characters/{character_id}/saves/temporary-modifiers/", response_model=ClearModifiersResponse)
+@router.delete("/characters/{character_id}/saves/temporary-modifiers")
 def clear_temporary_modifiers(
     character_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """
     Clear all temporary save modifiers using SaveManager method.
     """
     try:
-        character, session = char_session
+        session = char_session
         if not session or not session.character_manager:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -312,11 +306,11 @@ def clear_temporary_modifiers(
         )
 
 
-@router.post("/characters/{character_id}/saves/misc-bonus/", response_model=MiscSaveBonusResponse)
+@router.post("/characters/{character_id}/saves/misc-bonus")
 def set_misc_save_bonus(
     character_id: int,
-    request: MiscSaveBonusRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    request,
+    char_session: CharacterSessionDep
 ):
     """
     Set miscellaneous saving throw bonus using SaveManager method.
@@ -324,8 +318,10 @@ def set_misc_save_bonus(
     Args:
         request: Misc save bonus parameters
     """
+    from fastapi_models.save_models import MiscSaveBonusRequest
+    
     try:
-        character, session = char_session
+        session = char_session
         if not session or not session.character_manager:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -357,11 +353,11 @@ def set_misc_save_bonus(
         )
 
 
-@router.get("/characters/{character_id}/saves/racial/{race_id}/", response_model=RacialSavesResponse)
+@router.get("/characters/{character_id}/saves/racial/{race_id}")
 def get_racial_saves(
     character_id: int,
     race_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """
     Get racial save bonuses using SaveManager method.
@@ -373,7 +369,7 @@ def get_racial_saves(
         Dict with fortitude, reflex, will save bonuses
     """
     try:
-            save_manager = manager.get_manager('save')
+        save_manager = manager.get_manager('save')
         
         if not save_manager:
             raise HTTPException(

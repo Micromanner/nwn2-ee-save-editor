@@ -4,46 +4,29 @@ Handles skill points, ranks, modifiers, and skill checks
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 
 from fastapi_routers.dependencies import (
-    get_character_manager, 
-    get_character_session_dep,
-    CharacterManagerDep,
+    get_character_session,
     CharacterSessionDep
 )
-from fastapi_models import (
-    SkillInfo,
-    SkillPoints,
-    SkillSummary,
-    SkillUpdateRequest,
-    SkillUpdateResponse,
-    SkillChange,
-    SkillBatchUpdateRequest,
-    SkillBatchUpdateResponse,
-    SkillResetRequest,
-    SkillResetResponse,
-    SkillCheckRequest,
-    SkillCheckResponse,
-    SkillPrerequisites,
-    SkillBuild,
-    SkillBuildImportRequest,
-    SkillBuildImportResponse,
-    AllSkillsResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/characters/{character_id}/skills/state/", response_model=SkillSummary)
+@router.get("/characters/{character_id}/skills/state")
 def get_skills_state(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    char_session: CharacterSessionDep
 ):
     """Get current skills state for the skills editor"""
+    from fastapi_models import SkillSummary
     try:
+        session = char_session
+        manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Use actual manager method that exists
@@ -59,13 +42,18 @@ def get_skills_state(
         )
 
 
-@router.get("/characters/{character_id}/skills/all/", response_model=AllSkillsResponse)
+@router.get("/characters/{character_id}/skills/all")
 def get_all_skills(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    char_session: CharacterSessionDep
 ):
     """Get complete list of all skills with current ranks and modifiers"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import AllSkillsResponse
+        
+        session = char_session
+        manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Use actual manager method
@@ -81,15 +69,18 @@ def get_all_skills(
         )
 
 
-@router.post("/characters/{character_id}/skills/update/", response_model=SkillUpdateResponse)
+@router.post("/characters/{character_id}/skills/update")
 def update_skills(
     character_id: int,
-    skill_update: SkillUpdateRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    skill_update: Dict[str, Any] = Body(...)
 ):
     """Update skill ranks for character (in-memory only - use savegame endpoints to save)"""
     try:
-        character, session = char_session
+        # Lazy imports for performance
+        from fastapi_models import SkillUpdateRequest, SkillUpdateResponse, SkillChange, SkillSummary
+        
+        session = char_session
         manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
@@ -97,7 +88,7 @@ def update_skills(
         changes = []
         validation_errors = []
         
-        for skill_id_str, new_rank in skill_update.skills.items():
+        for skill_id_str, new_rank in skill_update['skills'].items():
             try:
                 skill_id = int(skill_id_str)
             except (ValueError, TypeError):
@@ -105,7 +96,7 @@ def update_skills(
                 continue
                 
             # Validate skill exists
-            skill_data = skill_manager.game_data_loader.get_by_id('skills', skill_id)
+            skill_data = skill_manager.game_rules_service.get_by_id('skills', skill_id)
             if not skill_data:
                 validation_errors.append(f"Skill {skill_id} does not exist")
                 continue
@@ -154,20 +145,23 @@ def update_skills(
         )
 
 
-@router.post("/characters/{character_id}/skills/batch/", response_model=SkillBatchUpdateResponse)
+@router.post("/characters/{character_id}/skills/batch")
 def batch_update_skills(
     character_id: int,
-    batch_update: SkillBatchUpdateRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    batch_update: Dict[str, Any] = Body(...)
 ):
     """Batch update multiple skills at once"""
     try:
-        character, session = char_session
+        # Lazy imports for performance
+        from fastapi_models import SkillBatchUpdateRequest, SkillBatchUpdateResponse, SkillChange, SkillSummary
+        
+        session = char_session
         manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Use actual manager method that exists
-        skills_dict = {int(k): v for k, v in batch_update.skills.items()}
+        skills_dict = {int(k): v for k, v in batch_update['skills'].items()}
         results = skill_manager.batch_set_skills(skills_dict)
         
         # Convert to expected format
@@ -203,15 +197,18 @@ def batch_update_skills(
         )
 
 
-@router.post("/characters/{character_id}/skills/reset/", response_model=SkillResetResponse)
+@router.post("/characters/{character_id}/skills/reset")
 def reset_skills(
     character_id: int,
-    reset_request: SkillResetRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    reset_request: Dict[str, Any] = Body(...)
 ):
     """Reset all skills to 0 and refund points (ignores preserve_class_skills and refund_percentage - manager doesn't support these)"""
     try:
-        character, session = char_session
+        # Lazy imports for performance
+        from fastapi_models import SkillResetRequest, SkillResetResponse
+        
+        session = char_session
         manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
@@ -241,19 +238,24 @@ def reset_skills(
         )
 
 
-@router.post("/characters/{character_id}/skills/{skill_id}/check/", response_model=SkillCheckResponse)
+@router.post("/characters/{character_id}/skills/{skill_id}/check")
 def skill_check(
     character_id: int,
     skill_id: int,
-    check_request: SkillCheckRequest,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    char_session: CharacterSessionDep,
+    check_request: Dict[str, Any] = Body(...)
 ):
     """Simulate a skill check (d20 + modifiers)"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import SkillCheckRequest, SkillCheckResponse
+        
+        session = char_session
+        manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Validate skill exists
-        skill_data = skill_manager.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = skill_manager.game_rules_service.get_by_id('skills', skill_id)
         if not skill_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -261,11 +263,11 @@ def skill_check(
             )
         
         # Handle take_10/take_20 since manager method doesn't support it
-        if check_request.take_20:
+        if check_request.get('take_20'):
             roll = 20
             critical = False
             fumble = False
-        elif check_request.take_10:
+        elif check_request.get('take_10'):
             roll = 10
             critical = False
             fumble = False
@@ -285,8 +287,8 @@ def skill_check(
         skill_name = field_mapper.get_field_value(skill_data, 'label', f'Skill {skill_id}')
         
         # Add additional fields from request
-        dc = check_request.dc
-        circumstance = check_request.circumstance_bonus
+        dc = check_request.get('dc', 15)
+        circumstance = check_request.get('circumstance_bonus', 0)
         final_total = roll + modifier + circumstance
         
         return SkillCheckResponse(
@@ -317,18 +319,23 @@ def skill_check(
         )
 
 
-@router.get("/characters/{character_id}/skills/{skill_id}/prerequisites/", response_model=SkillPrerequisites)
+@router.get("/characters/{character_id}/skills/{skill_id}/prerequisites")
 def skill_prerequisites(
     character_id: int,
     skill_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    char_session: CharacterSessionDep
 ):
     """Get prerequisites for a specific skill"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import SkillPrerequisites
+        
+        session = char_session
+        manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Validate skill exists
-        skill_data = skill_manager.game_data_loader.get_by_id('skills', skill_id)
+        skill_data = skill_manager.game_rules_service.get_by_id('skills', skill_id)
         if not skill_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -350,13 +357,18 @@ def skill_prerequisites(
         )
 
 
-@router.get("/characters/{character_id}/skills/export/", response_model=SkillBuild)
+@router.get("/characters/{character_id}/skills/export")
 def export_build(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    char_session: CharacterSessionDep
 ):
     """Export current skill build for saving/sharing"""
     try:
+        # Lazy imports for performance
+        from fastapi_models import SkillBuild
+        
+        session = char_session
+        manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Use skill manager method - no duplicated logic
@@ -372,28 +384,56 @@ def export_build(
         )
 
 
-@router.post("/characters/{character_id}/skills/import/", response_model=SkillBuildImportResponse)
+@router.get("/debug/skills_table")
+def debug_skills_table():
+    """Debug endpoint to check if skills table loads"""
+    try:
+        from fastapi_core.shared_services import get_shared_game_rules_service
+        
+        rules_service = get_shared_game_rules_service()
+        skills_table = rules_service.get_table('skills')
+        
+        return {
+            "table_type": str(type(skills_table)),
+            "table_length": len(skills_table) if skills_table else 0,
+            "table_exists": skills_table is not None,
+            "first_skill": skills_table[0] if skills_table and len(skills_table) > 0 else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to debug skills table: {e}")
+        return {
+            "error": str(e),
+            "table_exists": False,
+            "table_length": 0
+        }
+
+
+@router.post("/characters/{character_id}/skills/import")
 def import_build(
     character_id: int,
-    build_data: SkillBuildImportRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    build_data: Dict[str, Any] = Body(...)
 ):
     """Import a skill build (ignores replace_existing and should_validate - manager doesn't support these)"""
     try:
-        character, session = char_session
+        # Lazy imports for performance
+        from fastapi_models import SkillBuildImportRequest, SkillBuildImportResponse, SkillSummary
+        
+        session = char_session
         manager = session.character_manager
         skill_manager = manager.get_manager('skill')
         
         # Build the data in the format the manager expects
         build_dict = {
-            'skills': build_data.skills
+            'skills': build_data['skills']
         }
         
         # Add optional fields if provided
-        if build_data.character_level is not None:
-            build_dict['character_level'] = build_data.character_level
-        if build_data.total_skill_points is not None:
-            build_dict['total_skill_points'] = build_data.total_skill_points
+        if build_data.get('character_level') is not None:
+            build_dict['character_level'] = build_data['character_level']
+        if build_data.get('total_skill_points') is not None:
+            build_dict['total_skill_points'] = build_data['total_skill_points']
             
         # Note: replace_existing and should_validate are ignored since 
         # manager's import_skill_build() doesn't support these parameters
@@ -402,7 +442,7 @@ def import_build(
         
         if success:
             summary = skill_manager.get_skill_summary()
-            imported_count = len([s for s in build_data.skills.keys()])
+            imported_count = len([s for s in build_data['skills'].keys()])
             
             return SkillBuildImportResponse(
                 message="Skill build imported successfully (replace_existing and validation options not supported)",

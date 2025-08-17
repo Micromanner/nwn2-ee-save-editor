@@ -1,48 +1,73 @@
 """
 Abilities router - All ability score related endpoints
-Handles the six ability scores: STR, DEX, CON, INT, WIS, CHA and their modifiers
+Handles the six abilities: STR, DEX, CON, INT, WIS, CHA and their modifiers
 """
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Body
 
 from fastapi_routers.dependencies import (
     get_character_manager, 
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-from fastapi_models import (
-    AttributeState,
-    AttributeChangeRequest,
-    AttributeSetRequest,
-    AttributeModifiersResponse
-)
+# from fastapi_models import (...) - moved to lazy loading
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/characters/{character_id}/attributes/state/", response_model=AttributeState)
-def get_attributes_state(
+@router.get("/characters/{character_id}/abilities")
+def get_abilities(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
-    """Get current attributes and modifiers for the attributes editor"""
+    """Get character abilities and modifiers"""
+    # Redirect to the existing abilities state endpoint
+    return get_abilities_state(character_id, manager)
+
+
+@router.get("/characters/{character_id}/abilities/state")
+def get_abilities_state(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get current abilities and modifiers for the abilities editor"""
+    from fastapi_models import AttributeState
     
     try:
         ability_manager = manager.get_manager('ability')
         
         # Get all data from the ability manager - no duplicated logic
-        base_attrs = ability_manager.get_attributes()
-        effective_attrs = ability_manager.get_effective_attributes()
+        base_abilities = ability_manager.get_attributes()
+        effective_abilities = ability_manager.get_effective_attributes()
         
         # Build complete state using manager methods only
+        try:
+            hit_points_data = ability_manager.get_hit_points()
+            logger.info(f"Hit points retrieved: {hit_points_data}")
+            # Structure hit_points as expected by frontend
+            derived_stats = {
+                'hit_points': {
+                    'current': hit_points_data['current'],
+                    'maximum': hit_points_data['max']  # frontend expects 'maximum', not 'max'
+                }
+            }
+        except Exception as e:
+            logger.error(f"Failed to get hit points: {e}")
+            derived_stats = {
+                'hit_points': {
+                    'current': 0,
+                    'maximum': 0
+                }
+            }
+        
         state_data = {
-            'base_attributes': base_attrs,
-            'effective_attributes': effective_attrs,
+            'base_attributes': base_abilities,
+            'effective_attributes': effective_abilities,
             'attribute_modifiers': ability_manager.get_attribute_modifiers(),
             'detailed_modifiers': {
                 'base_modifiers': ability_manager.get_attribute_modifiers(),
@@ -54,6 +79,7 @@ def get_attributes_state(
                 'total_modifiers': ability_manager.get_total_modifiers()
             },
             'point_buy_cost': ability_manager.calculate_point_buy_total(),
+            'derived_stats': derived_stats,
             'encumbrance_limits': ability_manager.get_encumbrance_limits(),
             'saving_throw_modifiers': ability_manager.get_saving_throw_modifiers(),
             'skill_modifiers': ability_manager.get_skill_modifiers(),
@@ -66,34 +92,46 @@ def get_attributes_state(
             }
         }
         
-        return AttributeState(**state_data)
+        logger.info(f"About to create AttributeState with keys: {list(state_data.keys())}")
+        try:
+            result = AttributeState(**state_data)
+            logger.info("AttributeState created successfully")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to create AttributeState: {e}")
+            logger.error(f"State data hit_points: {state_data.get('hit_points')}")
+            raise
         
     except Exception as e:
-        logger.error(f"Failed to get attributes state for character {character_id}: {e}")
+        logger.error(f"Failed to get abilities state for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get attributes state: {str(e)}"
+            detail=f"Failed to get abilities state: {str(e)}"
         )
 
 
-@router.post("/characters/{character_id}/attributes/update/")
-def change_attributes(
+@router.post("/characters/{character_id}/abilities/update")
+def change_abilities(
     character_id: int,
-    attributes_data: AttributeChangeRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
 ):
     """
-    Change character attributes (STR, DEX, CON, INT, WIS, CHA)
+    Change character abilities (STR, DEX, CON, INT, WIS, CHA)
     Handles cascading effects like HP, saves, and combat bonuses
     """
-    character, session = char_session
+    from fastapi_models import AttributeChangeRequest
+    session = char_session
+    
+    # Create AttributeChangeRequest from raw data
+    abilities_data = AttributeChangeRequest(**request_data)
     
     try:
         manager = session.character_manager
         ability_manager = manager.get_manager('ability')
         
         # Use manager's set_all_attributes method - no duplicated logic
-        changes = ability_manager.set_all_attributes(attributes_data.attributes, attributes_data.validate)
+        changes = ability_manager.set_all_attributes(abilities_data.attributes, abilities_data.should_validate)
         
         # Check for any validation errors in changes
         validation_errors = []
@@ -111,7 +149,7 @@ def change_attributes(
         
         return {
             'success': len(validation_errors) == 0,
-            'attribute_changes': successful_changes,
+            'ability_changes': successful_changes,
             'cascading_effects': cascading_effects,
             'validation_errors': validation_errors,
             'saved': False,  # Changes kept in memory only
@@ -119,72 +157,77 @@ def change_attributes(
         }
         
     except Exception as e:
-        logger.error(f"Failed to change attributes for character {character_id}: {e}")
+        logger.error(f"Failed to change abilities for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to change attributes: {str(e)}"
+            detail=f"Failed to change abilities: {str(e)}"
         )
 
 
-@router.post("/characters/{character_id}/attributes/{attribute_name}/set/")
+@router.post("/characters/{character_id}/abilities/{ability_name}/set")
 def set_attribute(
     character_id: int,
-    attribute_name: str = Path(..., description="Attribute name (str, dex, con, int, wis, cha)"),
-    attribute_data: AttributeSetRequest = ...,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    ability_name: str = Path(..., description="Ability name (str, dex, con, int, wis, cha)"),
+    request_data: Dict[str, Any] = Body(...)
 ):
-    """Set a specific attribute to a value"""
-    character, session = char_session
+    """Set a specific ability to a value"""
+    from fastapi_models import AttributeSetRequest
+    session = char_session
+    
+    # Create AttributeSetRequest from raw data
+    ability_data = AttributeSetRequest(**request_data)
     
     try:
         manager = session.character_manager
         ability_manager = manager.get_manager('ability')
         
         # Use manager's ABILITY_MAPPING - no duplicated logic
-        gff_field = ability_manager.ABILITY_MAPPING.get(attribute_name.lower())
+        gff_field = ability_manager.ABILITY_MAPPING.get(ability_name.lower())
         if not gff_field:
             # Try direct mapping if not in standard names
-            if attribute_name in ability_manager.ATTRIBUTES:
-                gff_field = attribute_name
+            if ability_name in ability_manager.ATTRIBUTES:
+                gff_field = ability_name
             else:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid attribute: {attribute_name}"
+                    detail=f"Invalid ability: {ability_name}"
                 )
         
         # Use manager's set_attribute method - no duplicated logic
-        result = ability_manager.set_attribute(gff_field, attribute_data.value, attribute_data.validate)
+        result = ability_manager.set_attribute(gff_field, ability_data.value, ability_data.should_validate)
         
         return {
             'success': True,
-            'attribute_change': result,
+            'ability_change': result,
             'saved': False,  # Changes kept in memory only
             'has_unsaved_changes': session.has_unsaved_changes()
         }
         
     except ValueError as e:
         # Validation errors should be 400 Bad Request
-        logger.warning(f"Validation error setting attribute {attribute_name} for character {character_id}: {e}")
+        logger.warning(f"Validation error setting ability {ability_name} for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Validation error: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"Failed to set attribute {attribute_name} for character {character_id}: {e}")
+        logger.error(f"Failed to set ability {ability_name} for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to set attribute: {str(e)}"
+            detail=f"Failed to set ability: {str(e)}"
         )
 
 
 
 
-@router.get("/characters/{character_id}/attributes/modifiers/", response_model=AttributeModifiersResponse)
+@router.get("/characters/{character_id}/abilities/modifiers")
 def get_modifiers(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
-    """Get detailed breakdown of all attribute modifiers"""
+    """Get detailed breakdown of all ability modifiers"""
+    from fastapi_models import AttributeModifiersResponse
     
     try:
         ability_manager = manager.get_manager('ability')

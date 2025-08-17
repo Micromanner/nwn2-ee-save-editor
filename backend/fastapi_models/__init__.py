@@ -13,18 +13,17 @@ from .shared_models import (
     
     # System
     HealthResponse,
-    ReadyResponse,
     SystemInfo,
     CacheStatus,
     ConfigResponse,
-    CacheRebuildResponse,
-    ConfigUpdateRequest,
-    ConfigUpdateResponse,
+    # CacheRebuildResponse,
+    # ConfigUpdateRequest,
+    # ConfigUpdateResponse,
     NWN2PathResponse,
     AutoDiscoverResponse,
-    BackgroundLoadingTriggerResponse,
-    BackgroundLoadingStatusResponse,
-    InitializationStatusResponse,
+    # BackgroundLoadingTriggerResponse,
+    # BackgroundLoadingStatusResponse,
+    # InitializationStatusResponse,
     
     # Session
     SessionInfo,
@@ -115,7 +114,9 @@ from .combat_models import (
     CombatModeToggleResponse,
     DefensiveStats,
     NaturalArmorUpdateRequest,
-    NaturalArmorUpdateResponse
+    NaturalArmorUpdateResponse,
+    InitiativeBonusUpdateRequest,
+    InitiativeBonusUpdateResponse
 )
 
 # Skill models
@@ -323,6 +324,9 @@ from .class_models import (
 # Gamedata models
 from .gamedata_models import (
     NWN2PathInfo,
+    PathInfo,
+    CustomFolderInfo,
+    PathConfig,
     NWN2PathsResponse,
     GameDataTableInfo,
     GameDataTablesResponse,
@@ -376,6 +380,7 @@ __all__ = [
     'CombatUpdateRequest',
     'CombatUpdateResponse', 'CombatModeToggleRequest', 'CombatModeToggleResponse',
     'DefensiveStats', 'NaturalArmorUpdateRequest', 'NaturalArmorUpdateResponse',
+    'InitiativeBonusUpdateRequest', 'InitiativeBonusUpdateResponse',
     
     # Skill models
     'SkillInfo', 'SkillPoints', 'SkillSynergy', 'SkillSummary', 'SkillState',
@@ -456,7 +461,8 @@ __all__ = [
     'SavegameListItem', 'SavegameBrowseResponse',
     
     # Gamedata models
-    'NWN2PathInfo', 'NWN2PathsResponse', 'GameDataTableInfo', 'GameDataTablesResponse',
+    'NWN2PathInfo', 'PathInfo', 'CustomFolderInfo', 'PathConfig', 'NWN2PathsResponse', 
+    'GameDataTableInfo', 'GameDataTablesResponse',
     'GameDataRowRequest', 'GameDataRowResponse', 'TLKInfo', 'TLKStringRequest',
     'TLKStringEntry', 'TLKStringResponse', 'HAKInfo', 'HAKListResponse',
     'ModuleInfo', 'ModuleListResponse', 'GameDataCacheInfo', 'GameDataCacheResponse',

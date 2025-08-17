@@ -18,26 +18,32 @@ class NWN2PathInfo(BaseModel):
     size_bytes: Optional[int] = Field(None, description="Size if it's a file")
 
 
+class PathInfo(BaseModel):
+    """Individual path information"""
+    path: Optional[str] = Field(None, description="Full path")
+    exists: bool = Field(False, description="Whether path exists")
+    auto_detected: bool = Field(False, description="Whether path was auto-detected")
+
+
+class CustomFolderInfo(BaseModel):
+    """Custom folder information"""
+    path: str = Field(..., description="Full path")
+    exists: bool = Field(False, description="Whether path exists")
+
+
+class PathConfig(BaseModel):
+    """Path configuration"""
+    game_folder: PathInfo
+    documents_folder: PathInfo
+    steam_workshop_folder: PathInfo
+    custom_override_folders: List[CustomFolderInfo] = Field(default_factory=list)
+    custom_module_folders: List[CustomFolderInfo] = Field(default_factory=list)
+    custom_hak_folders: List[CustomFolderInfo] = Field(default_factory=list)
+
+
 class NWN2PathsResponse(BaseModel):
-    """NWN2 installation paths response"""
-    # Main paths
-    game_folder: NWN2PathInfo
-    user_folder: NWN2PathInfo
-    saves: NWN2PathInfo
-    data: NWN2PathInfo
-    
-    # Game content paths
-    campaigns: NWN2PathInfo
-    modules: NWN2PathInfo
-    localvault: NWN2PathInfo
-    hak: Optional[NWN2PathInfo] = None
-    override: Optional[NWN2PathInfo] = None
-    tlk: Optional[NWN2PathInfo] = None
-    
-    # Status
-    installation_valid: bool = Field(..., description="Whether NWN2 installation is valid")
-    version: Optional[str] = Field(None, description="NWN2 version detected")
-    expansions: List[str] = Field(default_factory=list, description="Detected expansions")
+    """NWN2 installation paths response - matches frontend PathsResponse"""
+    paths: PathConfig
 
 
 class GameDataTableInfo(BaseModel):

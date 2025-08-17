@@ -533,19 +533,19 @@ class InventoryManager(EventEmitter):
         try:
             encumbrance_data = self.game_rules_service.get_by_id('encumbrance', strength)
             if encumbrance_data:
-                light_load = field_mapper.get_field_value(encumbrance_data, 'light', strength * 3.3)
-                medium_load = field_mapper.get_field_value(encumbrance_data, 'medium', strength * 6.6) 
-                heavy_load = field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 10)
+                light_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'light', strength * 3.3)))
+                medium_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'medium', strength * 6.6)))
+                heavy_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 10)))
             else:
                 # Fallback to calculated values if no table data
-                light_load = strength * 3.3
-                medium_load = strength * 6.6
-                heavy_load = strength * 10
+                light_load = float(strength * 3.3)
+                medium_load = float(strength * 6.6)
+                heavy_load = float(strength * 10)
         except Exception:
             # Fallback to calculated values if game data unavailable
-            light_load = strength * 3.3
-            medium_load = strength * 6.6
-            heavy_load = strength * 10
+            light_load = float(strength * 3.3)
+            medium_load = float(strength * 6.6)
+            heavy_load = float(strength * 10)
         
         # Determine encumbrance level
         if total_weight <= light_load:
@@ -558,10 +558,10 @@ class InventoryManager(EventEmitter):
             level = 'overloaded'
         
         return {
-            'total_weight': total_weight,
-            'light_load': light_load,
-            'medium_load': medium_load,
-            'heavy_load': heavy_load,
+            'total_weight': float(total_weight),
+            'light_load': float(light_load),
+            'medium_load': float(medium_load),
+            'heavy_load': float(heavy_load),
             'encumbrance_level': level
         }
     
@@ -569,8 +569,34 @@ class InventoryManager(EventEmitter):
         """Get summary of character's inventory using dynamic data"""
         item_list = self.gff.get('ItemList', [])
         
+        # Process inventory items
+        inventory_items = []
+        for idx, item in enumerate(item_list):
+            if item:
+                base_item = item.get('BaseItem', 0)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+                is_custom = base_item_data is None
+                
+                item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}') if base_item_data else f'Custom Item {base_item}'
+                
+                inventory_items.append({
+                    'index': idx,
+                    'item': item,
+                    'base_item': base_item,
+                    'name': item_name,
+                    'is_custom': is_custom,
+                    'stack_size': item.get('StackSize', 1),
+                    'enhancement': item.get('Enhancement', 0),
+                    'charges': item.get('Charges'),
+                    'identified': item.get('Identified', 1) != 0,
+                    'plot': item.get('Plot', 0) == 1,
+                    'cursed': item.get('Cursed', 0) == 1,
+                    'stolen': item.get('Stolen', 0) == 1
+                })
+        
         summary = {
             'total_items': len(item_list),
+            'inventory_items': inventory_items,
             'equipped_items': {},
             'custom_items': [],
             'encumbrance': self.calculate_encumbrance()

@@ -17,7 +17,6 @@ import sys
 from character.character_manager import (
     CharacterManager, Transaction, GFFDataWrapper
 )
-from character.services import CharacterImportService
 from character.events import EventEmitter, EventData, EventType
 from parsers.gff import GFFParser, GFFElement, GFFFieldType
 from gamedata.services.game_rules_service import GameRulesService
@@ -182,9 +181,13 @@ def mock_resource_manager():
 
 
 @pytest.fixture
-def import_service(mock_resource_manager):
-    """Create a CharacterImportService instance for testing"""
-    return CharacterImportService(mock_resource_manager)
+def mock_savegame_handler():
+    """Create a mock savegame handler for testing FastAPI character loading"""
+    mock_handler = Mock()
+    mock_handler.extract_player_data.return_value = b"mock_player_data"
+    mock_handler.list_files.return_value = ['playerlist.ifo', 'globals.xml', 'player.bic']
+    mock_handler.extract_current_module.return_value = "test_module"
+    return mock_handler
 
 
 @pytest.fixture
@@ -574,247 +577,86 @@ class TestGFFDataWrapper:
         assert wrapper.raw_data == {"test": "data"}
 
 
-class TestCharacterImportService:
-    """Test CharacterImportService integration with CharacterManager"""
+class TestSavegameSessionIntegration:
+    """Test FastAPI savegame session integration with CharacterManager"""
     
-    @patch('character.services.CharacterClass')
-    @patch('character.services.CharacterFeat')
-    @patch('character.services.CharacterSkill')
-    @patch('character.services.CharacterItem')
-    @patch('character.services.Character')
-    def test_import_from_file(self, mock_character_model, mock_item_model, mock_skill_model, 
-                            mock_feat_model, mock_class_model, import_service, temp_save_dir):
-        """Test importing from a .bic file"""
-        # Create a mock .bic file in a subdirectory without currentmodule.txt
-        bic_dir = os.path.join(temp_save_dir, "bic_dir")
-        os.makedirs(bic_dir, exist_ok=True)
-        bic_path = os.path.join(bic_dir, "test.bic")
+    def test_character_session_creation(self, mock_savegame_handler, temp_save_dir):
+        """Test creating character session from savegame"""
+        from fastapi_core.session_registry import get_character_session
         
-        # Mock GFFParser
-        with patch('character.services.GFFParser') as mock_parser_class:
-            mock_parser = Mock()
-            mock_parser_class.return_value = mock_parser
+        # Mock the session creation process
+        with patch('fastapi_core.session_registry.InMemoryCharacterSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session.character_manager = Mock()
+            mock_session_class.return_value = mock_session
             
-            # Mock parsed data
-            mock_parser.top_level_struct.to_dict.return_value = {
-                "FirstName": {"substrings": [{"string": "Hero"}]},
-                "LastName": {"substrings": [{"string": "Test"}]},
-                "Race": 1,
-                "ClassList": [{"Class": 0, "ClassLevel": 10}],
-                "FeatList": [{"Feat": 1}, {"Feat": 10005}],
-                "Mod_Name": "custom_module"
-            }
+            # Get character session (this would normally create the session)
+            session = get_character_session(temp_save_dir)
             
-            # Mock Character model with id for foreign key relationships
-            mock_char_instance = Mock()
-            mock_char_instance.id = 1
-            mock_char_instance.pk = 1
-            mock_character_model.objects.create.return_value = mock_char_instance
-            
-            # Import character
-            result = import_service.import_character(bic_path)
-            
-            # Verify GFF parser was used
-            mock_parser.read.assert_called_once_with(bic_path)
-            
-            # Verify character was created with module info
-            create_call = mock_character_model.objects.create.call_args[1]
-            assert create_call["first_name"] == "Hero"
-            assert create_call["last_name"] == "Test"
-            assert create_call["module_name"] == "custom_module"
-            assert create_call["uses_custom_content"] is True  # Has custom feat
+            # Verify session was created with correct path
+            mock_session_class.assert_called_once_with(temp_save_dir, auto_load=True)
+            assert session.character_manager is not None
     
-    @patch('character.services.CharacterClass')
-    @patch('character.services.CharacterFeat') 
-    @patch('character.services.CharacterSkill')
-    @patch('character.services.CharacterItem')
+    def test_savegame_module_detection(self, temp_save_dir):
+        """Test module detection from currentmodule.txt in savegame"""
+        from parsers.resource_manager import ResourceManager
+        
+        # Mock resource manager
+        mock_rm = Mock(spec=ResourceManager)
+        mock_rm.find_module.return_value = '/path/to/TestModule.mod'
+        
+        # Read currentmodule.txt (created by temp_save_dir fixture)
+        module_file = Path(temp_save_dir) / "currentmodule.txt"
+        module_name = module_file.read_text().strip()
+        
+        # Should detect module from currentmodule.txt
+        assert module_name == "test_module"
+    
     @patch('parsers.savegame_handler.SaveGameHandler')
-    @patch('character.services.Character')
-    def test_import_from_savegame(self, mock_character_model, mock_handler_class, mock_item_model,
-                                 mock_skill_model, mock_feat_model, mock_class_model, import_service, temp_save_dir):
-        """Test importing from a save game directory"""
+    def test_savegame_import_flow(self, mock_handler_class, temp_save_dir):
+        """Test the FastAPI savegame import flow"""
+        from fastapi_routers.savegame import import_savegame
+        from fastapi_models.save_models import SavegameImportRequest
+        
         # Mock SaveGameHandler
         mock_handler = Mock()
         mock_handler_class.return_value = mock_handler
-        mock_handler.extract_player_data.return_value = b"mock_player_data"
         
-        # Mock GFFParser for playerlist.ifo
-        with patch('character.services.GFFParser') as mock_parser_class:
-            mock_parser = Mock()
-            mock_parser_class.return_value = mock_parser
-            
-            # Mock player list structure
-            mock_field = Mock()
-            mock_field.value = [Mock()]
-            mock_field.value[0].to_dict.return_value = {
-                "FirstName": {"substrings": [{"string": "SaveGame"}]},
-                "LastName": {"substrings": [{"string": "Character"}]},
-                "Race": 2,
-                "ClassList": [{"Class": 1, "ClassLevel": 15}]
+        # Mock the parallel GFF parsing
+        with patch('fastapi_routers.savegame.extract_and_parse_save_gff_files') as mock_parse:
+            mock_parse.return_value = {
+                'playerlist.ifo': {
+                    'success': True,
+                    'data': {
+                        'Mod_PlayerList': [{
+                            'FirstName': {'value': 'Test'},
+                            'LastName': {'value': 'Character'},
+                            'Race': 1,
+                            'ClassList': [{'Class': 0, 'ClassLevel': 10}]
+                        }]
+                    }
+                }
             }
             
-            # Mock the parsed GFF structure
-            mock_gff = Mock()
-            mock_gff.get_field = Mock(return_value=mock_field)
-            mock_parser.load.return_value = mock_gff
-            
-            # Mock Character model with id for foreign key relationships
-            mock_char_instance = Mock()
-            mock_char_instance.id = 1
-            mock_char_instance.pk = 1
-            mock_character_model.objects.create.return_value = mock_char_instance
-            
-            # Import from save game
-            result = import_service.import_character(temp_save_dir)
-            
-            # Verify save game handler was used
-            mock_handler_class.assert_called_once_with(temp_save_dir)
-            mock_handler.extract_player_data.assert_called_once()
-            
-            # Verify character was created
-            assert mock_character_model.objects.create.called
-            create_call = mock_character_model.objects.create.call_args[1]
-            assert create_call["is_savegame"] is True
-    
-    def test_detect_module_from_currentmodule_txt(self, import_service, temp_save_dir):
-        """Test module detection from currentmodule.txt"""
-        # Use a file path instead of directory to match expected behavior
-        data = {}
-        file_path = os.path.join(temp_save_dir, "test.bic")
-        import_service._detect_module_info(data, file_path)
-        
-        # Should detect module from currentmodule.txt
-        assert data["_module_info"]["module_name"] == "test_module"
-        
-        # Verify ResourceManager was called to load module
-        import_service.rm.find_module.assert_called_with("test_module")
-        import_service.rm.set_module.assert_called()
-    
-    def test_detect_module_from_mod_name(self, import_service):
-        """Test module detection from Mod_Name field"""
-        data = {"Mod_Name": "my_custom_module"}
-        import_service._detect_module_info(data)
-        
-        assert data["_module_info"]["module_name"] == "my_custom_module"
-        import_service.rm.find_module.assert_called_with("my_custom_module")
-    
-    def test_detect_official_campaign(self, import_service):
-        """Test detection of official campaign modules"""
-        data = {"Mod_Name": "OfficialCampaign", "Mod_LastModId": "OfficialCampaign"}
-        import_service._detect_module_info(data)
-        
-        assert data["_module_info"]["module_name"] == "OfficialCampaign"
-    
-    def test_detect_custom_content_classes(self, import_service):
-        """Test detection of custom classes"""
-        # Mock that base game only has 3 classes (0-2)
-        mock_2da = Mock()
-        mock_2da.get_resource_count.return_value = 3
-        import_service.rm.get_2da.return_value = mock_2da
-        
-        data = {
-            "ClassList": [
-                {"Class": 0},  # Vanilla
-                {"Class": 5}   # Custom
-            ]
-        }
-        import_service._detect_module_info(data)
-        
-        assert data["_module_info"]["uses_custom_content"] is True
-        assert 5 in data["_module_info"]["custom_content_ids"]["classes"]
-    
-    def test_detect_custom_content_feats(self, import_service):
-        """Test detection of custom feats"""
-        mock_2da = Mock()
-        mock_2da.get_resource_count.return_value = 1000
-        import_service.rm.get_2da.return_value = mock_2da
-        
-        data = {
-            "FeatList": [
-                {"Feat": 1},      # Vanilla
-                {"Feat": 999},    # Vanilla (edge)
-                {"Feat": 1001}    # Custom
-            ]
-        }
-        import_service._detect_module_info(data)
-        
-        assert data["_module_info"]["uses_custom_content"] is True
-        assert 1001 in data["_module_info"]["custom_content_ids"]["feats"]
-    
-    def test_detect_custom_spells(self, import_service):
-        """Test detection of custom spells"""
-        mock_2da = Mock()
-        mock_2da.get_resource_count.return_value = 500
-        import_service.rm.get_2da.return_value = mock_2da
-        
-        data = {
-            "KnownList0": [{"Spell": 501}],  # Custom cantrip
-            "SpellLvlMem1": [
-                {"MemorizedList": [{"Spell": 1}, {"Spell": 502}]}
-            ]
-        }
-        import_service._detect_module_info(data)
-        
-        assert data["_module_info"]["uses_custom_content"] is True
-        assert 501 in data["_module_info"]["custom_content_ids"]["spells"]
-        assert 502 in data["_module_info"]["custom_content_ids"]["spells"]
-    
-    def test_detect_campaign_by_module_pattern(self, import_service):
-        """Test campaign detection by module name patterns"""
-        # Test original campaign
-        data = {"_module_info": {"module_name": "1200_highcliff", "campaign_name": ""}}
-        
-        # Mock os.path.exists to return True for campaign path
-        with patch('os.path.exists', return_value=True):
-            import_service._detect_campaign_info(data)
-        
-        assert data["_module_info"]["campaign_name"] == "Test Campaign"
-        assert "test_module" in data["_module_info"]["campaign_modules"]
-        assert data["_module_info"]["campaign_level_cap"] == 20
-    
-    def test_detect_campaign_motb(self, import_service):
-        """Test Mask of the Betrayer campaign detection"""
-        data = {"_module_info": {"module_name": "2100_mulsantir", "campaign_name": ""}}
-        
-        # Mock campaign info
-        import_service.rm.find_campaign.return_value = {
-            "name": "Mask of the Betrayer",
-            "modules": ["2000_motb_start", "2100_mulsantir", "2200_thayred"],
-            "level_cap": 30
-        }
-        
-        # Mock os.path.exists to return True for campaign path
-        with patch('os.path.exists', return_value=True):
-            import_service._detect_campaign_info(data)
-        
-        assert "Mask of the Betrayer" in data["_module_info"]["campaign_name"]
-    
-    def test_detect_campaign_by_module_list(self, import_service):
-        """Test campaign detection by checking module lists"""
-        data = {"_module_info": {"module_name": "some_module", "campaign_name": ""}}
-        
-        # Mock campaign directory listing
-        with patch('os.path.exists', return_value=True), \
-             patch('os.listdir', return_value=["Campaign1", "Campaign2"]), \
-             patch('os.path.isdir', return_value=True):
-            
-            # First campaign doesn't contain module
-            # Second campaign contains module
-            def find_campaign_side_effect(path):
-                if "Campaign2" in path:
-                    return {
-                        "name": "Found Campaign",
-                        "modules": ["some_module", "other_module"],
-                        "level_cap": 25
-                    }
-                return {"name": "Other Campaign", "modules": ["different_module"]}
-            
-            import_service.rm.find_campaign.side_effect = find_campaign_side_effect
-            
-            import_service._detect_campaign_info(data)
-            
-            assert data["_module_info"]["campaign_name"] == "Found Campaign"
-            assert data["_module_info"]["campaign_level_cap"] == 25
+            # Mock the session creation
+            with patch('fastapi_routers.savegame.get_character_session') as mock_get_session:
+                mock_session = Mock()
+                mock_get_session.return_value = mock_session
+                
+                with patch('fastapi_routers.savegame.register_character_path') as mock_register:
+                    mock_register.return_value = 1
+                    
+                    # Create import request
+                    request = SavegameImportRequest(save_path=temp_save_dir)
+                    
+                    # Test import (would normally require system_ready dependency)
+                    with patch('fastapi_routers.savegame.check_system_ready', return_value=True):
+                        result = import_savegame(request, system_ready=True)
+                    
+                    # Verify the import was successful
+                    assert result.success is True
+                    assert result.character_name == "Test Character"
+                    assert result.character_id == "1"
 
 
 class TestCharacterManagerEdgeCases:

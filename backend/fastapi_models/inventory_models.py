@@ -274,6 +274,7 @@ class RemoveFromInventoryResponse(BaseModel):
 class InventorySummary(BaseModel):
     """Summary from get_inventory_summary()"""
     total_items: int
+    inventory_items: List[Dict[str, Any]]
     equipped_items: Dict[str, Dict[str, Any]]
     custom_items: List[Dict[str, Any]]
     encumbrance: Dict[str, Any]

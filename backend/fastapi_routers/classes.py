@@ -8,36 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 
 from fastapi_routers.dependencies import (
     get_character_manager, 
-    get_character_session_dep,
+    get_character_session,
     CharacterManagerDep,
-    CharacterSessionDep,
-    handle_character_error
+    CharacterSessionDep
 )
-from fastapi_models.class_models import (
-    # State models
-    ClassesState,
-    ClassSummary,
-    
-    # Change request models
-    ClassChangeRequest,
-    LevelUpRequest,
-    
-    # Response models
-    ClassChangeResult,
-    ClassChangePreview,
-    LevelUpResult,
-    LevelUpPreview,
-    
-    # Categorized classes models
-    CategorizedClassesResponse,
-    SearchClassesResult,
-    ClassInfo,
-    FocusInfo,
-    
-    # Class features models
-    ClassFeaturesResponse,
-    ClassFeaturesRequest
-)
+# from fastapi_models.class_models import (...) - moved to lazy loading
 from character.service_modules.class_categorizer import ClassCategorizer, ClassType
 from gamedata.loader import get_game_data_loader
 
@@ -46,12 +21,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/characters/{character_id}/classes/state/", response_model=ClassesState)
+@router.get("/characters/{character_id}/classes/state")
 def get_classes_state(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get current classes state"""
+    from fastapi_models.class_models import ClassesState
     
     try:
         class_manager = manager.get_manager('class')
@@ -85,20 +61,25 @@ def get_classes_state(
         
     except Exception as e:
         logger.error(f"Failed to get classes state for character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "get_classes_state")
+        logger.error(f"Failed to get classes state for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get classes state: {str(e)}"
+        )
 
 
-@router.post("/characters/{character_id}/classes/change/")
+@router.post("/characters/{character_id}/classes/change")
 def change_class(
     character_id: int,
-    request: ClassChangeRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    request: dict  # Request body parameter
 ):
     """
     Change character's class using the unified CharacterManager
     Returns all cascading changes (feats, spells, skills)
     """
-    character, session = char_session
+    from fastapi_models.class_models import ClassChangeRequest, ClassChangePreview, ClassChangeResult
+    session = char_session
     manager = session.character_manager
     
     try:
@@ -110,16 +91,17 @@ def change_class(
             )
         
         # Validate class ID exists
-        if not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', request.class_id):
+        class_id = request.get('class_id')
+        if class_id is None or not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid class ID: {request.class_id}"
+                detail=f"Invalid class ID: {class_id}"
             )
         
         # Use class manager methods - no duplicated logic
-        if request.preview:
+        if request.get('preview', False):
             changes = class_manager.change_class(
-                request.class_id, request.preserve_level, request.cheat_mode
+                class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
             )
             
             preview_data = {
@@ -131,7 +113,7 @@ def change_class(
 
         # Execute class change using manager
         changes = class_manager.change_class(
-            request.class_id, request.preserve_level, request.cheat_mode
+            class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
         )
 
         result = {
@@ -145,19 +127,25 @@ def change_class(
 
     except Exception as e:
         logger.error(f"Failed to change class for character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "change_class")
+        logger.error(f"Failed to change class for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to change class: {str(e)}"
+        )
 
 
-@router.post("/characters/{character_id}/classes/level-up/")
+@router.post("/characters/{character_id}/classes/level-up")
 def level_up(
     character_id: int,
-    request: LevelUpRequest,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep,
+    request: dict  # Request body parameter
 ):
     """
-    Add a level to a specific class (multiclassing or leveling up)
+    Adjust levels in a specific class (add or remove levels)
+    Supports level_change parameter for +/- level adjustments
     """
-    character, session = char_session
+    from fastapi_models.class_models import LevelUpRequest, LevelUpPreview, LevelUpResult
+    session = char_session
     manager = session.character_manager
     
     try:
@@ -169,23 +157,27 @@ def level_up(
             )
         
         # Validate class ID exists
-        if not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', request.class_id):
+        class_id = request.get('class_id')
+        if class_id is None or not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid class ID: {request.class_id}"
+                detail=f"Invalid class ID: {class_id}"
             )
         
-        if request.preview:
+        # Get level change (default to +1 for compatibility)
+        level_change = request.get('level_change', 1)
+        
+        if request.get('preview', False):
             # Use manager methods only
             preview_data = {
                 'preview': True,
-                'level_change': 1,
+                'level_change': level_change,
                 'has_unsaved_changes': session.has_unsaved_changes()
             }
             return LevelUpPreview(**preview_data)
         
         # Use class manager method - no duplicated logic
-        changes = class_manager.add_class_level(request.class_id, request.cheat_mode)
+        changes = class_manager.adjust_class_level(class_id, level_change, request.get('cheat_mode', False))
         
         result = {
             'success': True,
@@ -198,21 +190,26 @@ def level_up(
         
     except Exception as e:
         logger.error(f"Failed to level up character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "level_up")
+        logger.error(f"Failed to level up character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to level up: {str(e)}"
+        )
 
 
-@router.get("/characters/{character_id}/classes/categorized/", response_model=CategorizedClassesResponse)
+@router.get("/characters/{character_id}/classes/categorized")
 def get_categorized_classes_for_character(
     character_id: int,
+    manager: CharacterManagerDep,
     search: Optional[str] = Query(None, description="Filter classes by name"),
     type_filter: Optional[str] = Query(None, alias="type", description="Filter by 'base' or 'prestige'"),
-    include_unplayable: bool = Query(False, description="Include NPC classes"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    include_unplayable: bool = Query(False, description="Include NPC classes")
 ):
     """
     Get all classes organized by type and focus for UI selection
     Includes character-specific context for prerequisites
     """
+    from fastapi_models.class_models import CategorizedClassesResponse, FocusInfo
     
     try:
         # Get game data loader
@@ -308,7 +305,7 @@ def get_categorized_classes_for_character(
         )
 
 
-@router.get("/classes/categorized/", response_model=CategorizedClassesResponse)
+@router.get("/classes/categorized")
 def get_categorized_classes_standalone(
     search: Optional[str] = Query(None, description="Filter classes by name"),
     type_filter: Optional[str] = Query(None, alias="type", description="Filter by 'base' or 'prestige'"),
@@ -317,6 +314,7 @@ def get_categorized_classes_standalone(
     """
     Get all classes organized by type and focus (standalone, no character context needed)
     """
+    from fastapi_models.class_models import CategorizedClassesResponse, FocusInfo
     try:
         # Get game data loader
         game_data_loader = get_game_data_loader()
@@ -396,14 +394,58 @@ def get_categorized_classes_standalone(
         )
 
 
-@router.post("/characters/{character_id}/classes/remove/")
+@router.post("/characters/{character_id}/classes/add")
+def add_class(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request: dict  # Request body parameter
+):
+    """Add a new class to character (for multiclassing)"""
+    session = char_session
+    manager = session.character_manager
+    
+    try:
+        class_manager = manager.get_manager('class')
+        if not class_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Class manager not available"
+            )
+        
+        # Validate class ID exists
+        class_id = request.get('class_id')
+        if class_id is None or not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', class_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid class ID: {class_id}"
+            )
+        
+        # Use class manager method to add class level (handles new classes too)
+        changes = class_manager.add_class_level(class_id, request.get('cheat_mode', False))
+        
+        return {
+            'success': True,
+            'message': 'Class added successfully',
+            'changes': changes or {},
+            'has_unsaved_changes': session.has_unsaved_changes()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to add class {class_id} to character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add class: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/classes/remove/{class_id}")
 def remove_class(
     character_id: int,
     class_id: int,
-    char_session: CharacterSessionDep = Depends(get_character_session_dep)
+    char_session: CharacterSessionDep
 ):
     """Remove a class from multiclass character"""
-    character, session = char_session
+    session = char_session
     manager = session.character_manager
     
     try:
@@ -426,13 +468,17 @@ def remove_class(
         
     except Exception as e:
         logger.error(f"Failed to remove class {class_id} from character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "remove_class")
+        logger.error(f"Failed to remove class for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove class: {str(e)}"
+        )
 
 
-@router.get("/characters/{character_id}/classes/validate/")
+@router.get("/characters/{character_id}/classes/validate")
 def validate_classes(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Validate current class configuration"""
     
@@ -454,15 +500,19 @@ def validate_classes(
         
     except Exception as e:
         logger.error(f"Failed to validate classes for character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "validate_classes")
+        logger.error(f"Failed to validate classes for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate classes: {str(e)}"
+        )
 
 
-@router.get("/characters/{character_id}/classes/progression/{class_id}/")
+@router.get("/characters/{character_id}/classes/progression/{class_id}")
 def get_class_progression_summary(
     character_id: int,
     class_id: int,
-    max_level: int = Query(20, description="Maximum level to show"),
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep,
+    max_level: int = Query(20, description="Maximum level to show")
 ):
     """Get detailed class progression summary"""
     
@@ -481,13 +531,17 @@ def get_class_progression_summary(
         
     except Exception as e:
         logger.error(f"Failed to get class progression for class {class_id}: {e}")
-        raise handle_character_error(character_id, e, "get_class_progression_summary")
+        logger.error(f"Failed to get class progression summary for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get class progression summary: {str(e)}"
+        )
 
 
-@router.get("/characters/{character_id}/classes/prestige-options/")
+@router.get("/characters/{character_id}/classes/prestige-options")
 def get_prestige_options(
     character_id: int,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Get available prestige class options for character"""
     
@@ -508,14 +562,18 @@ def get_prestige_options(
         
     except Exception as e:
         logger.error(f"Failed to get prestige options for character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "get_prestige_options")
+        logger.error(f"Failed to get prestige options for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get prestige options: {str(e)}"
+        )
 
 
-@router.get("/characters/{character_id}/classes/has-class/{class_name}/")
+@router.get("/characters/{character_id}/classes/has-class/{class_name}")
 def has_class_by_name(
     character_id: int,
     class_name: str,
-    manager: CharacterManagerDep = Depends(get_character_manager)
+    manager: CharacterManagerDep
 ):
     """Check if character has levels in a specific class by name"""
     
@@ -539,10 +597,14 @@ def has_class_by_name(
         
     except Exception as e:
         logger.error(f"Failed to check class {class_name} for character {character_id}: {e}")
-        raise handle_character_error(character_id, e, "has_class_by_name")
+        logger.error(f"Failed to check class by name for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check class by name: {str(e)}"
+        )
 
 
-@router.get("/classes/features/{class_id}/", response_model=ClassFeaturesResponse)
+@router.get("/classes/features/{class_id}")
 def get_class_features(
     class_id: int,
     max_level: int = Query(20, description="Maximum level to show progression for"),
@@ -553,6 +615,7 @@ def get_class_features(
     """
     Get detailed class features and progression for a specific class
     """
+    from fastapi_models.class_models import ClassFeaturesResponse
     try:
         # Get game data loader
         game_data_loader = get_game_data_loader()
@@ -601,8 +664,9 @@ def get_class_features(
 
 # Helper functions
 
-def _serialize_class_info(class_info) -> ClassInfo:
+def _serialize_class_info(class_info):  # Return type removed for lazy loading
     """Serialize ClassInfo object for API response"""
+    from fastapi_models.class_models import ClassInfo
     # Serialize parsed description if available
     parsed_desc = None
     if class_info.parsed_description:

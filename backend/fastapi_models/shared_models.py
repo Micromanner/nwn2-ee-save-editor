@@ -55,15 +55,6 @@ class HealthResponse(BaseModel):
     uptime: Optional[int] = None
     checks: Dict[str, bool] = Field(default_factory=dict)
 
-
-class ReadyResponse(BaseModel):
-    """Service readiness check response"""
-    ready: bool
-    message: str
-    initialization_progress: int = Field(100, ge=0, le=100)
-    components: Dict[str, bool] = Field(default_factory=dict)
-
-
 class SystemInfo(BaseModel):
     """System information"""
     version: str

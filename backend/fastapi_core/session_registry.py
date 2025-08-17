@@ -9,15 +9,17 @@ This is the Django-free version for standalone FastAPI use.
 
 import logging
 import threading
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, TYPE_CHECKING
 
-from character.in_memory_save_manager import InMemoryCharacterSession
-from .character_info import CharacterInfo, get_character_info
+# Type hints only - no runtime imports to avoid heavy loading
+if TYPE_CHECKING:
+    from character.in_memory_save_manager import InMemoryCharacterSession
+    from .character_info import CharacterInfo
 
 logger = logging.getLogger(__name__)
 
-# Global registry of active character sessions
-_character_sessions: Dict[str, InMemoryCharacterSession] = {}
+# Global registry of active character sessions  
+_character_sessions: Dict[str, object] = {}  # Type as object to avoid import
 _registry_lock = threading.Lock()
 
 # Integer ID management for cleaner URLs
@@ -26,7 +28,7 @@ _id_to_path: Dict[int, str] = {}  # Maps integer IDs to file paths
 _path_to_id: Dict[str, int] = {}  # Reverse mapping for lookups
 
 
-def get_character_session(character_id: str) -> InMemoryCharacterSession:
+def get_character_session(character_id: str) -> "InMemoryCharacterSession":
     """
     Get or create a character editing session.
     
@@ -44,6 +46,9 @@ def get_character_session(character_id: str) -> InMemoryCharacterSession:
         HTTPException: If character not found
         ValueError: If session creation fails
     """
+    # Lazy imports - only import when creating sessions
+    from character.in_memory_save_manager import InMemoryCharacterSession
+    
     with _registry_lock:
         
         # Check if session already exists
@@ -57,15 +62,10 @@ def get_character_session(character_id: str) -> InMemoryCharacterSession:
                 logger.warning(f"Found invalid session for character {character_id}, removing")
                 _character_sessions.pop(character_id, None)
         
-        # Get character info (this validates the character exists)
-        character_info = get_character_info(character_id)
-        
-        if not character_info.is_savegame:
-            raise ValueError("Individual .bic files not yet supported by in-memory system")
-        
+        # Let InMemoryCharacterSession handle all validation (better error messages)
         try:
             logger.info(f"Creating new character session for character {character_id}")
-            session = InMemoryCharacterSession(character_info.file_path, auto_load=True)
+            session = InMemoryCharacterSession(character_id, auto_load=True)
             
             if not session.character_manager:
                 raise ValueError("Failed to load character data into memory")

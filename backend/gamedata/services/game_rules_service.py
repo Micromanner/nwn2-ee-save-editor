@@ -30,7 +30,14 @@ class GameRulesService:
     # Delegate data access methods to the loader
     def get_table(self, table_name: str) -> List[Any]:
         """Get all instances for a table."""
-        return self._loader.get_table(table_name)
+        import logging
+        logger = logging.getLogger(__name__)
+        result = self._loader.get_table(table_name)
+        logger.debug(f"GameRulesService.get_table('{table_name}'): result = {result}")
+        logger.debug(f"GameRulesService.get_table('{table_name}'): result type = {type(result)}")
+        if result:
+            logger.debug(f"GameRulesService.get_table('{table_name}'): result length = {len(result)}")
+        return result
     
     def get_by_id(self, table_name: str, row_id: int) -> Optional[Any]:
         """Get a specific row by ID."""
