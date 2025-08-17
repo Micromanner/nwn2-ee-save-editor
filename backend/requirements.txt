@@ -19,7 +19,7 @@ Nuitka==2.7.12
 numpy==1.26.3
 ordered-set==4.1.0
 packaging==25.0
-pillow==10.2.0
+pillow==10.3.0
 psutil==7.0.0
 pluggy==1.6.0
 maturin==1.9.2
