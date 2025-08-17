@@ -4,7 +4,7 @@ uvicorn==0.24.0
 pydantic==2.5.0
 
 # HTTP and CORS
-python-multipart==0.0.6
+python-multipart==0.0.18
 python-cors==1.7.0
 
 # Utilities (keeping from Django setup)
