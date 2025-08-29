@@ -32,4 +32,4 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 image = { version = "0.24", features = ["tga"] }
 base64 = "0.22"
-webp = "0.2.2"
+webp = "0.3.1"
