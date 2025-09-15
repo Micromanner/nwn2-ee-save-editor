@@ -104,7 +104,15 @@ function AppContent() {
             console.log('Fetching fresh inventory data...');
             await loadSubsystem('inventory');
             break;
-          // For other tabs like 'overview', 'appearance', etc., no specific fetch needed
+          case 'overview':
+            console.log('Fetching fresh overview data...');
+            await loadSubsystem('abilityScores');
+            await loadSubsystem('combat');
+            await loadSubsystem('skills');
+            await loadSubsystem('feats');
+            await loadSubsystem('saves');
+            break;
+          // For other tabs like 'appearance', etc., no specific fetch needed
           default:
             break;
         }

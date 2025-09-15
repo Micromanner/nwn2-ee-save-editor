@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useSpells } from '@/lib/api/hooks';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { spellSections, viewModeConfig } from './SpellSections';
+import { spellSections } from './SpellSections';
 import SpellFilters from './SpellFilters';
 import SpellHeader from './SpellHeader';
 import SpellList from './SpellList';
@@ -48,11 +48,24 @@ export default function SpellsEditor() {
   // Get character context to check if character is loaded
   const { character, isLoading: characterLoading, error: characterError } = useCharacterContext();
   
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(viewModeConfig.defaultMode as 'grid' | 'list');
   const [learnedSpells, setLearnedSpells] = useState<Set<number>>(new Set());
   
+  const [filters, setFilters] = useState({
+    search: '',
+    level: 'all' as number | 'all',
+    school: 'all',
+    onlyLearned: false,
+  });
+
+  // Prepare backend filters
+  const backendFilters = useMemo(() => ({
+    level: filters.level === 'all' ? undefined : filters.level,
+    school: filters.school === 'all' ? undefined : filters.school,
+    search: filters.search.trim() || undefined,
+  }), [filters]);
+
   // Fetch game spell data (filtered character spells) - only if character exists
-  const { data: gameSpellsData, loading: gameSpellsLoading, error: spellsError } = useSpells(character?.id);
+  const { data: gameSpellsData, loading: gameSpellsLoading, error: spellsError } = useSpells(character?.id, backendFilters);
   
   // Note: We now get spell data directly from the new filtered endpoint
   // No need to use the subsystem since we're getting both available spells and character spell state
@@ -83,13 +96,6 @@ export default function SpellsEditor() {
     }));
   }, [gameSpellsData, learnedSpells]);
 
-  const [filters, setFilters] = useState({
-    search: '',
-    level: 'all' as number | 'all',
-    school: 'all',
-    onlyLearned: false,
-  });
-
   // Get unique schools from spell data
   const schools = useMemo(() => {
     const schoolSet = new Set<string>();
@@ -99,18 +105,12 @@ export default function SpellsEditor() {
     return Array.from(schoolSet).sort();
   }, [knownSpells]);
 
+
+  // Since backend now handles most filtering, only apply client-side "onlyLearned" filter
   const filteredSpells = useMemo(() => {
-    return knownSpells.filter(spell => {
-      if (filters.search && !spell.name.toLowerCase().includes(filters.search.toLowerCase())) {
-        return false;
-      }
-      if (filters.level !== 'all' && filters.level !== spell.innate_level) return false;
-      if (filters.school !== 'all' && spell.school !== filters.school) return false;
-      if (filters.onlyLearned && !spell.isLearned) return false;
-      
-      return true;
-    });
-  }, [knownSpells, filters]);
+    if (!filters.onlyLearned) return knownSpells;
+    return knownSpells.filter(spell => spell.isLearned);
+  }, [knownSpells, filters.onlyLearned]);
   
   const isLoading = characterLoading || gameSpellsLoading;
   const error = characterError || spellsError;
@@ -178,8 +178,6 @@ export default function SpellsEditor() {
             filteredCount={filteredSpells.length}
             totalCount={knownSpells.length}
             learnedCount={filteredSpells.filter(s => s.isLearned).length}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
           />
         );
       case 'spellList':
@@ -187,7 +185,6 @@ export default function SpellsEditor() {
           <SpellList
             key={section.id}
             spells={filteredSpells}
-            viewMode={viewMode}
             isLoading={isLoading}
             onToggleLearned={toggleSpellLearning}
             defaultExpandedLevels={section.props?.defaultExpandedLevels}

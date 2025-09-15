@@ -3,45 +3,33 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed',
+  'btn-base',
   {
     variants: {
       variant: {
-        // Enhanced primary variant - fixed border colors
-        primary: 'bg-[rgb(var(--color-primary))] text-text-primary border border-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary-600))] hover:border-[rgb(var(--color-primary-600))]',
-        secondary: 'bg-[rgb(var(--color-secondary))] text-white hover:bg-[rgb(var(--color-secondary-600))]', 
-        // Enhanced outline variant - fixed border colors and hover effects
-        outline: 'bg-transparent text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary))] hover:text-text-primary hover:border-[rgb(var(--color-primary))]',
-        ghost: 'text-text-primary hover:bg-[rgb(var(--color-surface-1))]',
-        danger: 'bg-[rgb(var(--color-error))] text-white hover:bg-[rgb(var(--color-error-dark))]',
-        // Spell-specific variants
-        'spell-ghost': 'bg-transparent text-text-muted border border-transparent hover:bg-[rgb(var(--color-surface-2))] hover:text-text-primary',
-        'spell-learned': 'bg-[rgb(var(--color-primary))] text-text-primary border border-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-error))] hover:border-[rgb(var(--color-error))] relative overflow-hidden',
-        
-        // Interactive icon button (for attribute controls, etc.)
-        'icon-interactive': 'bg-[rgb(var(--color-surface-2))] text-text-primary border border-[rgb(var(--color-surface-border)/0.7)] hover:bg-[rgb(var(--color-surface-3))] hover:border-[rgb(var(--color-primary)/0.5)] hover:scale-105 active:scale-95 active:bg-[rgb(var(--color-primary)/0.1)] focus:outline-2 focus:outline-[rgb(var(--color-primary))] focus:outline-offset-2 focus:z-10 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:hover:bg-[rgb(var(--color-surface-2))] disabled:hover:border-[rgb(var(--color-surface-border)/0.7)]',
+        primary: 'btn-primary',
+        secondary: 'btn-secondary',
+        outline: 'btn-outline',
+        ghost: 'btn-ghost',
+        danger: 'btn-danger',
+        'spell-ghost': 'btn-spell-ghost',
+        'spell-learned': 'btn-spell-learned',
+        'icon-interactive': 'btn-icon-interactive',
       },
       size: {
-        xs: 'px-2 py-1 text-xs',      // Small buttons like spell actions
-        sm: 'px-3 py-1.5 text-sm',    // Small regular buttons
-        md: 'px-4 py-2 text-sm',      // Default button size
-        lg: 'px-6 py-3 text-base',    // Large buttons
-        icon: 'p-1.5',                // Small icon buttons (24x24px)
-        'icon-md': 'p-2',             // Medium icon buttons (32x32px)  
-        'icon-lg': 'w-8 h-8 p-0',     // Large icon buttons (32x32px with fixed dimensions)
+        xs: 'btn-xs',
+        sm: 'btn-sm',
+        md: 'btn-md',
+        lg: 'btn-lg',
+        icon: 'btn-icon',
+        'icon-md': 'btn-icon-md',
+        'icon-lg': 'btn-icon-lg',
       },
     },
     defaultVariants: {
       variant: 'primary',
       size: 'md',
     },
-    compoundVariants: [
-      // Enhanced disabled states for outline variant
-      {
-        variant: 'outline',
-        className: 'disabled:border-surface-border disabled:text-text-muted disabled:hover:bg-transparent disabled:hover:text-text-muted disabled:hover:border-surface-border',
-      },
-    ],
   }
 );
 

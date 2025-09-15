@@ -14,14 +14,18 @@ interface FeatInfo {
 }
 
 interface FeatsState {
-  current_feats: {
+  summary: {
     total: number;
     protected: FeatInfo[];
     class_feats: FeatInfo[];
     general_feats: FeatInfo[];
     custom_feats: FeatInfo[];
   };
-  available_feats?: FeatInfo[]; // Optional - no longer loaded from /feats/state/
+  all_feats: FeatInfo[];
+  available_feats: FeatInfo[];
+  legitimate_feats: FeatInfo[];
+  feat_chains: Record<string, any>;
+  recommended_feats: FeatInfo[];
 }
 
 interface FeatSummaryProps {
@@ -30,7 +34,7 @@ interface FeatSummaryProps {
 }
 
 export default function FeatSummary({ featsData, availableFeatsCount }: FeatSummaryProps) {
-  if (!featsData) return null;
+  if (!featsData?.summary) return null;
 
   return (
     <Card className="p-4" backgroundColor="rgb(var(--color-surface-1))" shadow="shadow-elevation-2">
@@ -42,14 +46,14 @@ export default function FeatSummary({ featsData, availableFeatsCount }: FeatSumm
           <div className="flex justify-between items-center">
             <span className="text-xs text-[rgb(var(--color-text-muted))]">Current / Available</span>
             <span className="text-sm font-bold">
-              {display(featsData.current_feats.total)} / {formatNumber(availableFeatsCount)}
+              {display(featsData.summary.total)} / {formatNumber(availableFeatsCount)}
             </span>
           </div>
           <div className="w-full bg-[rgb(var(--color-surface-3))] rounded-full h-2">
             <div 
               className="bg-[rgb(var(--color-primary))] h-2 rounded-full transition-all"
               style={{ 
-                width: `${Math.min(100, (featsData.current_feats.total / (featsData.current_feats.total + availableFeatsCount)) * 100)}%` 
+                width: `${Math.min(100, (featsData.summary.total / (featsData.summary.total + availableFeatsCount)) * 100)}%` 
               }}
             />
           </div>
@@ -61,26 +65,26 @@ export default function FeatSummary({ featsData, availableFeatsCount }: FeatSumm
               Protected
             </span>
             <span className="text-sm font-semibold">
-              {display(featsData.current_feats.protected.length)}
+              {display(featsData.summary.protected.length)}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-[rgb(var(--color-text-muted))]">Class Feats</span>
             <span className="text-sm font-semibold">
-              {display(featsData.current_feats.class_feats.length)}
+              {display(featsData.summary.class_feats.length)}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-[rgb(var(--color-text-muted))]">General Feats</span>
             <span className="text-sm font-semibold">
-              {display(featsData.current_feats.general_feats.length)}
+              {display(featsData.summary.general_feats.length)}
             </span>
           </div>
-          {featsData.current_feats.custom_feats.length > 0 && (
+          {featsData.summary.custom_feats.length > 0 && (
             <div className="flex justify-between items-center">
               <span className="text-xs text-[rgb(var(--color-text-muted))]">Custom Content</span>
               <span className="text-sm font-semibold">
-                {display(featsData.current_feats.custom_feats.length)}
+                {display(featsData.summary.custom_feats.length)}
               </span>
             </div>
           )}

@@ -73,8 +73,15 @@ export function useFeats(characterId: number, featType?: number) {
   return useGameData(() => gameData.feats(characterId, featType), [characterId, featType]);
 }
 
-export function useSpells(characterId?: number) {
-  return useGameData(() => characterId ? gameData.spells(characterId) : Promise.resolve([]), [characterId]);
+export function useSpells(characterId?: number, filters?: {
+  level?: number;
+  school?: string;
+  search?: string;
+}) {
+  return useGameData(() => 
+    characterId ? gameData.spells(characterId, filters) : Promise.resolve([]), 
+    [characterId, filters?.level, filters?.school, filters?.search]
+  );
 }
 
 // Hook for paginated data with automatic loading

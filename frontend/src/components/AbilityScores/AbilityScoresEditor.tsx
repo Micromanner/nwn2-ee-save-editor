@@ -12,12 +12,12 @@ export default function AbilityScoresEditor() {
   const { character } = useCharacterContext();
   const attributesData = useSubsystem<AbilityScoreState>('abilityScores');
   
-  // Load attributes data when component mounts
+  // Load attributes data only if missing when component mounts
   useEffect(() => {
-    if (character && !attributesData.data && !attributesData.isLoading) {
-      attributesData.load();
+    if (character?.id && !attributesData.data && !attributesData.isLoading) {
+      attributesData.load(); // Only load if data is missing - no forced refresh on tab switch
     }
-  }, [character, attributesData]);
+  }, [character?.id, attributesData.data, attributesData.isLoading]); // Load only when character changes or data is missing
   
   // Initialize ability score management with subsystem data
   const {

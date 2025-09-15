@@ -70,7 +70,7 @@ export const spellSections: SpellSection[] = [
     id: 'filters',
     title: 'Spell Filters',
     component: 'filters',
-    className: 'w-80',
+    className: 'w-65',
     props: {
       showResetButton: true
     }

@@ -1084,21 +1084,67 @@ class SpellManager(EventEmitter):
                     spell_icon = field_mapper.get_field_value(spell_data, 'IconResRef', '')
                     school_id_raw = field_mapper.get_field_value(spell_data, 'School', 0)
                     
+                    # Get additional spell details first (needed for invocation detection)
+                    spell_desc = field_mapper.get_field_value(spell_data, 'SpellDesc', '')
+                    
                     # Convert school_id to integer properly
+                    # NWN2 spells.2da uses letter codes for schools, need to map to IDs
                     school_id = None
                     school_name = None
-                    if school_id_raw not in [None, '', '****']:
-                        try:
-                            school_id = int(school_id_raw)
-                            # Get school name from spellschools table
+                    
+                    # Handle school mapping
+                    if school_id_raw not in [None, '', '****', 0]:
+                        # Try to map letter codes to school IDs first
+                        school_letter_map = {
+                            'G': 0,  # General
+                            'A': 1,  # Abjuration
+                            'C': 2,  # Conjuration  
+                            'D': 3,  # Divination
+                            'E': 4,  # Enchantment
+                            'V': 5,  # Evocation
+                            'I': 6,  # Illusion
+                            'N': 7,  # Necromancy
+                            'T': 8   # Transmutation
+                        }
+                        
+                        school_letter = str(school_id_raw).upper().strip()
+                        if school_letter in school_letter_map:
+                            school_id = school_letter_map[school_letter]
+                        else:
+                            # Fallback: try direct integer conversion
+                            try:
+                                school_id = int(school_id_raw)
+                            except (ValueError, TypeError):
+                                school_id = 0  # Default to General
+                        
+                        # Get school name from spellschools table
+                        if school_id is not None:
                             school_data = self.rules_service.get_by_id('spellschools', school_id)
                             if school_data:
                                 school_name = field_mapper.get_field_value(school_data, 'Label', None)
-                        except (ValueError, TypeError):
+                    else:
+                        # Handle spells with no school (null, '', '****', 0)
+                        # Check if this is a warlock invocation
+                        if available_classes == ['warlock']:
+                            school_id = 9  # Custom school ID for invocations
+                            school_name = "Invocation"
+                            
+                            # Optional: Add detailed subtyping based on description
+                            if spell_desc:
+                                desc_upper = spell_desc.upper()
+                                if 'INVOCATION TYPE:' in desc_upper or 'INVOCATION LEVEL:' in desc_upper:
+                                    if 'LEAST' in desc_upper:
+                                        school_name = "Invocation (Least)"
+                                    elif 'LESSER' in desc_upper:
+                                        school_name = "Invocation (Lesser)"
+                                    elif 'GREATER' in desc_upper:
+                                        school_name = "Invocation (Greater)"
+                                    elif 'DARK' in desc_upper:
+                                        school_name = "Invocation (Dark)"
+                        else:
+                            # Truly unknown/no school
                             school_id = None
-                    
-                    # Get additional spell details
-                    spell_desc = field_mapper.get_field_value(spell_data, 'SpellDesc', '')
+                            school_name = None
                     spell_range = field_mapper.get_field_value(spell_data, 'Range', '')
                     cast_time = field_mapper.get_field_value(spell_data, 'CastTime', '')
                     conj_time = field_mapper.get_field_value(spell_data, 'ConjTime', '')

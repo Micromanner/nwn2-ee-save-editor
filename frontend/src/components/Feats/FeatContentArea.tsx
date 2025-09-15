@@ -11,12 +11,21 @@ import {
   ChevronRight, 
   ChevronDown,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Info, 
+  Swords, 
+  Sparkles, 
+  Sun, 
+  Zap, 
+  Shield
 } from 'lucide-react';
-import FeatCard from './FeatCard';
-import VirtualizedFeatSection from './VirtualizedFeatSection';
+import GameDataList from '@/components/ui/GameDataList';
+import type { GameDataItem } from '@/components/ui/GameDataList';
+// Removed VirtualizedFeatSection - using GameDataList for all cases
 import FeatSearchBar from './FeatSearchBar';
 import { useFeatSearch } from '@/hooks/useFeatSearch';
+import NWN2Icon from '@/components/ui/NWN2Icon';
+import { display } from '@/utils/dataHelpers';
 import type { 
   FeatInfo, 
   FeatsState, 
@@ -45,6 +54,49 @@ interface FeatContentAreaProps extends FeatManagementCallbacks {
   validatingFeatId?: number | null;
 }
 
+// Helper functions for feat rendering
+const getFeatTypeName = (type: number): string => {
+  switch (type) {
+    case 1: return 'General';
+    case 2: return 'Combat';
+    case 8: return 'Metamagic';
+    case 16: return 'Divine';
+    case 32: return 'Epic';
+    case 64: return 'Class';
+    default: return 'General';
+  }
+};
+
+const getTypeIcon = (type: number) => {
+  switch (type) {
+    case 2: return <Swords className="w-4 h-4" />; // Combat
+    case 8: return <Sparkles className="w-4 h-4" />; // Metamagic
+    case 16: return <Sun className="w-4 h-4" />; // Divine
+    case 32: return <Zap className="w-4 h-4" />; // Epic
+    case 64: return <Shield className="w-4 h-4" />; // Class
+    default: return null;
+  }
+};
+
+const getTypeColor = (type: number) => {
+  switch (type) {
+    case 2: return 'destructive'; // Combat
+    case 8: return 'secondary'; // Metamagic
+    case 16: return 'default'; // Divine
+    case 32: return 'outline'; // Epic
+    case 64: return 'default'; // Class
+    default: return 'default';
+  }
+};
+
+// Convert FeatInfo to GameDataItem
+const featToGameDataItem = (feat: FeatInfo): GameDataItem & FeatInfo => ({
+  ...feat,
+  name: feat.label,
+  isActive: false, // Available feats are not active/learned yet
+  icon: `ife_${feat.label.toLowerCase()}`,
+});
+
 export default function FeatContentArea({
   selectedCategory,
   selectedSubcategory,
@@ -68,13 +120,13 @@ export default function FeatContentArea({
 
   // Combine all current feats with deduplication
   const allCurrentFeats = useMemo(() => {
-    if (!featsData) return [];
+    if (!featsData?.summary) return [];
     
     const allFeats = [
-      ...featsData.current_feats.protected,
-      ...featsData.current_feats.class_feats,
-      ...featsData.current_feats.general_feats,
-      ...featsData.current_feats.custom_feats,
+      ...(featsData.summary.protected || []),
+      ...(featsData.summary.class_feats || []),
+      ...(featsData.summary.general_feats || []),
+      ...(featsData.summary.custom_feats || []),
     ];
     
     // Deduplicate by feat ID
@@ -120,7 +172,7 @@ export default function FeatContentArea({
         groups['Protected'].push(feat);
       } else if (feat.custom) {
         groups['Custom'].push(feat);
-      } else if (featsData.current_feats.class_feats.some(f => f.id === feat.id)) {
+      } else if (featsData.summary?.class_feats?.some((f: any) => f.id === feat.id)) {
         groups['Class'].push(feat);
       } else {
         groups['General'].push(feat);
@@ -132,6 +184,98 @@ export default function FeatContentArea({
       Object.entries(groups).filter(([, feats]) => feats.length > 0)
     );
   }, [allCurrentFeats, featsData]);
+
+  // Custom renderers for GameDataList
+  const renderFeatMain = (item: GameDataItem & FeatInfo) => (
+    <div className="game-data-col-main">
+      <div className="game-data-icon-wrapper">
+        <NWN2Icon icon={item.icon || ''} size="sm" />
+      </div>
+      <div className="game-data-content">
+        <h4 className="game-data-title">
+          {display(item.label)}
+        </h4>
+        <div className="game-data-subtitle">
+          <span>{getFeatTypeName(item.type)}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFeatTags = (item: GameDataItem & FeatInfo) => (
+    <div className="flex flex-wrap gap-1">
+      <Badge variant={getTypeColor(item.type)} className="text-xs">
+        <span className="flex items-center gap-1">
+          {getTypeIcon(item.type)}
+          {getFeatTypeName(item.type)}
+        </span>
+      </Badge>
+      {item.protected && (
+        <Badge variant="outline" className="text-xs">
+          <Shield className="w-3 h-3 mr-1" />
+          Protected
+        </Badge>
+      )}
+      {item.custom && (
+        <Badge variant="secondary" className="text-xs">
+          Custom
+        </Badge>
+      )}
+    </div>
+  );
+
+  const renderAvailableFeatAction = (item: GameDataItem & FeatInfo) => {
+    const validation = validationCache[item.id];
+    const isValidating = validatingFeatId === item.id;
+    
+    return (
+      <div className="game-data-col-action">
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs h-7 px-2"
+            onClick={() => onDetails(item)}
+          >
+            <Info className="w-3 h-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            className="text-xs h-7 px-2"
+            onClick={() => onAdd(item.id)}
+            disabled={validation ? !validation.can_take : false}
+          >
+            {isValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Learn'}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCurrentFeatAction = (item: GameDataItem & FeatInfo) => (
+    <div className="game-data-col-action">
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-xs h-7 px-2"
+          onClick={() => onDetails(item)}
+        >
+          <Info className="w-3 h-3" />
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          className="text-xs h-7 px-2"
+          onClick={() => onRemove(item.id)}
+          disabled={item.protected}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -245,38 +389,17 @@ export default function FeatContentArea({
                       </div>
                     ) : (
                       <>
-                        {filteredCategoryFeats.length >= 20 ? (
-                          <VirtualizedFeatSection
-                            feats={filteredCategoryFeats}
-                            isActive={false}
-                            viewMode={viewMode}
-                            maxHeight={500}
-                            onDetails={onDetails}
-                            onAdd={onAdd}
-                            onRemove={onRemove}
-                            validationCache={validationCache}
-                            validatingFeatId={validatingFeatId}
-                            onValidate={onValidate}
+                        {filteredCategoryFeats.length > 0 ? (
+                          <GameDataList
+                            items={filteredCategoryFeats.map(featToGameDataItem)}
+                            renderMain={renderFeatMain}
+                            renderTags={renderFeatTags}
+                            renderAction={renderAvailableFeatAction}
+                            onItemAction={(item) => onAdd(item.id)}
+                            actionLabel={() => 'Learn'}
+                            actionVariant={() => 'primary'}
+                            emptyMessage="No available feats found"
                           />
-                        ) : filteredCategoryFeats.length > 0 ? (
-                          <div className={viewMode === 'grid' ? 
-                            'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 
-                            'space-y-2'}>
-                            {filteredCategoryFeats.map((feat) => (
-                              <FeatCard 
-                                key={`available-${feat.id}`} 
-                                feat={feat} 
-                                isActive={false} 
-                                viewMode={viewMode}
-                                onDetails={onDetails}
-                                onAdd={onAdd}
-                                onRemove={onRemove}
-                                validationState={validationCache[feat.id]}
-                                isValidating={validatingFeatId === feat.id}
-                                onValidate={onValidate}
-                              />
-                            ))}
-                          </div>
                         ) : (
                           <div className="text-center py-8">
                             <p className="text-[rgb(var(--color-text-secondary))]">

@@ -79,9 +79,9 @@ export default function FeatCategorySidebar({
             onClick={onMyFeatsClick}
           >
             <span className="flex-1">My Feats</span>
-            {featsData && (
+            {featsData?.summary && (
               <Badge variant="default" className="ml-auto">
-                {featsData.current_feats.total}
+                {featsData.summary.total}
               </Badge>
             )}
           </Button>

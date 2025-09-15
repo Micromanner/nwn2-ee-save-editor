@@ -57,3 +57,4 @@ backend/logs
 django_nuitka_runner.py
 nuitka-crash-report.xml
 binaries
+.tauri

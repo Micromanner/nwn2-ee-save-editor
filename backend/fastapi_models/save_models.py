@@ -75,7 +75,7 @@ class TemporaryModifierRequest(BaseModel):
 class MiscSaveBonusRequest(BaseModel):
     """Request for SaveManager.set_misc_save_bonus()"""
     save_type: str = Field(..., description="'fortitude', 'reflex', or 'will'")
-    value: int = Field(..., description="Bonus value to set")
+    value: int = Field(..., ge=-35, le=255, description="Bonus value to set (range: -35 to 255)")
 
 
 # Model for SaveManager.set_misc_save_bonus() output - matches actual manager return

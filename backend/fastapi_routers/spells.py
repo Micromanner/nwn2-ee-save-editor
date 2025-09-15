@@ -197,7 +197,10 @@ def get_available_spells(
 @router.get("/characters/{character_id}/spells/all")
 def get_all_spells(
     character_id: int,
-    manager: CharacterManagerDep
+    manager: CharacterManagerDep,
+    level: Optional[int] = Query(None, description="Filter by spell level (0-9)"),
+    school: Optional[str] = Query(None, description="Filter by school name"),
+    search: Optional[str] = Query(None, description="Search spell names")
 ):
     """Get all legitimate spells (filtered) for spell browsing"""
     try:
@@ -206,16 +209,54 @@ def get_all_spells(
         
         spell_manager = manager.get_manager('spell')
         
-        # Get all spells by level - let manager handle the data
-        all_spells = []
-        total_by_level = {}
+        # Handle filtering - if level is specified, get only that level
+        if level is not None:
+            if not 0 <= level <= 9:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Spell level must be between 0 and 9"
+                )
+            all_spells = spell_manager.get_available_spells(level)
+            total_by_level = {level: len(all_spells)}
+        else:
+            # Get all spells by level - let manager handle the data
+            all_spells = []
+            total_by_level = {}
+            
+            for spell_level in range(10):  # Levels 0-9
+                level_spells = spell_manager.get_available_spells(spell_level)
+                total_by_level[spell_level] = len(level_spells)
+                all_spells.extend(level_spells)
         
-        for level in range(10):  # Levels 0-9
-            level_spells = spell_manager.get_available_spells(level)
-            total_by_level[level] = len(level_spells)
-            all_spells.extend(level_spells)
+        # Apply additional filtering (school, search)
+        filtered_spells = all_spells
         
-        # Use spell data as-is from manager (no manual deduplication)
+        if school and school.lower() != 'all':
+            filtered_spells = [
+                spell for spell in filtered_spells 
+                if spell.get('school_name', '').lower() == school.lower()
+            ]
+        
+        if search and search.strip():
+            search_term = search.strip().lower()
+            filtered_spells = [
+                spell for spell in filtered_spells 
+                if search_term in spell.get('name', '').lower()
+            ]
+        
+        # Recalculate total_by_level for filtered results if filters were applied
+        if (school and school.lower() != 'all') or (search and search.strip()):
+            if level is not None:
+                # Single level requested - just count filtered spells
+                total_by_level = {level: len(filtered_spells)}
+            else:
+                # Multiple levels - recalculate counts by level
+                total_by_level = {}
+                for spell_level in range(10):
+                    count = len([s for s in filtered_spells if s.get('level') == spell_level])
+                    total_by_level[spell_level] = count
+        
+        # Convert to Pydantic models
         spells = [
             SpellInfo(
                 id=spell['id'],
@@ -233,7 +274,7 @@ def get_all_spells(
                 target_type=spell.get('target_type'),
                 available_classes=spell.get('available_classes', [])
             )
-            for spell in all_spells
+            for spell in filtered_spells
         ]
         
         return AllSpellsResponse(

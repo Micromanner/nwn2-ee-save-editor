@@ -55,11 +55,6 @@ const baseNavItems: NavItem[] = [
 // Development items (shown at bottom)
 const developmentNavItems: NavItem[] = [
   {
-    id: 'character-builder',
-    labelKey: 'navigation.characterBuilder',
-    icon: 'it_smithhammer_adamantine'
-  },
-  {
     id: 'appearance',
     labelKey: 'navigation.appearance',
     icon: 'ia_appear'

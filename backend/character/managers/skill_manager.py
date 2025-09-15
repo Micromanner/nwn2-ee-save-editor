@@ -355,24 +355,19 @@ class SkillManager(EventEmitter):
     
     def _get_class_skills(self, class_id: int) -> Set[int]:
         """Get set of class skills for a class using dynamic data"""
-        logger.info(f"_get_class_skills called for class_id={class_id}")
         if class_id in self._class_skills_cache:
-            logger.info(f"Found cached class skills for class_id={class_id}")
             return self._class_skills_cache[class_id]
         
         class_skills = set()
         class_data = self.game_rules_service.get_by_id('classes', class_id)
-        logger.info(f"Class data for class_id={class_id}: {class_data}")
         
         if class_data:
             # Get the skills table name from class data using FieldMappingUtility
             skills_table_name = field_mapper.get_field_value(class_data, 'skills_table', None)
-            logger.info(f"Skills table name for class_id={class_id}: {skills_table_name}")
             if skills_table_name:
                 # Load the specific class skills table (e.g., "CLS_SKILL_BARD")
                 # Convert to lowercase for table lookup (tables are stored in lowercase)
                 class_skills_table = self.game_rules_service.get_table(skills_table_name.lower())
-                logger.info(f"Class skills table '{skills_table_name.lower()}' loaded: {class_skills_table is not None}")
                 if class_skills_table:
                     for skill_entry in class_skills_table:
                         # Check for ClassSkill field to ensure it's actually a class skill

@@ -205,11 +205,18 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       };
     }
     
-    // Extract base and total values from backend objects
+    // Extract base and total values from backend objects, checking local overrides first
     const extractBaseTotal = (obj: unknown, statType: 'ac' | 'initiative' | 'fortitude' | 'reflex' | 'will') => {
+      // Check for local overrides first (for persistence across tab switches)
+      const overrideKey = statType === 'ac' ? 'armorClass' : statType;
+      const localOverride = localStatsOverrides[overrideKey as keyof CharacterStats];
+      
       if (typeof obj === 'number') {
         // Simple number - assume it's total, no editable base
-        return { base: 0, total: obj };
+        const baseValue = localOverride && typeof localOverride === 'object' && 'base' in localOverride 
+          ? (localOverride as { base: number }).base 
+          : 0;
+        return { base: baseValue, total: obj };
       }
       if (typeof obj === 'object' && obj !== null) {
         const objData = obj as Record<string, unknown>;
@@ -221,23 +228,28 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         total = (typeof objData.total === 'number' ? objData.total : 
                 typeof objData.value === 'number' ? objData.value : 0);
         
-        // Get base value based on stat type
-        switch (statType) {
-          case 'ac':
-            // Natural Armor comes from components.natural (from NaturalAC GFF field)
-            const components = objData.components as Record<string, unknown> | undefined;
-            base = (typeof components?.natural === 'number' ? components.natural : 0);
-            break;
-          case 'initiative':
-            // Initiative base is misc_bonus (editable miscellaneous bonus)
-            base = (typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 0);
-            break;
-          case 'fortitude':
-          case 'reflex':
-          case 'will':
-            // Saving throws base comes from the 'base' field in the save object
-            base = (typeof objData.base === 'number' ? objData.base : 0);
-            break;
+        // Check for local override base value first
+        if (localOverride && typeof localOverride === 'object' && 'base' in localOverride) {
+          base = (localOverride as { base: number }).base;
+        } else {
+          // Get base value from backend based on stat type
+          switch (statType) {
+            case 'ac':
+              // Natural Armor comes from components.natural (from NaturalAC GFF field)
+              const components = objData.components as Record<string, unknown> | undefined;
+              base = (typeof components?.natural === 'number' ? components.natural : 0);
+              break;
+            case 'initiative':
+              // Initiative base is misc_bonus (editable miscellaneous bonus)
+              base = (typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 0);
+              break;
+            case 'fortitude':
+            case 'reflex':
+            case 'will':
+              // Saving throws base comes from the 'base' field in the save object
+              base = (typeof objData.base === 'number' ? objData.base : 0);
+              break;
+          }
         }
         
         return { base, total };
@@ -245,11 +257,12 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       return { base: 0, total: 0 };
     };
     
-    const baseStats = {
-      hitPoints: abilityScoreData.derived_stats.hit_points.current,
-      maxHitPoints: abilityScoreData.derived_stats.hit_points.maximum,
-      experience: 0, // TODO: Add experience field to backend data
-      level: 1, // TODO: Add level field to backend data
+    // Build stats object with local overrides already integrated by extractBaseTotal
+    const stats = {
+      hitPoints: localStatsOverrides.hitPoints ?? abilityScoreData.derived_stats.hit_points.current,
+      maxHitPoints: localStatsOverrides.maxHitPoints ?? abilityScoreData.derived_stats.hit_points.maximum,
+      experience: localStatsOverrides.experience ?? 0, // TODO: Add experience field to backend data
+      level: localStatsOverrides.level ?? 1, // TODO: Add level field to backend data
       armorClass: extractBaseTotal(abilityScoreData.combat_stats?.armor_class, 'ac'),
       fortitude: extractBaseTotal(abilityScoreData.saving_throws?.fortitude, 'fortitude'),
       reflex: extractBaseTotal(abilityScoreData.saving_throws?.reflex, 'reflex'),
@@ -257,8 +270,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       initiative: extractBaseTotal(abilityScoreData.combat_stats?.initiative, 'initiative'),
     };
 
-    // Apply local overrides for optimistic updates
-    return { ...baseStats, ...localStatsOverrides };
+    return stats;
   }, [abilityScoreData, localStatsOverrides]);
 
   // Alignment state - fetched from backend

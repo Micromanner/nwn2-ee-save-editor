@@ -53,12 +53,12 @@ export default function FeatsEditor() {
   const isLoading = characterLoading || feats.isLoading || categoryFeatsLoading;
   const error = characterError || feats.error || categoryFeatsError;
 
-  // Load feats data only if character exists and data hasn't been loaded
+  // Load feats data when component mounts or character changes
   useEffect(() => {
-    if (character && !feats.data && !feats.isLoading) {
+    if (character?.id && !feats.data && !feats.isLoading) {
       feats.load();
     }
-  }, [character, feats]);
+  }, [character?.id, feats.data, feats.isLoading]);
 
   // Load category feats when category or subcategory changes
   useEffect(() => {
@@ -154,7 +154,7 @@ export default function FeatsEditor() {
     } catch (error) {
       console.error('Failed to add feat:', error);
     }
-  }, [character?.id, feats]);
+  }, [character?.id]);
 
   const handleRemoveFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
@@ -166,17 +166,17 @@ export default function FeatsEditor() {
     } catch (error) {
       console.error('Failed to remove feat:', error);
     }
-  }, [character?.id, feats]);
+  }, [character?.id]);
 
   // Combine all feats for available count calculation
   const allCurrentFeats = useMemo(() => {
-    if (!featsData) return [];
+    if (!featsData?.summary) return [];
     
     const allFeats = [
-      ...featsData.current_feats.protected,
-      ...featsData.current_feats.class_feats,
-      ...featsData.current_feats.general_feats,
-      ...featsData.current_feats.custom_feats,
+      ...(featsData.summary.protected || []),
+      ...(featsData.summary.class_feats || []),
+      ...(featsData.summary.general_feats || []),
+      ...(featsData.summary.custom_feats || []),
     ];
     
     // Deduplicate by feat ID

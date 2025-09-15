@@ -67,6 +67,43 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
   const combat = useSubsystem('combat');
   const skills = useSubsystem('skills');
   const feats = useSubsystem('feats');
+  const saves = useSubsystem('saves');
+  const abilities = useSubsystem('abilityScores');
+  
+  console.log('CharacterOverview component rendered/mounted');
+  console.log('Character HP data:', character?.hitPoints, character?.maxHitPoints, character?.current_hit_points, character?.max_hit_points);
+  console.log('Character BAB data:', character?.baseAttackBonus);
+  console.log('Abilities subsystem data:', abilities.data);
+  if (abilities.data) {
+    console.log('Abilities data keys:', Object.keys(abilities.data));
+    console.log('Looking for HP in abilities data...', abilities.data.derived_stats?.hit_points);
+  }
+  console.log('Combat subsystem data:', combat.data);
+  if (combat.data) {
+    console.log('Combat data keys:', Object.keys(combat.data));
+    console.log('Combat BAB data:', combat.data.base_attack_bonus);
+    console.log('Combat BAB type:', typeof combat.data.base_attack_bonus);
+    if (combat.data.base_attack_bonus && typeof combat.data.base_attack_bonus === 'object') {
+      console.log('Combat BAB object keys:', Object.keys(combat.data.base_attack_bonus));
+      console.log('Combat BAB base_attack_bonus:', combat.data.base_attack_bonus.base_attack_bonus);
+    }
+  }
+  console.log('Skills subsystem data:', skills.data);
+  console.log('Feats subsystem data:', feats.data);
+  console.log('Saves subsystem data:', saves.data);
+
+  // Debug: Manual refresh function to test data fetching
+  const handleManualRefresh = () => {
+    console.log('Manual refresh triggered');
+    refreshAll();
+  };
+  
+  // Debug: Log character data to see what we're getting
+  useEffect(() => {
+    if (character) {
+      console.log('CharacterOverview - Successfully loaded character:', character.name, 'Level', character.level);
+    }
+  }, [character]);
   
   // Name editing state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -118,20 +155,38 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
     setIsEditingName(false);
   };
   
-  // Load subsystems only if character exists and data hasn't been loaded
+  // Load subsystems data only if missing - don't force refresh on every tab switch
   useEffect(() => {
+    console.log('CharacterOverview - Character changed or component mounted, checking data status');
+    console.log('CharacterOverview - Character data:', character);
     if (character) {
+      console.log('CharacterOverview - Checking subsystem data status for character:', character.name || character.id);
+      
+      // Only load data if missing, don't force refresh
+      if (!abilities.data && !abilities.isLoading) {
+        console.log('CharacterOverview - Loading abilities data (missing)');
+        abilities.load().catch(err => console.warn('Failed to load abilities data:', err));
+      }
       if (!combat.data && !combat.isLoading) {
-        combat.load();
+        console.log('CharacterOverview - Loading combat data (missing)');
+        combat.load().catch(err => console.warn('Failed to load combat data:', err));
       }
       if (!skills.data && !skills.isLoading) {
-        skills.load();
+        console.log('CharacterOverview - Loading skills data (missing)');
+        skills.load().catch(err => console.warn('Failed to load skills data:', err));
       }
       if (!feats.data && !feats.isLoading) {
-        feats.load();
+        console.log('CharacterOverview - Loading feats data (missing)');
+        feats.load().catch(err => console.warn('Failed to load feats data:', err));
       }
+      if (!saves.data && !saves.isLoading) {
+        console.log('CharacterOverview - Loading saves data (missing)');
+        saves.load().catch(err => console.warn('Failed to load saves data:', err));
+      }
+    } else {
+      console.log('CharacterOverview - No character loaded, skipping data loading');
     }
-  }, [character, combat.data, combat.isLoading, skills.data, skills.isLoading, feats.data, feats.isLoading]);
+  }, [character?.id, abilities.data, abilities.isLoading, combat.data, combat.isLoading, skills.data, skills.isLoading, feats.data, feats.isLoading, saves.data, saves.isLoading]); // Depend on character ID and data state
 
   if (isLoading) {
     return (
@@ -288,12 +343,26 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     <span className="text-sm text-[rgb(var(--color-text-muted))]">Hit Points</span>
                   </div>
                   <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))]">
-                    {display(character.hitPoints)}<span className="text-lg text-[rgb(var(--color-text-muted))]">/</span>{display(character.maxHitPoints)}
+                    {abilities.isLoading ? (
+                      <div className="inline-flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))] mr-2"></div>
+                        <span className="text-sm text-[rgb(var(--color-text-muted))]\">Loading...</span>
+                      </div>
+                    ) : (
+                      <>
+                        {display(abilities.data?.derived_stats?.hit_points?.current || character.hitPoints || character.current_hit_points || 0)}
+                        <span className="text-lg text-[rgb(var(--color-text-muted))]">/</span>
+                        {display(abilities.data?.derived_stats?.hit_points?.maximum || character.maxHitPoints || character.max_hit_points || 0)}
+                      </>
+                    )}
                   </div>
                   <div className="mt-2 h-2 bg-[rgb(var(--color-surface-3))] rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-[rgb(var(--color-error))] to-[rgb(var(--color-error-dark))] transition-all duration-500"
-                      style={{ width: `${Math.min(100, ((character.hitPoints || 0) / (character.maxHitPoints || 1)) * 100)}%` }}
+                      style={{ 
+                        width: `${Math.min(100, ((abilities.data?.derived_stats?.hit_points?.current || character.hitPoints || character.current_hit_points || 0) / 
+                        (abilities.data?.derived_stats?.hit_points?.maximum || character.maxHitPoints || character.max_hit_points || 1)) * 100)}%` 
+                      }}
                     />
                   </div>
                 </div>
@@ -303,7 +372,16 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                   <div className="mb-2">
                     <span className="text-sm text-[rgb(var(--color-text-muted))]">Armor Class</span>
                   </div>
-                  <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))]">{display(character.armorClass)}</div>
+                  <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))]">
+                    {combat.isLoading ? (
+                      <div className="inline-flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))] mr-2"></div>
+                        <span className="text-sm text-[rgb(var(--color-text-muted))]">Loading...</span>
+                      </div>
+                    ) : (
+                      display(combat.data?.armor_class?.total || character.armorClass)
+                    )}
+                  </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))] mt-1">Defense Rating</div>
                 </div>
                 
@@ -321,7 +399,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                   <div className="mb-2">
                     <span className="text-sm text-[rgb(var(--color-text-muted))]">Gold</span>
                   </div>
-                  <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))]">{formatNumber(character.gold)}</div>
+                  <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))]">{formatNumber(character.gold || 0)}</div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))] mt-1">Gold Pieces</div>
                 </div>
               </div>
@@ -337,16 +415,24 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
         <CollapsibleSection 
           title={t('navigation.abilityScores')} 
           defaultOpen={true}
-          badge={character.abilities ? formatModifier(Object.values(character.abilities).reduce((sum, val) => sum + Math.floor((val - 10) / 2), 0)) : '-'}
+          badge={(abilities.data?.effective_attributes ? formatModifier(Object.values(abilities.data.effective_attributes).reduce((sum, val) => sum + Math.floor((val - 10) / 2), 0)) : character.abilities ? formatModifier(Object.values(character.abilities).reduce((sum, val) => sum + Math.floor((val - 10) / 2), 0)) : '-')}
         >
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {character.abilities && Object.entries(character.abilities).map(([key, value]) => {
+            {(abilities.data?.effective_attributes ? Object.entries(abilities.data.effective_attributes) : character.abilities ? Object.entries(character.abilities) : []).map(([key, value]) => {
               const modifier = Math.floor((value - 10) / 2);
               const modifierColor = modifier > 0 ? 'var(--color-success)' : modifier < 0 ? 'var(--color-error)' : 'var(--color-text-muted)';
               return (
                 <div key={key} className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)] hover:border-[rgb(var(--color-primary)/0.3)] transition-colors">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs text-[rgb(var(--color-text-muted))] uppercase tracking-wider">{t(`abilityScores.${key}`)}</span>
+                    <span className="text-xs text-[rgb(var(--color-text-muted))] uppercase tracking-wider">{
+                      key === 'Str' ? t('abilityScores.strength') :
+                      key === 'Dex' ? t('abilityScores.dexterity') :
+                      key === 'Con' ? t('abilityScores.constitution') :
+                      key === 'Int' ? t('abilityScores.intelligence') :
+                      key === 'Wis' ? t('abilityScores.wisdom') :
+                      key === 'Cha' ? t('abilityScores.charisma') :
+                      key
+                    }</span>
                     <span className={`text-xs font-medium text-[rgb(${modifierColor})]`}>
                       {modifier >= 0 ? '+' : ''}{modifier}
                     </span>
@@ -363,7 +449,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
         <CollapsibleSection 
           title="Combat & Progression" 
           defaultOpen={false}
-          badge={(character.availableSkillPoints ?? 0) > 0 ? `${character.availableSkillPoints} skill points` : `AC ${character.armorClass}`}
+          badge={(skills.data?.skill_points_available ?? character.availableSkillPoints ?? 0) > 0 ? `${skills.data?.skill_points_available || character.availableSkillPoints} skill points` : `AC ${combat.data?.armor_class?.total || character.armorClass}`}
         >
           <div className="space-y-6">
             {/* Combat Stats */}
@@ -371,15 +457,21 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
               <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">Combat Statistics</p>
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.baseAttackBonus)}</div>
+                  <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">
+                    {combat.isLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
+                    ) : (
+                      formatModifier(combat.data?.base_attack_bonus?.total_bab || combat.data?.summary?.base_attack_bonus || character.baseAttackBonus || 0)
+                    )}
+                  </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.baseAttackBonus')}</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.meleeAttackBonus)}</div>
+                  <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(combat.data?.attack_bonuses?.melee_attack_bonus || character.meleeAttackBonus || 0)}</div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.meleeAttack')}</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.rangedAttackBonus)}</div>
+                  <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(combat.data?.attack_bonuses?.ranged_attack_bonus || character.rangedAttackBonus || 0)}</div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.rangedAttack')}</div>
                 </div>
               </div>
@@ -387,15 +479,33 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
               <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">{t('abilityScores.savingThrows')}</p>
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.saves?.fortitude)}</div>
+                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">
+                    {saves.isLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
+                    ) : (
+                      formatModifier(saves.data?.fortitude?.total || saves.data?.fortitude || (typeof character.saves?.fortitude === 'number' ? character.saves.fortitude : 0))
+                    )}
+                  </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.fortitude')}</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.saves?.reflex)}</div>
+                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">
+                    {saves.isLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
+                    ) : (
+                      formatModifier(saves.data?.reflex?.total || saves.data?.reflex || (typeof character.saves?.reflex === 'number' ? character.saves.reflex : 0))
+                    )}
+                  </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.reflex')}</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.saves?.will)}</div>
+                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">
+                    {saves.isLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
+                    ) : (
+                      formatModifier(saves.data?.will?.total || saves.data?.will || (typeof character.saves?.will === 'number' ? character.saves.will : 0))
+                    )}
+                  </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.will')}</div>
                 </div>
               </div>
@@ -406,16 +516,16 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
               <p className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-3">Character Development</p>
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{character.totalSkillPoints}</div>
+                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{display(skills.data?.spent_points || character.totalSkillPoints || 0)}</div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">Total Skill Points</div>
                 </div>
                 <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{character.totalFeats}</div>
+                  <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{display(feats.data?.summary?.total || character.totalFeats || 0)}</div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.totalFeats')}</div>
                 </div>
                 {character.knownSpells !== undefined && (
                   <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                    <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{character.knownSpells}</div>
+                    <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{display(character.knownSpells || 0)}</div>
                     <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.knownSpells')}</div>
                   </div>
                 )}
@@ -430,7 +540,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.speed')}</div>
                   </div>
                   <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                    <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(character.initiative)}</div>
+                    <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(combat.data?.initiative?.total || character.initiative || 0)}</div>
                     <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.initiative')}</div>
                   </div>
                   <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">

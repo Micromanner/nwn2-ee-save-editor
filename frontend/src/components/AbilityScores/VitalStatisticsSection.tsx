@@ -71,7 +71,7 @@ export default function VitalStatisticsSection({
 
   const healthPercentage = Math.min(100, (stats.hitPoints / stats.maxHitPoints) * 100);
 
-  // Helper functions for updating nested stats
+  // Helper functions for updating stats via parent callback
   const updateArmorClass = (base: number) => {
     updateStats({ armorClass: { ...stats.armorClass, base } });
   };
@@ -156,25 +156,28 @@ export default function VitalStatisticsSection({
                 <span className="breakdown-label">Natural:</span>
                 <div className="breakdown-controls">
                   <Button
-                    onClick={() => updateArmorClass(stats.armorClass.base - 1)}
+                    onClick={() => updateArmorClass(Math.max(0, stats.armorClass.base - 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.armorClass.base <= 0}
                   >
                     −
                   </Button>
                   <input
                     type="number"
                     value={stats.armorClass.base}
-                    onChange={(e) => updateArmorClass(parseInt(e.target.value) || 0)}
+                    onChange={(e) => updateArmorClass(Math.max(0, Math.min(255, parseInt(e.target.value) || 0)))}
                     className="breakdown-input"
                     min="0"
+                    max="255"
                   />
                   <Button
-                    onClick={() => updateArmorClass(stats.armorClass.base + 1)}
+                    onClick={() => updateArmorClass(Math.min(255, stats.armorClass.base + 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.armorClass.base >= 255}
                   >
                     +
                   </Button>
@@ -218,24 +221,28 @@ export default function VitalStatisticsSection({
                 <span className="breakdown-label">Misc:</span>
                 <div className="breakdown-controls">
                   <Button
-                    onClick={() => updateInitiative(stats.initiative.base - 1)}
+                    onClick={() => updateInitiative(Math.max(-128, stats.initiative.base - 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.initiative.base <= -128}
                   >
                     −
                   </Button>
                   <input
                     type="number"
                     value={stats.initiative.base}
-                    onChange={(e) => updateInitiative(parseInt(e.target.value) || 0)}
+                    onChange={(e) => updateInitiative(Math.max(-128, Math.min(127, parseInt(e.target.value) || 0)))}
                     className="breakdown-input"
+                    min="-128"
+                    max="127"
                   />
                   <Button
-                    onClick={() => updateInitiative(stats.initiative.base + 1)}
+                    onClick={() => updateInitiative(Math.min(127, stats.initiative.base + 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.initiative.base >= 127}
                   >
                     +
                   </Button>
@@ -272,24 +279,28 @@ export default function VitalStatisticsSection({
                 <span className="breakdown-label">Misc:</span>
                 <div className="breakdown-controls">
                   <Button
-                    onClick={() => updateFortitude(stats.fortitude.base - 1)}
+                    onClick={() => updateFortitude(Math.max(-35, stats.fortitude.base - 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.fortitude.base <= -35}
                   >
                     −
                   </Button>
                   <input
                     type="number"
                     value={stats.fortitude.base}
-                    onChange={(e) => updateFortitude(parseInt(e.target.value) || 0)}
+                    onChange={(e) => updateFortitude(Math.max(-35, Math.min(255, parseInt(e.target.value) || 0)))}
                     className="breakdown-input"
+                    min="-35"
+                    max="255"
                   />
                   <Button
-                    onClick={() => updateFortitude(stats.fortitude.base + 1)}
+                    onClick={() => updateFortitude(Math.min(255, stats.fortitude.base + 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.fortitude.base >= 255}
                   >
                     +
                   </Button>
@@ -333,24 +344,28 @@ export default function VitalStatisticsSection({
                 <span className="breakdown-label">Misc:</span>
                 <div className="breakdown-controls">
                   <Button
-                    onClick={() => updateReflex(stats.reflex.base - 1)}
+                    onClick={() => updateReflex(Math.max(-35, stats.reflex.base - 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.reflex.base <= -35}
                   >
                     −
                   </Button>
                   <input
                     type="number"
                     value={stats.reflex.base}
-                    onChange={(e) => updateReflex(parseInt(e.target.value) || 0)}
+                    onChange={(e) => updateReflex(Math.max(-35, Math.min(255, parseInt(e.target.value) || 0)))}
                     className="breakdown-input"
+                    min="-35"
+                    max="255"
                   />
                   <Button
-                    onClick={() => updateReflex(stats.reflex.base + 1)}
+                    onClick={() => updateReflex(Math.min(255, stats.reflex.base + 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.reflex.base >= 255}
                   >
                     +
                   </Button>
@@ -394,24 +409,28 @@ export default function VitalStatisticsSection({
                 <span className="breakdown-label">Misc:</span>
                 <div className="breakdown-controls">
                   <Button
-                    onClick={() => updateWill(stats.will.base - 1)}
+                    onClick={() => updateWill(Math.max(-35, stats.will.base - 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.will.base <= -35}
                   >
                     −
                   </Button>
                   <input
                     type="number"
                     value={stats.will.base}
-                    onChange={(e) => updateWill(parseInt(e.target.value) || 0)}
+                    onChange={(e) => updateWill(Math.max(-35, Math.min(255, parseInt(e.target.value) || 0)))}
                     className="breakdown-input"
+                    min="-35"
+                    max="255"
                   />
                   <Button
-                    onClick={() => updateWill(stats.will.base + 1)}
+                    onClick={() => updateWill(Math.min(255, stats.will.base + 1))}
                     variant="outline"
                     size="xs"
                     className="breakdown-button"
+                    disabled={stats.will.base >= 255}
                   >
                     +
                   </Button>

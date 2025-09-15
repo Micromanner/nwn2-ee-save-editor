@@ -17,12 +17,64 @@ interface Item {
   equipped?: boolean;
   slot?: string;
   rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  enhancement_bonus?: number;
+  charges?: number;
+  is_custom?: boolean;
+  is_identified?: boolean;
+  is_plot?: boolean;
+  is_cursed?: boolean;
+  is_stolen?: boolean;
+}
+
+interface InventoryItem {
+  index: number;
+  item: any;
+  base_item: number;
+  name: string;
+  is_custom: boolean;
+  stack_size: number;
+  enhancement: number;
+  charges?: number;
+  identified: boolean;
+  plot: boolean;
+  cursed: boolean;
+  stolen: boolean;
+}
+
+interface InventoryEncumbrance {
+  total_weight: number | string;
+  light_load: number | string;
+  medium_load: number | string;
+  heavy_load: number | string;
+  encumbrance_level: string;
+}
+
+interface InventorySummary {
+  total_items: number;
+  inventory_items: InventoryItem[];
+  equipped_items: Record<string, any>;
+  custom_items: any[];
+  encumbrance: InventoryEncumbrance;
+}
+
+interface InventoryData {
+  summary: InventorySummary;
 }
 
 
 
 const INVENTORY_COLS = 8;
 const INVENTORY_ROWS = 8;
+
+// Utility function to safely convert values to numbers
+const safeToNumber = (value: any, defaultValue: number = 0): number => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+  return defaultValue;
+};
 
 export default function InventoryEditor() {
   const t = useTranslations();
@@ -34,38 +86,79 @@ export default function InventoryEditor() {
     if (character && !inventoryData.data && !inventoryData.isLoading) {
       inventoryData.load();
     }
-  }, [character, inventoryData.data, inventoryData.isLoading]);
+  }, [character?.id]);
   
-  // Mock items for testing
-  const mockItems: Item[] = [
-    { id: '1', name: 'Longsword +1', type: 'weapon', rarity: 'uncommon' },
-    { id: '2', name: 'Healing Potion', type: 'consumable', stackSize: 5, maxStack: 20, rarity: 'common' },
-    { id: '3', name: 'Chainmail', type: 'armor', rarity: 'common' },
-    { id: '4', name: 'Ring of Protection', type: 'accessory', rarity: 'rare' },
-    { id: '5', name: 'Flaming Greatsword', type: 'weapon', rarity: 'epic' },
-    { id: '6', name: 'Amulet of Natural Armor', type: 'accessory', rarity: 'uncommon' },
-    { id: '7', name: 'Boots of Speed', type: 'armor', rarity: 'rare' },
-    { id: '8', name: 'Scroll of Fireball', type: 'consumable', stackSize: 3, maxStack: 10, rarity: 'uncommon' },
-  ];
+  // Utility function to safely convert to number
+  const safeToNumber = (value: any, defaultValue: number = 0): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? defaultValue : parsed;
+    }
+    return defaultValue;
+  };
 
-  // Initialize inventory with some items
-  const initInventory = () => {
+  // Parse inventory data from backend
+  const parseInventoryData = (inventoryData: InventoryData | null): (Item | null)[] => {
     const inv = Array(INVENTORY_COLS * INVENTORY_ROWS).fill(null);
-    inv[0] = mockItems[0];
-    inv[1] = mockItems[1];
-    inv[8] = mockItems[2];
-    inv[9] = mockItems[3];
-    inv[16] = mockItems[4];
-    inv[17] = mockItems[5];
-    inv[24] = mockItems[6];
-    inv[25] = mockItems[7];
+    
+    if (!inventoryData?.summary) {
+      return inv;
+    }
+
+    const { inventory_items } = inventoryData.summary;
+    
+    // Convert inventory items to display format
+    inventory_items?.forEach((itemInfo: any, index: number) => {
+      if (index < INVENTORY_COLS * INVENTORY_ROWS && itemInfo) {
+        const item = itemInfo.item || {};
+        const baseItem = itemInfo.base_item || 0;
+        const isCustom = itemInfo.is_custom || false;
+        const itemName = itemInfo.name || `Item ${baseItem}`;
+        
+        // Determine item type based on base item type
+        const getItemType = (baseItem: number): string => {
+          // This is a simplified mapping - could be enhanced with actual base item data
+          if (baseItem >= 0 && baseItem <= 40) return 'weapon';  // Rough weapon range
+          if (baseItem >= 41 && baseItem <= 80) return 'armor';   // Rough armor range
+          if (baseItem >= 81 && baseItem <= 120) return 'accessory'; // Rough accessory range
+          return 'misc';
+        };
+        
+        inv[index] = {
+          id: `inventory_${itemInfo.index}`,
+          name: itemName,
+          type: getItemType(baseItem),
+          rarity: isCustom ? 'legendary' : 'common',
+          equipped: false,
+          stackSize: itemInfo.stack_size > 1 ? itemInfo.stack_size : undefined,
+          enhancement_bonus: itemInfo.enhancement || 0,
+          charges: itemInfo.charges,
+          is_custom: isCustom,
+          is_identified: itemInfo.identified,
+          is_plot: itemInfo.plot,
+          is_cursed: itemInfo.cursed,
+          is_stolen: itemInfo.stolen
+        };
+      }
+    });
+
     return inv;
   };
 
-  const [inventory, setInventory] = useState<(Item | null)[]>(initInventory());
+  const [inventory, setInventory] = useState<(Item | null)[]>(() => 
+    parseInventoryData(inventoryData.data as InventoryData | null)
+  );
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+
+  // Update inventory when backend data changes
+  useEffect(() => {
+    if (inventoryData.data) {
+      setInventory(parseInventoryData(inventoryData.data as InventoryData));
+    }
+  }, [inventoryData.data]);
 
   const getRarityColor = (rarity?: string) => {
     switch (rarity) {
@@ -141,42 +234,141 @@ export default function InventoryEditor() {
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-4">{t('inventory.equipment')}</h3>
               
-              {/* Character Model Placeholder */}
-              <div className="relative mx-auto w-48 h-64 mb-6">
-                <div className="absolute inset-0 bg-gradient-to-b from-[rgb(var(--color-surface-1))] to-[rgb(var(--color-surface-2))] rounded-lg border border-[rgb(var(--color-surface-border)/0.6)] flex items-center justify-center">
-                  <svg className="w-24 h-24 text-[rgb(var(--color-text-muted))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
+              {/* Equipment Slots Grid */}
+              <div className="grid grid-cols-4 gap-2 mb-6">
+                {/* Column 1: Helmet, Chest, Belt, Boots */}
+                <div className="space-y-2">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Helmet</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Chest</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Belt</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Boots</span>
+                  </div>
                 </div>
-                
-                {/* Equipment Slots */}
-                <div className="absolute -left-16 top-0 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Head" />
-                <div className="absolute -right-16 top-0 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Neck" />
-                <div className="absolute -left-16 top-16 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Cloak" />
-                <div className="absolute -right-16 top-16 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Chest" />
-                <div className="absolute -left-20 top-32 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Left Hand" />
-                <div className="absolute -right-20 top-32 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Right Hand" />
-                <div className="absolute -left-16 bottom-16 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Gloves" />
-                <div className="absolute -right-16 bottom-16 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Belt" />
-                <div className="absolute -left-16 bottom-0 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Ring Left" />
-                <div className="absolute -right-16 bottom-0 w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)]" title="Ring Right" />
+
+                {/* Column 2: Neck, Cloak, Gloves */}
+                <div className="space-y-2">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Neck</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Cloak</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Gloves</span>
+                  </div>
+                </div>
+
+                {/* Column 3: Left Ring, Right Ring */}
+                <div className="space-y-2">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">L Ring</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">R Ring</span>
+                  </div>
+                </div>
+
+                {/* Column 4: Left Hand, Right Hand, Ammo */}
+                <div className="space-y-2">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">L Hand</span>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                    <span className="text-xs text-[rgb(var(--color-text-muted))]">R Hand</span>
+                  </div>
+                </div>
               </div>
-              
-              {/* Quick Slots */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-[rgb(var(--color-text-secondary))]">{t('inventory.quickSlots')}</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  {['arrow', 'bullet', 'bolt'].map((slotId) => (
-                    <div key={slotId} className="bg-[rgb(var(--color-surface-1))] rounded p-2 border border-[rgb(var(--color-surface-border)/0.6)]">
-                      <div className="w-full h-12 bg-[rgb(var(--color-surface-2))] rounded border border-[rgb(var(--color-surface-border)/0.4)] flex items-center justify-center">
-                        <span className="text-xs text-[rgb(var(--color-text-muted))] capitalize">{slotId}s</span>
-                      </div>
-                    </div>
-                  ))}
+
+              {/* Ammo Row */}
+              <div className="grid grid-cols-3 gap-2 mb-6">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                  <span className="text-xs text-[rgb(var(--color-text-muted))]">Arrows</span>
+                </div>
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                  <span className="text-xs text-[rgb(var(--color-text-muted))]">Bullets</span>
+                </div>
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
+                  <span className="text-xs text-[rgb(var(--color-text-muted))]">Bolts</span>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Item Details Panel - Moved here */}
+          {selectedItem && (
+            <Card className="mt-6">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-4">{t('inventory.itemDetails')}</h3>
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-2" />
+                    <h4 className={`font-medium ${getRarityTextColor(selectedItem.rarity)}`}>
+                      {selectedItem.name}
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm text-[rgb(var(--color-text-muted))]">{t('inventory.type')}: {selectedItem.type}</p>
+                    <p className="text-sm text-[rgb(var(--color-text-muted))]">{t('inventory.rarity')}: {selectedItem.rarity || 'common'}</p>
+                    {selectedItem.slot && (
+                      <p className="text-sm text-[rgb(var(--color-text-muted))]">Equipped in: {selectedItem.slot}</p>
+                    )}
+                    {selectedItem.enhancement_bonus && selectedItem.enhancement_bonus > 0 && (
+                      <p className="text-sm text-[rgb(var(--color-text-muted))]">Enhancement: +{selectedItem.enhancement_bonus}</p>
+                    )}
+                    {selectedItem.charges && (
+                      <p className="text-sm text-[rgb(var(--color-text-muted))]">Charges: {selectedItem.charges}</p>
+                    )}
+                    {selectedItem.stackSize && (
+                      <p className="text-sm text-[rgb(var(--color-text-muted))]">
+                        {t('inventory.stack')}: {selectedItem.stackSize} / {selectedItem.maxStack}
+                      </p>
+                    )}
+                    {selectedItem.is_custom && (
+                      <p className="text-sm text-[rgb(var(--color-warning))]">⚠️ Custom/Modded Item</p>
+                    )}
+                    {selectedItem.is_plot && (
+                      <p className="text-sm text-[rgb(var(--color-primary))]">📜 Plot Item</p>
+                    )}
+                    {selectedItem.is_cursed && (
+                      <p className="text-sm text-[rgb(var(--color-danger))]">💀 Cursed</p>
+                    )}
+                    {selectedItem.is_stolen && (
+                      <p className="text-sm text-[rgb(var(--color-danger))]">🗡️ Stolen</p>
+                    )}
+                    <div className="pt-2 space-y-2">
+                      <Button className="w-full" size="sm" disabled={selectedItem.equipped}>
+                        {selectedItem.equipped ? 'Equipped' : t('actions.equip')}
+                      </Button>
+                      <Button variant="danger" size="sm" className="w-full" disabled={selectedItem.is_plot}>
+                        {selectedItem.is_plot ? 'Cannot Destroy' : t('actions.destroy')}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Inventory Grid */}
@@ -244,10 +436,12 @@ export default function InventoryEditor() {
               <div className="mt-4 flex items-center justify-between text-sm">
                 <div className="flex items-center space-x-4">
                   <span className="text-[rgb(var(--color-text-muted))]">
-                    {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">45.2 / 150 lbs</span>
+                    {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
+                      {safeToNumber((inventoryData.data as InventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as InventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
+                    </span>
                   </span>
                   <span className="text-[rgb(var(--color-text-muted))]">
-                    {t('inventory.gold')}: <span className="text-[rgb(var(--color-warning))]">1,234</span>
+                    {t('inventory.gold')}: <span className="text-[rgb(var(--color-warning))]">{character?.gold || 0}</span>
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -263,40 +457,6 @@ export default function InventoryEditor() {
           </Card>
         </div>
       </div>
-
-      {/* Item Details Panel */}
-      {selectedItem && (
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-4">{t('inventory.itemDetails')}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <div className="w-24 h-24 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto" />
-                <h4 className={`text-center font-medium ${getRarityTextColor(selectedItem.rarity)}`}>
-                  {selectedItem.name}
-                </h4>
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <p className="text-sm text-[rgb(var(--color-text-muted))]">{t('inventory.type')}: {selectedItem.type}</p>
-                <p className="text-sm text-[rgb(var(--color-text-muted))]">{t('inventory.rarity')}: {selectedItem.rarity || 'common'}</p>
-                {selectedItem.stackSize && (
-                  <p className="text-sm text-[rgb(var(--color-text-muted))]">
-                    {t('inventory.stack')}: {selectedItem.stackSize} / {selectedItem.maxStack}
-                  </p>
-                )}
-                <div className="pt-4">
-                  <Button className="mr-2">
-                    {t('actions.equip')}
-                  </Button>
-                  <Button variant="danger">
-                    {t('actions.destroy')}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

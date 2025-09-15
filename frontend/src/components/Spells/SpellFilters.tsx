@@ -43,8 +43,8 @@ export default function SpellFilters({
   };
 
   return (
-    <Card className="w-80" padding="p-0">
-      <div className="p-4 overflow-y-auto">
+    <Card className="w-65" padding="p-0">
+      <div className="p-3 overflow-y-auto">
         <h3 className="font-semibold mb-4">Spell Filters</h3>
         
         {/* Search */}
@@ -137,7 +137,7 @@ export default function SpellFilters({
         )}
 
         {/* Spell Slots Summary */}
-        <Card className="p-4" backgroundColor="rgb(var(--color-surface-1))" shadow="shadow-elevation-2">
+        <Card className="spell-slots-summary-card">
           <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
             {spellSlotConfig.icon}
             {spellSlotConfig.title}

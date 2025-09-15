@@ -14,26 +14,40 @@ export default function SkillsEditor() {
   const t = useTranslations();
   const { character } = useCharacterContext();
   
-  // Use subsystem hook for skills
+  // Use subsystem hook for skills - match backend structure
   const skillsSubsystem = useSubsystem<{
-    skills: Array<{
+    available_points: number;
+    total_available: number;
+    spent_points: number;
+    overspent: number;
+    total_ranks: number;
+    skills_with_ranks: number;
+    class_skills: Array<{
       id: number;
       name: string;
-      ability: string;
-      rank: number;
-      max_rank: number;
+      key_ability: string;
+      current_ranks: number;
+      max_ranks: number;
       total_modifier: number;
-      ability_modifier: number;
       is_class_skill: boolean;
-      armor_check_penalty: boolean;
+      armor_check: boolean;
     }>;
-    skill_points: {
-      available: number;
-      spent: number;
-    };
+    cross_class_skills: Array<{
+      id: number;
+      name: string;
+      key_ability: string;
+      current_ranks: number;
+      max_ranks: number;
+      total_modifier: number;
+      is_class_skill: boolean;
+      armor_check: boolean;
+    }>;
+    error: string | null;
   }>('skills');
 
   const [isUpdating, setIsUpdating] = useState(false);
+  const [updatingSkills, setUpdatingSkills] = useState<Set<number>>(new Set());
+  const [localSkillOverrides, setLocalSkillOverrides] = useState<Record<number, number>>({})
   
   const [cheatMode, setCheatMode] = useState(false);
   const [showCheatModeConfirm, setShowCheatModeConfirm] = useState(false);
@@ -51,26 +65,45 @@ export default function SkillsEditor() {
   const [sortColumn, setSortColumn] = useState<'name' | 'total' | 'ranks' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // Load skills data when component mounts
+  // Load skills data only if missing when component mounts
   useEffect(() => {
     const loadSkillsData = async () => {
       if (!character?.id) return;
       
-      try {
-        await skillsSubsystem.load();
-      } catch (err) {
-        console.error('Failed to load skills:', err);
+      // Only load if we don't have data yet - no forced refresh on tab switch
+      if (!skillsSubsystem.data) {
+        try {
+          await skillsSubsystem.load();
+        } catch (err) {
+          console.error('Failed to load skills:', err);
+        }
       }
     };
 
     loadSkillsData();
-  }, [character?.id]); // Remove skillsSubsystem.load dependency - always reload on mount
+  }, [character?.id, skillsSubsystem.data]); // Load only when character changes or data is missing
 
-  // Derive values from subsystem data
-  const skills = skillsSubsystem.data?.skills?.filter(skill => !skill.name.startsWith('DEL_')) || [];
-  const availableSkillPoints = skillsSubsystem.data?.skill_points?.available || 0;
-  const totalSpentPoints = skillsSubsystem.data?.skill_points?.spent || 0;
-  const totalSkillPoints = availableSkillPoints + totalSpentPoints;
+  // Reset local overrides when new data loads (like AbilityScores pattern)
+  useEffect(() => {
+    setLocalSkillOverrides({});
+  }, [skillsSubsystem.data]);
+
+  // Apply local overrides to skills (simple pattern like AbilityScores)
+  const applyOverrides = (skillList: any[]) => {
+    return skillList.map(skill => ({
+      ...skill,
+      current_ranks: localSkillOverrides[skill.id] ?? skill.current_ranks
+    }));
+  };
+
+  const classSkills = applyOverrides(skillsSubsystem.data?.class_skills?.filter(skill => !skill.name.startsWith('DEL_')) || []);
+  const crossClassSkills = applyOverrides(skillsSubsystem.data?.cross_class_skills?.filter(skill => !skill.name.startsWith('DEL_')) || []);
+  const skills = [...classSkills, ...crossClassSkills];
+  
+  // Use backend data for points (let backend handle calculations)
+  const availableSkillPoints = skillsSubsystem.data?.available_points || 0;
+  const totalSpentPoints = skillsSubsystem.data?.spent_points || 0;
+  const totalSkillPoints = skillsSubsystem.data?.total_available || availableSkillPoints + totalSpentPoints;
   const isLoading = skillsSubsystem.isLoading;
   const error = skillsSubsystem.error;
 
@@ -124,53 +157,82 @@ export default function SkillsEditor() {
     const skill = skills.find(s => s.id === skillId);
     if (!skill) return;
 
-    const oldRank = skill.rank;
-    const rankDifference = newRank - oldRank;
-    
+    // Basic validation (let backend handle detailed validation)
     if (!cheatMode) {
-      // Calculate cost based on whether it's a class skill
-      const costPerRank = skill.is_class_skill ? 1 : 2;
-      const totalCost = rankDifference * costPerRank;
-      
-      if (rankDifference > 0 && totalCost > availableSkillPoints) return;
       if (newRank < 0) return;
-      if (newRank > skill.max_rank) return;
+      if (newRank > skill.max_ranks) return;
     }
     
-    setIsUpdating(true);
+    // 1. Optimistic update (like AbilityScores pattern)
+    setLocalSkillOverrides(prev => ({
+      ...prev,
+      [skillId]: newRank
+    }));
+    
+    setUpdatingSkills(prev => new Set([...prev, skillId]));
     
     try {
+      // 2. Send to backend and get updated data in response
       const updates = { [skillId]: newRank };
-      await CharacterAPI.updateSkills(character.id, updates);
+      const response = await CharacterAPI.updateSkills(character.id, updates);
       
-      // Reload to get fresh data from backend
-      await skillsSubsystem.load();
+      // 3. Use response data directly instead of refetching
+      if (response && response.skill_summary) {
+        skillsSubsystem.updateData(response.skill_summary);
+      } else {
+        // Fallback to refresh if response doesn't have expected data
+        await skillsSubsystem.load();
+      }
+      
     } catch (err) {
       console.error('Error updating skill:', err);
+      
+      // 4. Revert on error (like AbilityScores pattern)
+      setLocalSkillOverrides(prev => {
+        const updated = { ...prev };
+        delete updated[skillId];
+        return updated;
+      });
     } finally {
-      setIsUpdating(false);
+      setUpdatingSkills(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(skillId);
+        return newSet;
+      });
     }
   };
 
   const handleButtonClick = (buttonType: 'increase' | 'decrease', skillId: number) => {
+    console.log('🔘 Button clicked:', { buttonType, skillId });
+    
     const buttonKey = `${buttonType}-${skillId}`;
     setClickedButton(buttonKey);
     setTimeout(() => setClickedButton(null), 150);
     
     const skill = skills.find(s => s.id === skillId);
-    if (!skill) return;
+    if (!skill) {
+      console.log('❌ Skill not found in handleButtonClick');
+      return;
+    }
+    
+    console.log('📋 Current skill data:', { name: skill.name, currentRanks: skill.current_ranks });
     
     if (buttonType === 'increase') {
-      handleUpdateSkillRank(skillId, skill.rank + 1);
+      console.log('⬆️ Increasing skill rank');
+      handleUpdateSkillRank(skillId, skill.current_ranks + 1);
     } else {
-      handleUpdateSkillRank(skillId, skill.rank - 1);
+      console.log('⬇️ Decreasing skill rank');
+      handleUpdateSkillRank(skillId, skill.current_ranks - 1);
     }
   };
 
   const handleCheatModeToggle = () => {
+    console.log('🎮 Cheat mode toggle clicked, current state:', cheatMode);
     if (cheatMode) {
+      console.log('🔒 Disabling cheat mode, showing confirmation');
       setShowCheatModeConfirm(true);
     } else {
+      console.log('🚀 Enabling cheat mode');
       setCheatMode(true);
     }
   };
@@ -189,7 +251,10 @@ export default function SkillsEditor() {
     setIsUpdating(true);
     
     try {
-      await CharacterAPI.resetSkills(character.id);
+      const response = await CharacterAPI.resetSkills(character.id);
+      
+      // After reset, refresh the data to get new state
+      // Note: Reset endpoint doesn't return skill_summary, so we need to refetch
       await skillsSubsystem.load();
     } catch (err) {
       console.error('Error resetting skills:', err);
@@ -223,7 +288,7 @@ export default function SkillsEditor() {
           compareValue = a.total_modifier - b.total_modifier;
           break;
         case 'ranks':
-          compareValue = a.rank - b.rank;
+          compareValue = a.current_ranks - b.current_ranks;
           break;
       }
       
@@ -355,15 +420,7 @@ export default function SkillsEditor() {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent padding="p-3" className="text-center">
-            <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('skills.totalPoints')}</div>
-            <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">
-              {display(totalSkillPoints)}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardContent padding="p-3" className="text-center">
             <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('skills.pointsSpent')}</div>
@@ -501,8 +558,8 @@ export default function SkillsEditor() {
                     <td className="p-3">
                       <div className="flex items-center space-x-2">
                         <span className="font-medium text-[rgb(var(--color-text-primary))]">{display(skill.name)}</span>
-                        <span className="text-sm text-[rgb(var(--color-text-muted))]">({display(skill.ability)})</span>
-                        {skill.armor_check_penalty && (
+                        <span className="text-sm text-[rgb(var(--color-text-muted))]">({display(skill.key_ability)})</span>
+                        {skill.armor_check && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-[rgb(var(--color-warning)/0.2)] text-[rgb(var(--color-warning))]">
                             {t('skills.armorCheck')}
                           </span>
@@ -525,7 +582,7 @@ export default function SkillsEditor() {
                           onClick={() => handleButtonClick('decrease', skill.id)}
                           variant="outline"
                           size="sm"
-                          disabled={(!cheatMode && skill.rank === 0) || isUpdating}
+                          disabled={(!cheatMode && skill.current_ranks === 0) || updatingSkills.has(skill.id)}
                           clicked={clickedButton === `decrease-${skill.id}`}
                           aria-label={`Decrease ${skill.name}`}
                           title={`Decrease ${skill.name} (min: 0)`}
@@ -535,19 +592,19 @@ export default function SkillsEditor() {
                         </Button>
                         <input
                           type="number"
-                          value={skill.rank}
+                          value={skill.current_ranks}
                           onChange={(e) => handleUpdateSkillRank(skill.id, parseInt(e.target.value) || 0)}
                           className="w-12 text-center h-6 text-sm bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border)/0.6)] rounded font-medium"
-                          disabled={isUpdating}
+                          disabled={updatingSkills.has(skill.id)}
                         />
                         <Button
                           onClick={() => handleButtonClick('increase', skill.id)}
                           variant="outline"
                           size="sm"
-                          disabled={(!cheatMode && (availableSkillPoints < (skill.is_class_skill ? 1 : 2) || skill.rank >= skill.max_rank)) || isUpdating}
+                          disabled={(!cheatMode && (availableSkillPoints < (skill.is_class_skill ? 1 : 2) || skill.current_ranks >= skill.max_ranks)) || updatingSkills.has(skill.id)}
                           clicked={clickedButton === `increase-${skill.id}`}
                           aria-label={`Increase ${skill.name}`}
-                          title={`Increase ${skill.name} (cost: ${skill.is_class_skill ? '1' : '2'} points, max: ${cheatMode ? '∞' : skill.max_rank})`}
+                          title={`Increase ${skill.name} (cost: ${skill.is_class_skill ? '1' : '2'} points, max: ${cheatMode ? '∞' : skill.max_ranks})`}
                           className="h-6 w-6 p-0 text-xs"
                         >
                           +
@@ -555,8 +612,8 @@ export default function SkillsEditor() {
                       </div>
                     </td>
                     <td className="p-3 text-center text-sm text-[rgb(var(--color-text-secondary))]">
-                      {/* Display the ability modifier component */}
-                      {formatModifier(skill.ability_modifier)}
+                      {/* Display the ability modifier component - approximate as total minus ranks */}
+                      {formatModifier(skill.total_modifier - skill.current_ranks)}
                     </td>
                     <td className="p-3 text-center text-sm text-[rgb(var(--color-text-secondary))]">
                       <span 

@@ -42,6 +42,7 @@ interface CharacterContextState {
   importCharacter: (savePath: string) => Promise<void>;
   loadSubsystem: (subsystem: SubsystemType, force?: boolean) => Promise<unknown>;
   updateSubsystem: (subsystem: SubsystemType, data: unknown) => Promise<void>;
+  updateSubsystemData: (subsystem: SubsystemType, data: unknown) => void;
   clearCharacter: () => void;
   refreshAll: () => Promise<void>;
 }
@@ -162,6 +163,18 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }
   }, [characterId, loadSubsystem]);
 
+  // Update subsystem data directly without HTTP request (for using API response data)
+  const updateSubsystemData = useCallback((subsystem: SubsystemType, data: unknown) => {
+    setSubsystems(prev => ({
+      ...prev,
+      [subsystem]: {
+        ...prev[subsystem],
+        data,
+        lastFetched: new Date()
+      }
+    }));
+  }, []);
+
   // Load character
   const loadCharacter = useCallback(async (id: number) => {
     setIsLoading(true);
@@ -252,6 +265,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     importCharacter,
     loadSubsystem,
     updateSubsystem,
+    updateSubsystemData,
     clearCharacter,
     refreshAll,
   };
@@ -274,12 +288,18 @@ export function useCharacterContext() {
 
 // Typed hook for specific subsystems
 export function useSubsystem<T = unknown>(subsystem: SubsystemType) {
-  const { subsystems, loadSubsystem } = useCharacterContext();
+  const { subsystems, loadSubsystem, updateSubsystemData } = useCharacterContext();
   
   const subsystemData = subsystems[subsystem] as SubsystemData<T>;
+  
+  // Update data directly without HTTP request (for using API response data)
+  const updateData = useCallback((newData: T) => {
+    updateSubsystemData(subsystem, newData);
+  }, [subsystem, updateSubsystemData]);
   
   return {
     ...subsystemData,
     load: (force?: boolean) => loadSubsystem(subsystem, force),
+    updateData,
   };
 }

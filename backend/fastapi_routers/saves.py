@@ -122,8 +122,8 @@ def get_save_totals(
 @router.post("/characters/{character_id}/saves/check")
 def check_save(
     character_id: int,
-    request,
-    manager: CharacterManagerDep
+    manager: CharacterManagerDep,
+    request_data: Dict[str, Any]
 ):
     """
     Check if a saving throw would succeed using SaveManager method.
@@ -136,6 +136,9 @@ def check_save(
     """
     from fastapi_models.save_models import SaveCheckRequest
     
+    # Create SaveCheckRequest from raw data
+    save_check_data = SaveCheckRequest(**request_data)
+    
     try:
         save_manager = manager.get_manager('save')
         
@@ -147,14 +150,14 @@ def check_save(
         
         # Use existing SaveManager method
         check_result = save_manager.check_save(
-            request.save_type, 
-            request.dc, 
-            request.modifier, 
-            request.take_20
+            save_check_data.save_type, 
+            save_check_data.dc, 
+            save_check_data.modifier, 
+            save_check_data.take_20
         )
         
         # Ensure success_chance is present for non-take_20 checks
-        if not request.take_20 and 'success_chance' not in check_result:
+        if not save_check_data.take_20 and 'success_chance' not in check_result:
             check_result['success_chance'] = None
         
         return check_result
@@ -175,8 +178,8 @@ def check_save(
 @router.post("/characters/{character_id}/saves/temporary-modifier")
 def add_temporary_modifier(
     character_id: int,
-    request,
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
 ):
     """
     Add temporary save modifier using SaveManager method.
@@ -185,6 +188,9 @@ def add_temporary_modifier(
         request: Temporary modifier parameters
     """
     from fastapi_models.save_models import TemporaryModifierRequest
+    
+    # Create TemporaryModifierRequest from raw data
+    temp_modifier_data = TemporaryModifierRequest(**request_data)
     
     try:
         session = char_session
@@ -202,14 +208,14 @@ def add_temporary_modifier(
             )
         
         # Use existing SaveManager method
-        save_manager.add_temporary_modifier(request.save_type, request.modifier, request.duration)
+        save_manager.add_temporary_modifier(temp_modifier_data.save_type, temp_modifier_data.modifier, temp_modifier_data.duration)
         
         return {
             "success": True,
-            "message": f"Added {request.modifier:+d} temporary {request.save_type} save modifier",
-            "save_type": request.save_type,
-            "modifier": request.modifier,
-            "duration": request.duration
+            "message": f"Added {temp_modifier_data.modifier:+d} temporary {temp_modifier_data.save_type} save modifier",
+            "save_type": temp_modifier_data.save_type,
+            "modifier": temp_modifier_data.modifier,
+            "duration": temp_modifier_data.duration
         }
         
     except Exception as e:
@@ -223,8 +229,8 @@ def add_temporary_modifier(
 @router.delete("/characters/{character_id}/saves/temporary-modifier")
 def remove_temporary_modifier(
     character_id: int,
-    request,
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
 ):
     """
     Remove temporary save modifier using SaveManager method.
@@ -233,6 +239,9 @@ def remove_temporary_modifier(
         request: Temporary modifier parameters (duration ignored for removal)
     """
     from fastapi_models.save_models import TemporaryModifierRequest
+    
+    # Create TemporaryModifierRequest from raw data
+    temp_modifier_data = TemporaryModifierRequest(**request_data)
     
     try:
         session = char_session
@@ -250,13 +259,13 @@ def remove_temporary_modifier(
             )
         
         # Use existing SaveManager method
-        save_manager.remove_temporary_modifier(request.save_type, request.modifier)
+        save_manager.remove_temporary_modifier(temp_modifier_data.save_type, temp_modifier_data.modifier)
         
         return {
             "success": True,
-            "message": f"Removed {request.modifier:+d} temporary {request.save_type} save modifier",
-            "save_type": request.save_type,
-            "modifier": request.modifier
+            "message": f"Removed {temp_modifier_data.modifier:+d} temporary {temp_modifier_data.save_type} save modifier",
+            "save_type": temp_modifier_data.save_type,
+            "modifier": temp_modifier_data.modifier
         }
         
     except Exception as e:
@@ -309,8 +318,8 @@ def clear_temporary_modifiers(
 @router.post("/characters/{character_id}/saves/misc-bonus")
 def set_misc_save_bonus(
     character_id: int,
-    request,
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
 ):
     """
     Set miscellaneous saving throw bonus using SaveManager method.
@@ -319,6 +328,9 @@ def set_misc_save_bonus(
         request: Misc save bonus parameters
     """
     from fastapi_models.save_models import MiscSaveBonusRequest
+    
+    # Create MiscSaveBonusRequest from raw data
+    misc_bonus_data = MiscSaveBonusRequest(**request_data)
     
     try:
         session = char_session
@@ -336,7 +348,7 @@ def set_misc_save_bonus(
             )
         
         # Use existing SaveManager method
-        result = save_manager.set_misc_save_bonus(request.save_type, request.value)
+        result = save_manager.set_misc_save_bonus(misc_bonus_data.save_type, misc_bonus_data.value)
         
         return result
         

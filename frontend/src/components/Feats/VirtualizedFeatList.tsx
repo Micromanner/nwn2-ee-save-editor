@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { FixedSizeList } from 'react-window';
-import FeatCard from './FeatCard';
+// Note: This component is deprecated in favor of GameDataList
 
 interface FeatInfo {
   id: number;
@@ -72,18 +72,10 @@ const Row = ({ index, style, data }: RowProps) => {
 
   return (
     <div style={style} className="px-4">
-      <FeatCard
-        key={feat.id}
-        feat={feat}
-        isActive={isActive}
-        viewMode="list"
-        onDetails={onDetails}
-        onAdd={onAdd}
-        onRemove={onRemove}
-        validationState={validationCache?.[feat.id]}
-        isValidating={validatingFeatId === feat.id}
-        onValidate={onValidate}
-      />
+      {/* VirtualizedFeatList is deprecated - use GameDataList instead */}
+      <div className="text-muted text-sm">
+        Virtualized list item for feat: {feat.label}
+      </div>
     </div>
   );
 };

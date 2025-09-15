@@ -145,12 +145,12 @@ export default function ClassSelectorModal({
   // Backend should provide human-readable focus names and descriptions from 2DA files
   const getFocusLabel = (focus: string) => {
     switch (focus) {
-      case 'combat': return '[Combat]';
-      case 'arcane_caster': return '[Arcane]';
-      case 'divine_caster': return '[Divine]';
-      case 'skill_specialist': return '[Skills]';  
-      case 'stealth_infiltration': return '[Stealth]';
-      default: return '[Other]';
+      case 'combat': return '';
+      case 'arcane_caster': return '';
+      case 'divine_caster': return '';
+      case 'skill_specialist': return '';  
+      case 'stealth_infiltration': return 'Stealth';
+      default: return '';
     }
   };
 
@@ -209,14 +209,12 @@ export default function ClassSelectorModal({
     return (
       <Card 
         key={`${classInfo.label}-${classInfo.type}`}
-        className={`cursor-pointer transition-colors min-w-0 ${
-          validation.can_add 
-            ? 'hover:bg-[rgb(var(--color-surface-2))]' 
-            : 'opacity-50 cursor-not-allowed'
+        className={`class-modal-class-card ${
+          validation.can_add ? 'available' : 'unavailable'
         }`}
         onClick={() => validation.can_add && onSelectClass(classInfo)}
       >
-        <CardContent padding="p-3">
+        <CardContent className="class-modal-class-card-content">
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2">
@@ -274,18 +272,6 @@ export default function ClassSelectorModal({
                - ✗ Uncanny Dodge: Required (character missing)
                - ✓ Sneak Attack: +3d6 (character has +4d6)
           */}
-          {validation.can_add && classInfo.type === 'prestige' && (
-            <div className="text-xs mt-2 p-2 bg-green-500/10 rounded border border-green-500/20">
-              <div className="flex items-center gap-1 text-green-400">
-                <span className="w-1 h-1 bg-green-500 rounded-full"></span>
-                <span className="font-medium">Basic Requirements Met</span>
-              </div>
-              <div className="text-green-300 mt-1 text-xs opacity-75">
-                • Character Level: {totalLevel}/6+
-                • Class Slots: {currentClasses.length}/{maxClasses}
-              </div>
-            </div>
-          )}
           
         </CardContent>
       </Card>
@@ -295,39 +281,39 @@ export default function ClassSelectorModal({
   if (!isOpen || !categorizedClasses) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="class-modal-overlay">
+      <Card className="class-modal-container">
         <CardContent padding="p-0" className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-4 border-b border-[rgb(var(--color-border))] flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+          <div className="class-modal-header">
+            <div className="class-modal-header-row">
+              <h3 className="class-modal-title">
                 {isChangingClass ? 'Change Class' : t('classes.selectClass')}
               </h3>
               <Button
                 onClick={onClose}
                 variant="ghost"
                 size="sm"
-                className="p-1"
+                className="class-modal-close-button"
               >
                 <X className="w-4 h-4" />
               </Button>
             </div>
             
             {/* Search Bar */}
-            <div className="relative mt-3">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[rgb(var(--color-text-muted))]" />
+            <div className="class-modal-search-container">
+              <Search className="class-modal-search-icon" />
               <Input
                 placeholder={t('classes.searchClasses')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="class-modal-search-input"
               />
             </div>
           </div>
 
           {/* Content */}
-          <div className="max-h-[60vh] overflow-y-auto overflow-x-hidden">
+          <div className="class-modal-content">
             {searchQuery.trim() ? (
               /* Search Results */
               <div className="p-4">
@@ -429,8 +415,8 @@ export default function ClassSelectorModal({
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-1))] flex-shrink-0">
-            <div className="flex justify-between items-center text-xs text-[rgb(var(--color-text-muted))]">
+          <div className="class-modal-footer">
+            <div className="class-modal-footer-content">
               <span>
                 {categorizedClasses.total_classes} total classes available
               </span>

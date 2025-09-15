@@ -40,14 +40,18 @@ export interface FeatInfo {
 }
 
 export interface FeatsState {
-  current_feats: {
+  summary: {
     total: number;
     protected: FeatInfo[];
     class_feats: FeatInfo[];
     general_feats: FeatInfo[];
     custom_feats: FeatInfo[];
   };
-  available_feats?: FeatInfo[]; // Optional - no longer loaded from /feats/state/
+  all_feats: FeatInfo[];
+  available_feats: FeatInfo[];
+  legitimate_feats: FeatInfo[];
+  feat_chains: Record<string, any>;
+  recommended_feats: FeatInfo[];
 }
 
 export interface FilterState {

@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { VariableSizeList } from 'react-window';
-import FeatCard from './FeatCard';
+// Note: This component is deprecated in favor of GameDataList
 
 interface FeatInfo {
   id: number;
@@ -114,18 +114,10 @@ const Row = ({ index, style, data }: RowProps) => {
         'grid-cols-1'
       }`}>
         {rowFeats.map((feat, colIndex) => (
-          <FeatCard
-            key={`${feat.id}-${index}-${colIndex}`}
-            feat={feat}
-            isActive={isActive}
-            viewMode="grid"
-            onDetails={onDetails}
-            onAdd={onAdd}
-            onRemove={onRemove}
-            validationState={validationCache?.[feat.id]}
-            isValidating={validatingFeatId === feat.id}
-            onValidate={onValidate}
-          />
+          <div key={`${feat.id}-${index}-${colIndex}`} className="text-muted text-sm p-2 border rounded">
+            {/* Deprecated virtualized grid - use GameDataList instead */}
+            {feat.label}
+          </div>
         ))}
         {/* Fill empty cells in partial rows */}
         {Array.from({ length: columns - rowFeats.length }).map((_, emptyIndex) => (

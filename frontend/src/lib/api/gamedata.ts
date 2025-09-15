@@ -62,7 +62,11 @@ export class GameDataService {
     return response.legitimate_feats;
   };
   skills = () => this.getPaged('skills');
-  spells = async (characterId: number) => {
+  spells = async (characterId: number, filters?: {
+    level?: number;
+    school?: string;
+    search?: string;
+  }) => {
     interface SpellResponse {
       id: number;
       name: string;
@@ -79,7 +83,23 @@ export class GameDataService {
       metamagic: string;
       target_type: string;
     }
-    const response = await apiClient.get<{spells: SpellResponse[], count: number, total_by_level: Record<string, number>}>(`/characters/${characterId}/spells/all`);
+    
+    // Build query parameters for server-side filtering
+    const params = new URLSearchParams();
+    if (filters?.level !== undefined && filters.level !== -1) {
+      params.append('level', filters.level.toString());
+    }
+    if (filters?.school && filters.school !== 'all') {
+      params.append('school', filters.school);
+    }
+    if (filters?.search && filters.search.trim()) {
+      params.append('search', filters.search.trim());
+    }
+    
+    const queryString = params.toString();
+    const url = `/characters/${characterId}/spells/all${queryString ? `?${queryString}` : ''}`;
+    
+    const response = await apiClient.get<{spells: SpellResponse[], count: number, total_by_level: Record<string, number>}>(url);
     return response.spells;
   };
   abilities = () => this.getPaged('abilities');

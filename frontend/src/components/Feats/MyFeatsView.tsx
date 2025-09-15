@@ -13,12 +13,19 @@ import {
   Shield,
   BookOpen,
   Sparkles,
-  Package
+  Package,
+  Info, 
+  Swords, 
+  Sun, 
+  Zap
 } from 'lucide-react';
-import FeatCard from './FeatCard';
-import VirtualizedFeatSection from './VirtualizedFeatSection';
+import GameDataList from '@/components/ui/GameDataList';
+import type { GameDataItem } from '@/components/ui/GameDataList';
+// Removed VirtualizedFeatSection - using GameDataList for all cases
 import FeatSearchBar from './FeatSearchBar';
 import { useFeatSearch } from '@/hooks/useFeatSearch';
+import NWN2Icon from '@/components/ui/NWN2Icon';
+import { display } from '@/utils/dataHelpers';
 import type { 
   FeatInfo, 
   FeatsState, 
@@ -37,6 +44,49 @@ interface MyFeatsViewProps extends FeatManagementCallbacks {
 
 type SortOption = 'name' | 'type' | 'level' | 'recent';
 type FilterOption = 'all' | 'protected' | 'class' | 'general' | 'custom';
+
+// Helper functions for feat rendering
+const getFeatTypeName = (type: number): string => {
+  switch (type) {
+    case 1: return 'General';
+    case 2: return 'Combat';
+    case 8: return 'Metamagic';
+    case 16: return 'Divine';
+    case 32: return 'Epic';
+    case 64: return 'Class';
+    default: return 'General';
+  }
+};
+
+const getTypeIcon = (type: number) => {
+  switch (type) {
+    case 2: return <Swords className="w-4 h-4" />; // Combat
+    case 8: return <Sparkles className="w-4 h-4" />; // Metamagic
+    case 16: return <Sun className="w-4 h-4" />; // Divine
+    case 32: return <Zap className="w-4 h-4" />; // Epic
+    case 64: return <Shield className="w-4 h-4" />; // Class
+    default: return null;
+  }
+};
+
+const getTypeColor = (type: number) => {
+  switch (type) {
+    case 2: return 'destructive'; // Combat
+    case 8: return 'secondary'; // Metamagic
+    case 16: return 'default'; // Divine
+    case 32: return 'outline'; // Epic
+    case 64: return 'default'; // Class
+    default: return 'default';
+  }
+};
+
+// Convert FeatInfo to GameDataItem
+const featToGameDataItem = (feat: FeatInfo): GameDataItem & FeatInfo => ({
+  ...feat,
+  name: feat.label,
+  isActive: true, // All feats in MyFeatsView are active/learned
+  icon: `ife_${feat.label.toLowerCase()}`,
+});
 
 export default function MyFeatsView({
   featsData,
@@ -58,11 +108,13 @@ export default function MyFeatsView({
 
   // Combine all feats with deduplication
   const allCurrentFeats = useMemo(() => {
+    if (!featsData?.summary) return [];
+    
     const allFeats = [
-      ...featsData.current_feats.protected,
-      ...featsData.current_feats.class_feats,
-      ...featsData.current_feats.general_feats,
-      ...featsData.current_feats.custom_feats,
+      ...(featsData.summary.protected || []),
+      ...(featsData.summary.class_feats || []),
+      ...(featsData.summary.general_feats || []),
+      ...(featsData.summary.custom_feats || []),
     ];
     
     // Deduplicate by feat ID
@@ -76,15 +128,17 @@ export default function MyFeatsView({
 
   // Filter feats based on filter option
   const filteredFeats = useMemo(() => {
+    if (!featsData?.summary) return [];
+    
     switch (filterBy) {
       case 'protected':
-        return featsData.current_feats.protected;
+        return featsData.summary.protected || [];
       case 'class':
-        return featsData.current_feats.class_feats;
+        return featsData.summary.class_feats || [];
       case 'general':
-        return featsData.current_feats.general_feats;
+        return featsData.summary.general_feats || [];
       case 'custom':
-        return featsData.current_feats.custom_feats;
+        return featsData.summary.custom_feats || [];
       default:
         return allCurrentFeats;
     }
@@ -138,7 +192,7 @@ export default function MyFeatsView({
         groups['Protected'].push(feat);
       } else if (feat.custom) {
         groups['Custom'].push(feat);
-      } else if (featsData.current_feats.class_feats.some(f => f.id === feat.id)) {
+      } else if (featsData.summary?.class_feats?.some(f => f.id === feat.id)) {
         groups['Class'].push(feat);
       } else {
         groups['General'].push(feat);
@@ -191,6 +245,69 @@ export default function MyFeatsView({
     }
   };
 
+  // Custom renderers for GameDataList
+  const renderFeatMain = (item: GameDataItem & FeatInfo) => (
+    <div className="game-data-col-main">
+      <div className="game-data-icon-wrapper">
+        <NWN2Icon icon={item.icon || ''} size="sm" />
+      </div>
+      <div className="game-data-content">
+        <h4 className="game-data-title">
+          {display(item.label)}
+        </h4>
+        <div className="game-data-subtitle">
+          <span>{getFeatTypeName(item.type)}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFeatTags = (item: GameDataItem & FeatInfo) => (
+    <div className="flex flex-wrap gap-1">
+      <Badge variant={getTypeColor(item.type)} className="text-xs">
+        <span className="flex items-center gap-1">
+          {getTypeIcon(item.type)}
+          {getFeatTypeName(item.type)}
+        </span>
+      </Badge>
+      {item.protected && (
+        <Badge variant="outline" className="text-xs">
+          <Shield className="w-3 h-3 mr-1" />
+          Protected
+        </Badge>
+      )}
+      {item.custom && (
+        <Badge variant="secondary" className="text-xs">
+          Custom
+        </Badge>
+      )}
+    </div>
+  );
+
+  const renderFeatAction = (item: GameDataItem & FeatInfo) => (
+    <div className="game-data-col-action">
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-xs h-7 px-2"
+          onClick={() => onDetails(item)}
+        >
+          <Info className="w-3 h-3" />
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          className="text-xs h-7 px-2"
+          onClick={() => onRemove(item.id)}
+          disabled={item.protected}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* Header with Controls */}
@@ -199,7 +316,7 @@ export default function MyFeatsView({
           <div>
             <h2 className="text-lg font-semibold">My Feats</h2>
             <p className="text-sm text-[rgb(var(--color-text-secondary))] mt-1">
-              {featsData.current_feats.total} acquired feats
+              {featsData.summary?.total || 0} acquired feats
             </p>
           </div>
           
@@ -276,40 +393,16 @@ export default function MyFeatsView({
                   <Badge variant="secondary">{sortedFeats.length}</Badge>
                 </h3>
                 
-                {sortedFeats.length >= 20 ? (
-                  <VirtualizedFeatSection
-                    feats={sortedFeats}
-                    isActive={true}
-                    viewMode={viewMode}
-                    maxHeight={500}
-                    onDetails={onDetails}
-                    onAdd={onAdd}
-                    onRemove={onRemove}
-                    validationCache={validationCache}
-                    validatingFeatId={validatingFeatId}
-                    onValidate={onValidate}
-                  />
-                ) : (
-                  <div className={viewMode === 'grid' ? 
-                    'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 
-                    'space-y-2'
-                  }>
-                    {sortedFeats.map((feat) => (
-                      <FeatCard
-                        key={feat.id}
-                        feat={feat}
-                        isActive={true}
-                        viewMode={viewMode}
-                        onDetails={onDetails}
-                        onAdd={onAdd}
-                        onRemove={onRemove}
-                        validationState={validationCache[feat.id]}
-                        isValidating={validatingFeatId === feat.id}
-                        onValidate={onValidate}
-                      />
-                    ))}
-                  </div>
-                )}
+                <GameDataList
+                  items={sortedFeats.map(featToGameDataItem)}
+                  renderMain={renderFeatMain}
+                  renderTags={renderFeatTags}
+                  renderAction={renderFeatAction}
+                  onItemAction={(item) => onRemove(item.id)}
+                  actionLabel={() => 'Remove'}
+                  actionVariant={() => 'primary'}
+                  emptyMessage="No feats found in this filter"
+                />
               </div>
             ) : (
               // Show grouped view when no filter
@@ -333,42 +426,16 @@ export default function MyFeatsView({
                   </div>
                   
                   {expandedSections.has(section) && (
-                    <>
-                      {sectionFeats.length >= 20 ? (
-                        <VirtualizedFeatSection
-                          feats={sectionFeats}
-                          isActive={true}
-                          viewMode={viewMode}
-                          maxHeight={400}
-                          onDetails={onDetails}
-                          onAdd={onAdd}
-                          onRemove={onRemove}
-                          validationCache={validationCache}
-                          validatingFeatId={validatingFeatId}
-                          onValidate={onValidate}
-                        />
-                      ) : (
-                        <div className={viewMode === 'grid' ? 
-                          'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 
-                          'space-y-2'
-                        }>
-                          {sectionFeats.map((feat) => (
-                            <FeatCard
-                              key={`${section}-${feat.id}`}
-                              feat={feat}
-                              isActive={true}
-                              viewMode={viewMode}
-                              onDetails={onDetails}
-                              onAdd={onAdd}
-                              onRemove={onRemove}
-                              validationState={validationCache[feat.id]}
-                              isValidating={validatingFeatId === feat.id}
-                              onValidate={onValidate}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </>
+                    <GameDataList
+                      items={sectionFeats.map(featToGameDataItem)}
+                      renderMain={renderFeatMain}
+                      renderTags={renderFeatTags}
+                      renderAction={renderFeatAction}
+                      onItemAction={(item) => onRemove(item.id)}
+                      actionLabel={() => 'Remove'}
+                      actionVariant={() => 'primary'}
+                      emptyMessage={`No ${section.toLowerCase()} feats found`}
+                    />
                   )}
                 </div>
               ))

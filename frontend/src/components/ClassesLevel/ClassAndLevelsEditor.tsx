@@ -85,15 +85,18 @@ export default function ClassAndLevelsEditor() {
     const loadCharacterClasses = async () => {
       if (!character?.id) return;
       
-      try {
-        await classesSubsystem.load();
-      } catch (err) {
-        console.error('Failed to load character classes:', err);
+      // Only load if data is missing and not already loading
+      if (!classesSubsystem.data && !classesSubsystem.isLoading) {
+        try {
+          await classesSubsystem.load();
+        } catch (err) {
+          console.error('Failed to load character classes:', err);
+        }
       }
     };
 
     loadCharacterClasses();
-  }, [character?.id]); // Removed classesSubsystem from dependencies to prevent infinite loop
+  }, [character?.id, classesSubsystem.data, classesSubsystem.isLoading]);
 
 
   const handleAdjustClassLevel = async (index: number, delta: number) => {
@@ -386,15 +389,17 @@ export default function ClassAndLevelsEditor() {
 
                     {/* Action Buttons - Fixed width */}
                     <div className="col-span-1 flex items-center justify-end">
-                      <Button
-                        onClick={() => handleRemoveClass(index)}
-                        variant="ghost"
-                        size="sm"
-                        className="p-1 hover:text-[rgb(var(--color-danger))]"
-                        title="Remove class"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                      {classes.length > 1 && (
+                        <Button
+                          onClick={() => handleRemoveClass(index)}
+                          variant="ghost"
+                          size="sm"
+                          className="p-1 hover:text-[rgb(var(--color-danger))]"
+                          title="Remove class"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
