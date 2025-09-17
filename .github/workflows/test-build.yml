@@ -47,40 +47,26 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: create virtual environment
+      
+      - name: install python dependencies and build rust extensions
+        shell: bash
+        working-directory: ./backend
         run: |
           python -m venv venv
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source venv/Scripts/activate
+          else
+            source venv/bin/activate
+          fi
           
-      - name: activate venv and install python dependencies (Unix)
-        if: matrix.platform != 'windows-latest'
-        run: |
-          source venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          pip install -r requirements.txt
           
-      - name: activate venv and install python dependencies (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          venv\Scripts\activate.bat
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-
-      - name: build rust extensions (Unix)
-        if: matrix.platform != 'windows-latest'
-        run: |
-          source ../venv/bin/activate
-          pip install maturin
-          maturin develop
-        working-directory: ./backend/rust_extensions
-        
-      - name: build rust extensions (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          ..\venv\Scripts\activate.bat
-          pip install maturin
-          maturin develop
-        working-directory: ./backend/rust_extensions
+          maturin develop --release --manifest-path rust_extensions/Cargo.toml
+          maturin develop --release --features python-bindings --manifest-path parsers/rust_tda_parser/Cargo.toml
+          maturin develop --release --features python-bindings --manifest-path parsers/rust_tlk_parser/Cargo.toml
+          maturin develop --release --manifest-path parsers/rust_erf_parser/Cargo.toml
+          maturin develop --release --manifest-path rust_icon_cache/Cargo.toml
 
       - uses: tauri-apps/tauri-action@v0
         env:
