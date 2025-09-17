@@ -76,7 +76,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       if (!characterId) return;
       
       try {
-        const categorized = await apiClient.get(`/characters/${characterId}/classes/categorized/?include_unplayable=true`);
+        const categorized = await apiClient.get(`/characters/${characterId}/classes/categorized?include_unplayable=true`);
         setCategorizedClasses(categorized);
       } catch (err) {
         console.error('Failed to load categorized classes:', err);
@@ -139,9 +139,9 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
     
     try {
-      await apiClient.post(`/characters/${characterId}/classes/level-up/`, {
+      await apiClient.post(`/characters/${characterId}/classes/level-up`, {
         class_id: classId,
-        level_change: delta
+        level_change: delta,
       });
     } catch (err) {
       console.error('Error adjusting class level:', err);
@@ -162,10 +162,9 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
     
     try {
-      await apiClient.post(`/characters/${characterId}/classes/change/`, {
-        old_class_id: classId,
-        new_class_id: newClassInfo.id,
-        preserve_level: true
+      await apiClient.post(`/characters/${characterId}/classes/change`, {
+        class_id: newClassInfo.id,
+        preserve_level: true,
       });
     } catch (err) {
       console.error('Error changing class:', err);
@@ -195,8 +194,8 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
     
     try {
-      await apiClient.post(`/characters/${characterId}/classes/add/`, {
-        class_id: classInfo.id
+      await apiClient.post(`/characters/${characterId}/classes/add`, {
+        class_id: classInfo.id,
       });
     } catch (err) {
       console.error('Error adding class:', err);
@@ -216,7 +215,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
     
     try {
-      await apiClient.post(`/characters/${characterId}/classes/remove/${classId}`);
+      await apiClient.post(`/characters/${characterId}/classes/remove/${classId}`, {});
     } catch (err) {
       console.error('Error removing class:', err);
       throw err;

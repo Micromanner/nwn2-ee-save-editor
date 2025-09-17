@@ -160,16 +160,20 @@ pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, Str
     let scan_start = Instant::now();
     if saves_path.is_dir() {
         if let Ok(entries) = std::fs::read_dir(&saves_path) {
-            // Collect entries and sort by modification time (newest first)
+            // Collect save directory entries for sorting
             let mut save_entries: Vec<_> = entries.flatten()
                 .filter(|entry| entry.path().is_dir() && entry.path().join("resgff.zip").exists())
                 .collect();
             
-            // Sort by folder name (which contains timestamp) in descending order
+            // Sort by directory modification time (newest first)
             save_entries.sort_by(|a, b| {
-                let name_a = a.file_name().to_string_lossy().to_string();
-                let name_b = b.file_name().to_string_lossy().to_string();
-                name_b.cmp(&name_a) // Reverse order for newest first
+                let time_a = a.path().metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                let time_b = b.path().metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                time_b.cmp(&time_a) // Reverse order for newest first
             });
             
             for entry in save_entries {
@@ -198,7 +202,7 @@ pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, Str
                 
                 // Limit to 3 saves
                 if saves.len() >= 3 {
-                    log::info!("[Rust] Limited scan to first 3 saves (newest first)");
+                    log::info!("[Rust] Limited scan to first 3 saves (newest by modification time)");
                     break;
                 }
             }

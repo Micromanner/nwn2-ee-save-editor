@@ -120,7 +120,7 @@ export default function ClassSelectorModal({
 
       try {
         const data = await apiClient.get<SearchResult>(
-          `/characters/${characterId}/classes/categorized/?search=${encodeURIComponent(searchQuery)}`
+          `/characters/${characterId}/classes/categorized?search=${encodeURIComponent(searchQuery)}`
         );
         setSearchResults(data.search_results);
       } catch (err) {
