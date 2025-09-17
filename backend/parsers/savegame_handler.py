@@ -20,6 +20,46 @@ class SaveGameError(Exception):
     pass
 
 
+class BatchReader:
+    """Helper class for batch reading files from an open ZIP."""
+    
+    def __init__(self, zip_file: zipfile.ZipFile, validate_func):
+        """
+        Initialize batch reader with an open ZIP file.
+        
+        Args:
+            zip_file: Open ZipFile object
+            validate_func: Function to validate file content
+        """
+        self.zf = zip_file
+        self.validate = validate_func
+        
+    def read(self, filename: str) -> Optional[bytes]:
+        """
+        Read a file from the open ZIP.
+        
+        Args:
+            filename: Name of file to read
+            
+        Returns:
+            File contents as bytes, or None if not found
+            
+        Raises:
+            SaveGameError: If read fails (not for missing file)
+        """
+        try:
+            content = self.zf.read(filename)
+            self.validate(filename, content)
+            return content
+        except KeyError:
+            logger.debug(f"File not found in save: {filename}")
+            return None
+    
+    def list_files(self) -> List[str]:
+        """Get list of all files in the ZIP."""
+        return self.zf.namelist()
+
+
 class SaveGameHandler:
     """Handles NWN2 save game ZIP files with proper format preservation"""
     
@@ -120,6 +160,23 @@ class SaveGameHandler:
         except Exception as e:
             raise SaveGameError(f"Error accessing save game: {e}")
     
+    @contextmanager
+    def batch_read_context(self):
+        """
+        Context manager for batch reading files from the ZIP.
+        Keeps the ZIP file open for multiple read operations.
+        
+        Usage:
+            with save_handler.batch_read_context() as reader:
+                player_data = reader.read('playerlist.ifo')
+                bic_data = reader.read('player.bic')
+                
+        Yields:
+            BatchReader: Object with read() and list_files() methods
+        """
+        with self._open_zip_safe('r') as zf:
+            yield BatchReader(zf, self._validate_file_content)
+    
     def extract_file(self, filename: str) -> bytes:
         """
         Extract a single file from the save game zip
@@ -193,6 +250,44 @@ class SaveGameHandler:
             Companion file contents
         """
         return self.extract_file(f'{companion_name}.ros')
+    
+    def batch_read_character_files(self) -> Dict[str, bytes]:
+        """
+        Batch read all character-related files from the save.
+        Opens the ZIP once and reads all needed files.
+        
+        Returns:
+            Dictionary mapping filenames to file contents:
+            - 'playerlist.ifo': Always present
+            - 'player.bic': Present if exists
+            - '*.ros': All companion files
+            
+        Raises:
+            SaveGameError: If playerlist.ifo cannot be read
+        """
+        result = {}
+        
+        with self.batch_read_context() as reader:
+            # Read playerlist.ifo (required)
+            player_data = reader.read('playerlist.ifo')
+            if not player_data:
+                raise SaveGameError("Could not read playerlist.ifo - save is invalid")
+            result['playerlist.ifo'] = player_data
+            
+            # Read player.bic (optional)
+            bic_data = reader.read('player.bic')
+            if bic_data:
+                result['player.bic'] = bic_data
+            
+            # Read all companion .ros files
+            for filename in reader.list_files():
+                if filename.endswith('.ros'):
+                    ros_data = reader.read(filename)
+                    if ros_data:
+                        result[filename] = ros_data
+        
+        logger.debug(f"Batch read {len(result)} character files")
+        return result
     
     def extract_globals_xml(self) -> Optional[str]:
         """

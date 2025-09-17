@@ -132,38 +132,15 @@ def extract_and_parse_save_gff_files(save_handler, max_workers: int = 4) -> Dict
         if 'player.bic' in results:
             bic_data = results['player.bic']['data']
     """
-    gff_files = []
-    
-    # Extract playerlist.ifo (always present)
+    # Use new batch read method - opens ZIP only once
     try:
-        player_data = save_handler.extract_player_data()
-        gff_files.append(('playerlist.ifo', player_data))
+        character_files = save_handler.batch_read_character_files()
     except Exception as e:
         # If we can't get player data, this save is unusable
-        raise ValueError(f"Could not extract playerlist.ifo: {e}")
+        raise ValueError(f"Could not read save files: {e}")
     
-    # Extract player.bic if present
-    try:
-        bic_data = save_handler.extract_player_bic()
-        if bic_data:
-            gff_files.append(('player.bic', bic_data))
-    except Exception:
-        pass  # player.bic is optional
-    
-    # Extract companion .ros files
-    try:
-        file_list = save_handler.list_files()
-        companion_files = [f for f in file_list if f.endswith('.ros')]
-        
-        for filename in companion_files:
-            try:
-                file_data = save_handler.extract_file(filename)
-                if file_data:
-                    gff_files.append((filename, file_data))
-            except Exception:
-                continue  # Skip failed companion files
-    except Exception:
-        pass  # If we can't list files, just continue with what we have
+    # Convert to list format for parallel parsing
+    gff_files = [(filename, data) for filename, data in character_files.items()]
     
     # Parse all files in parallel
     return parse_gff_files_parallel(gff_files, max_workers)
