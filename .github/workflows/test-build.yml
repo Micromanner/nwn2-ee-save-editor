@@ -47,12 +47,37 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
+      - name: cache python dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            backend/venv
+          key: python-venv-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            python-venv-${{ runner.os }}-
+
+      - name: cache nuitka build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/src-tauri/binaries/.nuitka-cache
+            ~/.nuitka
+            frontend/src-tauri/binaries/*.build
+            frontend/src-tauri/binaries/*.dist
+          key: nuitka-${{ runner.os }}-${{ hashFiles('backend/**/*.py', 'backend/requirements.txt') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-
       
       - name: install python dependencies and build rust extensions
         shell: bash
         working-directory: ./backend
         run: |
-          python -m venv venv
+          # Create venv only if it doesn't exist (cache miss)
+          if [ ! -d "venv" ]; then
+            python -m venv venv
+          fi
+          
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             source venv/Scripts/activate
           else
@@ -67,6 +92,17 @@ jobs:
           maturin develop --release --features python-bindings --manifest-path parsers/rust_tlk_parser/Cargo.toml
           maturin develop --release --manifest-path parsers/rust_erf_parser/Cargo.toml
           maturin develop --release --manifest-path parsers/rust_icon_cache/Cargo.toml
+
+      - name: build fastapi sidecar
+        shell: bash
+        working-directory: ./backend
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source venv/Scripts/activate
+          else
+            source venv/bin/activate
+          fi
+          python build_fastapi_sidecar.py
 
       - uses: tauri-apps/tauri-action@v0
         env:

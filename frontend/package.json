@@ -9,7 +9,9 @@
     "lint": "next lint",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "build:fastapi": "cd ../backend && python build_fastapi_sidecar.py",
+    "build:all": "npm run build:fastapi && npm run tauri:build"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
