@@ -5,22 +5,14 @@ import { useCharacterContext } from '@/contexts/CharacterContext';
 interface Skill {
   id: number;
   name: string;
-  ability: string;
   rank: number;
   max_rank: number;
-  total_modifier: number;
+  total_bonus: number;
   ability_modifier: number;
+  misc_modifier: number;
   is_class_skill: boolean;
-  armor_check_penalty: boolean;
 }
 
-interface SkillsData {
-  skills: Skill[];
-  skill_points: {
-    available: number;
-    spent: number;
-  };
-}
 
 interface UseSkillsReturn {
   skills: Skill[];
@@ -52,7 +44,7 @@ export function useSkills(): UseSkillsReturn {
     setError(null);
     
     try {
-      const data: SkillsData = await CharacterAPI.getSkillsState(character.id);
+      const data = await CharacterAPI.getSkillsState(character.id);
       
       // Filter out skills with DEL_ prefix
       const validSkills = (data.skills || []).filter(skill => 
@@ -102,8 +94,8 @@ export function useSkills(): UseSkillsReturn {
           ? { 
               ...s, 
               rank: newRank,
-              // Recalculate total modifier: ranks + ability modifier + misc bonuses
-              total_modifier: newRank + s.ability_modifier + (s.total_modifier - s.rank - s.ability_modifier)
+              // Recalculate total bonus: ranks + ability modifier + misc bonuses
+              total_bonus: newRank + s.ability_modifier + (s.total_bonus - s.rank - s.ability_modifier)
             }
           : s
       )

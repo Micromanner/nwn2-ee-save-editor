@@ -61,7 +61,7 @@ function CollapsibleSection({ title, children, defaultOpen = false, badge }: Col
   );
 }
 
-export default function CharacterOverview({ onNavigate }: CharacterOverviewProps) {
+export default function CharacterOverview({ onNavigate: _onNavigate }: CharacterOverviewProps) { // eslint-disable-line @typescript-eslint/no-unused-vars
   const t = useTranslations();
   const { character, isLoading, error, refreshAll } = useCharacterContext();
   const combat = useSubsystem('combat');
@@ -93,7 +93,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
   console.log('Saves subsystem data:', saves.data);
 
   // Debug: Manual refresh function to test data fetching
-  const handleManualRefresh = () => {
+  const _handleManualRefresh = () => { // eslint-disable-line @typescript-eslint/no-unused-vars
     console.log('Manual refresh triggered');
     refreshAll();
   };
@@ -186,7 +186,7 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
     } else {
       console.log('CharacterOverview - No character loaded, skipping data loading');
     }
-  }, [character?.id, abilities.data, abilities.isLoading, combat.data, combat.isLoading, skills.data, skills.isLoading, feats.data, feats.isLoading, saves.data, saves.isLoading]); // Depend on character ID and data state
+  }, [character?.id, abilities, combat, skills, feats, saves]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
     return (
@@ -461,7 +461,12 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     {combat.isLoading ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
                     ) : (
-                      formatModifier(combat.data?.base_attack_bonus?.total_bab || combat.data?.summary?.base_attack_bonus || character.baseAttackBonus || 0)
+                      formatModifier(
+                        (typeof combat.data?.base_attack_bonus === 'object' && combat.data?.base_attack_bonus?.total_bab) || 
+                        combat.data?.summary?.base_attack_bonus || 
+                        character.baseAttackBonus || 
+                        0
+                      )
                     )}
                   </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.baseAttackBonus')}</div>
@@ -483,7 +488,11 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     {saves.isLoading ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
                     ) : (
-                      formatModifier(saves.data?.fortitude?.total || saves.data?.fortitude || (typeof character.saves?.fortitude === 'number' ? character.saves.fortitude : 0))
+                      formatModifier(
+                        (typeof saves.data?.fortitude === 'object' && saves.data.fortitude !== null ? (saves.data.fortitude as { total?: number })?.total : undefined) || 
+                        (typeof saves.data?.fortitude === 'number' ? saves.data.fortitude : 0) || 
+                        (typeof character.saves?.fortitude === 'number' ? character.saves.fortitude : 0)
+                      )
                     )}
                   </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.fortitude')}</div>
@@ -493,7 +502,11 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     {saves.isLoading ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
                     ) : (
-                      formatModifier(saves.data?.reflex?.total || saves.data?.reflex || (typeof character.saves?.reflex === 'number' ? character.saves.reflex : 0))
+                      formatModifier(
+                        (typeof saves.data?.reflex === 'object' && saves.data.reflex !== null ? (saves.data.reflex as { total?: number })?.total : undefined) || 
+                        (typeof saves.data?.reflex === 'number' ? saves.data.reflex : 0) || 
+                        (typeof character.saves?.reflex === 'number' ? character.saves.reflex : 0)
+                      )
                     )}
                   </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.reflex')}</div>
@@ -503,7 +516,11 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     {saves.isLoading ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[rgb(var(--color-primary))]"></div>
                     ) : (
-                      formatModifier(saves.data?.will?.total || saves.data?.will || (typeof character.saves?.will === 'number' ? character.saves.will : 0))
+                      formatModifier(
+                        (typeof saves.data?.will === 'object' && saves.data.will !== null ? (saves.data.will as { total?: number })?.total : undefined) || 
+                        (typeof saves.data?.will === 'number' ? saves.data.will : 0) || 
+                        (typeof character.saves?.will === 'number' ? character.saves.will : 0)
+                      )
                     )}
                   </div>
                   <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('abilityScores.will')}</div>
@@ -540,7 +557,14 @@ export default function CharacterOverview({ onNavigate }: CharacterOverviewProps
                     <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.speed')}</div>
                   </div>
                   <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">
-                    <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{formatModifier(combat.data?.initiative?.total || character.initiative || 0)}</div>
+                    <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">
+                      {formatModifier(
+                        (typeof combat.data?.initiative === 'object' && combat.data?.initiative?.total) || 
+                        (typeof combat.data?.initiative === 'number' ? combat.data?.initiative : 0) || 
+                        character.initiative || 
+                        0
+                      )}
+                    </div>
                     <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('character.initiative')}</div>
                   </div>
                   <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 text-center border border-[rgb(var(--color-surface-border)/0.3)]">

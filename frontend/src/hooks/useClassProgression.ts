@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/lib/api/client';
 
 export interface ClassFeature {
@@ -139,7 +139,7 @@ export function useClassProgression(
     } finally {
       setIsLoading(false);
     }
-  }, [characterId, maxLevel, includeSpells, includeProficiencies]);
+  }, [characterId, maxLevel, includeSpells, includeProficiencies, options]);
 
   const clearProgression = useCallback(() => {
     setProgression(null);

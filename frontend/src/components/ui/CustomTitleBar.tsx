@@ -15,7 +15,7 @@ export default function CustomTitleBar() {
       try {
         const name = await getName();
         setAppName(name);
-      } catch (error) {
+      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
         console.log('Running in dev mode, using default app name');
       }
     };
@@ -28,7 +28,7 @@ export default function CustomTitleBar() {
         const appWindow = getCurrentWindow();
         const maximized = await appWindow.isMaximized();
         setIsMaximized(maximized);
-      } catch (error) {
+      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
         console.log('Could not check maximized state');
       }
     };
@@ -36,7 +36,7 @@ export default function CustomTitleBar() {
     checkMaximized();
     
     // Listen for window state changes
-    const unlisten = getCurrentWindow().onResized(() => {
+    const unlisten = getCurrentWindow().onResized((_e) => { // eslint-disable-line @typescript-eslint/no-unused-vars
       checkMaximized();
     });
     
@@ -50,7 +50,7 @@ export default function CustomTitleBar() {
     try {
       const appWindow = getCurrentWindow();
       await appWindow.minimize();
-    } catch (error) {
+    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
       console.log('Minimize not available in dev mode');
     }
   };
@@ -62,7 +62,7 @@ export default function CustomTitleBar() {
       // Update state immediately after toggle
       const maximized = await appWindow.isMaximized();
       setIsMaximized(maximized);
-    } catch (error) {
+    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
       console.log('Maximize not available in dev mode');
     }
   };
@@ -71,7 +71,7 @@ export default function CustomTitleBar() {
     try {
       const appWindow = getCurrentWindow();
       await appWindow.close();
-    } catch (error) {
+    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
       console.log('Close not available in dev mode');
     }
   };

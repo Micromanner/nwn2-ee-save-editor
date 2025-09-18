@@ -1,7 +1,125 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CharacterAPI, CharacterData } from '@/services/characterApi';
+
+// Subsystem data interfaces
+export interface AbilitiesData {
+  abilities?: Record<string, number>;
+  effective_attributes?: Record<string, number>;
+  derived_stats?: {
+    hit_points?: {
+      current?: number;
+      maximum?: number;
+    };
+    [key: string]: unknown;
+  };
+}
+
+export interface CombatData {
+  base_attack_bonus?: number | {
+    total_bab?: number;
+    [key: string]: unknown;
+  };
+  armor_class?: {
+    total?: number;
+    [key: string]: unknown;
+  };
+  attack_bonuses?: {
+    melee?: number;
+    ranged?: number;
+    melee_attack_bonus?: number;
+    ranged_attack_bonus?: number;
+  };
+  initiative?: number | {
+    total?: number;
+    [key: string]: unknown;
+  };
+  fortitude?: number | {
+    total?: number;
+    [key: string]: unknown;
+  };
+  reflex?: number | {
+    total?: number;
+    [key: string]: unknown;
+  };
+  will?: number | {
+    total?: number;
+    [key: string]: unknown;
+  };
+  summary?: {
+    spent_points?: number;
+    total_feats?: number;
+    base_attack_bonus?: number;
+  };
+}
+
+export interface SkillsData {
+  skill_points_available?: number;
+  spent_points?: number;
+  available_points?: number;
+  total_available?: number;
+  overspent?: number;
+  total_ranks?: number;
+  skills_with_ranks?: number;
+  class_skills?: Array<{
+    id: number;
+    name: string;
+    key_ability: string;
+    current_ranks: number;
+    max_ranks: number;
+    total_modifier: number;
+    is_class_skill: boolean;
+    armor_check: boolean;
+  }>;
+  cross_class_skills?: Array<{
+    id: number;
+    name: string;
+    key_ability: string;
+    current_ranks: number;
+    max_ranks: number;
+    total_modifier: number;
+    is_class_skill: boolean;
+    armor_check: boolean;
+  }>;
+  error: string | null;
+}
+
+export interface FeatsData {
+  summary?: {
+    total?: number;
+    spent_points?: number;
+  };
+  error?: string | null;
+  [key: string]: unknown;
+}
+
+export interface SavesData {
+  fortitude?: number | { total?: number; [key: string]: unknown };
+  reflex?: number | { total?: number; [key: string]: unknown };
+  will?: number | { total?: number; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+export interface ClassesData {
+  classes?: Array<{
+    id: number;
+    level: number;
+    name: string;
+  }>;
+  total_level?: number;
+  multiclass?: boolean;
+  can_multiclass?: boolean;
+  [key: string]: unknown;
+}
+
+export interface SpellsData {
+  [key: string]: unknown;
+}
+
+export interface InventoryData {
+  [key: string]: unknown;
+}
 
 // Generic subsystem data structure
 interface SubsystemData<T = unknown> {
@@ -26,6 +144,18 @@ const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
   classes: { endpoint: 'classes/state' },
 };
 
+// Subsystem type mappings
+interface SubsystemTypeMap {
+  feats: FeatsData;
+  spells: SpellsData;
+  skills: SkillsData;
+  inventory: InventoryData;
+  abilityScores: AbilitiesData;
+  combat: CombatData;
+  saves: SavesData;
+  classes: ClassesData;
+}
+
 // Context state interface
 interface CharacterContextState {
   // Core character data
@@ -34,8 +164,17 @@ interface CharacterContextState {
   isLoading: boolean;
   error: string | null;
   
-  // Generic subsystem data store
-  subsystems: Record<SubsystemType, SubsystemData>;
+  // Typed subsystem data store
+  subsystems: {
+    feats: SubsystemData<FeatsData>;
+    spells: SubsystemData<SpellsData>;
+    skills: SubsystemData<SkillsData>;
+    inventory: SubsystemData<InventoryData>;
+    abilityScores: SubsystemData<AbilitiesData>;
+    combat: SubsystemData<CombatData>;
+    saves: SubsystemData<SavesData>;
+    classes: SubsystemData<ClassesData>;
+  };
   
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
@@ -51,19 +190,57 @@ interface CharacterContextState {
 const CharacterContext = createContext<CharacterContextState | undefined>(undefined);
 
 // Initialize subsystems state
-const initializeSubsystems = (): Record<SubsystemType, SubsystemData> => {
-  const subsystems = {} as Record<SubsystemType, SubsystemData>;
-  
-  Object.keys(SUBSYSTEM_CONFIG).forEach((key) => {
-    subsystems[key as SubsystemType] = {
+const initializeSubsystems = (): CharacterContextState['subsystems'] => {
+  return {
+    feats: {
       data: null,
       isLoading: false,
       error: null,
       lastFetched: null,
-    };
-  });
-  
-  return subsystems;
+    },
+    spells: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+    skills: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+    inventory: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+    abilityScores: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+    combat: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+    saves: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+    classes: {
+      data: null,
+      isLoading: false,
+      error: null,
+      lastFetched: null,
+    },
+  };
 };
 
 // Provider component
@@ -72,10 +249,10 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [subsystems, setSubsystems] = useState<Record<SubsystemType, SubsystemData>>(initializeSubsystems());
+  const [subsystems, setSubsystems] = useState<CharacterContextState['subsystems']>(initializeSubsystems());
 
   // Generic subsystem loader - always fetch fresh, no caching
-  const loadSubsystem = useCallback(async (subsystem: SubsystemType, force = false): Promise<unknown> => {
+  const loadSubsystem = useCallback(async (subsystem: SubsystemType, _force = false): Promise<unknown> => { // eslint-disable-line @typescript-eslint/no-unused-vars
     if (!characterId) {
       console.warn(`Cannot load ${subsystem}: No character loaded`);
       return null;
@@ -157,9 +334,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
         await loadSubsystem(subsystem);
         throw new Error('Failed to update');
       }
-    } catch (err) {
-      console.error(`Failed to update ${subsystem}:`, err);
-      throw err;
+    } catch (_err) {
+      console.error(`Failed to update ${subsystem}:`, _err);
+      throw _err;
     }
   }, [characterId, loadSubsystem]);
 
@@ -286,19 +463,29 @@ export function useCharacterContext() {
   return context;
 }
 
-// Typed hook for specific subsystems
-export function useSubsystem<T = unknown>(subsystem: SubsystemType) {
+// Typed hook for specific subsystems with proper type inference
+export function useSubsystem<K extends SubsystemType>(subsystem: K): {
+  data: SubsystemTypeMap[K] | null;
+  isLoading: boolean;
+  error: string | null;
+  lastFetched: Date | null;
+  load: (force?: boolean) => Promise<unknown>;
+  updateData: (newData: SubsystemTypeMap[K]) => void;
+} {
   const { subsystems, loadSubsystem, updateSubsystemData } = useCharacterContext();
   
-  const subsystemData = subsystems[subsystem] as SubsystemData<T>;
+  const subsystemData = subsystems[subsystem];
   
   // Update data directly without HTTP request (for using API response data)
-  const updateData = useCallback((newData: T) => {
+  const updateData = useCallback((newData: SubsystemTypeMap[K]) => {
     updateSubsystemData(subsystem, newData);
   }, [subsystem, updateSubsystemData]);
   
   return {
-    ...subsystemData,
+    data: subsystemData.data as SubsystemTypeMap[K] | null,
+    isLoading: subsystemData.isLoading,
+    error: subsystemData.error,
+    lastFetched: subsystemData.lastFetched,
     load: (force?: boolean) => loadSubsystem(subsystem, force),
     updateData,
   };

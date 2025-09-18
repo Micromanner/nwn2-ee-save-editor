@@ -56,7 +56,7 @@ export function TauriProvider({ children }: TauriProviderProps) {
         await invoke('check_django_health');
         tauriExists = true;
         console.log('✅ TauriProvider: Tauri 2.x context detected via API import!');
-      } catch (error) {
+      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
         // Fallback: check for legacy __TAURI__ object
         tauriExists = windowExists && '__TAURI__' in window;
         console.log('🔧 TauriProvider: Modern Tauri detection failed, checking legacy __TAURI__:', tauriExists);

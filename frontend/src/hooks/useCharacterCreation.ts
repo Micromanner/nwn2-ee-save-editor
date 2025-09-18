@@ -33,7 +33,7 @@ interface CharacterData {
 }
 
 export const useCharacterCreation = () => {
-  const { api } = useTauri();
+  const { api: _api } = useTauri(); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

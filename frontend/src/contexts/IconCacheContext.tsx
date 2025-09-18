@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { fetchIconStats } from '@/lib/api/enhanced-icons';
 
 interface IconCacheStats {
@@ -43,7 +43,7 @@ interface IconCacheProviderProps {
   backendReady?: boolean;
 }
 
-export function IconCacheProvider({ children, backendReady = false }: IconCacheProviderProps) {
+export function IconCacheProvider({ children, backendReady: _backendReady = false }: IconCacheProviderProps) { // eslint-disable-line @typescript-eslint/no-unused-vars
   const [cacheStats, setCacheStats] = useState<IconCacheStats | null>(null);
   const [cacheReady, setCacheReady] = useState<boolean | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);

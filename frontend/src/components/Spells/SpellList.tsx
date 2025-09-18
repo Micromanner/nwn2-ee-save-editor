@@ -1,10 +1,8 @@
 import React from 'react';
-import { Badge } from '@/components/ui/Badge';
-import NWN2Icon from '@/components/ui/NWN2Icon';
 import GameDataList, { GameDataItem } from '@/components/ui/GameDataList';
 import { getSchoolIcon } from './SpellSections';
 import { display } from '@/utils/dataHelpers';
-import { parseSpellDescription, getSpellMetaTags } from '@/utils/spellParser';
+import { parseSpellDescription } from '@/utils/spellParser';
 
 interface Spell extends GameDataItem {
   icon: string;
@@ -42,7 +40,7 @@ export default function SpellList({
   spells,
   isLoading,
   onToggleLearned,
-  defaultExpandedLevels = [0, 1]
+  defaultExpandedLevels: _defaultExpandedLevels = [0, 1] // eslint-disable-line @typescript-eslint/no-unused-vars
 }: SpellListProps) {
 
   // Convert spells to have isActive property and sort by level, then name
@@ -143,7 +141,7 @@ export default function SpellList({
     <GameDataList
       items={gameDataSpells}
       isLoading={isLoading}
-      onItemAction={onToggleLearned}
+      onItemAction={(spell) => onToggleLearned(spell.id)}
       actionLabel={(spell) => spell.isLearned ? 'Learned' : 'Learn'}
       actionVariant={(spell) => spell.isLearned ? 'primary' : 'outline'}
       showHeader={true}

@@ -108,8 +108,8 @@ export default function FeatContentArea({
   onViewModeChange,
   onDetails,
   onAdd,
-  onRemove,
-  onValidate,
+  // onRemove prop removed as unused
+  // onValidate prop removed as unused
   validationCache = {},
   validatingFeatId = null,
 }: FeatContentAreaProps) {
@@ -156,34 +156,7 @@ export default function FeatContentArea({
     }
   );
 
-  // Group current feats by category
-  const groupedCurrentFeats = useMemo(() => {
-    if (!featsData) return {};
-    
-    const groups: Record<string, FeatInfo[]> = {
-      'Protected': [],
-      'Class': [],
-      'General': [],
-      'Custom': [],
-    };
-    
-    for (const feat of allCurrentFeats) {
-      if (feat.protected) {
-        groups['Protected'].push(feat);
-      } else if (feat.custom) {
-        groups['Custom'].push(feat);
-      } else if (featsData.summary?.class_feats?.some((f: any) => f.id === feat.id)) {
-        groups['Class'].push(feat);
-      } else {
-        groups['General'].push(feat);
-      }
-    }
-    
-    // Remove empty groups
-    return Object.fromEntries(
-      Object.entries(groups).filter(([, feats]) => feats.length > 0)
-    );
-  }, [allCurrentFeats, featsData]);
+  // Removed unused groupedCurrentFeats variable
 
   // Custom renderers for GameDataList
   const renderFeatMain = (item: GameDataItem & FeatInfo) => (
@@ -253,29 +226,7 @@ export default function FeatContentArea({
     );
   };
 
-  const renderCurrentFeatAction = (item: GameDataItem & FeatInfo) => (
-    <div className="game-data-col-action">
-      <div className="flex items-center gap-2">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-xs h-7 px-2"
-          onClick={() => onDetails(item)}
-        >
-          <Info className="w-3 h-3" />
-        </Button>
-        <Button
-          size="sm"
-          variant="danger"
-          className="text-xs h-7 px-2"
-          onClick={() => onRemove(item.id)}
-          disabled={item.protected}
-        >
-          Remove
-        </Button>
-      </div>
-    </div>
-  );
+  // Removed unused renderCurrentFeatAction function
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);

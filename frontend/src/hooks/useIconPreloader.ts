@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { buildIconUrl } from '@/lib/api/enhanced-icons';
 import { useIconCache } from '@/contexts/IconCacheContext';
 
@@ -14,7 +14,7 @@ export function useIconPreloader(icons: string[], options: PreloadOptions = {}) 
   const { enabled = true, batchSize = 10, delay = 100 } = options;
   const iconCache = useIconCache();
   const cacheReady = iconCache?.cacheReady;
-  const preloadedIcons = iconCache?.preloadedIcons || new Set();
+  const preloadedIcons = useMemo(() => iconCache?.preloadedIcons || new Set(), [iconCache?.preloadedIcons]);
   const addPreloadedIcon = iconCache?.addPreloadedIcon;
 
   const preloadIcon = useCallback((iconName: string): Promise<void> => {

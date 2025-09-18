@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 
 interface CharacterPortraitProps {
   portrait?: string | null;
@@ -101,6 +100,7 @@ export default function CharacterPortrait({
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[rgb(var(--color-primary))]"></div>
         </div>
       )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={imageUrl}
         alt="Character Portrait"

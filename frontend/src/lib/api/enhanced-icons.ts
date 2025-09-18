@@ -7,10 +7,10 @@
  * @param iconName - Icon name (e.g., "is_magicmissile")
  * @returns Full path (e.g., "evocation/spell/is_magicmissile")
  */
-function mapIconNameToPath(iconName: string): string {
+function _mapIconNameToPath(iconName: string): string { // eslint-disable-line @typescript-eslint/no-unused-vars
   if (!iconName) return iconName;
   
-  const prefix = iconName.slice(0, 3).toLowerCase();
+  const prefix = iconName.slice(0, 3).toLowerCase(); // eslint-disable-line @typescript-eslint/no-unused-vars
   
   // For now, try the icon name as-is first (no directory mapping)
   // This maintains backward compatibility while we test
@@ -44,7 +44,7 @@ export interface IconOptions {
  * @returns Full URL to the icon
  */
 export function buildIconUrl(iconName: string, options: IconOptions = {}): string {
-  const { useEnhanced = true, category } = options;
+  const { useEnhanced: _useEnhanced = true, category: _category } = options; // eslint-disable-line @typescript-eslint/no-unused-vars
   
   if (!iconName) {
     return '';

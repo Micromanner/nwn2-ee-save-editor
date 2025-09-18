@@ -25,6 +25,7 @@ interface DetailedPrerequisites {
 
 interface FeatInfo {
   id: number;
+  feat_id?: number;
   label: string;
   name: string;
   type: number;
@@ -32,14 +33,7 @@ interface FeatInfo {
   custom: boolean;
   description?: string;
   icon?: string;
-  prerequisites?: {
-    abilities: Record<string, number>;
-    feats: number[];
-    class: number;
-    level: number;
-    bab: number;
-    spell_level: number;
-  };
+  prerequisites?: Record<string, unknown>;
   can_take?: boolean;
   missing_requirements?: string[];
   has_feat?: boolean;

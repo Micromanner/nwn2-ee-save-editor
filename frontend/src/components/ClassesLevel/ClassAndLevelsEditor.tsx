@@ -5,7 +5,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
-import { display, formatModifier, formatNumber } from '@/utils/dataHelpers';
+import { formatModifier, formatNumber } from '@/utils/dataHelpers';
 import { useClassesLevel, type ClassesData } from '@/hooks/useClassesLevel';
 import ClassSelectorModal from './ClassSelectorModal';
 
@@ -60,7 +60,7 @@ export default function ClassAndLevelsEditor() {
   const { character, isLoading, error } = useCharacterContext();
   
   // Use the classes subsystem hook
-  const classesSubsystem = useSubsystem<ClassesData>('classes');
+  const classesSubsystem = useSubsystem('classes');
   
   // Use the classes level hook with subsystem data
   const {
@@ -72,7 +72,7 @@ export default function ClassAndLevelsEditor() {
     changeClass,
     addClass,
     removeClass,
-  } = useClassesLevel(classesSubsystem.data);
+  } = useClassesLevel(classesSubsystem.data as ClassesData | null);
 
   const [expandedClassDropdown, setExpandedClassDropdown] = useState<number | null>(null);
   const [showClassSelector, setShowClassSelector] = useState(false);
@@ -96,7 +96,7 @@ export default function ClassAndLevelsEditor() {
     };
 
     loadCharacterClasses();
-  }, [character?.id, classesSubsystem.data, classesSubsystem.isLoading]);
+  }, [character?.id, classesSubsystem.data, classesSubsystem.isLoading, classesSubsystem]);
 
 
   const handleAdjustClassLevel = async (index: number, delta: number) => {

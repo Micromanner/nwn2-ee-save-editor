@@ -58,7 +58,7 @@ export default function FeatsEditor() {
     if (character?.id && !feats.data && !feats.isLoading) {
       feats.load();
     }
-  }, [character?.id, feats.data, feats.isLoading]);
+  }, [character?.id, feats.data, feats.isLoading, feats]);
 
   // Load category feats when category or subcategory changes
   useEffect(() => {
@@ -154,7 +154,7 @@ export default function FeatsEditor() {
     } catch (error) {
       console.error('Failed to add feat:', error);
     }
-  }, [character?.id]);
+  }, [character?.id, feats]);
 
   const handleRemoveFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
@@ -166,7 +166,7 @@ export default function FeatsEditor() {
     } catch (error) {
       console.error('Failed to remove feat:', error);
     }
-  }, [character?.id]);
+  }, [character?.id, feats]);
 
   // Combine all feats for available count calculation
   const allCurrentFeats = useMemo(() => {

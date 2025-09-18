@@ -18,6 +18,7 @@ export interface DetailedPrerequisites {
 
 export interface FeatInfo {
   id: number;
+  feat_id?: number;
   label: string;
   name: string;
   type: number;
@@ -25,14 +26,7 @@ export interface FeatInfo {
   custom: boolean;
   description?: string;
   icon?: string;
-  prerequisites?: {
-    abilities: Record<string, number>;
-    feats: number[];
-    class: number;
-    level: number;
-    bab: number;
-    spell_level: number;
-  };
+  prerequisites?: Record<string, unknown>;
   can_take?: boolean;
   missing_requirements?: string[];
   has_feat?: boolean;
@@ -50,7 +44,7 @@ export interface FeatsState {
   all_feats: FeatInfo[];
   available_feats: FeatInfo[];
   legitimate_feats: FeatInfo[];
-  feat_chains: Record<string, any>;
+  feat_chains: Record<string, unknown>;
   recommended_feats: FeatInfo[];
 }
 

@@ -28,7 +28,7 @@ interface Item {
 
 interface InventoryItem {
   index: number;
-  item: any;
+  item: Record<string, unknown>;
   base_item: number;
   name: string;
   is_custom: boolean;
@@ -52,12 +52,12 @@ interface InventoryEncumbrance {
 interface InventorySummary {
   total_items: number;
   inventory_items: InventoryItem[];
-  equipped_items: Record<string, any>;
-  custom_items: any[];
+  equipped_items: Record<string, Record<string, unknown>>;
+  custom_items: Record<string, unknown>[];
   encumbrance: InventoryEncumbrance;
 }
 
-interface InventoryData {
+interface LocalInventoryData {
   summary: InventorySummary;
 }
 
@@ -67,7 +67,7 @@ const INVENTORY_COLS = 8;
 const INVENTORY_ROWS = 8;
 
 // Utility function to safely convert values to numbers
-const safeToNumber = (value: any, defaultValue: number = 0): number => {
+const safeToNumber = (value: unknown, defaultValue: number = 0): number => {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
     const parsed = parseFloat(value);
@@ -86,20 +86,11 @@ export default function InventoryEditor() {
     if (character && !inventoryData.data && !inventoryData.isLoading) {
       inventoryData.load();
     }
-  }, [character?.id]);
+  }, [character, inventoryData]);
   
-  // Utility function to safely convert to number
-  const safeToNumber = (value: any, defaultValue: number = 0): number => {
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string') {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? defaultValue : parsed;
-    }
-    return defaultValue;
-  };
 
   // Parse inventory data from backend
-  const parseInventoryData = (inventoryData: InventoryData | null): (Item | null)[] => {
+  const parseInventoryData = (inventoryData: LocalInventoryData | null): (Item | null)[] => {
     const inv = Array(INVENTORY_COLS * INVENTORY_ROWS).fill(null);
     
     if (!inventoryData?.summary) {
@@ -109,9 +100,8 @@ export default function InventoryEditor() {
     const { inventory_items } = inventoryData.summary;
     
     // Convert inventory items to display format
-    inventory_items?.forEach((itemInfo: any, index: number) => {
+    inventory_items?.forEach((itemInfo: InventoryItem, index: number) => {
       if (index < INVENTORY_COLS * INVENTORY_ROWS && itemInfo) {
-        const item = itemInfo.item || {};
         const baseItem = itemInfo.base_item || 0;
         const isCustom = itemInfo.is_custom || false;
         const itemName = itemInfo.name || `Item ${baseItem}`;
@@ -147,7 +137,7 @@ export default function InventoryEditor() {
   };
 
   const [inventory, setInventory] = useState<(Item | null)[]>(() => 
-    parseInventoryData(inventoryData.data as InventoryData | null)
+    parseInventoryData(inventoryData.data as unknown as LocalInventoryData | null)
   );
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -156,7 +146,7 @@ export default function InventoryEditor() {
   // Update inventory when backend data changes
   useEffect(() => {
     if (inventoryData.data) {
-      setInventory(parseInventoryData(inventoryData.data as InventoryData));
+      setInventory(parseInventoryData(inventoryData.data as unknown as LocalInventoryData));
     }
   }, [inventoryData.data]);
 
@@ -437,7 +427,7 @@ export default function InventoryEditor() {
                 <div className="flex items-center space-x-4">
                   <span className="text-[rgb(var(--color-text-muted))]">
                     {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
-                      {safeToNumber((inventoryData.data as InventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as InventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
+                      {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
                     </span>
                   </span>
                   <span className="text-[rgb(var(--color-text-muted))]">

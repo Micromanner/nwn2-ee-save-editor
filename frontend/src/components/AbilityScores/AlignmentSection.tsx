@@ -25,8 +25,7 @@ export default function AlignmentSection({
 
   // Use external alignment if provided, otherwise use internal state
   const currentAlignment = externalAlignment || internalAlignment;
-  const { getAlignmentDescription, getAlignmentColor } = useAlignment(currentAlignment);
-  const alignmentDescription = getAlignmentDescription(currentAlignment.lawChaos, currentAlignment.goodEvil);
+  const { getAlignmentColor } = useAlignment(currentAlignment);
   const alignmentColor = getAlignmentColor(currentAlignment.lawChaos, currentAlignment.goodEvil);
 
   const updateAlignment = (updates: Partial<Alignment>) => {

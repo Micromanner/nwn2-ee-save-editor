@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { display, formatModifier } from '@/utils/dataHelpers';
+import { formatModifier } from '@/utils/dataHelpers';
 
 interface CharacterStats {
   hitPoints: number;

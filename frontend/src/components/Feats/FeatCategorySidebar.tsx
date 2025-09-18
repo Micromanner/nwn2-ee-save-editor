@@ -7,14 +7,9 @@ import { Badge } from '@/components/ui/Badge';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { 
   ChevronRight, 
-  ChevronDown, 
-  BookOpen, 
-  Star,
-  Search,
-  Layers
+  ChevronDown
 } from 'lucide-react';
 import FeatSummary from './FeatSummary';
-import FeatSearchBar from './FeatSearchBar';
 import type { CategoryInfo, FeatsState } from './types';
 
 interface FeatCategorySidebarProps {
@@ -41,8 +36,7 @@ export default function FeatCategorySidebar({
   availableFeatsCount,
   showMyFeats = true,
   onMyFeatsClick,
-  globalSearch = '',
-  onGlobalSearchChange,
+  // globalSearch and onGlobalSearchChange props removed as unused
 }: FeatCategorySidebarProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(selectedCategory ? [selectedCategory] : [])

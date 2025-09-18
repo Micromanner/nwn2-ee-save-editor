@@ -93,11 +93,11 @@ export default function MyFeatsView({
   viewMode,
   onViewModeChange,
   onDetails,
-  onAdd,
+  // onAdd prop removed as unused
   onRemove,
-  onValidate,
-  validationCache = {},
-  validatingFeatId = null,
+  // onValidate prop removed as unused
+  // validationCache prop removed as unused
+  // validatingFeatId prop removed as unused
 }: MyFeatsViewProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['protected', 'class', 'general'])
@@ -166,8 +166,8 @@ export default function MyFeatsView({
       case 'level':
         // Sort by prerequisites if available
         return featsToSort.sort((a, b) => {
-          const aLevel = a.prerequisites?.level || 0;
-          const bLevel = b.prerequisites?.level || 0;
+          const aLevel = typeof a.prerequisites?.level === 'number' ? a.prerequisites.level : 0;
+          const bLevel = typeof b.prerequisites?.level === 'number' ? b.prerequisites.level : 0;
           return aLevel - bLevel;
         });
       case 'recent':

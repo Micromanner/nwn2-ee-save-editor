@@ -1,6 +1,5 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
 import { buildIconUrl, getIconCategory } from '@/lib/api/enhanced-icons';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
@@ -33,9 +32,8 @@ export default function NWN2Icon({
 }: NWN2IconProps) {
   const iconCache = useIconCache();
   const cacheReady = iconCache?.cacheReady;
-  const checkCacheStatus = iconCache?.checkCacheStatus;
-  const [loadError, setLoadError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+  const _checkCacheStatus = iconCache?.checkCacheStatus; // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [_loadError, _setLoadError] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [showFallback, setShowFallback] = useState(false);
 
   // Show fallback immediately if cache is not ready
@@ -62,7 +60,7 @@ export default function NWN2Icon({
     if (useEnhanced) {
       try {
         fullIconUrl = buildIconUrl(icon, { useEnhanced: true });
-      } catch (error) {
+      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
         return null;
       }
     } else {
@@ -71,7 +69,7 @@ export default function NWN2Icon({
       if (category) {
         try {
           fullIconUrl = buildIconUrl(icon, { useEnhanced: false, category });
-        } catch (error) {
+        } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
           return null;
         }
       }
@@ -93,7 +91,7 @@ export default function NWN2Icon({
           width={sizeConfig.px}
           height={sizeConfig.px}
           className="w-full h-full object-cover"
-          onError={(e) => {
+          onError={(_e) => { // eslint-disable-line @typescript-eslint/no-unused-vars
             // If image fails to load, don't render anything
             setShowFallback(true);
           }}

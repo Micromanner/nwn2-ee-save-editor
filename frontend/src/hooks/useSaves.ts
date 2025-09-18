@@ -34,7 +34,7 @@ export function useSaves() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSaves = async () => {
+  const loadSaves = useCallback(async () => {
     if (!character?.id) return;
 
     setIsLoading(true);
@@ -67,13 +67,13 @@ export function useSaves() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [character]);
 
   useEffect(() => {
     if (character?.id) {
       loadSaves();
     }
-  }, [character?.id]);
+  }, [character?.id, loadSaves]);
 
   // Update saving throw misc bonuses
   const updateSavingThrowBonus = useCallback(async (saveType: 'fortitude' | 'reflex' | 'will', bonus: number) => {

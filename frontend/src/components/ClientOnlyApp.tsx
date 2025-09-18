@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTauri } from '@/providers/TauriProvider';
-import { TauriAPI } from '@/lib/tauri-api';
 import CustomTitleBar from '@/components/ui/CustomTitleBar';
 import Sidebar from '@/components/ui/Sidebar';
 import AbilityScoresEditor from '@/components/AbilityScores/AbilityScoresEditor';
@@ -153,7 +152,7 @@ function AppContent() {
             return; // Stop polling
           }
         }
-      } catch (err) {
+      } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
         // Django might not be ready yet
       }
       
@@ -381,7 +380,7 @@ export default function ClientOnlyApp() {
           setBackendReady(true);
           return; // Stop polling
         }
-      } catch (err) {
+      } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
         // Django might not be ready yet
       }
       

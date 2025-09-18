@@ -14,36 +14,8 @@ export default function SkillsEditor() {
   const t = useTranslations();
   const { character } = useCharacterContext();
   
-  // Use subsystem hook for skills - match backend structure
-  const skillsSubsystem = useSubsystem<{
-    available_points: number;
-    total_available: number;
-    spent_points: number;
-    overspent: number;
-    total_ranks: number;
-    skills_with_ranks: number;
-    class_skills: Array<{
-      id: number;
-      name: string;
-      key_ability: string;
-      current_ranks: number;
-      max_ranks: number;
-      total_modifier: number;
-      is_class_skill: boolean;
-      armor_check: boolean;
-    }>;
-    cross_class_skills: Array<{
-      id: number;
-      name: string;
-      key_ability: string;
-      current_ranks: number;
-      max_ranks: number;
-      total_modifier: number;
-      is_class_skill: boolean;
-      armor_check: boolean;
-    }>;
-    error: string | null;
-  }>('skills');
+  // Use subsystem hook for skills - use typed subsystem
+  const skillsSubsystem = useSubsystem('skills');
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [updatingSkills, setUpdatingSkills] = useState<Set<number>>(new Set());
@@ -81,7 +53,7 @@ export default function SkillsEditor() {
     };
 
     loadSkillsData();
-  }, [character?.id, skillsSubsystem.data]); // Load only when character changes or data is missing
+  }, [character?.id, skillsSubsystem]); // Load only when character changes or data is missing
 
   // Reset local overrides when new data loads (like AbilityScores pattern)
   useEffect(() => {
@@ -89,7 +61,16 @@ export default function SkillsEditor() {
   }, [skillsSubsystem.data]);
 
   // Apply local overrides to skills (simple pattern like AbilityScores)
-  const applyOverrides = (skillList: any[]) => {
+  const applyOverrides = (skillList: Array<{
+    id: number;
+    name: string;
+    key_ability: string;
+    current_ranks: number;
+    max_ranks: number;
+    total_modifier: number;
+    is_class_skill: boolean;
+    armor_check: boolean;
+  }>) => {
     return skillList.map(skill => ({
       ...skill,
       current_ranks: localSkillOverrides[skill.id] ?? skill.current_ranks
@@ -103,7 +84,7 @@ export default function SkillsEditor() {
   // Use backend data for points (let backend handle calculations)
   const availableSkillPoints = skillsSubsystem.data?.available_points || 0;
   const totalSpentPoints = skillsSubsystem.data?.spent_points || 0;
-  const totalSkillPoints = skillsSubsystem.data?.total_available || availableSkillPoints + totalSpentPoints;
+  const _totalSkillPoints = skillsSubsystem.data?.total_available || availableSkillPoints + totalSpentPoints; // eslint-disable-line @typescript-eslint/no-unused-vars
   const isLoading = skillsSubsystem.isLoading;
   const error = skillsSubsystem.error;
 
@@ -178,7 +159,7 @@ export default function SkillsEditor() {
       
       // 3. Use response data directly instead of refetching
       if (response && response.skill_summary) {
-        skillsSubsystem.updateData(response.skill_summary);
+        skillsSubsystem.updateData({ ...response.skill_summary, error: null });
       } else {
         // Fallback to refresh if response doesn't have expected data
         await skillsSubsystem.load();
@@ -251,7 +232,7 @@ export default function SkillsEditor() {
     setIsUpdating(true);
     
     try {
-      const response = await CharacterAPI.resetSkills(character.id);
+      const _response = await CharacterAPI.resetSkills(character.id); // eslint-disable-line @typescript-eslint/no-unused-vars
       
       // After reset, refresh the data to get new state
       // Note: Reset endpoint doesn't return skill_summary, so we need to refetch

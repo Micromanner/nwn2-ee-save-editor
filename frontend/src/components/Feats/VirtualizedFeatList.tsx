@@ -65,7 +65,8 @@ interface RowProps {
 }
 
 const Row = ({ index, style, data }: RowProps) => {
-  const { feats, isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate } = data;
+  const { feats } = data;
+  // Removed unused destructured properties: isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate
   const feat = feats[index];
 
   if (!feat) return null;

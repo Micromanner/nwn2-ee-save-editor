@@ -26,7 +26,7 @@ export function useCharacter(): UseCharacterResult {
       const characterData = await CharacterAPI.getCharacterState(characterId);
       setCharacter(characterData);
       setCurrentCharacterId(characterId);
-    } catch (err) {
+    } catch (_err) { // eslint-disable-line @typescript-eslint/no-unused-vars
       // Fallback to basic character details if state endpoint fails
       try {
         const characterData = await CharacterAPI.getCharacterDetails(characterId);
@@ -77,7 +77,7 @@ export function useCharacter(): UseCharacterResult {
         if (characters.length > 0) {
           await loadCharacter(characters[0].id!);
         }
-      } catch (err) {
+      } catch (_err) { // eslint-disable-line @typescript-eslint/no-unused-vars
         console.log('No characters available to load');
       }
     };

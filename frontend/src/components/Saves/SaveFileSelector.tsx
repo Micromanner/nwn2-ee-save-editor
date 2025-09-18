@@ -106,7 +106,7 @@ export function SaveFileSelector() {
     } finally {
       setSaving(false);
     }
-  }, [character]);
+  }, [character, gameSettings.show_launch_dialog]);
 
   const handleGameLaunch = useCallback(async (closeEditor: boolean) => {
     if (!api) {
@@ -133,7 +133,7 @@ export function SaveFileSelector() {
       setError(err instanceof Error ? err.message : 'Failed to launch NWN2:EE');
       setShowLaunchDialog(false);
     }
-  }, [api]);
+  }, [api, gameSettings.nwn2_installation_path]);
 
   useEffect(() => {
     console.log('🔧 SaveFileSelector: useEffect triggered:', { isAvailable, hasApi: !!api });
@@ -143,7 +143,7 @@ export function SaveFileSelector() {
         setAutoScanComplete(true);
       });
     }
-  }, [isAvailable, api, autoScanComplete]);
+  }, [isAvailable, api, autoScanComplete, loadAvailableSaves]);
 
   const handleSelectFile = async () => {
     console.log('🔧 SaveFileSelector: handleSelectFile called');

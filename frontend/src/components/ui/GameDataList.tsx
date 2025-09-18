@@ -1,11 +1,10 @@
 import React, { useState, ReactNode } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Skeleton } from '@/components/ui/skeleton';
-import NWN2Icon from '@/components/ui/NWN2Icon';
 import { display } from '@/utils/dataHelpers';
 
 export interface GameDataItem {
@@ -84,7 +83,7 @@ export default function GameDataList<T extends GameDataItem>({
   showHeader = false,
   headerLabels = {},
   renderMain,
-  renderDetails,
+  renderDetails: _renderDetails, // eslint-disable-line @typescript-eslint/no-unused-vars
   renderTags,
   renderAction,
   renderLevel,
@@ -128,7 +127,7 @@ export default function GameDataList<T extends GameDataItem>({
     </div>
   );
 
-  const defaultRenderDetails = (item: T) => (
+  const _defaultRenderDetails = (item: T) => ( // eslint-disable-line @typescript-eslint/no-unused-vars
     <div className="game-data-col-details">
       {item.description && (
         <p className="game-data-description">

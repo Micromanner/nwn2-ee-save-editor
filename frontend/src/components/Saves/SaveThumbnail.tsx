@@ -60,7 +60,7 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
         URL.revokeObjectURL(thumbnailUrl);
       }
     };
-  }, [thumbnailPath]);
+  }, [thumbnailPath, thumbnailUrl]);
 
   // Cleanup URL on unmount
   useEffect(() => {
@@ -96,6 +96,7 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
   }
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={thumbnailUrl}
       alt="Save thumbnail"

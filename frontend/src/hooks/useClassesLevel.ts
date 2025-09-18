@@ -53,6 +53,29 @@ export interface CombatStats {
   base_will: number;
 }
 
+export interface FocusInfo {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export interface CategorizedClassesResponse {
+  categories: {
+    base: Record<string, ClassInfo[]>;
+    prestige: Record<string, ClassInfo[]>;
+    npc: Record<string, ClassInfo[]>;
+  };
+  focus_info: Record<string, FocusInfo>;
+  total_classes: number;
+  character_context?: {
+    current_classes: unknown;
+    prestige_requirements?: unknown[];
+    can_multiclass: boolean;
+    multiclass_slots_used: number;
+  };
+}
+
 export interface ClassesData {
   classes: Array<{
     id: number;
@@ -67,7 +90,7 @@ export interface ClassesData {
 
 export function useClassesLevel(classesData?: ClassesData | null) {
   const { characterId } = useCharacterContext();
-  const [categorizedClasses, setCategorizedClasses] = useState<any>(null);
+  const [categorizedClasses, setCategorizedClasses] = useState<CategorizedClassesResponse | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Load categorized classes for additional class info
@@ -77,7 +100,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       
       try {
         const categorized = await apiClient.get(`/characters/${characterId}/classes/categorized?include_unplayable=true`);
-        setCategorizedClasses(categorized);
+        setCategorizedClasses(categorized as CategorizedClassesResponse);
       } catch (err) {
         console.error('Failed to load categorized classes:', err);
       }

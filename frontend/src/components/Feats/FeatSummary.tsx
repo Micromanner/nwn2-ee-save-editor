@@ -1,7 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
-import { Info, Shield } from 'lucide-react';
+// Removed unused imports
 import { display, formatNumber } from '@/utils/dataHelpers';
 
 interface FeatInfo {
@@ -24,7 +24,7 @@ interface FeatsState {
   all_feats: FeatInfo[];
   available_feats: FeatInfo[];
   legitimate_feats: FeatInfo[];
-  feat_chains: Record<string, any>;
+  feat_chains: Record<string, unknown>;
   recommended_feats: FeatInfo[];
 }
 

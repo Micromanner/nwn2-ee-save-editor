@@ -25,6 +25,189 @@ export interface DamageResistance {
   amount: number;
 }
 
+// API Response interfaces
+export interface SaveResult {
+  success: boolean;
+  changes: Record<string, unknown>;
+  backup_created: boolean;
+}
+
+export interface FeatResponse {
+  id: number;
+  feat_id?: number;
+  label: string;
+  name: string;
+  type: number;
+  protected: boolean;
+  custom: boolean;
+  icon?: string;
+  description?: string;
+  prerequisites?: Record<string, unknown>;
+  can_take?: boolean;
+  missing_requirements?: string[];
+  has_feat?: boolean;
+}
+
+export interface FeatsStateResponse {
+  summary: {
+    total: number;
+    protected: FeatResponse[];
+    class_feats: FeatResponse[];
+    general_feats: FeatResponse[];
+    custom_feats: FeatResponse[];
+  };
+  all_feats: FeatResponse[];
+  available_feats: FeatResponse[];
+  legitimate_feats: FeatResponse[];
+  feat_chains: Record<string, unknown>;
+  recommended_feats: FeatResponse[];
+}
+
+export interface LegitimateFeatsResponse {
+  feats: FeatResponse[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    has_next: boolean;
+    has_previous: boolean;
+  };
+  search?: string;
+  category?: string;
+  subcategory?: string;
+}
+
+export interface FeatActionResponse {
+  feat_id: number;
+  success: boolean;
+  message: string;
+  character_feats?: FeatResponse[];
+}
+
+export interface FeatDetailsResponse {
+  id: number;
+  feat_id?: number;
+  label: string;
+  name: string;
+  description: string;
+  type: number;
+  protected: boolean;
+  custom: boolean;
+  icon?: string;
+  prerequisites?: Record<string, unknown>;
+  effects?: Record<string, unknown>;
+}
+
+export interface FeatValidationResponse {
+  feat_id: number;
+  can_take: boolean;
+  reason: string;
+  has_feat: boolean;
+  missing_requirements: string[];
+}
+
+export interface SkillEntry {
+  skill_id: number;
+  name: string;
+  ranks: number;
+  max_ranks: number;
+  bonus: number;
+  total: number;
+  is_class_skill: boolean;
+}
+
+export interface SkillInfo {
+  name: string;
+  description?: string;
+  key_ability: string;
+}
+
+export interface SkillsStateResponse {
+  character_skills: Record<number, SkillEntry>;
+  available_points: number;
+  total_points: number;
+  skill_info: Record<number, SkillInfo>;
+  // Additional properties to match SkillsData structure
+  skills: Array<{
+    id: number;
+    name: string;
+    rank: number;
+    max_rank: number;
+    is_class_skill: boolean;
+    total_bonus: number;
+    ability_modifier: number;
+    misc_modifier: number;
+  }>;
+  skill_points: {
+    available: number;
+    spent: number;
+  };
+}
+
+export interface SkillsUpdateResponse {
+  success: boolean;
+  updated_skills: Record<number, number>;
+  available_points: number;
+  message?: string;
+  skill_summary?: {
+    total_spent?: number;
+    available?: number;
+  };
+}
+
+export interface AbilitiesStateResponse {
+  abilities: {
+    strength: number;
+    dexterity: number;
+    constitution: number;
+    intelligence: number;
+    wisdom: number;
+    charisma: number;
+  };
+  modifiers: {
+    strength: number;
+    dexterity: number;
+    constitution: number;
+    intelligence: number;
+    wisdom: number;
+    charisma: number;
+  };
+  available_points?: number;
+}
+
+export interface AbilitiesUpdateResponse {
+  success: boolean;
+  updated_abilities: Record<string, number>;
+  message?: string;
+}
+
+export interface AlignmentResponse {
+  lawChaos: number;
+  goodEvil: number;
+  alignment_string?: string;
+}
+
+export interface AlignmentUpdateResponse {
+  success: boolean;
+  law_chaos: number;
+  good_evil: number;
+  lawChaos: number;
+  goodEvil: number;
+  alignment_string: string;
+}
+
+export interface CombatUpdateResponse {
+  success: boolean;
+  updated_value: number;
+  message?: string;
+}
+
+export interface SavesData {
+  fortitude: number;
+  reflex: number;
+  will: number;
+}
+
 export interface CharacterData {
   id?: number;
   name: string;
@@ -41,6 +224,9 @@ export interface CharacterData {
   abilities: CharacterAbilities;
   saves: CharacterSaves;
   armorClass: number;
+  armor_class?: number;
+  current_hit_points?: number;
+  max_hit_points?: number;
   gold: number;
   location?: string;
   playTime?: string;
@@ -120,6 +306,29 @@ export interface CharacterData {
   localizationStatus?: string;
   createdAt?: string;
   updatedAt?: string;
+  // Additional properties for overview
+  derived_stats?: {
+    armor_class?: number;
+    current_hit_points?: number;
+    max_hit_points?: number;
+    base_attack_bonus?: number;
+    fortitude?: number;
+    reflex?: number;
+    will?: number;
+    effective_attributes?: Record<string, number>;
+    skill_points_available?: number;
+    attack_bonuses?: {
+      melee?: number;
+      ranged?: number;
+    };
+    initiative?: number;
+  };
+  base_attack_bonus?: number;
+  summary?: {
+    spent_points?: number;
+    total_feats?: number;
+  };
+  skill_points_available?: number;
 }
 
 // Base API URL - FastAPI server running on localhost:8000
@@ -198,7 +407,7 @@ export class CharacterAPI {
   }
 
   // Save character changes to save game
-  static async saveCharacter(characterId: number, updates: Record<string, unknown> = {}): Promise<{ success: boolean; changes: any; backup_created: boolean }> {
+  static async saveCharacter(characterId: number, updates: Record<string, unknown> = {}): Promise<SaveResult> {
     const response = await fetch(`${API_BASE_URL}/${characterId}/update`, {
       method: 'POST',
       headers: {
@@ -221,7 +430,7 @@ export class CharacterAPI {
   }
 
   // Feat management methods
-  static async getCharacterFeats(characterId: number, featType?: number): Promise<any> {
+  static async getCharacterFeats(characterId: number, featType?: number): Promise<FeatsStateResponse> {
     const typeParam = featType !== undefined ? `?type=${featType}` : '';
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/state${typeParam}`);
     if (!response.ok) {
@@ -240,7 +449,7 @@ export class CharacterAPI {
       limit?: number; 
       search?: string; 
     } = {}
-  ): Promise<{ feats: any[]; pagination: any; search?: string; category?: string; subcategory?: string }> {
+  ): Promise<LegitimateFeatsResponse> {
     const params = new URLSearchParams();
     if (options.featType !== undefined) params.append('type', options.featType.toString());
     if (options.category) params.append('category', options.category);
@@ -259,14 +468,20 @@ export class CharacterAPI {
     const data = await response.json();
     return {
       feats: data.legitimate_feats || [],
-      pagination: data.pagination || {},
+      pagination: data.pagination || {
+        page: 1,
+        limit: 50,
+        total: 0,
+        has_next: false,
+        has_previous: false
+      },
       search: data.search,
       category: data.category,
       subcategory: data.subcategory
     };
   }
 
-  static async addFeat(characterId: number, featId: number): Promise<any> {
+  static async addFeat(characterId: number, featId: number): Promise<FeatActionResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/add`, {
       method: 'POST',
       headers: {
@@ -283,7 +498,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async removeFeat(characterId: number, featId: number): Promise<any> {
+  static async removeFeat(characterId: number, featId: number): Promise<FeatActionResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/remove`, {
       method: 'POST',
       headers: {
@@ -300,7 +515,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async getFeatDetails(characterId: number, featId: number): Promise<any> {
+  static async getFeatDetails(characterId: number, featId: number): Promise<FeatDetailsResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/details`);
     if (!response.ok) {
       throw new Error(`Failed to fetch feat details: ${response.statusText}`);
@@ -308,13 +523,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async validateFeat(characterId: number, featId: number): Promise<{
-    feat_id: number;
-    can_take: boolean;
-    reason: string;
-    has_feat: boolean;
-    missing_requirements: string[];
-  }> {
+  static async validateFeat(characterId: number, featId: number): Promise<FeatValidationResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/validate`);
     if (!response.ok) {
       throw new Error(`Failed to validate feat: ${response.statusText}`);
@@ -323,7 +532,7 @@ export class CharacterAPI {
   }
 
   // Skills API methods
-  static async getSkillsState(characterId: number): Promise<any> {
+  static async getSkillsState(characterId: number): Promise<SkillsStateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/state`);
     if (!response.ok) {
       throw new Error(`Failed to fetch skills state: ${response.statusText}`);
@@ -331,7 +540,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async updateSkills(characterId: number, skills: Record<number, number>): Promise<any> {
+  static async updateSkills(characterId: number, skills: Record<number, number>): Promise<SkillsUpdateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/update`, {
       method: 'POST',
       headers: {
@@ -346,7 +555,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async resetSkills(characterId: number): Promise<any> {
+  static async resetSkills(characterId: number): Promise<SkillsUpdateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/reset`, {
       method: 'POST',
       headers: {
@@ -365,7 +574,7 @@ export class CharacterAPI {
   }
 
   // Attributes API methods
-  static async getAttributesState(characterId: number): Promise<any> {
+  static async getAttributesState(characterId: number): Promise<AbilitiesStateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/abilities`);
     if (!response.ok) {
       throw new Error(`Failed to fetch abilities state: ${response.statusText}`);
@@ -373,7 +582,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async updateAttributes(characterId: number, attributes: Record<string, number>): Promise<any> {
+  static async updateAttributes(characterId: number, attributes: Record<string, number>): Promise<AbilitiesUpdateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/abilities/update`, {
       method: 'POST',
       headers: {
@@ -389,7 +598,7 @@ export class CharacterAPI {
   }
 
   // Alignment API methods
-  static async getAlignment(characterId: number): Promise<{ lawChaos: number; goodEvil: number }> {
+  static async getAlignment(characterId: number): Promise<AlignmentResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment`);
     if (!response.ok) {
       throw new Error(`Failed to fetch alignment: ${response.statusText}`);
@@ -397,7 +606,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async updateAlignment(characterId: number, alignment: { lawChaos: number; goodEvil: number }): Promise<any> {
+  static async updateAlignment(characterId: number, alignment: { lawChaos: number; goodEvil: number }): Promise<AlignmentUpdateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment`, {
       method: 'POST',
       headers: {
@@ -413,7 +622,7 @@ export class CharacterAPI {
   }
 
   // Combat stats API methods
-  static async updateArmorClass(characterId: number, naturalAC: number): Promise<any> {
+  static async updateArmorClass(characterId: number, naturalAC: number): Promise<CombatUpdateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-ac`, {
       method: 'POST',
       headers: {
@@ -429,7 +638,7 @@ export class CharacterAPI {
   }
 
   // Initiative API methods
-  static async updateInitiativeBonus(characterId: number, initiativeBonus: number): Promise<any> {
+  static async updateInitiativeBonus(characterId: number, initiativeBonus: number): Promise<CombatUpdateResponse> {
     const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-initiative`, {
       method: 'POST',
       headers: {
@@ -445,7 +654,7 @@ export class CharacterAPI {
   }
 
   // Saving throws API methods
-  static async updateSavingThrows(characterId: number, saveUpdates: Record<string, number>): Promise<any> {
+  static async updateSavingThrows(characterId: number, saveUpdates: Record<string, number>): Promise<{ success: boolean; updated: string[] }> {
     // Use misc-bonus endpoint for each save type (backend doesn't have bulk update)
     const promises = Object.entries(saveUpdates).map(([saveType, value]) =>
       fetch(`${API_BASE_URL}/characters/${characterId}/saves/misc-bonus`, {
@@ -492,7 +701,7 @@ export class CharacterAPI {
                  'Unknown Character';
     
     // Extract classes array
-    const classesArray = (classesData.classes as Array<Record<string, unknown>>) || [];
+    const classesArray = ((classesData as { classes: Array<Record<string, unknown>> })?.classes) || [];
     
     // Map alignment from law_chaos and good_evil
     const alignmentMap: { [key: string]: string } = {
@@ -501,10 +710,10 @@ export class CharacterAPI {
       '2_0': 'Chaotic Neutral', '2_1': 'Chaotic Good', '2_2': 'Chaotic Evil',
     };
     
-    const lawChaos = alignmentData.law_chaos || 0;
-    const goodEvil = alignmentData.good_evil || 0;
+    const lawChaos = (alignmentData as { law_chaos?: number }).law_chaos || 0;
+    const goodEvil = (alignmentData as { good_evil?: number }).good_evil || 0;
     const alignmentKey = `${Math.floor(lawChaos / 50)}_${Math.floor(goodEvil / 50)}`;
-    const alignmentString = alignmentData.alignment_string || alignmentMap[alignmentKey] || 'True Neutral';
+    const alignmentString = (alignmentData as { alignment_string?: string }).alignment_string || alignmentMap[alignmentKey] || 'True Neutral';
     
     return {
       id: typeof characterId === 'string' ? parseInt(characterId) : (characterId as number) || undefined,
@@ -518,22 +727,22 @@ export class CharacterAPI {
       })),
       alignment: String(alignmentString),
       deity: String(summary.deity || 'None'),
-      level: Number(summary.level || classesData.total_level || info.level || 1),
+      level: Number(summary.level || (classesData as { total_level?: number }).total_level || info.level || 1),
       experience: Number(summary.experience || info.experience || 0),
       hitPoints: Number(summary.current_hit_points || summary.hit_points || 10),
       maxHitPoints: Number(summary.max_hit_points || 10),
       abilities: {
-        strength: Number(abilities.strength || 10),
-        dexterity: Number(abilities.dexterity || 10),
-        constitution: Number(abilities.constitution || 10),
-        intelligence: Number(abilities.intelligence || 10),
-        wisdom: Number(abilities.wisdom || 10),
-        charisma: Number(abilities.charisma || 10)
+        strength: Number((abilities as { strength?: number }).strength || 10),
+        dexterity: Number((abilities as { dexterity?: number }).dexterity || 10),
+        constitution: Number((abilities as { constitution?: number }).constitution || 10),
+        intelligence: Number((abilities as { intelligence?: number }).intelligence || 10),
+        wisdom: Number((abilities as { wisdom?: number }).wisdom || 10),
+        charisma: Number((abilities as { charisma?: number }).charisma || 10)
       },
       saves: {
-        fortitude: Number((backendData.saves as any)?.fortitude || 0),
-        reflex: Number((backendData.saves as any)?.reflex || 0),
-        will: Number((backendData.saves as any)?.will || 0)
+        fortitude: Number((backendData.saves as SavesData)?.fortitude || 0),
+        reflex: Number((backendData.saves as SavesData)?.reflex || 0),
+        will: Number((backendData.saves as SavesData)?.will || 0)
       },
       armorClass: Number(summary.armor_class || 10),
       gold: Number(summary.gold || 0),
@@ -549,14 +758,14 @@ export class CharacterAPI {
       // Physical stats
       movementSpeed: 30,
       size: 'Medium',
-      initiative: Math.floor(((abilities.dexterity as number || 10) - 10) / 2),
+      initiative: Math.floor(((Number((abilities as { dexterity?: number }).dexterity) || 10) - 10) / 2),
       // Campaign info
       campaignName: String(backendData.campaign_name || ''),
       moduleName: String(backendData.module_name || ''),
       // Quest data
-      completedQuests: Number((backendData.quest_details as any)?.summary?.completed_quests || 0),
-      currentQuests: Number((backendData.quest_details as any)?.summary?.active_quests || 0),
-      questDetails: backendData.quest_details as any
+      completedQuests: Number((backendData.quest_details as CharacterData['questDetails'])?.summary?.completed_quests || 0),
+      currentQuests: Number((backendData.quest_details as CharacterData['questDetails'])?.summary?.active_quests || 0),
+      questDetails: backendData.quest_details as CharacterData['questDetails']
     };
   }
 }
