@@ -21,7 +21,8 @@ node_modules/
 sample_save/
 test_module/
 .env.local
-backend/cache/
+backend/cache/compiled_cache/
+backend/cache/icons/
 .env
 .env.local
 2da/
@@ -46,7 +47,7 @@ overall_docs/
 .claude/
 .benchmarks/
 .pytest_cache/
-backend/gamedata/cache 
+backend/gamedata/cache/generated_code/ 
 extracted_icons_for_debug_only
 .cspell.json
 legacy_java_editor
