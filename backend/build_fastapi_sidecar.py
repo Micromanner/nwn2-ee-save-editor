@@ -22,16 +22,22 @@ def build_with_nuitka():
     # Ensure the output directory exists
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Platform-specific naming for Tauri (matches expected sidecar names)
+    # Clean up previous build artifacts to avoid Windows Defender conflicts
+    print("Cleaning previous build artifacts...")
+    for pattern in ["*.build", "*.dist", "*.onefile-build", ".nuitka-cache"]:
+        for path in DIST_DIR.glob(pattern):
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+                print(f"Removed directory: {path.name}")
+            else:
+                path.unlink(missing_ok=True)
+                print(f"Removed file: {path.name}")
+    
+    # Generic naming - Tauri handles platform-specific suffixes automatically
     if sys.platform == "win32":
-        platform_name = "fastapi-server-x86_64-pc-windows-msvc.exe"
-        final_name = "fastapi-server.exe"  # Tauri expects this name
-    elif sys.platform == "darwin":
-        platform_name = "fastapi-server-x86_64-apple-darwin"
-        final_name = "fastapi-server"
-    else: # Linux
-        platform_name = "fastapi-server-x86_64-unknown-linux-gnu"
-        final_name = "fastapi-server"
+        output_name = "fastapi-server.exe"
+    else:
+        output_name = "fastapi-server"
 
     # Skip the large icon cache directory since icons are not used anymore
     include_cache = False
@@ -45,7 +51,7 @@ def build_with_nuitka():
     cmd = [
         sys.executable,  # Use the current python interpreter
         "-m", "nuitka",
-        f"--output-filename={platform_name}",
+        f"--output-filename={output_name}",
         f"--output-dir={DIST_DIR}",
         "--onefile",              # Create a single executable
         "--standalone",           # Bundle all dependencies
@@ -89,7 +95,7 @@ def build_with_nuitka():
     
 
     print(f"Building FastAPI server for {sys.platform} with Nuitka...")
-    print(f"Output file: {platform_name} -> {final_name}")
+    print(f"Output file: {output_name}")
     print(f"Command: {' '.join(cmd)}")
     
     # Run the Nuitka build
@@ -99,21 +105,14 @@ def build_with_nuitka():
         print("\nNuitka build failed!")
         return False
         
-    # Rename the output file to what Tauri expects
-    platform_file = DIST_DIR / platform_name
-    final_file = DIST_DIR / final_name
+    # Check if the output file was created
+    output_file = DIST_DIR / output_name
     
-    if platform_file.exists():
-        # Remove existing final file if it exists
-        if final_file.exists():
-            final_file.unlink()
-        
-        # Rename to expected Tauri sidecar name
-        shutil.move(str(platform_file), str(final_file))
-        print(f"Renamed {platform_name} -> {final_name}")
+    if output_file.exists():
+        print(f"Successfully created: {output_name}")
         return True
     else:
-        print(f"Expected output file not found: {platform_file}")
+        print(f"Expected output file not found: {output_file}")
         return False
 
 def main():
@@ -129,11 +128,11 @@ def main():
     
     # Get final binary name (what Tauri expects)
     if sys.platform == "win32":
-        final_name = "fastapi-server.exe"
+        output_name = "fastapi-server.exe"
     else:
-        final_name = "fastapi-server"
+        output_name = "fastapi-server"
     
-    final_path = DIST_DIR / final_name
+    final_path = DIST_DIR / output_name
     
     if success and final_path.exists():
         file_size_mb = final_path.stat().st_size / (1024 * 1024)

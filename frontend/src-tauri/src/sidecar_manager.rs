@@ -191,7 +191,6 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         // In development, run FastAPI directly with Python from venv
         if cfg!(target_os = "windows") {
             info!("Starting FastAPI on Windows with python.exe from venv");
-            // Use absolute path to backend directory
             let backend_dir = std::env::current_dir()
                 .unwrap()
                 .parent()

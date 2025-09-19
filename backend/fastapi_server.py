@@ -353,10 +353,19 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
 # Add middleware stack
 app.add_middleware(RequestTrackingMiddleware)
 
-# CORS configuration for Tauri frontend
+# CORS configuration for Tauri frontend - UPDATED FOR PRODUCTION
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",      # Dev mode
+    "tauri://localhost",          # Tauri protocol
+    "https://tauri.localhost",    # HTTPS Tauri
+    "http://tauri.localhost",     # HTTP Tauri (PRODUCTION FIX)
+]
+
+print(f"CORS DEBUG: Allowing origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "tauri://localhost", "https://tauri.localhost"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
