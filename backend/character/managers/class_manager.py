@@ -148,6 +148,10 @@ class ClassManager(EventEmitter):
         if not new_class:
             raise ValueError(f"Invalid class ID: {class_id}")
         
+        # Check for prestige class level limits
+        if not cheat_mode:
+            self._validate_class_level_limits(class_id, new_class)
+        
         # Update class list
         class_list = self.gff.get('ClassList', [])
         total_level = sum(c.get('ClassLevel', 0) for c in class_list) + 1
@@ -287,6 +291,20 @@ class ClassManager(EventEmitter):
         if len(class_list) > 1:
             raise ValueError("Cannot use _update_class_list for multiclass characters. Use change_specific_class() instead.")
         
+        # Check if new class has level limits and cap the level if needed
+        new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+        if new_class:
+            max_level_raw = self.field_mapper.get_field_value(new_class, 'max_level', '0')
+            try:
+                max_level = int(max_level_raw) if max_level_raw not in ['****', ''] else 0
+            except (ValueError, TypeError):
+                max_level = 0
+            
+            # If it's a prestige class (has max level), cap the level
+            if max_level > 0 and total_level > max_level:
+                logger.info(f"Capping level from {total_level} to {max_level} for prestige class {new_class_id}")
+                total_level = max_level
+        
         # For single class characters, replace the class entirely
         self.gff.set('ClassList', [{
             'Class': new_class_id,
@@ -324,6 +342,20 @@ class ClassManager(EventEmitter):
         for class_entry in class_list:
             if class_entry.get('Class') == old_class_id:
                 class_level = class_entry.get('ClassLevel', 0)
+                
+                # Check if new class has level limits and cap the level if needed
+                max_level_raw = self.field_mapper.get_field_value(new_class, 'max_level', '0')
+                try:
+                    max_level = int(max_level_raw) if max_level_raw not in ['****', ''] else 0
+                except (ValueError, TypeError):
+                    max_level = 0
+                
+                # If it's a prestige class (has max level), cap the level
+                if max_level > 0 and class_level > max_level:
+                    logger.info(f"Capping level from {class_level} to {max_level} for prestige class {new_class_id}")
+                    class_level = max_level
+                    class_entry['ClassLevel'] = class_level
+                
                 class_entry['Class'] = new_class_id
                 class_found = True
                 break
@@ -833,6 +865,87 @@ class ClassManager(EventEmitter):
             errors.append("Total level must be at least 1")
         
         return len(errors) == 0, errors
+    
+    def _validate_class_level_limits(self, class_id: int, class_data) -> None:
+        """
+        Validate prestige class level limits
+        
+        Args:
+            class_id: The class ID to validate
+            class_data: The class data from the game data loader
+            
+        Raises:
+            ValueError: If adding this level would exceed the class maximum
+        """
+        # Get current level in this class
+        current_level = 0
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            if class_entry.get('Class') == class_id:
+                current_level = class_entry.get('ClassLevel', 0)
+                break
+        
+        # Get max level from class data using field mapper
+        max_level_raw = self.field_mapper.get_field_value(class_data, 'max_level', '0')
+        try:
+            max_level = int(max_level_raw) if max_level_raw not in ['****', ''] else 0
+        except (ValueError, TypeError):
+            max_level = 0
+        
+        # Only check if it's a prestige class (has max level > 0)
+        if max_level > 0:
+            new_level = current_level + 1
+            if new_level > max_level:
+                class_name = self.field_mapper.get_field_value(class_data, 'label', 
+                    self.field_mapper.get_field_value(class_data, 'name', f'Class {class_id}'))
+                raise ValueError(f"Cannot add level to {class_name}: maximum level is {max_level}, character already has {current_level} levels")
+    
+    def get_class_level_info(self, class_id: int) -> Dict[str, Any]:
+        """
+        Get level information for a class including max level and remaining levels
+        
+        Args:
+            class_id: The class ID to check
+            
+        Returns:
+            Dict with current level, max level, and remaining levels
+        """
+        # Get current level in this class
+        current_level = 0
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            if class_entry.get('Class') == class_id:
+                current_level = class_entry.get('ClassLevel', 0)
+                break
+        
+        # Get class data and max level
+        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        if not class_data:
+            return {
+                'current_level': current_level,
+                'max_level': None,
+                'remaining_levels': None,
+                'is_prestige': False,
+                'can_level_up': True
+            }
+        
+        max_level_raw = self.field_mapper.get_field_value(class_data, 'max_level', '0')
+        try:
+            max_level = int(max_level_raw) if max_level_raw not in ['****', ''] else 0
+        except (ValueError, TypeError):
+            max_level = 0
+        
+        is_prestige = max_level > 0
+        remaining_levels = max_level - current_level if is_prestige else None
+        can_level_up = not is_prestige or remaining_levels > 0
+        
+        return {
+            'current_level': current_level,
+            'max_level': max_level if is_prestige else None,
+            'remaining_levels': remaining_levels,
+            'is_prestige': is_prestige,
+            'can_level_up': can_level_up
+        }
     
     def get_class_by_id(self, class_id: int) -> Optional[Dict[str, Any]]:
         """

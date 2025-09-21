@@ -72,6 +72,9 @@ export default function ClassAndLevelsEditor() {
     changeClass,
     addClass,
     removeClass,
+    canLevelUp,
+    getRemainingLevels,
+    isAtMaxLevel,
   } = useClassesLevel(classesSubsystem.data as ClassesData | null);
 
   const [expandedClassDropdown, setExpandedClassDropdown] = useState<number | null>(null);
@@ -335,28 +338,40 @@ export default function ClassAndLevelsEditor() {
                     </div>
 
                     {/* Level Controls - Fixed width */}
-                    <div className="col-span-2 flex items-center justify-center gap-1">
-                      <Button
-                        onClick={() => handleAdjustClassLevel(index, -1)}
-                        variant="outline"
-                        size="sm"
-                        disabled={cls.level <= 1}
-                        className="w-7 h-7 p-0"
-                      >
-                        <span className="text-sm">−</span>
-                      </Button>
-                      <div className="w-8 text-center">
-                        <div className="text-lg font-semibold">{cls.level}</div>
+                    <div className="col-span-2 flex flex-col items-center justify-center gap-1">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          onClick={() => handleAdjustClassLevel(index, -1)}
+                          variant="outline"
+                          size="sm"
+                          disabled={cls.level <= 1}
+                          className="w-7 h-7 p-0"
+                        >
+                          <span className="text-sm">−</span>
+                        </Button>
+                        <div className="w-8 text-center">
+                          <div className="text-lg font-semibold">{cls.level}</div>
+                        </div>
+                        <Button
+                          onClick={() => handleAdjustClassLevel(index, 1)}
+                          variant="outline"
+                          size="sm"
+                          disabled={totalLevel >= maxLevel || !canLevelUp(cls.id)}
+                          className="w-7 h-7 p-0"
+                        >
+                          <span className="text-sm">+</span>
+                        </Button>
                       </div>
-                      <Button
-                        onClick={() => handleAdjustClassLevel(index, 1)}
-                        variant="outline"
-                        size="sm"
-                        disabled={totalLevel >= maxLevel}
-                        className="w-7 h-7 p-0"
-                      >
-                        <span className="text-sm">+</span>
-                      </Button>
+                      {/* Show remaining levels for prestige classes */}
+                      {getRemainingLevels(cls.id) !== null && (
+                        <div className="text-xs text-[rgb(var(--color-text-muted))]">
+                          {isAtMaxLevel(cls.id) ? (
+                            <span className="text-orange-400">Max Level</span>
+                          ) : (
+                            <span>{getRemainingLevels(cls.id)} levels left</span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Class Stats - Aligned columns */}

@@ -621,6 +621,35 @@ def has_class_by_name(
         )
 
 
+@router.get("/characters/{character_id}/classes/level-info/{class_id}")
+def get_class_level_info(
+    character_id: int,
+    class_id: int,
+    manager: CharacterManagerDep
+):
+    """Get level information for a class including max level and remaining levels"""
+    
+    try:
+        class_manager = manager.get_manager('class')
+        if not class_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Class manager not available"
+            )
+        
+        # Use manager method directly
+        level_info = class_manager.get_class_level_info(class_id)
+        
+        return level_info
+        
+    except Exception as e:
+        logger.error(f"Failed to get level info for class {class_id} for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get class level info: {str(e)}"
+        )
+
+
 @router.get("/classes/features/{class_id}")
 def get_class_features(
     class_id: int,

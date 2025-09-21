@@ -159,6 +159,13 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     const newLevel = Math.max(1, cls.level + delta);
     if (newLevel === cls.level) return;
     
+    // Check prestige class level limits
+    if (delta > 0 && cls.max_level && cls.max_level > 0) {
+      if (newLevel > cls.max_level) {
+        throw new Error(`Cannot add level to ${cls.name}: maximum level is ${cls.max_level}, character already has ${cls.level} levels`);
+      }
+    }
+    
     setIsUpdating(true);
     
     try {
@@ -248,6 +255,36 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     }
   }, [characterId, classes]);
 
+  // Helper function to check if a class can level up
+  const canLevelUp = useCallback((classId: number): boolean => {
+    const cls = classes.find(c => c.id === classId);
+    if (!cls) return false;
+    
+    // Check prestige class level limits
+    if (cls.max_level && cls.max_level > 0) {
+      return cls.level < cls.max_level;
+    }
+    
+    // Base classes can level up until character level cap
+    return (classesData?.total_level || 0) < 60;
+  }, [classes, classesData?.total_level]);
+
+  // Helper function to get remaining levels for prestige classes
+  const getRemainingLevels = useCallback((classId: number): number | null => {
+    const cls = classes.find(c => c.id === classId);
+    if (!cls || !cls.max_level || cls.max_level <= 0) return null;
+    
+    return Math.max(0, cls.max_level - cls.level);
+  }, [classes]);
+
+  // Helper function to check if a class is at max level
+  const isAtMaxLevel = useCallback((classId: number): boolean => {
+    const cls = classes.find(c => c.id === classId);
+    if (!cls || !cls.max_level || cls.max_level <= 0) return false;
+    
+    return cls.level >= cls.max_level;
+  }, [classes]);
+
   return {
     // Data from subsystem
     classes,
@@ -279,5 +316,10 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     changeClass,
     addClass,
     removeClass,
+    
+    // Helper functions for prestige class limits
+    canLevelUp,
+    getRemainingLevels,
+    isAtMaxLevel,
   };
 }
