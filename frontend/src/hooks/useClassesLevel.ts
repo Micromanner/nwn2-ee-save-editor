@@ -186,6 +186,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     
     try {
       await apiClient.post(`/characters/${characterId}/classes/change`, {
+        old_class_id: classId,
         class_id: newClassInfo.id,
         preserve_level: true,
       });

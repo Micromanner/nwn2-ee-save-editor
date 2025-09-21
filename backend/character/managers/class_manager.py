@@ -276,8 +276,18 @@ class ClassManager(EventEmitter):
             raise ValueError(f"Character does not have class {class_id}")
     
     def _update_class_list(self, new_class_id: int, total_level: int):
-        """Update the character's class list"""
-        # Clear existing classes
+        """
+        Update the character's class list for class change
+        WARNING: This method is only for single-class characters!
+        For multiclass characters, use change_specific_class() instead.
+        """
+        class_list = self.gff.get('ClassList', [])
+        
+        # If multiclass, this method should not be used
+        if len(class_list) > 1:
+            raise ValueError("Cannot use _update_class_list for multiclass characters. Use change_specific_class() instead.")
+        
+        # For single class characters, replace the class entirely
         self.gff.set('ClassList', [{
             'Class': new_class_id,
             'ClassLevel': total_level
@@ -285,6 +295,93 @@ class ClassManager(EventEmitter):
         
         # Update primary class field
         self.gff.set('Class', new_class_id)
+    
+    def change_specific_class(self, old_class_id: int, new_class_id: int, preserve_level: bool = True) -> Dict[str, Any]:
+        """
+        Change a specific class in a multiclass character without affecting other classes
+        
+        Args:
+            old_class_id: The class ID to replace
+            new_class_id: The new class ID
+            preserve_level: Keep the same level in that class
+            
+        Returns:
+            Dict with change details
+        """
+        logger.info(f"Changing specific class from {old_class_id} to {new_class_id}")
+        
+        # Validate new class exists
+        new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+        if not new_class:
+            raise ValueError(f"Invalid class ID: {new_class_id}")
+        
+        class_list = self.gff.get('ClassList', [])
+        total_level = sum(c.get('ClassLevel', 0) for c in class_list)
+        
+        # Find the class to change
+        class_found = False
+        class_level = 0
+        for class_entry in class_list:
+            if class_entry.get('Class') == old_class_id:
+                class_level = class_entry.get('ClassLevel', 0)
+                class_entry['Class'] = new_class_id
+                class_found = True
+                break
+        
+        if not class_found:
+            raise ValueError(f"Character does not have class {old_class_id}")
+        
+        # Begin transaction if not already in one
+        transaction_started = False
+        if not self.character_manager._current_transaction:
+            self.character_manager.begin_transaction()
+            transaction_started = True
+        
+        try:
+            # Update the class list
+            self.gff.set('ClassList', class_list)
+            
+            # Update primary class if it was changed
+            current_primary = self.gff.get('Class', 0)
+            if current_primary == old_class_id:
+                self.gff.set('Class', new_class_id)
+            
+            # Recalculate all stats since classes changed
+            self._recalculate_all_stats()
+            
+            # Emit class changed event
+            event = ClassChangedEvent(
+                event_type=EventType.CLASS_CHANGED,
+                source_manager='class',
+                timestamp=time.time(),
+                old_class_id=old_class_id,
+                new_class_id=new_class_id,
+                level=class_level,
+                preserve_feats=self._get_preserved_feats()
+            )
+            self.character_manager.emit(event)
+            
+            # Commit transaction if we started it
+            if transaction_started:
+                self.character_manager.commit_transaction()
+                
+        except Exception as e:
+            # Rollback on error if we started the transaction
+            if transaction_started:
+                self.character_manager.rollback_transaction()
+            logger.error(f"Error during specific class change: {e}")
+            raise
+        
+        return {
+            'class_change': {
+                'old_class': old_class_id,
+                'new_class': new_class_id,
+                'level': class_level
+            },
+            'multiclass_preserved': True,
+            'total_level': total_level,
+            'stats_updated': True
+        }
     
     def _update_class_stats(self, new_class, total_level: int) -> Dict[str, Any]:
         """Update HP, BAB, saves based on new class"""

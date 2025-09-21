@@ -495,6 +495,132 @@ class TestMulticlassHandling:
         assert result['new_total_level'] == 6
         assert result['multiclass'] == False
     
+    def test_change_specific_class_multiclass_preserves_others(self, class_manager):
+        """Test that changing one class in multiclass character preserves other classes (NWN-25 fix)"""
+        # Set up multiclass character: Fighter 5/Wizard 3/Rogue 2
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 5},  # Fighter 5
+            {'Class': 1, 'ClassLevel': 3},  # Wizard 3
+            {'Class': 2, 'ClassLevel': 2}   # Rogue 2
+        ])
+        class_manager.gff.set('Class', 0)  # Primary class is Fighter
+        
+        # Change Fighter to Barbarian (Fighter ID 0 -> Barbarian ID 6)
+        result = class_manager.change_specific_class(0, 6, preserve_level=True)
+        
+        # Verify the result
+        assert result['class_change']['old_class'] == 0
+        assert result['class_change']['new_class'] == 6
+        assert result['class_change']['level'] == 5
+        assert result['multiclass_preserved'] == True
+        
+        # Verify the class list still has all classes
+        class_list = class_manager.gff.get('ClassList')
+        assert len(class_list) == 3, "Should still have 3 classes"
+        
+        # Verify specific classes
+        class_ids = [c.get('Class') for c in class_list]
+        class_levels = [c.get('ClassLevel') for c in class_list]
+        
+        assert 6 in class_ids, "Should have Barbarian (ID 6)"
+        assert 1 in class_ids, "Should still have Wizard (ID 1)"
+        assert 2 in class_ids, "Should still have Rogue (ID 2)"
+        assert 0 not in class_ids, "Should no longer have Fighter (ID 0)"
+        
+        # Verify levels are preserved
+        assert sum(class_levels) == 10, "Total level should be preserved"
+        
+        # Find Barbarian entry and verify level
+        barbarian_entry = next(c for c in class_list if c.get('Class') == 6)
+        assert barbarian_entry.get('ClassLevel') == 5, "Barbarian should have Fighter's level"
+        
+        # Verify Wizard and Rogue levels unchanged
+        wizard_entry = next(c for c in class_list if c.get('Class') == 1)
+        rogue_entry = next(c for c in class_list if c.get('Class') == 2)
+        assert wizard_entry.get('ClassLevel') == 3, "Wizard level unchanged"
+        assert rogue_entry.get('ClassLevel') == 2, "Rogue level unchanged"
+        
+        # Verify primary class updated
+        assert class_manager.gff.get('Class') == 6, "Primary class should be updated to Barbarian"
+    
+    def test_change_specific_class_non_primary_class(self, class_manager):
+        """Test changing a non-primary class preserves primary class designation"""
+        # Set up multiclass character: Fighter 5/Wizard 3/Rogue 2
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 5},  # Fighter 5
+            {'Class': 1, 'ClassLevel': 3},  # Wizard 3
+            {'Class': 2, 'ClassLevel': 2}   # Rogue 2
+        ])
+        class_manager.gff.set('Class', 0)  # Primary class is Fighter
+        
+        # Change Wizard to Cleric (Wizard ID 1 -> Cleric ID 3)
+        result = class_manager.change_specific_class(1, 3, preserve_level=True)
+        
+        # Verify the change
+        assert result['class_change']['old_class'] == 1
+        assert result['class_change']['new_class'] == 3
+        assert result['class_change']['level'] == 3
+        
+        # Verify all classes preserved
+        class_list = class_manager.gff.get('ClassList')
+        assert len(class_list) == 3
+        
+        class_ids = [c.get('Class') for c in class_list]
+        assert 0 in class_ids, "Fighter should be preserved"
+        assert 3 in class_ids, "Should have Cleric (ID 3)"
+        assert 2 in class_ids, "Rogue should be preserved"
+        assert 1 not in class_ids, "Should no longer have Wizard"
+        
+        # Verify primary class unchanged (still Fighter)
+        assert class_manager.gff.get('Class') == 0, "Primary class should remain Fighter"
+    
+    def test_change_specific_class_invalid_old_class(self, class_manager):
+        """Test error handling when old class doesn't exist"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 5}
+        ])
+        
+        with pytest.raises(ValueError, match="Character does not have class 999"):
+            class_manager.change_specific_class(999, 1, preserve_level=True)
+    
+    def test_change_specific_class_invalid_new_class(self, class_manager):
+        """Test error handling with invalid new class ID"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 5}
+        ])
+        
+        with pytest.raises(ValueError, match="Invalid class ID: 999"):
+            class_manager.change_specific_class(0, 999, preserve_level=True)
+    
+    def test_change_specific_class_emits_event(self, class_manager):
+        """Test that specific class change emits ClassChangedEvent"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 5},
+            {'Class': 1, 'ClassLevel': 3}
+        ])
+        
+        with patch.object(class_manager.character_manager, 'emit') as mock_emit:
+            class_manager.change_specific_class(0, 6, preserve_level=True)
+            
+            mock_emit.assert_called_once()
+            event = mock_emit.call_args[0][0]
+            assert isinstance(event, ClassChangedEvent)
+            assert event.old_class_id == 0
+            assert event.new_class_id == 6
+            assert event.level == 5
+    
+    def test_change_class_rejects_multiclass_characters(self, class_manager):
+        """Test that original change_class method rejects multiclass characters (NWN-25 prevention)"""
+        # Set up multiclass character
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 5},  # Fighter 5
+            {'Class': 1, 'ClassLevel': 3}   # Wizard 3
+        ])
+        
+        # Original change_class should reject multiclass characters
+        with pytest.raises(ValueError, match="Cannot use _update_class_list for multiclass characters"):
+            class_manager.change_class(6, cheat_mode=True)  # Try to change to Barbarian
+    
     def test_add_class_level_new_class(self, class_manager):
         """Test adding level in new class (multiclassing)"""
         class_manager.gff.set('ClassList', [

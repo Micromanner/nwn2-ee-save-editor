@@ -172,7 +172,7 @@ export default function ClassSelectorModal({
     let canAdd = true;
     
     // Check various conditions
-    if (hasClass && !isChangingClass) {
+    if (hasClass) {
       reason = 'Already have this class';
       canAdd = false;
     } else if (atMaxClasses && !isChangingClass) {

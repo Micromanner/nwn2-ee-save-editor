@@ -98,11 +98,21 @@ def change_class(
                 detail=f"Invalid class ID: {class_id}"
             )
         
+        # Get old class ID if provided (for multiclass characters)
+        old_class_id = request.get('old_class_id')
+        
         # Use class manager methods - no duplicated logic
         if request.get('preview', False):
-            changes = class_manager.change_class(
-                class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
-            )
+            if old_class_id is not None:
+                # Multiclass character - change specific class
+                changes = class_manager.change_specific_class(
+                    old_class_id, class_id, request.get('preserve_level', True)
+                )
+            else:
+                # Single class character - change primary class
+                changes = class_manager.change_class(
+                    class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
+                )
             
             preview_data = {
                 'preview': True,
@@ -112,9 +122,16 @@ def change_class(
             return ClassChangePreview(**preview_data)
 
         # Execute class change using manager
-        changes = class_manager.change_class(
-            class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
-        )
+        if old_class_id is not None:
+            # Multiclass character - change specific class
+            changes = class_manager.change_specific_class(
+                old_class_id, class_id, request.get('preserve_level', True)
+            )
+        else:
+            # Single class character - change primary class
+            changes = class_manager.change_class(
+                class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
+            )
 
         result = {
             'success': True,

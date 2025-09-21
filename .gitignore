@@ -60,3 +60,4 @@ nuitka-crash-report.xml
 binaries
 .tauri
 out/
+test-build-local.bat
