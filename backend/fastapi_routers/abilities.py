@@ -65,6 +65,37 @@ def get_abilities_state(
                 }
             }
         
+        # Get combat stats including armor class and initiative
+        try:
+            combat_manager = manager.get_manager('combat')
+            if combat_manager:
+                armor_class_data = combat_manager.calculate_armor_class()
+                initiative_data = combat_manager.calculate_initiative()
+                combat_stats = {
+                    'armor_class': armor_class_data,
+                    'initiative': initiative_data
+                }
+                logger.info(f"Combat stats retrieved: AC={armor_class_data}, Initiative={initiative_data}")
+            else:
+                combat_stats = {}
+                logger.warning("Combat manager not available")
+        except Exception as e:
+            logger.error(f"Failed to get combat stats: {e}")
+            combat_stats = {}
+
+        # Get saving throws
+        try:
+            save_manager = manager.get_manager('save')
+            if save_manager:
+                saving_throws = save_manager.calculate_saving_throws()
+                logger.info(f"Saving throws retrieved: {saving_throws}")
+            else:
+                saving_throws = {}
+                logger.warning("Save manager not available")
+        except Exception as e:
+            logger.error(f"Failed to get saving throws: {e}")
+            saving_throws = {}
+
         state_data = {
             'base_attributes': base_abilities,
             'effective_attributes': effective_abilities,
@@ -80,6 +111,8 @@ def get_abilities_state(
             },
             'point_buy_cost': ability_manager.calculate_point_buy_total(),
             'derived_stats': derived_stats,
+            'combat_stats': combat_stats,
+            'saving_throws': saving_throws,
             'encumbrance_limits': ability_manager.get_encumbrance_limits(),
             'saving_throw_modifiers': ability_manager.get_saving_throw_modifiers(),
             'skill_modifiers': ability_manager.get_skill_modifiers(),

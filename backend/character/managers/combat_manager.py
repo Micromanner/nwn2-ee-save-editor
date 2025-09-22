@@ -86,7 +86,10 @@ class CombatManager(EventEmitter):
         effective_dex_bonus = min(dex_bonus, max_dex_bonus)
         
         # Get natural armor (from race, spells, etc.)
-        natural_armor = self.gff.get('NaturalAC', 0)
+        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
+            natural_armor = self.character_manager.character_data.get('NaturalAC', 0)
+        else:
+            natural_armor = self.gff.get('NaturalAC', 0)
         
         # Get dodge bonus (from feats like Dodge)
         dodge_bonus = self._calculate_dodge_bonus()
@@ -824,7 +827,9 @@ class CombatManager(EventEmitter):
     
     def _get_natural_armor_bonus(self) -> int:
         """Get natural armor bonus"""
-        return self.character_manager.character_data.get('NaturalAC', 0)
+        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
+            return self.character_manager.character_data.get('NaturalAC', 0)
+        return self.gff.get('NaturalAC', 0)
     
     def update_natural_armor(self, value: int) -> Dict[str, Any]:
         """
@@ -844,6 +849,9 @@ class CombatManager(EventEmitter):
         
         # Update the character data
         self.character_manager.character_data['NaturalAC'] = value
+        
+        # Always update GFF wrapper as well (like save_manager pattern)
+        self.gff.set('NaturalAC', value)
         
         # Also update the GFF element if available
         if hasattr(self.character_manager, '_gff_element') and self.character_manager._gff_element:
@@ -893,6 +901,9 @@ class CombatManager(EventEmitter):
         
         # Update the character data
         self.character_manager.character_data['initbonus'] = value
+        
+        # Always update GFF wrapper as well (like save_manager pattern)
+        self.gff.set('initbonus', value)
         
         # Also update the GFF element if available
         if hasattr(self.character_manager, '_gff_element') and self.character_manager._gff_element:

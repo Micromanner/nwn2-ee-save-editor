@@ -96,6 +96,8 @@ class AttributeState(BaseModel):
     # Derived statistics
     point_buy_cost: int = Field(..., description="Total point buy cost of current scores")
     derived_stats: Dict[str, Any] = Field(..., description="Derived statistics including hit_points")
+    combat_stats: Dict[str, Any] = Field(default_factory=dict, description="Combat statistics including armor_class and initiative")
+    saving_throws: Dict[str, Any] = Field(default_factory=dict, description="Saving throw details for fortitude, reflex, will")
     encumbrance_limits: EncumbranceLimits
     saving_throw_modifiers: Dict[str, int]
     skill_modifiers: Dict[int, int] = Field(default_factory=dict, description="Skill ID -> modifier from abilities")
