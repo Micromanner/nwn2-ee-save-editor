@@ -68,6 +68,10 @@ class FieldMappingUtility:
         # Favored class
         'favored_class': ['favored_class', 'FavoredClass', 'favoured_class', 'FavouredClass'],
         
+        # Class feat table fields
+        'feat_index': ['FeatIndex', 'feat_index', 'featindex', 'feat_id'],
+        'granted_on_level': ['GrantedOnLevel', 'granted_on_level', 'grantedlevel', 'level'],
+        
         # Racial feats (many possible field names)
         'racial_feats': ['racial_feats', 'feats', 'special_abilities', 'RacialFeats', 'Feats'],
         'feat0': ['Feat0', 'feat0', 'Feat', 'feat'],

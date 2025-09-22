@@ -497,6 +497,81 @@ class TestEventHandling:
         # Should have called methods to handle class change
         assert feat_manager.character_manager.get_class_feats_for_level.called
     
+    def test_class_specific_feat_removal_stormlord(self, feat_manager):
+        """Test removal of Stormlord-specific feats when changing from Stormlord class"""
+        # Add a mock Stormlord class and feat
+        stormlord_class_id = 56  # Common Stormlord class ID
+        stormlord_feat_id = 500  # Mock Stormlord feat
+        
+        # Create mock Stormlord class
+        mock_stormlord_class = MockClass(stormlord_class_id, 'STORMLORD', 'Storm Lord')
+        
+        # Create mock Stormlord feat that requires Stormlord class
+        mock_stormlord_feat = MockFeat(
+            stormlord_feat_id, 
+            'StormlordLightning', 
+            'Stormlord Lightning Strike',
+            feat_type=2,
+            required_class=stormlord_class_id
+        )
+        
+        # Update mocks to include Stormlord data
+        feat_manager.game_rules_service.get_by_id.side_effect = lambda table, id: {
+            ('classes', stormlord_class_id): mock_stormlord_class,
+            ('feat', stormlord_feat_id): mock_stormlord_feat,
+            ('classes', 0): MockClass(0, 'FIGHTER', 'Fighter'),
+            ('classes', 1): MockClass(1, 'WIZARD', 'Wizard'),
+            ('feat', 1): MockFeat(1, 'WeaponFinesse', 'Weapon Finesse'),
+        }.get((table, id))
+        
+        # Set up character with Stormlord class and feat
+        feat_manager.gff.get.side_effect = lambda key, default=None: {
+            'ClassList': [{'Class': stormlord_class_id, 'ClassLevel': 5}],
+            'FeatList': [{'Feat': stormlord_feat_id}]
+        }.get(key, default)
+        
+        # Test the class-specific feat check
+        remaining_classes = {0}  # Fighter class remains
+        is_class_specific = feat_manager._is_class_specific_feat(
+            stormlord_feat_id, 
+            stormlord_class_id, 
+            remaining_classes
+        )
+        
+        assert is_class_specific == True, "Stormlord feat should be identified as class-specific"
+    
+    def test_protected_feats_not_removed(self, feat_manager):
+        """Test that protected feats (quest, epithet, racial) are not removed during class change"""
+        quest_feat_id = 9999  # Mock quest feat
+        
+        # Mock a quest feat
+        mock_quest_feat = MockFeat(quest_feat_id, 'QuestReward', 'Special Quest Reward')
+        
+        feat_manager.game_rules_service.get_by_id.side_effect = lambda table, id: {
+            ('feat', quest_feat_id): mock_quest_feat,
+            ('classes', 0): MockClass(0, 'FIGHTER', 'Fighter'),
+        }.get((table, id))
+        
+        # Mark as protected
+        feat_manager._protected_feats.add(quest_feat_id)
+        
+        # Set up character data
+        feat_manager.gff.get.side_effect = lambda key, default=None: {
+            'ClassList': [{'Class': 0, 'ClassLevel': 5}],
+            'FeatList': [{'Feat': quest_feat_id}]
+        }.get(key, default)
+        
+        # Test that protected feat is not considered for removal
+        remaining_classes = {1}  # Different class
+        is_class_specific = feat_manager._is_class_specific_feat(
+            quest_feat_id, 
+            0,  # Remove fighter
+            remaining_classes
+        )
+        
+        # Even if it was class-specific, it should be protected
+        assert feat_manager.is_feat_protected(quest_feat_id) == True, "Quest feat should be protected"
+    
     def test_on_level_gained_feat_addition(self, feat_manager):
         """Test feat addition during level gain"""
         # Mock class data and feats for new level

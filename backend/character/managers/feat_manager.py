@@ -905,35 +905,214 @@ class FeatManager(EventEmitter):
         return detailed
     
     def _remove_class_feats(self, class_id: int, level: int, preserve_list: List[int]):
-        """Remove feats granted by a class"""
+        """
+        Remove feats granted by a class (CONSERVATIVE approach)
+        Only removes feats that are confirmed to be class-specific to avoid breaking saves
+        """
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
         
-        # Collect all auto-granted feats for this class
         feats_to_remove = []
         class_manager = self.character_manager.get_manager('class')
+        
+        # 1. Get auto-granted feats from class feat tables (safest to remove)
         for lvl in range(1, level + 1):
             if class_manager:
                 feats_at_level = class_manager.get_class_feats_for_level(class_data, lvl)
             else:
                 feats_at_level = []
             for feat_info in feats_at_level:
-                if feat_info['list_type'] == 0:  # Auto-granted
+                if feat_info['list_type'] == 0:  # Auto-granted only
                     feat_id = feat_info['feat_id']
-                    # Skip if in preserve list or protected
                     if feat_id not in preserve_list and not self.is_feat_protected(feat_id):
                         feats_to_remove.append(feat_id)
         
-        # Remove feats
+        # 2. Check for feats with class prerequisites that match this class
+        # This catches class-specific feats that might not be in feat tables
+        feat_list = self.gff.get('FeatList', [])
+        current_class_ids = set()
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            if class_entry.get('Class') != class_id:  # Don't include the class being removed
+                current_class_ids.add(class_entry.get('Class'))
+        
+        for feat_entry in feat_list:
+            feat_id = feat_entry.get('Feat', -1)
+            if feat_id in preserve_list or self.is_feat_protected(feat_id):
+                continue
+                
+            # Check if this feat requires the class being removed
+            if self._is_class_specific_feat(feat_id, class_id, current_class_ids):
+                if feat_id not in feats_to_remove:
+                    feats_to_remove.append(feat_id)
+        
+        # Remove feats (force=True since we've already checked protection)
         removed_count = 0
         for feat_id in feats_to_remove:
-            if self.remove_feat(feat_id):
+            if self.remove_feat(feat_id, force=False):  # Still respect protection in remove_feat
                 removed_count += 1
         
         if removed_count > 0:
             class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
-            logger.info(f"Removed {removed_count} feats from {class_name}")
+            logger.info(f"Removed {removed_count} class-specific feats from {class_name}")
+    
+    def _get_feats_gained_during_class_levels(self, class_id: int) -> List[int]:
+        """
+        Get all feats gained during levels of a specific class using LvlStatList
+        
+        Args:
+            class_id: The class ID to check
+            
+        Returns:
+            List of feat IDs gained during that class's levels
+        """
+        feats_from_class = []
+        
+        # Get the level progression data
+        lvl_stat_list = self.gff.get('LvlStatList', [])
+        
+        for level_data in lvl_stat_list:
+            if level_data.get('LvlStatClass') == class_id:
+                # This level was taken in the specified class
+                feat_list = level_data.get('FeatList', [])
+                for feat_entry in feat_list:
+                    feat_id = feat_entry.get('Feat')
+                    if feat_id is not None:
+                        feats_from_class.append(feat_id)
+        
+        return feats_from_class
+    
+    def _get_all_class_feats_all_levels(self, class_id: int) -> Set[int]:
+        """
+        Get all feats that a class can grant across all its levels
+        
+        Args:
+            class_id: The class ID to check
+            
+        Returns:
+            Set of feat IDs that this class can grant
+        """
+        all_class_feats = set()
+        
+        try:
+            class_data = self.game_rules_service.get_by_id('classes', class_id)
+            if not class_data:
+                return all_class_feats
+            
+            # Get the class feat table
+            feat_table_name = field_mapper.get_field_value(class_data, 'feats_table', None)
+            if feat_table_name:
+                feat_table = self.game_rules_service.get_table(feat_table_name.lower())
+                if feat_table:
+                    for feat_entry in feat_table:
+                        feat_id = field_mapper._safe_int(
+                            field_mapper.get_field_value(feat_entry, 'feat_index', -1)
+                        )
+                        if feat_id >= 0:
+                            all_class_feats.add(feat_id)
+            
+        except Exception as e:
+            logger.warning(f"Error getting all feats for class {class_id}: {e}")
+        
+        return all_class_feats
+    
+    def _should_preserve_feat_level_based(self, feat_id: int, removed_class_id: int, remaining_class_ids: set) -> bool:
+        """
+        Check if a feat should be preserved because other remaining classes can also grant it
+        
+        Args:
+            feat_id: The feat ID to check
+            removed_class_id: The class being removed
+            remaining_class_ids: Set of remaining class IDs
+            
+        Returns:
+            True if feat should be preserved (other classes can grant it)
+        """
+        # Check if any remaining class can grant this feat
+        for class_id in remaining_class_ids:
+            class_feats = self._get_all_class_feats_all_levels(class_id)
+            if feat_id in class_feats:
+                logger.debug(f"Preserving feat {feat_id} - also granted by class {class_id}")
+                return True
+        
+        return False
+    
+    def _is_class_specific_feat(self, feat_id: int, removed_class_id: int, remaining_class_ids: set) -> bool:
+        """
+        ENHANCED: Check if a feat should be removed using level-based analysis
+        
+        This replaces the old logic with a smarter approach:
+        1. Check if feat was gained during removed class levels (from LvlStatList)
+        2. Check if any remaining class can also grant this feat
+        3. Only remove if it's unique to the removed class
+        """
+        # Step 1: Check if this feat was actually gained during removed class levels
+        feats_from_removed_class = self._get_feats_gained_during_class_levels(removed_class_id)
+        if feat_id not in feats_from_removed_class:
+            # This feat was NOT gained during removed class levels, so keep it
+            return False
+        
+        # Step 2: Check if any remaining class can also grant this feat
+        if self._should_preserve_feat_level_based(feat_id, removed_class_id, remaining_class_ids):
+            # Another class can grant this feat, so preserve it
+            return False
+        
+        # Step 3: This feat was gained during removed class levels AND no other class grants it
+        feat_data = self.game_rules_service.get_by_id('feat', feat_id)
+        feat_label = field_mapper.get_field_value(feat_data, 'label', f'Feat_{feat_id}') if feat_data else f'Feat_{feat_id}'
+        removed_class_data = self.game_rules_service.get_by_id('classes', removed_class_id)
+        class_name = field_mapper.get_field_value(removed_class_data, 'label', f'Class_{removed_class_id}') if removed_class_data else f'Class_{removed_class_id}'
+        
+        logger.debug(f"Removing level-based feat {feat_id} ({feat_label}) - gained during {class_name} levels and not available from remaining classes")
+        return True
+    
+    def _is_feat_from_class_table(self, feat_id: int, class_id: int) -> bool:
+        """
+        Check if a feat is granted by a specific class's feat table
+        Uses the hybrid approach: check both feat table and direct table lookup
+        """
+        try:
+            class_data = self.game_rules_service.get_by_id('classes', class_id)
+            if not class_data:
+                return False
+            
+            # Check if this class has a feat table using field mapper
+            feat_table_name = field_mapper.get_field_value(class_data, 'feats_table', None)
+            if not feat_table_name:
+                return False
+            
+            # Direct table lookup approach (more reliable)
+            try:
+                # Load the feat table directly
+                feat_table = self.game_rules_service.get_table(feat_table_name.lower())
+                if feat_table:
+                    for feat_entry in feat_table:
+                        # Use field mapper to get feat index with proper field name mapping
+                        entry_feat_id = field_mapper._safe_int(
+                            field_mapper.get_field_value(feat_entry, 'feat_index', -1)
+                        )
+                        if entry_feat_id == feat_id:
+                            logger.debug(f"Found feat {feat_id} in class {class_id} feat table {feat_table_name}")
+                            return True
+            except Exception as e:
+                logger.debug(f"Direct table lookup failed for {feat_table_name}: {e}")
+            
+            # Fallback: Use class manager's method (level-by-level)
+            class_manager = self.character_manager.get_manager('class')
+            if class_manager:
+                for level in range(1, 21):  # Check levels 1-20
+                    feats_at_level = class_manager.get_class_feats_for_level(class_data, level)
+                    for feat_info in feats_at_level:
+                        if feat_info.get('feat_id') == feat_id:
+                            logger.debug(f"Found feat {feat_id} in class {class_id} feat table at level {level}")
+                            return True
+            
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking feat {feat_id} for class {class_id}: {e}")
+            return False  # Conservative: if we can't determine, don't remove
     
     def _add_class_feats(self, class_id: int, level: int):
         """Add feats granted by a class"""
@@ -1670,7 +1849,12 @@ class FeatManager(EventEmitter):
             return epithet_feats
         
         # Build set of all vanilla feat IDs (using row indices which correspond to feat IDs)
-        vanilla_feat_ids = set(range(len(feat_table)))
+        try:
+            vanilla_feat_ids = set(range(len(feat_table)))
+        except (TypeError, AttributeError):
+            # Handle case where feat_table is a Mock or not a proper list
+            logger.debug("Feat table is not a proper list, cannot detect epithet feats")
+            return epithet_feats
         
         # Check each character feat
         for feat_entry in feat_list:
