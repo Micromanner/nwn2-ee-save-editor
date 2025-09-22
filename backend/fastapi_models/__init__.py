@@ -344,7 +344,12 @@ from .gamedata_models import (
     GameDataCacheResponse,
     GameDataRefreshRequest,
     GameDataRefreshResponse,
-    GameDataConfigResponse
+    GameDataConfigResponse,
+    # New FastAPI endpoint models
+    GameDataTableResponse,
+    GameDataTablesResponse,
+    GameDataSchemaResponse,
+    GameDataModulesResponse
 )
 
 __all__ = [
@@ -467,6 +472,8 @@ __all__ = [
     'TLKStringEntry', 'TLKStringResponse', 'HAKInfo', 'HAKListResponse',
     'ModuleInfo', 'ModuleListResponse', 'GameDataCacheInfo', 'GameDataCacheResponse',
     'GameDataRefreshRequest', 'GameDataRefreshResponse', 'GameDataConfigResponse',
+    # New FastAPI endpoint models
+    'GameDataTableResponse', 'GameDataTablesResponse', 'GameDataSchemaResponse', 'GameDataModulesResponse',
     
     # Legacy base models removed - functionality moved to appropriate model files
 ]

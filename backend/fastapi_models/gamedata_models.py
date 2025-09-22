@@ -246,3 +246,30 @@ class GameDataConfigResponse(BaseModel):
     saves_path: str = Field(..., description="Savegames directory")
     data_path: str = Field(..., description="Game data directory")
     dialog_tlk_path: str = Field(..., description="Main dialog.tlk file path")
+
+
+# Simple response models that relay data from existing business logic
+class GameDataTableResponse(BaseModel):
+    """Generic response for any table data - delegates to GameDataViewSet"""
+    table_name: str
+    data: List[Dict[str, Any]]
+    count: int
+
+
+class GameDataTablesResponse(BaseModel):
+    """List of available tables - delegates to GameDataViewSet"""
+    tables: List[Dict[str, Any]]
+    total_tables: int
+
+
+class GameDataSchemaResponse(BaseModel):
+    """Table schema information - delegates to GameDataViewSet"""
+    table_name: str
+    row_count: int
+    columns: List[Dict[str, Any]]
+
+
+class GameDataModulesResponse(BaseModel):
+    """Modules list - delegates to GameDataViewSet"""
+    modules: List[Dict[str, Any]]
+    count: int
