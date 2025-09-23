@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { CharacterAPI } from '@/services/characterApi';
+import { CharacterAPI, type RaceDataResponse } from '@/services/characterApi';
 
 export interface AbilityScore {
   name: string;
@@ -25,24 +25,40 @@ export interface CharacterStats {
   armorClass: {
     base: number;
     total: number;
+    dexMod?: number;
+    equipment?: number;
   };
   initiative: {
     base: number;
     total: number;
+    dexMod?: number;
+    feats?: number;
   };
   
   // Saving throws with base (editable) and total (calculated)
   fortitude: {
     base: number;
     total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
   };
   reflex: {
     base: number;
     total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
   };
   will: {
     base: number;
     total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
   };
 }
 
@@ -50,9 +66,15 @@ export interface AbilityScoreState {
   base_attributes: Record<string, number>;
   attribute_modifiers: Record<string, number>;
   point_buy_cost: number;
-  racial_modifiers: Record<string, number>;
-  item_modifiers: Record<string, number>;
-  level_up_modifiers: Record<string, number>;
+  detailed_modifiers: {
+    racial_modifiers: Record<string, number>;
+    item_modifiers: Record<string, number>;
+    level_up_modifiers: Record<string, number>;
+    total_modifiers: Record<string, number>;
+    base_modifiers: Record<string, number>;
+    enhancement_modifiers: Record<string, number>;
+    temporary_modifiers: Record<string, number>;
+  };
   effective_attributes: Record<string, number>;
   total_modifiers: Record<string, number>;
   derived_stats: {
@@ -84,12 +106,35 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   // Local state for optimistic updates
   const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
   const [localStatsOverrides, setLocalStatsOverrides] = useState<Partial<CharacterStats>>({});
+  
+  // Race data state for combined racial modifiers
+  const [raceData, setRaceData] = useState<RaceDataResponse | null>(null);
 
   // Reset local overrides when abilityScoreData changes (new character loaded)
   useEffect(() => {
     setLocalAbilityScoreOverrides({});
     setLocalStatsOverrides({});
   }, [abilityScoreData]);
+
+  // Fetch race data when character changes to get combined racial modifiers
+  useEffect(() => {
+    const fetchRaceData = async () => {
+      if (!characterId) {
+        setRaceData(null);
+        return;
+      }
+      
+      try {
+        const raceResponse = await CharacterAPI.getRaceData(characterId);
+        setRaceData(raceResponse);
+      } catch (error) {
+        console.error('Failed to fetch race data:', error);
+        setRaceData(null);
+      }
+    };
+    
+    fetchRaceData();
+  }, [characterId]);
 
   // Utility function to calculate ability modifier
   const calculateModifier = useCallback((value: number): number => {
@@ -106,9 +151,10 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       // If we have local overrides (user is editing), calculate effective value
       if (localAbilityScoreOverrides[attrKey] !== undefined) {
         const baseValue = localAbilityScoreOverrides[attrKey];
-        const racial = abilityScoreData.racial_modifiers?.[attrKey] ?? 0;
-        const item = abilityScoreData.item_modifiers?.[attrKey] ?? 0;
-        const levelup = abilityScoreData.level_up_modifiers?.[attrKey] ?? 0;
+        // Use combined racial modifiers from race manager instead of separate racial_modifiers
+        const racial = raceData?.ability_modifiers?.[attrKey] ?? 0;
+        const item = abilityScoreData.detailed_modifiers?.item_modifiers?.[attrKey] ?? 0;
+        const levelup = abilityScoreData.detailed_modifiers?.level_up_modifiers?.[attrKey] ?? 0;
         return baseValue + racial + item + levelup;
       }
       // Otherwise use the backend's calculated effective attributes
@@ -127,8 +173,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         modifier: abilityScoreData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')), 
         baseValue: getEditValue('Str'),
         breakdown: {
-          racial: abilityScoreData.racial_modifiers?.Str ?? 0,
-          equipment: abilityScoreData.item_modifiers?.Str ?? 0
+          racial: raceData?.ability_modifiers?.Str ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Str ?? 0
         }
       },
       { 
@@ -138,8 +184,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         modifier: abilityScoreData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')), 
         baseValue: getEditValue('Dex'),
         breakdown: {
-          racial: abilityScoreData.racial_modifiers?.Dex ?? 0,
-          equipment: abilityScoreData.item_modifiers?.Dex ?? 0
+          racial: raceData?.ability_modifiers?.Dex ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Dex ?? 0
         }
       },
       { 
@@ -149,8 +195,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         modifier: abilityScoreData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')), 
         baseValue: getEditValue('Con'),
         breakdown: {
-          racial: abilityScoreData.racial_modifiers?.Con ?? 0,
-          equipment: abilityScoreData.item_modifiers?.Con ?? 0
+          racial: raceData?.ability_modifiers?.Con ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Con ?? 0
         }
       },
       { 
@@ -160,8 +206,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         modifier: abilityScoreData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')), 
         baseValue: getEditValue('Int'),
         breakdown: {
-          racial: abilityScoreData.racial_modifiers?.Int ?? 0,
-          equipment: abilityScoreData.item_modifiers?.Int ?? 0
+          racial: raceData?.ability_modifiers?.Int ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Int ?? 0
         }
       },
       { 
@@ -171,8 +217,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         modifier: abilityScoreData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')), 
         baseValue: getEditValue('Wis'),
         breakdown: {
-          racial: abilityScoreData.racial_modifiers?.Wis ?? 0,
-          equipment: abilityScoreData.item_modifiers?.Wis ?? 0
+          racial: raceData?.ability_modifiers?.Wis ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Wis ?? 0
         }
       },
       { 
@@ -182,12 +228,12 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         modifier: abilityScoreData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')), 
         baseValue: getEditValue('Cha'),
         breakdown: {
-          racial: abilityScoreData.racial_modifiers?.Cha ?? 0,
-          equipment: abilityScoreData.item_modifiers?.Cha ?? 0
+          racial: raceData?.ability_modifiers?.Cha ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Cha ?? 0
         }
       },
     ];
-  }, [abilityScoreData, localAbilityScoreOverrides, t, calculateModifier]);
+  }, [abilityScoreData, localAbilityScoreOverrides, raceData, t, calculateModifier]);
 
   // Transform stats from attributeData with local overrides
   const stats = useMemo((): CharacterStats => {
@@ -223,6 +269,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         
         let base = 0;
         let total = 0;
+        let result: any = { base, total };
         
         // Get total value
         total = (typeof objData.total === 'number' ? objData.total : 
@@ -238,21 +285,35 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
               // Natural Armor comes from components.natural (from NaturalAC GFF field)
               const components = objData.components as Record<string, unknown> | undefined;
               base = (typeof components?.natural === 'number' ? components.natural : 0);
+              // Add detailed AC breakdown
+              result.dexMod = (typeof components?.dex === 'number' ? components.dex : 0);
+              result.equipment = ((typeof components?.armor === 'number' ? components.armor : 0) + 
+                                (typeof components?.shield === 'number' ? components.shield : 0));
               break;
             case 'initiative':
               // Initiative base is misc_bonus (editable miscellaneous bonus)
               base = (typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 0);
+              // Add detailed initiative breakdown
+              result.dexMod = (typeof objData.dex_modifier === 'number' ? objData.dex_modifier : 0);
+              result.feats = (typeof objData.improved_initiative === 'number' ? objData.improved_initiative : 0);
               break;
             case 'fortitude':
             case 'reflex':
             case 'will':
               // Saving throws base comes from the 'base' field in the save object
               base = (typeof objData.base === 'number' ? objData.base : 0);
+              // Add detailed save breakdown
+              result.abilityMod = (typeof objData.ability === 'number' ? objData.ability : 0);
+              result.classMod = (typeof objData.base === 'number' ? objData.base : 0); // Class contribution is the base
+              result.racial = (typeof objData.racial === 'number' ? objData.racial : 0);
+              result.feat = (typeof objData.feat === 'number' ? objData.feat : 0);
               break;
           }
         }
         
-        return { base, total };
+        result.base = base;
+        result.total = total;
+        return result;
       }
       return { base: 0, total: 0 };
     };

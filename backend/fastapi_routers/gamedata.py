@@ -285,6 +285,68 @@ def get_races(search: str = None, limit: int = None, offset: int = 0):
     return get_table_data("racialtypes", search, limit, offset)
 
 
+@router.get("/subraces")
+def get_subraces(search: str = None, limit: int = None, offset: int = 0):
+    """Get subraces from racialsubtypes.2da - includes Aasimar, Tiefling, etc."""
+    return get_table_data("racialsubtypes", search, limit, offset)
+
+
+@router.get("/races/{race_id}/subraces")
+def get_subraces_for_race(race_id: int):
+    """Get available subraces for a specific base race"""
+    from fastapi_models import GameDataTableResponse
+    from gamedata.services.game_rules_service import GameRulesService
+    
+    try:
+        rules_service = GameRulesService()
+        
+        # Get all subraces
+        all_subraces_list = rules_service.get_table('racialsubtypes')
+        # Convert list to dict with indices as keys
+        all_subraces = {i: subrace for i, subrace in enumerate(all_subraces_list)}
+        
+        # Filter by base race
+        filtered_subraces = {}
+        for subrace_id, subrace_data in all_subraces.items():
+            # Check BaseRace field
+            base_race = getattr(subrace_data, 'BaseRace', None)
+            if base_race is not None:
+                try:
+                    if int(base_race) == race_id:
+                        # Check if it's player accessible
+                        player_race = getattr(subrace_data, 'PlayerRace', 1)
+                        if int(player_race) == 1:
+                            filtered_subraces[subrace_id] = subrace_data
+                except (ValueError, TypeError):
+                    continue
+        
+        # Convert to the same format as table data
+        result_data = []
+        for subrace_id, subrace_data in filtered_subraces.items():
+            subrace_dict = {'id': subrace_id}
+            # Add all attributes
+            for attr in dir(subrace_data):
+                if not attr.startswith('_') and not callable(getattr(subrace_data, attr)):
+                    value = getattr(subrace_data, attr)
+                    subrace_dict[attr] = value
+            result_data.append(subrace_dict)
+        
+        return GameDataTableResponse(
+            table_name="racialsubtypes",
+            data=result_data,
+            total_count=len(result_data),
+            limit=None,
+            offset=0
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get subraces for race {race_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get subraces: {str(e)}"
+        )
+
+
 @router.get("/classes") 
 def get_classes(search: str = None, limit: int = None, offset: int = 0, playable_only: bool = False):
     """Get classes - convenience wrapper for table endpoint with playable filter"""

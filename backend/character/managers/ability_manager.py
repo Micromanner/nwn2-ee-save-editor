@@ -1223,21 +1223,35 @@ class AbilityManager(EventEmitter):
         }
 
     def get_racial_modifiers(self) -> Dict[str, int]:
-        """Get racial attribute modifiers"""
+        """Get combined racial + subrace attribute modifiers"""
         race_id = self.gff.get('Race', 0)
+        subrace = self.gff.get('Subrace', '')
+        
         race = self.game_rules_service.get_by_id('racialtypes', race_id)
         if not race:
             logger.warning(f"Unknown race ID: {race_id}")
             return {attr: 0 for attr in self.ATTRIBUTES}
         
-        # Get racial modifiers using field mapping utility for safe access
+        # Get base racial modifiers using field mapping utility for safe access
         from gamedata.dynamic_loader.field_mapping_utility import field_mapper
         racial_mods = field_mapper.get_ability_modifiers(race)
         
-        # Ensure all attributes are present with default 0
-        result = {attr: 0 for attr in self.ATTRIBUTES}
-        result.update(racial_mods)
+        # Get subrace modifiers if subrace is specified
+        subrace_mods = {attr: 0 for attr in self.ATTRIBUTES}
+        if subrace:
+            race_manager = self.character_manager.get_manager('race')
+            if race_manager:
+                subrace_data = race_manager._get_subrace_data(subrace)
+                if subrace_data:
+                    subrace_mods = field_mapper.get_ability_modifiers(subrace_data)
+                    logger.debug(f"Subrace {subrace} modifiers: {subrace_mods}")
         
+        # Combine base race and subrace modifiers
+        result = {attr: 0 for attr in self.ATTRIBUTES}
+        for attr in self.ATTRIBUTES:
+            result[attr] = racial_mods.get(attr, 0) + subrace_mods.get(attr, 0)
+        
+        logger.debug(f"Combined racial modifiers (race {race_id} + subrace '{subrace}'): {result}")
         return result
     
     def get_item_modifiers(self) -> Dict[str, int]:

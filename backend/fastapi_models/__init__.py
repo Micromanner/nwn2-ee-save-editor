@@ -276,7 +276,10 @@ from .race_models import (
     RaceChangeRequest,
     RaceChangeResponse,
     RaceValidationRequest,
-    RaceValidationResponse
+    RaceValidationResponse,
+    SubraceInfo,
+    AvailableSubracesResponse,
+    SubraceValidationResponse
 )
 
 # Content models
@@ -437,7 +440,8 @@ __all__ = [
     
     # Race models
     'CurrentRace', 'RaceSummary', 'RaceChangeRequest', 'RaceChangeResponse', 
-    'RaceValidationRequest', 'RaceValidationResponse',
+    'RaceValidationRequest', 'RaceValidationResponse', 'SubraceInfo',
+    'AvailableSubracesResponse', 'SubraceValidationResponse',
     
     # Save models - Updated to match SaveManager methods
     'SaveDetails', 'SaveSummaryResponse', 'SaveBreakdownResponse', 'SaveTotalsResponse',

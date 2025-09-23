@@ -1867,8 +1867,20 @@
 /* Calculation Components */
 .breakdown-calculated {
   color: rgb(var(--color-text-muted));
-  font-style: italic;
   font-size: 0.8rem;
+}
+
+.breakdown-calculated.positive {
+  color: rgb(var(--color-success));
+}
+
+.breakdown-calculated.negative {
+  color: rgb(var(--color-error));
+}
+
+.breakdown-calculated.zero {
+  color: rgb(var(--color-text-muted));
+  opacity: 0.8;
 }
 
 .calculation-hint {

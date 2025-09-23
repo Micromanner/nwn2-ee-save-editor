@@ -196,6 +196,18 @@ export interface AlignmentUpdateResponse {
   alignment_string: string;
 }
 
+export interface RaceDataResponse {
+  race_id: number;
+  race_name: string;
+  subrace: string;
+  size: number;
+  size_name: string;
+  base_speed: number;
+  ability_modifiers: Record<string, number>;
+  racial_feats: number[];
+  favored_class?: number;
+}
+
 export interface CombatUpdateResponse {
   success: boolean;
   updated_value: number;
@@ -674,6 +686,15 @@ export class CharacterAPI {
     }
     
     return { success: true, updated: Object.keys(saveUpdates) };
+  }
+
+  // Race manager API methods
+  static async getRaceData(characterId: number): Promise<RaceDataResponse> {
+    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/race/current`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch race data: ${response.statusText}`);
+    }
+    return response.json();
   }
 
   // Map backend data structure to frontend interface

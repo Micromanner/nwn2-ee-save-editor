@@ -14,22 +14,38 @@ interface CharacterStats {
   armorClass: {
     base: number; // Natural Armor bonus
     total: number;
+    dexMod?: number;
+    equipment?: number;
   };
   initiative: {
     base: number; // Miscellaneous Initiative bonus
     total: number;
+    dexMod?: number;
+    feats?: number;
   };
   fortitude: {
     base: number;
     total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
   };
   reflex: {
     base: number;
     total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
   };
   will: {
     base: number;
     total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
   };
 }
 
@@ -70,6 +86,13 @@ export default function VitalStatisticsSection({
   };
 
   const healthPercentage = Math.min(100, (stats.hitPoints / stats.maxHitPoints) * 100);
+
+  // Helper function to get modifier class for color coding
+  const getModifierClass = (modifier: number) => {
+    if (modifier > 0) return 'positive';
+    if (modifier < 0) return 'negative';
+    return 'zero';
+  };
 
   // Helper functions for updating stats via parent callback
   const updateArmorClass = (base: number) => {
@@ -187,14 +210,14 @@ export default function VitalStatisticsSection({
               <div className="breakdown-row">
                 <span className="breakdown-label">DEX Mod:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.armorClass.dexMod ?? 0)}`}>{formatModifier(stats.armorClass.dexMod ?? 0)}</span>
                 </div>
               </div>
               
               <div className="breakdown-row">
                 <span className="breakdown-label">Equipment:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.armorClass.equipment ?? 0)}`}>{formatModifier(stats.armorClass.equipment ?? 0)}</span>
                 </div>
               </div>
               
@@ -206,7 +229,6 @@ export default function VitalStatisticsSection({
                 </div>
               </div>
               
-              <div className="calculation-hint">10 + Natural + DEX + Equipment</div>
             </div>
           </Card>
 
@@ -250,9 +272,16 @@ export default function VitalStatisticsSection({
               </div>
               
               <div className="breakdown-row">
+                <span className="breakdown-label">DEX Mod:</span>
+                <div className="breakdown-value-container">
+                  <span className={`breakdown-value ${getModifierClass(stats.initiative.dexMod ?? 0)}`}>{formatModifier(stats.initiative.dexMod ?? 0)}</span>
+                </div>
+              </div>
+              
+              <div className="breakdown-row">
                 <span className="breakdown-label">Feats:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.initiative.feats ?? 0)}`}>{formatModifier(stats.initiative.feats ?? 0)}</span>
                 </div>
               </div>
               
@@ -264,7 +293,6 @@ export default function VitalStatisticsSection({
                 </div>
               </div>
               
-              <div className="calculation-hint">Misc + Feats</div>
             </div>
           </Card>
 
@@ -310,14 +338,14 @@ export default function VitalStatisticsSection({
               <div className="breakdown-row">
                 <span className="breakdown-label">Class:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.fortitude.classMod ?? 0)}`}>{formatModifier(stats.fortitude.classMod ?? 0)}</span>
                 </div>
               </div>
               
               <div className="breakdown-row">
                 <span className="breakdown-label">CON Mod:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.fortitude.abilityMod ?? 0)}`}>{formatModifier(stats.fortitude.abilityMod ?? 0)}</span>
                 </div>
               </div>
               
@@ -329,7 +357,6 @@ export default function VitalStatisticsSection({
                 </div>
               </div>
               
-              <div className="calculation-hint">Class + CON + Misc</div>
             </div>
           </Card>
 
@@ -375,14 +402,14 @@ export default function VitalStatisticsSection({
               <div className="breakdown-row">
                 <span className="breakdown-label">Class:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.reflex.classMod ?? 0)}`}>{formatModifier(stats.reflex.classMod ?? 0)}</span>
                 </div>
               </div>
               
               <div className="breakdown-row">
                 <span className="breakdown-label">DEX Mod:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.reflex.abilityMod ?? 0)}`}>{formatModifier(stats.reflex.abilityMod ?? 0)}</span>
                 </div>
               </div>
               
@@ -394,7 +421,6 @@ export default function VitalStatisticsSection({
                 </div>
               </div>
               
-              <div className="calculation-hint">Class + DEX + Misc</div>
             </div>
           </Card>
 
@@ -440,14 +466,14 @@ export default function VitalStatisticsSection({
               <div className="breakdown-row">
                 <span className="breakdown-label">Class:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.will.classMod ?? 0)}`}>{formatModifier(stats.will.classMod ?? 0)}</span>
                 </div>
               </div>
               
               <div className="breakdown-row">
                 <span className="breakdown-label">WIS Mod:</span>
                 <div className="breakdown-value-container">
-                  <span className="breakdown-value breakdown-calculated">TODO</span>
+                  <span className={`breakdown-value ${getModifierClass(stats.will.abilityMod ?? 0)}`}>{formatModifier(stats.will.abilityMod ?? 0)}</span>
                 </div>
               </div>
               
@@ -459,7 +485,6 @@ export default function VitalStatisticsSection({
                 </div>
               </div>
               
-              <div className="calculation-hint">Class + WIS + Misc</div>
             </div>
           </Card>
 

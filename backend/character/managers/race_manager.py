@@ -72,6 +72,153 @@ class RaceManager(EventEmitter):
             logger.warning(f"Could not load race data for ID {race_id}: {e}")
             return None
     
+    def _get_subrace_data(self, subrace_name):
+        """
+        Get subrace data from racialsubtypes.2da by name
+        
+        Args:
+            subrace_name: The subrace name to look up (string or int)
+            
+        Returns:
+            Subrace data object or None if not found
+        """
+        # Handle both string and integer inputs
+        if not subrace_name:
+            return None
+            
+        # Convert to string if it's an integer
+        if isinstance(subrace_name, int):
+            if subrace_name == 0:
+                return None  # 0 typically means no subrace
+            subrace_name = str(subrace_name)
+        
+        # Handle string inputs
+        if isinstance(subrace_name, str) and not subrace_name.strip():
+            return None
+            
+        try:
+            # Get all subrace data and find by name
+            all_subraces_list = self.game_rules_service.get_table('racialsubtypes')
+            for subrace_data in all_subraces_list:
+                # Check both name and label fields
+                if (field_mapper.get_field_value(subrace_data, 'subrace_name', '').lower() == subrace_name.lower() or
+                    field_mapper.get_field_value(subrace_data, 'subrace_label', '').lower() == subrace_name.lower()):
+                    return subrace_data
+                    
+        except Exception as e:
+            logger.warning(f"Could not load subrace data for '{subrace_name}': {e}")
+            
+        return None
+    
+    def _get_subrace_name(self, subrace_input) -> str:
+        """
+        Convert subrace ID or name to standardized subrace name string
+        
+        Args:
+            subrace_input: The subrace identifier (int ID or string name)
+            
+        Returns:
+            Subrace name string, or empty string if not found/invalid
+        """
+        if not subrace_input:
+            return ''
+            
+        # If it's already a string, return it
+        if isinstance(subrace_input, str):
+            return subrace_input.strip()
+            
+        # If it's an integer ID, look up the name
+        if isinstance(subrace_input, int):
+            if subrace_input == 0:
+                return ''  # 0 typically means no subrace
+                
+            try:
+                # Get all subrace data and find by ID (row index)
+                all_subraces_list = self.game_rules_service.get_table('racialsubtypes')
+                if subrace_input < len(all_subraces_list):
+                    subrace_data = all_subraces_list[subrace_input]
+                    # Get the subrace name from the data
+                    return field_mapper.get_field_value(subrace_data, 'subrace_name', '')
+                    
+            except Exception as e:
+                logger.warning(f"Could not load subrace name for ID {subrace_input}: {e}")
+                
+        return ''
+    
+    def get_available_subraces(self, race_id: int) -> List[Dict[str, Any]]:
+        """
+        Get list of available subraces for a given race
+        
+        Args:
+            race_id: The base race ID
+            
+        Returns:
+            List of dicts with subrace information
+        """
+        subraces = []
+        
+        try:
+            all_subraces_list = self.game_rules_service.get_table('racialsubtypes')
+            for subrace_id, subrace_data in enumerate(all_subraces_list):
+                base_race = field_mapper.get_field_value(subrace_data, 'base_race', 0)
+                if field_mapper._safe_int(base_race) == race_id:
+                    # Check if it's player accessible
+                    player_race = field_mapper.get_field_value(subrace_data, 'player_race', 1)
+                    if field_mapper._safe_bool(player_race):
+                        subraces.append({
+                            'id': subrace_id,
+                            'name': field_mapper.get_field_value(subrace_data, 'subrace_name', ''),
+                            'label': field_mapper.get_field_value(subrace_data, 'subrace_label', ''),
+                            'base_race': race_id
+                        })
+                        
+        except Exception as e:
+            logger.warning(f"Could not load subraces for race {race_id}: {e}")
+            
+        return subraces
+    
+    def validate_subrace(self, race_id: int, subrace_name) -> Tuple[bool, List[str]]:
+        """
+        Validate that a subrace is compatible with a race
+        
+        Args:
+            race_id: The base race ID
+            subrace_name: The subrace name (string or int)
+            
+        Returns:
+            Tuple of (is_valid, error_messages)
+        """
+        errors = []
+        
+        # Handle different input types
+        if not subrace_name:
+            return True, errors  # Empty/None subrace is valid
+            
+        if isinstance(subrace_name, int) and subrace_name == 0:
+            return True, errors  # 0 typically means no subrace
+            
+        if isinstance(subrace_name, str) and not subrace_name.strip():
+            return True, errors  # Empty string subrace is valid
+            
+        subrace_data = self._get_subrace_data(subrace_name)
+        if not subrace_data:
+            errors.append(f"Unknown subrace: {subrace_name}")
+            return False, errors
+            
+        # Check if subrace belongs to the base race
+        base_race = field_mapper.get_field_value(subrace_data, 'base_race', 0)
+        if field_mapper._safe_int(base_race) != race_id:
+            errors.append(f"Subrace '{subrace_name}' does not belong to race ID {race_id}")
+            return False, errors
+            
+        # Check if it's player accessible
+        player_race = field_mapper.get_field_value(subrace_data, 'player_race', 1)
+        if not field_mapper._safe_bool(player_race):
+            errors.append(f"Subrace '{subrace_name}' is not available to players")
+            return False, errors
+            
+        return True, errors
+    
     def change_race(self, new_race_id: int, new_subrace: str = '', 
                    preserve_feats: bool = True) -> Dict[str, Any]:
         """
@@ -94,6 +241,14 @@ class RaceManager(EventEmitter):
         new_race = self._get_race_data(new_race_id)
         if not new_race:
             raise ValueError(f"Unknown race ID: {new_race_id}")
+            
+        # Validate subrace if provided
+        if new_subrace:
+            subrace_valid, subrace_errors = self.validate_subrace(new_race_id, new_subrace)
+            if not subrace_valid:
+                raise ValueError(f"Invalid subrace: {'; '.join(subrace_errors)}")
+        
+        new_subrace_data = self._get_subrace_data(new_subrace) if new_subrace else None
         
         changes = {
             'old_race': {
@@ -132,8 +287,12 @@ class RaceManager(EventEmitter):
             char.subrace_id = 0  # NWN2 doesn't have subrace IDs
             char.subrace_name = new_subrace
         
-        # 3. Apply new racial ability modifiers
+        # 3. Apply new racial ability modifiers (base race)
         self._apply_racial_modifiers(new_race, changes)
+        
+        # 3b. Apply subrace ability modifiers if subrace is specified
+        if new_subrace_data:
+            self._apply_subrace_modifiers(new_subrace_data, changes)
         
         # 4. Update size
         old_size = self.gff.get('CreatureSize', 4)
@@ -160,6 +319,10 @@ class RaceManager(EventEmitter):
         if not preserve_feats:
             self._remove_racial_feats(old_race_id, changes)
         self._add_racial_feats(new_race_id, changes)
+        
+        # 6b. Handle subrace feats if subrace is specified
+        if new_subrace_data:
+            self._add_subrace_feats(new_subrace_data, changes)
         
         # 7. Emit race changed event
         event = RaceChangedEvent(
@@ -269,6 +432,61 @@ class RaceManager(EventEmitter):
                         'name': feat_info['name']
                     })
     
+    def _apply_subrace_modifiers(self, subrace_data: Any, changes: Dict[str, Any]):
+        """Apply ability modifiers from subrace using dynamic data (stacks with base race)"""
+        subrace_mods = field_mapper.get_ability_modifiers(subrace_data)
+        logger.debug(f"Applying subrace modifiers: {subrace_mods}")
+        
+        # Always use AttributeManager for proper cascading effects
+        attr_manager = self.character_manager.get_manager('ability')
+        
+        for attr, mod in subrace_mods.items():
+            if mod != 0:
+                current = self.gff.get(attr, 10)
+                new_value = current + mod
+                
+                if attr_manager:
+                    # Use AttributeManager to handle cascading effects
+                    attr_manager.set_attribute(attr, new_value, validate=False)
+                else:
+                    # Fallback only if AttributeManager is not available
+                    logger.warning(f"AttributeManager not available, setting {attr} directly")
+                    self.gff.set(attr, new_value)
+                
+                changes['ability_changes'].append({
+                    'attribute': attr,
+                    'old_value': current,
+                    'new_value': new_value,
+                    'modifier_applied': mod,
+                    'source': 'subrace'
+                })
+    
+    def _add_subrace_feats(self, subrace_data: Any, changes: Dict[str, Any]):
+        """Add feats granted by subrace"""
+        # Try to get feats from feats table reference first
+        feats_table = field_mapper.get_field_value(subrace_data, 'feats_table', '')
+        
+        subrace_feats = []
+        if feats_table and feats_table != '****':
+            # TODO: Load feats from referenced table when that functionality is available
+            logger.debug(f"Subrace references feats table: {feats_table}")
+        
+        # Also try direct feat fields as fallback
+        direct_feats = field_mapper.get_racial_feats(subrace_data)
+        subrace_feats.extend(direct_feats)
+        
+        feat_manager = self.character_manager.get_manager('feat')
+        if feat_manager:
+            for feat_id in subrace_feats:
+                if not feat_manager.has_feat(feat_id):
+                    feat_manager.add_feat(feat_id, source='subrace')
+                    feat_info = feat_manager.get_feat_info(feat_id)
+                    changes['feat_changes']['added'].append({
+                        'id': feat_id,
+                        'name': feat_info['name'],
+                        'source': 'subrace'
+                    })
+    
     def _get_racial_feats(self, race_id: int) -> List[int]:
         """Get list of feats granted by a race using field mapping utility"""
         race_data = self._get_race_data(race_id)
@@ -350,10 +568,14 @@ class RaceManager(EventEmitter):
         return size_names.get(size, 'Unknown')
     
     def get_racial_properties(self) -> Dict[str, Any]:
-        """Get comprehensive racial properties using dynamic data"""
+        """Get comprehensive racial properties using dynamic data, including subrace"""
         race_id = self.gff.get('Race', 0)
-        subrace = self.gff.get('Subrace', '')
+        subrace_raw = self.gff.get('Subrace', '')
         
+        # Convert subrace to string if it's an integer
+        subrace = self._get_subrace_name(subrace_raw) if subrace_raw else ''
+        
+        # Base race properties
         properties = {
             'race_id': race_id,
             'race_name': self._get_race_name(race_id),
@@ -365,6 +587,34 @@ class RaceManager(EventEmitter):
             'racial_feats': self._get_racial_feats(race_id),
             'favored_class': self._get_favored_class(race_id)
         }
+        
+        # Add subrace properties if subrace is specified
+        if subrace:
+            subrace_data = self._get_subrace_data(subrace)
+            if subrace_data:
+                subrace_props = field_mapper.get_subrace_properties(subrace_data)
+                
+                # Combine ability modifiers (base race + subrace)
+                combined_modifiers = properties['ability_modifiers'].copy()
+                for attr, mod in subrace_props['ability_modifiers'].items():
+                    combined_modifiers[attr] += mod
+                
+                properties.update({
+                    'subrace_data': subrace_props,
+                    'ability_modifiers': combined_modifiers,  # Combined modifiers
+                    'base_race_modifiers': properties['ability_modifiers'],  # Keep separate for reference
+                    'subrace_modifiers': subrace_props['ability_modifiers'],
+                    'effective_character_level': subrace_props.get('ecl', 0),
+                    'subrace_favored_class': subrace_props.get('favored_class', -1),
+                    'available_subraces': self.get_available_subraces(race_id)
+                })
+                
+                # Override favored class if subrace has one
+                if subrace_props.get('has_favored_class') and subrace_props.get('favored_class', -1) >= 0:
+                    properties['favored_class'] = subrace_props['favored_class']
+        else:
+            # No subrace, add available subraces list
+            properties['available_subraces'] = self.get_available_subraces(race_id)
         
         return properties
     
@@ -392,8 +642,8 @@ class RaceManager(EventEmitter):
                     pass
         return None
     
-    def validate_race_change(self, new_race_id: int) -> Tuple[bool, List[str]]:
-        """Validate race change - only check for race ID existence (crash prevention)"""
+    def validate_race_change(self, new_race_id: int, new_subrace: str = '') -> Tuple[bool, List[str]]:
+        """Validate race change - check for race ID existence and subrace compatibility"""
         errors = []
         
         # Check if race exists using dynamic data - this prevents crashes/corruption
@@ -402,7 +652,13 @@ class RaceManager(EventEmitter):
             errors.append(f"Unknown race ID: {new_race_id}")
             return False, errors
         
-        # Remove game rule validations - users can change to any race that exists
+        # Validate subrace if provided
+        if new_subrace:
+            subrace_valid, subrace_errors = self.validate_subrace(new_race_id, new_subrace)
+            if not subrace_valid:
+                errors.extend(subrace_errors)
+        
+        # Remove other game rule validations - users can change to any race that exists
         # This includes non-player races if they exist in the data files
         
         return len(errors) == 0, errors

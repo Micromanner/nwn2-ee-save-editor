@@ -103,13 +103,15 @@ def get_current_race(
 def validate_race_change(
     character_id: int,
     race_id: int,
-    manager: CharacterManagerDep
+    manager: CharacterManagerDep,
+    subrace: Optional[str] = None
 ):
     """
     Validate if race change is allowed.
     
     Checks:
     - Race exists in racialtypes.2da
+    - Subrace is valid for the race (if provided)
     - Character meets any special requirements
     - Compatibility with current classes
     
@@ -121,8 +123,8 @@ def validate_race_change(
         
         race_manager = manager.get_manager('race')
         
-        # Use existing race manager validation method
-        valid, errors = race_manager.validate_race_change(race_id)
+        # Use enhanced race manager validation method with subrace support
+        valid, errors = race_manager.validate_race_change(race_id, subrace or '')
         
         return RaceValidationResponse(
             valid=valid,
@@ -139,6 +141,81 @@ def validate_race_change(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to validate race change: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/race/{race_id}/subraces")
+def get_available_subraces_for_character(
+    character_id: int,
+    race_id: int,
+    manager: CharacterManagerDep
+):
+    """
+    Get available subraces for a specific race for this character.
+    
+    Returns subraces that are:
+    - Compatible with the specified race
+    - Available to players
+    - Meet any character-specific requirements
+    """
+    try:
+        # Lazy imports for performance
+        from fastapi_models import AvailableSubracesResponse
+        
+        race_manager = manager.get_manager('race')
+        
+        # Use race manager method to get available subraces
+        available_subraces = race_manager.get_available_subraces(race_id)
+        
+        return AvailableSubracesResponse(
+            race_id=race_id,
+            subraces=available_subraces
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get available subraces for character {character_id}, race {race_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available subraces: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/race/subraces/validate")
+def validate_subrace(
+    character_id: int,
+    race_id: int,
+    subrace: str,
+    manager: CharacterManagerDep
+):
+    """
+    Validate if a specific subrace is compatible with a race.
+    
+    Checks:
+    - Subrace exists in racialsubtypes.2da
+    - Subrace belongs to the specified base race
+    - Subrace is available to players
+    """
+    try:
+        # Lazy imports for performance
+        from fastapi_models import SubraceValidationResponse
+        
+        race_manager = manager.get_manager('race')
+        
+        # Use race manager method to validate subrace
+        valid, errors = race_manager.validate_subrace(race_id, subrace)
+        
+        return SubraceValidationResponse(
+            race_id=race_id,
+            subrace=subrace,
+            valid=valid,
+            errors=errors
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to validate subrace for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate subrace: {str(e)}"
         )
 
 

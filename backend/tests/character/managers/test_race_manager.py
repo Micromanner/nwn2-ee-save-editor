@@ -11,6 +11,7 @@ from typing import Dict, Any
 from character.managers.race_manager import RaceManager, RaceChangedEvent
 from character.events import EventType, EventData
 from character.character_manager import CharacterManager, GFFDataWrapper
+from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 
 @pytest.fixture
@@ -88,12 +89,73 @@ def mock_game_data_loader():
         )
     }
     
+    # Subrace data (racialsubtypes.2da) - Using proper Mock configuration
+    sun_elf = Mock()
+    sun_elf.configure_mock(
+        Label="SunElf",
+        Name="Sun Elf",
+        BaseRace=1,  # Elf
+        ECL=0,
+        StrAdjust=0, DexAdjust=0, ConAdjust=0,
+        IntAdjust=2, WisAdjust=0, ChaAdjust=0,  # Additional +2 Int
+        Favored=1,  # Wizard
+        HasFavoredClass=1,
+        PlayerRace=1,
+        FeatsTable="****",
+        Feat0=None
+    )
+    
+    moon_elf = Mock()
+    moon_elf.configure_mock(
+        Label="MoonElf", 
+        Name="Moon Elf",
+        BaseRace=1,  # Elf
+        ECL=0,
+        StrAdjust=0, DexAdjust=2, ConAdjust=0,  # Additional +2 Dex
+        IntAdjust=0, WisAdjust=0, ChaAdjust=0,
+        Favored=2,  # Rogue
+        HasFavoredClass=1,
+        PlayerRace=1,
+        FeatsTable="****",
+        Feat0=20  # Special Moon Elf feat
+    )
+    
+    gray_dwarf = Mock()
+    gray_dwarf.configure_mock(
+        Label="GrayDwarf",
+        Name="Gray Dwarf", 
+        BaseRace=2,  # Dwarf
+        ECL=1,  # Has level adjustment
+        StrAdjust=2, DexAdjust=0, ConAdjust=0,  # Additional +2 Str
+        IntAdjust=0, WisAdjust=0, ChaAdjust=-2,  # Additional -2 Cha
+        Favored=0,  # Fighter
+        HasFavoredClass=1,
+        PlayerRace=1,
+        FeatsTable="****",
+        Feat0=21,  # Special Gray Dwarf feat
+        Feat1=22   # Another feat
+    )
+    
+    subrace_data = {
+        0: sun_elf,
+        1: moon_elf,
+        2: gray_dwarf
+    }
+    
     def get_by_id_side_effect(table_name, race_id):
         if table_name == 'racialtypes':
             return race_data.get(race_id, None)
+        elif table_name == 'racialsubtypes':
+            return subrace_data.get(race_id, None)
         return None
     
+    def get_all_side_effect(table_name):
+        if table_name == 'racialsubtypes':
+            return subrace_data
+        return {}
+    
     mock_loader.get_by_id.side_effect = get_by_id_side_effect
+    mock_loader.get_all.side_effect = get_all_side_effect
     return mock_loader
 
 
@@ -129,6 +191,7 @@ def mock_character_manager(sample_character_data, mock_game_data_loader):
     mock_cm.character_data = sample_character_data
     mock_cm.gff = GFFDataWrapper(sample_character_data)
     mock_cm.game_data_loader = mock_game_data_loader
+    mock_cm.rules_service = mock_game_data_loader
     
     # Mock character model
     mock_cm.character_model = Mock()
@@ -182,7 +245,7 @@ class TestRaceManagerInitialization:
         """Test RaceManager initialization"""
         assert race_manager.character_manager == mock_character_manager
         assert race_manager.gff == mock_character_manager.gff
-        assert race_manager.game_data_loader == mock_character_manager.game_data_loader
+        assert race_manager.game_rules_service == mock_character_manager.rules_service
         assert len(race_manager._race_data_cache) == 0
         
         # Check original race is cached
@@ -226,8 +289,8 @@ class TestRaceDataRetrieval:
         race_data2 = race_manager._get_race_data(0) 
         assert race_data1 is race_data2
         
-        # Verify game data loader was only called once
-        race_manager.game_data_loader.get_by_id.assert_called_once_with('racialtypes', 0)
+        # Verify game rules service was only called once
+        race_manager.game_rules_service.get_by_id.assert_called_once_with('racialtypes', 0)
 
 
 class TestRaceChange:
@@ -235,18 +298,18 @@ class TestRaceChange:
     
     def test_basic_race_change(self, race_manager):
         """Test basic race change from Human to Elf"""
-        changes = race_manager.change_race(1, "Wood Elf")
+        changes = race_manager.change_race(1, "Sun Elf")  # Use valid subrace
         
         # Verify race was changed
         assert race_manager.gff.get('Race') == 1
-        assert race_manager.gff.get('Subrace') == "Wood Elf"
+        assert race_manager.gff.get('Subrace') == "Sun Elf"
         
         # Verify changes structure
         assert changes['old_race']['id'] == 0
         assert changes['old_race']['name'] == "Human"
         assert changes['new_race']['id'] == 1
         assert changes['new_race']['name'] == "Elf"
-        assert changes['new_race']['subrace'] == "Wood Elf"
+        assert changes['new_race']['subrace'] == "Sun Elf"
     
     def test_ability_modifier_changes(self, race_manager):
         """Test ability modifiers are correctly applied"""
@@ -305,17 +368,17 @@ class TestRaceChange:
     
     def test_character_model_updated(self, race_manager):
         """Test character model is updated during race change"""
-        race_manager.change_race(1, "Wood Elf")
+        race_manager.change_race(1, "Sun Elf")
         
         char_model = race_manager.character_manager.character_model
         assert char_model.race_id == 1
         assert char_model.race_name == "Elf"
         assert char_model.subrace_id == 0
-        assert char_model.subrace_name == "Wood Elf"
+        assert char_model.subrace_name == "Sun Elf"
     
     def test_event_emission(self, race_manager):
         """Test that race change events are emitted"""
-        race_manager.change_race(1, "Wood Elf")
+        race_manager.change_race(1, "Sun Elf")
         
         # Verify event was emitted
         race_manager.character_manager.emit.assert_called_once()
@@ -324,7 +387,7 @@ class TestRaceChange:
         assert event.old_race_id == 0
         assert event.new_race_id == 1
         assert event.old_subrace == ""
-        assert event.new_subrace == "Wood Elf"
+        assert event.new_subrace == "Sun Elf"
     
     def test_invalid_race_change(self, race_manager):
         """Test error handling for invalid race change"""
@@ -456,7 +519,7 @@ class TestSizeAndSpeed:
                 return mock_medium_race
             return None
         
-        race_manager.game_data_loader.get_by_id.side_effect = mock_get_by_id
+        race_manager.game_rules_service.get_by_id.side_effect = mock_get_by_id
         
         speed = race_manager._get_base_speed(998)
         assert speed == 20  # Small races default to 20ft
@@ -509,12 +572,12 @@ class TestRaceProperties:
     
     def test_get_racial_properties_elf(self, race_manager):
         """Test getting properties for Elf after race change"""
-        race_manager.change_race(1, "Wood Elf")
+        race_manager.change_race(1)  # Elf without subrace
         props = race_manager.get_racial_properties()
         
         assert props['race_id'] == 1
         assert props['race_name'] == "Elf"
-        assert props['subrace'] == "Wood Elf"
+        assert props['subrace'] == ""  # No subrace specified
         assert props['ability_modifiers']['Dex'] == 2
         assert props['ability_modifiers']['Con'] == -2
         # Should have at least one racial feat
@@ -596,7 +659,7 @@ class TestRaceManagerReverting:
     def test_revert_to_original_race(self, race_manager):
         """Test reverting to original race"""
         # Change race
-        race_manager.change_race(1, "Wood Elf")
+        race_manager.change_race(1, "Sun Elf")
         assert race_manager.gff.get('Race') == 1
         
         # Revert
@@ -654,19 +717,19 @@ class TestEdgeCases:
     
     def test_race_change_same_race(self, race_manager):
         """Test changing to the same race"""
-        changes = race_manager.change_race(0, "Different Subrace")
+        changes = race_manager.change_race(0)  # Human race, no subrace
         
-        # Should still work and update subrace
+        # Should still work with no subrace change
         assert changes['old_race']['id'] == 0
         assert changes['new_race']['id'] == 0
-        assert race_manager.gff.get('Subrace') == "Different Subrace"
+        assert race_manager.gff.get('Subrace') == ""  # No subrace specified
     
     def test_malformed_race_data(self, race_manager):
         """Test handling of malformed race data"""
         # Mock race data with missing fields
         mock_race = Mock()
         del mock_race.str_adjust  # Remove expected field
-        race_manager.game_data_loader.get_by_id.return_value = mock_race
+        race_manager.game_rules_service.get_by_id.return_value = mock_race
         
         # Should handle gracefully
         modifiers = race_manager._get_racial_ability_modifiers(999)
@@ -721,9 +784,9 @@ class TestPerformance:
         def mock_get_by_id(table, race_id):
             if race_id == 998:
                 return mock_race
-            return race_manager.game_data_loader.get_by_id(table, race_id)
+            return race_manager.game_rules_service.get_by_id(table, race_id)
         
-        race_manager.game_data_loader.get_by_id.side_effect = mock_get_by_id
+        race_manager.game_rules_service.get_by_id.side_effect = mock_get_by_id
         
         feats = race_manager._get_racial_feats(998)
         assert len(feats) == 100
@@ -761,3 +824,202 @@ def test_size_changes_parametrized(race_manager, from_race, to_race, expected_si
         assert changes['size_change'] is not None
     else:
         assert changes['size_change'] is None
+
+
+class TestSubraceSupport:
+    """Test RaceManager's new subrace functionality using RacialSubtypes.2da"""
+    
+    def test_get_subrace_data(self, race_manager):
+        """Test subrace data retrieval by name"""
+        # Test valid subrace
+        subrace_data = race_manager._get_subrace_data("Sun Elf")
+        assert subrace_data is not None
+        assert subrace_data.Name == "Sun Elf"
+        assert subrace_data.BaseRace == 1  # Elf
+        
+        # Test case insensitive lookup
+        subrace_data = race_manager._get_subrace_data("sun elf")
+        assert subrace_data is not None
+        
+        # Test non-existent subrace
+        subrace_data = race_manager._get_subrace_data("NonExistent")
+        assert subrace_data is None
+        
+        # Test empty/None subrace
+        assert race_manager._get_subrace_data("") is None
+        assert race_manager._get_subrace_data(None) is None
+    
+    def test_get_available_subraces(self, race_manager):
+        """Test listing available subraces for a race"""
+        # Test Elf subraces
+        elf_subraces = race_manager.get_available_subraces(1)
+        assert len(elf_subraces) == 2
+        subrace_names = [sr['name'] for sr in elf_subraces]
+        assert "Sun Elf" in subrace_names
+        assert "Moon Elf" in subrace_names
+        
+        # Test Dwarf subraces
+        dwarf_subraces = race_manager.get_available_subraces(2)
+        assert len(dwarf_subraces) == 1
+        assert dwarf_subraces[0]['name'] == "Gray Dwarf"
+        
+        # Test race with no subraces
+        human_subraces = race_manager.get_available_subraces(0)
+        assert len(human_subraces) == 0
+    
+    def test_validate_subrace(self, race_manager):
+        """Test subrace validation"""
+        # Valid subrace for correct race
+        valid, errors = race_manager.validate_subrace(1, "Sun Elf")
+        assert valid is True
+        assert len(errors) == 0
+        
+        # Valid empty subrace
+        valid, errors = race_manager.validate_subrace(1, "")
+        assert valid is True
+        assert len(errors) == 0
+        
+        # Invalid subrace for race
+        valid, errors = race_manager.validate_subrace(0, "Sun Elf")  # Human can't be Sun Elf
+        assert valid is False
+        assert len(errors) == 1
+        assert "does not belong to race ID 0" in errors[0]
+        
+        # Non-existent subrace
+        valid, errors = race_manager.validate_subrace(1, "NonExistent")
+        assert valid is False
+        assert len(errors) == 1
+        assert "Unknown subrace" in errors[0]
+    
+    def test_race_change_with_subrace(self, race_manager, mock_attribute_manager, mock_feat_manager):
+        """Test changing race with subrace applies both base and subrace modifiers"""
+        # Set up managers
+        race_manager.character_manager.get_manager.side_effect = lambda name: {
+            'ability': mock_attribute_manager,
+            'feat': mock_feat_manager
+        }.get(name)
+        
+        # Change to Elf with Sun Elf subrace
+        changes = race_manager.change_race(1, "Sun Elf")
+        
+        # Verify race change
+        assert race_manager.gff.get('Race') == 1
+        assert race_manager.gff.get('Subrace') == "Sun Elf"
+        
+        # Check that both base and subrace ability changes were applied
+        ability_changes = changes['ability_changes']
+        
+        # Should have base elf modifiers (Dex+2, Con-2) + Sun Elf modifiers (Int+2)
+        dex_changes = [c for c in ability_changes if c['attribute'] == 'Dex']
+        int_changes = [c for c in ability_changes if c['attribute'] == 'Int']
+        
+        assert len(dex_changes) == 1  # Base elf Dex bonus
+        assert len(int_changes) == 1  # Sun elf Int bonus
+        
+        # Check AttributeManager was called for all ability changes
+        assert mock_attribute_manager.set_attribute.call_count >= 2
+    
+    def test_race_change_with_subrace_feats(self, race_manager, mock_feat_manager):
+        """Test subrace-specific feats are granted"""
+        race_manager.character_manager.get_manager.side_effect = lambda name: {
+            'feat': mock_feat_manager
+        }.get(name)
+        
+        # Change to Elf with Moon Elf subrace (has Feat0=20)
+        changes = race_manager.change_race(1, "Moon Elf")
+        
+        # Verify subrace feats were added
+        feat_changes = changes['feat_changes']['added']
+        subrace_feats = [f for f in feat_changes if f.get('source') == 'subrace']
+        
+        assert len(subrace_feats) >= 1
+        # Moon Elf should grant feat 20
+        feat_ids = [f['id'] for f in subrace_feats]
+        assert 20 in feat_ids
+    
+    def test_race_change_validation_with_invalid_subrace(self, race_manager):
+        """Test that invalid subrace prevents race change"""
+        with pytest.raises(ValueError, match="Invalid subrace"):
+            race_manager.change_race(1, "NonExistent Subrace")
+        
+        # Verify race didn't change
+        assert race_manager.gff.get('Race') == 0  # Still human
+        assert race_manager.gff.get('Subrace') == ""
+    
+    def test_get_racial_properties_with_subrace(self, race_manager):
+        """Test racial properties includes subrace data"""
+        # Change to elf with subrace
+        race_manager.change_race(1, "Sun Elf")
+        
+        properties = race_manager.get_racial_properties()
+        
+        # Check subrace data is included
+        assert 'subrace_data' in properties
+        assert properties['subrace'] == "Sun Elf"
+        assert properties['subrace_data']['name'] == "Sun Elf"
+        assert properties['subrace_data']['base_race'] == 1
+        
+        # Check combined ability modifiers
+        combined_mods = properties['ability_modifiers']
+        assert combined_mods['Dex'] == 2  # Base elf
+        assert combined_mods['Con'] == -2  # Base elf
+        assert combined_mods['Int'] == 2  # Sun elf subrace
+        
+        # Check separate modifier tracking
+        assert 'base_race_modifiers' in properties
+        assert 'subrace_modifiers' in properties
+        
+        # Check ECL
+        assert properties.get('effective_character_level', 0) == 0  # Sun elf has no ECL
+        
+        # Check available subraces
+        assert 'available_subraces' in properties
+        assert len(properties['available_subraces']) == 2
+    
+    def test_validate_race_change_with_subrace(self, race_manager):
+        """Test enhanced validate_race_change method includes subrace validation"""
+        # Valid race and subrace
+        valid, errors = race_manager.validate_race_change(1, "Sun Elf")
+        assert valid is True
+        assert len(errors) == 0
+        
+        # Valid race, no subrace
+        valid, errors = race_manager.validate_race_change(1, "")
+        assert valid is True
+        assert len(errors) == 0
+        
+        # Invalid race
+        valid, errors = race_manager.validate_race_change(999, "Sun Elf")
+        assert valid is False
+        assert any("Unknown race ID" in error for error in errors)
+        
+        # Valid race, invalid subrace
+        valid, errors = race_manager.validate_race_change(1, "NonExistent")
+        assert valid is False
+        assert any("Unknown subrace" in error for error in errors)
+    
+    def test_subrace_favored_class_override(self, race_manager):
+        """Test that subrace favored class overrides base race"""
+        # Change to Gray Dwarf (has different favored class than base dwarf)
+        race_manager.change_race(2, "Gray Dwarf")
+        
+        properties = race_manager.get_racial_properties()
+        
+        # Gray Dwarf should have Fighter (0) as favored class
+        # (same as base dwarf, but testing the override mechanism)
+        assert properties['favored_class'] == 0
+        
+        # But Sun Elf should override base elf's favored class
+        race_manager.change_race(1, "Sun Elf")
+        properties = race_manager.get_racial_properties()
+        assert properties['favored_class'] == 1  # Wizard (Sun Elf override)
+    
+    def test_subrace_with_level_adjustment(self, race_manager):
+        """Test subrace with Effective Character Level adjustment"""
+        race_manager.change_race(2, "Gray Dwarf")
+        
+        properties = race_manager.get_racial_properties()
+        
+        # Gray Dwarf has ECL +1
+        assert properties.get('effective_character_level', 0) == 1
+        assert properties['subrace_data']['ecl'] == 1

@@ -75,6 +75,28 @@ class RaceValidationResponse(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class SubraceInfo(BaseModel):
+    """Information about a subrace"""
+    id: int
+    name: str
+    label: str
+    base_race: int
+
+
+class AvailableSubracesResponse(BaseModel):
+    """Available subraces for a race - matches get_available_subraces() return structure"""
+    race_id: int
+    subraces: List[SubraceInfo] = Field(default_factory=list)
+
+
+class SubraceValidationResponse(BaseModel):
+    """Subrace validation result - matches validate_subrace() return structure"""
+    race_id: int
+    subrace: str
+    valid: bool
+    errors: List[str] = Field(default_factory=list)
+
+
 # Removed race search models - no manager backing
 
 

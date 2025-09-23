@@ -138,6 +138,14 @@ class FieldMappingUtility:
         'cost': ['cost', 'Cost', 'Price', 'Value'],
         'weight': ['weight', 'Weight', 'Wt'],
         
+        # Subrace fields (racialsubtypes.2da)
+        'base_race': ['base_race', 'BaseRace', 'baserace', 'BASERACE'],
+        'subrace_name': ['Name', 'name', 'Label', 'label'],  # Prioritize exact case matches
+        'subrace_label': ['Label', 'label', 'Name', 'name'],  # Prioritize exact case matches
+        'effective_character_level': ['ecl', 'ECL', 'effective_character_level', 'EffectiveCharacterLevel'],
+        'feats_table': ['feats_table', 'FeatsTable', 'featstable', 'FEATSTABLE'],
+        'has_favored_class': ['has_favored_class', 'HasFavoredClass', 'hasfavoredclass', 'HASFAVOREDCLASS'],
+        
         # Misc common fields
         'description': ['description', 'Description', 'Desc', 'DescRef'],
         'category': ['category', 'Category', 'Cat', 'Type'],
@@ -163,13 +171,25 @@ class FieldMappingUtility:
         
         for field_name in field_names:
             try:
-                # Try different case variations
-                for case_variant in [field_name, field_name.lower(), field_name.upper()]:
-                    # Use hasattr to check if attribute actually exists (avoids Mock auto-creation)
-                    if hasattr(data_object, case_variant):
+                # First try exact field name (prevents Mock auto-creation issues)
+                if hasattr(data_object, field_name):
+                    value = getattr(data_object, field_name)
+                    # Check if value is meaningful and not a Mock object
+                    if (value is not None and 
+                        str(value).strip() and 
+                        str(value) != '****' and
+                        not str(value).startswith('<Mock')):
+                        return value
+                
+                # Then try case variations only if needed
+                for case_variant in [field_name.lower(), field_name.upper()]:
+                    if case_variant != field_name and hasattr(data_object, case_variant):
                         value = getattr(data_object, case_variant)
-                        # Check if value is meaningful (not None, not empty string, not ****)
-                        if value is not None and str(value).strip() and str(value) != '****':
+                        # Check if value is meaningful and not a Mock object
+                        if (value is not None and 
+                            str(value).strip() and 
+                            str(value) != '****' and
+                            not str(value).startswith('<Mock')):
                             return value
             except (AttributeError, TypeError):
                 continue
@@ -679,6 +699,49 @@ class FieldMappingUtility:
             results[field_pattern] = value is not None
             
         return results
+    
+    def get_subrace_properties(self, subrace_data: Any) -> Dict[str, Any]:
+        """
+        Get comprehensive subrace properties from racialsubtypes.2da data.
+        
+        Args:
+            subrace_data: Subrace data object from racialsubtypes.2da
+            
+        Returns:
+            Dict with subrace properties
+        """
+        properties = {}
+        
+        # Basic properties
+        properties['label'] = self.get_field_value(subrace_data, 'subrace_label', '')
+        properties['name'] = self.get_field_value(subrace_data, 'subrace_name', '')
+        properties['base_race'] = self._safe_int(
+            self.get_field_value(subrace_data, 'base_race', 0)
+        )
+        properties['ecl'] = self._safe_int(
+            self.get_field_value(subrace_data, 'effective_character_level', 0)
+        )
+        
+        # Ability modifiers (additional to base race)
+        properties['ability_modifiers'] = self.get_ability_modifiers(subrace_data)
+        
+        # Feats table reference
+        properties['feats_table'] = self.get_field_value(subrace_data, 'feats_table', '')
+        
+        # Favored class override
+        properties['favored_class'] = self._safe_int(
+            self.get_field_value(subrace_data, 'favored_class', -1)
+        )
+        properties['has_favored_class'] = self._safe_bool(
+            self.get_field_value(subrace_data, 'has_favored_class', 0)
+        )
+        
+        # Player accessibility
+        properties['player_race'] = self._safe_bool(
+            self.get_field_value(subrace_data, 'player_race', 1)
+        )
+        
+        return properties
 
 
 # Global instance for use throughout the application
