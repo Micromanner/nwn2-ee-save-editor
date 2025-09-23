@@ -45,7 +45,7 @@ export default function CharacterPortrait({
     // Build the icon URL using the v2 endpoint
     // Portrait IDs in NWN2 are typically like "po_hu_f_99_" or custom names
     const iconPath = `portraits/${portraitId}`;
-    const url = `http://localhost:8000/api/gamedata/icons/v2/${iconPath}/`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/gamedata/icons/v2/${iconPath}/`;
     
     setLoading(true);
     setImageUrl(url);

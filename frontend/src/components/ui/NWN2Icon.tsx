@@ -76,7 +76,7 @@ export default function NWN2Icon({
     }
   } else if (fullIconUrl && !fullIconUrl.startsWith('http')) {
     // Ensure relative URLs are converted to full URLs
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
     const baseUrl = apiUrl.replace('/api', '');
     fullIconUrl = `${baseUrl}${fullIconUrl}`;
   }

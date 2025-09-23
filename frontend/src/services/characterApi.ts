@@ -343,8 +343,8 @@ export interface CharacterData {
   skill_points_available?: number;
 }
 
-// Base API URL - FastAPI server running on localhost:8000
-const API_BASE_URL = 'http://localhost:8000/api';
+// Base API URL - FastAPI server (from environment variable)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export class CharacterAPI {
   // Get character state (comprehensive data)

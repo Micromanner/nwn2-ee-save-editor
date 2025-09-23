@@ -43,7 +43,7 @@ export const useCharacterCreation = () => {
     
     try {
       // Create the character (no separate validation endpoint)
-      const response = await fetch('http://localhost:8000/api/characters/create', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ export const useCharacterCreation = () => {
 
   const getTemplates = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/characters/templates', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/templates`, {
         method: 'GET'
       });
       if (response.status < 200 || response.status >= 300) {
@@ -85,7 +85,7 @@ export const useCharacterCreation = () => {
 
   const exportToLocalVault = async (sourcePath: string, backupExisting: boolean = true) => {
     try {
-      const response = await fetch('http://localhost:8000/api/characters/export/localvault', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/export/localvault`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

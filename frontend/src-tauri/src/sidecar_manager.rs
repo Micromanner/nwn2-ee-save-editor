@@ -8,6 +8,7 @@ use tokio::sync::Mutex as TokioMutex;
 use std::path::PathBuf;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+use crate::config::Config;
 
 pub struct FastAPISidecar {
     pub pid: Mutex<Option<u32>>,
@@ -35,8 +36,9 @@ impl Drop for FastAPISidecar {
         if let Ok(runtime) = rt {
             let _ = runtime.block_on(async {
                 // Try to send shutdown signal to FastAPI
+                let config = Config::new();
                 match reqwest::Client::new()
-                    .post("http://127.0.0.1:8000/api/system/shutdown/")
+                    .post(&format!("{}/api/system/shutdown/", config.get_base_url()))
                     .timeout(std::time::Duration::from_secs(2))
                     .send()
                     .await
@@ -65,12 +67,14 @@ impl Drop for FastAPISidecar {
 
 #[tauri::command]
 pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, String> {
+    let config = Config::new();
+    let base_url = config.get_base_url();
     if let Some(sidecar) = app.try_state::<FastAPISidecar>() {
         // Prevent concurrent startups
         let _guard = sidecar.startup_mutex.lock().await;
         
         // Check if FastAPI is already running
-        if let Ok(response) = reqwest::get("http://127.0.0.1:8000/api/health/").await {
+        if let Ok(response) = reqwest::get(&format!("{}/api/health/", base_url)).await {
             if response.status().is_success() {
                 info!("FastAPI already running, force killing it for fresh start");
                 let _ = force_kill_fastapi_sidecar(app.clone()).await;
@@ -91,11 +95,11 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         return Err("FastAPI sidecar state not initialized".to_string());
     }
     
-    // Check if port 8000 is actually in use before trying to kill anything
+    // Check if the configured port is actually in use before trying to kill anything
     if cfg!(debug_assertions) {
         // Quick check if port is already free
         let port_in_use = match reqwest::Client::new()
-            .get("http://127.0.0.1:8000/api/health/")
+            .get(&format!("{}/api/health/", base_url))
             .timeout(std::time::Duration::from_millis(500))
             .send()
             .await 
@@ -105,17 +109,17 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         };
         
         if !port_in_use {
-            info!("Port 8000 is free, skipping kill process - proceeding directly to startup");
+            info!("Port {} is free, skipping kill process - proceeding directly to startup", config.fastapi_port);
         } else {
-            info!("Port 8000 is in use, attempting to kill existing process");
+            info!("Port {} is in use, attempting to kill existing process", config.fastapi_port);
             
-            // Use native OS commands to find and kill process on port 8000
+            // Use native OS commands to find and kill process on the configured port
         let kill_result = if cfg!(target_os = "windows") {
             // Windows: Use netstat and taskkill
             // First find the PID
             let netstat_output = app.shell()
                 .command("cmd")
-                .args(["/C", "netstat -ano | findstr :8000"])
+                .args(["/C", &format!("netstat -ano | findstr :{}", config.fastapi_port)])
                 .output()
                 .await;
                 
@@ -124,7 +128,7 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 // Parse PID from netstat output (last column)
                 if let Some(line) = output_str.lines().find(|l| l.contains("LISTENING")) {
                     if let Some(pid) = line.split_whitespace().last() {
-                        info!("Found process {} on port 8000, killing it", pid);
+                        info!("Found process {} on port {}, killing it", pid, config.fastapi_port);
                         app.shell()
                             .command("cmd")
                             .args(["/C", &format!("taskkill /F /PID {}", pid)])
@@ -143,7 +147,7 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
             // Unix: Use lsof or ss and kill
             app.shell()
                 .command("sh")
-                .args(["-c", "lsof -ti:8000 | xargs kill -9 2>/dev/null || true"])
+                .args(["-c", &format!("lsof -ti:{} | xargs kill -9 2>/dev/null || true", config.fastapi_port)])
                 .output()
                 .await
         };
@@ -160,14 +164,14 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         // Double-check that port is free with retries
         let mut port_check_attempts = 0;
         while port_check_attempts < 5 {
-            match reqwest::get("http://127.0.0.1:8000/api/health/").await {
+            match reqwest::get(&format!("{}/api/health/", config.get_base_url())).await {
                 Ok(_) => {
                     if port_check_attempts == 0 {
                         error!("FastAPI server is still running after kill attempt!");
                         // Try a more aggressive kill using shell command
                         let _ = app.shell()
                             .command("sh")
-                            .args(["-c", "lsof -ti :8000 | xargs -r kill -9"])
+                            .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", config.fastapi_port)])
                             .output()
                             .await;
                     }
@@ -175,14 +179,14 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
                 }
                 Err(_) => {
-                    info!("Port 8000 is free, proceeding with startup");
+                    info!("Port {} is free, proceeding with startup", config.fastapi_port);
                     break;
                 }
             }
         }
         
             if port_check_attempts >= 5 {
-                return Err("Failed to free port 8000 after multiple attempts".to_string());
+                return Err(format!("Failed to free port {} after multiple attempts", config.fastapi_port));
             }
         } // End of port_in_use check
     }
@@ -219,7 +223,7 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         app.shell()
             .sidecar("fastapi-server")
             .map_err(|e| format!("Failed to create sidecar command: {}", e))?
-            .args(["--port", "8000"])
+            .args(["--port", &config.fastapi_port.to_string()])
     };
 
     let (mut rx, child) = sidecar_command
@@ -292,6 +296,7 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
 }
 
 async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, String> {
+    let config = Config::new();
     // Wait for FastAPI health check to pass (max 30 seconds)
     let mut attempts = 0;
     let max_attempts = 30;
@@ -299,7 +304,7 @@ async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, Str
     info!("Waiting for FastAPI health check to pass...");
     
     while attempts < max_attempts {
-        match reqwest::get("http://127.0.0.1:8000/api/health/").await {
+        match reqwest::get(&format!("{}/api/health/", config.get_base_url())).await {
             Ok(response) if response.status().is_success() => {
                 info!("FastAPI health check passed after {} attempts", attempts + 1);
                 break;
@@ -328,7 +333,7 @@ async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, Str
     info!("Triggering background loading of complete game data...");
     
     match reqwest::Client::new()
-        .post("http://127.0.0.1:8000/api/system/background-loading/trigger/")
+        .post(&format!("{}/api/system/background-loading/trigger/", config.get_base_url()))
         .header("Content-Type", "application/json")
         .body("{}")
         .send()
@@ -355,11 +360,12 @@ async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, Str
 
 #[tauri::command]
 pub async fn stop_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, String> {
+    let config = Config::new();
     info!("Attempting graceful FastAPI shutdown...");
     
     // Try graceful shutdown first
     match reqwest::Client::new()
-        .post("http://127.0.0.1:8000/api/system/shutdown/")
+        .post(&format!("{}/api/system/shutdown/", config.get_base_url()))
         .timeout(std::time::Duration::from_secs(3))
         .send()
         .await
@@ -370,7 +376,7 @@ pub async fn stop_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Strin
             tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
             
             // Check if server actually stopped
-            match reqwest::get("http://127.0.0.1:8000/api/health/").await {
+            match reqwest::get(&format!("{}/api/health/", config.get_base_url())).await {
                 Ok(_) => {
                     info!("Server still responding, will force kill");
                 }
@@ -431,15 +437,16 @@ pub async fn force_kill_fastapi_sidecar(app: tauri::AppHandle) -> Result<String,
         *pid = None;
     }
     
-    // Also kill any process on port 8000 directly
+    // Also kill any process on the configured port directly
+    let config = Config::new();
     if cfg!(target_os = "windows") {
         let _ = tokio::process::Command::new("cmd")
-            .args(["/C", "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do taskkill /F /PID %a 2>nul"])
+            .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
             .output()
             .await;
     } else {
         let _ = tokio::process::Command::new("sh")
-            .args(["-c", "lsof -ti:8000 | xargs -r kill -9 2>/dev/null || true"])
+            .args(["-c", &format!("lsof -ti:{} | xargs -r kill -9 2>/dev/null || true", config.fastapi_port)])
             .output()
             .await;
     }
@@ -449,7 +456,8 @@ pub async fn force_kill_fastapi_sidecar(app: tauri::AppHandle) -> Result<String,
 
 #[tauri::command]
 pub async fn check_fastapi_health() -> Result<bool, String> {
-    match reqwest::get("http://127.0.0.1:8000/api/health/").await {
+    let config = Config::new();
+    match reqwest::get(&format!("{}/api/health/", config.get_base_url())).await {
         Ok(response) => Ok(response.status().is_success()),
         Err(_) => Ok(false),
     }
@@ -457,7 +465,8 @@ pub async fn check_fastapi_health() -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn check_background_loading_status() -> Result<serde_json::Value, String> {
-    match reqwest::get("http://127.0.0.1:8000/api/system/background-loading/status/").await {
+    let config = Config::new();
+    match reqwest::get(&format!("{}/api/system/background-loading/status/", config.get_base_url())).await {
         Ok(response) => {
             if response.status().is_success() {
                 match response.json::<serde_json::Value>().await {
@@ -511,9 +520,10 @@ fn remove_fastapi_lock() {
 
 /// Ensures FastAPI is running, but doesn't restart if already healthy
 pub async fn ensure_fastapi_running(app: tauri::AppHandle) -> Result<(), String> {
+    let config = Config::new();
     // Quick health check first
     match reqwest::Client::new()
-        .get("http://127.0.0.1:8000/api/health/")
+        .get(&format!("{}/api/health/", config.get_base_url()))
         .timeout(std::time::Duration::from_secs(1))
         .send()
         .await 
@@ -535,7 +545,7 @@ pub async fn ensure_fastapi_running(app: tauri::AppHandle) -> Result<(), String>
                     tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
                     
                     match reqwest::Client::new()
-                        .get("http://127.0.0.1:8000/api/health/")
+                        .get(&format!("{}/api/health/", config.get_base_url()))
                         .timeout(std::time::Duration::from_secs(2))
                         .send()
                         .await 
@@ -565,12 +575,13 @@ pub async fn ensure_fastapi_running(app: tauri::AppHandle) -> Result<(), String>
 
 #[tauri::command]
 pub async fn graceful_shutdown_on_exit(app: tauri::AppHandle) -> Result<String, String> {
+    let config = Config::new();
     // Called when Tauri app is about to exit - ensures FastAPI shuts down properly
     info!("App exit detected - ensuring FastAPI shutdown");
     
     // Try graceful shutdown with shorter timeout since we're exiting
     match reqwest::Client::new()
-        .post("http://127.0.0.1:8000/api/system/shutdown/")
+        .post(&format!("{}/api/system/shutdown/", config.get_base_url()))
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .await
@@ -587,15 +598,15 @@ pub async fn graceful_shutdown_on_exit(app: tauri::AppHandle) -> Result<String, 
     // Also kill process directly
     let _ = stop_fastapi_sidecar(app).await;
     
-    // Final fallback: kill any remaining Python processes on port 8000
+    // Final fallback: kill any remaining Python processes on the configured port
     if cfg!(target_os = "windows") {
         let _ = tokio::process::Command::new("cmd")
-            .args(["/C", "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do taskkill /F /PID %a 2>nul"])
+            .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
             .output()
             .await;
     } else {
         let _ = tokio::process::Command::new("sh")
-            .args(["-c", "lsof -ti:8000 | xargs -r kill -9 2>/dev/null || true"])
+            .args(["-c", &format!("lsof -ti:{} | xargs -r kill -9 2>/dev/null || true", config.fastapi_port)])
             .output()
             .await;
     }

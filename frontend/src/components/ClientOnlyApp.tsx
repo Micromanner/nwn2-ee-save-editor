@@ -135,7 +135,7 @@ function AppContent() {
     
     const checkInitStatus = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/system/initialization/status/');
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/system/initialization/status/`);
         if (!response.ok) return;
         
         const data = await response.json();
@@ -371,7 +371,7 @@ export default function ClientOnlyApp() {
     
     const checkInitStatus = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/system/initialization/status/');
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/system/initialization/status/`);
         if (!response.ok) return;
         
         const data = await response.json();

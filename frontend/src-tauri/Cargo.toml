@@ -33,3 +33,4 @@ reqwest = { version = "0.12", features = ["json"] }
 image = { version = "0.24", features = ["tga"] }
 base64 = "0.22"
 webp = "0.2.2"
+dotenvy = "0.15"

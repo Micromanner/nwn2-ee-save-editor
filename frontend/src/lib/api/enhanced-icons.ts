@@ -50,7 +50,7 @@ export function buildIconUrl(iconName: string, options: IconOptions = {}): strin
     return '';
   }
   
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
   const baseUrl = apiUrl.replace('/api', ''); // Remove /api suffix to get base URL
   
   // Always use the enhanced API now (legacy removed)
@@ -94,7 +94,7 @@ export async function fetchIconStats(): Promise<{
   format: string;
   mimetype: string;
 }> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
   const response = await fetch(`${apiUrl}/gamedata/icons/`);
   
   if (!response.ok) {
@@ -113,7 +113,7 @@ export async function updateModuleIcons(hakList: string[]): Promise<{
   haks_loaded: number;
   statistics: Record<string, unknown>;
 }> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
   const response = await fetch(`${apiUrl}/gamedata/icons/module/`, {
     method: 'POST',
     headers: {

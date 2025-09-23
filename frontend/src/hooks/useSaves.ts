@@ -42,7 +42,7 @@ export function useSaves() {
 
     try {
       // Try to fetch saves data from backend
-      const response = await fetch(`http://localhost:8000/api/characters/${character.id}/saves/summary`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/${character.id}/saves/summary`);
       
       if (response.ok) {
         const data = await response.json();

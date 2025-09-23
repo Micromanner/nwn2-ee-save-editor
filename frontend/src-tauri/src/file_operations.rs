@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use base64::prelude::*;
 use tauri_plugin_shell::ShellExt;
+use crate::config::Config;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SaveFile {
@@ -13,6 +14,7 @@ pub struct SaveFile {
 
 #[tauri::command]
 pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String> {
+    let config = Config::new();
     log::info!("[Rust] The 'select_save_file' command has been invoked.");
     let mut dialog = app.dialog().file();
     
@@ -23,7 +25,7 @@ pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String>
     let _ = crate::sidecar_manager::ensure_fastapi_running(app.clone()).await;
     
     if let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build() {
-        if let Ok(response) = client.get("http://localhost:8000/api/gamedata/paths/").send().await {
+        if let Ok(response) = client.get(&format!("{}/api/gamedata/paths/", config.get_base_url())).send().await {
             if response.status().is_success() {
                 if let Ok(paths_info) = response.json::<serde_json::Value>().await {
                     if let Some(saves_path_str) = paths_info.get("saves").and_then(|p| p.as_str()) {
@@ -110,6 +112,7 @@ pub async fn select_nwn2_directory(app: tauri::AppHandle) -> Result<String, Stri
 
 #[tauri::command]
 pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, String> {
+    let config = Config::new();
     use std::time::Instant;
     let start_time = Instant::now();
     log::info!("[Rust] Finding available NWN2 saves via FastAPI backend.");
@@ -133,7 +136,7 @@ pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, Str
     let backend_start = Instant::now();
     let client = reqwest::Client::new();
     let response = client
-        .get("http://localhost:8000/api/gamedata/config/")
+        .get(&format!("{}/api/gamedata/config/", config.get_base_url()))
         .send()
         .await
         .map_err(|e| format!("Failed to connect to FastAPI backend: {}", e))?;
@@ -296,6 +299,7 @@ pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String
 
 #[tauri::command]
 pub async fn detect_nwn2_installation(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let config = Config::new();
     log::info!("[Rust] Detecting NWN2:EE installation using FastAPI backend");
     
     // Ensure FastAPI sidecar is running
@@ -304,7 +308,7 @@ pub async fn detect_nwn2_installation(app: tauri::AppHandle) -> Result<Option<St
     // Use FastAPI backend's Rust-powered path discovery
     let client = reqwest::Client::new();
     let response = client
-        .get("http://localhost:8000/api/gamedata/paths/")
+        .get(&format!("{}/api/gamedata/paths/", config.get_base_url()))
         .send()
         .await
         .map_err(|e| format!("Failed to connect to FastAPI backend: {}", e))?;

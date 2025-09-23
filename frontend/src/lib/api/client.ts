@@ -3,7 +3,7 @@ export class ApiClient {
   private cache: Map<string, { data: unknown; timestamp: number }>;
   private cacheTimeout: number = 5 * 60 * 1000; // 5 minutes
 
-  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api') {
+  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL!) {
     this.baseUrl = baseUrl;
     this.cache = new Map();
   }

@@ -1,6 +1,7 @@
 mod sidecar_manager;
 mod file_operations;
 mod window_manager;
+mod config;
 
 use tauri::Manager;
 use sidecar_manager::{FastAPISidecar, start_fastapi_sidecar, stop_fastapi_sidecar, check_fastapi_health, check_background_loading_status, graceful_shutdown_on_exit};

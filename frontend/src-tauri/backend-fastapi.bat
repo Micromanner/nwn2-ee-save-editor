@@ -6,10 +6,7 @@ set BACKEND_DIR=%~dp0..\..\backend
 set PYTHON_EXE=%BACKEND_DIR%\venv\Scripts\python.exe
 set FASTAPI_SCRIPT=%BACKEND_DIR%\fastapi_server.py
 
-REM Set environment variables for the backend
-set PORT=8000
-set HOST=127.0.0.1
-set DEBUG=false
+REM Environment variables are loaded from backend/.env file via python-dotenv
 
 REM Change to backend directory
 cd /d "%BACKEND_DIR%"
