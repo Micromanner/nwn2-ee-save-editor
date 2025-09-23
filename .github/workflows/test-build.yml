@@ -104,12 +104,6 @@ jobs:
           fi
           python build_fastapi_sidecar.py
 
-      - name: add external binary to tauri config for production build
-        shell: bash
-        working-directory: ./frontend
-        run: |
-          # Add externalBin entry back for production builds (generic name, Tauri handles platform suffixes)
-          sed -i 's/"resources": \[\]/"externalBin": ["binaries\/fastapi-server"],"resources": []/g' src-tauri/tauri.conf.json
 
       - uses: tauri-apps/tauri-action@v0
         env:
