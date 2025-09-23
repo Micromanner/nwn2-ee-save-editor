@@ -67,6 +67,29 @@ class InventoryManager(EventEmitter):
         self._build_proficiency_mappings()
         self._update_proficiency_cache()
     
+    def _get_item_name(self, item: Dict[str, Any]) -> str:
+        """Get the proper item name from LocalizedName or fallback to base item label"""
+        # Try to get the localized name first
+        localized_name = item.get('LocalizedName')
+        if localized_name and isinstance(localized_name, dict):
+            string_ref = localized_name.get('string_ref')
+            if string_ref is not None and string_ref != 4294967295:  # 4294967295 = invalid/empty string ref
+                try:
+                    # Use the resource manager to resolve the string reference
+                    resolved_name = self.game_rules_service.rm.get_string(string_ref)
+                    if resolved_name and not resolved_name.startswith('{StrRef:'):
+                        return resolved_name
+                except Exception:
+                    pass  # Fall back to base item label
+        
+        # Fallback to base item label
+        base_item = item.get('BaseItem', 0)
+        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+        if base_item_data:
+            return field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
+        else:
+            return f'Custom Item {base_item}'
+    
     def _build_proficiency_mappings(self):
         """Build dynamic mapping of feat IDs to proficiency types"""
         self._feat_proficiency_map.clear()
@@ -577,7 +600,7 @@ class InventoryManager(EventEmitter):
                 base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 is_custom = base_item_data is None
                 
-                item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}') if base_item_data else f'Custom Item {base_item}'
+                item_name = self._get_item_name(item)
                 
                 inventory_items.append({
                     'index': idx,
@@ -602,25 +625,52 @@ class InventoryManager(EventEmitter):
             'encumbrance': self.calculate_encumbrance()
         }
         
-        # Check equipped items
-        for slot, gff_slot in self.EQUIPMENT_SLOTS.items():
-            item = self.gff.get(gff_slot)
-            if item:
+        # Check equipped items using Equip_ItemList
+        equipped_items_list = self.gff.get('Equip_ItemList', [])
+        
+        # Equipment slot mapping (index in Equip_ItemList -> slot name)
+        # Based on ACTUAL NWN2 save file data - DO NOT GUESS, USE THE DATA!
+        slot_index_mapping = {
+            0: 'head',        # Helmet
+            1: 'chest',       # Armor
+            2: 'boots',       # Boots
+            3: 'gloves',      # Gauntlet
+            4: 'right_hand',  # Battleaxe (right hand weapon)
+            5: 'left_hand',   # Light Shield (left hand)
+            6: 'cloak',       # Cloak
+            7: 'left_ring',   # Ring (left)
+            8: 'right_ring',  # Ring (right)
+            9: 'neck',        # Amulet (neck)
+            10: 'belt',       # Belt
+            11: 'arrows',     # Arrow
+            12: 'bullets',    # Bullet
+            13: 'bolts',      # Bolt
+        }
+        
+        for slot_index, item in enumerate(equipped_items_list):
+            if item and slot_index in slot_index_mapping:
+                slot_name = slot_index_mapping[slot_index]
                 base_item = item.get('BaseItem', 0)
                 
                 # Check if item exists in base items data
                 base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 is_custom = base_item_data is None
                 
-                summary['equipped_items'][slot] = {
+                # Get item name
+                item_name = self._get_item_name(item)
+                
+                summary['equipped_items'][slot_name] = {
                     'base_item': base_item,
-                    'custom': is_custom
+                    'custom': is_custom,
+                    'name': item_name,
+                    'item_data': item
                 }
                 
                 if is_custom:
                     summary['custom_items'].append({
-                        'slot': slot,
-                        'base_item': base_item
+                        'slot': slot_name,
+                        'base_item': base_item,
+                        'name': item_name
                     })
         
         return summary

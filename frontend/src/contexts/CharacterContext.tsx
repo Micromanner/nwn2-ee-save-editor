@@ -137,7 +137,7 @@ const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
   feats: { endpoint: 'feats/state' },
   spells: { endpoint: 'spells/state' },
   skills: { endpoint: 'skills/state' },
-  inventory: { endpoint: 'inventory/summary' }, // Updated to get inventory summary
+  inventory: { endpoint: 'inventory' },
   abilityScores: { endpoint: 'abilities' },
   combat: { endpoint: 'combat/state' },
   saves: { endpoint: 'saves/summary' }, // Updated to match backend

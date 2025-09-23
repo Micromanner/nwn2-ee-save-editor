@@ -19,6 +19,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/characters/{character_id}/inventory")
+def get_inventory(
+    character_id: int,
+    char_session: CharacterSessionDep
+):
+    """Get complete inventory data including items and equipment"""
+    try:
+        # Lazy imports for performance
+        from fastapi_models.inventory_models import InventorySummaryResponse
+        
+        session = char_session
+        manager = session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        summary = inventory_manager.get_inventory_summary()
+        
+        return InventorySummaryResponse(summary=summary)
+        
+    except Exception as e:
+        logger.error(f"Failed to get inventory for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get inventory: {str(e)}"
+        )
+
+
 @router.get("/characters/{character_id}/inventory/equipment")
 def get_equipment_info(
     character_id: int,
@@ -42,30 +67,6 @@ def get_equipment_info(
             detail=f"Failed to get equipment info: {str(e)}"
         )
 
-
-@router.get("/characters/{character_id}/inventory/summary")
-def get_inventory_summary(
-    character_id: int,
-    char_session: CharacterSessionDep
-):
-    """Get summary of character's inventory"""
-    try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import InventorySummaryResponse
-        
-        session = char_session
-        manager = session.character_manager
-        inventory_manager = manager.get_manager('inventory')
-        summary = inventory_manager.get_inventory_summary()
-        
-        return InventorySummaryResponse(summary=summary)
-        
-    except Exception as e:
-        logger.error(f"Failed to get inventory summary for character {character_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get inventory summary: {str(e)}"
-        )
 
 
 @router.get("/characters/{character_id}/inventory/encumbrance")

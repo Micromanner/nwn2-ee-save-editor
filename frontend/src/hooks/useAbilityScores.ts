@@ -269,7 +269,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         
         let base = 0;
         let total = 0;
-        let result: any = { base, total };
+        const result: { base: number; total: number; [key: string]: number } = { base, total };
         
         // Get total value
         total = (typeof objData.total === 'number' ? objData.total : 

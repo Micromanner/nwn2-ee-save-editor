@@ -97,7 +97,15 @@ export default function InventoryEditor() {
       return inv;
     }
 
-    const { inventory_items } = inventoryData.summary;
+    const { inventory_items, equipped_items } = inventoryData.summary;
+    
+    // Create a set of equipped base items for quick lookup
+    const equippedBaseItems = new Set<number>();
+    Object.values(equipped_items || {}).forEach((equipData: Record<string, unknown>) => {
+      if (equipData?.base_item) {
+        equippedBaseItems.add(equipData.base_item as number);
+      }
+    });
     
     // Convert inventory items to display format
     inventory_items?.forEach((itemInfo: InventoryItem, index: number) => {
@@ -105,6 +113,9 @@ export default function InventoryEditor() {
         const baseItem = itemInfo.base_item || 0;
         const isCustom = itemInfo.is_custom || false;
         const itemName = itemInfo.name || `Item ${baseItem}`;
+        
+        // Check if this item type is equipped
+        const isEquipped = equippedBaseItems.has(baseItem);
         
         // Determine item type based on base item type
         const getItemType = (baseItem: number): string => {
@@ -120,7 +131,7 @@ export default function InventoryEditor() {
           name: itemName,
           type: getItemType(baseItem),
           rarity: isCustom ? 'legendary' : 'common',
-          equipped: false,
+          equipped: isEquipped,
           stackSize: itemInfo.stack_size > 1 ? itemInfo.stack_size : undefined,
           enhancement_bonus: itemInfo.enhancement || 0,
           charges: itemInfo.charges,
@@ -142,6 +153,97 @@ export default function InventoryEditor() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+
+  // Helper function to get equipped item for a slot
+  const getEquippedItemForSlot = (slotName: string) => {
+    if (!inventoryData.data) return null;
+    const summary = (inventoryData.data as unknown as LocalInventoryData).summary;
+    const equippedItems = summary?.equipped_items || {};
+    
+    // Map display slot names to backend slot names (using backend's EQUIPMENT_SLOTS mapping)
+    const slotMapping: Record<string, string> = {
+      'helmet': 'head',
+      'chest': 'chest', 
+      'belt': 'belt',
+      'boots': 'boots',
+      'neck': 'neck',
+      'cloak': 'cloak',
+      'gloves': 'gloves',
+      'l ring': 'left_ring',
+      'r ring': 'right_ring', 
+      'l hand': 'left_hand',
+      'r hand': 'right_hand',
+      'arrows': 'arrows',
+      'bullets': 'bullets',
+      'bolts': 'bolts'
+    };
+    
+    const mappedSlot = slotMapping[slotName.toLowerCase()];
+    if (!mappedSlot || !equippedItems[mappedSlot]) return null;
+    
+    const equipData = equippedItems[mappedSlot] as Record<string, unknown>;
+    return {
+      name: (equipData.name as string) || `Item ${equipData.base_item}`, // Use backend-provided name
+      base_item: equipData.base_item as number,
+      is_custom: equipData.custom as boolean
+    };
+  };
+
+  // Equipment slot component
+  const EquipmentSlot = ({ slotName }: { slotName: string }) => {
+    const equippedItem = getEquippedItemForSlot(slotName);
+    
+    const handleSlotClick = () => {
+      if (equippedItem) {
+        // Create an Item object for the equipped item to show in details panel
+        const itemForDetails: Item = {
+          id: `equipped_${slotName.toLowerCase().replace(' ', '_')}`,
+          name: equippedItem.name,
+          type: 'misc', // We could enhance this based on slot type
+          rarity: equippedItem.is_custom ? 'legendary' : 'common',
+          equipped: true,
+          slot: slotName,
+          is_custom: equippedItem.is_custom,
+          is_identified: true,
+          is_plot: false,
+          is_cursed: false,
+          is_stolen: false
+        };
+        setSelectedItem(itemForDetails);
+      }
+    };
+    
+    return (
+      <div className="text-center">
+        <div 
+          className={`w-12 h-12 rounded border-2 mx-auto mb-1 flex items-center justify-center relative transition-colors ${
+            equippedItem 
+              ? 'bg-[rgb(var(--color-primary)/0.1)] border-[rgb(var(--color-primary))] cursor-pointer hover:bg-[rgb(var(--color-primary)/0.2)]' 
+              : 'bg-[rgb(var(--color-surface-1))] border-[rgb(var(--color-surface-border)/0.6)]'
+          }`}
+          onClick={handleSlotClick}
+          role={equippedItem ? "button" : undefined}
+          tabIndex={equippedItem ? 0 : undefined}
+        >
+          {equippedItem ? (
+            <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold pointer-events-none">
+              {equippedItem.name.charAt(0)}
+            </div>
+          ) : (
+            <div className="text-xs text-[rgb(var(--color-text-muted))] font-bold pointer-events-none">
+              -
+            </div>
+          )}
+          {equippedItem?.is_custom && (
+            <span className="absolute -top-1 -right-1 text-xs bg-[rgb(var(--color-warning))] text-white px-1 rounded-full pointer-events-none">
+              !
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-[rgb(var(--color-text-muted))]">{slotName}</span>
+      </div>
+    );
+  };
 
   // Update inventory when backend data changes
   useEffect(() => {
@@ -228,79 +330,37 @@ export default function InventoryEditor() {
               <div className="grid grid-cols-4 gap-2 mb-6">
                 {/* Column 1: Helmet, Chest, Belt, Boots */}
                 <div className="space-y-2">
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Helmet</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Chest</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Belt</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Boots</span>
-                  </div>
+                  <EquipmentSlot slotName="Helmet" />
+                  <EquipmentSlot slotName="Chest" />
+                  <EquipmentSlot slotName="Belt" />
+                  <EquipmentSlot slotName="Boots" />
                 </div>
 
                 {/* Column 2: Neck, Cloak, Gloves */}
                 <div className="space-y-2">
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Neck</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Cloak</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">Gloves</span>
-                  </div>
+                  <EquipmentSlot slotName="Neck" />
+                  <EquipmentSlot slotName="Cloak" />
+                  <EquipmentSlot slotName="Gloves" />
                 </div>
 
                 {/* Column 3: Left Ring, Right Ring */}
                 <div className="space-y-2">
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">L Ring</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">R Ring</span>
-                  </div>
+                  <EquipmentSlot slotName="L Ring" />
+                  <EquipmentSlot slotName="R Ring" />
                 </div>
 
-                {/* Column 4: Left Hand, Right Hand, Ammo */}
+                {/* Column 4: Left Hand, Right Hand */}
                 <div className="space-y-2">
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">L Hand</span>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                    <span className="text-xs text-[rgb(var(--color-text-muted))]">R Hand</span>
-                  </div>
+                  <EquipmentSlot slotName="L Hand" />
+                  <EquipmentSlot slotName="R Hand" />
                 </div>
               </div>
 
               {/* Ammo Row */}
               <div className="grid grid-cols-3 gap-2 mb-6">
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                  <span className="text-xs text-[rgb(var(--color-text-muted))]">Arrows</span>
-                </div>
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                  <span className="text-xs text-[rgb(var(--color-text-muted))]">Bullets</span>
-                </div>
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-1" />
-                  <span className="text-xs text-[rgb(var(--color-text-muted))]">Bolts</span>
-                </div>
+                <EquipmentSlot slotName="Arrows" />
+                <EquipmentSlot slotName="Bullets" />
+                <EquipmentSlot slotName="Bolts" />
               </div>
             </CardContent>
           </Card>
@@ -396,7 +456,7 @@ export default function InventoryEditor() {
                   <div
                     key={index}
                     className={`aspect-square bg-[rgb(var(--color-surface-2))] border-2 ${
-                      item ? getRarityColor(item.rarity) : 'border-[rgb(var(--color-surface-border)/0.4)]'
+                      item ? (item.equipped ? 'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : getRarityColor(item.rarity)) : 'border-[rgb(var(--color-surface-border)/0.4)]'
                     } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, index)}
@@ -414,6 +474,11 @@ export default function InventoryEditor() {
                         {item.stackSize && (
                           <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
                             {item.stackSize}
+                          </span>
+                        )}
+                        {item.equipped && (
+                          <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
+                            E
                           </span>
                         )}
                       </div>
