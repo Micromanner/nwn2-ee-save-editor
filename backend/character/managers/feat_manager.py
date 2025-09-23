@@ -50,6 +50,11 @@ class FeatManager(EventEmitter):
         self._feat_cache = {}
         self._class_cache = {}  # Cache for class lookups
         self._protected_feats: Set[int] = set()
+        
+        # Domain feat caches
+        self._domain_feats_cache: Optional[Set[int]] = None
+        self._domain_feat_map_cache: Optional[Dict[int, List[Dict]]] = None
+        
         self._update_protected_feats()
         
         # Get prerequisite graph if available
@@ -908,6 +913,8 @@ class FeatManager(EventEmitter):
         """
         Remove feats granted by a class (CONSERVATIVE approach)
         Only removes feats that are confirmed to be class-specific to avoid breaking saves
+        
+        Special handling for CLERIC CLASS (id=2) - removes domain feats when losing all cleric levels
         """
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
@@ -947,15 +954,39 @@ class FeatManager(EventEmitter):
                 if feat_id not in feats_to_remove:
                     feats_to_remove.append(feat_id)
         
-        # Remove feats (force=True since we've already checked protection)
+        # 3. SPECIAL CLERIC HANDLING - Remove domain feats if losing all cleric levels
+        class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
+        is_cleric = class_name.lower() == 'cleric'  # Check by name to be safe
+        
+        domain_feats_removed = 0
+        if is_cleric:
+            # Check if character will still have cleric levels after this removal
+            remaining_cleric_levels = 0
+            for class_entry in class_list:
+                if class_entry.get('Class') == class_id:
+                    continue  # Skip the class being removed
+                entry_class_data = self.game_rules_service.get_by_id('classes', class_entry.get('Class'))
+                if entry_class_data:
+                    entry_class_name = field_mapper.get_field_value(entry_class_data, 'label', '').lower()
+                    if entry_class_name == 'cleric':
+                        remaining_cleric_levels += class_entry.get('ClassLevel', 0)
+            
+            if remaining_cleric_levels == 0:
+                # Losing ALL cleric levels - remove domain feats
+                logger.info(f"Removing all domain feats due to complete loss of cleric class")
+                domain_feats_removed = self.remove_all_domain_feats()
+            else:
+                logger.debug(f"Preserving domain feats - character retains {remaining_cleric_levels} cleric levels")
+        
+        # Remove regular class feats (force=True since we've already checked protection)
         removed_count = 0
         for feat_id in feats_to_remove:
             if self.remove_feat(feat_id, force=False):  # Still respect protection in remove_feat
                 removed_count += 1
         
-        if removed_count > 0:
-            class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
-            logger.info(f"Removed {removed_count} class-specific feats from {class_name}")
+        if removed_count > 0 or domain_feats_removed > 0:
+            total_removed = removed_count + domain_feats_removed
+            logger.info(f"Removed {total_removed} feats from {class_name} ({removed_count} class feats, {domain_feats_removed} domain feats)")
     
     def _get_feats_gained_during_class_levels(self, class_id: int) -> List[int]:
         """
@@ -1115,7 +1146,11 @@ class FeatManager(EventEmitter):
             return False  # Conservative: if we can't determine, don't remove
     
     def _add_class_feats(self, class_id: int, level: int):
-        """Add feats granted by a class"""
+        """
+        Add feats granted by a class
+        
+        Special handling for CLERIC CLASS - adds default domain feats when gaining first cleric level
+        """
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
@@ -1133,9 +1168,33 @@ class FeatManager(EventEmitter):
                     if self.add_feat(feat_info['feat_id'], source='class'):
                         added_count += 1
         
-        if added_count > 0:
-            class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
-            logger.info(f"Added {added_count} feats for {class_name}")
+        # SPECIAL CLERIC HANDLING - Add default domain feats if first cleric level
+        class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
+        is_cleric = class_name.lower() == 'cleric'
+        
+        domain_feats_added = 0
+        if is_cleric:
+            # Check if character already has any domain feats (indicates existing cleric levels)
+            existing_domain_feats = self.get_character_domain_feats()
+            
+            if not existing_domain_feats:
+                # First time gaining cleric - add default domains (typically first 2 available)
+                available_domains = self.get_available_domains()
+                if available_domains and len(available_domains) >= 2:
+                    # Add first two available domains as defaults
+                    default_domain_ids = {available_domains[0]['id'], available_domains[1]['id']}
+                    domain_feats_added = self.add_domain_feats_for_domains(default_domain_ids)
+                    
+                    domain_names = [d['name'] for d in available_domains[:2]]
+                    logger.info(f"Added default domains for new cleric: {domain_names}")
+                else:
+                    logger.warning("Could not add default domains - insufficient available domains")
+            else:
+                logger.debug(f"Character already has domain feats, not adding defaults")
+        
+        if added_count > 0 or domain_feats_added > 0:
+            total_added = added_count + domain_feats_added
+            logger.info(f"Added {total_added} feats for {class_name} ({added_count} class feats, {domain_feats_added} domain feats)")
     
     def is_legitimate_feat(self, feat_data) -> bool:
         """
@@ -1886,3 +1945,323 @@ class FeatManager(EventEmitter):
         
         logger.info(f"Detected {len(epithet_feats)} epithet feats: {epithet_feats}")
         return epithet_feats
+    
+    # ===== DOMAIN FEAT MANAGEMENT =====
+    
+    def _build_domain_feat_map(self) -> Dict[int, List[Dict]]:
+        """
+        Build mapping of feat_id -> list of domains that grant it
+        
+        Returns:
+            Dict mapping feat IDs to domain information
+        """
+        if self._domain_feat_map_cache is not None:
+            return self._domain_feat_map_cache
+        
+        domain_feat_map = {}
+        
+        # Get domains data
+        domains_table = self.game_rules_service.get_table('domains')
+        if not domains_table:
+            logger.warning("Domains table not found, cannot build domain feat map")
+            self._domain_feat_map_cache = {}
+            return self._domain_feat_map_cache
+        
+        # Process each domain
+        for domain_id, domain_data in enumerate(domains_table):
+            try:
+                # Get domain name
+                domain_name = field_mapper.get_field_value(domain_data, 'label', f'Domain_{domain_id}')
+                
+                # Check each feat type
+                for feat_type in ['GrantedFeat', 'CastableFeat', 'EpithetFeat']:
+                    feat_id = field_mapper.get_field_value(domain_data, feat_type, None)
+                    
+                    # Validate feat ID
+                    if feat_id and str(feat_id).strip() not in ['', '****', '-1', '0']:
+                        try:
+                            feat_id_int = int(feat_id)
+                            if feat_id_int > 0:
+                                # Add to map
+                                if feat_id_int not in domain_feat_map:
+                                    domain_feat_map[feat_id_int] = []
+                                
+                                domain_feat_map[feat_id_int].append({
+                                    'domain_id': domain_id,
+                                    'domain_name': domain_name,
+                                    'feat_type': feat_type
+                                })
+                                
+                        except (ValueError, TypeError):
+                            continue
+                            
+            except Exception as e:
+                logger.warning(f"Error processing domain {domain_id}: {e}")
+                continue
+        
+        logger.info(f"Built domain feat map with {len(domain_feat_map)} domain feats")
+        self._domain_feat_map_cache = domain_feat_map
+        return self._domain_feat_map_cache
+    
+    def get_all_domain_feat_ids(self) -> Set[int]:
+        """
+        Get set of all feat IDs that are domain feats
+        
+        Returns:
+            Set of domain feat IDs
+        """
+        if self._domain_feats_cache is not None:
+            return self._domain_feats_cache
+        
+        domain_feat_map = self._build_domain_feat_map()
+        self._domain_feats_cache = set(domain_feat_map.keys())
+        
+        logger.debug(f"Found {len(self._domain_feats_cache)} total domain feats")
+        return self._domain_feats_cache
+    
+    def is_domain_feat(self, feat_id: int) -> bool:
+        """
+        Check if a feat is a domain feat (from domains.2da)
+        This distinguishes domain feats from quest epithet feats with similar names
+        
+        Args:
+            feat_id: The feat ID to check
+            
+        Returns:
+            True if feat is listed in any domain's GrantedFeat/CastableFeat/EpithetFeat
+        """
+        domain_feats = self.get_all_domain_feat_ids()
+        return feat_id in domain_feats
+    
+    def get_character_domain_feats(self) -> Set[int]:
+        """
+        Get domain feats that the character currently has
+        
+        Returns:
+            Set of domain feat IDs that character possesses
+        """
+        character_feats = set()
+        feat_list = self.gff.get('FeatList', [])
+        
+        for feat_entry in feat_list:
+            feat_id = feat_entry.get('Feat', -1)
+            if feat_id > 0:
+                character_feats.add(feat_id)
+        
+        # Filter to only domain feats
+        domain_feats = self.get_all_domain_feat_ids()
+        return character_feats.intersection(domain_feats)
+    
+    def get_character_active_domains(self) -> Set[int]:
+        """
+        Determine which domains are active based on character's domain feats
+        
+        Returns:
+            Set of domain IDs that character has feats for
+        """
+        character_domain_feats = self.get_character_domain_feats()
+        domain_feat_map = self._build_domain_feat_map()
+        
+        active_domains = set()
+        
+        for feat_id in character_domain_feats:
+            if feat_id in domain_feat_map:
+                for domain_info in domain_feat_map[feat_id]:
+                    active_domains.add(domain_info['domain_id'])
+        
+        logger.debug(f"Character has active domains: {active_domains}")
+        return active_domains
+    
+    def get_domain_feats_for_domains(self, domain_ids: Set[int]) -> Set[int]:
+        """
+        Get all feat IDs associated with specific domains
+        
+        Args:
+            domain_ids: Set of domain IDs
+            
+        Returns:
+            Set of feat IDs granted by those domains
+        """
+        domain_feat_map = self._build_domain_feat_map()
+        domain_feats = set()
+        
+        for feat_id, domain_list in domain_feat_map.items():
+            for domain_info in domain_list:
+                if domain_info['domain_id'] in domain_ids:
+                    domain_feats.add(feat_id)
+                    break
+        
+        return domain_feats
+    
+    def invalidate_domain_caches(self):
+        """Clear domain feat caches when game data changes"""
+        self._domain_feats_cache = None
+        self._domain_feat_map_cache = None
+        logger.debug("Domain feat caches invalidated")
+    
+    def remove_all_domain_feats(self) -> int:
+        """
+        Remove ALL domain feats from character (for cleric -> non-cleric transition)
+        
+        Returns:
+            Number of domain feats removed
+        """
+        character_domain_feats = self.get_character_domain_feats()
+        removed_count = 0
+        
+        logger.info(f"Removing {len(character_domain_feats)} domain feats for cleric class loss")
+        
+        for feat_id in character_domain_feats:
+            # Force removal since these are domain feats being properly removed
+            if self.remove_feat(feat_id, force=True):
+                removed_count += 1
+                logger.debug(f"Removed domain feat {feat_id}")
+            else:
+                logger.warning(f"Failed to remove domain feat {feat_id}")
+        
+        logger.info(f"Successfully removed {removed_count} domain feats")
+        return removed_count
+    
+    def remove_domain_feats_for_domains(self, domain_ids: Set[int]) -> int:
+        """
+        Remove domain feats for specific domains (for domain change within cleric)
+        
+        Args:
+            domain_ids: Set of domain IDs to remove feats for
+            
+        Returns:
+            Number of feats removed
+        """
+        if not domain_ids:
+            return 0
+        
+        feats_to_remove = self.get_domain_feats_for_domains(domain_ids)
+        character_feats = self.get_character_domain_feats()
+        
+        # Only remove feats the character actually has
+        feats_to_remove = feats_to_remove.intersection(character_feats)
+        
+        removed_count = 0
+        logger.info(f"Removing {len(feats_to_remove)} feats for domains {domain_ids}")
+        
+        for feat_id in feats_to_remove:
+            if self.remove_feat(feat_id, force=True):
+                removed_count += 1
+                logger.debug(f"Removed domain feat {feat_id} for domain change")
+            else:
+                logger.warning(f"Failed to remove domain feat {feat_id}")
+        
+        logger.info(f"Successfully removed {removed_count} domain feats for domain change")
+        return removed_count
+    
+    def add_domain_feats_for_domains(self, domain_ids: Set[int]) -> int:
+        """
+        Add domain feats for specific domains (for cleric class gain or domain change)
+        
+        Args:
+            domain_ids: Set of domain IDs to add feats for
+            
+        Returns:
+            Number of feats added
+        """
+        if not domain_ids:
+            return 0
+        
+        feats_to_add = self.get_domain_feats_for_domains(domain_ids)
+        character_feats = self.get_character_domain_feats()
+        
+        # Only add feats the character doesn't already have
+        feats_to_add = feats_to_add - character_feats
+        
+        added_count = 0
+        logger.info(f"Adding {len(feats_to_add)} feats for domains {domain_ids}")
+        
+        for feat_id in feats_to_add:
+            if self.add_feat(feat_id, source='domain'):
+                added_count += 1
+                logger.debug(f"Added domain feat {feat_id}")
+            else:
+                logger.warning(f"Failed to add domain feat {feat_id}")
+        
+        logger.info(f"Successfully added {added_count} domain feats")
+        return added_count
+    
+    def change_cleric_domains(self, old_domain_ids: Set[int], new_domain_ids: Set[int]) -> Dict[str, int]:
+        """
+        Change cleric domains by removing old domain feats and adding new ones
+        
+        Args:
+            old_domain_ids: Set of current domain IDs
+            new_domain_ids: Set of new domain IDs
+            
+        Returns:
+            Dict with 'removed' and 'added' counts
+        """
+        logger.info(f"Changing cleric domains from {old_domain_ids} to {new_domain_ids}")
+        
+        # Determine which domains to remove and add
+        domains_to_remove = old_domain_ids - new_domain_ids
+        domains_to_add = new_domain_ids - old_domain_ids
+        
+        removed_count = 0
+        added_count = 0
+        
+        # Remove feats for old domains
+        if domains_to_remove:
+            removed_count = self.remove_domain_feats_for_domains(domains_to_remove)
+        
+        # Add feats for new domains
+        if domains_to_add:
+            added_count = self.add_domain_feats_for_domains(domains_to_add)
+        
+        result = {
+            'removed': removed_count,
+            'added': added_count,
+            'domains_removed': domains_to_remove,
+            'domains_added': domains_to_add
+        }
+        
+        logger.info(f"Domain change complete: {result}")
+        return result
+    
+    def get_available_domains(self) -> List[Dict[str, Any]]:
+        """
+        Get list of available domains for cleric selection
+        
+        Returns:
+            List of domain information dicts
+        """
+        domains_table = self.game_rules_service.get_table('domains')
+        if not domains_table:
+            return []
+        
+        available_domains = []
+        
+        for domain_id, domain_data in enumerate(domains_table):
+            try:
+                # Skip empty domains
+                if not hasattr(domain_data, 'Label') and not hasattr(domain_data, 'label'):
+                    continue
+                
+                domain_name = field_mapper.get_field_value(domain_data, 'label', f'Domain_{domain_id}')
+                domain_desc = field_mapper.get_field_value(domain_data, 'description', '')
+                
+                # Skip domains with empty names
+                if not domain_name or domain_name.strip() in ['', '****']:
+                    continue
+                
+                available_domains.append({
+                    'id': domain_id,
+                    'name': domain_name,
+                    'description': domain_desc,
+                    'granted_feat': field_mapper.get_field_value(domain_data, 'GrantedFeat', None),
+                    'castable_feat': field_mapper.get_field_value(domain_data, 'CastableFeat', None),
+                    'epithet_feat': field_mapper.get_field_value(domain_data, 'EpithetFeat', None)
+                })
+                
+            except Exception as e:
+                logger.debug(f"Skipping domain {domain_id}: {e}")
+                continue
+        
+        logger.debug(f"Found {len(available_domains)} available domains")
+        return available_domains
