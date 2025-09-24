@@ -737,7 +737,7 @@ class SpellManager(EventEmitter):
             return metamagic
             
         # Get all character feats and check which ones are metamagic
-        feat_list = self.character_manager.character_data.get('FeatList', [])
+        feat_list = self.gff.get('FeatList', [])
         for feat in feat_list:
             feat_id = feat.get('Feat')
             if feat_id and self._is_metamagic_feat(feat_id):

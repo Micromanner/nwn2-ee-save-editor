@@ -653,20 +653,14 @@ class SaveManager(EventEmitter):
     
     def _get_misc_fortitude_bonus(self) -> int:
         """Get miscellaneous fortitude bonus"""
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
-            return self.character_manager.character_data.get('fortbonus', 0)
         return self.gff.get('fortbonus', 0)
     
     def _get_misc_reflex_bonus(self) -> int:
         """Get miscellaneous reflex bonus"""
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
-            return self.character_manager.character_data.get('refbonus', 0)
         return self.gff.get('refbonus', 0)
     
     def _get_misc_will_bonus(self) -> int:
         """Get miscellaneous will bonus"""
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
-            return self.character_manager.character_data.get('willbonus', 0)
         return self.gff.get('willbonus', 0)
     
     def set_misc_save_bonus(self, save_type: str, value: int) -> Dict[str, Any]:
@@ -692,25 +686,14 @@ class SaveManager(EventEmitter):
         
         gff_field = save_field_map[save_type]
         
-        # Get old value from appropriate source
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
-            old_value = self.character_manager.character_data.get(gff_field, 0)
-        else:
-            old_value = self.gff.get(gff_field, 0)
+        # Get old value from GFF wrapper (single source of truth)
+        old_value = self.gff.get(gff_field, 0)
         
         # Clamp value to engine limits
         value = max(-35, min(255, int(value)))
         
-        # Update the character data (prefer character_data if available)
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data is not None:
-            self.character_manager.character_data[gff_field] = value
-        
-        # Always update GFF as fallback and primary source
+        # Update GFF wrapper (single source of truth)
         self.gff.set(gff_field, value)
-        
-        # Also update GFF element if available for consistency
-        if hasattr(self.character_manager, '_gff_element') and self.character_manager._gff_element:
-            self.character_manager._gff_element.set_field(gff_field, value)
         
         # Calculate new totals
         new_saves = {

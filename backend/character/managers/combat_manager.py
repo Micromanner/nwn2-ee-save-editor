@@ -86,10 +86,7 @@ class CombatManager(EventEmitter):
         effective_dex_bonus = min(dex_bonus, max_dex_bonus)
         
         # Get natural armor (from race, spells, etc.)
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
-            natural_armor = self.character_manager.character_data.get('NaturalAC', 0)
-        else:
-            natural_armor = self.gff.get('NaturalAC', 0)
+        natural_armor = self.gff.get('NaturalAC', 0)
         
         # Get dodge bonus (from feats like Dodge)
         dodge_bonus = self._calculate_dodge_bonus()
@@ -149,11 +146,7 @@ class CombatManager(EventEmitter):
         improved_init = 4 if self._has_feat_by_name('ImprovedInitiative') else 0
         
         # Check for other initiative bonuses (items, etc.)
-        # Try to get from character_data first, then fall back to GFF wrapper
-        misc_bonus = self.character_manager.character_data.get('initbonus', 0)
-        if misc_bonus == 0:
-            # Fallback to GFF wrapper for backwards compatibility
-            misc_bonus = self.gff.get('initbonus', 0)
+        misc_bonus = self.gff.get('initbonus', 0)
         
         total_initiative = dex_mod + improved_init + misc_bonus
         
@@ -827,8 +820,6 @@ class CombatManager(EventEmitter):
     
     def _get_natural_armor_bonus(self) -> int:
         """Get natural armor bonus"""
-        if hasattr(self.character_manager, 'character_data') and self.character_manager.character_data:
-            return self.character_manager.character_data.get('NaturalAC', 0)
         return self.gff.get('NaturalAC', 0)
     
     def update_natural_armor(self, value: int) -> Dict[str, Any]:
@@ -841,21 +832,14 @@ class CombatManager(EventEmitter):
         Returns:
             Dict with old/new values and updated AC
         """
-        old_value = self.character_manager.character_data.get('NaturalAC', 0)
+        old_value = self.gff.get('NaturalAC', 0)
         
         # Engine limit - NWN2 engine caps natural armor at 255
         # This is an engine constraint, not a game rule
         value = max(0, min(255, int(value)))
         
-        # Update the character data
-        self.character_manager.character_data['NaturalAC'] = value
-        
-        # Always update GFF wrapper as well (like save_manager pattern)
+        # Update GFF wrapper (single source of truth)
         self.gff.set('NaturalAC', value)
-        
-        # Also update the GFF element if available
-        if hasattr(self.character_manager, '_gff_element') and self.character_manager._gff_element:
-            self.character_manager._gff_element.set_field('NaturalAC', value)
         
         # Calculate new AC
         new_ac = self.calculate_armor_class()
@@ -892,22 +876,14 @@ class CombatManager(EventEmitter):
         Returns:
             Dict with old/new values and updated initiative
         """
-        old_value = self.character_manager.character_data.get('initbonus', 0)
-        logger.info(f"DEBUG: old_value from character_data: {old_value}")
+        old_value = self.gff.get('initbonus', 0)
         
         # Engine limit - NWN2 engine uses BYTE for bonus fields (-128 to +127)
         # This is an engine constraint, not a game rule
         value = max(-128, min(127, int(value)))
         
-        # Update the character data
-        self.character_manager.character_data['initbonus'] = value
-        
-        # Always update GFF wrapper as well (like save_manager pattern)
+        # Update GFF wrapper (single source of truth)
         self.gff.set('initbonus', value)
-        
-        # Also update the GFF element if available
-        if hasattr(self.character_manager, '_gff_element') and self.character_manager._gff_element:
-            self.character_manager._gff_element.set_field('initbonus', value)
         
         # Calculate new initiative
         new_initiative = self.calculate_initiative()
