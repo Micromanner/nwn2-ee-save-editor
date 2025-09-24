@@ -22,14 +22,14 @@ class PrerequisiteGraph:
     converting recursive prerequisite checking into simple set operations.
     """
     
-    def __init__(self, game_data_loader):
+    def __init__(self, rules_service):
         """
         Initialize and build the prerequisite graph using Rust.
         
         Args:
-            game_data_loader: DynamicGameDataLoader instance with feat data
+            rules_service: GameRulesService instance with feat data
         """
-        self.game_data_loader = game_data_loader
+        self.rules_service = rules_service
         self.using_rust = True  # Always true now
         self._init_rust_implementation()
     
@@ -46,7 +46,7 @@ class PrerequisiteGraph:
         retry_delay = 0.5
 
         for attempt in range(max_retries):
-            feat_table = self.game_data_loader.get_table('feat')
+            feat_table = self.rules_service.get_table('feat')
             if feat_table:
                 break
             
@@ -224,12 +224,13 @@ class PrerequisiteGraph:
 _prerequisite_graph_instance: Optional[PrerequisiteGraph] = None
 
 
-def get_prerequisite_graph(game_data_loader=None, force_rebuild: bool = False) -> Optional[PrerequisiteGraph]:
+def get_prerequisite_graph(game_data_loader=None, rules_service=None, force_rebuild: bool = False) -> Optional[PrerequisiteGraph]:
     """
     Get the singleton PrerequisiteGraph instance.
     
     Args:
-        game_data_loader: DynamicGameDataLoader to use (required on first call)
+        game_data_loader: DEPRECATED - DynamicGameDataLoader (for backward compatibility)
+        rules_service: GameRulesService to use (preferred)
         force_rebuild: If True, rebuild the graph even if it exists
         
     Returns:
@@ -240,12 +241,15 @@ def get_prerequisite_graph(game_data_loader=None, force_rebuild: bool = False) -
     if _prerequisite_graph_instance and not force_rebuild:
         return _prerequisite_graph_instance
     
-    if game_data_loader is None:
-        logger.warning("Cannot create PrerequisiteGraph without game_data_loader")
+    # Prefer rules_service, fallback to game_data_loader for backward compatibility
+    data_source = rules_service if rules_service is not None else game_data_loader
+    
+    if data_source is None:
+        logger.warning("Cannot create PrerequisiteGraph without rules_service or game_data_loader")
         return None
     
     logger.info("Creating PrerequisiteGraph singleton...")
-    _prerequisite_graph_instance = PrerequisiteGraph(game_data_loader)
+    _prerequisite_graph_instance = PrerequisiteGraph(data_source)
     
     return _prerequisite_graph_instance
 

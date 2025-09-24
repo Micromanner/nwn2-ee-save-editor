@@ -30,7 +30,7 @@ class CombatManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
+        self.rules_service = character_manager.rules_service
         
         # Cache for performance
         self._base_item_cache = {}
@@ -303,7 +303,7 @@ class CombatManager(EventEmitter):
             return self._base_item_cache[base_item_id]
         
         try:
-            base_item_data = self.game_data_loader.get_by_id('baseitems', base_item_id)
+            base_item_data = self.rules_service.get_by_id('baseitems', base_item_id)
             self._base_item_cache[base_item_id] = base_item_data
             return base_item_data
         except Exception as e:
@@ -459,7 +459,7 @@ class CombatManager(EventEmitter):
             return self._feat_cache[feat_id]
         
         try:
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.rules_service.get_by_id('feat', feat_id)
             self._feat_cache[feat_id] = feat_data
             return feat_data
         except Exception as e:
@@ -495,7 +495,7 @@ class CombatManager(EventEmitter):
             return self._class_cache[class_id]
         
         try:
-            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            class_data = self.rules_service.get_by_id('classes', class_id)
             self._class_cache[class_id] = class_data
             return class_data
         except Exception as e:
@@ -746,7 +746,7 @@ class CombatManager(EventEmitter):
             class_level = class_info.get('ClassLevel', 0)
             
             if class_level > 0:
-                class_data = self.game_data_loader.get_by_id('classes', class_id)
+                class_data = self.rules_service.get_by_id('classes', class_id)
                 if class_data:
                     class_bab = self._calculate_class_bab(class_data, class_level)
                     total_bab += class_bab
@@ -777,7 +777,7 @@ class CombatManager(EventEmitter):
         # Cache BAB table data (convert to lowercase for lookup)
         bab_table_name_lower = bab_table_name.lower()
         if bab_table_name_lower not in self._class_cache:
-            bab_table = self.game_data_loader.get_table(bab_table_name_lower)
+            bab_table = self.rules_service.get_table(bab_table_name_lower)
             if bab_table:
                 self._class_cache[bab_table_name_lower] = bab_table
             else:
@@ -1133,7 +1133,7 @@ class CombatManager(EventEmitter):
         """
         # Base SR from race
         race_id = self.gff.get('Race', 0)
-        race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+        race_data = self.rules_service.get_by_id('racialtypes', race_id)
         base_sr = 0
         
         if race_data:

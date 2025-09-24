@@ -62,8 +62,8 @@ class FeatManager(EventEmitter):
         if USE_PREREQUISITE_GRAPH:
             try:
                 from .prerequisite_graph import get_prerequisite_graph
-                # Pass the game_data_loader from GameRulesService
-                self._prerequisite_graph = get_prerequisite_graph(self.game_rules_service._loader)
+                # Pass the rules_service directly
+                self._prerequisite_graph = get_prerequisite_graph(rules_service=self.game_rules_service)
                 if self._prerequisite_graph:
                     logger.info("FeatManager using PrerequisiteGraph for fast validation")
                 else:

@@ -25,7 +25,7 @@ class SaveManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
+        self.rules_service = character_manager.rules_service
         
         # Track temporary modifiers (from spells, items, etc.)
         self.temporary_modifiers = {
@@ -77,7 +77,7 @@ class SaveManager(EventEmitter):
         
         # Get all feats from game data
         try:
-            feats_table = self.game_data_loader.get_table('feat')
+            feats_table = self.rules_service.get_table('feat')
             if not feats_table:
                 logger.warning("No feat table available")
                 return
@@ -121,7 +121,7 @@ class SaveManager(EventEmitter):
         """Build cache of racial save bonuses from racialtypes.2da"""
         self._racial_cache = {}
         
-        races = self.game_data_loader.get_table('racialtypes')
+        races = self.rules_service.get_table('racialtypes')
         for race in races:
             race_id = getattr(race, 'id', None) if hasattr(race, 'id') else None
             if race_id is None:
@@ -296,7 +296,7 @@ class SaveManager(EventEmitter):
         # fully data-driven as this is core D&D 3.5 Paladin class feature logic.
         try:
             # Get all classes and check for Paladin-like class with Divine Grace
-            classes_table = self.game_data_loader.get_table('classes')
+            classes_table = self.rules_service.get_table('classes')
             if classes_table:
                 for class_data in classes_table:
                     class_label = field_mapper.get_field_value(class_data, 'label', '')
@@ -339,7 +339,7 @@ class SaveManager(EventEmitter):
         
         # Get racial bonuses using FieldMappingUtility and data-driven approach
         try:
-            race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+            race_data = self.rules_service.get_by_id('racialtypes', race_id)
             if race_data:
                 racial_bonuses = field_mapper.get_racial_saves(race_data)
                 bonuses['fortitude'] += racial_bonuses['fortitude']
@@ -732,7 +732,7 @@ class SaveManager(EventEmitter):
         from gamedata.dynamic_loader.field_mapping_utility import field_mapper
         
         try:
-            race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+            race_data = self.rules_service.get_by_id('racialtypes', race_id)
             if race_data:
                 return field_mapper.get_racial_saves(race_data)
         except Exception as e:

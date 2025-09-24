@@ -21,7 +21,7 @@ msgpack==1.0.7
 Nuitka==2.7.12
 numpy==1.26.3
 packaging==25.0
-pillow==10.2.0
+pillow==11.3.0
 pluggy==1.6.0
 psutil==7.0.0
 pycodestyle==2.14.0

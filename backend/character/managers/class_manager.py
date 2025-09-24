@@ -26,7 +26,7 @@ class ClassManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
+        self.rules_service = character_manager.rules_service
         self.field_mapper = FieldMappingUtility()
         
         # Cache for performance
@@ -65,12 +65,12 @@ class ClassManager(EventEmitter):
         
         # Basic validation for save file integrity only
         if not cheat_mode:
-            new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+            new_class = self.rules_service.get_by_id('classes', new_class_id)
             if not new_class:
                 raise ValueError(f"Invalid class ID: {new_class_id}")
         
         # Get class info
-        new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+        new_class = self.rules_service.get_by_id('classes', new_class_id)
         if not new_class:
             raise ValueError(f"Invalid class ID: {new_class_id}")
         
@@ -139,12 +139,12 @@ class ClassManager(EventEmitter):
         
         # Basic validation for save file integrity only
         if not cheat_mode:
-            new_class = self.game_data_loader.get_by_id('classes', class_id)
+            new_class = self.rules_service.get_by_id('classes', class_id)
             if not new_class:
                 raise ValueError(f"Invalid class ID: {class_id}")
         
         # Get class info
-        new_class = self.game_data_loader.get_by_id('classes', class_id)
+        new_class = self.rules_service.get_by_id('classes', class_id)
         if not new_class:
             raise ValueError(f"Invalid class ID: {class_id}")
         
@@ -237,7 +237,7 @@ class ClassManager(EventEmitter):
                             self.gff.set('ClassList', class_list)
                             
                             # Recalculate stats
-                            new_class = self.game_data_loader.get_by_id('classes', class_id)
+                            new_class = self.rules_service.get_by_id('classes', class_id)
                             total_level = sum(c.get('ClassLevel', 0) for c in class_list)
                             changes = self._update_class_stats(new_class, total_level)
                             
@@ -292,7 +292,7 @@ class ClassManager(EventEmitter):
             raise ValueError("Cannot use _update_class_list for multiclass characters. Use change_specific_class() instead.")
         
         # Check if new class has level limits and cap the level if needed
-        new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+        new_class = self.rules_service.get_by_id('classes', new_class_id)
         if new_class:
             max_level_raw = self.field_mapper.get_field_value(new_class, 'max_level', '0')
             try:
@@ -329,7 +329,7 @@ class ClassManager(EventEmitter):
         logger.info(f"Changing specific class from {old_class_id} to {new_class_id}")
         
         # Validate new class exists
-        new_class = self.game_data_loader.get_by_id('classes', new_class_id)
+        new_class = self.rules_service.get_by_id('classes', new_class_id)
         if not new_class:
             raise ValueError(f"Invalid class ID: {new_class_id}")
         
@@ -523,7 +523,7 @@ class ClassManager(EventEmitter):
         # Cache BAB table data (convert to lowercase for lookup)
         bab_table_name_lower = bab_table_name.lower()
         if bab_table_name_lower not in self._bab_table_cache:
-            bab_table = self.game_data_loader.get_table(bab_table_name_lower)
+            bab_table = self.rules_service.get_table(bab_table_name_lower)
             if bab_table:
                 self._bab_table_cache[bab_table_name_lower] = bab_table
             else:
@@ -561,7 +561,7 @@ class ClassManager(EventEmitter):
             class_level = class_info.get('ClassLevel', 0)
             
             if class_level > 0:
-                class_data = self.game_data_loader.get_by_id('classes', class_id)
+                class_data = self.rules_service.get_by_id('classes', class_id)
                 if class_data:
                     class_bab = self._calculate_bab(class_data, class_level)
                     total_bab += class_bab
@@ -587,7 +587,7 @@ class ClassManager(EventEmitter):
         # Cache save table data (convert to lowercase for lookup)
         save_table_name_lower = save_table_name.lower()
         if save_table_name_lower not in self._save_table_cache:
-            save_table = self.game_data_loader.get_table(save_table_name_lower)
+            save_table = self.rules_service.get_table(save_table_name_lower)
             if save_table:
                 self._save_table_cache[save_table_name_lower] = save_table
             else:
@@ -648,7 +648,7 @@ class ClassManager(EventEmitter):
             class_level = class_info.get('ClassLevel', 0)
             
             if class_level > 0:
-                class_data = self.game_data_loader.get_by_id('classes', class_id)
+                class_data = self.rules_service.get_by_id('classes', class_id)
                 if class_data:
                     # Get base saves without modifiers
                     saves = self._calculate_saves(class_data, class_level, {'CON': 0, 'DEX': 0, 'WIS': 0})
@@ -708,7 +708,7 @@ class ClassManager(EventEmitter):
         classes = []
         for c in class_list:
             class_id = c.get('Class', 0)
-            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            class_data = self.rules_service.get_by_id('classes', class_id)
             
             # Safely get class name
             if class_data:
@@ -786,7 +786,7 @@ class ClassManager(EventEmitter):
         
         for feat in feat_list:
             feat_id = feat.get('Feat', -1)
-            feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+            feat_data = self.rules_service.get_by_id('feat', feat_id)
             if feat_data:
                 label = getattr(feat_data, 'label', '')
                 if label == feat_label:
@@ -799,14 +799,14 @@ class ClassManager(EventEmitter):
         racial_feats = []
         
         # Get race data
-        race_data = self.game_data_loader.get_by_id('racialtypes', race_id)
+        race_data = self.rules_service.get_by_id('racialtypes', race_id)
         if not race_data:
             return racial_feats
         
         # Check for racial feat table
         feat_table_name = getattr(race_data, 'feat_table', None)
         if feat_table_name:
-            feat_table = self.game_data_loader.get_table(feat_table_name.lower())
+            feat_table = self.rules_service.get_table(feat_table_name.lower())
             if feat_table:
                 for feat_entry in feat_table:
                     feat_id = getattr(feat_entry, 'feat_index', -1)
@@ -818,7 +818,7 @@ class ClassManager(EventEmitter):
     def _is_background_feat(self, feat_id: int) -> bool:
         """Check if a feat is a background/history feat that should be preserved"""
         # Get feat data
-        feat_data = self.game_data_loader.get_by_id('feat', feat_id)
+        feat_data = self.rules_service.get_by_id('feat', feat_id)
         if not feat_data:
             return False
         
@@ -853,7 +853,7 @@ class ClassManager(EventEmitter):
         # Check for valid classes (prevent crashes from invalid class references)
         for class_entry in class_list:
             class_id = class_entry.get('Class', 0)
-            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            class_data = self.rules_service.get_by_id('classes', class_id)
             if not class_data:
                 errors.append(f"Invalid class ID: {class_id}")
         
@@ -919,7 +919,7 @@ class ClassManager(EventEmitter):
                 break
         
         # Get class data and max level
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.rules_service.get_by_id('classes', class_id)
         if not class_data:
             return {
                 'current_level': current_level,
@@ -961,7 +961,7 @@ class ClassManager(EventEmitter):
         
         for class_entry in class_list:
             if class_entry.get('Class') == class_id:
-                class_data = self.game_data_loader.get_by_id('classes', class_id)
+                class_data = self.rules_service.get_by_id('classes', class_id)
                 return {
                     'id': class_id,
                     'level': class_entry.get('ClassLevel', 0),
@@ -1040,7 +1040,7 @@ class ClassManager(EventEmitter):
         available_prestige = []
         
         # Get all classes
-        classes_table = self.game_data_loader.get_table('classes')
+        classes_table = self.rules_service.get_table('classes')
         if not classes_table:
             return available_prestige
         
@@ -1151,7 +1151,7 @@ class ClassManager(EventEmitter):
             'skill_points': 0
         }
         
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.rules_service.get_by_id('classes', class_id)
         if not class_data:
             return features
         
@@ -1230,7 +1230,7 @@ class ClassManager(EventEmitter):
             return self._save_table_cache[save_table_name]
         
         # Load save table
-        save_table_data = self.game_data_loader.get_table(save_table_name.lower())
+        save_table_data = self.rules_service.get_table(save_table_name.lower())
         if not save_table_data:
             return None
         
@@ -1254,7 +1254,7 @@ class ClassManager(EventEmitter):
         Returns:
             Dict with progression data formatted for frontend display
         """
-        class_data = self.game_data_loader.get_by_id('classes', class_id)
+        class_data = self.rules_service.get_by_id('classes', class_id)
         if not class_data:
             return {}
         
@@ -1312,7 +1312,7 @@ class ClassManager(EventEmitter):
             }
         
         # Convert to lowercase for table lookup
-        save_table = self.game_data_loader.get_table(save_table_name.lower())
+        save_table = self.rules_service.get_table(save_table_name.lower())
         
         if not save_table or level > len(save_table):
             return {'fortitude': 0, 'reflex': 0, 'will': 0}
@@ -1528,7 +1528,7 @@ class ClassManager(EventEmitter):
             return feats_for_level
         
         # Load the feat table
-        feat_table = self.game_data_loader.get_table(feat_table_name.lower())
+        feat_table = self.rules_service.get_table(feat_table_name.lower())
         if not feat_table:
             logger.warning(f"Feat table {feat_table_name} not found")
             return feats_for_level
@@ -1564,7 +1564,7 @@ class ClassManager(EventEmitter):
         abilities = []
         
         try:
-            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            class_data = self.rules_service.get_by_id('classes', class_id)
             if not class_data:
                 return abilities
             
@@ -1576,7 +1576,7 @@ class ClassManager(EventEmitter):
                 ability_table_name = f'cls_bfeat_{label}'
             
             if ability_table_name:
-                ability_table = self.game_data_loader.get_table(ability_table_name.lower())
+                ability_table = self.rules_service.get_table(ability_table_name.lower())
                 if ability_table:
                     for ability in ability_table:
                         granted_level = getattr(ability, 'granted_on_level', -1)
@@ -1607,7 +1607,7 @@ class ClassManager(EventEmitter):
         
         for class_info in class_list:
             class_id = class_info.get('Class', -1)
-            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            class_data = self.rules_service.get_by_id('classes', class_id)
             if class_data:
                 label = getattr(class_data, 'label', '')
                 if label.lower() == class_name.lower():
@@ -1629,7 +1629,7 @@ class ClassManager(EventEmitter):
         
         for class_info in class_list:
             class_id = class_info.get('Class', -1)
-            class_data = self.game_data_loader.get_by_id('classes', class_id)
+            class_data = self.rules_service.get_by_id('classes', class_id)
             if class_data:
                 label = getattr(class_data, 'label', '')
                 if label.lower() == class_name.lower():
@@ -1647,7 +1647,7 @@ class ClassManager(EventEmitter):
     
     def _get_content_name(self, table_name: str, content_id: int) -> str:
         """Get content name from dynamic data"""
-        content_data = self.game_data_loader.get_by_id(table_name, content_id)
+        content_data = self.rules_service.get_by_id(table_name, content_id)
         if content_data:
             # Try multiple possible name fields
             for field in ['label', 'name', 'Label', 'Name']:
@@ -1767,7 +1767,7 @@ class ClassManager(EventEmitter):
         """
         try:
             # Search through classes.2da for matching name
-            classes_data = self.game_data_loader.get_table('classes')
+            classes_data = self.rules_service.get_table('classes')
             for row_id, class_data in enumerate(classes_data):
                 if class_data:
                     # Check different name fields
