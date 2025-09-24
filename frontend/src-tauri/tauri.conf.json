@@ -52,7 +52,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/fastapi-server"],
+    "externalBin": ["binaries/fastapi_server.dist/fastapi-server.exe"],
     "resources": []
   }
 }

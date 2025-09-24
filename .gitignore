@@ -61,3 +61,4 @@ binaries
 .tauri
 out/
 test-build-local.bat
+nwn1/

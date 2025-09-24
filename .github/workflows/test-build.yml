@@ -12,8 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            args: '--target universal-apple-darwin'
           - platform: 'ubuntu-latest'
             args: ''
           - platform: 'windows-latest'
@@ -31,7 +29,7 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ''
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'

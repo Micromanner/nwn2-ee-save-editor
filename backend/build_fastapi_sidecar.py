@@ -33,24 +33,19 @@ def build_with_nuitka():
                 path.unlink(missing_ok=True)
                 print(f"Removed file: {path.name}")
     
-    # Create both generic name (for dev) and target-specific name (for production)
     if sys.platform == "win32":
-        generic_name = "fastapi-server.exe"
-        target_specific_name = "fastapi-server-x86_64-pc-windows-msvc.exe"
+        exe_name = "fastapi-server.exe"
+        generic_dir = "fastapi_server.dist"
+        target_specific_dir = "fastapi-server-x86_64-pc-windows-msvc"
     elif sys.platform == "darwin":
-        # Detect architecture for macOS
-        if platform.machine() == "arm64":
-            target_triple = "aarch64-apple-darwin"
-        else:
-            target_triple = "x86_64-apple-darwin"
-        generic_name = "fastapi-server"
-        target_specific_name = f"fastapi-server-{target_triple}"
+        raise RuntimeError("macOS not supported - NWN2:EE is not available for macOS")
     else:  # Linux
-        generic_name = "fastapi-server"
-        target_specific_name = "fastapi-server-x86_64-unknown-linux-gnu"
+        exe_name = "fastapi-server"
+        generic_dir = "fastapi_server.dist"
+        target_specific_dir = "fastapi-server-x86_64-unknown-linux-gnu"
     
-    # Build with generic name first
-    output_name = generic_name
+    # Build with generic directory name first
+    output_name = exe_name
 
     # Skip the large icon cache directory since icons are not used anymore
     include_cache = False
@@ -66,7 +61,6 @@ def build_with_nuitka():
         "-m", "nuitka",
         f"--output-filename={output_name}",
         f"--output-dir={DIST_DIR}",
-        "--onefile",              # Create a single executable
         "--standalone",           # Bundle all dependencies
         "--assume-yes-for-downloads",  # Auto-download C compiler if needed
         "--lto=yes",              # Link-Time Optimization for smaller binary
@@ -118,21 +112,24 @@ def build_with_nuitka():
         print("\nNuitka build failed!")
         return False
         
-    # Check if the output file was created
-    output_file = DIST_DIR / output_name
+    # Check if the output directory and executable were created
+    output_dir = DIST_DIR / generic_dir
+    output_file = output_dir / output_name
     
-    if output_file.exists():
-        print(f"Successfully created: {output_name}")
+    if output_dir.exists() and output_file.exists():
+        print(f"Successfully created: {generic_dir}/{output_name}")
         
         # Create target-specific copy for production builds
-        target_file = DIST_DIR / target_specific_name
-        if not target_file.exists() or output_file.stat().st_mtime > target_file.stat().st_mtime:
-            shutil.copy2(output_file, target_file)
-            print(f"Created target-specific binary: {target_specific_name}")
+        target_dir = DIST_DIR / target_specific_dir
+        if not target_dir.exists() or output_dir.stat().st_mtime > target_dir.stat().st_mtime:
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            shutil.copytree(output_dir, target_dir)
+            print(f"Created target-specific binary: {target_specific_dir}")
         
         return True
     else:
-        print(f"Expected output file not found: {output_file}")
+        print(f"Expected output directory/file not found: {output_dir}/{output_name}")
         return False
 
 def main():
@@ -146,32 +143,29 @@ def main():
     end_time = time.time()
     build_time = end_time - start_time
     
-    # Show both binaries created
     if sys.platform == "win32":
-        generic_name = "fastapi-server.exe"
-        target_specific_name = "fastapi-server-x86_64-pc-windows-msvc.exe"
+        exe_name = "fastapi-server.exe"
+        generic_dir = "fastapi_server.dist"
+        target_specific_dir = "fastapi-server-x86_64-pc-windows-msvc"
     elif sys.platform == "darwin":
-        if platform.machine() == "arm64":
-            target_triple = "aarch64-apple-darwin"
-        else:
-            target_triple = "x86_64-apple-darwin"
-        generic_name = "fastapi-server"
-        target_specific_name = f"fastapi-server-{target_triple}"
+        raise RuntimeError("macOS not supported - NWN2:EE is not available for macOS")
     else:  # Linux
-        generic_name = "fastapi-server"
-        target_specific_name = "fastapi-server-x86_64-unknown-linux-gnu"
+        exe_name = "fastapi-server"
+        generic_dir = "fastapi_server.dist"
+        target_specific_dir = "fastapi-server-x86_64-unknown-linux-gnu"
     
-    final_path = DIST_DIR / generic_name
-    target_path = DIST_DIR / target_specific_name
+    final_dir = DIST_DIR / generic_dir
+    final_path = final_dir / exe_name
+    target_dir = DIST_DIR / target_specific_dir
     
     if success and final_path.exists():
         file_size_mb = final_path.stat().st_size / (1024 * 1024)
         print("\nBuild completed successfully!")
         print("=========================================")
         print(f"Generic binary: {final_path}")
-        if target_path.exists():
-            print(f"Target-specific binary: {target_path}")
-        print(f"Size: {file_size_mb:.1f} MB")
+        if target_dir.exists():
+            print(f"Target-specific directory: {target_dir}")
+        print(f"Executable size: {file_size_mb:.1f} MB")
         print(f"Build time: {build_time:.1f} seconds")
         print(f"Ready for Tauri sidecar usage")
         return 0
