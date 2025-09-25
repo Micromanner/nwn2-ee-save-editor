@@ -37,7 +37,6 @@ backend/cache/icons/
 *.dylib
 *.pyi
 *.pyd
-Cargo.lock
 *_profile*.json
 *analysis*.json
 backend/scripts/
