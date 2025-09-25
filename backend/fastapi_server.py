@@ -356,6 +356,7 @@ app.add_middleware(RequestTrackingMiddleware)
 # CORS configuration for Tauri frontend - UPDATED FOR PRODUCTION
 ALLOWED_ORIGINS = [
     "http://localhost:3000",      # Dev mode
+    "http://localhost:24314",     # Dev mode (Tauri dev port)
     "tauri://localhost",          # Tauri protocol
     "https://tauri.localhost",    # HTTPS Tauri
     "http://tauri.localhost",     # HTTP Tauri (PRODUCTION FIX)
@@ -434,6 +435,22 @@ def validation_exception_handler(request: Request, exc: RequestValidationError):
 @app.exception_handler(StarletteHTTPException)
 def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions with consistent format"""
+    # Suppress noisy logs for icon lookups while icons are temporarily disabled
+    try:
+        path = request.url.path
+    except Exception:
+        path = ""
+
+    if exc.status_code == 404 and path.startswith("/api/gamedata/icons/"):
+        # Return 404 without warning-level log to avoid noise
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": "icon_not_found",
+                "path": path
+            }
+        )
+
     logger.warning(f"HTTP {exc.status_code} on {request.url}: {exc.detail}")
     return JSONResponse(
         status_code=exc.status_code,
@@ -755,24 +772,41 @@ def main():
     
     logger.info(f"Server configuration: {host}:{port} (debug={debug})")
     
+    # Create uvicorn config to capture actual port
+    config = uvicorn.Config(
+        app=app,
+        host=host,
+        port=port,
+        log_level="info" if debug else "warning",
+        reload=False
+    )
+    
+    server = uvicorn.Server(config)
+    
+    # Create a custom server class to report the actual port after binding
+    class PortReportingServer(uvicorn.Server):
+        async def startup(self, sockets=None):
+            # First do the normal startup
+            await super().startup(sockets)
+            
+            # Now we can get the actual bound port
+            for server in self.servers:
+                for socket in server.sockets:
+                    actual_port = socket.getsockname()[1]
+                    print(f"FASTAPI_ACTUAL_PORT={actual_port}", flush=True)
+                    logger.info(f"FastAPI server bound to port: {actual_port}")
+                    break
+                break
+    
+    # Use custom server class
+    server.__class__ = PortReportingServer
+    
     # Run the server
-    if debug:
-        # In debug mode, run without reload to avoid import string requirement
-        uvicorn.run(
-            app,
-            host=host,
-            port=port,
-            reload=False,  # Disable reload to avoid import string requirement
-            log_level="info"
-        )
-    else:
-        # In production, run normally
-        uvicorn.run(
-            app,
-            host=host,
-            port=port,
-            log_level="warning"
-        )
+    try:
+        server.run()
+    except Exception as e:
+        logger.error(f"Failed to start FastAPI server: {e}")
+        raise
 
 if __name__ == "__main__":
     main()

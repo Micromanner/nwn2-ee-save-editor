@@ -240,16 +240,37 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         *child_lock = Some(child);
     }
 
-    // Monitor sidecar output
+    // Monitor sidecar output and capture dynamic port
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(line) => {
                     let line_str = String::from_utf8_lossy(&line);
                     info!("FastAPI: {}", line_str);
+                    
+                    // Check for dynamic port assignment
+                    if line_str.starts_with("FASTAPI_ACTUAL_PORT=") {
+                        if let Some(port_str) = line_str.strip_prefix("FASTAPI_ACTUAL_PORT=") {
+                            if let Ok(port) = port_str.trim().parse::<u16>() {
+                                crate::config::Config::set_dynamic_port(port);
+                                info!("Captured dynamic FastAPI port: {}", port);
+                            }
+                        }
+                    }
                 }
                 CommandEvent::Stderr(line) => {
                     let line_str = String::from_utf8_lossy(&line);
+                    
+                    // Check for dynamic port assignment (might be in stderr)
+                    if line_str.starts_with("FASTAPI_ACTUAL_PORT=") {
+                        if let Some(port_str) = line_str.strip_prefix("FASTAPI_ACTUAL_PORT=") {
+                            if let Ok(port) = port_str.trim().parse::<u16>() {
+                                crate::config::Config::set_dynamic_port(port);
+                                info!("Captured dynamic FastAPI port: {}", port);
+                            }
+                        }
+                    }
+                    
                     // FastAPI logs INFO messages to stderr, so check the content
                     if line_str.contains("ERROR") || line_str.contains("CRITICAL") || line_str.contains("FATAL") {
                         error!("FastAPI Error: {}", line_str);
@@ -571,6 +592,12 @@ pub async fn ensure_fastapi_running(app: tauri::AppHandle) -> Result<(), String>
     info!("Starting new FastAPI instance");
     start_fastapi_sidecar(app).await?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_fastapi_base_url() -> Result<String, String> {
+    let config = Config::new();
+    Ok(config.get_base_url())
 }
 
 #[tauri::command]

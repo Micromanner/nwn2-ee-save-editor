@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import DynamicAPI from '@/lib/utils/dynamicApi';
 
 interface CharacterPortraitProps {
   portrait?: string | null;
@@ -41,14 +42,18 @@ export default function CharacterPortrait({
     if (!portraitId) {
       return;
     }
-    
-    // Build the icon URL using the v2 endpoint
-    // Portrait IDs in NWN2 are typically like "po_hu_f_99_" or custom names
-    const iconPath = `portraits/${portraitId}`;
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/gamedata/icons/v2/${iconPath}/`;
-    
-    setLoading(true);
-    setImageUrl(url);
+
+    const buildUrl = async () => {
+      // Build the icon URL using the v2 endpoint
+      // Portrait IDs in NWN2 are typically like "po_hu_f_99_" or custom names
+      const iconPath = `portraits/${portraitId}`;
+      const apiBase = await DynamicAPI.getApiBaseUrl();
+      const url = `${apiBase}/gamedata/icons/v2/${iconPath}/`;
+      setLoading(true);
+      setImageUrl(url);
+    };
+
+    buildUrl();
   }, [portrait, customPortrait]);
   
   const handleError = () => {

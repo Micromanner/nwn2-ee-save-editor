@@ -1,9 +1,9 @@
 {
   "name": "frontend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
+    "dev": "next dev --turbo -p 24314",
     "build": "next build --turbo",
     "start": "next start",
     "lint": "next lint",
@@ -23,7 +23,7 @@
     "@radix-ui/react-tabs": "^1.1.12",
     "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-dialog": "^2.3.2",
-    "@tauri-apps/plugin-http": "^2.5.1",
+    "@tauri-apps/plugin-http": "^2.5.2",
     "@tauri-apps/plugin-updater": "^2.9.0",
     "@types/react-window": "^1.8.8",
     "class-variance-authority": "^0.7.1",

@@ -2,6 +2,8 @@
  * Enhanced icon URL builder for NWN2 icons with override support
  */
 
+import DynamicAPI from '../utils/dynamicApi';
+
 /**
  * Map icon name to full directory path in NWN2 Enhanced Edition
  * @param iconName - Icon name (e.g., "is_magicmissile")
@@ -50,8 +52,12 @@ export function buildIconUrl(iconName: string, options: IconOptions = {}): strin
     return '';
   }
   
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
-  const baseUrl = apiUrl.replace('/api', ''); // Remove /api suffix to get base URL
+  const cachedBase = DynamicAPI.getCachedBaseUrl();
+  if (!cachedBase) {
+    // Not initialized yet; let caller decide to render fallback
+    return '';
+  }
+  const baseUrl = `${cachedBase}`;
   
   // Always use the enhanced API now (legacy removed)
   return `${baseUrl}/api/gamedata/icons/${iconName}/`;
@@ -94,8 +100,7 @@ export async function fetchIconStats(): Promise<{
   format: string;
   mimetype: string;
 }> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
-  const response = await fetch(`${apiUrl}/gamedata/icons/`);
+  const response = await DynamicAPI.fetch(`/gamedata/icons/`);
   
   if (!response.ok) {
     throw new Error('Failed to fetch icon statistics');
@@ -113,8 +118,7 @@ export async function updateModuleIcons(hakList: string[]): Promise<{
   haks_loaded: number;
   statistics: Record<string, unknown>;
 }> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
-  const response = await fetch(`${apiUrl}/gamedata/icons/module/`, {
+  const response = await DynamicAPI.fetch(`/gamedata/icons/module/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 /// Configuration for the NWN2 Save Editor Tauri app
 /// Reads from the same .env file as the Python backend
@@ -7,6 +8,25 @@ use std::path::PathBuf;
 pub struct Config {
     pub fastapi_port: u16,
     pub fastapi_host: String,
+}
+
+// Global state for dynamic port assignment
+lazy_static::lazy_static! {
+    static ref DYNAMIC_PORT: Arc<Mutex<Option<u16>>> = Arc::new(Mutex::new(None));
+}
+
+impl Config {
+    /// Set the dynamically assigned port (called by sidecar manager)
+    pub fn set_dynamic_port(port: u16) {
+        let mut dynamic_port = DYNAMIC_PORT.lock().unwrap();
+        *dynamic_port = Some(port);
+    }
+    
+    /// Get the current effective port (dynamic if available, otherwise configured)
+    pub fn get_effective_port(&self) -> u16 {
+        let dynamic_port = DYNAMIC_PORT.lock().unwrap();
+        dynamic_port.unwrap_or(self.fastapi_port)
+    }
 }
 
 impl Config {
@@ -51,12 +71,10 @@ impl Config {
     }
     
     pub fn get_base_url(&self) -> String {
-        format!("http://{}:{}", self.fastapi_host, self.fastapi_port)
+        let effective_port = self.get_effective_port();
+        format!("http://{}:{}", self.fastapi_host, effective_port)
     }
     
-    pub fn get_api_base_url(&self) -> String {
-        format!("http://{}:{}/api", self.fastapi_host, self.fastapi_port)
-    }
 }
 
 impl Default for Config {

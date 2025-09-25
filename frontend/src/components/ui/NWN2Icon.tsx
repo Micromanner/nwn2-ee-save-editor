@@ -4,6 +4,7 @@ import { buildIconUrl, getIconCategory } from '@/lib/api/enhanced-icons';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useIconCache } from '@/contexts/IconCacheContext';
+import DynamicAPI from '@/lib/utils/dynamicApi';
 
 interface NWN2IconProps {
   icon: string;
@@ -76,9 +77,9 @@ export default function NWN2Icon({
     }
   } else if (fullIconUrl && !fullIconUrl.startsWith('http')) {
     // Ensure relative URLs are converted to full URLs
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL!;
-    const baseUrl = apiUrl.replace('/api', '');
-    fullIconUrl = `${baseUrl}${fullIconUrl}`;
+    const cachedBase = DynamicAPI.getCachedBaseUrl();
+    if (!cachedBase) return null;
+    fullIconUrl = `${cachedBase}${fullIconUrl}`;
   }
   
   if (fullIconUrl) {

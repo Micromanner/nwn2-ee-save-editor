@@ -14,17 +14,24 @@ export class TauriAPI {
     return typeof window !== 'undefined' && '__TAURI__' in window;
   }
 
-  // Django Sidecar Management
-  static async startDjangoServer(): Promise<string> {
-    return await invoke('start_django_sidecar');
+  // FastAPI Sidecar Management
+  static async startFastAPIServer(): Promise<string> {
+    return await invoke('start_fastapi_sidecar');
   }
 
-  static async stopDjangoServer(): Promise<string> {
-    return await invoke('stop_django_sidecar');
+  static async stopFastAPIServer(): Promise<string> {
+    return await invoke('stop_fastapi_sidecar');
   }
 
-  static async checkDjangoHealth(): Promise<boolean> {
-    return await invoke('check_django_health');
+  static async checkFastAPIHealth(): Promise<boolean> {
+    return await invoke('check_fastapi_health');
+  }
+
+  static async getFastAPIBaseURL(): Promise<string> {
+    console.log('🔧 TauriAPI: Calling get_fastapi_base_url...');
+    const result = await invoke('get_fastapi_base_url');
+    console.log('✅ TauriAPI: Got base URL from Tauri:', result);
+    return result;
   }
 
   // File Operations

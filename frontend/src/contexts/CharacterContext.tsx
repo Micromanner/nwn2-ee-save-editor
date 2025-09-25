@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CharacterAPI, CharacterData } from '@/services/characterApi';
+import DynamicAPI from '@/lib/utils/dynamicApi';
 
 // Subsystem data interfaces
 export interface AbilitiesData {
@@ -270,7 +271,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }));
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/${characterId}/${config.endpoint}`);
+      const response = await DynamicAPI.fetch(`/characters/${characterId}/${config.endpoint}`);
       
       if (!response.ok) {
         throw new Error(`Failed to load ${subsystem}: ${response.statusText}`);
@@ -323,7 +324,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
     // Here you would also send the update to the backend
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/${characterId}/${SUBSYSTEM_CONFIG[subsystem].endpoint}`, {
+      const response = await DynamicAPI.fetch(`/characters/${characterId}/${SUBSYSTEM_CONFIG[subsystem].endpoint}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)

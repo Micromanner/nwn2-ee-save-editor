@@ -31,9 +31,8 @@
     {
       "identifier": "http:allow-fetch",
       "allow": [
-        {
-          "url": "http://localhost:8001/*"
-        }
+        { "url": "http://localhost/*" },
+        { "url": "http://127.0.0.1/*" }
       ]
     }
   ]

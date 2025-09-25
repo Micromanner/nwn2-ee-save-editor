@@ -1,10 +1,11 @@
+import { tauriCompatibleFetch } from '../utils/tauriFetch';
+import DynamicAPI from '../utils/dynamicApi';
+
 export class ApiClient {
-  private baseUrl: string;
   private cache: Map<string, { data: unknown; timestamp: number }>;
   private cacheTimeout: number = 5 * 60 * 1000; // 5 minutes
 
-  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL!) {
-    this.baseUrl = baseUrl;
+  constructor() {
     this.cache = new Map();
   }
 
@@ -16,7 +17,8 @@ export class ApiClient {
       return cached.data as T;
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, options);
+    const baseUrl = await DynamicAPI.getApiBaseUrl();
+    const response = await tauriCompatibleFetch(`${baseUrl}${endpoint}`, options);
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
@@ -31,7 +33,8 @@ export class ApiClient {
   }
 
   async post<T>(endpoint: string, data: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const baseUrl = await DynamicAPI.getApiBaseUrl();
+    const response = await tauriCompatibleFetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

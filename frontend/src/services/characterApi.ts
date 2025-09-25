@@ -1,4 +1,7 @@
-// Character API service for fetching character data from Django backend
+// Character API service for fetching character data from FastAPI backend
+
+import { tauriCompatibleFetch } from '../lib/utils/tauriFetch';
+import DynamicAPI from '../lib/utils/dynamicApi';
 
 export interface CharacterAbilities {
   strength: number;
@@ -343,13 +346,12 @@ export interface CharacterData {
   skill_points_available?: number;
 }
 
-// Base API URL - FastAPI server (from environment variable)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+// Base API URL is now dynamically obtained from Tauri
 
 export class CharacterAPI {
   // Get character state (comprehensive data)
   static async getCharacterState(characterId: number): Promise<CharacterData> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/state`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/state`);
     if (!response.ok) {
       throw new Error(`Failed to fetch character state: ${response.statusText}`);
     }
@@ -361,7 +363,7 @@ export class CharacterAPI {
   // Get character details (basic data)
   static async getCharacterDetails(characterId: number): Promise<CharacterData> {
     // Use summary endpoint instead of non-existent basic details endpoint
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/summary`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/summary`);
     if (!response.ok) {
       throw new Error(`Failed to fetch character details: ${response.statusText}`);
     }
@@ -380,7 +382,7 @@ export class CharacterAPI {
 
   // Import character from save game
   static async importCharacter(savePath: string): Promise<{id: number; name: string}> {
-    const response = await fetch(`${API_BASE_URL}/savegames/import`, {
+    const response = await DynamicAPI.fetch(`/savegames/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -420,7 +422,7 @@ export class CharacterAPI {
 
   // Save character changes to save game
   static async saveCharacter(characterId: number, updates: Record<string, unknown> = {}): Promise<SaveResult> {
-    const response = await fetch(`${API_BASE_URL}/${characterId}/update`, {
+    const response = await DynamicAPI.fetch(`/${characterId}/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -444,7 +446,7 @@ export class CharacterAPI {
   // Feat management methods
   static async getCharacterFeats(characterId: number, featType?: number): Promise<FeatsStateResponse> {
     const typeParam = featType !== undefined ? `?type=${featType}` : '';
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/state${typeParam}`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/state${typeParam}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch character feats: ${response.statusText}`);
     }
@@ -471,9 +473,8 @@ export class CharacterAPI {
     if (options.search) params.append('search', options.search);
     
     const queryString = params.toString();
-    const url = `${API_BASE_URL}/characters/${characterId}/feats/legitimate${queryString ? `?${queryString}` : ''}`;
     
-    const response = await fetch(url);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/legitimate${queryString ? `?${queryString}` : ''}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch legitimate feats: ${response.statusText}`);
     }
@@ -494,7 +495,7 @@ export class CharacterAPI {
   }
 
   static async addFeat(characterId: number, featId: number): Promise<FeatActionResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/add`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -511,7 +512,7 @@ export class CharacterAPI {
   }
 
   static async removeFeat(characterId: number, featId: number): Promise<FeatActionResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/remove`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/remove`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -528,7 +529,7 @@ export class CharacterAPI {
   }
 
   static async getFeatDetails(characterId: number, featId: number): Promise<FeatDetailsResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/details`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/${featId}/details`);
     if (!response.ok) {
       throw new Error(`Failed to fetch feat details: ${response.statusText}`);
     }
@@ -536,7 +537,7 @@ export class CharacterAPI {
   }
 
   static async validateFeat(characterId: number, featId: number): Promise<FeatValidationResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/feats/${featId}/validate`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/${featId}/validate`);
     if (!response.ok) {
       throw new Error(`Failed to validate feat: ${response.statusText}`);
     }
@@ -545,7 +546,7 @@ export class CharacterAPI {
 
   // Skills API methods
   static async getSkillsState(characterId: number): Promise<SkillsStateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/state`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/skills/state`);
     if (!response.ok) {
       throw new Error(`Failed to fetch skills state: ${response.statusText}`);
     }
@@ -553,7 +554,7 @@ export class CharacterAPI {
   }
 
   static async updateSkills(characterId: number, skills: Record<number, number>): Promise<SkillsUpdateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/update`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/skills/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -568,7 +569,7 @@ export class CharacterAPI {
   }
 
   static async resetSkills(characterId: number): Promise<SkillsUpdateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/skills/reset`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/skills/reset`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -587,7 +588,7 @@ export class CharacterAPI {
 
   // Attributes API methods
   static async getAttributesState(characterId: number): Promise<AbilitiesStateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/abilities`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/abilities`);
     if (!response.ok) {
       throw new Error(`Failed to fetch abilities state: ${response.statusText}`);
     }
@@ -595,7 +596,7 @@ export class CharacterAPI {
   }
 
   static async updateAttributes(characterId: number, attributes: Record<string, number>): Promise<AbilitiesUpdateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/abilities/update`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/abilities/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -611,7 +612,7 @@ export class CharacterAPI {
 
   // Alignment API methods
   static async getAlignment(characterId: number): Promise<AlignmentResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/alignment`);
     if (!response.ok) {
       throw new Error(`Failed to fetch alignment: ${response.statusText}`);
     }
@@ -619,7 +620,7 @@ export class CharacterAPI {
   }
 
   static async updateAlignment(characterId: number, alignment: { lawChaos: number; goodEvil: number }): Promise<AlignmentUpdateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/alignment`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/alignment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -635,7 +636,7 @@ export class CharacterAPI {
 
   // Combat stats API methods
   static async updateArmorClass(characterId: number, naturalAC: number): Promise<CombatUpdateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-ac`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/combat/update-ac`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -651,7 +652,7 @@ export class CharacterAPI {
 
   // Initiative API methods
   static async updateInitiativeBonus(characterId: number, initiativeBonus: number): Promise<CombatUpdateResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/combat/update-initiative`, {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/combat/update-initiative`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -669,7 +670,7 @@ export class CharacterAPI {
   static async updateSavingThrows(characterId: number, saveUpdates: Record<string, number>): Promise<{ success: boolean; updated: string[] }> {
     // Use misc-bonus endpoint for each save type (backend doesn't have bulk update)
     const promises = Object.entries(saveUpdates).map(([saveType, value]) =>
-      fetch(`${API_BASE_URL}/characters/${characterId}/saves/misc-bonus`, {
+      DynamicAPI.fetch(`/characters/${characterId}/saves/misc-bonus`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -690,7 +691,7 @@ export class CharacterAPI {
 
   // Race manager API methods
   static async getRaceData(characterId: number): Promise<RaceDataResponse> {
-    const response = await fetch(`${API_BASE_URL}/characters/${characterId}/race/current`);
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/race/current`);
     if (!response.ok) {
       throw new Error(`Failed to fetch race data: ${response.statusText}`);
     }

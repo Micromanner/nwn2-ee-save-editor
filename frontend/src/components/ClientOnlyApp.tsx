@@ -1,8 +1,12 @@
 'use client';
 
+console.log('📦 ClientOnlyApp: File loaded/parsed');
+
 import { useState, useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTauri } from '@/providers/TauriProvider';
+import { tauriCompatibleFetch } from '@/lib/utils/tauriFetch';
+import DynamicAPI from '@/lib/utils/dynamicApi';
 import CustomTitleBar from '@/components/ui/CustomTitleBar';
 import Sidebar from '@/components/ui/Sidebar';
 import AbilityScoresEditor from '@/components/AbilityScores/AbilityScoresEditor';
@@ -124,6 +128,8 @@ function AppContent() {
 
   // Poll Django initialization status with exponential backoff
   useEffect(() => {
+    console.log('🔍 useEffect: Starting, api=', !!api);
+    console.log('🔍 useEffect: NEXT_PUBLIC_API_URL =', process.env.NEXT_PUBLIC_API_URL);
     if (!api) return;
     
     let timeoutId: NodeJS.Timeout;
@@ -135,7 +141,10 @@ function AppContent() {
     
     const checkInitStatus = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/system/initialization/status/`);
+        console.log('🔧 ClientOnlyApp: NEXT_PUBLIC_API_URL =', process.env.NEXT_PUBLIC_API_URL);
+        // Initialize DynamicAPI first to get the dynamic port from Tauri
+        await DynamicAPI.initialize();
+        const response = await DynamicAPI.fetch('/system/initialization/status/');
         if (!response.ok) return;
         
         const data = await response.json();
@@ -173,6 +182,7 @@ function AppContent() {
     };
     
     // Start polling
+    console.log('🔍 useEffect: About to start first checkInitStatus...');
     checkInitStatus();
     
     return () => {
@@ -358,6 +368,7 @@ function AppContent() {
 
 // Main export component that provides the context
 export default function ClientOnlyApp() {
+  console.log('🚀 ClientOnlyApp: Component rendering/mounting');
   const [backendReady, setBackendReady] = useState(false);
 
   // Backend readiness detection with exponential backoff (same as AppContent)
@@ -371,7 +382,9 @@ export default function ClientOnlyApp() {
     
     const checkInitStatus = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/system/initialization/status/`);
+        // Initialize DynamicAPI first to get the dynamic port from Tauri
+        await DynamicAPI.initialize();
+        const response = await DynamicAPI.fetch('/system/initialization/status/');
         if (!response.ok) return;
         
         const data = await response.json();

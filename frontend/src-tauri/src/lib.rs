@@ -4,7 +4,7 @@ mod window_manager;
 mod config;
 
 use tauri::Manager;
-use sidecar_manager::{FastAPISidecar, start_fastapi_sidecar, stop_fastapi_sidecar, check_fastapi_health, check_background_loading_status, graceful_shutdown_on_exit};
+use sidecar_manager::{FastAPISidecar, start_fastapi_sidecar, stop_fastapi_sidecar, check_fastapi_health, check_background_loading_status, graceful_shutdown_on_exit, get_fastapi_base_url};
 use file_operations::{
     select_save_file, 
     select_nwn2_directory, 
@@ -55,6 +55,7 @@ pub fn run() {
       check_fastapi_health,
       check_background_loading_status,
       graceful_shutdown_on_exit,
+      get_fastapi_base_url,
       select_save_file,
       select_nwn2_directory,
       find_nwn2_saves,

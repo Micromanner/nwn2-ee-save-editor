@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
+import DynamicAPI from '@/lib/utils/dynamicApi';
 
 export interface SavesData {
   fortitude: number;
@@ -42,7 +43,7 @@ export function useSaves() {
 
     try {
       // Try to fetch saves data from backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/characters/${character.id}/saves/summary`);
+      const response = await DynamicAPI.fetch(`/characters/${character.id}/saves/summary`);
       
       if (response.ok) {
         const data = await response.json();

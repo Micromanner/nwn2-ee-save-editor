@@ -53,7 +53,7 @@ export function TauriProvider({ children }: TauriProviderProps) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         // Test if we can actually call invoke (this will only work in Tauri context)
-        await invoke('check_django_health');
+        await invoke('check_fastapi_health');
         tauriExists = true;
         console.log('✅ TauriProvider: Tauri 2.x context detected via API import!');
       } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
