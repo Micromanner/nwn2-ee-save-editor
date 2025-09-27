@@ -7,10 +7,11 @@ import tempfile
 import shutil
 import os
 import logging
-from typing import Dict, List, Optional, BinaryIO, Union
+from typing import Dict, List, Optional, BinaryIO, Union, Any
 from io import BytesIO
 from contextlib import contextmanager
 from pathlib import Path
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +79,17 @@ class SaveGameHandler:
         '.ute': b'UTE ',
     }
     
-    def __init__(self, save_path: Union[str, Path], validate: bool = False):
+    # Class variable to track which saves have already been backed up this session
+    _backup_created_for_saves = set()
+    
+    def __init__(self, save_path: Union[str, Path], validate: bool = False, create_load_backup: bool = True):
         """
         Initialize with path to save game directory or resgff.zip
         
         Args:
             save_path: Path to save directory or resgff.zip file
             validate: Whether to validate file formats on operations
+            create_load_backup: Whether to create backup when loading save (recommended)
         """
         save_path = Path(save_path)
         
@@ -100,6 +105,15 @@ class SaveGameHandler:
             
         self.validate = validate
         self._temp_files = []  # Track temp files for cleanup
+        
+        # Create backup on load for undo/restore functionality (only once per save)
+        if create_load_backup and self.save_dir not in SaveGameHandler._backup_created_for_saves:
+            try:
+                backup_path = self._create_backup()
+                SaveGameHandler._backup_created_for_saves.add(self.save_dir)
+                logger.info(f"Created load backup: {backup_path}")
+            except Exception as e:
+                logger.warning(f"Could not create load backup: {e}")
         
         logger.debug(f"Initialized SaveGameHandler for {self.zip_path}")
     
@@ -371,7 +385,7 @@ class SaveGameHandler:
         logger.debug(f"Found {len(companions)} companions")
         return companions
     
-    def update_file(self, filename: str, content: bytes, backup: bool = True):
+    def update_file(self, filename: str, content: bytes):
         """
         Update a file in the save game zip, preserving NWN2 format.
         
@@ -381,18 +395,14 @@ class SaveGameHandler:
         Args:
             filename: Name of file to update
             content: New file content
-            backup: Whether to create a backup first
             
         Raises:
             SaveGameError: If update fails
         """
-        logger.info(f"Updating file: {filename} (backup={backup})")
+        logger.info(f"Updating file: {filename}")
         
         # Validate content if enabled
         self._validate_file_content(filename, content)
-        
-        if backup:
-            self._create_backup()
         
         # Create temporary file for new zip
         temp_fd, temp_path = tempfile.mkstemp(suffix='.zip', dir=self.save_dir)
@@ -463,19 +473,16 @@ class SaveGameHandler:
             logger.error(f"Failed to update {filename}: {e}")
             raise SaveGameError(f"Failed to update {filename}: {e}") from e
     
-    def update_player_data(self, content: bytes, backup: bool = True):
+    def update_player_data(self, content: bytes):
         """Update the playerlist.ifo file"""
-        self.update_file('playerlist.ifo', content, backup)
+        self.update_file('playerlist.ifo', content)
     
-    def update_player_bic(self, content: bytes, backup: bool = True):
+    def update_player_bic(self, content: bytes):
         """Update the player.bic file"""
-        self.update_file('player.bic', content, backup)
+        self.update_file('player.bic', content)
     
-    def update_player_complete(self, playerlist_content: bytes, playerbic_content: bytes, backup: bool = True):
+    def update_player_complete(self, playerlist_content: bytes, playerbic_content: bytes):
         """Update both playerlist.ifo and player.bic together (required for save games)"""
-        if backup:
-            self._create_backup()
-        
         # TODO: Sync Module Data fields between IFO and globals.xml
         # The following fields in playerlist.ifo need to be synchronized with globals.xml:
         # 1. Module Data (NEEDS SYNC):
@@ -501,17 +508,17 @@ class SaveGameHandler:
         # - ActionList: Queued actions (2 fields)
         # - Mod_LastName: Character's last name (1 field)
         
-        # Update both files without individual backups
-        self.update_file('playerlist.ifo', playerlist_content, backup=False)
-        self.update_file('player.bic', playerbic_content, backup=False)
+        # Update both files
+        self.update_file('playerlist.ifo', playerlist_content)
+        self.update_file('player.bic', playerbic_content)
     
-    def update_companion(self, companion_name: str, content: bytes, backup: bool = True):
+    def update_companion(self, companion_name: str, content: bytes):
         """Update a companion's .ros file"""
-        self.update_file(f'{companion_name}.ros', content, backup)
+        self.update_file(f'{companion_name}.ros', content)
     
     def _create_backup(self) -> str:
         """
-        Create a backup of the entire save directory.
+        Create a backup of the entire save directory in saves/backups/ folder.
         
         Returns:
             Path to backup directory
@@ -521,9 +528,19 @@ class SaveGameHandler:
         """
         import datetime
         
-        # Create backup directory name with timestamp
+        # Get save folder name (e.g. "MyCharacter")
+        save_folder_name = os.path.basename(self.save_dir)
+        
+        # Create backups directory in the parent saves folder
+        saves_root = os.path.dirname(self.save_dir)
+        backups_root = os.path.join(saves_root, 'backups')
+        
+        # Create backups directory if it doesn't exist
+        os.makedirs(backups_root, exist_ok=True)
+        
+        # Create backup directory name with save name and timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_dir = f"{self.save_dir}_backup_{timestamp}"
+        backup_dir = os.path.join(backups_root, f"{save_folder_name}_backup_{timestamp}")
         
         logger.info(f"Creating backup at: {backup_dir}")
         
@@ -717,3 +734,207 @@ class SaveGameHandler:
             
             logger.error(f"Failed to repack files: {e}")
             raise SaveGameError(f"Failed to repack files: {e}") from e
+    
+    def list_backups(self) -> List[Dict[str, Any]]:
+        """
+        List all available backups for this save file.
+        
+        Returns:
+            List of backup info dictionaries with path, timestamp, etc.
+        """
+        save_folder_name = os.path.basename(self.save_dir)
+        saves_root = os.path.dirname(self.save_dir)
+        backups_root = os.path.join(saves_root, 'backups')
+        
+        backups = []
+        
+        if not os.path.exists(backups_root):
+            return backups
+        
+        # Find backups for this save file
+        backup_prefix = f"{save_folder_name}_backup_"
+        
+        try:
+            for item in os.listdir(backups_root):
+                if item.startswith(backup_prefix) and os.path.isdir(os.path.join(backups_root, item)):
+                    backup_path = os.path.join(backups_root, item)
+                    
+                    # Extract timestamp from folder name
+                    timestamp_str = item[len(backup_prefix):]
+                    
+                    # Get backup creation time
+                    try:
+                        backup_time = datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                    except ValueError:
+                        # Skip if timestamp format is invalid
+                        continue
+                    
+                    # Read backup save name if available
+                    backup_save_name = save_folder_name
+                    savename_path = os.path.join(backup_path, 'savename.txt')
+                    if os.path.exists(savename_path):
+                        try:
+                            with open(savename_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                backup_save_name = f.readline().strip()
+                        except Exception:
+                            pass
+                    
+                    # Get backup size
+                    backup_size = 0
+                    try:
+                        for root, dirs, files in os.walk(backup_path):
+                            backup_size += sum(os.path.getsize(os.path.join(root, file)) for file in files)
+                    except Exception:
+                        pass
+                    
+                    backups.append({
+                        'path': backup_path,
+                        'folder_name': item,
+                        'timestamp': backup_time.isoformat(),
+                        'display_name': backup_save_name,
+                        'size_bytes': backup_size,
+                        'original_save': save_folder_name
+                    })
+            
+            # Sort by timestamp (newest first)
+            backups.sort(key=lambda x: x['timestamp'], reverse=True)
+            
+        except Exception as e:
+            logger.warning(f"Error listing backups: {e}")
+        
+        return backups
+    
+    def restore_from_backup(self, backup_path: str, create_pre_restore_backup: bool = True) -> Dict[str, Any]:
+        """
+        Restore save from a backup directory.
+        
+        Args:
+            backup_path: Full path to backup directory
+            create_pre_restore_backup: Whether to backup current state before restore
+            
+        Returns:
+            Dict with restore results
+            
+        Raises:
+            SaveGameError: If restore fails
+        """
+        import datetime
+        
+        if not os.path.exists(backup_path):
+            raise SaveGameError(f"Backup directory not found: {backup_path}")
+        
+        if not os.path.isdir(backup_path):
+            raise SaveGameError(f"Backup path is not a directory: {backup_path}")
+        
+        logger.info(f"Restoring save from backup: {backup_path}")
+        
+        pre_restore_backup = None
+        
+        try:
+            # Create pre-restore backup if requested
+            if create_pre_restore_backup and os.path.exists(self.save_dir):
+                pre_restore_backup = self._create_backup()
+                logger.info(f"Created pre-restore backup: {pre_restore_backup}")
+            
+            # Remove current save directory if it exists
+            if os.path.exists(self.save_dir):
+                shutil.rmtree(self.save_dir)
+            
+            # Copy backup to save location
+            shutil.copytree(backup_path, self.save_dir)
+            
+            # Update savename.txt to remove "Backup of" prefix if present
+            savename_path = os.path.join(self.save_dir, 'savename.txt')
+            if os.path.exists(savename_path):
+                try:
+                    with open(savename_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        current_name = f.readline().strip()
+                    
+                    # Remove backup prefix if present
+                    if current_name.startswith("Backup of "):
+                        # Extract original name (remove "Backup of X at Y")
+                        parts = current_name.split(" at ")
+                        if len(parts) >= 2:
+                            original_name = current_name[10:].split(" at ")[0]  # Remove "Backup of "
+                        else:
+                            original_name = current_name[10:]  # Just remove "Backup of "
+                        
+                        with open(savename_path, 'w', encoding='utf-8') as f:
+                            f.write(original_name)
+                        
+                        logger.info(f"Updated savename.txt: '{original_name}'")
+                except Exception as e:
+                    logger.warning(f"Failed to update savename.txt: {e}")
+            
+            # Count restored files
+            restored_files = []
+            for root, dirs, files in os.walk(self.save_dir):
+                restored_files.extend(files)
+            
+            logger.info(f"Successfully restored {len(restored_files)} files from backup")
+            
+            return {
+                'success': True,
+                'restored_from': backup_path,
+                'files_restored': restored_files,
+                'pre_restore_backup': pre_restore_backup,
+                'restore_timestamp': datetime.datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to restore from backup: {e}")
+            
+            # Try to restore pre-restore backup if something went wrong
+            if pre_restore_backup and os.path.exists(pre_restore_backup):
+                try:
+                    if os.path.exists(self.save_dir):
+                        shutil.rmtree(self.save_dir)
+                    shutil.copytree(pre_restore_backup, self.save_dir)
+                    logger.info("Restored original save after failed restore")
+                except Exception as restore_error:
+                    logger.error(f"Failed to restore original save: {restore_error}")
+            
+            raise SaveGameError(f"Failed to restore from backup: {e}") from e
+    
+    def cleanup_old_backups(self, keep_count: int = 10) -> Dict[str, Any]:
+        """
+        Clean up old backups, keeping only the most recent ones.
+        
+        Args:
+            keep_count: Number of recent backups to keep per save file
+            
+        Returns:
+            Dict with cleanup results
+        """
+        save_folder_name = os.path.basename(self.save_dir)
+        saves_root = os.path.dirname(self.save_dir)
+        backups_root = os.path.join(saves_root, 'backups')
+        
+        if not os.path.exists(backups_root):
+            return {'cleaned_up': 0, 'kept': 0, 'errors': []}
+        
+        backups = self.list_backups()
+        
+        if len(backups) <= keep_count:
+            return {'cleaned_up': 0, 'kept': len(backups), 'errors': []}
+        
+        # Keep the most recent backups, remove the rest
+        backups_to_remove = backups[keep_count:]
+        errors = []
+        cleaned_up = 0
+        
+        for backup in backups_to_remove:
+            try:
+                shutil.rmtree(backup['path'])
+                cleaned_up += 1
+                logger.info(f"Removed old backup: {backup['folder_name']}")
+            except Exception as e:
+                error_msg = f"Failed to remove backup {backup['folder_name']}: {e}"
+                errors.append(error_msg)
+                logger.warning(error_msg)
+        
+        return {
+            'cleaned_up': cleaned_up,
+            'kept': len(backups) - len(backups_to_remove),
+            'errors': errors
+        }

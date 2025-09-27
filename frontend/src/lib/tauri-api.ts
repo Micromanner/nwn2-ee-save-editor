@@ -31,7 +31,7 @@ export class TauriAPI {
     console.log('🔧 TauriAPI: Calling get_fastapi_base_url...');
     const result = await invoke('get_fastapi_base_url');
     console.log('✅ TauriAPI: Got base URL from Tauri:', result);
-    return result;
+    return result as string;
   }
 
   // File Operations
@@ -78,6 +78,10 @@ export class TauriAPI {
     return await invoke('launch_nwn2_game', { gamePath });
   }
 
+  static async openFolderInExplorer(folderPath: string): Promise<void> {
+    return await invoke('open_folder_in_explorer', { folderPath });
+  }
+
   // Instance method for consistency with the class pattern
   async confirmSaveSwitch(currentSave: string, newSave: string): Promise<boolean> {
     return TauriAPI.confirmSaveSwitch(currentSave, newSave);
@@ -89,6 +93,10 @@ export class TauriAPI {
 
   async launchNWN2Game(gamePath?: string): Promise<void> {
     return TauriAPI.launchNWN2Game(gamePath);
+  }
+
+  async openFolderInExplorer(folderPath: string): Promise<void> {
+    return TauriAPI.openFolderInExplorer(folderPath);
   }
 
   // Window Management

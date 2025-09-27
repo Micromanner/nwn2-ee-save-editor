@@ -338,6 +338,43 @@ pub async fn detect_nwn2_installation(app: tauri::AppHandle) -> Result<Option<St
 }
 
 #[tauri::command]
+pub async fn open_folder_in_explorer(app: tauri::AppHandle, folder_path: String) -> Result<(), String> {
+    log::info!("[Rust] Opening folder in file explorer: {}", folder_path);
+    
+    let path = PathBuf::from(&folder_path);
+    
+    // Check if path exists
+    if !path.exists() {
+        return Err(format!("Folder does not exist: {}", folder_path));
+    }
+    
+    let shell = app.shell();
+    
+    if cfg!(windows) {
+        // On Windows, use explorer.exe
+        shell.command("explorer")
+            .args([&folder_path])
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    } else if cfg!(target_os = "macos") {
+        // On macOS, use open command
+        shell.command("open")
+            .args([&folder_path])
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    } else {
+        // On Linux, try xdg-open
+        shell.command("xdg-open")
+            .args([&folder_path])
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    log::info!("[Rust] Successfully opened folder in file explorer");
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn launch_nwn2_game(app: tauri::AppHandle, game_path: Option<String>) -> Result<(), String> {
     log::info!("[Rust] Launching NWN2:EE game");
     

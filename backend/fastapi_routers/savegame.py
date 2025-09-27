@@ -303,13 +303,131 @@ def update_savegame_character(
         )
 
 
+@router.get("/{character_id}/backups")
+def list_savegame_backups(character_id: int):
+    """List all available backups for a save game"""
+    try:
+        # Lazy imports for performance
+        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from fastapi_models import SavegameBackupsResponse, BackupInfo
+        
+        # Use helper function - no duplicated logic
+        file_path = _validate_savegame_character(character_id)
+        
+        handler = SaveGameHandler(file_path)
+        backups_data = handler.list_backups()
+        
+        # Convert to response model
+        backups = []
+        for backup in backups_data:
+            backup_info = BackupInfo(
+                path=backup['path'],
+                folder_name=backup['folder_name'],
+                timestamp=backup['timestamp'],
+                display_name=backup['display_name'],
+                size_bytes=backup['size_bytes'],
+                original_save=backup['original_save']
+            )
+            backups.append(backup_info)
+        
+        logger.info(f"Listed backups: character_id={character_id}, backups_count={len(backups)}")
+        
+        return SavegameBackupsResponse(
+            backups=backups,
+            count=len(backups)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error listing backups: {e}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list backups: {str(e)}"
+        )
+
+
 @router.post("/{character_id}/restore")
 def restore_savegame_backup(
     character_id: int,
     restore_request  # Type removed for lazy loading
 ):
-    """Restore functionality not implemented - SaveGameHandler needs restore methods"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Restore functionality requires SaveGameHandler.restore_from_backup() method to be implemented"
-    )
+    """Restore a save game from backup"""
+    try:
+        # Lazy imports for performance
+        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from fastapi_models import SavegameRestoreRequest, SavegameRestoreResponse
+        
+        # Use helper function - no duplicated logic
+        file_path = _validate_savegame_character(character_id)
+        
+        # Parse request
+        if not isinstance(restore_request, SavegameRestoreRequest):
+            request_data = SavegameRestoreRequest.model_validate(restore_request)
+        else:
+            request_data = restore_request
+        
+        if not request_data.confirm_restore:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Restore confirmation required"
+            )
+        
+        handler = SaveGameHandler(file_path)
+        restore_result = handler.restore_from_backup(
+            backup_path=request_data.backup_path,
+            create_pre_restore_backup=request_data.create_pre_restore_backup
+        )
+        
+        # Clean up old backups after successful restore
+        cleanup_result = handler.cleanup_old_backups(keep_count=10)
+        
+        logger.info(f"Restored backup: character_id={character_id}, backup_path={request_data.backup_path}")
+        
+        return SavegameRestoreResponse(
+            success=restore_result['success'],
+            restored_from=restore_result['restored_from'],
+            files_restored=restore_result['files_restored'],
+            pre_restore_backup=restore_result.get('pre_restore_backup'),
+            restore_timestamp=restore_result['restore_timestamp'],
+            backups_cleaned_up=cleanup_result['cleaned_up']
+        )
+        
+    except Exception as e:
+        logger.error(f"Error restoring backup: {e}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to restore backup: {str(e)}"
+        )
+
+
+@router.post("/{character_id}/cleanup-backups")
+def cleanup_savegame_backups(
+    character_id: int,
+    keep_count: int = 10
+):
+    """Clean up old backups, keeping only the most recent ones"""
+    try:
+        # Lazy imports for performance
+        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        
+        # Use helper function - no duplicated logic
+        file_path = _validate_savegame_character(character_id)
+        
+        handler = SaveGameHandler(file_path)
+        cleanup_result = handler.cleanup_old_backups(keep_count=keep_count)
+        
+        logger.info(f"Cleaned up backups: character_id={character_id}, cleaned={cleanup_result['cleaned_up']}, kept={cleanup_result['kept']}")
+        
+        return cleanup_result
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up backups: {e}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clean up backups: {str(e)}"
+        )

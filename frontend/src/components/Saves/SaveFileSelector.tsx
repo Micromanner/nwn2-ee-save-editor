@@ -135,6 +135,29 @@ export function SaveFileSelector() {
     }
   }, [api, gameSettings.nwn2_installation_path]);
 
+  const handleOpenBackupsFolder = useCallback(async () => {
+    if (!api || !selectedFile) {
+      setError('Cannot open backups folder: No save file selected');
+      return;
+    }
+
+    let backupsPath = '';
+    
+    try {
+      // Get the saves directory (parent of the selected save folder) and append /backups
+      // selectedFile.path is the save folder, so go up one level to get saves root
+      const saveDir = selectedFile.path.replace(/[\/\\][^\/\\]*$/, ''); // Remove last folder to get saves directory
+      backupsPath = saveDir + (saveDir.includes('\\') ? '\\backups' : '/backups');
+      
+      // Use our custom Tauri command to open the folder in file explorer
+      await api.openFolderInExplorer(backupsPath);
+      console.log('Opened backups folder:', backupsPath);
+    } catch (err) {
+      console.error('Failed to open backups folder "' + backupsPath + '":', err);
+      setError(err instanceof Error ? err.message : 'Failed to open backups folder. Backups are stored in: ' + backupsPath);
+    }
+  }, [api, selectedFile]);
+
   useEffect(() => {
     console.log('🔧 SaveFileSelector: useEffect triggered:', { isAvailable, hasApi: !!api });
     if (isAvailable && api && !autoScanComplete) {
@@ -256,6 +279,17 @@ export function SaveFileSelector() {
         >
           {importing ? 'Loading...' : 'Load'}
         </Button>
+        {character && selectedFile && (
+          <Button
+            variant="ghost"
+            size="md"
+            className="text-sm"
+            onClick={handleOpenBackupsFolder}
+            disabled={importing || characterLoading}
+          >
+            Backups
+          </Button>
+        )}
       </div>
 
       {/* Auto-detected saves */}

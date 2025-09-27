@@ -51,10 +51,11 @@ class SavegameCompanionsResponse(BaseModel):
 class BackupInfo(BaseModel):
     """Backup file information"""
     path: str = Field(..., description="Backup directory path")
-    name: str = Field(..., description="Backup name")
-    created: datetime = Field(..., description="When backup was created")
+    folder_name: str = Field(..., description="Backup folder name")
+    timestamp: str = Field(..., description="Backup creation timestamp (ISO format)")
+    display_name: str = Field(..., description="Display name from savename.txt")
     size_bytes: int = Field(0, description="Backup size in bytes")
-    character_name: Optional[str] = Field(None, description="Character name in backup")
+    original_save: str = Field(..., description="Original save folder name")
 
 
 class SavegameInfoResponse(BaseModel):
@@ -114,19 +115,20 @@ class SavegameRestoreRequest(BaseModel):
     create_pre_restore_backup: bool = Field(True, description="Backup current state before restore")
 
 
+class SavegameBackupsResponse(BaseModel):
+    """Response listing available backups"""
+    backups: List[BackupInfo] = Field(..., description="List of available backups")
+    count: int = Field(..., description="Number of backups found")
+
+
 class SavegameRestoreResponse(BaseModel):
     """Response after restoring save from backup"""
-    success: bool
-    message: str
-    
-    # Restore details
+    success: bool = Field(..., description="Whether restore was successful")
     restored_from: str = Field(..., description="Backup path restored from")
     files_restored: List[str] = Field(..., description="Files that were restored")
     pre_restore_backup: Optional[str] = Field(None, description="Pre-restore backup path")
-    
-    # Character info after restore
-    character_name: str = Field(..., description="Character name after restore")
-    character_level: Optional[int] = Field(None, description="Character level after restore")
+    restore_timestamp: str = Field(..., description="When restore completed")
+    backups_cleaned_up: int = Field(0, description="Number of old backups cleaned up")
 
 
 class SavegameExportRequest(BaseModel):

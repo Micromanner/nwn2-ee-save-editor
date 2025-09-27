@@ -13,7 +13,8 @@ use file_operations::{
     validate_nwn2_installation,
     get_save_thumbnail,
     detect_nwn2_installation,
-    launch_nwn2_game
+    launch_nwn2_game,
+    open_folder_in_explorer
 };
 use window_manager::{open_settings_window, close_settings_window};
 
@@ -64,6 +65,7 @@ pub fn run() {
       get_save_thumbnail,
       detect_nwn2_installation,
       launch_nwn2_game,
+      open_folder_in_explorer,
       open_settings_window,
       close_settings_window
     ])
