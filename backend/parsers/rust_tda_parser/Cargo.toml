@@ -40,7 +40,7 @@ thiserror = "1.0"
 wide = { version = "0.7", optional = true }
 
 # Fast integer parsing
-lexical = "6.1"
+lexical = "7.0"
 
 # Zero-copy string processing
 bstr = "1.8"
