@@ -46,22 +46,33 @@ class AbilityManager(EventEmitter):
         self.character_manager.on(EventType.CLASS_CHANGED, self._on_class_changed)
         self.character_manager.on(EventType.LEVEL_GAINED, self._on_level_gained)
     
-    def get_attributes(self) -> Dict[str, int]:
+    def get_attributes(self, include_equipment: bool = True) -> Dict[str, int]:
         """
         Get all character attributes
-        
+
+        Args:
+            include_equipment: Include equipment bonuses in the result
+
         Returns:
             Dict mapping attribute names to values
         """
-        # Remove hardcoded default value, let the system handle defaults
         attributes = {}
         for attr in self.ATTRIBUTES:
-            # Get default attribute value from game rules if available
             default_value = self._get_default_attribute_value(attr)
-            value = self.gff.get(attr, default_value)
-            attributes[attr] = value
-            logger.debug(f"AbilityManager.get_attributes: {attr} = {value}")
-        
+            base_value = self.gff.get(attr, default_value)
+            attributes[attr] = base_value
+            logger.debug(f"AbilityManager.get_attributes: {attr} base = {base_value}")
+
+        if include_equipment:
+            inventory_manager = self.character_manager.get_manager('inventory')
+            if inventory_manager:
+                equipment_bonuses = inventory_manager.get_equipment_bonuses()
+                for attr in self.ATTRIBUTES:
+                    equipment_bonus = equipment_bonuses['attributes'].get(attr, 0)
+                    if equipment_bonus > 0:
+                        attributes[attr] += equipment_bonus
+                        logger.debug(f"AbilityManager.get_attributes: {attr} with equipment = {attributes[attr]} (+{equipment_bonus})")
+
         return attributes
     
     def _get_default_attribute_value(self, attribute: str) -> int:

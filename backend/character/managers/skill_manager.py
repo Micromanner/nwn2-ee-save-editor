@@ -294,17 +294,26 @@ class SkillManager(EventEmitter):
         """Calculate total skill modifier including ranks and ability bonus"""
         # Get base ranks
         ranks = self.get_skill_ranks(skill_id)
-        
+
         # Get ability modifier using dynamic skill data
         skill_data = self.game_rules_service.get_by_id('skills', skill_id)
         key_ability = field_mapper.get_field_value(skill_data, 'key_ability', 'STR').upper() if skill_data else 'STR'
-        
+
         modifiers = self._calculate_ability_modifiers()
         ability_mod = modifiers.get(key_ability, 0)
-        
+
+        # Get equipment bonuses from InventoryManager
+        inventory_manager = self.character_manager.get_manager('inventory')
+        if inventory_manager:
+            equipment_bonuses = inventory_manager.get_equipment_bonuses()
+            skill_name = field_mapper.get_field_value(skill_data, 'label', '') if skill_data else ''
+            equipment_skill_bonus = equipment_bonuses['skills'].get(skill_name, 0)
+        else:
+            equipment_skill_bonus = 0
+
         # Check for skill synergies
         synergy_bonus = self._calculate_synergy_bonus(skill_id)
-        
+
         # Check for armor check penalty
         armor_penalty = 0
         if skill_data:
@@ -313,9 +322,9 @@ class SkillManager(EventEmitter):
             )
             if armor_check_penalty > 0:
                 armor_penalty = self._get_armor_check_penalty()
-        
-        total = ranks + ability_mod + synergy_bonus - armor_penalty
-        
+
+        total = ranks + ability_mod + synergy_bonus + equipment_skill_bonus - armor_penalty
+
         return total
     
     def reset_all_skills(self):

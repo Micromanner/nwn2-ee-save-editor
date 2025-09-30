@@ -11,6 +11,7 @@ import time
 
 from ..events import EventEmitter, EventType, ClassChangedEvent, FeatChangedEvent
 from ..custom_content import CustomContentDetector
+from ..services.item_property_decoder import ItemPropertyDecoder
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class InventoryManager(EventEmitter):
         self.gff = character_manager.gff
         self.game_rules_service = character_manager.rules_service
         self.content_detector = CustomContentDetector(None)  # Will use dynamic detection
+        self.property_decoder = ItemPropertyDecoder(character_manager.rules_service)
         
         # Register for events
         self._register_event_handlers()
@@ -602,6 +604,9 @@ class InventoryManager(EventEmitter):
                 
                 item_name = self._get_item_name(item)
                 
+                # Get decoded properties for this item
+                decoded_properties = self.get_item_property_descriptions(item)
+                
                 inventory_items.append({
                     'index': idx,
                     'item': item,
@@ -614,7 +619,8 @@ class InventoryManager(EventEmitter):
                     'identified': item.get('Identified', 1) != 0,
                     'plot': item.get('Plot', 0) == 1,
                     'cursed': item.get('Cursed', 0) == 1,
-                    'stolen': item.get('Stolen', 0) == 1
+                    'stolen': item.get('Stolen', 0) == 1,
+                    'decoded_properties': decoded_properties
                 })
         
         summary = {
@@ -659,11 +665,15 @@ class InventoryManager(EventEmitter):
                 # Get item name
                 item_name = self._get_item_name(item)
                 
+                # Get decoded properties for this equipped item
+                decoded_properties = self.get_item_property_descriptions(item)
+                
                 summary['equipped_items'][slot_name] = {
                     'base_item': base_item,
                     'custom': is_custom,
                     'name': item_name,
-                    'item_data': item
+                    'item_data': item,
+                    'decoded_properties': decoded_properties
                 }
                 
                 if is_custom:
@@ -678,7 +688,7 @@ class InventoryManager(EventEmitter):
     def get_equipment_bonuses(self) -> Dict[str, Dict[str, int]]:
         """
         Calculate all equipment bonuses for other managers to use
-        
+
         Returns:
             Dict with bonus categories (ac, saves, attributes, skills, etc.)
         """
@@ -690,13 +700,14 @@ class InventoryManager(EventEmitter):
             'combat': {'attack': 0, 'damage': 0},
             'misc': {}
         }
-        
-        # Check all equipped items
-        for slot, gff_slot in self.EQUIPMENT_SLOTS.items():
-            item = self.gff.get(gff_slot)
+
+        # Get equipped items from Equip_ItemList (NWN2 format)
+        equipped_items_list = self.gff.get('Equip_ItemList', [])
+
+        for item in equipped_items_list:
             if item:
                 item_bonuses = self._calculate_item_bonuses(item)
-                
+
                 # Aggregate bonuses by type
                 for category, category_bonuses in item_bonuses.items():
                     if category in bonuses:
@@ -705,7 +716,7 @@ class InventoryManager(EventEmitter):
                                 bonuses[category][bonus_type] += value
                             else:
                                 bonuses[category][bonus_type] = value
-        
+
         return bonuses
     
     def get_ac_bonus(self) -> int:
@@ -780,10 +791,7 @@ class InventoryManager(EventEmitter):
     
     def _parse_item_property(self, property_data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
         """
-        Parse a single item property for bonuses
-        
-        This is a simplified version - full implementation would need
-        to parse all NWN2 item property types from itemprops.2da
+        Parse a single item property for bonuses using the smart property decoder
         """
         bonuses = {
             'ac': {},
@@ -794,34 +802,22 @@ class InventoryManager(EventEmitter):
             'misc': {}
         }
         
-        property_name = property_data.get('PropertyName', 0)
-        subtype = property_data.get('Subtype', 0)
-        cost_table = property_data.get('CostTable', 0)
-        cost_value = property_data.get('CostValue', 0)
-        param1 = property_data.get('Param1', 0)
-        param1_value = property_data.get('Param1Value', 0)
+        # The decoder handles ALL the business logic - this is just a clean data relay
+        decoded_bonuses = self.property_decoder.get_item_bonuses([property_data])
         
-        # Common property types (would need full implementation)
-        if property_name == 0:  # Ability Bonus
-            ability_map = {0: 'Str', 1: 'Dex', 2: 'Con', 3: 'Int', 4: 'Wis', 5: 'Cha'}
-            if subtype in ability_map:
-                bonuses['attributes'][ability_map[subtype]] = cost_value
+        # Map decoder output to our expected manager format
+        bonuses['ac'] = decoded_bonuses.get('ac', {})
+        bonuses['saves'] = decoded_bonuses.get('saves', {})
+        bonuses['skills'] = decoded_bonuses.get('skills', {})
+        bonuses['combat'] = decoded_bonuses.get('combat', {})
+        bonuses['misc'] = decoded_bonuses.get('special', {})
         
-        elif property_name == 1:  # AC Bonus
-            bonuses['ac']['deflection'] = cost_value
+        # Map abilities directly - decoder already provides correct case (Str, Dex, Con, Int, Wis, Cha)
+        bonuses['attributes'].update(decoded_bonuses.get('abilities', {}))
         
-        elif property_name == 2:  # Attack Bonus
-            bonuses['combat']['attack'] = cost_value
-        
-        elif property_name == 3:  # Saving Throw Bonus
-            save_map = {0: 'fortitude', 1: 'reflex', 2: 'will'}
-            if subtype in save_map:
-                bonuses['saves'][save_map[subtype]] = cost_value
-            elif subtype == 3:  # All saves
-                for save_type in save_map.values():
-                    bonuses['saves'][save_type] = cost_value
-        
-        # Add more property types as needed...
+        # Add immunities as misc properties
+        for immunity in decoded_bonuses.get('immunities', []):
+            bonuses['misc'][f'immunity_{immunity}'] = 1
         
         return bonuses
     
@@ -979,3 +975,58 @@ class InventoryManager(EventEmitter):
                 equipment_summary[slot] = None
         
         return equipment_summary
+    
+    def get_item_property_descriptions(self, item_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Get human-readable descriptions of all item properties
+        
+        Args:
+            item_data: Item data from GFF
+            
+        Returns:
+            List of decoded property descriptions
+        """
+        properties = item_data.get('PropertiesList', [])
+        if not properties:
+            return []
+        
+        return self.property_decoder.decode_all_properties(properties)
+    
+    def get_enhanced_item_summary(self, item_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get enhanced item summary with decoded properties
+        
+        Args:
+            item_data: Item data from GFF
+            
+        Returns:
+            Enhanced item summary with property descriptions
+        """
+        base_item = item_data.get('BaseItem', 0)
+        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+        
+        # Get basic item info
+        item_name = self._get_item_name(item_data)
+        is_custom = base_item_data is None
+        
+        # Get decoded properties
+        property_descriptions = self.get_item_property_descriptions(item_data)
+        
+        # Get quantified bonuses
+        bonuses = self._calculate_item_bonuses(item_data)
+        
+        return {
+            'name': item_name,
+            'base_item': base_item,
+            'is_custom': is_custom,
+            'enhancement': item_data.get('Enhancement', 0),
+            'charges': item_data.get('Charges'),
+            'identified': item_data.get('Identified', 1) != 0,
+            'plot': item_data.get('Plot', 0) == 1,
+            'cursed': item_data.get('Cursed', 0) == 1,
+            'stolen': item_data.get('Stolen', 0) == 1,
+            'stack_size': item_data.get('StackSize', 1),
+            'properties': property_descriptions,
+            'bonuses': bonuses,
+            'raw_data': item_data
+        }

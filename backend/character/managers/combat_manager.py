@@ -56,64 +56,68 @@ class CombatManager(EventEmitter):
     def calculate_armor_class(self) -> Dict[str, Any]:
         """
         Calculate total AC and all components
-        
+
         Returns:
             Dict with total AC and breakdown of all components
         """
         # Base AC from game rules (D&D 3.5/NWN2 standard)
-        # TODO: This should come from game data if configurable
-        base_ac = 10  # Standard D&D base AC
-        
-        # Get DEX modifier
-        dex_bonus = (self.gff.get('Dex', 10) - 10) // 2
-        
-        # Get armor and shield bonuses
-        armor_bonus = 0
-        shield_bonus = 0
-        max_dex_bonus = 999  # No limit by default
-        
-        # Check equipped items
+        base_ac = 10
+
+        # Get base ability scores
+        base_dex = self.gff.get('Dex', 10)
+
+        # Get equipment bonuses from InventoryManager
+        inventory_manager = self.character_manager.get_manager('inventory')
+        equipment_bonuses = inventory_manager.get_equipment_bonuses() if inventory_manager else {
+            'ac': {}, 'attributes': {}, 'saves': {}, 'skills': {}, 'combat': {}
+        }
+
+        # Apply equipment bonuses to DEX for AC calculation
+        dex_equipment_bonus = equipment_bonuses['attributes'].get('Dex', 0)
+        effective_dex = base_dex + dex_equipment_bonus
+        dex_bonus = (effective_dex - 10) // 2
+
+        # Get armor and shield bonuses from equipment
+        armor_bonus = equipment_bonuses['ac'].get('armor', 0)
+        shield_bonus = equipment_bonuses['ac'].get('shield', 0)
+        deflection_bonus = equipment_bonuses['ac'].get('deflection', 0)
+        natural_bonus = equipment_bonuses['ac'].get('natural', 0)
+
+        # Get max dex bonus from armor
+        max_dex_bonus = 999
         chest_item = self._get_equipped_item('Chest')
         if chest_item:
-            armor_bonus = self._get_item_ac_bonus(chest_item)
             max_dex_bonus = self._get_item_max_dex(chest_item)
-        
-        left_hand = self._get_equipped_item('LeftHand')
-        if left_hand and self._is_shield(left_hand):
-            shield_bonus = self._get_item_ac_bonus(left_hand)
-        
+
         # Apply max dex bonus from armor
         effective_dex_bonus = min(dex_bonus, max_dex_bonus)
-        
-        # Get natural armor (from race, spells, etc.)
-        natural_armor = self.gff.get('NaturalAC', 0)
-        
+
+        # Get natural armor from character (race, spells, etc.) and add equipment natural armor
+        natural_armor = self.gff.get('NaturalAC', 0) + natural_bonus
+
         # Get dodge bonus (from feats like Dodge)
         dodge_bonus = self._calculate_dodge_bonus()
-        
-        # Get deflection bonus (from items/spells)
-        deflection_bonus = 0  # Would come from items
-        
+
         # Get size modifier from game data
-        size = self.gff.get('CreatureSize', 4)  # Default Medium
+        size = self.gff.get('CreatureSize', 4)
         race_manager = self.character_manager.get_manager('race')
         if race_manager:
             size_modifier = race_manager.get_size_modifier(size)
         else:
             size_modifier = 0
-        
+
         # Calculate total AC
-        total_ac = (base_ac + armor_bonus + shield_bonus + effective_dex_bonus + 
+        total_ac = (base_ac + armor_bonus + shield_bonus + effective_dex_bonus +
                    natural_armor + dodge_bonus + deflection_bonus + size_modifier)
-        
+
         # Calculate touch AC (ignores armor, shield, natural)
         touch_ac = base_ac + effective_dex_bonus + dodge_bonus + deflection_bonus + size_modifier
-        
+
         # Calculate flat-footed AC (no DEX or dodge)
         flatfooted_ac = base_ac + armor_bonus + shield_bonus + natural_armor + deflection_bonus + size_modifier
-        
+
         return {
-            'total': total_ac,  # Add 'total' key for test compatibility
+            'total': total_ac,
             'total_ac': total_ac,
             'touch_ac': touch_ac,
             'flatfooted_ac': flatfooted_ac,
@@ -679,48 +683,67 @@ class CombatManager(EventEmitter):
     def get_attack_bonuses(self) -> Dict[str, Any]:
         """
         Get attack bonuses (moved from ClassManager)
-        
+
         Returns:
             Dict with melee and ranged attack bonuses and their components
         """
         # Use our own BAB calculation
         bab = self.calculate_base_attack_bonus()
-        
-        # Get ability modifiers
-        str_mod = (self.gff.get('Str', 10) - 10) // 2
-        dex_mod = (self.gff.get('Dex', 10) - 10) // 2
-        
+
+        # Get base ability scores
+        base_str = self.gff.get('Str', 10)
+        base_dex = self.gff.get('Dex', 10)
+
+        # Get equipment bonuses from InventoryManager
+        inventory_manager = self.character_manager.get_manager('inventory')
+        equipment_bonuses = inventory_manager.get_equipment_bonuses() if inventory_manager else {
+            'ac': {}, 'attributes': {}, 'saves': {}, 'skills': {}, 'combat': {}
+        }
+
+        # Apply equipment bonuses to ability scores
+        str_equipment = equipment_bonuses['attributes'].get('Str', 0)
+        dex_equipment = equipment_bonuses['attributes'].get('Dex', 0)
+        effective_str = base_str + str_equipment
+        effective_dex = base_dex + dex_equipment
+
+        # Calculate modifiers with equipment
+        str_mod = (effective_str - 10) // 2
+        dex_mod = (effective_dex - 10) // 2
+
+        # Get equipment attack bonuses
+        attack_equipment = equipment_bonuses['combat'].get('attack', 0)
+
         # Get size modifier
-        size = self.gff.get('CreatureSize', 4)  # Default Medium
+        size = self.gff.get('CreatureSize', 4)
         race_manager = self.character_manager.get_manager('race')
         if race_manager:
             size_modifier = race_manager.get_size_modifier(size)
         else:
             size_modifier = 0
-        
+
         # Calculate melee attack bonus
         melee_attack = {
             'base': bab,
             'ability': str_mod,
             'size': size_modifier,
-            'misc': 0,  # Would include enhancement bonuses, etc.
-            'total': bab + str_mod + size_modifier
+            'misc': attack_equipment,
+            'total': bab + str_mod + size_modifier + attack_equipment
         }
-        
+
         # Calculate ranged attack bonus
         ranged_attack = {
             'base': bab,
             'ability': dex_mod,
             'size': size_modifier,
-            'misc': 0,
-            'total': bab + dex_mod + size_modifier
+            'misc': attack_equipment,
+            'total': bab + dex_mod + size_modifier + attack_equipment
         }
-        
+
         return {
             'melee': melee_attack,
             'ranged': ranged_attack,
-            'melee_attack_bonus': melee_attack['total'],  # Legacy compatibility
-            'ranged_attack_bonus': ranged_attack['total'],  # Legacy compatibility
+            'melee_attack_bonus': melee_attack['total'],
+            'ranged_attack_bonus': ranged_attack['total'],
             'str_modifier': str_mod,
             'dex_modifier': dex_mod,
             'base_attack_bonus': bab

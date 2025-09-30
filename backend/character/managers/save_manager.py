@@ -160,27 +160,42 @@ class SaveManager(EventEmitter):
                 'base_will': 0
             }
         
-        # Get ability modifiers using AttributeManager
-        attr_manager = self.character_manager.get_manager('ability') or self.character_manager.get_manager('attribute')
-        if attr_manager:
-            all_modifiers = attr_manager.get_all_modifiers()
-            con_mod = all_modifiers.get('CON', 0)
-            dex_mod = all_modifiers.get('DEX', 0)
-            wis_mod = all_modifiers.get('WIS', 0)
-        else:
-            # Fallback if no AttributeManager available
-            con_mod = (self.gff.get('Con', 10) - 10) // 2
-            dex_mod = (self.gff.get('Dex', 10) - 10) // 2
-            wis_mod = (self.gff.get('Wis', 10) - 10) // 2
-        
+        # Get base ability scores
+        base_con = self.gff.get('Con', 10)
+        base_dex = self.gff.get('Dex', 10)
+        base_wis = self.gff.get('Wis', 10)
+
+        # Get equipment bonuses from InventoryManager
+        inventory_manager = self.character_manager.get_manager('inventory')
+        equipment_bonuses = inventory_manager.get_equipment_bonuses() if inventory_manager else {
+            'ac': {}, 'attributes': {}, 'saves': {}, 'skills': {}, 'combat': {}
+        }
+
+        # Apply equipment bonuses to ability scores for save calculations
+        con_equipment = equipment_bonuses['attributes'].get('Con', 0)
+        dex_equipment = equipment_bonuses['attributes'].get('Dex', 0)
+        wis_equipment = equipment_bonuses['attributes'].get('Wis', 0)
+
+        effective_con = base_con + con_equipment
+        effective_dex = base_dex + dex_equipment
+        effective_wis = base_wis + wis_equipment
+
+        # Calculate ability modifiers with equipment
+        con_mod = (effective_con - 10) // 2
+        dex_mod = (effective_dex - 10) // 2
+        wis_mod = (effective_wis - 10) // 2
+
         # Get feat bonuses
         feat_bonuses = self._calculate_feat_bonuses()
-        
+
         # Get racial bonuses
         racial_bonuses = self._calculate_racial_bonuses()
-        
-        # Get resistance bonuses (from items/spells)
+
+        # Get resistance bonuses (from items/spells) and add equipment save bonuses
         resistance_bonuses = self._calculate_resistance_bonuses()
+        resistance_bonuses['fortitude'] += equipment_bonuses['saves'].get('fortitude', 0)
+        resistance_bonuses['reflex'] += equipment_bonuses['saves'].get('reflex', 0)
+        resistance_bonuses['will'] += equipment_bonuses['saves'].get('will', 0)
         
         # Calculate totals (base does NOT include ability mods)
         fort_total = (base_saves['base_fortitude'] + con_mod + 
