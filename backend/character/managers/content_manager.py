@@ -324,8 +324,8 @@ class ContentManager(EventEmitter):
             logger.info(f"ContentManager: Current module is '{current_module}'")
             
             # Use shared ResourceManager to find the module file
-            from parsers.erf import ERFParser
-            
+            from parsers import ERFParser
+
             # Use the shared ResourceManager from rules_service
             rm = self.rules_service.rm
             module_path = rm.find_module(f"{current_module}.mod")

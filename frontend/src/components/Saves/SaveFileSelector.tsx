@@ -10,8 +10,14 @@ import { GameLaunchDialog } from '../GameLaunchDialog';
 import { CharacterAPI } from '@/services/characterApi';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import FileBrowserModal from '@/components/FileBrowser/FileBrowserModal';
+import { apiClient } from '@/lib/api/client';
 
-export function SaveFileSelector() {
+interface SaveFileSelectorProps {
+  onOpenBackups?: () => void;
+}
+
+export function SaveFileSelector({ onOpenBackups }: SaveFileSelectorProps = {}) {
   const { isAvailable, isLoading, api } = useTauri();
   const { importCharacter, character, isLoading: characterLoading } = useCharacterContext();
   const { gameSettings } = useSettings();
@@ -24,8 +30,14 @@ export function SaveFileSelector() {
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [autoScanComplete, setAutoScanComplete] = useState(false);
   const [showLaunchDialog, setShowLaunchDialog] = useState(false);
+  const [showFileBrowser, setShowFileBrowser] = useState(false);
+  const [showBackupBrowser, setShowBackupBrowser] = useState(false);
+  const [currentPath, setCurrentPath] = useState<string>('');
+  const [backupPath, setBackupPath] = useState<string>('');
+  const [backupRefreshKey, setBackupRefreshKey] = useState(0);
 
   const loadAvailableSaves = useCallback(async () => {
     const startTime = performance.now();
@@ -135,28 +147,84 @@ export function SaveFileSelector() {
     }
   }, [api, gameSettings.nwn2_installation_path]);
 
-  const handleOpenBackupsFolder = useCallback(async () => {
-    if (!api || !selectedFile) {
-      setError('Cannot open backups folder: No save file selected');
+  const handleOpenBackupsFolder = useCallback(() => {
+    // Clear any previous messages
+    setSuccessMessage(null);
+    setError(null);
+
+    // If a save is selected, show backups for that specific save
+    // Otherwise, show all backups in the main backups directory
+    let backupsPath = '';
+
+    if (selectedFile) {
+      // Show backups for the selected save
+      const saveDir = selectedFile.path.replace(/[\/\\][^\/\\]*$/, '');
+      backupsPath = saveDir + (saveDir.includes('\\') ? '\\backups' : '/backups');
+    } else {
+      // Show all backups (empty path will use default from backend)
+      backupsPath = '';
+    }
+
+    setBackupPath(backupsPath);
+    setShowBackupBrowser(true);
+  }, [selectedFile]);
+
+  const handleBackupSelect = useCallback(async (file: { path: string; name: string }) => {
+    // Restore backup functionality
+    if (!selectedFile) {
+      setError('Please select a save file first to restore a backup');
+      setShowBackupBrowser(false);
       return;
     }
 
-    let backupsPath = '';
-    
     try {
-      // Get the saves directory (parent of the selected save folder) and append /backups
-      // selectedFile.path is the save folder, so go up one level to get saves root
-      const saveDir = selectedFile.path.replace(/[\/\\][^\/\\]*$/, ''); // Remove last folder to get saves directory
-      backupsPath = saveDir + (saveDir.includes('\\') ? '\\backups' : '/backups');
-      
-      // Use our custom Tauri command to open the folder in file explorer
-      await api.openFolderInExplorer(backupsPath);
-      console.log('Opened backups folder:', backupsPath);
+      await apiClient.post('/backups/restore', {
+        backup_path: file.path,
+        save_path: selectedFile.path,
+        create_pre_restore_backup: true,
+        confirm_restore: true
+      });
+
+      console.log('Backup restored successfully');
+      setShowBackupBrowser(false);
+
+      // Reload the character after successful restore
+      await importSaveFile(selectedFile);
     } catch (err) {
-      console.error('Failed to open backups folder "' + backupsPath + '":', err);
-      setError(err instanceof Error ? err.message : 'Failed to open backups folder. Backups are stored in: ' + backupsPath);
+      console.error('Failed to restore backup:', err);
+      setError(err instanceof Error ? err.message : 'Failed to restore backup');
     }
-  }, [api, selectedFile]);
+  }, [selectedFile, importSaveFile]);
+
+  const handleDeleteBackup = useCallback(async (file: { path: string; name: string }) => {
+    try {
+      await apiClient.delete('/backups/delete', {
+        backup_path: file.path
+      });
+
+      setBackupRefreshKey(prev => prev + 1);
+    } catch (err) {
+      console.error('Failed to delete backup:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete backup');
+    }
+  }, []);
+
+  const handleCreateBackup = useCallback(async () => {
+    if (!selectedFile) return;
+
+    try {
+      await apiClient.post('/backups/create', {
+        save_path: selectedFile.path
+      });
+
+      console.log('Backup created successfully');
+      // Refresh the backup list by incrementing refresh key
+      setBackupRefreshKey(prev => prev + 1);
+    } catch (err) {
+      console.error('Failed to create backup:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create backup');
+    }
+  }, [selectedFile]);
 
   useEffect(() => {
     console.log('🔧 SaveFileSelector: useEffect triggered:', { isAvailable, hasApi: !!api });
@@ -168,29 +236,32 @@ export function SaveFileSelector() {
     }
   }, [isAvailable, api, autoScanComplete, loadAvailableSaves]);
 
-  const handleSelectFile = async () => {
-    console.log('🔧 SaveFileSelector: handleSelectFile called');
-    console.log('🔧 SaveFileSelector: API available:', !!api);
-    
-    if (!api) {
-        console.error('❌ SaveFileSelector: Tauri API is not available');
-        setError("Tauri API is not available. Cannot open file dialog.");
-        return;
-    };
+  // Expose backup handler to parent - always available
+  useEffect(() => {
+    // Always expose the function, even without a save selected
+    (window as any).__openBackups = handleOpenBackupsFolder;
 
+    return () => {
+      delete (window as any).__openBackups;
+    };
+  }, [handleOpenBackupsFolder]);
+
+  const handleSelectFile = async () => {
+    setShowFileBrowser(true);
+  };
+
+  const handleFileBrowserSelect = async (file: { path: string; name: string }) => {
     try {
-      console.log("🔧 SaveFileSelector: Attempting to open file dialog via Tauri...");
-      const file = await api.selectSaveFile();
-      console.log("✅ SaveFileSelector: File selected successfully:", file);
-      setSelectedFile(file);
-      await importSaveFile(file);
+      const saveFile: SaveFile = {
+        name: file.name,
+        path: file.path,
+        thumbnail: ''
+      };
+      setSelectedFile(saveFile);
+      await importSaveFile(saveFile);
     } catch (err) {
-      console.error('❌ SaveFileSelector: The select_save_file command failed:', err);
-      const errorMessage = typeof err === 'string' && err ? err : 'The file selection was cancelled or failed unexpectedly.';
-      
-      if (typeof err === 'string' && err) {
-        setError(`Failed to select save file: ${errorMessage}`);
-      }
+      console.error('Failed to import save file:', err);
+      setError(err instanceof Error ? err.message : 'Failed to import save file');
     }
   };
 
@@ -253,6 +324,12 @@ export function SaveFileSelector() {
         </div>
       )}
 
+      {successMessage && (
+        <div className="p-2 bg-surface-1 text-success rounded text-sm">
+          {successMessage}
+        </div>
+      )}
+
       {character && (
         <div className="p-2 bg-surface-1 text-success rounded text-sm">
           Loaded: {character.name}
@@ -279,17 +356,6 @@ export function SaveFileSelector() {
         >
           {importing ? 'Loading...' : 'Load'}
         </Button>
-        {character && selectedFile && (
-          <Button
-            variant="ghost"
-            size="md"
-            className="text-sm"
-            onClick={handleOpenBackupsFolder}
-            disabled={importing || characterLoading}
-          >
-            Backups
-          </Button>
-        )}
       </div>
 
       {/* Auto-detected saves */}
@@ -337,12 +403,6 @@ export function SaveFileSelector() {
           </div>
         </Card>
       ) : null}
-      
-      {selectedFile && (
-        <div className="text-xs text-text-secondary p-2 bg-surface-1 rounded">
-          Selected: {selectedFile.name}
-        </div>
-      )}
 
       <GameLaunchDialog
         isOpen={showLaunchDialog}
@@ -350,6 +410,28 @@ export function SaveFileSelector() {
         onLaunch={handleGameLaunch}
         saveName={character?.name}
         gamePathDetected={!!gameSettings.nwn2_installation_path}
+      />
+
+      <FileBrowserModal
+        isOpen={showFileBrowser}
+        onClose={() => setShowFileBrowser(false)}
+        mode="load-saves"
+        onSelectFile={handleFileBrowserSelect}
+        currentPath={currentPath}
+        onPathChange={setCurrentPath}
+      />
+
+      <FileBrowserModal
+        isOpen={showBackupBrowser}
+        onClose={() => setShowBackupBrowser(false)}
+        mode="manage-backups"
+        onSelectFile={handleBackupSelect}
+        currentPath={backupPath}
+        onPathChange={setBackupPath}
+        onDeleteBackup={handleDeleteBackup}
+        onCreateBackup={handleCreateBackup}
+        canRestore={!!selectedFile}
+        refreshKey={backupRefreshKey}
       />
     </div>
   );

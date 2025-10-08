@@ -358,6 +358,27 @@ function AppContent() {
                 </Button>
               </div>
             </div>
+
+            {/* Save Management - Always visible */}
+            <div className="mt-6 space-y-3">
+              <h3 className="text-base font-bold text-text-primary mb-3 text-center">
+                Save Management
+              </h3>
+              <div className="h-px separator-primary"></div>
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  className="w-full text-sm"
+                  onClick={() => {
+                    if ((window as any).__openBackups) {
+                      (window as any).__openBackups();
+                    }
+                  }}
+                >
+                  Manage Backups
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

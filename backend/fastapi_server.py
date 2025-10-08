@@ -661,10 +661,14 @@ try:
     
     app.include_router(content.router, prefix="/api", tags=["content"])
     routers_loaded.append("content")
-    
+
+    from fastapi_routers import file_browser
+    app.include_router(file_browser.router, prefix="/api", tags=["file_browser"])
+    routers_loaded.append("file_browser")
+
     app.include_router(savegame.router, prefix="/api", tags=["savegame"])
     routers_loaded.append("savegame")
-    
+
     app.include_router(data.router, prefix="/api", tags=["data"])
     routers_loaded.append("data")
     

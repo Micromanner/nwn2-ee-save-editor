@@ -27,9 +27,9 @@ from collections import OrderedDict
 import zlib
 
 from parsers.resource_manager import ResourceManager, ModuleLRUCache
-from parsers import TDAParser  # Use the main parsers module to get Rust parser
+from parsers import TDAParser, ERFParser
 from parsers.rust_tlk_parser import TLKParser
-from parsers.erf import ERFParser, ERFResourceType
+from rust_erf_parser import ERFResourceType
 from parsers.gff import GFFParser, GFFElement, GFFFieldType
 from gamedata.services.workshop_service import SteamWorkshopService
 

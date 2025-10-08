@@ -11,7 +11,8 @@ from pathlib import Path
 from io import BytesIO
 from unittest.mock import patch, MagicMock
 
-from parsers.erf import ERFParser, ERFHeader, ERFKey, ERFResource, ERFResourceType, HakpakReader
+from parsers import ERFParser
+from rust_erf_parser import ERFHeader, ERFKey, ERFResource, ERFResourceType, HakpakReader
 
 
 class TestERFHeader:

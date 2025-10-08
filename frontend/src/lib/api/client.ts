@@ -39,11 +39,26 @@ export class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
-    
+
+    return response.json();
+  }
+
+  async delete<T>(endpoint: string, data?: unknown): Promise<T> {
+    const baseUrl = await DynamicAPI.getApiBaseUrl();
+    const response = await tauriCompatibleFetch(`${baseUrl}${endpoint}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: data ? JSON.stringify(data) : undefined,
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    }
+
     return response.json();
   }
 

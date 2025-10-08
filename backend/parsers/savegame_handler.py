@@ -556,11 +556,8 @@ class SaveGameHandler:
                     with open(savename_path, 'r', encoding='utf-8', errors='ignore') as f:
                         original_name = f.readline().strip()
                     
-                    # Format timestamp for display
-                    display_timestamp = datetime.datetime.now().strftime("%m/%d/%Y %H:%M")
-                    
                     # Create backup save name (single line only, as NWN2 only reads first line)
-                    backup_name = f"Backup of {original_name} at {display_timestamp}"
+                    backup_name = f"Backup of {original_name}"
                     
                     # Write updated savename.txt
                     with open(savename_path, 'w', encoding='utf-8') as f:
@@ -870,13 +867,13 @@ class SaveGameHandler:
             restored_files = []
             for root, dirs, files in os.walk(self.save_dir):
                 restored_files.extend(files)
-            
+
             logger.info(f"Successfully restored {len(restored_files)} files from backup")
-            
+
             return {
                 'success': True,
                 'restored_from': backup_path,
-                'files_restored': restored_files,
+                'files_restored': len(restored_files),
                 'pre_restore_backup': pre_restore_backup,
                 'restore_timestamp': datetime.datetime.now().isoformat()
             }
