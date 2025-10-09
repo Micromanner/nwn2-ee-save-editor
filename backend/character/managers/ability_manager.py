@@ -93,12 +93,12 @@ class AbilityManager(EventEmitter):
     
     def get_attribute_modifiers(self) -> Dict[str, int]:
         """
-        Calculate attribute modifiers (D&D rules: (score - 10) / 2)
-        
+        Calculate attribute modifiers from BASE scores only (D&D rules: (score - 10) / 2)
+
         Returns:
-            Dict mapping attribute names to modifiers
+            Dict mapping attribute names to base modifiers
         """
-        attributes = self.get_attributes()
+        attributes = self.get_attributes(include_equipment=False)
         modifiers = {}
         for attr, value in attributes.items():
             modifiers[attr] = (value - 10) // 2
@@ -381,13 +381,13 @@ class AbilityManager(EventEmitter):
     
     def get_total_attribute_points(self) -> int:
         """
-        Get the total of all attribute values
+        Get the total of all BASE attribute values (for point-buy calculation)
         Note: NWN2 doesn't use point buy system in game data
-        
+
         Returns:
-            Sum of all attribute values
+            Sum of all base attribute values
         """
-        attributes = self.get_attributes()
+        attributes = self.get_attributes(include_equipment=False)
         return sum(attributes.values())
     
     def apply_ability_increase(self, attribute: str) -> Dict[str, Any]:
@@ -968,10 +968,10 @@ class AbilityManager(EventEmitter):
         return default
     
     def get_ability_scores(self) -> Dict[str, int]:
-        """Get all ability scores using standard names"""
-        gff_attributes = self.get_attributes()  # Use existing method
+        """Get all BASE ability scores using standard names (without equipment)"""
+        gff_attributes = self.get_attributes(include_equipment=False)
         return {
-            ability: gff_attributes[gff_field] 
+            ability: gff_attributes[gff_field]
             for ability, gff_field in self.ABILITY_MAPPING.items()
         }
     
@@ -1336,7 +1336,7 @@ class AbilityManager(EventEmitter):
             
             # For imported characters, we need to reverse-engineer the level-up bonuses
             # by comparing current attributes to expected base values
-            base_attrs = self.get_attributes()
+            base_attrs = self.get_attributes(include_equipment=False)
             racial_mods = self.get_racial_modifiers()
             
             # Try to determine starting ability scores by working backwards
@@ -1485,7 +1485,7 @@ class AbilityManager(EventEmitter):
             logger.info(f"Removing level-up bonuses: {bonuses_to_remove}")
             
             # Get current base attributes (these include level-up bonuses)
-            current_attrs = self.get_attributes()
+            current_attrs = self.get_attributes(include_equipment=False)
             
             # Remove the bonuses from the base attributes
             for attr in self.ATTRIBUTES:
@@ -1520,47 +1520,47 @@ class AbilityManager(EventEmitter):
     
     def get_total_modifiers(self) -> Dict[str, int]:
         """Get total effective modifiers from all sources"""
-        base_attrs = self.get_attributes()
+        base_attrs = self.get_attributes(include_equipment=False)
         racial_mods = self.get_racial_modifiers()
         item_mods = self.get_item_modifiers()
         enhancement_mods = self.get_enhancement_modifiers()
         temp_mods = self.get_temporary_modifiers()
         # Note: Level-up bonuses are already included in base_attrs from GFF
-        
+
         total_modifiers = {}
         for attr in self.ATTRIBUTES:
             # Calculate effective ability score
             effective_score = (
-                base_attrs[attr] + 
-                racial_mods[attr] + 
-                item_mods[attr] + 
-                enhancement_mods[attr] + 
+                base_attrs[attr] +
+                racial_mods[attr] +
+                item_mods[attr] +
+                enhancement_mods[attr] +
                 temp_mods[attr]
             )
             # Convert to D&D modifier
             total_modifiers[attr] = (effective_score - 10) // 2
-        
+
         return total_modifiers
     
     def get_effective_attributes(self) -> Dict[str, int]:
         """Get effective attribute scores (what the game actually uses)"""
-        base_attrs = self.get_attributes()
+        base_attrs = self.get_attributes(include_equipment=False)
         racial_mods = self.get_racial_modifiers()
         item_mods = self.get_item_modifiers()
         enhancement_mods = self.get_enhancement_modifiers()
         temp_mods = self.get_temporary_modifiers()
         # Note: Level-up bonuses are already included in base_attrs from GFF
-        
+
         effective_attrs = {}
         for attr in self.ATTRIBUTES:
             effective_attrs[attr] = (
-                base_attrs[attr] + 
-                racial_mods[attr] + 
-                item_mods[attr] + 
-                enhancement_mods[attr] + 
+                base_attrs[attr] +
+                racial_mods[attr] +
+                item_mods[attr] +
+                enhancement_mods[attr] +
                 temp_mods[attr]
             )
-        
+
         return effective_attrs
     
     def calculate_point_buy_total(self) -> int:
@@ -1573,7 +1573,7 @@ class AbilityManager(EventEmitter):
         }
         
         total_cost = 0
-        base_attributes = self.get_attributes()  # Use existing method
+        base_attributes = self.get_attributes(include_equipment=False)  # Get base only for point-buy
         
         for attr in self.ATTRIBUTES:
             value = base_attributes.get(attr, 10)

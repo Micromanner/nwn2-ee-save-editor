@@ -10,8 +10,11 @@ export interface AbilityScore {
   modifier: number;
   baseValue?: number;
   breakdown?: {
+    levelUp: number;
     racial: number;
     equipment: number;
+    enhancement: number;
+    temporary: number;
   };
 }
 
@@ -106,35 +109,12 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   // Local state for optimistic updates
   const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
   const [localStatsOverrides, setLocalStatsOverrides] = useState<Partial<CharacterStats>>({});
-  
-  // Race data state for combined racial modifiers
-  const [raceData, setRaceData] = useState<RaceDataResponse | null>(null);
 
-  // Reset local overrides when abilityScoreData changes (new character loaded)
+  // Reset local overrides when abilityScoreData changes (backend has refreshed with new data)
   useEffect(() => {
     setLocalAbilityScoreOverrides({});
     setLocalStatsOverrides({});
   }, [abilityScoreData]);
-
-  // Fetch race data when character changes to get combined racial modifiers
-  useEffect(() => {
-    const fetchRaceData = async () => {
-      if (!characterId) {
-        setRaceData(null);
-        return;
-      }
-      
-      try {
-        const raceResponse = await CharacterAPI.getRaceData(characterId);
-        setRaceData(raceResponse);
-      } catch (error) {
-        console.error('Failed to fetch race data:', error);
-        setRaceData(null);
-      }
-    };
-    
-    fetchRaceData();
-  }, [characterId]);
 
   // Utility function to calculate ability modifier
   const calculateModifier = useCallback((value: number): number => {
@@ -144,96 +124,106 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   // Transform attributeData into frontend format with local overrides
   const abilityScores = useMemo((): AbilityScore[] => {
     if (!abilityScoreData) return [];
-    
-    // For editing: use base attributes + local overrides
-    // For display: show effective attributes (which include all modifiers)
-    const getDisplayValue = (attrKey: string) => {
-      // If we have local overrides (user is editing), calculate effective value
-      if (localAbilityScoreOverrides[attrKey] !== undefined) {
-        const baseValue = localAbilityScoreOverrides[attrKey];
-        // Use combined racial modifiers from race manager instead of separate racial_modifiers
-        const racial = raceData?.ability_modifiers?.[attrKey] ?? 0;
-        const item = abilityScoreData.detailed_modifiers?.item_modifiers?.[attrKey] ?? 0;
-        const levelup = abilityScoreData.detailed_modifiers?.level_up_modifiers?.[attrKey] ?? 0;
-        return baseValue + racial + item + levelup;
-      }
-      // Otherwise use the backend's calculated effective attributes
-      return abilityScoreData.effective_attributes?.[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
-    };
 
+    // For editing: use base attributes + local overrides (base only, no modifiers)
+    // For display: use backend's pre-calculated effective attributes
     const getEditValue = (attrKey: string) => {
       return localAbilityScoreOverrides[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
     };
+
+    const getDisplayValue = (attrKey: string) => {
+      // If we have a local override, we need to wait for backend refresh to get the correct effective value
+      // For now, show the backend's current effective value
+      return abilityScoreData.effective_attributes?.[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
+    };
     
     return [
-      { 
-        name: t('abilityScores.strength'), 
-        shortName: 'STR', 
-        value: getDisplayValue('Str'), 
-        modifier: abilityScoreData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')), 
+      {
+        name: t('abilityScores.strength'),
+        shortName: 'STR',
+        value: getDisplayValue('Str'),
+        modifier: abilityScoreData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')),
         baseValue: getEditValue('Str'),
         breakdown: {
-          racial: raceData?.ability_modifiers?.Str ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Str ?? 0
+          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Str ?? 0,
+          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Str ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Str ?? 0,
+          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Str ?? 0,
+          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Str ?? 0
         }
       },
-      { 
-        name: t('abilityScores.dexterity'), 
-        shortName: 'DEX', 
-        value: getDisplayValue('Dex'), 
-        modifier: abilityScoreData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')), 
+      {
+        name: t('abilityScores.dexterity'),
+        shortName: 'DEX',
+        value: getDisplayValue('Dex'),
+        modifier: abilityScoreData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')),
         baseValue: getEditValue('Dex'),
         breakdown: {
-          racial: raceData?.ability_modifiers?.Dex ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Dex ?? 0
+          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Dex ?? 0,
+          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Dex ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Dex ?? 0,
+          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Dex ?? 0,
+          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Dex ?? 0
         }
       },
-      { 
-        name: t('abilityScores.constitution'), 
-        shortName: 'CON', 
-        value: getDisplayValue('Con'), 
-        modifier: abilityScoreData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')), 
+      {
+        name: t('abilityScores.constitution'),
+        shortName: 'CON',
+        value: getDisplayValue('Con'),
+        modifier: abilityScoreData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')),
         baseValue: getEditValue('Con'),
         breakdown: {
-          racial: raceData?.ability_modifiers?.Con ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Con ?? 0
+          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Con ?? 0,
+          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Con ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Con ?? 0,
+          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Con ?? 0,
+          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Con ?? 0
         }
       },
-      { 
-        name: t('abilityScores.intelligence'), 
-        shortName: 'INT', 
-        value: getDisplayValue('Int'), 
-        modifier: abilityScoreData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')), 
+      {
+        name: t('abilityScores.intelligence'),
+        shortName: 'INT',
+        value: getDisplayValue('Int'),
+        modifier: abilityScoreData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')),
         baseValue: getEditValue('Int'),
         breakdown: {
-          racial: raceData?.ability_modifiers?.Int ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Int ?? 0
+          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Int ?? 0,
+          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Int ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Int ?? 0,
+          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Int ?? 0,
+          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Int ?? 0
         }
       },
-      { 
-        name: t('abilityScores.wisdom'), 
-        shortName: 'WIS', 
-        value: getDisplayValue('Wis'), 
-        modifier: abilityScoreData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')), 
+      {
+        name: t('abilityScores.wisdom'),
+        shortName: 'WIS',
+        value: getDisplayValue('Wis'),
+        modifier: abilityScoreData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')),
         baseValue: getEditValue('Wis'),
         breakdown: {
-          racial: raceData?.ability_modifiers?.Wis ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Wis ?? 0
+          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Wis ?? 0,
+          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Wis ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Wis ?? 0,
+          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Wis ?? 0,
+          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Wis ?? 0
         }
       },
-      { 
-        name: t('abilityScores.charisma'), 
-        shortName: 'CHA', 
-        value: getDisplayValue('Cha'), 
-        modifier: abilityScoreData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')), 
+      {
+        name: t('abilityScores.charisma'),
+        shortName: 'CHA',
+        value: getDisplayValue('Cha'),
+        modifier: abilityScoreData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')),
         baseValue: getEditValue('Cha'),
         breakdown: {
-          racial: raceData?.ability_modifiers?.Cha ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Cha ?? 0
+          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Cha ?? 0,
+          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Cha ?? 0,
+          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Cha ?? 0,
+          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Cha ?? 0,
+          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Cha ?? 0
         }
       },
     ];
-  }, [abilityScoreData, localAbilityScoreOverrides, raceData, t, calculateModifier]);
+  }, [abilityScoreData, localAbilityScoreOverrides, t, calculateModifier]);
 
   // Transform stats from attributeData with local overrides
   const stats = useMemo((): CharacterStats => {

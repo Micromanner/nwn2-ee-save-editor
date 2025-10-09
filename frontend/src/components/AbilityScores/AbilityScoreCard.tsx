@@ -12,8 +12,11 @@ interface AbilityScoreCardProps {
   modifier: number;
   baseValue?: number;
   breakdown?: {
+    levelUp: number;
     racial: number;
     equipment: number;
+    enhancement: number;
+    temporary: number;
   };
   onIncrease: () => void;
   onDecrease: () => void;
@@ -184,6 +187,14 @@ export default function AbilityScoreCard({
         {breakdown && (
           <>
             <div className="breakdown-row">
+              <span className="breakdown-label">Level-ups:</span>
+              <div className="breakdown-value-container">
+                <span className={`breakdown-value ${getValueClass(breakdown.levelUp)}`}>
+                  {formatModifier(breakdown.levelUp)}
+                </span>
+              </div>
+            </div>
+            <div className="breakdown-row">
               <span className="breakdown-label">Racial:</span>
               <div className="breakdown-value-container">
                 <span className={`breakdown-value ${getValueClass(breakdown.racial)}`}>
@@ -199,6 +210,26 @@ export default function AbilityScoreCard({
                 </span>
               </div>
             </div>
+            {breakdown.enhancement !== 0 && (
+              <div className="breakdown-row">
+                <span className="breakdown-label">Enhancement:</span>
+                <div className="breakdown-value-container">
+                  <span className={`breakdown-value ${getValueClass(breakdown.enhancement)}`}>
+                    {formatModifier(breakdown.enhancement)}
+                  </span>
+                </div>
+              </div>
+            )}
+            {breakdown.temporary !== 0 && (
+              <div className="breakdown-row">
+                <span className="breakdown-label">Temporary:</span>
+                <div className="breakdown-value-container">
+                  <span className={`breakdown-value ${getValueClass(breakdown.temporary)}`}>
+                    {formatModifier(breakdown.temporary)}
+                  </span>
+                </div>
+              </div>
+            )}
             <hr className="breakdown-divider" />
             <div className="breakdown-row breakdown-effective-row">
               <span className="breakdown-label">Effective:</span>

@@ -42,9 +42,17 @@ def get_abilities_state(
         ability_manager = manager.get_manager('ability')
         
         # Get all data from the ability manager - no duplicated logic
-        base_abilities = ability_manager.get_attributes()
+        gff_abilities = ability_manager.get_attributes(include_equipment=False)
+        level_up_mods = ability_manager.get_level_up_modifiers()
+
+        # Base attributes = GFF value - level_up bonuses (so user edits the starting value)
+        base_abilities = {
+            attr: gff_abilities[attr] - level_up_mods.get(attr, 0)
+            for attr in gff_abilities
+        }
         effective_abilities = ability_manager.get_effective_attributes()
-        
+
+
         # Build complete state using manager methods only
         try:
             hit_points_data = ability_manager.get_hit_points()
@@ -95,6 +103,10 @@ def get_abilities_state(
         except Exception as e:
             logger.error(f"Failed to get saving throws: {e}")
             saving_throws = {}
+
+        # Log what we're sending to frontend
+        logger.info(f"Sending to frontend - base_attributes: {base_abilities}")
+        logger.info(f"Sending to frontend - effective_attributes: {effective_abilities}")
 
         state_data = {
             'base_attributes': base_abilities,
@@ -162,9 +174,17 @@ def change_abilities(
     try:
         manager = session.character_manager
         ability_manager = manager.get_manager('ability')
-        
+
+        # User sends base values (starting scores), but GFF stores base + level_up_modifiers
+        # So we need to add level_up_modifiers back before storing
+        level_up_mods = ability_manager.get_level_up_modifiers()
+        gff_values = {
+            attr: value + level_up_mods.get(attr, 0)
+            for attr, value in abilities_data.attributes.items()
+        }
+
         # Use manager's set_all_attributes method - no duplicated logic
-        changes = ability_manager.set_all_attributes(abilities_data.attributes, abilities_data.should_validate)
+        changes = ability_manager.set_all_attributes(gff_values, abilities_data.should_validate)
         
         # Check for any validation errors in changes
         validation_errors = []
