@@ -145,6 +145,21 @@ const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
   classes: { endpoint: 'classes/state' },
 };
 
+// Subsystem dependency map - defines which subsystems need refresh when another updates
+// Used by hooks to trigger silent refresh of dependent subsystems after updates
+// Example: When inventory changes (equip/unequip), refresh abilityScores, combat, saves, skills
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const SUBSYSTEM_DEPENDENCIES: Record<SubsystemType, SubsystemType[]> = {
+  abilityScores: ['abilityScores', 'combat', 'saves', 'skills'], // Self + dependents for AC/stats refresh
+  inventory: ['abilityScores', 'combat', 'saves', 'skills'], // Equipment affects stats, AC, saves, skills
+  classes: ['abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells'], // Class/level affects everything
+  combat: [],
+  saves: [],
+  skills: [],
+  feats: ['combat'], // Feats affect BAB, AC, saves
+  spells: [],
+};
+
 // Subsystem type mappings
 interface SubsystemTypeMap {
   feats: FeatsData;
@@ -180,9 +195,10 @@ interface CharacterContextState {
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string) => Promise<void>;
-  loadSubsystem: (subsystem: SubsystemType, force?: boolean) => Promise<unknown>;
+  loadSubsystem: (subsystem: SubsystemType, options?: { force?: boolean; silent?: boolean }) => Promise<unknown>;
   updateSubsystem: (subsystem: SubsystemType, data: unknown) => Promise<void>;
   updateSubsystemData: (subsystem: SubsystemType, data: unknown) => void;
+  invalidateSubsystems: (subsystems: SubsystemType[]) => Promise<void>;
   clearCharacter: () => void;
   refreshAll: () => Promise<void>;
 }
@@ -253,32 +269,38 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [subsystems, setSubsystems] = useState<CharacterContextState['subsystems']>(initializeSubsystems());
 
   // Generic subsystem loader - always fetch fresh, no caching
-  const loadSubsystem = useCallback(async (subsystem: SubsystemType, _force = false): Promise<unknown> => { // eslint-disable-line @typescript-eslint/no-unused-vars
+  const loadSubsystem = useCallback(async (
+    subsystem: SubsystemType,
+    options: { force?: boolean; silent?: boolean } = {}
+  ): Promise<unknown> => {
     if (!characterId) {
       console.warn(`Cannot load ${subsystem}: No character loaded`);
       return null;
     }
 
     const config = SUBSYSTEM_CONFIG[subsystem];
+    const { silent = false } = options;
 
     // Always fetch fresh data - no caching
-    console.log(`Loading fresh ${subsystem} data`);
+    console.log(`Loading fresh ${subsystem} data${silent ? ' (silent)' : ''}`);
 
-    // Update loading state
-    setSubsystems(prev => ({
-      ...prev,
-      [subsystem]: { ...prev[subsystem], isLoading: true, error: null }
-    }));
+    // Update loading state (skip if silent)
+    if (!silent) {
+      setSubsystems(prev => ({
+        ...prev,
+        [subsystem]: { ...prev[subsystem], isLoading: true, error: null }
+      }));
+    }
 
     try {
       const response = await DynamicAPI.fetch(`/characters/${characterId}/${config.endpoint}`);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to load ${subsystem}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
+
       // Update subsystem state
       setSubsystems(prev => ({
         ...prev,
@@ -289,11 +311,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
           lastFetched: new Date()
         }
       }));
-      
+
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : `Failed to load ${subsystem}`;
-      
+
       setSubsystems(prev => ({
         ...prev,
         [subsystem]: {
@@ -302,7 +324,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
           error: errorMessage
         }
       }));
-      
+
       console.error(`Failed to load ${subsystem}:`, err);
       throw err;
     }
@@ -352,6 +374,19 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       }
     }));
   }, []);
+
+  // Invalidate and silently refresh multiple subsystems
+  const invalidateSubsystems = useCallback(async (subsystems: SubsystemType[]) => {
+    if (!characterId) return;
+
+    const refreshPromises = subsystems.map(subsystem =>
+      loadSubsystem(subsystem, { silent: true }).catch(err =>
+        console.error(`Silent refresh failed for ${subsystem}:`, err)
+      )
+    );
+
+    await Promise.all(refreshPromises);
+  }, [characterId, loadSubsystem]);
 
   // Load character
   const loadCharacter = useCallback(async (id: number) => {
@@ -444,6 +479,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     loadSubsystem,
     updateSubsystem,
     updateSubsystemData,
+    invalidateSubsystems,
     clearCharacter,
     refreshAll,
   };
@@ -470,24 +506,24 @@ export function useSubsystem<K extends SubsystemType>(subsystem: K): {
   isLoading: boolean;
   error: string | null;
   lastFetched: Date | null;
-  load: (force?: boolean) => Promise<unknown>;
+  load: (options?: { force?: boolean; silent?: boolean }) => Promise<unknown>;
   updateData: (newData: SubsystemTypeMap[K]) => void;
 } {
   const { subsystems, loadSubsystem, updateSubsystemData } = useCharacterContext();
-  
+
   const subsystemData = subsystems[subsystem];
-  
+
   // Update data directly without HTTP request (for using API response data)
   const updateData = useCallback((newData: SubsystemTypeMap[K]) => {
     updateSubsystemData(subsystem, newData);
   }, [subsystem, updateSubsystemData]);
-  
+
   return {
     data: subsystemData.data as SubsystemTypeMap[K] | null,
     isLoading: subsystemData.isLoading,
     error: subsystemData.error,
     lastFetched: subsystemData.lastFetched,
-    load: (force?: boolean) => loadSubsystem(subsystem, force),
+    load: (options?: { force?: boolean; silent?: boolean }) => loadSubsystem(subsystem, options),
     updateData,
   };
 }

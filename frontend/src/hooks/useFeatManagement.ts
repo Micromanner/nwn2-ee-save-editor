@@ -65,7 +65,7 @@ export function useFeatManagement(
     enableValidation = true 
   } = options;
 
-  const { character, isLoading: characterLoading, error: characterError } = useCharacterContext();
+  const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems } = useCharacterContext();
   const feats = useSubsystem('feats');
   
   // State for category-based feat loading
@@ -97,7 +97,7 @@ export function useFeatManagement(
   // Load feats data
   const loadFeats = useCallback(async (force = false) => {
     if (!character) return;
-    await feats.load(force);
+    await feats.load({ force });
   }, [character, feats]);
 
   // Load category-specific feats
@@ -198,42 +198,46 @@ export function useFeatManagement(
   // Add a feat to the character
   const addFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
-    
+
     try {
       await CharacterAPI.addFeat(character.id, featId);
       // Refresh current feats
-      await feats.load(true);
+      await feats.load({ force: true });
       // Clear validation cache for this feat
       setValidationCache(prev => {
         const newCache = { ...prev };
         delete newCache[featId];
         return newCache;
       });
+      // Silently refresh combat subsystem (feats may affect BAB, AC, saves, etc.)
+      await invalidateSubsystems(['combat']);
     } catch (error) {
       console.error('Failed to add feat:', error);
       throw error;
     }
-  }, [character?.id, feats]);
+  }, [character?.id, feats, invalidateSubsystems]);
 
   // Remove a feat from the character
   const removeFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
-    
+
     try {
       await CharacterAPI.removeFeat(character.id, featId);
       // Refresh current feats
-      await feats.load(true);
+      await feats.load({ force: true });
       // Clear validation cache for this feat
       setValidationCache(prev => {
         const newCache = { ...prev };
         delete newCache[featId];
         return newCache;
       });
+      // Silently refresh combat subsystem (feats may affect BAB, AC, saves, etc.)
+      await invalidateSubsystems(['combat']);
     } catch (error) {
       console.error('Failed to remove feat:', error);
       throw error;
     }
-  }, [character?.id, feats]);
+  }, [character?.id, feats, invalidateSubsystems]);
 
   // Select a feat
   const selectFeat = useCallback((feat: FeatInfo | null) => {

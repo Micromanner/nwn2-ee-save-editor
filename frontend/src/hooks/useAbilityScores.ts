@@ -101,7 +101,7 @@ export interface Alignment {
 
 export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   const t = useTranslations();
-  const { characterId } = useCharacterContext();
+  const { characterId, invalidateSubsystems } = useCharacterContext();
 
   // Local state for optimistic updates
   const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
@@ -389,12 +389,15 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       const result = await CharacterAPI.updateAttributes(characterId, {
         [backendAttrName]: clampedValue
       });
-      
+
       console.log('Ability score update result:', result);
-      
+
       // Backend confirmed the change - keep local override for now
       // It will be cleared when new data is loaded from backend
-      
+
+      // Silently refresh dependent subsystems (abilityScores for AC/stats, combat, saves, skills)
+      await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
+
     } catch (err) {
       console.error('Failed to update ability score:', err);
       // Revert optimistic update on error
@@ -405,7 +408,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       });
       throw err;
     }
-  }, [characterId, abilityScores]);
+  }, [characterId, abilityScores, invalidateSubsystems]);
 
   const updateAbilityScoreByShortName = useCallback(async (shortName: string, newValue: number) => {
     const index = abilityScores.findIndex(attr => attr.shortName === shortName);

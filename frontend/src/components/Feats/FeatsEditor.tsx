@@ -141,11 +141,11 @@ export default function FeatsEditor() {
 
   const handleAddFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
-    
+
     try {
       await CharacterAPI.addFeat(character.id, featId);
       // Refresh current feats and clear validation cache for this feat
-      await feats.load(true);
+      await feats.load({ force: true });
       setValidationCache(prev => {
         const newCache = { ...prev };
         delete newCache[featId];
@@ -158,11 +158,11 @@ export default function FeatsEditor() {
 
   const handleRemoveFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
-    
+
     try {
       await CharacterAPI.removeFeat(character.id, featId);
       // Refresh current feats
-      await feats.load(true);
+      await feats.load({ force: true });
     } catch (error) {
       console.error('Failed to remove feat:', error);
     }
