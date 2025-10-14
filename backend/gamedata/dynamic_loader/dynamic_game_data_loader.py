@@ -315,14 +315,12 @@ class DynamicGameDataLoader:
         # Define mapping strategies for specific tables
         strategies = {
             'creaturesize': {
-                'type': 'offset',
-                'offset': -1,
-                'description': 'creaturesize.2da uses row_index = id - 1'
+                'type': 'direct',
+                'description': 'creaturesize.2da uses direct mapping (id = row_index)'
             },
             'categories': {
-                'type': 'offset',
-                'offset': -1,
-                'description': 'categories.2da uses row_index = id - 1'
+                'type': 'direct',
+                'description': 'categories.2da uses direct mapping (id = row_index)'
             },
             # Partial offset tables with lower confidence - use direct for now
             # 'phenotype': {'type': 'direct'},  # Only 66% confidence, gaps present

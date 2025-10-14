@@ -279,14 +279,6 @@ class RaceManager(EventEmitter):
         self.gff.set('Race', new_race_id)
         self.gff.set('Subrace', new_subrace)
         
-        # Update Character model fields if available
-        if hasattr(self.character_manager, 'character_model'):
-            char = self.character_manager.character_model
-            char.race_id = new_race_id
-            char.race_name = getattr(new_race, 'label', '')
-            char.subrace_id = 0  # NWN2 doesn't have subrace IDs
-            char.subrace_name = new_subrace
-        
         # 3. Apply new racial ability modifiers (base race)
         self._apply_racial_modifiers(new_race, changes)
         

@@ -638,31 +638,31 @@ class ClassManager(EventEmitter):
         dex_mod = modifiers['DEX']
         wis_mod = modifiers['WIS']
         
-        # For multiclass, take the best base save from any class
-        best_fort = 0
-        best_ref = 0
-        best_will = 0
-        
+        # For multiclass, each class contributes its own save progression (they STACK)
+        total_fort = 0
+        total_ref = 0
+        total_will = 0
+
         for class_info in class_list:
             class_id = class_info.get('Class', -1)
             class_level = class_info.get('ClassLevel', 0)
-            
+
             if class_level > 0:
                 class_data = self.rules_service.get_by_id('classes', class_id)
                 if class_data:
                     # Get base saves without modifiers
                     saves = self._calculate_saves(class_data, class_level, {'CON': 0, 'DEX': 0, 'WIS': 0})
-                    best_fort = max(best_fort, saves['fortitude'])
-                    best_ref = max(best_ref, saves['reflex'])
-                    best_will = max(best_will, saves['will'])
-        
+                    total_fort += saves['fortitude']
+                    total_ref += saves['reflex']
+                    total_will += saves['will']
+
         return {
-            'fortitude': best_fort + con_mod,
-            'reflex': best_ref + dex_mod,
-            'will': best_will + wis_mod,
-            'base_fortitude': best_fort,
-            'base_reflex': best_ref,
-            'base_will': best_will
+            'fortitude': total_fort + con_mod,
+            'reflex': total_ref + dex_mod,
+            'will': total_will + wis_mod,
+            'base_fortitude': total_fort,
+            'base_reflex': total_ref,
+            'base_will': total_will
         }
     
     def _get_preserved_feats(self) -> List[int]:

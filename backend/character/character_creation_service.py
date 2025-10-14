@@ -72,14 +72,9 @@ class CharacterCreationService:
         self._calculate_hit_points(gff_data, character_data)
         self._calculate_skill_points(gff_data, character_data)
         
-        # Write the modified data
         writer = GFFWriter()
         writer.write(output_path, gff_data)
-        
-        # Character creation now uses FastAPI session-based approach
-        # The character file has been created, but database import is now handled
-        # by the FastAPI savegame router and session registry
-        # Return the output path instead of a Django model
+
         return output_path
     
     def _update_basic_info(self, gff_data: Dict[str, Any], character_data: Dict[str, Any]):

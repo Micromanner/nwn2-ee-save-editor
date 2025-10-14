@@ -83,11 +83,12 @@ class CombatManager(EventEmitter):
         deflection_bonus = equipment_bonuses['ac'].get('deflection', 0)
         natural_bonus = equipment_bonuses['ac'].get('natural', 0)
 
-        # Get max dex bonus from armor
+        # Get max dex bonus from armor using inventory manager
         max_dex_bonus = 999
-        chest_item = self._get_equipped_item('Chest')
-        if chest_item:
-            max_dex_bonus = self._get_item_max_dex(chest_item)
+        if inventory_manager:
+            chest_item = inventory_manager.get_equipped_item('chest')
+            if chest_item:
+                max_dex_bonus = self._get_item_max_dex(chest_item)
 
         # Apply max dex bonus from armor
         effective_dex_bonus = min(dex_bonus, max_dex_bonus)
@@ -95,8 +96,10 @@ class CombatManager(EventEmitter):
         # Get natural armor from character (race, spells, etc.) and add equipment natural armor
         natural_armor = self.gff.get('NaturalAC', 0) + natural_bonus
 
-        # Get dodge bonus (from feats like Dodge)
-        dodge_bonus = self._calculate_dodge_bonus()
+        # Get all feat-based AC bonuses (dodge, luck, etc.)
+        feat_ac_bonuses = self._calculate_feat_ac_bonuses()
+        dodge_bonus = feat_ac_bonuses.get('dodge', 0)
+        misc_bonus = feat_ac_bonuses.get('misc', 0)
 
         # Get size modifier from game data
         size = self.gff.get('CreatureSize', 4)
@@ -108,13 +111,13 @@ class CombatManager(EventEmitter):
 
         # Calculate total AC
         total_ac = (base_ac + armor_bonus + shield_bonus + effective_dex_bonus +
-                   natural_armor + dodge_bonus + deflection_bonus + size_modifier)
+                   natural_armor + dodge_bonus + deflection_bonus + size_modifier + misc_bonus)
 
         # Calculate touch AC (ignores armor, shield, natural)
-        touch_ac = base_ac + effective_dex_bonus + dodge_bonus + deflection_bonus + size_modifier
+        touch_ac = base_ac + effective_dex_bonus + dodge_bonus + deflection_bonus + size_modifier + misc_bonus
 
-        # Calculate flat-footed AC (no DEX or dodge)
-        flatfooted_ac = base_ac + armor_bonus + shield_bonus + natural_armor + deflection_bonus + size_modifier
+        # Calculate flat-footed AC (no DEX or dodge, but misc applies)
+        flatfooted_ac = base_ac + armor_bonus + shield_bonus + natural_armor + deflection_bonus + size_modifier + misc_bonus
 
         return {
             'total': total_ac,
@@ -129,7 +132,8 @@ class CombatManager(EventEmitter):
                 'natural': natural_armor,
                 'dodge': dodge_bonus,
                 'deflection': deflection_bonus,
-                'size': size_modifier
+                'size': size_modifier,
+                'misc': misc_bonus
             },
             'dex_bonus': dex_bonus,
             'max_dex_from_armor': max_dex_bonus,
@@ -217,19 +221,7 @@ class CombatManager(EventEmitter):
         return dr_list
     
     def _get_equipped_item(self, slot: str) -> Optional[Any]:
-        """Get item equipped in specific slot from Django model"""
-        # If we have access to the character model
-        if hasattr(self.character_manager, 'character_model'):
-            character = self.character_manager.character_model
-            try:
-                # Use Django ORM to get equipped item
-                from character.models import CharacterItem
-                item = character.items.filter(location=slot.upper()).first()
-                return item
-            except:
-                pass
-        
-        # Fallback to GFF data if no model access
+        """Get item equipped in specific slot from GFF data"""
         equipped_items = self.gff.get('Equip_ItemList', [])
         
         slot_mapping = {
@@ -262,19 +254,6 @@ class CombatManager(EventEmitter):
     
     def _get_item_ac_bonus(self, item) -> int:
         """Get AC bonus from an item"""
-        # Handle Django model
-        if hasattr(item, 'base_item_id'):
-            # Django model properties are stored as JSONField
-            if hasattr(item, 'properties') and item.properties:
-                # Look for AC bonus in item properties
-                for prop in item.properties:
-                    if isinstance(prop, dict) and prop.get('type') == 'ac_bonus':
-                        return prop.get('value', 0)
-            
-            # Use base item defaults if no AC property
-            return self._get_base_item_ac(item.base_item_id)
-        
-        # Handle raw GFF data
         base_item = item.get('BaseItem', 0)
         
         # Use base item data to determine AC bonus
@@ -331,30 +310,29 @@ class CombatManager(EventEmitter):
         return 0
     
     def _get_item_max_dex(self, item) -> int:
-        """Get max DEX bonus allowed by armor using dynamic game data"""
+        """Get max DEX bonus allowed by armor using armorrulestats.2da"""
         if not item:
             return 999  # No armor = no DEX limit
-        
-        # Handle Django model
-        if hasattr(item, 'base_item_id'):
-            base_item_id = item.base_item_id
-        else:
-            # Raw GFF data
-            base_item_id = item.get('BaseItem', 0)
-        
-        # Get data from baseitems.2da
-        base_item = self._get_base_item_data(base_item_id)
-        if base_item:
-            try:
-                # Use field mapping utility for max DEX bonus
-                max_dex_patterns = ['dex_bonus', 'DexBonus', 'max_dex_bonus', 'MaxDexBonus']
-                max_dex_value = self.field_mapper.get_robust_field_value(
-                    base_item, max_dex_patterns, 'int', 999
-                )
-                return max_dex_value
-            except (ValueError, AttributeError, TypeError):
-                pass
-        
+
+        # Get ArmorRulesType from item
+        armor_rules_type = item.get('ArmorRulesType', None) if isinstance(item, dict) else getattr(item, 'armor_rules_type', None)
+
+        if armor_rules_type is not None:
+            # Look up in armorrulestats.2da
+            armor_stats = self.rules_service.get_by_id('armorrulestats', armor_rules_type)
+            if armor_stats:
+                try:
+                    # Try direct attribute access first (handles runtime classes properly)
+                    max_dex_value = getattr(armor_stats, 'MAXDEXBONUS', None)
+                    if max_dex_value is None:
+                        # Fallback to field mapper
+                        max_dex_value = self.field_mapper.get_field_value(armor_stats, 'MAXDEXBONUS', None)
+
+                    if max_dex_value is not None and str(max_dex_value).strip() and str(max_dex_value) != '****':
+                        return int(max_dex_value)
+                except (ValueError, AttributeError, TypeError) as e:
+                    logger.warning(f"Error getting MAXDEXBONUS for armor type {armor_rules_type}: {e}")
+
         return 999  # No limit if data not found
     
     def _is_shield(self, item) -> bool:
@@ -411,19 +389,68 @@ class CombatManager(EventEmitter):
             
         return False
     
-    def _calculate_dodge_bonus(self) -> int:
-        """Calculate dodge AC bonus from feats"""
-        dodge_bonus = 0
-        
-        # Dodge feat
-        if self._has_feat_by_name('Dodge'):
-            dodge_bonus += 1
-        
-        # Mobility feat
-        if self._has_feat_by_name('Mobility'):
-            dodge_bonus += 4  # Only vs AoO, but simplified here
-        
-        return dodge_bonus
+    def _calculate_feat_ac_bonuses(self) -> Dict[str, int]:
+        """
+        Calculate all AC bonuses from feats by parsing feat descriptions.
+        Automatically detects AC bonuses from any feat, including modded feats.
+
+        Returns:
+            Dict with 'dodge' and 'misc' AC bonuses
+        """
+        import re
+
+        bonuses = {'dodge': 0, 'misc': 0}
+
+        # Get all character feats
+        feat_list = self.gff.get('FeatList', [])
+
+        for feat_entry in feat_list:
+            feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
+
+            # Get feat data from game rules
+            feat_data = self.rules_service.get_by_id('feat', feat_id)
+            if not feat_data:
+                continue
+
+            # Get label and description
+            label = (getattr(feat_data, 'LABEL', '') or '').lower()
+            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+
+            # Skip conditional bonuses (against specific enemies, when unarmed, etc.)
+            conditional_keywords = [
+                'against', 'vs ', 'versus', 'when ', 'while ', 'if ',
+                'when wielding', 'when wearing', 'when using', 'when fighting'
+            ]
+            if any(keyword in description.lower() for keyword in conditional_keywords):
+                # This is a conditional bonus, skip it
+                continue
+
+            # Check for dodge-type feats (don't stack with flat-footed)
+            if 'dodge' in label or 'mobility' in label:
+                # Parse for +X bonus
+                match = re.search(r'\+(\d+)', description)
+                if match:
+                    bonuses['dodge'] += int(match.group(1))
+                elif 'dodge' in label and not match:
+                    bonuses['dodge'] += 1  # Default Dodge feat = +1
+                continue
+
+            # Parse description for AC bonus patterns (luck, insight, sacred, etc.)
+            ac_patterns = [
+                r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+(?:Armor\s+Class|AC)',  # "+1 luck bonus to Armor Class"
+                r'\+(\d+)\s+(?:to\s+)?AC(?:\s|\.|\,)',                      # "+2 AC"
+                r'\+(\d+)\s+AC\s+bonus',                                     # "+1 AC bonus"
+            ]
+
+            for pattern in ac_patterns:
+                match = re.search(pattern, description, re.IGNORECASE)
+                if match:
+                    bonus_value = int(match.group(1))
+                    bonuses['misc'] += bonus_value
+                    logger.debug(f"Found AC bonus +{bonus_value} from feat {feat_id}: {label}")
+                    break  # Only count once per feat
+
+        return bonuses
     
     def _get_armor_check_penalty(self) -> int:
         """Get armor check penalty for skills using dynamic game data"""
@@ -431,11 +458,7 @@ class CombatManager(EventEmitter):
         if not chest_item:
             return 0
         
-        # Handle Django model vs raw GFF data
-        if hasattr(chest_item, 'base_item_id'):
-            base_item_id = chest_item.base_item_id
-        else:
-            base_item_id = chest_item.get('BaseItem', 0)
+        base_item_id = chest_item.get('BaseItem', 0)
         
         # Get data from baseitems.2da
         base_item = self._get_base_item_data(base_item_id)
@@ -637,11 +660,7 @@ class CombatManager(EventEmitter):
         # Check for heavy armor
         chest_item = self._get_equipped_item('Chest')
         if chest_item:
-            # Handle Django model vs raw GFF data
-            if hasattr(chest_item, 'base_item_id'):
-                base_item = chest_item.base_item_id
-            else:
-                base_item = chest_item.get('BaseItem', 0)
+            base_item = chest_item.get('BaseItem', 0)
             # Check if armor reduces speed using baseitems.2da
             base_item_data = self._get_base_item_data(base_item)
             if base_item_data and self._is_heavy_armor(base_item_data):

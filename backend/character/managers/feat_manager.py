@@ -2265,3 +2265,143 @@ class FeatManager(EventEmitter):
         
         logger.debug(f"Found {len(available_domains)} available domains")
         return available_domains
+
+    def get_save_bonuses(self) -> Dict[str, int]:
+        """
+        Calculate total save bonuses from all character feats.
+        Centralizes feat-to-save-bonus mapping in FeatManager where it belongs.
+
+        Returns:
+            Dict with fortitude, reflex, will save bonuses from feats
+        """
+        bonuses = {
+            'fortitude': 0,
+            'reflex': 0,
+            'will': 0
+        }
+
+        # Map feat labels to their save bonuses
+        # NOTE: These bonuses are hardcoded in the NWN2 game engine, NOT stored in 2DA files.
+        # The engine checks for these feat constants and applies bonuses internally during save calculations.
+        # Modded feats that add save bonuses must use SPELLID + spell scripts (not covered here).
+        # Research: https://linear.app/nwn2editor/issue/NWN-65
+        SAVE_FEAT_BONUSES = {
+            # Standard save feats (+2)
+            'GreatFort': {'type': 'fortitude', 'bonus': 2},
+            'IronWill': {'type': 'will', 'bonus': 2},
+            'LightngRef': {'type': 'reflex', 'bonus': 2},
+
+            # Epic save feats (+4, overlaps with standard)
+            'FEAT_EPIC_FORTITUDE': {'type': 'fortitude', 'bonus': 4},
+            'FEAT_EPIC_WILL': {'type': 'will', 'bonus': 4},
+            'FEAT_EPIC_REFLEXES': {'type': 'reflex', 'bonus': 4},
+
+            # Universal save bonuses
+            'LuckOfHeroes': {'type': 'universal', 'bonus': 1},
+            'lucky': {'type': 'universal', 'bonus': 1},
+            'FEAT_SVIRFNEBLIN_SAVE': {'type': 'universal', 'bonus': 2},
+            'FEAT_SACRED_DEFENSE_1': {'type': 'universal', 'bonus': 1},
+            'FEAT_FAMILIAR_IMPROVED_LUCK': {'type': 'universal', 'bonus': 1},
+
+            # Background feats (NOTE: Can have NEGATIVE bonuses!)
+            'FEAT_BACKGROUND_BULLY': {'type': 'fortitude', 'bonus': 1},
+            'FEAT_BACKGROUND_DEVOUT': {'type': 'will', 'bonus': 1},
+            'FEAT_BACKGROUND_MILITIA': {'type': 'will', 'bonus': -2},
+            'FEAT_BACKGROUND_TROUBLE_MAKER': [
+                {'type': 'reflex', 'bonus': 1},
+                {'type': 'will', 'bonus': -2}
+            ],
+            'FEAT_BACKGROUND_WIZARDS_APPRENTICE': {'type': 'fortitude', 'bonus': -1},
+
+            # Class/prestige abilities
+            'FEAT_BARB_RAGE': {'type': 'will', 'bonus': 4},
+            'FEAT_BARB_WHIRLWIND_FRENZY': {'type': 'reflex', 'bonus': 4},
+            'Bullheaded': {'type': 'will', 'bonus': 2},
+            'FEAT_DEATHLESS_VIGOR': {'type': 'fortitude', 'bonus': 4},
+            'FEAT_GRACE': {'type': 'reflex', 'bonus': 2},
+            'FEAT_HEX_METTLE': {'type': 'will', 'bonus': 4},
+            'FEAT_INDOMITABLE_WILL': {'type': 'will', 'bonus': 4},
+            'StrongSoul': {'type': 'will', 'bonus': 1},
+
+            # Familiar bonuses
+            'FEAT_FAMILIAR_IMPROVED_FORTITUDE': {'type': 'fortitude', 'bonus': 2},
+            'FEAT_FAMILIAR_IMPROVED_REFLEX': {'type': 'reflex', 'bonus': 2},
+
+            # Racial/heritage feats
+            'FEAT_FIENDISH_HERITAGE': {'type': 'fortitude', 'bonus': 4},
+            'FEAT_RACIAL_RESIST_POISON': {'type': 'fortitude', 'bonus': 4},
+            'ResistDisease': {'type': 'fortitude', 'bonus': 4},
+            'ResistPoison': {'type': 'fortitude', 'bonus': 4},
+
+            # Reflex-based class abilities
+            'FEAT_PRESTIGE_DEFENSIVE_AWARENESS_3': {'type': 'reflex', 'bonus': 1},
+            'SnakeBlood': {'type': 'reflex', 'bonus': 1},
+            'FEAT_SWASHBUCKLER_GRACE_1': {'type': 'reflex', 'bonus': 1},
+            'FEAT_SWASHBUCKLER_GRACE_2': {'type': 'reflex', 'bonus': 1},
+            'FEAT_SWASHBUCKLER_GRACE_3': {'type': 'reflex', 'bonus': 1},
+            'FEAT_SWASHBUCKLER_GRACE_4': {'type': 'reflex', 'bonus': 1},
+
+            # Trap sense progression
+            'FEAT_TRAP_SENSE_1': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_2': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_3': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_4': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_5': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_6': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_7': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_8': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_9': {'type': 'reflex', 'bonus': 1},
+            'FEAT_TRAP_SENSE_10': {'type': 'reflex', 'bonus': 1},
+
+            # Uncanny dodge progression
+            'UncannyDodge2': {'type': 'reflex', 'bonus': 1},
+            'UncannyDodge3': {'type': 'reflex', 'bonus': 2},
+            'UncannyDodge4': {'type': 'reflex', 'bonus': 3},
+            'UncannyDodge5': {'type': 'reflex', 'bonus': 4},
+        }
+
+        # Get all feats from game data for label lookup
+        try:
+            feats_table = self.game_rules_service.get_table('feat')
+            if not feats_table:
+                logger.warning("No feat table available for save bonus calculation")
+                return bonuses
+
+            # Build feat ID to label mapping
+            feat_labels = {}
+            for feat_id, feat in enumerate(feats_table):
+                feat_label = field_mapper.get_field_value(feat, 'label', '')
+                if feat_label:
+                    feat_labels[feat_id] = feat_label
+
+            # Check character's feats against save-affecting feats
+            for feat_id, feat_label in feat_labels.items():
+                if feat_label not in SAVE_FEAT_BONUSES:
+                    continue
+
+                if not self.has_feat(feat_id):
+                    continue
+
+                bonus_data = SAVE_FEAT_BONUSES[feat_label]
+
+                # Handle both single bonus dict and list of bonuses
+                bonus_list = bonus_data if isinstance(bonus_data, list) else [bonus_data]
+
+                for bonus_info in bonus_list:
+                    save_type = bonus_info['type']
+                    bonus_value = bonus_info['bonus']
+
+                    if save_type == 'universal':
+                        bonuses['fortitude'] += bonus_value
+                        bonuses['reflex'] += bonus_value
+                        bonuses['will'] += bonus_value
+                    else:
+                        bonuses[save_type] += bonus_value
+
+                    sign = '+' if bonus_value >= 0 else ''
+                    logger.info(f"Applied {feat_label} bonus {sign}{bonus_value} to {save_type} saves")
+
+        except Exception as e:
+            logger.warning(f"Error calculating feat save bonuses: {e}")
+
+        return bonuses

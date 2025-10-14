@@ -148,18 +148,32 @@ class ItemPropertyDecoder:
                 'uses_per_day': uses
             }
         
-        # Property ID 40/41: Saving Throw Bonuses  
+        # Property ID 40/41: Saving Throw Bonuses
         elif prop_id in [40, 41]:
             if prop_id == 40:
-                # All saves
-                return {
-                    'label': f'Saves +{cost_value}',
-                    'description': f'{base_description} +{cost_value} to all saving throws',
-                    'bonus_type': 'saves_all',
-                    'bonus_value': cost_value
-                }
+                # Property 40 uses iprp_saveelement subtypes
+                # Subtype 0 = Universal (applies to Fort/Ref/Will)
+                # Subtype 5 = Disease resistance (specific save type, NOT universal)
+                # Other subtypes = Fear, Poison, etc (specific save types)
+                save_element_name = self._get_save_element_name(subtype)
+
+                if subtype == 0:  # Universal - applies to all three main saves
+                    return {
+                        'label': f'Saves +{cost_value}',
+                        'description': f'{base_description} +{cost_value} to all saving throws',
+                        'bonus_type': 'saves_all',
+                        'bonus_value': cost_value
+                    }
+                else:  # Specific element (disease, fear, poison, etc) - does NOT apply to main saves
+                    return {
+                        'label': f'Saves +{cost_value} vs {save_element_name}',
+                        'description': f'{base_description} +{cost_value} vs {save_element_name}',
+                        'bonus_type': 'save_element',
+                        'element_type': save_element_name,
+                        'bonus_value': cost_value
+                    }
             else:
-                # Specific save
+                # Property 41 uses iprp_savingthrow subtypes (Fort/Ref/Will)
                 save_name = self._save_map.get(subtype, f'Save {subtype}')
                 return {
                     'label': f'{save_name.title()} Save +{cost_value}',
@@ -295,6 +309,34 @@ class ItemPropertyDecoder:
         except Exception:
             pass
         return f'Skill {skill_id}'
+
+    def _get_save_element_name(self, element_id: int) -> str:
+        """Get save element name from iprp_saveelement ID"""
+        element_names = {
+            0: 'Universal',
+            1: 'Acid',
+            2: 'Backstab',
+            3: 'Cold',
+            4: 'Death',
+            5: 'Disease',
+            6: 'Divine',
+            7: 'Electrical',
+            8: 'Fear',
+            9: 'Fire',
+            10: 'Illusion',
+            11: 'Mind-Affecting',
+            12: 'Negative Energy',
+            13: 'Poison',
+            14: 'Positive Energy',
+            15: 'Sonic',
+            16: 'Traps',
+            17: 'Spells',
+            18: 'Law',
+            19: 'Chaos',
+            20: 'Good',
+            21: 'Evil'
+        }
+        return element_names.get(element_id, f'Element {element_id}')
     
     def _decode_target_type(self, prop_id: int, subtype: int) -> str:
         """Decode target type for conditional bonuses"""
@@ -403,9 +445,9 @@ class ItemPropertyDecoder:
                 if ability and cost_value > 0:
                     bonuses['abilities'][ability] = cost_value  # Store as 'Dex', not 'dex'
                     
-            elif property_name == 1:  # AC Bonus
+            elif property_name == 1:  # AC Bonus (enchantment/deflection bonus)
                 if cost_value > 0:
-                    bonuses['ac']['armor'] = cost_value
+                    bonuses['ac']['deflection'] = cost_value
                     
             elif property_name == 6:  # Enhancement Bonus  
                 if cost_value > 0:
@@ -413,13 +455,18 @@ class ItemPropertyDecoder:
                     
             elif property_name in [40, 41]:  # Saving Throw Bonuses
                 if cost_value > 0:
-                    if property_name == 40:  # All saves
-                        for save in ['fortitude', 'reflex', 'will']:
-                            bonuses['saves'][save] = bonuses['saves'].get(save, 0) + cost_value
-                    else:  # Specific save (property_name == 41)
+                    if property_name == 40:
+                        # Property 40 uses iprp_saveelement
+                        # ONLY subtype 0 (Universal) applies to Fort/Ref/Will
+                        # Other subtypes (Disease=5, Fear=8, etc) are specific save elements
+                        if subtype == 0:  # Universal - applies to all three main saves
+                            for save in ['fortitude', 'reflex', 'will']:
+                                bonuses['saves'][save] = bonuses['saves'].get(save, 0) + cost_value
+                        # Disease/Fear/Poison/etc saves are NOT added to main saves
+                    else:  # Property 41 - Specific save (Fort/Ref/Will)
                         save_type = self._save_map.get(subtype)
                         if save_type:
-                            bonuses['saves'][save_type] = cost_value
+                            bonuses['saves'][save_type] = bonuses['saves'].get(save_type, 0) + cost_value
                             
             elif property_name == 52:  # Skill Bonus
                 if cost_value > 0:

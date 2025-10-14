@@ -73,14 +73,14 @@ def mock_game_data_loader():
     mock_loader = Mock(spec=DynamicGameDataLoader)
     
     # Mock feats data with save bonuses
-    # Labels must contain keywords that SaveManager looks for
-    # Use save_modifier as a fallback that works for all fields
+    # IMPORTANT: Labels must match the exact labels from feat.2da (abbreviated forms)
+    # These match the SAVE_FEAT_BONUSES dict in SaveManager
     mock_feats = [
-        MockFeat(22, 'IronWill', 'Iron Will', save_modifier=2),  # contains 'will'
-        MockFeat(24, 'LightningReflexes', 'Lightning Reflexes', save_modifier=2),  # contains 'lightning'
-        MockFeat(14, 'GreatFortitude', 'Great Fortitude', save_modifier=2),  # contains 'fortitude'
-        MockFeat(100, 'LuckOfHeroes', 'Luck of Heroes', save_modifier=1),  # contains 'luck'
-        MockFeat(376, 'DivineGrace', 'Divine Grace'),  # Paladin ability
+        MockFeat(22, 'IronWill', 'Iron Will', save_modifier=2),
+        MockFeat(24, 'LightngRef', 'Lightning Reflexes', save_modifier=2),  # Note: abbreviated label
+        MockFeat(14, 'GreatFort', 'Great Fortitude', save_modifier=2),  # Note: abbreviated label
+        MockFeat(100, 'LuckOfHeroes', 'Luck of Heroes', save_modifier=1),
+        MockFeat(376, 'DivineGrace', 'Divine Grace'),
         MockFeat(389, 'Evasion', 'Evasion'),
         MockFeat(390, 'ImprovedEvasion', 'Improved Evasion'),
         MockFeat(392, 'SlipperyMind', 'Slippery Mind'),

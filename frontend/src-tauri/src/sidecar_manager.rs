@@ -95,19 +95,20 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
         return Err("FastAPI sidecar state not initialized".to_string());
     }
     
-    // Check if the configured port is actually in use before trying to kill anything
-    if cfg!(debug_assertions) {
-        // Quick check if port is already free
+    // Check if FastAPI is already running before trying to kill anything
+    // Skip port-based checks when using dynamic ports (port 0)
+    if cfg!(debug_assertions) && config.fastapi_port > 0 {
+        // Quick check if the configured static port is already free
         let port_in_use = match reqwest::Client::new()
-            .get(&format!("{}/api/health/", base_url))
+            .get(&format!("http://{}:{}/api/health/", config.fastapi_host, config.fastapi_port))
             .timeout(std::time::Duration::from_millis(500))
             .send()
-            .await 
+            .await
         {
             Ok(_) => true,
             Err(_) => false,
         };
-        
+
         if !port_in_use {
             info!("Port {} is free, skipping kill process - proceeding directly to startup", config.fastapi_port);
         } else {
@@ -184,11 +185,14 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 }
             }
         }
-        
+
             if port_check_attempts >= 5 {
                 return Err(format!("Failed to free port {} after multiple attempts", config.fastapi_port));
             }
         } // End of port_in_use check
+    } else if cfg!(debug_assertions) {
+        // Using dynamic ports (port 0) - skip port-based kill logic
+        info!("Using dynamic port assignment, skipping port-based process cleanup");
     }
     
     let sidecar_command = if cfg!(debug_assertions) {
@@ -247,30 +251,30 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 CommandEvent::Stdout(line) => {
                     let line_str = String::from_utf8_lossy(&line);
                     info!("FastAPI: {}", line_str);
-                    
+
                     // Check for dynamic port assignment
                     if line_str.starts_with("FASTAPI_ACTUAL_PORT=") {
                         if let Some(port_str) = line_str.strip_prefix("FASTAPI_ACTUAL_PORT=") {
                             if let Ok(port) = port_str.trim().parse::<u16>() {
                                 crate::config::Config::set_dynamic_port(port);
-                                info!("Captured dynamic FastAPI port: {}", port);
+                                info!("\n\n==========================================================\n==========================================================\n  FASTAPI_ACTUAL_PORT={}\n==========================================================\n==========================================================\n", port);
                             }
                         }
                     }
                 }
                 CommandEvent::Stderr(line) => {
                     let line_str = String::from_utf8_lossy(&line);
-                    
+
                     // Check for dynamic port assignment (might be in stderr)
                     if line_str.starts_with("FASTAPI_ACTUAL_PORT=") {
                         if let Some(port_str) = line_str.strip_prefix("FASTAPI_ACTUAL_PORT=") {
                             if let Ok(port) = port_str.trim().parse::<u16>() {
                                 crate::config::Config::set_dynamic_port(port);
-                                info!("Captured dynamic FastAPI port: {}", port);
+                                info!("\n\n==========================================================\n==========================================================\n  FASTAPI_ACTUAL_PORT={}\n==========================================================\n==========================================================\n", port);
                             }
                         }
                     }
-                    
+
                     // FastAPI logs INFO messages to stderr, so check the content
                     if line_str.contains("ERROR") || line_str.contains("CRITICAL") || line_str.contains("FATAL") {
                         error!("FastAPI Error: {}", line_str);

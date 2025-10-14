@@ -37,6 +37,7 @@ class FieldMappingUtility:
         # Size and movement
         'creature_size': ['creature_size', 'size', 'CreatureSize', 'Size', 'RaceSize'],
         'movement_rate': ['movement_rate', 'base_speed', 'speed', 'MovementRate', 'BaseSpeed', 'Speed'],
+        'ac_attack_mod': ['ACATTACKMOD', 'ac_attack_mod', 'AcAttackMod', 'ACAttackMod', 'ACMod'],
         
         # Names and labels
         'label': ['label', 'name', 'Label', 'Name', 'Description'],

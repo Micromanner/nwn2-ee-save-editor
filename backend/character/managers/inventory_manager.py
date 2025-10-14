@@ -162,19 +162,42 @@ class InventoryManager(EventEmitter):
     
     def get_equipped_item(self, slot: str) -> Optional[Dict[str, Any]]:
         """
-        Get item equipped in a specific slot
-        
+        Get item equipped in a specific slot from Equip_ItemList array
+
         Args:
             slot: Slot name (e.g., 'head', 'chest', 'right_hand')
-            
+
         Returns:
-            Item data or None
+            Item data dict or None
         """
-        gff_slot = self.EQUIPMENT_SLOTS.get(slot)
-        if not gff_slot:
+        # Use same slot index mapping as get_inventory_summary (battle-tested)
+        slot_to_index = {
+            'head': 0,
+            'chest': 1,
+            'boots': 2,
+            'gloves': 3,
+            'right_hand': 4,
+            'left_hand': 5,
+            'cloak': 6,
+            'left_ring': 7,
+            'right_ring': 8,
+            'neck': 9,
+            'belt': 10,
+            'arrows': 11,
+            'bullets': 12,
+            'bolts': 13,
+        }
+
+        slot_index = slot_to_index.get(slot)
+        if slot_index is None:
             return None
-        
-        return self.gff.get(gff_slot)
+
+        equipped_items = self.gff.get('Equip_ItemList', [])
+        if slot_index < len(equipped_items):
+            item = equipped_items[slot_index]
+            return item if item else None
+
+        return None
     
     def equip_item(self, item_data: Dict[str, Any], slot: str) -> Tuple[bool, List[str]]:
         """
@@ -760,17 +783,28 @@ class InventoryManager(EventEmitter):
         
         # Get base item data for default bonuses
         base_item = item_data.get('BaseItem', 0)
-        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-        
-        if base_item_data:
-            # Armor and shield AC bonuses
-            ac_value = field_mapper.get_field_value(base_item_data, 'base_ac', 0)
-            if ac_value > 0:
-                item_type = field_mapper.get_field_value(base_item_data, 'BaseItem', 0)
-                if item_type == 16:  # Armor
-                    bonuses['ac']['armor'] = ac_value
-                elif item_type == 29:  # Shield
-                    bonuses['ac']['shield'] = ac_value
+        base_item_int = int(base_item) if base_item else 0
+
+        # Armor AC comes from armorrulestats.2da via ArmorRulesType
+        if base_item_int == 16:  # Armor
+            armor_rules_type = item_data.get('ArmorRulesType', 0)
+            if armor_rules_type is not None:
+                armor_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
+                if armor_stats:
+                    ac_value = field_mapper.get_field_value(armor_stats, 'ACBONUS', 0)
+                    if ac_value and int(ac_value) > 0:
+                        bonuses['ac']['armor'] = int(ac_value)
+
+        # Shield AC comes from armorrulestats.2da via ArmorRulesType
+        # BaseItem 14=Light Shield, 56=Heavy Shield, 57=Tower Shield
+        elif base_item_int in [14, 56, 57]:  # Shields
+            armor_rules_type = item_data.get('ArmorRulesType', 0)
+            if armor_rules_type is not None:
+                shield_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
+                if shield_stats:
+                    ac_value = field_mapper.get_field_value(shield_stats, 'ACBONUS', 0)
+                    if ac_value and int(ac_value) > 0:
+                        bonuses['ac']['shield'] = int(ac_value)
         
         # Parse item properties for additional bonuses
         properties = item_data.get('PropertiesList', [])
@@ -892,7 +926,7 @@ class InventoryManager(EventEmitter):
                     'name': armor_name,
                     'type': item_type,
                     'ac_type': field_mapper.get_field_value(base_item_data, 'ACType', 0),
-                    'ac_value': field_mapper.get_field_value(base_item_data, 'base_ac', 0),
+                    'ac_value': field_mapper.get_field_value(base_item_data, 'BaseAC', 0),
                     'proficiency_info': proficiency_info
                 })
         

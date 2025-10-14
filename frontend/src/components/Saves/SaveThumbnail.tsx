@@ -33,7 +33,7 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
         console.log('🖼️ Loading thumbnail from:', thumbnailPath);
         const base64Data = await TauriAPI.getSaveThumbnail(thumbnailPath);
         console.log('📦 Received base64 data:', base64Data.length, 'characters');
-        
+
         if (!isCancelled) {
           // Create data URL from base64 string (now WebP format)
           const dataUrl = `data:image/webp;base64,${base64Data}`;
@@ -56,11 +56,8 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
 
     return () => {
       isCancelled = true;
-      if (thumbnailUrl) {
-        URL.revokeObjectURL(thumbnailUrl);
-      }
     };
-  }, [thumbnailPath, thumbnailUrl]);
+  }, [thumbnailPath]);
 
   // Cleanup URL on unmount
   useEffect(() => {

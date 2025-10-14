@@ -35,9 +35,7 @@ class SaveManager(EventEmitter):
         }
         
         # Data caches for performance
-        self._feat_cache = {}
         self._racial_cache = {}
-        self._save_affecting_feats = None
         
         # Initialize data-driven lookups
         self._initialize_data_lookups()
@@ -48,74 +46,13 @@ class SaveManager(EventEmitter):
     def _initialize_data_lookups(self):
         """Initialize data-driven lookups for save calculations"""
         try:
-            # Cache save-affecting feats from feat.2da
-            self._build_save_affecting_feats_cache()
-            
             # Cache racial save bonuses from racialtypes.2da
             self._build_racial_save_cache()
-            
+
         except Exception as e:
             logger.warning(f"Could not initialize save data lookups: {e}")
             # Fallback to ensure basic functionality
-            self._save_affecting_feats = {}
             self._racial_cache = {}
-    
-    def _build_save_affecting_feats_cache(self):
-        """Build cache of feats that affect saving throws using FeatManager"""
-        self._save_affecting_feats = {
-            'fortitude': [],
-            'reflex': [],
-            'will': [],
-            'universal': []
-        }
-        
-        # Get FeatManager to handle feat operations
-        feat_manager = self.character_manager.get_manager('feat')
-        if not feat_manager:
-            logger.warning("FeatManager not available for save affecting feats cache")
-            return
-        
-        # Get all feats from game data
-        try:
-            feats_table = self.rules_service.get_table('feat')
-            if not feats_table:
-                logger.warning("No feat table available")
-                return
-            
-            # Map known save-affecting feat labels to their effects
-            # NOTE: These bonuses are hardcoded in the NWN2 game engine, not stored in 2DA files.
-            # They cannot be made data-driven as the engine itself defines these bonuses.
-            # This is correct behavior - we're matching the game's hardcoded logic.
-            SAVE_FEAT_BONUSES = {
-                'GreatFort': {'type': 'fortitude', 'bonus': 2},
-                'IronWill': {'type': 'will', 'bonus': 2},
-                'LightngRef': {'type': 'reflex', 'bonus': 2},
-                # Epic versions
-                'EpicFort': {'type': 'fortitude', 'bonus': 4},
-                'EpicReflexes': {'type': 'reflex', 'bonus': 4},
-                'EpicWill': {'type': 'will', 'bonus': 4},
-                # Universal bonuses
-                'LuckOfHeroes': {'type': 'universal', 'bonus': 1},
-                'SacredDefense': {'type': 'universal', 'bonus': 2}
-            }
-            
-            # Find feats by their labels and build cache
-            for feat in feats_table:
-                feat_id = field_mapper.get_field_value(feat, 'id', -1)
-                feat_label = field_mapper.get_field_value(feat, 'label', '')
-                
-                if feat_id >= 0 and feat_label in SAVE_FEAT_BONUSES:
-                    bonus_info = SAVE_FEAT_BONUSES[feat_label]
-                    save_type = bonus_info['type']
-                    self._save_affecting_feats[save_type].append({
-                        'id': feat_id,
-                        'label': feat_label,
-                        'bonus': bonus_info['bonus']
-                    })
-                    
-        except Exception as e:
-            logger.warning(f"Could not build save affecting feats cache: {e}")
-    
     
     def _build_racial_save_cache(self):
         """Build cache of racial save bonuses from racialtypes.2da"""
@@ -160,30 +97,24 @@ class SaveManager(EventEmitter):
                 'base_will': 0
             }
         
-        # Get base ability scores
-        base_con = self.gff.get('Con', 10)
-        base_dex = self.gff.get('Dex', 10)
-        base_wis = self.gff.get('Wis', 10)
+        # Get ability modifiers from AbilityManager (includes base + racial + equipment + level-ups)
+        ability_manager = self.character_manager.get_manager('ability')
+        if ability_manager:
+            total_modifiers = ability_manager.get_total_modifiers()
+            con_mod = total_modifiers.get('Con', 0)
+            dex_mod = total_modifiers.get('Dex', 0)
+            wis_mod = total_modifiers.get('Wis', 0)
+        else:
+            # Fallback: calculate from base scores only
+            con_mod = (self.gff.get('Con', 10) - 10) // 2
+            dex_mod = (self.gff.get('Dex', 10) - 10) // 2
+            wis_mod = (self.gff.get('Wis', 10) - 10) // 2
 
-        # Get equipment bonuses from InventoryManager
+        # Get equipment save bonuses separately (these are direct save bonuses, not ability bonuses)
         inventory_manager = self.character_manager.get_manager('inventory')
         equipment_bonuses = inventory_manager.get_equipment_bonuses() if inventory_manager else {
             'ac': {}, 'attributes': {}, 'saves': {}, 'skills': {}, 'combat': {}
         }
-
-        # Apply equipment bonuses to ability scores for save calculations
-        con_equipment = equipment_bonuses['attributes'].get('Con', 0)
-        dex_equipment = equipment_bonuses['attributes'].get('Dex', 0)
-        wis_equipment = equipment_bonuses['attributes'].get('Wis', 0)
-
-        effective_con = base_con + con_equipment
-        effective_dex = base_dex + dex_equipment
-        effective_wis = base_wis + wis_equipment
-
-        # Calculate ability modifiers with equipment
-        con_mod = (effective_con - 10) // 2
-        dex_mod = (effective_dex - 10) // 2
-        wis_mod = (effective_wis - 10) // 2
 
         # Get feat bonuses
         feat_bonuses = self._calculate_feat_bonuses()
@@ -193,24 +124,35 @@ class SaveManager(EventEmitter):
 
         # Get resistance bonuses (from items/spells) and add equipment save bonuses
         resistance_bonuses = self._calculate_resistance_bonuses()
+        logger.info(f"Equipment save bonuses: {equipment_bonuses['saves']}")
         resistance_bonuses['fortitude'] += equipment_bonuses['saves'].get('fortitude', 0)
         resistance_bonuses['reflex'] += equipment_bonuses['saves'].get('reflex', 0)
         resistance_bonuses['will'] += equipment_bonuses['saves'].get('will', 0)
         
         # Calculate totals (base does NOT include ability mods)
-        fort_total = (base_saves['base_fortitude'] + con_mod + 
-                     feat_bonuses['fortitude'] + racial_bonuses['fortitude'] + 
+        fort_total = (base_saves['base_fortitude'] + con_mod +
+                     feat_bonuses['fortitude'] + racial_bonuses['fortitude'] +
                      resistance_bonuses['fortitude'] + self.temporary_modifiers['fortitude'])
-        
-        ref_total = (base_saves['base_reflex'] + dex_mod + 
-                    feat_bonuses['reflex'] + racial_bonuses['reflex'] + 
+
+        ref_total = (base_saves['base_reflex'] + dex_mod +
+                    feat_bonuses['reflex'] + racial_bonuses['reflex'] +
                     resistance_bonuses['reflex'] + self.temporary_modifiers['reflex'])
-        
-        will_total = (base_saves['base_will'] + wis_mod + 
-                     feat_bonuses['will'] + racial_bonuses['will'] + 
+
+        will_total = (base_saves['base_will'] + wis_mod +
+                     feat_bonuses['will'] + racial_bonuses['will'] +
                      resistance_bonuses['will'] + self.temporary_modifiers['will'])
-        
-        logger.debug(f"Save calculation - Feat bonuses: {feat_bonuses}")
+
+        # Debug: Check GFF stored values vs calculated
+        gff_fort = self.gff.get('FortSave', 0)
+        gff_ref = self.gff.get('RefSave', 0)
+        gff_will = self.gff.get('WillSave', 0)
+        logger.info(f"GFF saves: Fort={gff_fort}, Ref={gff_ref}, Will={gff_will}")
+        logger.info(f"Calculated saves: Fort={fort_total}, Ref={ref_total}, Will={will_total}")
+        logger.info(f"Base saves: {base_saves}")
+        logger.info(f"Ability mods: CON={con_mod}, DEX={dex_mod}, WIS={wis_mod}")
+        logger.info(f"Feat bonuses: {feat_bonuses}")
+        logger.info(f"Racial bonuses: {racial_bonuses}")
+        logger.info(f"Resistance bonuses: {resistance_bonuses}")
         
         return {
             'fortitude': {
@@ -255,41 +197,21 @@ class SaveManager(EventEmitter):
         }
     
     def _calculate_feat_bonuses(self) -> Dict[str, int]:
-        """Calculate save bonuses from feats using FeatManager"""
-        bonuses = {
-            'fortitude': 0,
-            'reflex': 0,
-            'will': 0
-        }
-        
-        if not self._save_affecting_feats:
-            return bonuses
-        
-        # Use FeatManager to get character's feats
+        """Calculate save bonuses from feats by delegating to FeatManager"""
         feat_manager = self.character_manager.get_manager('feat')
         if not feat_manager:
             logger.warning("FeatManager not available for feat bonus calculation")
-            return bonuses
-        
-        # Check each save type for applicable feats
-        for save_type in ['fortitude', 'reflex', 'will']:
-            for feat_info in self._save_affecting_feats.get(save_type, []):
-                if feat_manager.has_feat(feat_info['id']):
-                    bonuses[save_type] += feat_info['bonus']
-                    logger.debug(f"Applied {feat_info['label']} bonus +{feat_info['bonus']} to {save_type}")
-        
-        # Universal save bonuses (affect all saves)
-        for feat_info in self._save_affecting_feats.get('universal', []):
-            if feat_manager.has_feat(feat_info['id']):
-                bonuses['fortitude'] += feat_info['bonus']
-                bonuses['reflex'] += feat_info['bonus']
-                bonuses['will'] += feat_info['bonus']
-        
-        # Special class-based bonuses
+            return {'fortitude': 0, 'reflex': 0, 'will': 0}
+
+        # Get feat save bonuses from FeatManager (centralized logic)
+        bonuses = feat_manager.get_save_bonuses()
+
+        # Add special class-based bonuses (e.g., Paladin Divine Grace)
         class_bonuses = self._calculate_class_save_bonuses()
         for save_type in bonuses:
             bonuses[save_type] += class_bonuses.get(save_type, 0)
-        
+
+        logger.info(f"Total feat bonuses: {bonuses}")
         return bonuses
     
     def _calculate_class_save_bonuses(self) -> Dict[str, int]:
@@ -366,40 +288,19 @@ class SaveManager(EventEmitter):
         return bonuses
     
     def _calculate_resistance_bonuses(self) -> Dict[str, int]:
-        """Calculate resistance bonuses from items and spells"""
+        """
+        Calculate resistance bonuses from spells/effects
+        Note: Equipment save bonuses are handled separately via InventoryManager
+        """
         bonuses = {
             'fortitude': 0,
             'reflex': 0,
             'will': 0
         }
-        
-        # Check if we have access to character model
-        if hasattr(self.character_manager, 'character_model'):
-            character = self.character_manager.character_model
-            try:
-                # Check all equipped items for save bonuses
-                from character.models import CharacterItem
-                equipped_items = character.items.exclude(location='INVENTORY')
-                
-                for item in equipped_items:
-                    # Check item properties for save bonuses
-                    for prop in item.properties:
-                        prop_type = prop.get('type', '')
-                        if prop_type == 'save_fortitude':
-                            bonuses['fortitude'] += prop.get('value', 0)
-                        elif prop_type == 'save_reflex':
-                            bonuses['reflex'] += prop.get('value', 0)
-                        elif prop_type == 'save_will':
-                            bonuses['will'] += prop.get('value', 0)
-                        elif prop_type == 'save_universal':
-                            # Items that boost all saves
-                            value = prop.get('value', 0)
-                            bonuses['fortitude'] += value
-                            bonuses['reflex'] += value
-                            bonuses['will'] += value
-            except:
-                pass
-        
+
+        # Resistance bonuses from spells/effects would go here
+        # Currently we don't parse spell effects from the GFF
+
         return bonuses
     
     def add_temporary_modifier(self, save_type: str, modifier: int, duration: float = 0):
