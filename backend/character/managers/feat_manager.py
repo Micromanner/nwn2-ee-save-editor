@@ -4,7 +4,7 @@ Uses CharacterManager and DynamicGameDataLoader for all feat data access
 """
 
 from typing import Dict, List, Set, Tuple, Optional, Any
-import logging
+from loguru import logger
 import time
 import os
 
@@ -14,7 +14,7 @@ from ..events import (
 )
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 # Check if prerequisite graph is enabled
 USE_PREREQUISITE_GRAPH = os.environ.get('USE_PREREQUISITE_GRAPH', 'true').lower() == 'true'

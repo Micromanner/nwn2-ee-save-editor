@@ -3,12 +3,9 @@ Rule Detector - Auto-detects game rules and requirements from 2DA files
 Based on pattern analysis of 442 2DA files, enables dynamic rule detection
 without hardcoding for full mod compatibility
 """
-import logging
+from loguru import logger
 import re
 from typing import Dict, List, Optional, Any, Set, Tuple, Protocol
-
-# Per your suggestion, logging is used to report data conversion issues.
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 # Medium-Severity Fix: Use Protocols to define explicit interfaces for dependencies.
@@ -120,7 +117,7 @@ class RuleDetector:
                     feat_id = int(row_data['ReqParam1'])
                     feats.setdefault('all_of', []).append(feat_id)
             except (ValueError, TypeError, KeyError):
-                 logging.warning(f"Could not parse complex requirement in table '{table_name}'. Row: {row_data}")
+                 logger.warning(f"Could not parse complex requirement in table '{table_name}'. Row: {row_data}")
 
         # General pattern-based parsing for simple requirements
         for col, value in row_data.items():
@@ -132,7 +129,7 @@ class RuleDetector:
                     elif purpose == 'or_prereq_feat': feats.setdefault('one_of', []).append(int(value))
                     elif purpose not in requirements: requirements[purpose] = int(value)
                 except (ValueError, TypeError):
-                    logging.warning(f"Could not parse value '{value}' for column '{col}' in table '{table_name}'.")
+                    logger.warning(f"Could not parse value '{value}' for column '{col}' in table '{table_name}'.")
 
         # High-Severity Fix: Context-aware parsing for feat.2da's paired skill requirement columns.
         if table_name == 'feat':
@@ -146,7 +143,7 @@ class RuleDetector:
                             ranks = int(rank_val)
                             requirements.setdefault('required_skills', []).append({'id': skill_id, 'ranks': ranks})
                         except (ValueError, TypeError):
-                            logging.warning(f"Could not parse skill req pair ('{skill_col}', '{rank_col}') in feat.2da. Row: {row_data}")
+                            logger.warning(f"Could not parse skill req pair ('{skill_col}', '{rank_col}') in feat.2da. Row: {row_data}")
 
         if feats:
             requirements['prereq_feats'] = feats

@@ -6,10 +6,10 @@ Maps PropertyName IDs to human-readable descriptions and bonus calculations.
 """
 
 from typing import Dict, List, Any, Optional, Tuple
-import logging
+from loguru import logger
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class ItemPropertyDecoder:

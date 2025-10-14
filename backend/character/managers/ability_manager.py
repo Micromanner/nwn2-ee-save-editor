@@ -4,12 +4,12 @@ Manages base ability scores, racial modifiers, and ability score improvements
 """
 
 from typing import Dict, List, Optional, Any, Tuple
-import logging
+from loguru import logger
 import time
 
 from ..events import EventEmitter, EventType, EventData, ClassChangedEvent, LevelGainedEvent
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class AbilityManager(EventEmitter):

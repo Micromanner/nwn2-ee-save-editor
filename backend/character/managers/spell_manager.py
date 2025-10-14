@@ -12,7 +12,7 @@ VALIDATION CLEANUP APPLIED:
 """
 
 from typing import Dict, List, Tuple, Optional, Any
-import logging
+from loguru import logger
 from collections import defaultdict
 
 from ..events import (
@@ -29,7 +29,7 @@ except ImportError:
             return getattr(obj, field, default)
     field_mapper = MockFieldMapper()
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class SpellManager(EventEmitter):

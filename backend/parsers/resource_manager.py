@@ -7,7 +7,7 @@ Consider it part of the gamedata layer despite its location.
 """
 # zipfile removed - using Rust ZipContentReader instead
 import os
-import logging
+from loguru import logger
 from typing import Dict, Optional, List, Tuple, Any, Union
 from pathlib import Path
 from datetime import datetime
@@ -29,16 +29,14 @@ except ImportError:
 # Parser imports - Use Rust TLK parser for performance
 try:
     from rust_tlk_parser import TLKParser
-    logger_tlk = logging.getLogger(__name__ + '.tlk')
-    logger_tlk.info("Using high-performance Rust TLK parser")
+    logger.info("Using high-performance Rust TLK parser")
 except ImportError:
     TLKParser = None
 
 # Import Rust ERF parser
 try:
     from rust_erf_parser import ErfParser as ERFParser
-    logger_erf = logging.getLogger(__name__ + '.erf')
-    logger_erf.info("Using high-performance Rust ERF parser")
+    logger.info("Using high-performance Rust ERF parser")
 except ImportError:
     ERFParser = None
 
@@ -102,8 +100,6 @@ except ImportError:
 from gamedata.cache.safe_cache import SafeCache
 from gamedata.data_fetching_rules import with_retry_limit
 from utils.performance_profiler import get_profiler
-
-logger = logging.getLogger(__name__)
 
 
 class ModuleLRUCache:
@@ -692,7 +688,7 @@ class ResourceManager:
             # Check if it's a directory or file (.mod)
             if module_path.is_dir():
                 # Directory - not a valid module in NWN2
-                print(f"Error: {module_path} is a directory, not a .mod file")
+                logger.error(f"{module_path} is a directory, not a .mod file")
                 return False
             else:
                 # Regular .mod file - extract info and get parser
@@ -778,7 +774,7 @@ class ResourceManager:
             if cam_files:
                 # Parse the first .cam file found
                 cam_file = cam_files[0]
-                print(f"Found campaign file: {cam_file}")
+                logger.debug(f"Found campaign file: {cam_file}")
                 
                 # .cam files are GFF format
                 gff_parser = GFFParser()
@@ -814,7 +810,7 @@ class ResourceManager:
             return None
             
         except Exception as e:
-            print(f"Error finding campaign in {campaign_path}: {e}")
+            logger.error(f"Error finding campaign in {campaign_path}: {e}")
             return None
     
     def _load_custom_tlk(self, tlk_filename: str):
@@ -924,7 +920,7 @@ class ResourceManager:
         
         hakpak_path = self._find_hakpak(hakpak_name)
         if not hakpak_path:
-            print(f"Warning: Hakpak '{hakpak_name}' not found")
+            logger.warning(f"Hakpak '{hakpak_name}' not found")
             return
         
         try:
@@ -948,14 +944,14 @@ class ResourceManager:
                         if tda_parser:
                             hak_overrides[name] = tda_parser
                     except Exception as e:
-                        print(f"Error loading 2DA {name} from {hakpak_name}: {e}")
+                        logger.error(f"Error loading 2DA {name} from {hakpak_name}: {e}")
             
             if hak_overrides:
                 self._hak_overrides.append(hak_overrides)
                 logger.info(f"Loaded {len(hak_overrides)} 2DA overrides from {hakpak_name}")
                 
         except Exception as e:
-            print(f"Error loading hakpak {hakpak_name}: {e}")
+            logger.error(f"Error loading hakpak {hakpak_name}: {e}")
     
     def _scan_override_directories(self, module_context: Optional[Dict[str, Any]] = None):
         """
@@ -1812,7 +1808,7 @@ class ResourceManager:
                 return parser
                 
         if not self.suppress_warnings:
-            print("Warning: dialog.tlk not found")
+            logger.warning("dialog.tlk not found")
         return None
     
     def get_string(self, str_ref: int) -> str:
@@ -1984,7 +1980,7 @@ class ResourceManager:
             'spells', 'baseitems', 'appearance', 'gender'
         ]
         
-        print("Preloading common 2DA tables...")
+        logger.info("Preloading common 2DA tables...")
         for table in common_tables:
             self.get_2da(table)
     
@@ -2072,7 +2068,7 @@ class ResourceManager:
                     parser.read(str(tlk_path))
                     self._custom_tlk_cache = parser
                     logger.info(f"Loaded TLK for HAK {hakpak_path.name}: {tlk_path}")
-                    print(f"Found and loaded TLK file for {hakpak_path.name}: {tlk_path.name}")
+                    logger.info(f"Found and loaded TLK file for {hakpak_path.name}: {tlk_path.name}")
                     return
                 except Exception as e:
                     logger.error(f"Error loading TLK {tlk_path}: {e}")

@@ -4,12 +4,12 @@ Includes base saves, ability modifiers, feats, and temporary effects
 """
 
 from typing import Dict, List, Tuple, Any
-import logging
+from loguru import logger
 
 from ..events import EventEmitter, EventType, EventData
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: ignore
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class SaveManager(EventEmitter):

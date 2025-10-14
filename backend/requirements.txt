@@ -15,6 +15,7 @@ idna==3.10
 iniconfig==2.1.0
 jsonschema==4.25.0
 jsonschema-specifications==2025.4.1
+loguru==0.7.3
 maturin==1.9.2
 mccabe==0.7.0
 msgpack==1.0.7

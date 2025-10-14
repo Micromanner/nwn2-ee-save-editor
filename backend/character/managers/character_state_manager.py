@@ -5,7 +5,7 @@ Manages reset, clone, import/export operations and file I/O
 
 from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 import copy
-import logging
+from loguru import logger
 from pathlib import Path
 
 from parsers import gff
@@ -14,7 +14,7 @@ from ..events import EventEmitter, EventType, EventData
 if TYPE_CHECKING:
     from ..character_manager import CharacterManager
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class CharacterStateManager(EventEmitter):

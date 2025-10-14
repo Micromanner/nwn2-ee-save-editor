@@ -4,14 +4,14 @@ Manages racial ability modifiers, size, speed, and racial feats using DynamicGam
 """
 
 from typing import Dict, List, Tuple, Optional, Any
-import logging
+from loguru import logger
 import time
 
 from ..events import EventEmitter, EventType, EventData
 from dataclasses import dataclass
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 @dataclass

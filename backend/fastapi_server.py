@@ -10,6 +10,7 @@ import os
 import sys
 import asyncio
 import time
+import atexit
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -38,12 +39,14 @@ from fastapi_core.exceptions import (
     SaveFileException
 )
 
-# Configure logging
+# Configure Loguru logging
+from config.logging_config import logger, ENABLE_LOG_VIEWER
+
+# Keep standard logging for compatibility with libraries that use it
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
 
 # Global singletons for shared services (like Django's middleware)
 _shared_services = {
@@ -55,6 +58,8 @@ _shared_services = {
 }
 _services_lock = asyncio.Lock()
 _initializing = False
+
+# No more log viewer process tracking - it runs in the same process
 
 # Global initialization lock to prevent duplicate background initialization
 _initialization_lock = asyncio.Lock()
@@ -306,7 +311,7 @@ async def lifespan(app: FastAPI):
     logger.info("Background import preloading and initialization tasks scheduled")
     
     yield
-    
+
     # Shutdown
     logger.info("FastAPI server shutting down...")
 
@@ -768,12 +773,21 @@ except Exception as e:
 def main():
     """Main entry point for FastAPI server"""
     logger.info("Starting NWN2 Save Editor FastAPI backend...")
-    
+
+    # Mount log viewer if enabled (runs in same process, auto-stops with backend)
+    should_open_browser = False
+    if ENABLE_LOG_VIEWER:
+        logger.info("Mounting development log viewer at /dev/logs...")
+        from dev_log_viewer import app as log_app
+        app.mount("/dev/logs", log_app)
+        logger.info("Log viewer available at http://localhost:<port>/dev/logs")
+        should_open_browser = True
+
     # Check environment
     port = int(os.environ.get("PORT", "8000"))
     host = os.environ.get("HOST", "127.0.0.1")
     debug = os.environ.get("DEBUG", "False").lower() == "true"
-    
+
     logger.info(f"Server configuration: {host}:{port} (debug={debug})")
     
     # Create uvicorn config to capture actual port
@@ -792,13 +806,25 @@ def main():
         async def startup(self, sockets=None):
             # First do the normal startup
             await super().startup(sockets)
-            
+
             # Now we can get the actual bound port
             for server in self.servers:
                 for socket in server.sockets:
                     actual_port = socket.getsockname()[1]
                     print(f"FASTAPI_ACTUAL_PORT={actual_port}", flush=True)
                     logger.info(f"FastAPI server bound to port: {actual_port}")
+
+                    # Open log viewer in browser if enabled
+                    if should_open_browser:
+                        import webbrowser
+                        import threading
+                        def open_browser():
+                            import time
+                            time.sleep(1)  # Wait for server to be ready
+                            url = f"http://localhost:{actual_port}/dev/logs"
+                            logger.info(f"Opening log viewer in browser: {url}")
+                            webbrowser.open(url)
+                        threading.Thread(target=open_browser, daemon=True).start()
                     break
                 break
     

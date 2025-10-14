@@ -6,7 +6,7 @@ Focuses on save corruption prevention rather than game rule enforcement
 """
 
 from typing import Dict, List, Set, Tuple, Optional, Any
-import logging
+from loguru import logger
 import time
 
 from ..events import EventEmitter, EventType, ClassChangedEvent, FeatChangedEvent
@@ -14,7 +14,7 @@ from ..custom_content import CustomContentDetector
 from ..services.item_property_decoder import ItemPropertyDecoder
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class InventoryManager(EventEmitter):

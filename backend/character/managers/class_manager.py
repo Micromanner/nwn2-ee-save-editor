@@ -4,13 +4,13 @@ Refactored from class_change_service.py to work with event system
 """
 
 from typing import Dict, List, Tuple, Optional, Any
-import logging
+from loguru import logger
 import time
 
 from ..events import EventEmitter, EventType, ClassChangedEvent, LevelGainedEvent
 from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class ClassManager(EventEmitter):

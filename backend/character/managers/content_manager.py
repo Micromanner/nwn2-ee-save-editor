@@ -5,7 +5,7 @@ Also extracts and manages campaign, module, and quest information from save file
 """
 
 from typing import Dict, List, Any, Optional, TYPE_CHECKING
-import logging
+from loguru import logger
 import os
 
 from ..events import EventEmitter
@@ -14,7 +14,7 @@ from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: 
 if TYPE_CHECKING:
     pass
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 
 class ContentManager(EventEmitter):

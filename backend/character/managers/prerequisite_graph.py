@@ -4,11 +4,11 @@ Prerequisite Graph for optimized feat validation.
 Pre-computes all feat prerequisite chains at startup,
 enabling O(1) validation instead of recursive checking.
 """
-import logging
+from loguru import logger
 import time
 from typing import Dict, Set, Optional, Any, List, Tuple
 
-logger = logging.getLogger(__name__)
+# Using global loguru logger
 
 # Import Rust implementation
 from rust_extensions.python.nwn2_rust_extensions.nwn2_rust_wrapper import create_prerequisite_graph
