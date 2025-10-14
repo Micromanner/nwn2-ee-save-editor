@@ -445,7 +445,10 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       if (updates.hitPoints !== undefined || updates.maxHitPoints !== undefined) {
         console.warn('Hit points updates not yet implemented - need separate endpoint');
       }
-      
+
+      // Silently refresh dependent subsystems after AC/Initiative/Saves updates
+      await invalidateSubsystems(['abilityScores', 'combat', 'saves']);
+
     } catch (err) {
       console.error('Failed to update stats:', err);
       // Revert optimistic update on error
@@ -456,7 +459,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       });
       throw err;
     }
-  }, [characterId]);
+  }, [characterId, invalidateSubsystems]);
 
   // Alignment management - now using backend endpoint
   const updateAlignment = useCallback(async (updates: Partial<Alignment>) => {
