@@ -36,10 +36,13 @@ class SaveManager(EventEmitter):
         
         # Data caches for performance
         self._racial_cache = {}
-        
+
+        # Request-level save calculation cache
+        self._saves_cache = None
+
         # Initialize data-driven lookups
         self._initialize_data_lookups()
-        
+
         # Register for relevant events
         self._register_event_handlers()
     
@@ -77,11 +80,14 @@ class SaveManager(EventEmitter):
     
     def calculate_saving_throws(self) -> Dict[str, Any]:
         """
-        Calculate all saving throws with complete breakdown
-        
+        Calculate all saving throws with complete breakdown and request-level caching
+
         Returns:
             Dict with total saves and all components
         """
+        if self._saves_cache is not None:
+            return self._saves_cache.copy()
+
         # Get base saves from ClassManager
         class_manager = self.character_manager.get_manager('class')
         if class_manager:
@@ -153,8 +159,8 @@ class SaveManager(EventEmitter):
         logger.info(f"Feat bonuses: {feat_bonuses}")
         logger.info(f"Racial bonuses: {racial_bonuses}")
         logger.info(f"Resistance bonuses: {resistance_bonuses}")
-        
-        return {
+
+        result = {
             'fortitude': {
                 'total': fort_total,
                 'base': base_saves['base_fortitude'],
@@ -195,7 +201,14 @@ class SaveManager(EventEmitter):
                     resistance_bonuses['will'], self.temporary_modifiers['will'])
             }
         }
-    
+
+        self._saves_cache = result.copy()
+        return result
+
+    def _invalidate_saves_cache(self):
+        """Invalidate the saves cache when data changes"""
+        self._saves_cache = None
+
     def _calculate_feat_bonuses(self) -> Dict[str, int]:
         """Calculate save bonuses from feats by delegating to FeatManager"""
         feat_manager = self.character_manager.get_manager('feat')
@@ -440,10 +453,12 @@ class SaveManager(EventEmitter):
     
     def _on_class_changed(self, event: EventData):
         """Handle class changes that affect saves"""
+        self._invalidate_saves_cache()
         logger.info("Saves may be affected by class change")
-    
+
     def _on_feat_changed(self, event: EventData):
         """Handle feat changes that affect saves"""
+        self._invalidate_saves_cache()
         logger.info("Saves may be affected by feat change")
     
     def get_save_summary(self) -> Dict[str, Any]:
@@ -607,10 +622,13 @@ class SaveManager(EventEmitter):
         
         # Clamp value to engine limits
         value = max(-35, min(255, int(value)))
-        
+
         # Update GFF wrapper (single source of truth)
         self.gff.set(gff_field, value)
-        
+
+        # Invalidate cache
+        self._invalidate_saves_cache()
+
         # Calculate new totals
         new_saves = {
             'fortitude': self.calculate_fortitude_save(),

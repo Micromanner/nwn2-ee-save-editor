@@ -812,6 +812,7 @@ def main():
                 for socket in server.sockets:
                     actual_port = socket.getsockname()[1]
                     print(f"FASTAPI_ACTUAL_PORT={actual_port}", flush=True)
+                    logger.info(f"FASTAPI_ACTUAL_PORT={actual_port}")
                     logger.info(f"FastAPI server bound to port: {actual_port}")
 
                     # Open log viewer in browser if enabled

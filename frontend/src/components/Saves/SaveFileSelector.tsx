@@ -17,7 +17,7 @@ interface SaveFileSelectorProps {
   onOpenBackups?: () => void;
 }
 
-export function SaveFileSelector({ onOpenBackups }: SaveFileSelectorProps = {}) {
+export function SaveFileSelector(_props: SaveFileSelectorProps = {}) {
   const { isAvailable, isLoading, api } = useTauri();
   const { importCharacter, character, isLoading: characterLoading } = useCharacterContext();
   const { gameSettings } = useSettings();
@@ -239,10 +239,10 @@ export function SaveFileSelector({ onOpenBackups }: SaveFileSelectorProps = {}) 
   // Expose backup handler to parent - always available
   useEffect(() => {
     // Always expose the function, even without a save selected
-    (window as any).__openBackups = handleOpenBackupsFolder;
+    (window as Window & { __openBackups?: () => void }).__openBackups = handleOpenBackupsFolder;
 
     return () => {
-      delete (window as any).__openBackups;
+      delete (window as Window & { __openBackups?: () => void }).__openBackups;
     };
   }, [handleOpenBackupsFolder]);
 

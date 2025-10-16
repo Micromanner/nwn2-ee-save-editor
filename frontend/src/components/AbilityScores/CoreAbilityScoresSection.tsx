@@ -12,8 +12,11 @@ interface AbilityScore {
   modifier: number;
   baseValue?: number;
   breakdown?: {
+    levelUp: number;
     racial: number;
     equipment: number;
+    enhancement: number;
+    temporary: number;
   };
 }
 

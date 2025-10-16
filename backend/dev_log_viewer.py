@@ -17,6 +17,30 @@ if os.getenv("ENABLE_LOG_VIEWER", "false").lower() != "true":
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 
+# Capture FastAPI port from logs
+_fastapi_port = None
+
+def extract_fastapi_port() -> Optional[str]:
+    """Extract FastAPI actual port from logs - looks for FASTAPI_ACTUAL_PORT= line"""
+    global _fastapi_port
+
+    if _fastapi_port:
+        return _fastapi_port
+
+    if not LOG_FILE.exists():
+        return None
+
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                if "FASTAPI_ACTUAL_PORT=" in line:
+                    _fastapi_port = line.split("FASTAPI_ACTUAL_PORT=")[1].strip()
+                    return _fastapi_port
+    except Exception:
+        pass
+
+    return None
+
 app = FastAPI(title="NWN2 Editor Dev Log Viewer")
 
 def get_available_sessions() -> List[str]:
@@ -106,6 +130,12 @@ async def get_modules():
     modules = get_available_modules()
     return JSONResponse({"modules": modules})
 
+@app.get("/api/port")
+async def get_port():
+    """API endpoint for fetching FastAPI actual port"""
+    port = extract_fastapi_port()
+    return JSONResponse({"port": port})
+
 @app.get("/", response_class=HTMLResponse)
 async def log_viewer():
     """Main log viewer UI"""
@@ -147,6 +177,13 @@ async def log_viewer():
             }}
             button:hover {{
                 background: #1177bb;
+            }}
+            .copy-btn {{
+                background: #0e639c;
+                min-width: 120px;
+            }}
+            .copy-btn.copied {{
+                background: #107c10;
             }}
             #logs {{
                 background: #1e1e1e;
@@ -216,6 +253,7 @@ async def log_viewer():
             <button onclick="loadLogs()">Refresh</button>
             <button onclick="clearFilters()">Clear Filters</button>
             <button onclick="toggleAutoRefresh()">Auto-Refresh: <span id="autoStatus">OFF</span></button>
+            <button class="copy-btn" id="copyPortBtn" onclick="copyPort()">Copy App Port</button>
 
             <div class="status" id="status">Ready</div>
         </div>
@@ -334,15 +372,65 @@ async def log_viewer():
                 }}
             }}
 
+            async function loadPort() {{
+                try {{
+                    const response = await fetch('./api/port');
+                    const data = await response.json();
+
+                    const button = document.getElementById('copyPortBtn');
+                    if (data.port) {{
+                        button.textContent = `Copy App Port (${{data.port}})`;
+                        button.dataset.port = data.port;
+                    }} else {{
+                        button.textContent = 'Port Not Found';
+                        button.disabled = true;
+                    }}
+                }} catch (error) {{
+                    console.error('Failed to load port:', error);
+                    const button = document.getElementById('copyPortBtn');
+                    button.textContent = 'Port Not Found';
+                    button.disabled = true;
+                }}
+            }}
+
+            async function copyPort() {{
+                const button = event.target;
+                const port = button.dataset.port;
+
+                if (!port) {{
+                    button.textContent = 'No port available';
+                    return;
+                }}
+
+                try {{
+                    await navigator.clipboard.writeText(port);
+                    const originalText = button.textContent;
+                    button.textContent = 'Copied!';
+                    button.classList.add('copied');
+
+                    setTimeout(() => {{
+                        button.textContent = originalText;
+                        button.classList.remove('copied');
+                    }}, 2000);
+                }} catch (error) {{
+                    console.error('Failed to copy port:', error);
+                    button.textContent = 'Failed to copy';
+                    setTimeout(() => {{
+                        button.textContent = `Copy App Port (${{port}})`;
+                    }}, 2000);
+                }}
+            }}
+
             document.getElementById('sessionFilter').addEventListener('change', loadLogs);
             document.getElementById('moduleFilter').addEventListener('change', loadLogs);
             document.getElementById('levelFilter').addEventListener('change', loadLogs);
             document.getElementById('searchInput').addEventListener('input', loadLogs);
 
-            // Load sessions, modules and logs on page load (in sequence)
+            // Load sessions, modules, port and logs on page load (in sequence)
             async function initializePage() {{
                 await loadSessions();  // Load sessions first
                 await loadModules();   // Then modules
+                await loadPort();      // Then port
                 loadLogs();            // Then logs with current session selected
             }}
 

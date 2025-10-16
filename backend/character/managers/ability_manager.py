@@ -33,7 +33,7 @@ class AbilityManager(EventEmitter):
     def __init__(self, character_manager):
         """
         Initialize the AbilityManager
-        
+
         Args:
             character_manager: Reference to parent CharacterManager
         """
@@ -41,14 +41,20 @@ class AbilityManager(EventEmitter):
         self.character_manager = character_manager
         self.gff = character_manager.gff
         self.game_rules_service = character_manager.rules_service
-        
+
+        # Request-level caching to prevent redundant calculations
+        self._attributes_cache: Dict[str, Optional[Dict[str, int]]] = {
+            'with_equipment': None,
+            'without_equipment': None
+        }
+
         # Register for events
         self.character_manager.on(EventType.CLASS_CHANGED, self._on_class_changed)
         self.character_manager.on(EventType.LEVEL_GAINED, self._on_level_gained)
     
     def get_attributes(self, include_equipment: bool = True) -> Dict[str, int]:
         """
-        Get all character attributes
+        Get all character attributes with request-level caching
 
         Args:
             include_equipment: Include equipment bonuses in the result
@@ -56,6 +62,11 @@ class AbilityManager(EventEmitter):
         Returns:
             Dict mapping attribute names to values
         """
+        cache_key = 'with_equipment' if include_equipment else 'without_equipment'
+
+        if self._attributes_cache[cache_key] is not None:
+            return self._attributes_cache[cache_key].copy()
+
         attributes = {}
         for attr in self.ATTRIBUTES:
             default_value = self._get_default_attribute_value(attr)
@@ -73,8 +84,16 @@ class AbilityManager(EventEmitter):
                         attributes[attr] += equipment_bonus
                         logger.debug(f"AbilityManager.get_attributes: {attr} with equipment = {attributes[attr]} (+{equipment_bonus})")
 
+        self._attributes_cache[cache_key] = attributes.copy()
         return attributes
-    
+
+    def _invalidate_attributes_cache(self):
+        """Invalidate the attributes cache when data changes"""
+        self._attributes_cache = {
+            'with_equipment': None,
+            'without_equipment': None
+        }
+
     def _get_default_attribute_value(self, attribute: str) -> int:
         """Get default attribute value from game rules or fallback to 10"""
         # Try to get default from game rules, fallback to standard D&D default
@@ -221,7 +240,10 @@ class AbilityManager(EventEmitter):
         
         # Update the attribute
         self.gff.set(attribute, value)
-        
+
+        # Invalidate cache
+        self._invalidate_attributes_cache()
+
         # Calculate new modifier
         old_modifier = (old_value - 10) // 2
         new_modifier = (value - 10) // 2
@@ -415,13 +437,19 @@ class AbilityManager(EventEmitter):
         """Handle class change events"""
         logger.info(f"🔥 AbilityManager handling class change to {event.new_class_id}, level {event.level}")
         logger.info(f"🔥 Event details: old_class={event.old_class_id}, new_class={event.new_class_id}, level={event.level}")
-        
+
+        # Invalidate cache
+        self._invalidate_attributes_cache()
+
         # When level changes (especially reductions), adjust level-up bonuses
         logger.info(f"🔥 Calling _adjust_level_up_bonuses_for_level({event.level})")
         self._adjust_level_up_bonuses_for_level(event.level)
     
     def _on_level_gained(self, event: LevelGainedEvent):
         """Handle level gained events"""
+        # Invalidate cache
+        self._invalidate_attributes_cache()
+
         # Check if this level grants an ability increase
         if event.new_level % 4 == 0:
             logger.info(f"Level {event.new_level} grants ability score increase")
@@ -1308,27 +1336,42 @@ class AbilityManager(EventEmitter):
         
         # Check for level-up choices in LevelUpList or similar structure
         levelup_bonuses = {attr: 0 for attr in self.ATTRIBUTES}
-        
-        # Look for level-up data in GFF - common fields include:
-        # LevelUpList, StatGainList, AbilityGainList, etc.
-        levelup_list = self.gff.get('LevelUpList', [])
-        
-        for levelup_entry in levelup_list:
-            if not isinstance(levelup_entry, dict):
+
+        # Read level-up data from LvlStatList (NWN2's per-level data structure)
+        # Ability increases are stored in LvlStatAbility field as an index (0-5)
+        # 0=Str, 1=Dex, 2=Con, 3=Int, 4=Wis, 5=Cha
+        lvl_stat_list = self.gff.get('LvlStatList', [])
+
+        logger.debug(f"Found {len(lvl_stat_list)} levels in LvlStatList")
+
+        # Map ability index to attribute name
+        ABILITY_INDEX_MAP = {
+            0: 'Str',
+            1: 'Dex',
+            2: 'Con',
+            3: 'Int',
+            4: 'Wis',
+            5: 'Cha'
+        }
+
+        # Parse LvlStatAbility from each level
+        for level_idx, level_entry in enumerate(lvl_stat_list):
+            if not isinstance(level_entry, dict):
                 continue
-                
-            # Check for ability score increases in this level
-            # Common fields: StatGain, AbilityGain, SkillPoints, etc.
-            for attr in self.ATTRIBUTES:
-                # Check various possible field names for ability gains
-                attr_gain = 0
-                for field_name in [f'{attr}Gain', f'Ability{attr}', attr]:
-                    if field_name in levelup_entry:
-                        attr_gain += levelup_entry.get(field_name, 0)
-                
-                if attr_gain > 0:
-                    levelup_bonuses[attr] += attr_gain
-        
+
+            # Check if this level has an ability increase
+            if 'LvlStatAbility' in level_entry:
+                ability_index = level_entry['LvlStatAbility']
+                if ability_index in ABILITY_INDEX_MAP:
+                    attr_name = ABILITY_INDEX_MAP[ability_index]
+                    levelup_bonuses[attr_name] += 1
+                    logger.debug(f"Level {level_idx + 1}: {attr_name} +1 (LvlStatAbility={ability_index})")
+                else:
+                    logger.warning(f"Level {level_idx + 1}: Invalid LvlStatAbility index {ability_index}")
+
+        logger.debug(f"Total ability bonuses from LvlStatList: {levelup_bonuses}")
+        logger.debug(f"Sum of bonuses: {sum(levelup_bonuses.values())} (expected: {ability_increases_available})")
+
         # If no explicit level-up data found, try to infer from character progression
         # This is a fallback for characters created outside our editor
         if all(bonus == 0 for bonus in levelup_bonuses.values()) and ability_increases_available > 0:

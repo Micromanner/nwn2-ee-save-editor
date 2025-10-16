@@ -34,13 +34,15 @@ class CombatManager(EventEmitter):
         
         # Cache for performance
         self._base_item_cache = {}
-        self._feat_cache = {}
         self._class_cache = {}
         
         # BAB calculation cache to prevent redundant calculations during character loading
         self._bab_cache = None
         self._bab_cache_dirty = True
-        
+
+        # Request-level AC calculation cache
+        self._ac_cache = None
+
         # Field mapping utility for 2DA access
         self.field_mapper = field_mapper
         
@@ -55,11 +57,14 @@ class CombatManager(EventEmitter):
     
     def calculate_armor_class(self) -> Dict[str, Any]:
         """
-        Calculate total AC and all components
+        Calculate total AC and all components with request-level caching
 
         Returns:
             Dict with total AC and breakdown of all components
         """
+        if self._ac_cache is not None:
+            return self._ac_cache.copy()
+
         # Base AC from game rules (D&D 3.5/NWN2 standard)
         base_ac = 10
 
@@ -96,8 +101,9 @@ class CombatManager(EventEmitter):
         # Get natural armor from character (race, spells, etc.) and add equipment natural armor
         natural_armor = self.gff.get('NaturalAC', 0) + natural_bonus
 
-        # Get all feat-based AC bonuses (dodge, luck, etc.)
-        feat_ac_bonuses = self._calculate_feat_ac_bonuses()
+        # Get all feat-based AC bonuses from FeatManager
+        feat_manager = self.character_manager.get_manager('feat')
+        feat_ac_bonuses = feat_manager.get_ac_bonuses() if feat_manager else {'dodge': 0, 'misc': 0}
         dodge_bonus = feat_ac_bonuses.get('dodge', 0)
         misc_bonus = feat_ac_bonuses.get('misc', 0)
 
@@ -119,7 +125,7 @@ class CombatManager(EventEmitter):
         # Calculate flat-footed AC (no DEX or dodge, but misc applies)
         flatfooted_ac = base_ac + armor_bonus + shield_bonus + natural_armor + deflection_bonus + size_modifier + misc_bonus
 
-        return {
+        result = {
             'total': total_ac,
             'total_ac': total_ac,
             'touch_ac': touch_ac,
@@ -139,6 +145,9 @@ class CombatManager(EventEmitter):
             'max_dex_from_armor': max_dex_bonus,
             'armor_check_penalty': self._get_armor_check_penalty()
         }
+
+        self._ac_cache = result.copy()
+        return result
     
     def calculate_initiative(self) -> Dict[str, Any]:
         """
@@ -149,19 +158,20 @@ class CombatManager(EventEmitter):
         """
         # Base initiative is DEX modifier
         dex_mod = (self.gff.get('Dex', 10) - 10) // 2
-        
-        # Check for Improved Initiative feat
-        improved_init = 4 if self._has_feat_by_name('ImprovedInitiative') else 0
-        
+
+        # Get initiative bonus from FeatManager
+        feat_manager = self.character_manager.get_manager('feat')
+        feat_init_bonus = feat_manager.get_initiative_bonus() if feat_manager else 0
+
         # Check for other initiative bonuses (items, etc.)
         misc_bonus = self.gff.get('initbonus', 0)
         
-        total_initiative = dex_mod + improved_init + misc_bonus
-        
+        total_initiative = dex_mod + feat_init_bonus + misc_bonus
+
         return {
             'total': total_initiative,
             'dex_modifier': dex_mod,
-            'improved_initiative': improved_init,
+            'feat_bonus': feat_init_bonus,
             'misc_bonus': misc_bonus
         }
     
@@ -389,69 +399,6 @@ class CombatManager(EventEmitter):
             
         return False
     
-    def _calculate_feat_ac_bonuses(self) -> Dict[str, int]:
-        """
-        Calculate all AC bonuses from feats by parsing feat descriptions.
-        Automatically detects AC bonuses from any feat, including modded feats.
-
-        Returns:
-            Dict with 'dodge' and 'misc' AC bonuses
-        """
-        import re
-
-        bonuses = {'dodge': 0, 'misc': 0}
-
-        # Get all character feats
-        feat_list = self.gff.get('FeatList', [])
-
-        for feat_entry in feat_list:
-            feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
-
-            # Get feat data from game rules
-            feat_data = self.rules_service.get_by_id('feat', feat_id)
-            if not feat_data:
-                continue
-
-            # Get label and description
-            label = (getattr(feat_data, 'LABEL', '') or '').lower()
-            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
-
-            # Skip conditional bonuses (against specific enemies, when unarmed, etc.)
-            conditional_keywords = [
-                'against', 'vs ', 'versus', 'when ', 'while ', 'if ',
-                'when wielding', 'when wearing', 'when using', 'when fighting'
-            ]
-            if any(keyword in description.lower() for keyword in conditional_keywords):
-                # This is a conditional bonus, skip it
-                continue
-
-            # Check for dodge-type feats (don't stack with flat-footed)
-            if 'dodge' in label or 'mobility' in label:
-                # Parse for +X bonus
-                match = re.search(r'\+(\d+)', description)
-                if match:
-                    bonuses['dodge'] += int(match.group(1))
-                elif 'dodge' in label and not match:
-                    bonuses['dodge'] += 1  # Default Dodge feat = +1
-                continue
-
-            # Parse description for AC bonus patterns (luck, insight, sacred, etc.)
-            ac_patterns = [
-                r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+(?:Armor\s+Class|AC)',  # "+1 luck bonus to Armor Class"
-                r'\+(\d+)\s+(?:to\s+)?AC(?:\s|\.|\,)',                      # "+2 AC"
-                r'\+(\d+)\s+AC\s+bonus',                                     # "+1 AC bonus"
-            ]
-
-            for pattern in ac_patterns:
-                match = re.search(pattern, description, re.IGNORECASE)
-                if match:
-                    bonus_value = int(match.group(1))
-                    bonuses['misc'] += bonus_value
-                    logger.debug(f"Found AC bonus +{bonus_value} from feat {feat_id}: {label}")
-                    break  # Only count once per feat
-
-        return bonuses
-    
     def _get_armor_check_penalty(self) -> int:
         """Get armor check penalty for skills using dynamic game data"""
         chest_item = self._get_equipped_item('Chest')
@@ -471,42 +418,6 @@ class CombatManager(EventEmitter):
             return acp_value
         
         return 0  # No penalty if data not found
-    
-    def _get_feat_data(self, feat_id: int):
-        """
-        Get feat data from cache or load from game data
-        
-        Args:
-            feat_id: The feat ID to get data for
-            
-        Returns:
-            Feat data object or None if not found
-        """
-        if feat_id in self._feat_cache:
-            return self._feat_cache[feat_id]
-        
-        try:
-            feat_data = self.rules_service.get_by_id('feat', feat_id)
-            self._feat_cache[feat_id] = feat_data
-            return feat_data
-        except Exception as e:
-            logger.warning(f"Could not load feat data for ID {feat_id}: {e}")
-            return None
-
-    def _has_feat_by_name(self, feat_label: str) -> bool:
-        """Check if character has a feat by its label using FeatManager"""
-        feat_manager = self.character_manager.get_manager('feat')
-        return feat_manager.has_feat_by_name(feat_label) if feat_manager else False
-
-    def _has_feat_by_id(self, feat_id: int) -> bool:
-        """Check if character has a feat by its ID"""
-        feat_list = self.gff.get('FeatList', [])
-        
-        for feat in feat_list:
-            if feat.get('Feat', -1) == feat_id:
-                return True
-        
-        return False
     
     def _get_class_data(self, class_id: int):
         """
@@ -561,6 +472,9 @@ class CombatManager(EventEmitter):
     
     def _on_attribute_changed(self, event: EventData):
         """Handle attribute changes that affect combat stats"""
+        # Invalidate AC cache
+        self._invalidate_ac_cache()
+
         # DEX affects AC and initiative
         if hasattr(event, 'changes'):
             for change in event.changes:
@@ -569,10 +483,12 @@ class CombatManager(EventEmitter):
     
     def _on_item_equipped(self, event: EventData):
         """Handle item equip that affects AC"""
+        self._invalidate_ac_cache()
         logger.info("Item equipped - recalculating AC")
-    
+
     def _on_item_unequipped(self, event: EventData):
         """Handle item unequip that affects AC"""
+        self._invalidate_ac_cache()
         logger.info("Item unequipped - recalculating AC")
     
     def get_combat_summary(self) -> Dict[str, Any]:
@@ -841,6 +757,10 @@ class CombatManager(EventEmitter):
     def invalidate_bab_cache(self):
         """Invalidate BAB cache when class data changes"""
         self._bab_cache_dirty = True
+
+    def _invalidate_ac_cache(self):
+        """Invalidate AC cache when related data changes"""
+        self._ac_cache = None
         
     def _get_dex_modifier(self) -> int:
         """Get dexterity modifier"""  
@@ -882,7 +802,10 @@ class CombatManager(EventEmitter):
         
         # Update GFF wrapper (single source of truth)
         self.gff.set('NaturalAC', value)
-        
+
+        # Invalidate AC cache
+        self._invalidate_ac_cache()
+
         # Calculate new AC
         new_ac = self.calculate_armor_class()
         

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { CharacterAPI, type RaceDataResponse } from '@/services/characterApi';
+import { CharacterAPI } from '@/services/characterApi';
 
 export interface AbilityScore {
   name: string;

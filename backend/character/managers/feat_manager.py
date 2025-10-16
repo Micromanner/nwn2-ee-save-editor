@@ -2268,140 +2268,166 @@ class FeatManager(EventEmitter):
 
     def get_save_bonuses(self) -> Dict[str, int]:
         """
-        Calculate total save bonuses from all character feats.
-        Centralizes feat-to-save-bonus mapping in FeatManager where it belongs.
+        Calculate total save bonuses from all character feats by parsing feat descriptions.
+        Automatically detects save bonuses from any feat, including modded feats.
 
         Returns:
             Dict with fortitude, reflex, will save bonuses from feats
         """
+        import re
+
         bonuses = {
             'fortitude': 0,
             'reflex': 0,
             'will': 0
         }
 
-        # Map feat labels to their save bonuses
-        # NOTE: These bonuses are hardcoded in the NWN2 game engine, NOT stored in 2DA files.
-        # The engine checks for these feat constants and applies bonuses internally during save calculations.
-        # Modded feats that add save bonuses must use SPELLID + spell scripts (not covered here).
-        # Research: https://linear.app/nwn2editor/issue/NWN-65
-        SAVE_FEAT_BONUSES = {
-            # Standard save feats (+2)
-            'GreatFort': {'type': 'fortitude', 'bonus': 2},
-            'IronWill': {'type': 'will', 'bonus': 2},
-            'LightngRef': {'type': 'reflex', 'bonus': 2},
+        feat_list = self.gff.get('FeatList', [])
 
-            # Epic save feats (+4, overlaps with standard)
-            'FEAT_EPIC_FORTITUDE': {'type': 'fortitude', 'bonus': 4},
-            'FEAT_EPIC_WILL': {'type': 'will', 'bonus': 4},
-            'FEAT_EPIC_REFLEXES': {'type': 'reflex', 'bonus': 4},
+        for feat_entry in feat_list:
+            feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
 
-            # Universal save bonuses
-            'LuckOfHeroes': {'type': 'universal', 'bonus': 1},
-            'lucky': {'type': 'universal', 'bonus': 1},
-            'FEAT_SVIRFNEBLIN_SAVE': {'type': 'universal', 'bonus': 2},
-            'FEAT_SACRED_DEFENSE_1': {'type': 'universal', 'bonus': 1},
-            'FEAT_FAMILIAR_IMPROVED_LUCK': {'type': 'universal', 'bonus': 1},
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
+            if not feat_data:
+                continue
 
-            # Background feats (NOTE: Can have NEGATIVE bonuses!)
-            'FEAT_BACKGROUND_BULLY': {'type': 'fortitude', 'bonus': 1},
-            'FEAT_BACKGROUND_DEVOUT': {'type': 'will', 'bonus': 1},
-            'FEAT_BACKGROUND_MILITIA': {'type': 'will', 'bonus': -2},
-            'FEAT_BACKGROUND_TROUBLE_MAKER': [
-                {'type': 'reflex', 'bonus': 1},
-                {'type': 'will', 'bonus': -2}
-            ],
-            'FEAT_BACKGROUND_WIZARDS_APPRENTICE': {'type': 'fortitude', 'bonus': -1},
+            label = (getattr(feat_data, 'LABEL', '') or '').lower()
+            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
 
-            # Class/prestige abilities
-            'FEAT_BARB_RAGE': {'type': 'will', 'bonus': 4},
-            'FEAT_BARB_WHIRLWIND_FRENZY': {'type': 'reflex', 'bonus': 4},
-            'Bullheaded': {'type': 'will', 'bonus': 2},
-            'FEAT_DEATHLESS_VIGOR': {'type': 'fortitude', 'bonus': 4},
-            'FEAT_GRACE': {'type': 'reflex', 'bonus': 2},
-            'FEAT_HEX_METTLE': {'type': 'will', 'bonus': 4},
-            'FEAT_INDOMITABLE_WILL': {'type': 'will', 'bonus': 4},
-            'StrongSoul': {'type': 'will', 'bonus': 1},
+            conditional_keywords = [
+                'against', 'vs ', 'versus', 'to avoid', 'made to'
+            ]
+            if any(keyword in description.lower() for keyword in conditional_keywords):
+                continue
 
-            # Familiar bonuses
-            'FEAT_FAMILIAR_IMPROVED_FORTITUDE': {'type': 'fortitude', 'bonus': 2},
-            'FEAT_FAMILIAR_IMPROVED_REFLEX': {'type': 'reflex', 'bonus': 2},
+            save_patterns = [
+                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+all\s+(?:saving\s+throws|saves)', 'universal'),
+                (r'([+-]\d+)\s+(?:to\s+)?all\s+(?:saving\s+throws|saves)', 'universal'),
+                (r'([+-]\d+)\s+(?:bonus\s+)?(?:to|on)\s+Fortitude\s+and\s+Will\s+(?:saving\s+throws|saves?)', 'fortitude_and_will'),
+                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Fortitude\s+(?:saving\s+throws|saves?)', 'fortitude'),
+                (r'([+-]\d+)\s+Fortitude\s+Save', 'fortitude'),
+                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Reflex\s+(?:saving\s+throws|saves?)', 'reflex'),
+                (r'([+-]\d+)\s+Reflex\s+Save', 'reflex'),
+                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Will\s+(?:saving\s+throws|saves?)', 'will'),
+                (r'([+-]\d+)\s+(?:to|on)\s+all\s+Will\s+(?:saving\s+throws|saves?)', 'will'),
+                (r'([+-]\d+)\s+Will\s+Save', 'will'),
+            ]
 
-            # Racial/heritage feats
-            'FEAT_FIENDISH_HERITAGE': {'type': 'fortitude', 'bonus': 4},
-            'FEAT_RACIAL_RESIST_POISON': {'type': 'fortitude', 'bonus': 4},
-            'ResistDisease': {'type': 'fortitude', 'bonus': 4},
-            'ResistPoison': {'type': 'fortitude', 'bonus': 4},
-
-            # Reflex-based class abilities
-            'FEAT_PRESTIGE_DEFENSIVE_AWARENESS_3': {'type': 'reflex', 'bonus': 1},
-            'SnakeBlood': {'type': 'reflex', 'bonus': 1},
-            'FEAT_SWASHBUCKLER_GRACE_1': {'type': 'reflex', 'bonus': 1},
-            'FEAT_SWASHBUCKLER_GRACE_2': {'type': 'reflex', 'bonus': 1},
-            'FEAT_SWASHBUCKLER_GRACE_3': {'type': 'reflex', 'bonus': 1},
-            'FEAT_SWASHBUCKLER_GRACE_4': {'type': 'reflex', 'bonus': 1},
-
-            # Trap sense progression
-            'FEAT_TRAP_SENSE_1': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_2': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_3': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_4': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_5': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_6': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_7': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_8': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_9': {'type': 'reflex', 'bonus': 1},
-            'FEAT_TRAP_SENSE_10': {'type': 'reflex', 'bonus': 1},
-
-            # Uncanny dodge progression
-            'UncannyDodge2': {'type': 'reflex', 'bonus': 1},
-            'UncannyDodge3': {'type': 'reflex', 'bonus': 2},
-            'UncannyDodge4': {'type': 'reflex', 'bonus': 3},
-            'UncannyDodge5': {'type': 'reflex', 'bonus': 4},
-        }
-
-        # Get all feats from game data for label lookup
-        try:
-            feats_table = self.game_rules_service.get_table('feat')
-            if not feats_table:
-                logger.warning("No feat table available for save bonus calculation")
-                return bonuses
-
-            # Build feat ID to label mapping
-            feat_labels = {}
-            for feat_id, feat in enumerate(feats_table):
-                feat_label = field_mapper.get_field_value(feat, 'label', '')
-                if feat_label:
-                    feat_labels[feat_id] = feat_label
-
-            # Check character's feats against save-affecting feats
-            for feat_id, feat_label in feat_labels.items():
-                if feat_label not in SAVE_FEAT_BONUSES:
-                    continue
-
-                if not self.has_feat(feat_id):
-                    continue
-
-                bonus_data = SAVE_FEAT_BONUSES[feat_label]
-
-                # Handle both single bonus dict and list of bonuses
-                bonus_list = bonus_data if isinstance(bonus_data, list) else [bonus_data]
-
-                for bonus_info in bonus_list:
-                    save_type = bonus_info['type']
-                    bonus_value = bonus_info['bonus']
+            for pattern, save_type in save_patterns:
+                match = re.search(pattern, description, re.IGNORECASE)
+                if match:
+                    bonus_value = int(match.group(1))
 
                     if save_type == 'universal':
                         bonuses['fortitude'] += bonus_value
                         bonuses['reflex'] += bonus_value
                         bonuses['will'] += bonus_value
+                    elif save_type == 'fortitude_and_will':
+                        bonuses['fortitude'] += bonus_value
+                        bonuses['will'] += bonus_value
                     else:
                         bonuses[save_type] += bonus_value
 
                     sign = '+' if bonus_value >= 0 else ''
-                    logger.info(f"Applied {feat_label} bonus {sign}{bonus_value} to {save_type} saves")
-
-        except Exception as e:
-            logger.warning(f"Error calculating feat save bonuses: {e}")
+                    logger.info(f"Applied {label} bonus {sign}{bonus_value} to {save_type} saves")
+                    break
 
         return bonuses
+
+    def get_ac_bonuses(self) -> Dict[str, int]:
+        """
+        Calculate all AC bonuses from feats by parsing feat descriptions.
+        Automatically detects AC bonuses from any feat, including modded feats.
+
+        Returns:
+            Dict with 'dodge' and 'misc' AC bonuses
+        """
+        import re
+
+        bonuses = {'dodge': 0, 'misc': 0}
+
+        feat_list = self.gff.get('FeatList', [])
+
+        for feat_entry in feat_list:
+            feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
+
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
+            if not feat_data:
+                continue
+
+            label = (getattr(feat_data, 'LABEL', '') or '').lower()
+            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+
+            conditional_keywords = [
+                'against', 'vs ', 'versus', 'when ', 'while ', 'if ',
+                'when wielding', 'when wearing', 'when using', 'when fighting'
+            ]
+            if any(keyword in description.lower() for keyword in conditional_keywords):
+                continue
+
+            if 'dodge' in label or 'mobility' in label:
+                match = re.search(r'\+(\d+)', description)
+                if match:
+                    bonuses['dodge'] += int(match.group(1))
+                elif 'dodge' in label and not match:
+                    bonuses['dodge'] += 1
+                continue
+
+            ac_patterns = [
+                r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+(?:Armor\s+Class|AC)',
+                r'\+(\d+)\s+(?:to\s+)?AC(?:\s|\.|\,)',
+                r'\+(\d+)\s+AC\s+bonus',
+            ]
+
+            for pattern in ac_patterns:
+                match = re.search(pattern, description, re.IGNORECASE)
+                if match:
+                    bonus_value = int(match.group(1))
+                    bonuses['misc'] += bonus_value
+                    logger.debug(f"Found AC bonus +{bonus_value} from feat {feat_id}: {label}")
+                    break
+
+        return bonuses
+
+    def get_initiative_bonus(self) -> int:
+        """
+        Calculate initiative bonus from feats by parsing feat descriptions.
+
+        Returns:
+            Total initiative bonus from feats
+        """
+        import re
+
+        bonus = 0
+
+        feat_list = self.gff.get('FeatList', [])
+
+        for feat_entry in feat_list:
+            feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
+
+            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
+            if not feat_data:
+                continue
+
+            label = (getattr(feat_data, 'LABEL', '') or '').lower()
+            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+
+            if 'improvedinitiative' in label.replace('_', '').replace(' ', ''):
+                bonus += 4
+                logger.debug(f"Found Improved Initiative feat: +4 initiative")
+                continue
+
+            initiative_patterns = [
+                r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+initiative',
+                r'\+(\d+)\s+(?:to\s+)?initiative',
+            ]
+
+            for pattern in initiative_patterns:
+                match = re.search(pattern, description, re.IGNORECASE)
+                if match:
+                    bonus_value = int(match.group(1))
+                    bonus += bonus_value
+                    logger.debug(f"Found initiative bonus +{bonus_value} from feat: {label}")
+                    break
+
+        return bonus

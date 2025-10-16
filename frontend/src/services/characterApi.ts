@@ -1,6 +1,5 @@
 // Character API service for fetching character data from FastAPI backend
 
-import { tauriCompatibleFetch } from '../lib/utils/tauriFetch';
 import DynamicAPI from '../lib/utils/dynamicApi';
 
 export interface CharacterAbilities {

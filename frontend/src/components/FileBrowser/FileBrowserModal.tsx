@@ -70,7 +70,7 @@ export default function FileBrowserModal({
   canRestore = true,
   refreshKey = 0
 }: FileBrowserModalProps) {
-  const t = useTranslations();
+  useTranslations();
 
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);

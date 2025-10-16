@@ -16,8 +16,8 @@ export async function tauriCompatibleFetch(
         // console.debug('[tauriFetch] Using Tauri plugin-http');
         return await tauriFetch(input as RequestInfo, init);
       }
-    } catch (_err) {
-      // console.warn('[tauriFetch] Failed to load plugin-http, falling back to window.fetch', _err);
+    } catch {
+      // console.warn('[tauriFetch] Failed to load plugin-http, falling back to window.fetch');
     }
   }
 

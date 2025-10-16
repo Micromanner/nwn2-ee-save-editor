@@ -370,9 +370,7 @@ function AppContent() {
                   variant="outline"
                   className="w-full text-sm"
                   onClick={() => {
-                    if ((window as any).__openBackups) {
-                      (window as any).__openBackups();
-                    }
+                    (window as Window & { __openBackups?: () => void }).__openBackups?.();
                   }}
                 >
                   Manage Backups
