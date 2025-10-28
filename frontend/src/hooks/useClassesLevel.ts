@@ -89,7 +89,7 @@ export interface ClassesData {
 }
 
 export function useClassesLevel(classesData?: ClassesData | null) {
-  const { characterId } = useCharacterContext();
+  const { characterId, invalidateSubsystems } = useCharacterContext();
   const [categorizedClasses, setCategorizedClasses] = useState<CategorizedClassesResponse | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -167,19 +167,22 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     }
     
     setIsUpdating(true);
-    
+
     try {
       await apiClient.post(`/characters/${characterId}/classes/level-up`, {
         class_id: classId,
         level_change: delta,
       });
+
+      // Silently refresh all dependent subsystems
+      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
     } catch (err) {
       console.error('Error adjusting class level:', err);
       throw err;
     } finally {
       setIsUpdating(false);
     }
-  }, [characterId, classes]);
+  }, [characterId, classes, invalidateSubsystems]);
 
   const changeClass = useCallback(async (classId: number, newClassInfo: ClassInfo) => {
     if (!characterId) return;
@@ -190,20 +193,23 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     }
     
     setIsUpdating(true);
-    
+
     try {
       await apiClient.post(`/characters/${characterId}/classes/change`, {
         old_class_id: classId,
         class_id: newClassInfo.id,
         preserve_level: true,
       });
+
+      // Silently refresh all dependent subsystems
+      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
     } catch (err) {
       console.error('Error changing class:', err);
       throw err;
     } finally {
       setIsUpdating(false);
     }
-  }, [characterId, classes]);
+  }, [characterId, classes, invalidateSubsystems]);
 
   const addClass = useCallback(async (classInfo: ClassInfo) => {
     if (!characterId || !classesData) return;
@@ -223,18 +229,21 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     }
     
     setIsUpdating(true);
-    
+
     try {
       await apiClient.post(`/characters/${characterId}/classes/add`, {
         class_id: classInfo.id,
       });
+
+      // Silently refresh all dependent subsystems
+      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
     } catch (err) {
       console.error('Error adding class:', err);
       throw err;
     } finally {
       setIsUpdating(false);
     }
-  }, [characterId, classes, classesData]);
+  }, [characterId, classes, classesData, invalidateSubsystems]);
 
   const removeClass = useCallback(async (classId: number) => {
     if (!characterId) return;
@@ -244,16 +253,19 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     }
     
     setIsUpdating(true);
-    
+
     try {
       await apiClient.post(`/characters/${characterId}/classes/remove/${classId}`, {});
+
+      // Silently refresh all dependent subsystems
+      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
     } catch (err) {
       console.error('Error removing class:', err);
       throw err;
     } finally {
       setIsUpdating(false);
     }
-  }, [characterId, classes]);
+  }, [characterId, classes, invalidateSubsystems]);
 
   // Helper function to check if a class can level up
   const canLevelUp = useCallback((classId: number): boolean => {

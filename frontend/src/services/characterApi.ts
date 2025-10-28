@@ -479,13 +479,13 @@ export class CharacterAPI {
     }
     const data = await response.json();
     return {
-      feats: data.legitimate_feats || [],
-      pagination: data.pagination || {
-        page: 1,
-        limit: 50,
-        total: 0,
-        has_next: false,
-        has_previous: false
+      feats: data.feats || [],
+      pagination: {
+        page: data.page || 1,
+        limit: data.limit || 50,
+        total: data.total || 0,
+        has_next: data.page < data.pages,
+        has_previous: data.page > 1
       },
       search: data.search,
       category: data.category,

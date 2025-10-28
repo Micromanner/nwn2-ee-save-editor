@@ -2,12 +2,12 @@
 Classes router - Class management endpoints
 """
 
-import logging
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from loguru import logger
 
 from fastapi_routers.dependencies import (
-    get_character_manager, 
+    get_character_manager,
     get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
@@ -15,8 +15,6 @@ from fastapi_routers.dependencies import (
 # from fastapi_models.class_models import (...) - moved to lazy loading
 from character.service_modules.class_categorizer import ClassCategorizer, ClassType
 from gamedata.loader import get_game_data_loader
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -92,12 +90,12 @@ def change_class(
         
         # Validate class ID exists
         class_id = request.get('class_id')
-        if class_id is None or not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', class_id):
+        if class_id is None or not class_manager.rules_service.get_by_id('classes', class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid class ID: {class_id}"
             )
-        
+
         # Get old class ID if provided (for multiclass characters)
         old_class_id = request.get('old_class_id')
         
@@ -133,11 +131,15 @@ def change_class(
                 class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
             )
 
+        # Get updated character state after all event handlers have executed
+        updated_state = _get_updated_character_state(manager)
+
         result = {
             'success': True,
             'message': 'Class changed successfully',
             'class_change': changes or {},
-            'has_unsaved_changes': session.has_unsaved_changes()
+            'has_unsaved_changes': session.has_unsaved_changes(),
+            'updated_state': updated_state
         }
 
         return ClassChangeResult(**result)
@@ -175,12 +177,12 @@ def level_up(
         
         # Validate class ID exists
         class_id = request.get('class_id')
-        if class_id is None or not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', class_id):
+        if class_id is None or not class_manager.rules_service.get_by_id('classes', class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid class ID: {class_id}"
             )
-        
+
         # Get level change (default to +1 for compatibility)
         level_change = request.get('level_change', 1)
         
@@ -196,13 +198,17 @@ def level_up(
         # Use class manager method - no duplicated logic
         changes = class_manager.adjust_class_level(class_id, level_change, request.get('cheat_mode', False))
         
+        # Get updated character state after all event handlers have executed
+        updated_state = _get_updated_character_state(manager)
+
         result = {
             'success': True,
             'message': 'Leveled up successfully',
             'level_changes': changes or {},
-            'has_unsaved_changes': session.has_unsaved_changes()
+            'has_unsaved_changes': session.has_unsaved_changes(),
+            'updated_state': updated_state
         }
-        
+
         return LevelUpResult(**result)
         
     except Exception as e:
@@ -431,20 +437,24 @@ def add_class(
         
         # Validate class ID exists
         class_id = request.get('class_id')
-        if class_id is None or not hasattr(class_manager.game_data_loader, 'get_by_id') or not class_manager.game_data_loader.get_by_id('classes', class_id):
+        if class_id is None or not class_manager.rules_service.get_by_id('classes', class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid class ID: {class_id}"
             )
-        
+
         # Use class manager method to add class level (handles new classes too)
         changes = class_manager.add_class_level(class_id, request.get('cheat_mode', False))
-        
+
+        # Get updated character state after all event handlers have executed
+        updated_state = _get_updated_character_state(manager)
+
         return {
             'success': True,
             'message': 'Class added successfully',
             'changes': changes or {},
-            'has_unsaved_changes': session.has_unsaved_changes()
+            'has_unsaved_changes': session.has_unsaved_changes(),
+            'updated_state': updated_state
         }
         
     except Exception as e:
@@ -751,23 +761,83 @@ def _serialize_class_info(class_info):  # Return type removed for lazy loading
 def _get_character_class_context(manager, categorizer) -> Optional[Dict[str, Any]]:
     """Get character-specific class context using manager methods only"""
     context = {}
-    
+
     try:
         # Use class manager methods - no duplicated logic
         class_manager = manager.get_manager('class')
         class_summary = class_manager.get_class_summary()
         context['current_classes'] = class_summary
-        
+
         # Use manager methods for prestige requirements if available
         if hasattr(class_manager, 'get_prestige_class_options'):
             prestige_options = class_manager.get_prestige_class_options()
             context['prestige_requirements'] = prestige_options
-        
+
         context['can_multiclass'] = class_summary.get('can_multiclass', True)
         context['multiclass_slots_used'] = len(class_summary.get('classes', []))
-        
+
     except Exception as e:
         logger.warning(f"Error getting character class context: {e}")
         context['error'] = str(e)
-    
+
     return context
+
+
+def _get_updated_character_state(manager) -> Dict[str, Any]:
+    """Get updated character state after class/level changes"""
+    updated_state = {}
+
+    try:
+        # Get updated class info
+        class_manager = manager.get_manager('class')
+        if class_manager:
+            updated_state['classes'] = class_manager.get_class_summary()
+            updated_state['combat'] = class_manager.get_attack_bonuses()
+            updated_state['saves'] = class_manager.calculate_total_saves()
+
+        # Get updated skill info
+        skill_manager = manager.get_manager('skill')
+        if skill_manager:
+            updated_state['skills'] = {
+                'available_points': skill_manager.gff.get('SkillPoints', 0),
+                'total_available': skill_manager.calculate_total_skill_points(
+                    manager.gff.get('ClassList', [{}])[0].get('Class', 0),
+                    sum(c.get('ClassLevel', 0) for c in manager.gff.get('ClassList', []))
+                ),
+                'spent_points': skill_manager._calculate_spent_skill_points()
+            }
+
+        # Get updated feat info
+        feat_manager = manager.get_manager('feat')
+        if feat_manager:
+            feat_list = manager.gff.get('FeatList', [])
+            updated_state['feats'] = {
+                'total_feats': len(feat_list),
+                'feat_count': len(feat_list)
+            }
+
+        # Get updated spell info for casters
+        spell_manager = manager.get_manager('spell')
+        if spell_manager and hasattr(spell_manager, 'get_spell_summary'):
+            updated_state['spells'] = spell_manager.get_spell_summary()
+
+        # Get updated ability info (level-up bonuses available)
+        ability_manager = manager.get_manager('ability')
+        if ability_manager:
+            class_list = manager.gff.get('ClassList', [])
+            total_level = sum(c.get('ClassLevel', 0) for c in class_list)
+            ability_increases_available = total_level // 4
+            level_up_bonuses = ability_manager.get_level_up_modifiers()
+            bonuses_used = sum(level_up_bonuses.values())
+
+            updated_state['abilities'] = {
+                'level_up_available': ability_increases_available - bonuses_used,
+                'total_increases': ability_increases_available,
+                'used_increases': bonuses_used
+            }
+
+    except Exception as e:
+        logger.error(f"Error getting updated character state: {e}")
+        updated_state['error'] = str(e)
+
+    return updated_state

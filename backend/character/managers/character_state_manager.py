@@ -30,7 +30,6 @@ class CharacterStateManager(EventEmitter):
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
-        self.game_data_loader = character_manager.game_data_loader
     
     def reset_character(self) -> None:
         """Reset character to a default state (level 1, base attributes)"""
@@ -247,12 +246,9 @@ class CharacterStateManager(EventEmitter):
         # Validate we have access to required resources
         if not self.character_manager:
             errors.append("Missing character_manager reference")
-        
+
         if not self.gff:
             errors.append("Missing gff reference")
-            
-        if not self.game_data_loader:
-            errors.append("Missing game_data_loader reference")
         
         return len(errors) == 0, errors
     

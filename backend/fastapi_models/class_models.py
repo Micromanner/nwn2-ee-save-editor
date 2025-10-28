@@ -278,6 +278,7 @@ class ClassChangeResult(BaseModel):
     message: str
     class_change: Dict[str, Any] = Field(default_factory=dict)
     has_unsaved_changes: bool = True
+    updated_state: Dict[str, Any] = Field(default_factory=dict, description="Updated character state after change")
 
 
 class ClassChangePreview(BaseModel):
@@ -293,6 +294,7 @@ class LevelUpResult(BaseModel):
     message: str
     level_changes: Dict[str, Any] = Field(default_factory=dict)
     has_unsaved_changes: bool = True
+    updated_state: Dict[str, Any] = Field(default_factory=dict, description="Updated character state after level change")
 
 
 class LevelUpPreview(BaseModel):
