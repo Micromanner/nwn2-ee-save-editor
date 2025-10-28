@@ -3,14 +3,12 @@ File browser router - List and browse save files and backups
 Handles file system operations for the unified file browser modal
 """
 
-import logging
 import os
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Query
 from pydantic import BaseModel
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 router = APIRouter(tags=["file_browser"])
 
 

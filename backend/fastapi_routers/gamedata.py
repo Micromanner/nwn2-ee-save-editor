@@ -2,14 +2,12 @@
 Gamedata endpoints router - NWN2 paths, game configuration
 """
 
-import logging
 from fastapi import APIRouter, HTTPException, status
 from pathlib import Path
+from loguru import logger
 
 from config.nwn2_settings import nwn2_paths
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

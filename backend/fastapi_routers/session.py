@@ -2,14 +2,14 @@
 Session management router - Character session operations
 """
 
-import logging
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 
 from fastapi_core.session_registry import (
-    get_character_session, 
-    close_character_session, 
+    get_character_session,
+    close_character_session,
     get_active_sessions,
     has_active_session,
     get_path_from_id
@@ -17,8 +17,6 @@ from fastapi_core.session_registry import (
 # Removed character_info dependency - use actual session instead
 from fastapi_routers.dependencies import check_system_ready
 # Lazy import for startup performance - models loaded in background
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

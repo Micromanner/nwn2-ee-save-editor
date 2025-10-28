@@ -3,16 +3,14 @@ State router - Character state aggregation endpoint
 Provides comprehensive character state from all subsystem managers
 """
 
-import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep
 )
 # from fastapi_models.character_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 router = APIRouter(tags=["state"])
 
 

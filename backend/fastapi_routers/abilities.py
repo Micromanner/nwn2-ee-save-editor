@@ -3,19 +3,17 @@ Abilities router - All ability score related endpoints
 Handles the six abilities: STR, DEX, CON, INT, WIS, CHA and their modifiers
 """
 
-import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Body
+from loguru import logger
 
 from fastapi_routers.dependencies import (
-    get_character_manager, 
+    get_character_manager,
     get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

@@ -2,17 +2,15 @@
 Handles skill points, ranks, modifiers, and skill checks
 """
 
-import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Body
+from loguru import logger
 
 from fastapi_routers.dependencies import (
     get_character_session,
     CharacterSessionDep
 )
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

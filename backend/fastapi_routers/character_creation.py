@@ -11,14 +11,12 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
-import logging
+from loguru import logger
 
 from config.nwn2_settings import nwn2_paths
 from character.character_creation_service import CharacterCreationService
 from parsers.resource_manager import ResourceManager
 from .dependencies import check_system_ready
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Character Creation"])
 

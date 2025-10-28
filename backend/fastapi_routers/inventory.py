@@ -2,19 +2,17 @@
 Inventory router - Complete inventory management endpoints
 """
 
-import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 
 from fastapi_routers.dependencies import (
-    get_character_manager, 
+    get_character_manager,
     get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
 # from fastapi_models.inventory_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

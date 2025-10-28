@@ -17,30 +17,6 @@ if os.getenv("ENABLE_LOG_VIEWER", "false").lower() != "true":
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 
-# Capture FastAPI port from logs
-_fastapi_port = None
-
-def extract_fastapi_port() -> Optional[str]:
-    """Extract FastAPI actual port from logs - looks for FASTAPI_ACTUAL_PORT= line"""
-    global _fastapi_port
-
-    if _fastapi_port:
-        return _fastapi_port
-
-    if not LOG_FILE.exists():
-        return None
-
-    try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                if "FASTAPI_ACTUAL_PORT=" in line:
-                    _fastapi_port = line.split("FASTAPI_ACTUAL_PORT=")[1].strip()
-                    return _fastapi_port
-    except Exception:
-        pass
-
-    return None
-
 app = FastAPI(title="NWN2 Editor Dev Log Viewer")
 
 def get_available_sessions() -> List[str]:
@@ -129,12 +105,6 @@ async def get_modules():
     """API endpoint for fetching available modules"""
     modules = get_available_modules()
     return JSONResponse({"modules": modules})
-
-@app.get("/api/port")
-async def get_port():
-    """API endpoint for fetching FastAPI actual port"""
-    port = extract_fastapi_port()
-    return JSONResponse({"port": port})
 
 @app.get("/", response_class=HTMLResponse)
 async def log_viewer():
@@ -373,24 +343,10 @@ async def log_viewer():
             }}
 
             async function loadPort() {{
-                try {{
-                    const response = await fetch('./api/port');
-                    const data = await response.json();
-
-                    const button = document.getElementById('copyPortBtn');
-                    if (data.port) {{
-                        button.textContent = `Copy App Port (${{data.port}})`;
-                        button.dataset.port = data.port;
-                    }} else {{
-                        button.textContent = 'Port Not Found';
-                        button.disabled = true;
-                    }}
-                }} catch (error) {{
-                    console.error('Failed to load port:', error);
-                    const button = document.getElementById('copyPortBtn');
-                    button.textContent = 'Port Not Found';
-                    button.disabled = true;
-                }}
+                const button = document.getElementById('copyPortBtn');
+                const currentPort = window.location.port || '80';
+                button.textContent = `Copy App Port (${{currentPort}})`;
+                button.dataset.port = currentPort;
             }}
 
             async function copyPort() {{
@@ -430,7 +386,7 @@ async def log_viewer():
             async function initializePage() {{
                 await loadSessions();  // Load sessions first
                 await loadModules();   // Then modules
-                await loadPort();      // Then port
+                loadPort();            // Load port (synchronous now)
                 loadLogs();            // Then logs with current session selected
             }}
 

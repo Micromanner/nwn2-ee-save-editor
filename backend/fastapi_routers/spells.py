@@ -3,19 +3,17 @@ Spells router - Spell management endpoints
 Handles spellbooks, memorization, and spell management for all caster types
 """
 
-import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional
+from loguru import logger
 
 from fastapi_routers.dependencies import (
-    get_character_manager, 
+    get_character_manager,
     get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

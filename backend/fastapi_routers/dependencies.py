@@ -3,16 +3,14 @@ Lightweight FastAPI dependencies using existing session registry
 Eliminates redundant code and reduces startup time by using lazy imports
 """
 
-import logging
 from typing import Annotated, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
+from loguru import logger
 
 # Type-only imports for better performance
 if TYPE_CHECKING:
     from character.character_manager import CharacterManager
     from character.in_memory_save_manager import InMemoryCharacterSession
-
-logger = logging.getLogger(__name__)
 
 
 def get_character_manager(character_id: int) -> "CharacterManager":

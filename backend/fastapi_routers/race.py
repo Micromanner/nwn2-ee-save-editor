@@ -4,13 +4,11 @@ Handles race changes and subraces.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-import logging
 from typing import Optional
+from loguru import logger
 
 # from fastapi_models import (...) - moved to lazy loading
 from .dependencies import get_character_manager, get_character_session, CharacterManagerDep, CharacterSessionDep
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Race"])
 

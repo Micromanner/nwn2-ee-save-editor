@@ -2,12 +2,9 @@
 System endpoints router - health checks, cache management, configuration
 """
 
-import logging
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, status
-
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 router = APIRouter()
 

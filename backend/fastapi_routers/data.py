@@ -3,17 +3,15 @@ Data router - Raw GFF data access and field structure exploration
 Provides low-level access to character data for debugging and advanced editing
 """
 
-import logging
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from loguru import logger
 from parsers.gff import GFFFieldType
 from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep
 )
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/data", tags=["data"])
 
 

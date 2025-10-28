@@ -3,9 +3,9 @@ Alignment router - Character alignment (Law/Chaos, Good/Evil) endpoints
 Handles D&D alignment system operations
 """
 
-import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Body
+from loguru import logger
 
 from fastapi_routers.dependencies import (
     get_character_manager,
@@ -14,8 +14,6 @@ from fastapi_routers.dependencies import (
     CharacterSessionDep
 )
 # from fastapi_models.shared_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 router = APIRouter(tags=["alignment"])
 
 

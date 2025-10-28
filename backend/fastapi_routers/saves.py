@@ -4,13 +4,11 @@ Handles fortitude, reflex, will saves and resistances.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-import logging
 from typing import Dict, Any
+from loguru import logger
 
 from .dependencies import get_character_manager, get_character_session, CharacterManagerDep, CharacterSessionDep
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Saves"])
 

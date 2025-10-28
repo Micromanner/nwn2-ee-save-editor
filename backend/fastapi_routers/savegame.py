@@ -4,7 +4,6 @@ Handles operations on NWN2 save game directories and files
 All operations use SaveGameHandler to ensure NWN2 save file integrity
 """
 
-import logging
 import os
 import glob
 import shutil
@@ -12,6 +11,7 @@ import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from fastapi_core.session_registry import get_character_session, save_character_session, get_path_from_id
 # Heavy imports moved to lazy loading to improve startup time
 # from parsers.savegame_handler import SaveGameHandler, SaveGameError
@@ -21,8 +21,6 @@ from fastapi_routers.dependencies import (
     check_system_ready
 )
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 router = APIRouter(tags=["savegame"])
 
 
