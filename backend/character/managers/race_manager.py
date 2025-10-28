@@ -497,11 +497,9 @@ class RaceManager(EventEmitter):
                 except (ValueError, TypeError):
                     pass
         
-        # Fallback: Small races typically have 20ft speed, others 30ft
-        race_size = self._get_race_size(race_id)
-        default_speed = 20 if race_size == 3 else 30  # 3 = Small size
-        logger.debug(f"No speed data found for race {race_id}, defaulting to {default_speed}")
-        return default_speed
+        # Fallback: Default to 30ft
+        logger.debug(f"No speed data found for race {race_id}, defaulting to 30")
+        return 30
     
     def _get_race_name(self, race_id: int) -> str:
         """Get race name from dynamic data using field mapping utility"""
@@ -568,12 +566,13 @@ class RaceManager(EventEmitter):
         subrace = self._get_subrace_name(subrace_raw) if subrace_raw else ''
         
         # Base race properties
+        creature_size = self.get_creature_size()
         properties = {
             'race_id': race_id,
             'race_name': self._get_race_name(race_id),
             'subrace': subrace,
-            'size': self._get_race_size(race_id),
-            'size_name': self._get_size_name(self._get_race_size(race_id)),
+            'size': creature_size,
+            'size_name': self._get_size_name(creature_size),
             'base_speed': self._get_base_speed(race_id),
             'ability_modifiers': self._get_racial_ability_modifiers(race_id),
             'racial_feats': self._get_racial_feats(race_id),
@@ -719,14 +718,23 @@ class RaceManager(EventEmitter):
     def get_base_speed(self, race_id: int = None) -> int:
         """
         Get base movement speed for a race
-        
+
         Args:
             race_id: The race ID, if None uses current character race
-            
+
         Returns:
             Base movement speed in feet
         """
         if race_id is None:
             race_id = self.gff.get('Race', 0)  # Remove hardcoded human race ID
-        
+
         return self._get_base_speed(race_id)
+
+    def get_creature_size(self) -> int:
+        """
+        Get creature size from character GFF
+
+        Returns:
+            Creature size ID (1=Tiny, 2-3=Small, 4=Medium, 5=Large, 6=Huge)
+        """
+        return self.gff.get('CreatureSize', 4)

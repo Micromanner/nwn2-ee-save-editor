@@ -107,10 +107,10 @@ class CombatManager(EventEmitter):
         dodge_bonus = feat_ac_bonuses.get('dodge', 0)
         misc_bonus = feat_ac_bonuses.get('misc', 0)
 
-        # Get size modifier from game data
-        size = self.gff.get('CreatureSize', 4)
+        # Get size and modifier from race_manager
         race_manager = self.character_manager.get_manager('race')
         if race_manager:
+            size = race_manager.get_creature_size()
             size_modifier = race_manager.get_size_modifier(size)
         else:
             size_modifier = 0
@@ -188,11 +188,11 @@ class CombatManager(EventEmitter):
         
         # Get STR modifier
         str_mod = (self.gff.get('Str', 10) - 10) // 2
-        
+
         # Get size modifier (opposite of AC size mod for CMB)
-        size = self.gff.get('CreatureSize', 4)
         race_manager = self.character_manager.get_manager('race')
         if race_manager:
+            size = race_manager.get_creature_size()
             size_mod = -race_manager.get_size_modifier(size)
         else:
             size_mod = 0
@@ -648,10 +648,10 @@ class CombatManager(EventEmitter):
         # Get equipment attack bonuses
         attack_equipment = equipment_bonuses['combat'].get('attack', 0)
 
-        # Get size modifier
-        size = self.gff.get('CreatureSize', 4)
+        # Get size modifier from race_manager
         race_manager = self.character_manager.get_manager('race')
         if race_manager:
+            size = race_manager.get_creature_size()
             size_modifier = race_manager.get_size_modifier(size)
         else:
             size_modifier = 0
