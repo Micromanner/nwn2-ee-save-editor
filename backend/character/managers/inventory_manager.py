@@ -63,8 +63,9 @@ class InventoryManager(EventEmitter):
         self._item_cache = {}
         self._proficiency_cache = set()
         self._feat_proficiency_map = {}  # Maps feat IDs to proficiency types
+        self._proficiency_reverse_map = {}  # Maps proficiency types to feat IDs (O(1) lookup)
         self._base_item_cache = {}
-        
+
         # Initialize caches
         self._build_proficiency_mappings()
         self._update_proficiency_cache()
@@ -95,10 +96,11 @@ class InventoryManager(EventEmitter):
     def _build_proficiency_mappings(self):
         """Build dynamic mapping of feat IDs to proficiency types"""
         self._feat_proficiency_map.clear()
-        
+        self._proficiency_reverse_map.clear()
+
         # Get all feats and identify proficiency feats by name patterns
         feats = self.game_rules_service.get_table('feat')
-        
+
         proficiency_patterns = {
             'weapon_simple': ['weapon proficiency (simple)', 'simple weapon proficiency', 'wpnprofsimple'],
             'weapon_martial': ['weapon proficiency (martial)', 'martial weapon proficiency', 'wpnprofmartial'],
@@ -114,18 +116,20 @@ class InventoryManager(EventEmitter):
             'shield': ['shield proficiency', 'shield'],
             'tower_shield': ['tower shield proficiency', 'towershield']
         }
-        
+
         for feat_id, feat_data in enumerate(feats):
             if feat_data is None:
                 continue
-                
+
             feat_name = field_mapper.get_field_value(feat_data, 'label', '').lower()
-            
+
             for prof_type, patterns in proficiency_patterns.items():
                 if any(pattern in feat_name for pattern in patterns):
                     self._feat_proficiency_map[feat_id] = prof_type
+                    # Build reverse map for O(1) lookup
+                    self._proficiency_reverse_map[prof_type] = feat_id
                     break
-        
+
         logger.info(f"Built proficiency mapping for {len(self._feat_proficiency_map)} feats")
     
     def _register_event_handlers(self):
@@ -399,12 +403,9 @@ class InventoryManager(EventEmitter):
         # Get class name using field mapper
         class_label = field_mapper.get_field_value(class_data, 'label', '').lower()
         
-        # Helper function to get proficiency feat ID by type
+        # Helper function to get proficiency feat ID by type - O(1) lookup using reverse map
         def get_prof_feat_id(prof_type: str) -> Optional[int]:
-            for feat_id, mapped_type in self._feat_proficiency_map.items():
-                if mapped_type == prof_type:
-                    return feat_id
-            return None
+            return self._proficiency_reverse_map.get(prof_type)
         
         # All classes get simple weapons
         simple_prof = get_prof_feat_id('weapon_simple')

@@ -14,11 +14,14 @@ logger = logging.getLogger(__name__)
 class FieldMappingUtility:
     """
     Centralized field name mapping utility for NWN2 2DA files.
-    
+
     Provides standardized access to fields that may have different naming
     conventions across different game data sources.
     """
-    
+
+    # Cache for reverse field mapping (built once on first use)
+    _reverse_field_map = None
+
     # Comprehensive field mapping patterns
     FIELD_PATTERNS = {
         # Ability score modifiers
@@ -40,8 +43,8 @@ class FieldMappingUtility:
         'ac_attack_mod': ['ACATTACKMOD', 'ac_attack_mod', 'AcAttackMod', 'ACAttackMod', 'ACMod'],
         
         # Names and labels
-        'label': ['label', 'name', 'Label', 'Name', 'Description'],
-        'name': ['name', 'label', 'Name', 'Label', 'NameRef'],
+        'label': ['LABEL', 'label', 'Label', 'FEAT', 'Feat', 'name', 'Name', 'Description'],
+        'name': ['NAME', 'name', 'Name', 'FEAT', 'Feat', 'label', 'Label', 'NameRef'],
         
         # Skill-specific fields
         'key_ability': ['KeyAbility', 'key_ability', 'keyability', 'KEYABILITY'],
@@ -121,7 +124,7 @@ class FieldMappingUtility:
         'player_class': ['player_class', 'PlayerClass', 'PCClass', 'Playable'],
         
         # Icons and visuals
-        'icon': ['icon', 'Icon', 'IconResRef', 'IconRef'],
+        'icon': ['ICON', 'icon', 'Icon', 'IconResRef', 'IconRef'],
         'bordered_icon': ['bordered_icon', 'BorderedIcon', 'IconBordered'],
         
         # Combat and damage
@@ -148,8 +151,9 @@ class FieldMappingUtility:
         'has_favored_class': ['has_favored_class', 'HasFavoredClass', 'hasfavoredclass', 'HASFAVOREDCLASS'],
         
         # Misc common fields
-        'description': ['description', 'Description', 'Desc', 'DescRef'],
+        'description': ['DESCRIPTION', 'description', 'Description', 'Desc', 'DescRef'],
         'category': ['category', 'Category', 'Cat', 'Type'],
+        'type': ['CATEGORY', 'FeatCategory', 'Category', 'Type', 'category'],
         'constant': ['constant', 'Constant', 'Const', 'ConstantValue']
     }
     
@@ -196,7 +200,64 @@ class FieldMappingUtility:
                 continue
                 
         return default
-    
+
+    @classmethod
+    def _get_reverse_field_map(cls) -> Dict[str, str]:
+        """Get or build the reverse field mapping cache"""
+        if cls._reverse_field_map is None:
+            cls._reverse_field_map = {}
+            for pattern, aliases in cls.FIELD_PATTERNS.items():
+                for alias in aliases:
+                    if alias not in cls._reverse_field_map:
+                        cls._reverse_field_map[alias] = pattern
+                    if alias.lower() not in cls._reverse_field_map:
+                        cls._reverse_field_map[alias.lower()] = pattern
+                    if alias.upper() not in cls._reverse_field_map:
+                        cls._reverse_field_map[alias.upper()] = pattern
+        return cls._reverse_field_map
+
+    def get_feat_fields_batch(self, feat_data: Any) -> Dict[str, Any]:
+        """
+        Batch extract all fields needed for feat display in a single pass.
+
+        Optimized version that scans the feat_data object once instead of 17 separate get_field_value() calls.
+        Uses cached reverse field mapping for maximum performance.
+
+        Args:
+            feat_data: The feat data object
+
+        Returns:
+            Dict with all extracted field values
+        """
+        if feat_data is None:
+            return {}
+
+        # Use cached reverse lookup map
+        field_map = self._get_reverse_field_map()
+
+        # Single pass through data object attributes
+        result = {}
+        if hasattr(feat_data, 'to_dict'):
+            # Dynamically generated classes have to_dict() method
+            attrs = feat_data.to_dict()
+        elif hasattr(feat_data, '__dict__'):
+            attrs = feat_data.__dict__
+        else:
+            # Fallback for other object types
+            attrs = {attr: getattr(feat_data, attr) for attr in dir(feat_data) if not attr.startswith('_')}
+
+        for attr_name, attr_value in attrs.items():
+            if attr_name in field_map:
+                pattern = field_map[attr_name]
+                if pattern not in result:
+                    if (attr_value is not None and
+                        str(attr_value).strip() and
+                        str(attr_value) != '****' and
+                        not str(attr_value).startswith('<Mock')):
+                        result[pattern] = attr_value
+
+        return result
+
     def get_ability_modifiers(self, race_data: Any) -> Dict[str, int]:
         """
         Get racial ability modifiers with comprehensive field mapping.

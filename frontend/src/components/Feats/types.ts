@@ -22,6 +22,7 @@ export interface FeatInfo {
   label: string;
   name: string;
   type: number;
+  category?: string;
   protected: boolean;
   custom: boolean;
   description?: string;
@@ -89,6 +90,8 @@ export const FEAT_TYPES = {
   DIVINE: 16,
   EPIC: 32,
   CLASS: 64,
+  BACKGROUND: 128,
+  DOMAIN: 256,
 } as const;
 
 export type FeatType = typeof FEAT_TYPES[keyof typeof FEAT_TYPES];

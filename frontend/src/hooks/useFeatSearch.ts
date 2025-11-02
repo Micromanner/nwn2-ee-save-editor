@@ -58,7 +58,7 @@ export function useFeatSearch<T extends { id: number; label: string; name: strin
 
   // Perform search
   const searchResults = useMemo(() => {
-    if (!fuseIndex || !searchTerm || searchTerm.trim().length === 0) {
+    if (!fuseIndex || !searchTerm || searchTerm.trim().length < 3) {
       return feats;
     }
 
@@ -75,7 +75,7 @@ export function useFeatSearch<T extends { id: number; label: string; name: strin
 
   // Highlight search terms in text
   const highlightSearchTerm = useCallback((text: string): string => {
-    if (!searchTerm || searchTerm.trim().length === 0) {
+    if (!searchTerm || searchTerm.trim().length < 3) {
       return text;
     }
 
@@ -84,7 +84,7 @@ export function useFeatSearch<T extends { id: number; label: string; name: strin
   }, [searchTerm]);
 
   // Check if search is active
-  const isSearching = searchTerm && searchTerm.trim().length > 0;
+  const isSearching = searchTerm && searchTerm.trim().length >= 3;
 
   // Get search statistics
   const searchStats = useMemo(() => ({
@@ -127,7 +127,7 @@ export function useFeatSearchIndex<T extends { id: number; label: string; name: 
 
   // Search function
   const search = useCallback((searchTerm: string, limit?: number): T[] => {
-    if (!fuseIndex || !searchTerm || searchTerm.trim().length === 0) {
+    if (!fuseIndex || !searchTerm || searchTerm.trim().length < 3) {
       return feats;
     }
 

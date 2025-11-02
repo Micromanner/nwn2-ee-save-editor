@@ -71,6 +71,7 @@ export interface LegitimateFeatsResponse {
     page: number;
     limit: number;
     total: number;
+    pages: number;
     has_next: boolean;
     has_previous: boolean;
   };
@@ -453,44 +454,32 @@ export class CharacterAPI {
   }
 
   static async getLegitimateFeats(
-    characterId: number, 
-    options: { 
-      featType?: number; 
+    characterId: number,
+    options: {
+      featType?: number;
       category?: string;
       subcategory?: string;
-      page?: number; 
-      limit?: number; 
-      search?: string; 
+      page?: number;
+      limit?: number;
+      search?: string;
     } = {}
   ): Promise<LegitimateFeatsResponse> {
     const params = new URLSearchParams();
-    if (options.featType !== undefined) params.append('type', options.featType.toString());
+    if (options.featType !== undefined) params.append('feat_type', options.featType.toString());
     if (options.category) params.append('category', options.category);
     if (options.subcategory) params.append('subcategory', options.subcategory);
     if (options.page !== undefined) params.append('page', options.page.toString());
     if (options.limit !== undefined) params.append('limit', options.limit.toString());
     if (options.search) params.append('search', options.search);
-    
+
     const queryString = params.toString();
-    
+
     const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/legitimate${queryString ? `?${queryString}` : ''}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch legitimate feats: ${response.statusText}`);
     }
-    const data = await response.json();
-    return {
-      feats: data.feats || [],
-      pagination: {
-        page: data.page || 1,
-        limit: data.limit || 50,
-        total: data.total || 0,
-        has_next: data.page < data.pages,
-        has_previous: data.page > 1
-      },
-      search: data.search,
-      category: data.category,
-      subcategory: data.subcategory
-    };
+
+    return await response.json();
   }
 
   static async addFeat(characterId: number, featId: number): Promise<FeatActionResponse> {

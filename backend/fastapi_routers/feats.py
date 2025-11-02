@@ -3,19 +3,20 @@ Feats router - Complete feat management endpoints
 Handles feat selection, prerequisites, and feat management
 """
 
-import logging
 import time
 from typing import List, Optional
 from functools import wraps
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from loguru import logger
+
 # Simplified caching - can be replaced with proper caching later
 class SimpleCache:
     def __init__(self):
         self._cache = {}
-    
+
     def get(self, key, default=None):
         return self._cache.get(key, default)
-    
+
     def set(self, key, value, timeout=None):
         self._cache[key] = value
 
@@ -23,14 +24,12 @@ class SimpleCache:
 cache = SimpleCache()
 
 from fastapi_routers.dependencies import (
-    get_character_manager, 
+    get_character_manager,
     get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
 # from fastapi_models import (...) - moved to lazy loading
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -161,62 +160,50 @@ def get_legitimate_feats(
 ):
     """Get legitimate feats with pagination and smart filtering (no validation for performance)"""
     from fastapi_models import LegitimateFeatsResponse
-    # Use helper function to generate cache key - no duplicated logic
+
+    try:
+        feat_type_int = int(feat_type) if feat_type not in (None, '', 'null', 'undefined') else None
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid feat_type value: {feat_type}, defaulting to None")
+        feat_type_int = None
+
     cache_key = _get_feat_cache_key(
-        character_id, 
+        character_id,
         "legitimate",
         category=category.lower(),
         subcategory=subcategory.lower(),
-        feat_type=feat_type,
+        feat_type=feat_type_int,
         page=page,
-        limit=limit
+        limit=limit,
+        search=search.lower()
     )
-    
-    # Try to get from cache first
+
     cached_response = cache.get(cache_key)
     if cached_response is not None:
-        logger.debug(f"Returning cached feat response for key: {cache_key}")
+        logger.info(f"Returning cached feat response for key: {cache_key}, {len(cached_response.get('feats', []))} feats")
         return LegitimateFeatsResponse(**cached_response)
-    
+
     try:
         feat_manager = manager.get_manager('feat')
-        
-        # Use existing manager method and apply pagination manually
-        if category or subcategory:
-            all_feats = feat_manager.get_legitimate_feats_by_category(
-                category=category.lower(),
-                subcategory=subcategory.lower(),
-                feat_type=feat_type
-            )
-        else:
-            all_feats = feat_manager.get_legitimate_feats(feat_type=feat_type)
-        
-        # Apply search filter if provided
-        if search.strip():
-            search_lower = search.strip().lower()
-            all_feats = [f for f in all_feats if search_lower in f.get('name', '').lower() or search_lower in f.get('label', '').lower()]
-        
-        # Apply pagination
-        total = len(all_feats)
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        feats = all_feats[start_idx:end_idx]
-        pages = (total + limit - 1) // limit
-        
-        response_data = {
-            'feats': feats,
-            'total': total,
-            'page': page,
-            'pages': pages,
-            'limit': limit
-        }
-        
-        # Cache the response for 5 minutes
-        cache.set(cache_key, response_data, timeout=300)
+
+        logger.info(f"get_legitimate_feats endpoint: character_id={character_id}, page={page}, limit={limit}, category='{category}', subcategory='{subcategory}', search='{search}', feat_type={feat_type_int}")
+
+        result = feat_manager.get_legitimate_feats(
+            feat_type=feat_type_int,
+            category=category.lower(),
+            subcategory=subcategory.lower(),
+            search=search.strip() if search.strip() else None,
+            page=page,
+            limit=limit
+        )
+
+        logger.info(f"get_legitimate_feats: Received {len(result['feats'])} feats, total={result['pagination']['total']}, page={result['pagination']['page']}")
+
+        cache.set(cache_key, result, timeout=300)
         logger.debug(f"Cached feat response for key: {cache_key}")
-        
-        return LegitimateFeatsResponse(**response_data)
-        
+
+        return LegitimateFeatsResponse(**result)
+
     except Exception as e:
         logger.error(f"Failed to get legitimate feats for character {character_id}: {e}")
         raise HTTPException(
@@ -229,45 +216,61 @@ def get_legitimate_feats(
 @log_performance
 def add_feat(
     character_id: int,
-    feat_request,  # Type removed for lazy loading
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    feat_request: dict = Body(...)
 ):
     """Add a feat to character"""
     from fastapi_models import FeatAddRequest, FeatAddResponse
+
+    feat_request = FeatAddRequest(**feat_request)
     try:
         session = char_session
         manager = session.character_manager
         feat_manager = manager.get_manager('feat')
-        
-        # Check if feat can be added (only if not ignoring prerequisites)
-        if not feat_request.ignore_prerequisites:
-            can_take, reason = feat_manager.can_take_feat(feat_request.feat_id)
-            if not can_take:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f'Cannot add feat: {reason}'
-                )
-        
-        result = feat_manager.add_feat(feat_request.feat_id)
-        if not result:
+
+        # Use manager method to handle feat addition with auto-prerequisites
+        auto_add_prereqs = not feat_request.ignore_prerequisites
+        success, auto_added_feats = feat_manager.add_feat_with_prerequisites(
+            feat_request.feat_id,
+            auto_add_prerequisites=auto_add_prereqs
+        )
+
+        if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail='Failed to add feat'
             )
-        
+
         # Get feat info and updated summary
         feat_info = feat_manager.get_feat_info(feat_request.feat_id)
         if not feat_info:
             feat_info = {'id': feat_request.feat_id, 'name': f'Feat {feat_request.feat_id}', 'label': f'Feat {feat_request.feat_id}'}
         feat_summary = feat_manager.get_feat_summary_fast() or {}
-        
-        # Use helper function to invalidate cache - no duplicated logic
+
         _invalidate_feat_cache(character_id)
-        
+
+        message = 'Feat added successfully'
+        if auto_added_feats:
+            # Separate feats and abilities
+            added_feats = [f for f in auto_added_feats if f.get('type') == 'feat']
+            increased_abilities = [f for f in auto_added_feats if f.get('type') == 'ability']
+
+            changes = []
+            if increased_abilities:
+                ability_changes = ', '.join([f['label'] for f in increased_abilities])
+                changes.append(f"abilities: {ability_changes}")
+            if added_feats:
+                feat_names = ', '.join([f['label'] or f['name'] for f in added_feats])
+                changes.append(f"feats: {feat_names}")
+
+            if changes:
+                message = f"Feat added successfully (also added {'; '.join(changes)})"
+
         return FeatAddResponse(
-            message='Feat added successfully',
+            message=message,
             feat_info=feat_info,
             feat_summary=feat_summary,
+            cascading_effects=auto_added_feats,
             has_unsaved_changes=getattr(session, 'has_unsaved_changes', lambda: True)()
         )
         
@@ -284,11 +287,13 @@ def add_feat(
 @router.post("/characters/{character_id}/feats/remove")
 def remove_feat(
     character_id: int,
-    feat_request,  # Type removed for lazy loading
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    feat_request: dict = Body(...)
 ):
     """Remove a feat from character"""
     from fastapi_models import FeatRemoveRequest, FeatRemoveResponse
+
+    feat_request = FeatRemoveRequest(**feat_request)
     try:
         session = char_session
         manager = session.character_manager
@@ -425,7 +430,6 @@ def get_feat_details(
     manager: CharacterManagerDep
 ):
     """Get detailed information about a specific feat including description and prerequisites"""
-    from fastapi_models import FeatDetails
     try:
         feat_manager = manager.get_manager('feat')
         
@@ -439,14 +443,14 @@ def get_feat_details(
         
         # Get detailed prerequisites
         detailed_prereqs = feat_manager.get_detailed_prerequisites(feat_id) or {}
-        
-        # Combine information
+
+        # Flatten feat_info fields to top level and add detailed_prerequisites
         detailed_feat = {
             **feat_info,
             'detailed_prerequisites': detailed_prereqs
         }
-        
-        return FeatDetails(**detailed_feat)
+
+        return detailed_feat
         
     except HTTPException:
         raise

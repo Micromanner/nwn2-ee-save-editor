@@ -104,11 +104,9 @@ export default function ClassAndLevelsEditor() {
 
   const handleAdjustClassLevel = async (index: number, delta: number) => {
     if (!classes[index]) return;
-    
+
     try {
       await adjustClassLevel(classes[index].id, delta);
-      // Reload subsystem data to get updated values
-      await classesSubsystem.load();
     } catch (err) {
       console.error('Failed to adjust class level:', err);
     }
@@ -116,12 +114,10 @@ export default function ClassAndLevelsEditor() {
 
   const handleChangeClass = async (index: number, newClassInfo: ClassInfo) => {
     if (!classes[index]) return;
-    
+
     try {
       await changeClass(classes[index].id, newClassInfo);
       setExpandedClassDropdown(null);
-      // Reload subsystem data to get updated values
-      await classesSubsystem.load();
     } catch (err) {
       console.error('Failed to change class:', err);
     }
@@ -135,12 +131,10 @@ export default function ClassAndLevelsEditor() {
         setShowClassSelector(false);
         return;
       }
-      
+
       // Adding a new class
       await addClass(classInfo);
       setShowClassSelector(false);
-      // Reload subsystem data to get updated values
-      await classesSubsystem.load();
     } catch (err) {
       console.error('Failed to handle class selection:', err);
     }
@@ -148,11 +142,9 @@ export default function ClassAndLevelsEditor() {
 
   const handleRemoveClass = async (index: number) => {
     if (!classes[index]) return;
-    
+
     try {
       await removeClass(classes[index].id);
-      // Reload subsystem data to get updated values
-      await classesSubsystem.load();
     } catch (err) {
       console.error('Failed to remove class:', err);
     }

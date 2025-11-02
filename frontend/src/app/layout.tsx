@@ -3,6 +3,7 @@ import "./globals.css";
 import { LocaleProvider } from '@/providers/LocaleProvider';
 import { TauriProvider } from '@/providers/TauriProvider';
 import { SettingsProvider } from '@/contexts/SettingsContext';
+import { ToastProvider } from '@/contexts/ToastContext';
 
 export const metadata: Metadata = {
   title: "NWN2 Save Editor",
@@ -20,7 +21,9 @@ export default function RootLayout({
         <TauriProvider>
           <SettingsProvider>
             <LocaleProvider>
-              {children}
+              <ToastProvider>
+                {children}
+              </ToastProvider>
             </LocaleProvider>
           </SettingsProvider>
         </TauriProvider>

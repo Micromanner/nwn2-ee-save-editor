@@ -309,14 +309,21 @@ class AvailableFeatsResponse(BaseModel):
     model_config = ConfigDict(extra='allow')
 
 
+class PaginationMetadata(BaseModel):
+    """Pagination metadata"""
+    page: int = Field(..., description="Current page number")
+    limit: int = Field(..., description="Items per page")
+    total: int = Field(..., description="Total number of items")
+    pages: int = Field(..., description="Total number of pages")
+    has_next: bool = Field(..., description="Whether there is a next page")
+    has_previous: bool = Field(..., description="Whether there is a previous page")
+
+
 class LegitimateFeatsResponse(BaseModel):
     """Response with legitimate feats (paginated)"""
     feats: List[Dict[str, Any]] = Field(..., description="Legitimate feats for current page")
-    total: int = Field(..., description="Total number of legitimate feats")
-    page: int = Field(..., description="Current page number")
-    pages: int = Field(..., description="Total number of pages")
-    limit: int = Field(..., description="Items per page")
-    
+    pagination: PaginationMetadata = Field(..., description="Pagination metadata")
+
     model_config = ConfigDict(extra='allow')
 
 

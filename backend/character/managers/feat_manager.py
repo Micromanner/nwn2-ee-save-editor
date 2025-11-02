@@ -14,9 +14,6 @@ from ..events import (
 )
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
-# Using global loguru logger
-
-# Check if prerequisite graph is enabled
 USE_PREREQUISITE_GRAPH = os.environ.get('USE_PREREQUISITE_GRAPH', 'true').lower() == 'true'
 
 
@@ -37,32 +34,28 @@ class FeatManager(EventEmitter):
         self.character_manager = character_manager
         self.game_rules_service = character_manager.rules_service
         self.gff = character_manager.gff
-        
-        # Register for events
+
         self._register_event_handlers()
-        
-        # Separate caches for performance optimization
-        # Display cache: Static feat info (name, description, icon) - rarely invalidated
+
         self._display_cache = {}
-        # Validation cache: Character-specific validation results - frequently invalidated
         self._validation_cache = {}
-        # Legacy cache for backward compatibility (will be phased out)
         self._feat_cache = {}
-        self._class_cache = {}  # Cache for class lookups
+        self._class_cache = {}
         self._protected_feats: Set[int] = set()
-        
-        # Domain feat caches
+
+        logger.warning(f"FeatManager CREATED - instance id: {id(self)}")
+
         self._domain_feats_cache: Optional[Set[int]] = None
         self._domain_feat_map_cache: Optional[Dict[int, List[Dict]]] = None
-        
+        self._has_feat_set: Optional[Set[int]] = None
+        self._has_class_set: Optional[Set[int]] = None
+
         self._update_protected_feats()
-        
-        # Get prerequisite graph if available
+
         self._prerequisite_graph = None
         if USE_PREREQUISITE_GRAPH:
             try:
                 from .prerequisite_graph import get_prerequisite_graph
-                # Pass the rules_service directly
                 self._prerequisite_graph = get_prerequisite_graph(rules_service=self.game_rules_service)
                 if self._prerequisite_graph:
                     logger.info("FeatManager using PrerequisiteGraph for fast validation")
@@ -76,7 +69,6 @@ class FeatManager(EventEmitter):
         """Register handlers for relevant events"""
         self.character_manager.on(EventType.CLASS_CHANGED, self.on_class_changed)
         self.character_manager.on(EventType.LEVEL_GAINED, self.on_level_gained)
-        # Cache invalidation for prerequisite changes
         self.character_manager.on(EventType.ATTRIBUTE_CHANGED, self.on_attribute_changed)
         self.character_manager.on(EventType.FEAT_ADDED, self.on_feat_changed)
         self.character_manager.on(EventType.FEAT_REMOVED, self.on_feat_changed)
@@ -89,40 +81,32 @@ class FeatManager(EventEmitter):
     def _update_protected_feats(self):
         """Update the set of protected feat IDs"""
         self._protected_feats.clear()
-        
-        # Add all custom content feats
+
         for content_id, info in self.character_manager.custom_content.items():
             if info['type'] == 'feat' and info.get('protected', False):
                 self._protected_feats.add(info['id'])
-        
-        # Use our own epithet feat detection
+
         epithet_feats = self.detect_epithet_feats()
         self._protected_feats.update(epithet_feats)
-        
+
         logger.debug(f"Protected feats updated: {len(self._protected_feats)} feats protected")
     
     def on_class_changed(self, event: ClassChangedEvent):
         """Handle class change event"""
         logger.info(f"FeatManager handling class change: {event.old_class_id} -> {event.new_class_id}")
-        
-        # Remove old class feats (except protected)
+
         if event.old_class_id is not None:
             self._remove_class_feats(event.old_class_id, event.level, event.preserve_feats)
-        
-        # Add new class feats
+
         self._add_class_feats(event.new_class_id, event.level)
-        
-        # Invalidate validation cache since class levels affect prerequisites
         self.invalidate_validation_cache()
     
     def on_level_gained(self, event: LevelGainedEvent):
         """Handle level gain event"""
         logger.info(f"FeatManager handling level gain: Class {event.class_id}, Level {event.new_level}")
-        
-        # Add feats for the new level using game rules service
+
         class_data = self.game_rules_service.get_by_id('classes', event.class_id)
         if class_data:
-            # Use class manager's method to get class feats for level
             class_manager = self.character_manager.get_manager('class')
             if class_manager:
                 feats_at_level = class_manager.get_class_feats_for_level(
@@ -130,21 +114,18 @@ class FeatManager(EventEmitter):
                 )
             else:
                 feats_at_level = []
-            
+
             for feat_info in feats_at_level:
-                if feat_info['list_type'] == 0:  # Auto-granted
+                if feat_info['list_type'] == 0:
                     feat_id = feat_info['feat_id']
-                    
-                    # Check if this is a progression feat that replaces an older version
+
                     old_feat_id = self._check_feat_progression(feat_id, event.class_id)
                     if old_feat_id:
-                        # Remove the old version first
                         logger.info(f"Progressing feat: {old_feat_id} -> {feat_id}")
                         self.remove_feat(old_feat_id, force=True)
-                    
+
                     self.add_feat(feat_id, source='level')
-        
-        # Invalidate validation cache since character level affects prerequisites
+
         self.invalidate_validation_cache()
     
     def on_attribute_changed(self, event: EventData):
@@ -168,37 +149,28 @@ class FeatManager(EventEmitter):
     def add_feat(self, feat_id: int, source: str = 'manual') -> bool:
         """
         Add a feat to the character
-        
+
         Args:
             feat_id: The feat ID to add
             source: Source of the feat ('class', 'level', 'manual')
-            
+
         Returns:
             True if feat was added
         """
-        # Check if already has feat (duplicate prevention - corruption prevention)
         if self.has_feat(feat_id):
             logger.debug(f"Character already has feat {feat_id}")
             return False
-        
-        # Check if feat ID exists (corruption prevention)
+
         feat_data = self.game_rules_service.get_by_id('feat', feat_id)
-        if not feat_data and feat_id >= 0:  # Allow custom/unknown feats with negative IDs
+        if not feat_data and feat_id >= 0:
             logger.warning(f"Feat ID {feat_id} not found in feat table")
-            # Still allow it - might be custom content
-        
-        # NOTE: Prerequisite validation removed per validation cleanup plan
-        # Users can now add any feat regardless of prerequisites
-        # Prerequisites are still available for informational display via get_detailed_prerequisites()
-        
-        # Add to feat list
+
         feat_list = self.gff.get('FeatList', [])
         feat_list.append({'Feat': feat_id})
         self.gff.set('FeatList', feat_list)
-        
-        # Emit event
+
         event = FeatChangedEvent(
-            event_type=EventType.FEAT_ADDED,  # Will be overridden by __post_init__
+            event_type=EventType.FEAT_ADDED,
             source_manager='feat',
             timestamp=time.time(),
             feat_id=feat_id,
@@ -206,37 +178,99 @@ class FeatManager(EventEmitter):
             source=source
         )
         self.character_manager.emit(event)
-        
+
         logger.info(f"Added feat {feat_id} from source: {source}")
         return True
-    
+
+    def add_feat_with_prerequisites(self, feat_id: int, auto_add_prerequisites: bool = True, source: str = 'manual') -> Tuple[bool, List[Dict[str, Any]]]:
+        """
+        Add a feat to the character, automatically adding missing prerequisite feats and ability scores if requested
+
+        Args:
+            feat_id: The feat ID to add
+            auto_add_prerequisites: Whether to automatically add missing prerequisite feats and ability scores
+            source: Source of the feat ('class', 'level', 'manual')
+
+        Returns:
+            (success, list_of_changes)
+            - success: True if the main feat was added successfully
+            - list_of_changes: List of changes made (feats added, abilities increased)
+        """
+        auto_changes = []
+
+        if auto_add_prerequisites:
+            can_take, missing_info = self.get_feat_prerequisites_info(feat_id)
+
+            if not can_take:
+                logger.info(f"Feat {feat_id} missing prerequisites. Attempting to auto-add prerequisites.")
+
+                feat_data = self.game_rules_service.get_by_id('feat', feat_id)
+                if feat_data:
+                    prereqs = field_mapper.get_feat_prerequisites(feat_data)
+
+                    ability_manager = self.character_manager.get_manager('ability')
+                    for ability, min_score in prereqs['abilities'].items():
+                        if min_score > 0:
+                            current_score = self.gff.get(ability, 10)
+                            if current_score < min_score:
+                                logger.info(f"Auto-increasing {ability} from {current_score} to {min_score}")
+                                ability_manager.set_attribute(ability, min_score, validate=False)
+                                auto_changes.append({
+                                    'type': 'ability',
+                                    'ability': ability,
+                                    'old_value': current_score,
+                                    'new_value': min_score,
+                                    'label': f'{ability.upper()} increased to {min_score}'
+                                })
+
+                    for prereq_feat_id in prereqs['feats']:
+                        if not self.has_feat(prereq_feat_id):
+                            prereq_success, nested_auto_added = self.add_feat_with_prerequisites(
+                                prereq_feat_id,
+                                auto_add_prerequisites=True,
+                                source='auto_prerequisite'
+                            )
+
+                            if prereq_success:
+                                prereq_info = self.get_feat_info(prereq_feat_id) or {
+                                    'id': prereq_feat_id,
+                                    'name': f'Feat {prereq_feat_id}',
+                                    'label': f'Feat {prereq_feat_id}'
+                                }
+                                prereq_info['type'] = 'feat'
+                                auto_changes.append(prereq_info)
+                                auto_changes.extend(nested_auto_added)
+
+                                logger.debug(f"Auto-added prerequisite feat {prereq_feat_id}")
+
+        success = self.add_feat(feat_id, source=source)
+
+        return success, auto_changes
+
     def remove_feat(self, feat_id: int, force: bool = False) -> bool:
         """
         Remove a feat from the character
-        
+
         Args:
             feat_id: The feat ID to remove
             force: Force removal even if protected
-            
+
         Returns:
             True if feat was removed
         """
-        # Check protection
         if not force and self.is_feat_protected(feat_id):
             logger.warning(f"Cannot remove protected feat {feat_id}")
             return False
-        
-        # Find and remove feat
+
         feat_list = self.gff.get('FeatList', [])
         original_count = len(feat_list)
         feat_list = [f for f in feat_list if f.get('Feat') != feat_id]
-        
+
         if len(feat_list) < original_count:
             self.gff.set('FeatList', feat_list)
-            
-            # Emit event
+
             event = FeatChangedEvent(
-                event_type=EventType.FEAT_REMOVED,  # Will be overridden by __post_init__
+                event_type=EventType.FEAT_REMOVED,
                 source_manager='feat',
                 timestamp=time.time(),
                 feat_id=feat_id,
@@ -244,16 +278,18 @@ class FeatManager(EventEmitter):
                 source='manual'
             )
             self.character_manager.emit(event)
-            
+
             logger.info(f"Removed feat {feat_id}")
             return True
-        
+
         return False
     
     def has_feat(self, feat_id: int) -> bool:
-        """Check if character has a specific feat"""
-        feat_list = self.gff.get('FeatList', [])
-        return any(f.get('Feat') == feat_id for f in feat_list)
+        """Check if character has a specific feat - O(1) lookup using cached set"""
+        if self._has_feat_set is None:
+            feat_list = self.gff.get('FeatList', [])
+            self._has_feat_set = {f.get('Feat') for f in feat_list if 'Feat' in f}
+        return feat_id in self._has_feat_set
     
     def has_feat_by_name(self, feat_label: str) -> bool:
         """
@@ -284,61 +320,50 @@ class FeatManager(EventEmitter):
     def _check_feat_progression(self, new_feat_id: int, class_id: int) -> Optional[int]:
         """
         Check if a feat is part of a progression that replaces an older version
-        
+
         Returns the old feat ID that should be removed, or None
         """
-        # Get the new feat's data using game rules service
         new_feat = self.game_rules_service.get_by_id('feat', new_feat_id)
         if not new_feat:
             return None
-            
-        # Get label using field mapping utility
+
         new_label = field_mapper.get_field_value(new_feat, 'label', '')
-        
-        # Try to parse progression from feat name
-        # Patterns: "Something2", "Something_2", "FEAT_SOMETHING_2"
+
         import re
         match = re.search(r'^(.*?)[\s_]?(\d+)$', new_label)
         if not match:
             return None
-            
+
         base_name = match.group(1).rstrip('_')
         new_number = int(match.group(2))
-        
-        # Only consider it a progression if number is 2 or higher
+
         if new_number < 2:
             return None
-            
-        # Look for the previous version in character's feats
+
         feat_list = self.gff.get('FeatList', [])
         character_feat_ids = {f.get('Feat') for f in feat_list}
-        
-        # Search for feats with same base name but lower number
+
         for feat_id in character_feat_ids:
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if not feat_data:
                 continue
-                
+
             label = field_mapper.get_field_value(feat_data, 'label', '')
-            
-            # Check if it's the same feat family
+
             if label.startswith(base_name):
-                # Try to extract number
                 old_match = re.search(r'^(.*?)[\s_]?(\d+)$', label)
                 if old_match:
                     old_base = old_match.group(1).rstrip('_')
                     old_number = int(old_match.group(2))
-                    
-                    # If same base and lower number, this is what we replace
+
                     if old_base == base_name and old_number < new_number:
                         logger.info(f"Auto-detected progression: {label} -> {new_label}")
                         return feat_id
-                        
-                # Also check for base version without number (e.g., "BarbarianRage" -> "BarbarianRage2")
+
                 elif label == base_name or label == base_name.rstrip('_'):
                     logger.info(f"Auto-detected progression: {label} -> {new_label}")
                     return feat_id
-        
+
         return None
     
     def get_feat_info(self, feat_id: int, feat_data=None, skip_validation: bool = False) -> Optional[Dict[str, Any]]:
@@ -353,34 +378,38 @@ class FeatManager(EventEmitter):
         # If skip_validation is True, use the fast display method
         if skip_validation:
             return self.get_feat_info_display(feat_id, feat_data)
-        
-        # Check cache first
+
         if feat_id in self._feat_cache:
             return self._feat_cache[feat_id]
-        
-        # Use provided feat_data or get from dynamic game data loader
+
         if feat_data is None:
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
-        
+
         if feat_data:
-            # Use label as the primary name
-            label = field_mapper.get_field_value(feat_data, 'label', f'Feat_{feat_id}')
-            
-            # Get prerequisites and check if character meets them
+            label_raw = field_mapper.get_field_value(feat_data, 'label', f'Feat_{feat_id}')
+            if isinstance(label_raw, int) and label_raw > 0:
+                label = self.game_rules_service._loader.get_string(label_raw) or f'Feat_{feat_id}'
+            else:
+                label = str(label_raw) if label_raw else f'Feat_{feat_id}'
+
             prereqs = field_mapper.get_feat_prerequisites(feat_data)
             can_take, missing_reqs = self.get_feat_prerequisites_info(feat_id, feat_data)
-            
-            # Get description
-            description = field_mapper.get_field_value(feat_data, 'description', '')
-            
-            # Get icon reference
+
+            desc_raw = field_mapper.get_field_value(feat_data, 'description', '')
+            if isinstance(desc_raw, int) and desc_raw > 0:
+                description = self.game_rules_service._loader.get_string(desc_raw) or ''
+            else:
+                description = str(desc_raw) if desc_raw else ''
+
             icon = field_mapper.get_field_value(feat_data, 'icon', '')
             
+            feat_type = self._parse_feat_type(feat_data)
             info = {
                 'id': feat_id,
                 'label': label,
-                'name': label,  # Use label as name since it's more readable
-                'type': field_mapper.get_field_value(feat_data, 'type', 0),
+                'name': label,
+                'type': feat_type,
+                'category': self.get_feat_category_by_type(feat_type),
                 'protected': self.is_feat_protected(feat_id),
                 'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
@@ -392,14 +421,14 @@ class FeatManager(EventEmitter):
             }
             self._feat_cache[feat_id] = info
             return info
-        
-        # Unknown feat
+
         return {
             'id': feat_id,
             'label': f'Unknown_{feat_id}',
             'name': f'Unknown Feat {feat_id}',
             'type': 0,
-            'protected': True,  # Protect unknown feats
+            'category': 'General',
+            'protected': True,
             'custom': True,
             'description': 'Unknown or custom feat',
             'icon': '',
@@ -413,67 +442,84 @@ class FeatManager(EventEmitter):
         """
         Get feat information for DISPLAY only - no prerequisite validation.
         10-100x faster than get_feat_info() since it skips expensive validation.
-        
+
         Args:
             feat_id: ID of the feat
             feat_data: Optional pre-loaded feat data to avoid redundant lookups
-            
+
         Returns:
             Dict with feat display information (no can_take or missing_requirements)
         """
-        # Check display cache first
         if feat_id in self._display_cache:
             cached = self._display_cache[feat_id].copy()
-            # Add current has_feat status (not cached as it can change)
             cached['has_feat'] = self.has_feat(feat_id)
             return cached
-        
-        # Use provided feat_data or get from dynamic game data loader
+
         if feat_data is None:
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
-        
+
         if feat_data:
-            # Use label as the primary name
-            label = field_mapper.get_field_value(feat_data, 'label', f'Feat_{feat_id}')
-            
-            # Get static prerequisites (for display only, not validation)
-            prereqs = field_mapper.get_feat_prerequisites(feat_data)
-            
-            # Get description
-            description = field_mapper.get_field_value(feat_data, 'description', '')
-            
-            # Get icon reference
-            icon = field_mapper.get_field_value(feat_data, 'icon', '')
-            
+            fields = field_mapper.get_feat_fields_batch(feat_data)
+
+            prereqs = {
+                'abilities': {
+                    'Str': field_mapper._safe_int(fields.get('prereq_str', 0)),
+                    'Dex': field_mapper._safe_int(fields.get('prereq_dex', 0)),
+                    'Con': field_mapper._safe_int(fields.get('prereq_con', 0)),
+                    'Int': field_mapper._safe_int(fields.get('prereq_int', 0)),
+                    'Wis': field_mapper._safe_int(fields.get('prereq_wis', 0)),
+                    'Cha': field_mapper._safe_int(fields.get('prereq_cha', 0)),
+                },
+                'feats': [
+                    f for f in [
+                        field_mapper._safe_int(fields.get('prereq_feat1', 0)),
+                        field_mapper._safe_int(fields.get('prereq_feat2', 0))
+                    ] if f > 0
+                ],
+                'class': field_mapper._safe_int(fields.get('required_class', -1)),
+                'level': field_mapper._safe_int(fields.get('min_level', 0)),
+                'bab': field_mapper._safe_int(fields.get('prereq_bab', 0)),
+                'spell_level': field_mapper._safe_int(fields.get('prereq_spell_level', 0))
+            }
+
+            label_raw = fields.get('label', f'Feat_{feat_id}')
+            if isinstance(label_raw, int) and label_raw > 0:
+                label = self.game_rules_service._loader.get_string(label_raw) or f'Feat_{feat_id}'
+            else:
+                label = str(label_raw) if label_raw else f'Feat_{feat_id}'
+
+            desc_raw = fields.get('description', '')
+            if isinstance(desc_raw, int) and desc_raw > 0:
+                description = self.game_rules_service._loader.get_string(desc_raw) or ''
+            else:
+                description = str(desc_raw) if desc_raw else ''
+
+            feat_type = self._parse_feat_type(feat_data)
             info = {
                 'id': feat_id,
                 'label': label,
-                'name': label,  # Use label as name since it's more readable
-                'type': field_mapper.get_field_value(feat_data, 'type', 0),
+                'name': label,
+                'type': feat_type,
+                'category': self.get_feat_category_by_type(feat_type),
                 'protected': self.is_feat_protected(feat_id),
                 'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
-                'icon': icon,
+                'icon': fields.get('icon', ''),
                 'prerequisites': prereqs,
-                # NO validation - these fields are omitted for performance:
-                # 'can_take': NOT CALCULATED
-                # 'missing_requirements': NOT CALCULATED
             }
-            
-            # Cache the static parts (everything except has_feat)
+
             self._display_cache[feat_id] = info.copy()
-            
-            # Add current has_feat status
+
             info['has_feat'] = self.has_feat(feat_id)
             return info
-        
-        # Unknown feat - return minimal info
+
         return {
             'id': feat_id,
             'label': f'Unknown_{feat_id}',
             'name': f'Unknown Feat {feat_id}',
             'type': 0,
-            'protected': True,  # Protect unknown feats
+            'category': 'General',
+            'protected': True,
             'custom': True,
             'description': 'Unknown or custom feat',
             'icon': '',
@@ -501,7 +547,6 @@ class FeatManager(EventEmitter):
         
         for feat in feat_list:
             feat_id = feat.get('Feat', 0)
-            # Use FAST display method instead of full validation
             feat_info = self.get_feat_info_display(feat_id)
             
             if feat_info['protected']:
@@ -509,7 +554,7 @@ class FeatManager(EventEmitter):
             
             if feat_info['custom']:
                 categorized['custom_feats'].append(feat_info)
-            elif feat_info['type'] == 1:  # General feat
+            elif feat_info['type'] == 1:
                 categorized['general_feats'].append(feat_info)
             else:
                 categorized['class_feats'].append(feat_info)
@@ -520,11 +565,12 @@ class FeatManager(EventEmitter):
         """
         Clear the validation cache when character state changes.
         This should be called when abilities, levels, or feats change.
-        
+
         Note: Does NOT clear display cache or game data cache (those are static).
         """
         self._validation_cache.clear()
-        # Also clear legacy feat cache validation data
+        self._has_feat_set = None
+        self._has_class_set = None
         for feat_id in self._feat_cache:
             if 'can_take' in self._feat_cache[feat_id]:
                 del self._feat_cache[feat_id]['can_take']
@@ -542,44 +588,60 @@ class FeatManager(EventEmitter):
         Returns:
             Dictionary mapping feat_id to (meets_requirements, list_of_missing_requirements)
         """
-        # Try to use PrerequisiteGraph for fast batch validation if available
         if self._prerequisite_graph and self._prerequisite_graph.is_built:
-            # Prepare character data for graph validation
             character_feats = set()
             feat_list = self.gff.get('FeatList', [])
             for feat in feat_list:
                 character_feats.add(feat.get('Feat', -1))
-            
-            # Get character data for non-feat prerequisites
+
+            # NOTE: Rust expects lowercase full ability names (e.g., 'strength', not 'Str')
             class_list = self.gff.get('ClassList', [])
             character_data = {
-                'Str': self.gff.get('Str', 10),
-                'Dex': self.gff.get('Dex', 10),
-                'Con': self.gff.get('Con', 10),
-                'Int': self.gff.get('Int', 10),
-                'Wis': self.gff.get('Wis', 10),
-                'Cha': self.gff.get('Cha', 10),
+                'strength': self.gff.get('Str', 10),
+                'dexterity': self.gff.get('Dex', 10),
+                'constitution': self.gff.get('Con', 10),
+                'intelligence': self.gff.get('Int', 10),
+                'wisdom': self.gff.get('Wis', 10),
+                'charisma': self.gff.get('Cha', 10),
                 'classes': set(c.get('Class') for c in class_list),
                 'level': sum(c.get('ClassLevel', 0) for c in class_list),
                 'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
             }
-            
-            # Use graph for fast batch validation
-            return self._prerequisite_graph.validate_batch_fast(
+
+            batch_results = self._prerequisite_graph.validate_batch_fast(
                 feat_ids, character_feats, character_data
             )
-        
-        # Fallback to standard batch validation
+
+            resolved_batch_results = {}
+            for feat_id, (can_take, errors) in batch_results.items():
+                resolved_errors = []
+                for error in errors:
+                    if error.startswith("Requires Feat "):
+                        try:
+                            feat_id_str = error.replace("Requires Feat ", "")
+                            prereq_feat_id = int(feat_id_str)
+                            prereq_info = self.get_feat_info_display(prereq_feat_id)
+                            if prereq_info:
+                                prereq_name = prereq_info.get('name', f'Feat {prereq_feat_id}')
+                            else:
+                                prereq_name = f'Feat {prereq_feat_id}'
+                            resolved_errors.append(f"Requires {prereq_name}")
+                        except (ValueError, AttributeError):
+                            resolved_errors.append(error)
+                    else:
+                        resolved_errors.append(error)
+                resolved_batch_results[feat_id] = (can_take, resolved_errors)
+
+            return resolved_batch_results
+
         results = {}
-        
-        # Pre-load all feat data at once
+
         feat_data_map = {}
         for feat_id in feat_ids:
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if feat_data:
                 feat_data_map[feat_id] = feat_data
-        
-        # Pre-load character data once
+
         char_abilities = {
             'Str': self.gff.get('Str', 10),
             'Dex': self.gff.get('Dex', 10),
@@ -588,58 +650,44 @@ class FeatManager(EventEmitter):
             'Wis': self.gff.get('Wis', 10),
             'Cha': self.gff.get('Cha', 10)
         }
-        
-        # Get character's current feats once
+
         current_feat_ids = set()
         feat_list = self.gff.get('FeatList', [])
         for feat in feat_list:
             current_feat_ids.add(feat.get('Feat', -1))
-        
-        # Get character's classes once
+
         class_list = self.gff.get('ClassList', [])
         char_classes = set(c.get('Class') for c in class_list)
-        
-        # Get character level and BAB once
+
         char_level = sum(c.get('ClassLevel', 0) for c in class_list)
         char_bab = self.character_manager.get_manager('combat').get_base_attack_bonus()
-        
-        # Process each feat
+
         for feat_id in feat_ids:
             if feat_id not in feat_data_map:
-                # Allow unknown feats (custom content)
                 results[feat_id] = (True, [])
                 continue
-            
+
             feat_data = feat_data_map[feat_id]
             errors = []
-            
-            # Check prerequisites using field mapping utility
+
             prereqs = field_mapper.get_feat_prerequisites(feat_data)
-            
-            # Check ability score prerequisites
+
             for ability, min_score in prereqs['abilities'].items():
                 if min_score > 0:
                     current_score = char_abilities.get(ability, 10)
                     if current_score < min_score:
                         errors.append(f"Requires {ability.upper()} {min_score}")
-            
-            # Check feat prerequisites
+
             for prereq_feat_id in prereqs['feats']:
                 if prereq_feat_id not in current_feat_ids:
-                    # Get prereq feat name from cache or lookup
-                    if prereq_feat_id in self._feat_cache:
-                        prereq_name = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
+                    prereq_info = self.get_feat_info_display(prereq_feat_id)
+                    if prereq_info:
+                        prereq_name = prereq_info.get('name', f'Feat {prereq_feat_id}')
                     else:
-                        prereq_feat_data = self.game_rules_service.get_by_id('feat', prereq_feat_id)
-                        prereq_name = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
-                        # Cache for future use
-                        if prereq_feat_data:
-                            self._feat_cache[prereq_feat_id] = {'label': prereq_name}
+                        prereq_name = f'Feat {prereq_feat_id}'
                     errors.append(f"Requires {prereq_name}")
-            
-            # Check class requirements
+
             if prereqs['class'] >= 0 and prereqs['class'] not in char_classes:
-                # Get class name from cache or lookup
                 class_id = prereqs['class']
                 if class_id in self._class_cache:
                     class_name = self._class_cache[class_id]
@@ -648,19 +696,14 @@ class FeatManager(EventEmitter):
                     class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}') if class_data else f'Class {class_id}'
                     self._class_cache[class_id] = class_name
                 errors.append(f"Requires {class_name} class")
-            
-            # Check level requirements
+
             if prereqs['level'] > 0 and char_level < prereqs['level']:
                 errors.append(f"Requires character level {prereqs['level']}")
-            
-            # Check BAB requirements
+
             if prereqs['bab'] > 0 and char_bab < prereqs['bab']:
                 errors.append(f"Requires base attack bonus +{prereqs['bab']}")
-            
-            # Check spell level requirements
+
             if prereqs['spell_level'] > 0:
-                # This would require checking spellcasting capabilities
-                # For now, we'll skip this check
                 pass
             
             results[feat_id] = (len(errors) == 0, errors)
@@ -669,111 +712,62 @@ class FeatManager(EventEmitter):
     
     def get_feat_prerequisites_info(self, feat_id: int, feat_data=None) -> Tuple[bool, List[str]]:
         """
-        Get prerequisite information for a feat (INFORMATIONAL ONLY)
+        Get prerequisite information for a feat using Rust PrerequisiteGraph (INFORMATIONAL ONLY)
         NOTE: This method provides information for UI display but does NOT block feat selection.
         Users can add any feat regardless of the prerequisites shown here.
-        
+
         Args:
             feat_id: ID of the feat to check
-            feat_data: Optional pre-loaded feat data to avoid redundant lookups
-        
+            feat_data: Optional pre-loaded feat data (unused, kept for API compatibility)
+
         Returns:
             (meets_requirements, list_of_missing_requirements)
         """
-        # Try to use PrerequisiteGraph for fast validation if available
-        if self._prerequisite_graph and self._prerequisite_graph.is_built:
-            # Prepare character data for graph validation
-            character_feats = set()
-            feat_list = self.gff.get('FeatList', [])
-            for feat in feat_list:
-                character_feats.add(feat.get('Feat', -1))
-            
-            # Get character data for non-feat prerequisites
-            class_list = self.gff.get('ClassList', [])
-            character_data = {
-                'Str': self.gff.get('Str', 10),
-                'Dex': self.gff.get('Dex', 10),
-                'Con': self.gff.get('Con', 10),
-                'Int': self.gff.get('Int', 10),
-                'Wis': self.gff.get('Wis', 10),
-                'Cha': self.gff.get('Cha', 10),
-                'classes': set(c.get('Class') for c in class_list),
-                'level': sum(c.get('ClassLevel', 0) for c in class_list),
-                'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
-            }
-            
-            # Use graph for fast validation
-            return self._prerequisite_graph.validate_feat_prerequisites_fast(
-                feat_id, character_feats, character_data
-            )
-        
-        # Fallback to standard validation
-        errors = []
-        if feat_data is None:
-            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
-        
-        if not feat_data:
-            return True, []  # Allow unknown feats (custom content)
-        
-        # Check prerequisites using field mapping utility
-        prereqs = field_mapper.get_feat_prerequisites(feat_data)
-        
-        # Check ability score prerequisites
-        for ability, min_score in prereqs['abilities'].items():
-            if min_score > 0:
-                current_score = self.gff.get(ability, 10)
-                if current_score < min_score:
-                    errors.append(f"Requires {ability.upper()} {min_score}")
-        
-        # Check feat prerequisites
-        for prereq_feat_id in prereqs['feats']:
-            if not self.has_feat(prereq_feat_id):
-                # Check cache first to avoid redundant lookups
-                if prereq_feat_id in self._feat_cache:
-                    prereq_name = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
-                else:
-                    prereq_feat_data = self.game_rules_service.get_by_id('feat', prereq_feat_id)
-                    if prereq_feat_data is None:
-                        logger.warning(f"Prerequisite feat ID {prereq_feat_id} not found in feat table (for feat {feat_id})")
-                    prereq_name = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
-                errors.append(f"Requires {prereq_name}")
-        
-        # Check class requirements
-        if prereqs['class'] >= 0:
-            class_list = self.gff.get('ClassList', [])
-            has_class = any(c.get('Class') == prereqs['class'] for c in class_list)
-            if not has_class:
-                # Check cache first to avoid redundant lookups
-                class_id = prereqs['class']
-                if class_id in self._class_cache:
-                    class_name = self._class_cache[class_id]
-                else:
-                    class_data = self.game_rules_service.get_by_id('classes', class_id)
-                    class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}') if class_data else f'Class {class_id}'
-                    self._class_cache[class_id] = class_name
-                errors.append(f"Requires {class_name} class")
-        
-        # Check level requirements
-        if prereqs['level'] > 0:
-            total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
-            if total_level < prereqs['level']:
-                errors.append(f"Requires level {prereqs['level']}")
-                
-        # Check BAB requirements
-        if prereqs['bab'] > 0:
-            # TODO: Implement proper BAB calculation
-            # For now, approximate based on total level and classes
-            total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
-            estimated_bab = total_level  # Simplified - should calculate based on class BAB tables
-            if estimated_bab < prereqs['bab']:
-                errors.append(f"Requires BAB +{prereqs['bab']}")
-                
-        # Check spell level requirements
-        if prereqs['spell_level'] > 0:
-            # TODO: Implement spell level requirement validation
-            pass
-        
-        return len(errors) == 0, errors
+        if not self._prerequisite_graph or not self._prerequisite_graph.is_built:
+            logger.critical("PrerequisiteGraph not available! Cannot validate feat prerequisites.")
+            return True, []
+
+        character_feats = set()
+        feat_list = self.gff.get('FeatList', [])
+        for feat in feat_list:
+            character_feats.add(feat.get('Feat', -1))
+
+        # NOTE: Rust expects lowercase full ability names (e.g., 'strength', not 'Str')
+        class_list = self.gff.get('ClassList', [])
+        character_data = {
+            'strength': self.gff.get('Str', 10),
+            'dexterity': self.gff.get('Dex', 10),
+            'constitution': self.gff.get('Con', 10),
+            'intelligence': self.gff.get('Int', 10),
+            'wisdom': self.gff.get('Wis', 10),
+            'charisma': self.gff.get('Cha', 10),
+            'classes': set(c.get('Class') for c in class_list),
+            'level': sum(c.get('ClassLevel', 0) for c in class_list),
+            'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
+        }
+
+        can_take, errors = self._prerequisite_graph.validate_feat_prerequisites_fast(
+            feat_id, character_feats, character_data
+        )
+
+        resolved_errors = []
+        for error in errors:
+            if error.startswith("Requires Feat "):
+                try:
+                    feat_id_str = error.replace("Requires Feat ", "")
+                    prereq_feat_id = int(feat_id_str)
+                    prereq_info = self.get_feat_info_display(prereq_feat_id)
+                    if prereq_info:
+                        prereq_name = prereq_info.get('name', f'Feat {prereq_feat_id}')
+                    else:
+                        prereq_name = f'Feat {prereq_feat_id}'
+                    resolved_errors.append(f"Requires {prereq_name}")
+                except (ValueError, AttributeError):
+                    resolved_errors.append(error)
+            else:
+                resolved_errors.append(error)
+
+        return can_take, resolved_errors
     
     def get_detailed_prerequisites(self, feat_id: int) -> Dict[str, Any]:
         """
@@ -792,8 +786,7 @@ class FeatManager(EventEmitter):
             'met': [],
             'unmet': []
         }
-        
-        # Ability score requirements
+
         for ability, min_score in prereqs['abilities'].items():
             if min_score > 0:
                 current_score = self.gff.get(ability, 10)
@@ -810,34 +803,35 @@ class FeatManager(EventEmitter):
                     detailed['met'].append(req_text)
                 else:
                     detailed['unmet'].append(f"{req_text} (current: {current_score})")
-        
-        # Feat requirements
+
         for prereq_feat_id in prereqs['feats']:
             has_prereq = self.has_feat(prereq_feat_id)
-            # Check cache first to avoid redundant lookups
             if prereq_feat_id in self._feat_cache:
-                prereq_name = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
+                prereq_name_raw = self._feat_cache[prereq_feat_id].get('label', f'Feat {prereq_feat_id}')
             else:
                 prereq_feat_data = self.game_rules_service.get_by_id('feat', prereq_feat_id)
-                prereq_name = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
-            
+                prereq_name_raw = field_mapper.get_field_value(prereq_feat_data, 'label', f'Feat {prereq_feat_id}') if prereq_feat_data else f'Feat {prereq_feat_id}'
+
+            if isinstance(prereq_name_raw, int) and prereq_name_raw > 0:
+                prereq_name = self.game_rules_service._loader.get_string(prereq_name_raw) or f'Feat {prereq_feat_id}'
+            else:
+                prereq_name = str(prereq_name_raw) if prereq_name_raw else f'Feat {prereq_feat_id}'
+
             detailed['requirements'].append({
                 'type': 'feat',
                 'description': prereq_name,
                 'feat_id': prereq_feat_id,
                 'met': has_prereq
             })
-            
+
             if has_prereq:
                 detailed['met'].append(prereq_name)
             else:
                 detailed['unmet'].append(prereq_name)
-        
-        # Class requirements
+
         if prereqs['class'] >= 0:
             class_list = self.gff.get('ClassList', [])
             has_class = any(c.get('Class') == prereqs['class'] for c in class_list)
-            # Check cache first to avoid redundant lookups
             class_id = prereqs['class']
             if class_id in self._class_cache:
                 class_name = self._class_cache[class_id]
@@ -857,12 +851,11 @@ class FeatManager(EventEmitter):
                 detailed['met'].append(f"{class_name} class")
             else:
                 detailed['unmet'].append(f"{class_name} class")
-        
-        # Level requirements
+
         if prereqs['level'] > 0:
             total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
             req_text = f"Level {prereqs['level']}"
-            
+
             detailed['requirements'].append({
                 'type': 'level',
                 'description': req_text,
@@ -870,18 +863,17 @@ class FeatManager(EventEmitter):
                 'current_value': total_level,
                 'met': total_level >= prereqs['level']
             })
-            
+
             if total_level >= prereqs['level']:
                 detailed['met'].append(req_text)
             else:
                 detailed['unmet'].append(f"{req_text} (current: {total_level})")
-        
-        # BAB requirements
+
         if prereqs['bab'] > 0:
             total_level = sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
-            estimated_bab = total_level  # Simplified calculation
+            estimated_bab = total_level
             req_text = f"BAB +{prereqs['bab']}"
-            
+
             detailed['requirements'].append({
                 'type': 'bab',
                 'description': req_text,
@@ -889,21 +881,19 @@ class FeatManager(EventEmitter):
                 'current_value': estimated_bab,
                 'met': estimated_bab >= prereqs['bab']
             })
-            
+
             if estimated_bab >= prereqs['bab']:
                 detailed['met'].append(req_text)
             else:
                 detailed['unmet'].append(f"{req_text} (current: +{estimated_bab})")
-        
-        # Spell level requirements
+
         if prereqs['spell_level'] > 0:
             req_text = f"Able to cast {prereqs['spell_level']}th level spells"
-            # TODO: Implement proper spell level checking
             detailed['requirements'].append({
                 'type': 'spell_level',
                 'description': req_text,
                 'required_value': prereqs['spell_level'],
-                'met': False  # Default to false until implemented
+                'met': False
             })
             detailed['unmet'].append(req_text)
         
@@ -922,66 +912,59 @@ class FeatManager(EventEmitter):
         
         feats_to_remove = []
         class_manager = self.character_manager.get_manager('class')
-        
-        # 1. Get auto-granted feats from class feat tables (safest to remove)
+
         for lvl in range(1, level + 1):
             if class_manager:
                 feats_at_level = class_manager.get_class_feats_for_level(class_data, lvl)
             else:
                 feats_at_level = []
             for feat_info in feats_at_level:
-                if feat_info['list_type'] == 0:  # Auto-granted only
+                if feat_info['list_type'] == 0:
                     feat_id = feat_info['feat_id']
                     if feat_id not in preserve_list and not self.is_feat_protected(feat_id):
                         feats_to_remove.append(feat_id)
-        
-        # 2. Check for feats with class prerequisites that match this class
-        # This catches class-specific feats that might not be in feat tables
+
         feat_list = self.gff.get('FeatList', [])
         current_class_ids = set()
         class_list = self.gff.get('ClassList', [])
         for class_entry in class_list:
-            if class_entry.get('Class') != class_id:  # Don't include the class being removed
+            if class_entry.get('Class') != class_id:
                 current_class_ids.add(class_entry.get('Class'))
         
         for feat_entry in feat_list:
             feat_id = feat_entry.get('Feat', -1)
             if feat_id in preserve_list or self.is_feat_protected(feat_id):
                 continue
-                
-            # Check if this feat requires the class being removed
+
             if self._is_class_specific_feat(feat_id, class_id, current_class_ids):
                 if feat_id not in feats_to_remove:
                     feats_to_remove.append(feat_id)
-        
-        # 3. SPECIAL CLERIC HANDLING - Remove domain feats if losing all cleric levels
+
+        # SPECIAL CLERIC HANDLING - Remove domain feats if losing all cleric levels
         class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
-        is_cleric = class_name.lower() == 'cleric'  # Check by name to be safe
-        
+        is_cleric = class_name.lower() == 'cleric'
+
         domain_feats_removed = 0
         if is_cleric:
-            # Check if character will still have cleric levels after this removal
             remaining_cleric_levels = 0
             for class_entry in class_list:
                 if class_entry.get('Class') == class_id:
-                    continue  # Skip the class being removed
+                    continue
                 entry_class_data = self.game_rules_service.get_by_id('classes', class_entry.get('Class'))
                 if entry_class_data:
                     entry_class_name = field_mapper.get_field_value(entry_class_data, 'label', '').lower()
                     if entry_class_name == 'cleric':
                         remaining_cleric_levels += class_entry.get('ClassLevel', 0)
-            
+
             if remaining_cleric_levels == 0:
-                # Losing ALL cleric levels - remove domain feats
                 logger.info(f"Removing all domain feats due to complete loss of cleric class")
                 domain_feats_removed = self.remove_all_domain_feats()
             else:
                 logger.debug(f"Preserving domain feats - character retains {remaining_cleric_levels} cleric levels")
-        
-        # Remove regular class feats (force=True since we've already checked protection)
+
         removed_count = 0
         for feat_id in feats_to_remove:
-            if self.remove_feat(feat_id, force=False):  # Still respect protection in remove_feat
+            if self.remove_feat(feat_id, force=False):
                 removed_count += 1
         
         if removed_count > 0 or domain_feats_removed > 0:
@@ -1154,8 +1137,7 @@ class FeatManager(EventEmitter):
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
-        
-        # Add all auto-granted feats for this class
+
         added_count = 0
         class_manager = self.character_manager.get_manager('class')
         for lvl in range(1, level + 1):
@@ -1164,27 +1146,24 @@ class FeatManager(EventEmitter):
             else:
                 feats_at_level = []
             for feat_info in feats_at_level:
-                if feat_info['list_type'] == 0:  # Auto-granted
+                if feat_info['list_type'] == 0:
                     if self.add_feat(feat_info['feat_id'], source='class'):
                         added_count += 1
-        
+
         # SPECIAL CLERIC HANDLING - Add default domain feats if first cleric level
         class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
         is_cleric = class_name.lower() == 'cleric'
-        
+
         domain_feats_added = 0
         if is_cleric:
-            # Check if character already has any domain feats (indicates existing cleric levels)
             existing_domain_feats = self.get_character_domain_feats()
-            
+
             if not existing_domain_feats:
-                # First time gaining cleric - add default domains (typically first 2 available)
                 available_domains = self.get_available_domains()
                 if available_domains and len(available_domains) >= 2:
-                    # Add first two available domains as defaults
                     default_domain_ids = {available_domains[0]['id'], available_domains[1]['id']}
                     domain_feats_added = self.add_domain_feats_for_domains(default_domain_ids)
-                    
+
                     domain_names = [d['name'] for d in available_domains[:2]]
                     logger.info(f"Added default domains for new cleric: {domain_names}")
                 else:
@@ -1226,43 +1205,210 @@ class FeatManager(EventEmitter):
         
         return True
     
-    def get_legitimate_feats(self, feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_legitimate_feats(
+        self,
+        feat_type: Optional[int] = None,
+        category: str = '',
+        subcategory: str = '',
+        search: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50
+    ) -> Dict[str, Any]:
         """
-        Get list of all legitimate feats (filtered to remove dev/broken feats)
-        
+        Get list of all legitimate feats with complete filtering and pagination.
+        This is the unified method that handles ALL feat filtering and pagination logic.
+
         Args:
-            feat_type: Optional feat type filter
-            
+            feat_type: Optional feat type filter (bitmask - can combine multiple types with OR)
+            category: Category filter (general, combat, class, etc.)
+            subcategory: Subcategory filter (for class/racial)
+            search: Optional search term to filter by name/description
+            page: Page number (1-indexed, default: 1)
+            limit: Items per page (default: 50)
+
         Returns:
-            List of feat info dicts for legitimate feats only
+            Dict with structure:
+            {
+                'feats': [...],
+                'pagination': {
+                    'page': 1,
+                    'limit': 50,
+                    'total': 150,
+                    'pages': 3,
+                    'has_next': True,
+                    'has_previous': False
+                }
+            }
         """
-        legitimate = []
-        
-        # Get all feats from dynamic game data
+        import time
+        time_filtering = 0
+        time_search = 0
+        time_get_feat_info = 0
+
         all_feats = self.game_rules_service.get_table('feat')
         if not all_feats:
-            return legitimate
-        
+            logger.warning("get_legitimate_feats: No feats table found")
+            return self._build_pagination_response([], page, limit, 0)
+
+        logger.debug(f"get_legitimate_feats: Processing {len(all_feats)} feats (feat_type={feat_type}, category={category}, subcategory={subcategory}, search={search}, page={page}, limit={limit})")
+        filtered_count = 0
+
+        # Phase 1: Fast filtering to get feat IDs only (no display cache building)
+        legitimate_feat_ids = []
         for row_index, feat_data in enumerate(all_feats):
-            # Filter out illegitimate feats first
+            t0 = time.perf_counter()
+
+            # Filter out illegitimate feats
             if not self.is_legitimate_feat(feat_data):
+                filtered_count += 1
+                time_filtering += time.perf_counter() - t0
                 continue
-                
+
+            # Filter by category
+            if category:
+                feat_category = self.get_feat_category(feat_data)
+                if feat_category != category:
+                    time_filtering += time.perf_counter() - t0
+                    continue
+
+                # Filter by subcategory
+                if subcategory and category in ['class', 'racial']:
+                    feat_subcategory = self.get_feat_subcategory(feat_data, category)
+                    if feat_subcategory != subcategory:
+                        time_filtering += time.perf_counter() - t0
+                        continue
+
             # Use proper row index as feat ID
             feat_id = getattr(feat_data, 'id', getattr(feat_data, 'row_index', row_index))
-            
-            # Skip if wrong type
+
+            # Filter by feat type (bitwise AND for multiple type flags)
             if feat_type is not None:
                 data_type = field_mapper.get_field_value(feat_data, 'type', 0)
-                if data_type != feat_type:
+
+                data_type_int = 0
+                if isinstance(data_type, str):
+                    data_type_upper = data_type.upper()
+                    if 'GENERAL' in data_type_upper:
+                        data_type_int = 1
+                    elif 'PROFICIENCY' in data_type_upper:
+                        data_type_int = 2
+                    elif 'SKILLNSAVE' in data_type_upper or 'SKILL' in data_type_upper:
+                        data_type_int = 4
+                    elif 'METAMAGIC' in data_type_upper:
+                        data_type_int = 8
+                    elif 'DIVINE' in data_type_upper:
+                        data_type_int = 16
+                    elif 'EPIC' in data_type_upper:
+                        data_type_int = 32
+                    elif 'CLASSABILITY' in data_type_upper:
+                        data_type_int = 64
+                    elif 'BACKGROUND' in data_type_upper:
+                        data_type_int = 128
+                    elif 'SPELLCASTING' in data_type_upper:
+                        data_type_int = 256
+                    elif 'HISTORY' in data_type_upper:
+                        data_type_int = 512
+                    elif 'HERITAGE' in data_type_upper:
+                        data_type_int = 1024
+                    elif 'ITEMCREATION' in data_type_upper or 'ITEM' in data_type_upper:
+                        data_type_int = 2048
+                    elif 'RACIALABILITY' in data_type_upper or 'RACIAL' in data_type_upper:
+                        data_type_int = 4096
+                    else:
+                        data_type_int = 1
+                else:
+                    try:
+                        data_type_int = int(data_type) if data_type else 0
+                        if data_type_int not in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
+                            data_type_int = 1
+                    except (ValueError, TypeError):
+                        data_type_int = 1
+
+                if not (data_type_int & feat_type):
+                    time_filtering += time.perf_counter() - t0
                     continue
-            
-            # Use fast display method - skip validation for performance
+
+            time_filtering += time.perf_counter() - t0
+            legitimate_feat_ids.append((feat_id, feat_data))
+
+        # Phase 2: Apply search BEFORE pagination (critical for correct results)
+        if search:
+            t_search = time.perf_counter()
+            search_lower = search.lower()
+            filtered_feat_ids = []
+
+            for feat_id, feat_data in legitimate_feat_ids:
+                # Get name from label reference
+                label_ref = field_mapper.get_field_value(feat_data, 'feat')
+                if isinstance(label_ref, int):
+                    name = self.game_rules_service._loader.get_string(label_ref) if label_ref else ''
+                else:
+                    name = str(label_ref) if label_ref else ''
+
+                # Get description
+                desc_ref = field_mapper.get_field_value(feat_data, 'description')
+                if isinstance(desc_ref, int):
+                    description = self.game_rules_service._loader.get_string(desc_ref) if desc_ref else ''
+                else:
+                    description = str(desc_ref) if desc_ref else ''
+
+                # Search in name or description
+                if search_lower in name.lower() or search_lower in description.lower():
+                    filtered_feat_ids.append((feat_id, feat_data))
+
+            legitimate_feat_ids = filtered_feat_ids
+            time_search = time.perf_counter() - t_search
+            logger.debug(f"Search '{search}' filtered to {len(legitimate_feat_ids)} feats")
+
+        total_count = len(legitimate_feat_ids)
+
+        # Phase 3: Apply pagination BEFORE building display cache
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        feats_to_load = legitimate_feat_ids[start_idx:end_idx]
+        logger.info(f"Pagination: loading {len(feats_to_load)} of {total_count} feats (page {page})")
+
+        # Phase 4: Build display cache ONLY for requested feats
+        legitimate = []
+        for feat_id, feat_data in feats_to_load:
+            t1 = time.perf_counter()
             feat_info = self.get_feat_info(feat_id, feat_data, skip_validation=True)
+            time_get_feat_info += time.perf_counter() - t1
             if feat_info:
                 legitimate.append(feat_info)
-        
-        return legitimate
+
+        logger.info(f"get_legitimate_feats: Returned {len(legitimate)} legitimate feats (filtered out {filtered_count}, total valid: {total_count})")
+        logger.info(f"get_legitimate_feats TIMING: filtering={time_filtering:.3f}s, search={time_search:.3f}s, get_feat_info={time_get_feat_info:.3f}s")
+        logger.info(f"get_legitimate_feats: Display cache size: {len(self._display_cache)} entries")
+
+        return self._build_pagination_response(legitimate, page, limit, total_count)
+
+    def _build_pagination_response(self, feats: List[Dict[str, Any]], page: int, limit: int, total: int) -> Dict[str, Any]:
+        """
+        Build standardized pagination response structure.
+
+        Args:
+            feats: List of feat dictionaries
+            page: Current page number
+            limit: Items per page
+            total: Total number of items
+
+        Returns:
+            Complete response with pagination metadata
+        """
+        pages = (total + limit - 1) // limit if total > 0 else 1
+
+        return {
+            'feats': feats,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': total,
+                'pages': pages,
+                'has_next': page < pages,
+                'has_previous': page > 1
+            }
+        }
 
     def get_available_feats(self, feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
         """
@@ -1306,7 +1452,47 @@ class FeatManager(EventEmitter):
             # Skip if wrong type (fast check)
             if feat_type is not None:
                 data_type = field_mapper.get_field_value(feat_data, 'type', 0)
-                if data_type != feat_type:
+
+                data_type_int = 0
+                if isinstance(data_type, str):
+                    data_type_upper = data_type.upper()
+                    if 'GENERAL' in data_type_upper:
+                        data_type_int = 1
+                    elif 'PROFICIENCY' in data_type_upper:
+                        data_type_int = 2
+                    elif 'SKILLNSAVE' in data_type_upper or 'SKILL' in data_type_upper:
+                        data_type_int = 4
+                    elif 'METAMAGIC' in data_type_upper:
+                        data_type_int = 8
+                    elif 'DIVINE' in data_type_upper:
+                        data_type_int = 16
+                    elif 'EPIC' in data_type_upper:
+                        data_type_int = 32
+                    elif 'CLASSABILITY' in data_type_upper:
+                        data_type_int = 64
+                    elif 'BACKGROUND' in data_type_upper:
+                        data_type_int = 128
+                    elif 'SPELLCASTING' in data_type_upper:
+                        data_type_int = 256
+                    elif 'HISTORY' in data_type_upper:
+                        data_type_int = 512
+                    elif 'HERITAGE' in data_type_upper:
+                        data_type_int = 1024
+                    elif 'ITEMCREATION' in data_type_upper or 'ITEM' in data_type_upper:
+                        data_type_int = 2048
+                    elif 'RACIALABILITY' in data_type_upper or 'RACIAL' in data_type_upper:
+                        data_type_int = 4096
+                    else:
+                        data_type_int = 1
+                else:
+                    try:
+                        data_type_int = int(data_type) if data_type else 0
+                        if data_type_int not in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
+                            data_type_int = 1
+                    except (ValueError, TypeError):
+                        data_type_int = 1
+
+                if not (data_type_int & feat_type):
                     continue
             
             total_checked += 1
@@ -1453,7 +1639,47 @@ class FeatManager(EventEmitter):
             # Skip if wrong type
             if feat_type is not None:
                 data_type = field_mapper.get_field_value(feat_data, 'type', 0)
-                if data_type != feat_type:
+
+                data_type_int = 0
+                if isinstance(data_type, str):
+                    data_type_upper = data_type.upper()
+                    if 'GENERAL' in data_type_upper:
+                        data_type_int = 1
+                    elif 'PROFICIENCY' in data_type_upper:
+                        data_type_int = 2
+                    elif 'SKILLNSAVE' in data_type_upper or 'SKILL' in data_type_upper:
+                        data_type_int = 4
+                    elif 'METAMAGIC' in data_type_upper:
+                        data_type_int = 8
+                    elif 'DIVINE' in data_type_upper:
+                        data_type_int = 16
+                    elif 'EPIC' in data_type_upper:
+                        data_type_int = 32
+                    elif 'CLASSABILITY' in data_type_upper:
+                        data_type_int = 64
+                    elif 'BACKGROUND' in data_type_upper:
+                        data_type_int = 128
+                    elif 'SPELLCASTING' in data_type_upper:
+                        data_type_int = 256
+                    elif 'HISTORY' in data_type_upper:
+                        data_type_int = 512
+                    elif 'HERITAGE' in data_type_upper:
+                        data_type_int = 1024
+                    elif 'ITEMCREATION' in data_type_upper or 'ITEM' in data_type_upper:
+                        data_type_int = 2048
+                    elif 'RACIALABILITY' in data_type_upper or 'RACIAL' in data_type_upper:
+                        data_type_int = 4096
+                    else:
+                        data_type_int = 1
+                else:
+                    try:
+                        data_type_int = int(data_type) if data_type else 0
+                        if data_type_int not in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
+                            data_type_int = 1
+                    except (ValueError, TypeError):
+                        data_type_int = 1
+
+                if not (data_type_int & feat_type):
                     continue
             
             # Use fast display method - skip validation for performance
@@ -1532,7 +1758,7 @@ class FeatManager(EventEmitter):
             
             if feat_info['custom']:
                 categorized['custom_feats'].append(feat_info)
-            elif feat_info['type'] == 1:  # General feat
+            elif feat_info['type'] == 1:
                 categorized['general_feats'].append(feat_info)
             else:
                 categorized['class_feats'].append(feat_info)
@@ -1867,17 +2093,19 @@ class FeatManager(EventEmitter):
         """
         Get category name based on feat type number.
         Helper method for fast categorization.
-        
+
         Args:
             feat_type: The feat type number
-            
+
         Returns:
             Category name string
         """
         if feat_type == 1:
             return 'General'
         elif feat_type == 2:
-            return 'Combat'
+            return 'Proficiency'
+        elif feat_type == 4:
+            return 'Skill/Save'
         elif feat_type == 8:
             return 'Metamagic'
         elif feat_type == 16:
@@ -1886,8 +2114,95 @@ class FeatManager(EventEmitter):
             return 'Epic'
         elif feat_type == 64:
             return 'Class'
+        elif feat_type == 128:
+            return 'Background'
+        elif feat_type == 256:
+            return 'Spellcasting'
+        elif feat_type == 512:
+            return 'History'
+        elif feat_type == 1024:
+            return 'Heritage'
+        elif feat_type == 2048:
+            return 'Item Creation'
+        elif feat_type == 4096:
+            return 'Racial'
         else:
             return 'General'
+
+    def _parse_feat_type(self, feat_data) -> int:
+        """
+        Parse numeric feat type from feat data by checking both DESCRIPTION and FeatCategory fields.
+
+        Args:
+            feat_data: The feat data object
+
+        Returns:
+            Numeric feat type bitflag:
+            1=General, 2=Proficiency, 4=Skill/Save, 8=Metamagic, 16=Divine, 32=Epic,
+            64=Class, 128=Background, 256=Spellcasting, 512=History, 1024=Heritage,
+            2048=ItemCreation, 4096=Racial
+        """
+        import re
+
+        description = field_mapper.get_field_value(feat_data, 'description', '')
+        feat_category = field_mapper.get_field_value(feat_data, 'type', '')
+
+        if isinstance(feat_category, str):
+            feat_category_upper = feat_category.upper()
+
+            if 'GENERAL' in feat_category_upper:
+                return 1
+            elif 'PROFICIENCY' in feat_category_upper:
+                return 2
+            elif 'SKILLNSAVE' in feat_category_upper or 'SKILL' in feat_category_upper:
+                return 4
+            elif 'METAMAGIC' in feat_category_upper:
+                return 8
+            elif 'DIVINE' in feat_category_upper:
+                return 16
+            elif 'EPIC' in feat_category_upper:
+                return 32
+            elif 'CLASSABILITY' in feat_category_upper:
+                return 64
+            elif 'BACKGROUND' in feat_category_upper:
+                return 128
+            elif 'SPELLCASTING' in feat_category_upper:
+                return 256
+            elif 'HISTORY' in feat_category_upper:
+                return 512
+            elif 'HERITAGE' in feat_category_upper:
+                return 1024
+            elif 'ITEMCREATION' in feat_category_upper or 'ITEM' in feat_category_upper:
+                return 2048
+            elif 'RACIALABILITY' in feat_category_upper or 'RACIAL' in feat_category_upper:
+                return 4096
+
+        try:
+            feat_type_int = int(feat_category) if feat_category else 0
+            if feat_type_int in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
+                return feat_type_int
+        except (ValueError, TypeError):
+            pass
+
+        if description:
+            match = re.search(r'Type of Feat:\s*(\w+)', description, re.IGNORECASE)
+            if match:
+                feat_type_str = match.group(1).lower()
+
+                if feat_type_str == 'combat':
+                    return 2
+                elif feat_type_str == 'metamagic':
+                    return 8
+                elif feat_type_str == 'epic':
+                    return 32
+                elif feat_type_str == 'class':
+                    return 64
+                elif feat_type_str == 'background':
+                    return 128
+                elif feat_type_str == 'special':
+                    return 16
+
+        return 1
     
     def detect_epithet_feats(self) -> Set[int]:
         """

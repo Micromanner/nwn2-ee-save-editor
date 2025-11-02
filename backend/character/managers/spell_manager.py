@@ -1040,7 +1040,12 @@ class SpellManager(EventEmitter):
             
             # Filter out dev/test spells first, keeping track of original indices
             legitimate_spells = self._filter_legitimate_spells_with_indices(all_spells)
-            
+
+            # PERFORMANCE: Cache class_data lookup outside the loop (was doing 1000+ redundant lookups)
+            class_data = None
+            if class_id is not None:
+                class_data = self.rules_service.get_by_id('classes', class_id)
+
             for original_idx, spell_data in legitimate_spells:
                 spell_id = original_idx  # Use original index as spell ID
                 
@@ -1069,9 +1074,8 @@ class SpellManager(EventEmitter):
                                 available_classes.append(class_name)
                                 
                                 # If filtering by class, check if this class matches
-                                if class_id is not None:
-                                    class_data = self.rules_service.get_by_id('classes', class_id)
-                                    if class_data and self._class_matches_column(class_data, column_name):
+                                if class_data is not None:
+                                    if self._class_matches_column(class_data, column_name):
                                         spell_available = True
                                         break
                     except (ValueError, TypeError):
@@ -1217,22 +1221,23 @@ class SpellManager(EventEmitter):
         return legitimate_spells
     
     def _class_matches_column(self, class_data: Any, column_name: str) -> bool:
-        """Check if a class matches a spell table column"""
+        """Check if a class matches a spell table column - optimized with set lookups"""
         class_label = field_mapper.get_field_value(class_data, 'Label', '').lower()
-        
+
         column_mappings = {
-            'Bard': ['bard'],
-            'Cleric': ['cleric'],
-            'Druid': ['druid'],
-            'Paladin': ['paladin'],
-            'Ranger': ['ranger'],
-            'Wiz_Sorc': ['wizard', 'sorcerer'],
-            'Warlock': ['warlock']
+            'Bard': {'bard'},
+            'Cleric': {'cleric'},
+            'Druid': {'druid'},
+            'Paladin': {'paladin'},
+            'Ranger': {'ranger'},
+            'Wiz_Sorc': {'wizard', 'sorcerer'},
+            'Warlock': {'warlock'}
         }
-        
+
         if column_name in column_mappings:
+            # Check if any keyword from the set is in class_label
             return any(class_name in class_label for class_name in column_mappings[column_name])
-        
+
         return False
     
     def _is_metamagic_feat(self, feat_id: int) -> bool:

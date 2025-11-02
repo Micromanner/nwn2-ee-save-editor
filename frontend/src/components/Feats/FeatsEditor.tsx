@@ -5,220 +5,218 @@ import { Card } from '@/components/ui/Card';
 import { AlertCircle } from 'lucide-react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
-import { useFeatNavigation } from '@/hooks/useFeatManagement';
-import { useIconPreloader } from '@/hooks/useIconPreloader';
-
-// Import new components
-import FeatCategorySidebar from './FeatCategorySidebar';
-import FeatBreadcrumbs from './FeatBreadcrumbs';
-import FeatContentArea from './FeatContentArea';
-import MyFeatsView from './MyFeatsView';
-import FeatDetailsPanel from './FeatDetailsPanel';
-
-// Import types
-import type { 
-  FeatInfo, 
-  FeatsState, 
-  ViewMode,
-  ValidationState
-} from './types';
-import { FEAT_CATEGORIES as CATEGORIES } from './types';
+import { useFeatSearch } from '@/hooks/useFeatSearch';
+import { FeatNavBar, type FeatTab } from './FeatNavBar';
+import { FeatTabContent } from './FeatTabContent';
+import type { FeatInfo, FeatsState } from './types';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function FeatsEditor() {
-  const { character, isLoading: characterLoading, error: characterError } = useCharacterContext();
+  const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems } = useCharacterContext();
   const feats = useSubsystem('feats');
-  
-  // Use custom hooks for feat management
-  const navigation = useFeatNavigation();
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [showMyFeats, setShowMyFeats] = useState(true);
-  const [globalSearch, setGlobalSearch] = useState('');
-  
-  // State for category-based feat loading
-  const [categoryFeats, setCategoryFeats] = useState<FeatInfo[]>([]);
-  const [categoryFeatsLoading, setCategoryFeatsLoading] = useState(false);
-  const [categoryFeatsError, setCategoryFeatsError] = useState<string | null>(null);
-  
-  // State for feat details and validation
-  const [selectedFeat, setSelectedFeat] = useState<FeatInfo | null>(null);
-  const [featDetails, setFeatDetails] = useState<FeatInfo | null>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  
-  // State for on-demand feat validation
-  const [validationCache, setValidationCache] = useState<Record<number, ValidationState>>({});
-  const [validatingFeatId, setValidatingFeatId] = useState<number | null>(null);
-  
-  // Get feats data from subsystem
-  const featsData = feats.data as FeatsState | null;
-  const isLoading = characterLoading || feats.isLoading || categoryFeatsLoading;
-  const error = characterError || feats.error || categoryFeatsError;
+  const { showToast } = useToast();
 
-  // Load feats data when component mounts or character changes
+  const [activeTab, setActiveTab] = useState<FeatTab>('my-feats');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  const [selectedTypes, setSelectedTypes] = useState<Set<number>>(new Set());
+
+  const [availableFeats, setAvailableFeats] = useState<FeatInfo[]>([]);
+  const [_availableFeatsLoading, setAvailableFeatsLoading] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [availableFeatsError, setAvailableFeatsError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalFeats, setTotalFeats] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
+  const FEATS_PER_PAGE = 50;
+
+  const featsData = feats.data as FeatsState | null;
+  const isLoading = characterLoading || feats.isLoading;
+  const error = characterError || feats.error || availableFeatsError;
+
   useEffect(() => {
     if (character?.id && !feats.data && !feats.isLoading) {
       feats.load();
     }
   }, [character?.id, feats.data, feats.isLoading, feats]);
 
-  // Load category feats when category or subcategory changes
   useEffect(() => {
-    const loadCategoryFeats = async () => {
-      if (!character?.id || !navigation.selectedCategory) {
-        setCategoryFeats([]);
+    setCurrentPage(1);
+  }, [activeTab, searchTerm, selectedTypes]);
+
+  useEffect(() => {
+    const loadAvailableFeats = async () => {
+      if (!character?.id || activeTab !== 'all-feats') {
         return;
       }
-      
-      setCategoryFeatsLoading(true);
-      setCategoryFeatsError(null);
-      
+
+      setAvailableFeatsLoading(true);
+      setAvailableFeatsError(null);
+
       try {
+        const featTypeBitmask = selectedTypes.size > 0
+          ? Array.from(selectedTypes).reduce((acc, type) => acc | type, 0)
+          : undefined;
+
         const response = await CharacterAPI.getLegitimateFeats(character.id, {
-          category: navigation.selectedCategory,
-          subcategory: navigation.selectedSubcategory || undefined,
-          page: 1,
-          limit: 500 // Load more feats since search is client-side now
+          page: currentPage,
+          limit: FEATS_PER_PAGE,
+          featType: featTypeBitmask,
+          search: (searchTerm && searchTerm.length >= 3) ? searchTerm : undefined,
         });
-        
-        setCategoryFeats(response.feats);
+
+        setAvailableFeats(response.feats);
+        setTotalFeats(response.pagination.total);
+        setHasNext(response.pagination.has_next);
+        setHasPrevious(response.pagination.has_previous);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to load category feats';
-        setCategoryFeatsError(errorMessage);
-        console.error('Failed to load category feats:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load available feats';
+        setAvailableFeatsError(errorMessage);
       } finally {
-        setCategoryFeatsLoading(false);
+        setAvailableFeatsLoading(false);
       }
     };
 
-    loadCategoryFeats();
-  }, [character?.id, navigation.selectedCategory, navigation.selectedSubcategory]);
+    loadAvailableFeats();
+  }, [character?.id, activeTab, currentPage, FEATS_PER_PAGE, selectedTypes, searchTerm]);
 
-  // Callbacks for feat management
-  const loadFeatDetails = useCallback(async (feat: FeatInfo) => {
-    if (!character?.id) return;
-    
-    setSelectedFeat(feat);
-    setLoadingDetails(true);
-    
-    try {
-      const details = await CharacterAPI.getFeatDetails(character.id, feat.id);
-      setFeatDetails(details);
-    } catch (error) {
-      console.error('Failed to load feat details:', error);
-      setFeatDetails(null);
-    } finally {
-      setLoadingDetails(false);
-    }
-  }, [character?.id]);
-
-  const validateFeat = useCallback(async (featId: number) => {
-    if (!character?.id) return null;
-    
-    // Check cache first
-    if (validationCache[featId]) {
-      return validationCache[featId];
-    }
-    
-    // Mark as validating
-    setValidatingFeatId(featId);
-    
-    try {
-      const validation = await CharacterAPI.validateFeat(character.id, featId);
-      
-      // Cache the result
-      setValidationCache(prev => ({
-        ...prev,
-        [featId]: validation
-      }));
-      
-      return validation;
-    } catch (error) {
-      console.error('Failed to validate feat:', error);
-      return null;
-    } finally {
-      setValidatingFeatId(null);
-    }
-  }, [character?.id, validationCache]);
-
-  const handleAddFeat = useCallback(async (featId: number) => {
-    if (!character?.id) return;
-
-    try {
-      await CharacterAPI.addFeat(character.id, featId);
-      // Refresh current feats and clear validation cache for this feat
-      await feats.load({ force: true });
-      setValidationCache(prev => {
-        const newCache = { ...prev };
-        delete newCache[featId];
-        return newCache;
-      });
-    } catch (error) {
-      console.error('Failed to add feat:', error);
-    }
-  }, [character?.id, feats]);
-
-  const handleRemoveFeat = useCallback(async (featId: number) => {
-    if (!character?.id) return;
-
-    try {
-      await CharacterAPI.removeFeat(character.id, featId);
-      // Refresh current feats
-      await feats.load({ force: true });
-    } catch (error) {
-      console.error('Failed to remove feat:', error);
-    }
-  }, [character?.id, feats]);
-
-  // Combine all feats for available count calculation
-  const allCurrentFeats = useMemo(() => {
+  const allMyFeats = useMemo(() => {
     if (!featsData?.summary) return [];
-    
+
     const allFeats = [
       ...(featsData.summary.protected || []),
       ...(featsData.summary.class_feats || []),
       ...(featsData.summary.general_feats || []),
       ...(featsData.summary.custom_feats || []),
     ];
-    
-    // Deduplicate by feat ID
+
     const uniqueFeats = new Map<number, FeatInfo>();
     allFeats.forEach(feat => {
       uniqueFeats.set(feat.id, feat);
     });
-    
+
     return Array.from(uniqueFeats.values());
   }, [featsData]);
 
-  // Calculate available feats count
-  const availableFeatsCount = useMemo(() => {
-    const currentFeatIds = new Set(allCurrentFeats.map(f => f.id));
-    return categoryFeats.filter(feat => !currentFeatIds.has(feat.id)).length;
-  }, [categoryFeats, allCurrentFeats]);
+  const ownedFeatIds = useMemo(() => {
+    return new Set(allMyFeats.map(f => f.id));
+  }, [allMyFeats]);
 
-  // Preload icons for visible feats
-  const visibleFeatIcons = useMemo(() => {
-    const icons: string[] = [];
-    
-    // Add icons from current feats (first 20)
-    allCurrentFeats.slice(0, 20).forEach(feat => {
-      icons.push(`ife_${feat.label.toLowerCase()}`);
+  const protectedFeatIds = useMemo(() => {
+    if (!featsData?.summary) return new Set<number>();
+    return new Set((featsData.summary.protected || []).map(f => f.id));
+  }, [featsData]);
+
+  const filterAndSortFeats = useCallback((feats: FeatInfo[]) => {
+    let filtered = [...feats];
+
+    if (selectedTypes.size > 0) {
+      filtered = filtered.filter(feat => {
+        return Array.from(selectedTypes).some(type => (feat.type & type) !== 0);
+      });
+    }
+
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'type':
+          return a.type - b.type;
+        case 'level':
+          return 0;
+        default:
+          return 0;
+      }
     });
-    
-    // Add icons from category feats (first 20)
-    categoryFeats.slice(0, 20).forEach(feat => {
-      icons.push(`ife_${feat.label.toLowerCase()}`);
+
+    return filtered;
+  }, [selectedTypes, sortBy]);
+
+  const { searchResults: searchedMyFeats } = useFeatSearch(allMyFeats, searchTerm);
+  const filteredMyFeats = useMemo(() => filterAndSortFeats(searchedMyFeats), [searchedMyFeats, filterAndSortFeats]);
+
+  const filteredAvailableFeats = useMemo(() => {
+    const notOwned = availableFeats.filter(feat => !ownedFeatIds.has(feat.id));
+
+    return notOwned.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'type':
+          return a.type - b.type;
+        case 'level':
+          return 0;
+        default:
+          return 0;
+      }
     });
-    
-    return icons;
-  }, [allCurrentFeats, categoryFeats]);
+  }, [availableFeats, ownedFeatIds, sortBy]);
 
-  useIconPreloader(visibleFeatIcons, {
-    enabled: true,
-    batchSize: 10,
-    delay: 100,
-  });
+  const finalAvailableFeats = filteredAvailableFeats;
 
-  // Early return for loading/error states
-  if (isLoading) {
+  const handleAddFeat = useCallback(async (featId: number) => {
+    if (!character?.id) return;
+
+    try {
+      const response = await CharacterAPI.addFeat(character.id, featId);
+      await feats.load({ force: true });
+      await invalidateSubsystems(['combat', 'abilityScores']);
+
+      // Show success notification
+      if (response.message && (response.message.includes('feats:') || response.message.includes('abilities:'))) {
+        showToast(response.message, 'success', 6000);
+      } else {
+        showToast('Feat added successfully', 'success');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add feat';
+      showToast(errorMessage, 'error');
+      console.error('Failed to add feat:', error);
+    }
+  }, [character?.id, feats, invalidateSubsystems, showToast]);
+
+  const handleRemoveFeat = useCallback(async (featId: number) => {
+    if (!character?.id) return;
+
+    try {
+      await CharacterAPI.removeFeat(character.id, featId);
+      await feats.load({ force: true });
+      await invalidateSubsystems(['combat']);
+      showToast('Feat removed successfully', 'success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove feat';
+      showToast(errorMessage, 'error');
+      console.error('Failed to remove feat:', error);
+    }
+  }, [character?.id, feats, invalidateSubsystems, showToast]);
+
+  const handleLoadFeatDetails = useCallback(async (feat: FeatInfo): Promise<FeatInfo | null> => {
+    if (!character?.id) return null;
+
+    try {
+      const details = await CharacterAPI.getFeatDetails(character.id, feat.id);
+      return details;
+    } catch (error) {
+      console.error('Failed to load feat details:', error);
+      return null;
+    }
+  }, [character?.id]);
+
+  const totalPages = useMemo(() => {
+    return Math.ceil(totalFeats / FEATS_PER_PAGE);
+  }, [totalFeats, FEATS_PER_PAGE]);
+
+  const filteredCount = useMemo(() => {
+    if (activeTab === 'my-feats') return filteredMyFeats.length;
+    if (activeTab === 'all-feats') return totalFeats;
+    return 0;
+  }, [activeTab, filteredMyFeats.length, totalFeats]);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+  }, []);
+
+  if (isLoading && !featsData) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
@@ -246,82 +244,43 @@ export default function FeatsEditor() {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-      {/* Breadcrumbs */}
-      <FeatBreadcrumbs
-        category={navigation.selectedCategory}
-        subcategory={navigation.selectedSubcategory}
-        categories={CATEGORIES}
-        onNavigate={navigation.navigateTo}
-        totalFeats={showMyFeats ? allCurrentFeats.length : availableFeatsCount}
-      />
-
-      <div className="flex gap-4 flex-1">
-        {/* Sidebar */}
-        <FeatCategorySidebar
-          categories={CATEGORIES}
-          selectedCategory={navigation.selectedCategory}
-          selectedSubcategory={navigation.selectedSubcategory}
-          onCategorySelect={navigation.setSelectedCategory}
-          onSubcategorySelect={navigation.setSelectedSubcategory}
-          featsData={featsData}
-          availableFeatsCount={availableFeatsCount}
-          showMyFeats={true}
-          onMyFeatsClick={() => {
-            setShowMyFeats(true);
-            navigation.clearNavigation();
-          }}
-          globalSearch={globalSearch}
-          onGlobalSearchChange={setGlobalSearch}
+    <div className="flex flex-col h-full">
+      <div className="sticky top-0 z-10 mb-4">
+        <FeatNavBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          selectedTypes={selectedTypes}
+          onTypesChange={setSelectedTypes}
+          myFeatsCount={allMyFeats.length}
+          availableFeatsCount={totalFeats}
+          filteredCount={filteredCount}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          hasNext={hasNext}
+          hasPrevious={hasPrevious}
+          onPageChange={handlePageChange}
         />
-
-        {/* Main Content Area */}
-        {showMyFeats ? (
-          <MyFeatsView
-            featsData={featsData}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onDetails={loadFeatDetails}
-            onAdd={handleAddFeat}
-            onRemove={handleRemoveFeat}
-            onValidate={validateFeat}
-            validationCache={validationCache}
-            validatingFeatId={validatingFeatId}
-          />
-        ) : (
-          <FeatContentArea
-            selectedCategory={navigation.selectedCategory}
-            selectedSubcategory={navigation.selectedSubcategory}
-            featsData={featsData}
-            categoryFeats={categoryFeats}
-            categoryFeatsLoading={categoryFeatsLoading}
-            categoryFeatsError={categoryFeatsError}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onDetails={loadFeatDetails}
-            onAdd={handleAddFeat}
-            onRemove={handleRemoveFeat}
-            onValidate={validateFeat}
-            validationCache={validationCache}
-            validatingFeatId={validatingFeatId}
-          />
-        )}
       </div>
 
-      {/* Feat Details Panel */}
-      {selectedFeat && (
-        <FeatDetailsPanel
-          selectedFeat={selectedFeat}
-          featDetails={featDetails}
-          loadingDetails={loadingDetails}
-          onClose={() => {
-            setSelectedFeat(null);
-            setFeatDetails(null);
-          }}
-          onAdd={handleAddFeat}
-          onRemove={handleRemoveFeat}
-        />
-      )}
+      <FeatTabContent
+        activeTab={activeTab}
+        myFeats={filteredMyFeats}
+        allFeats={finalAvailableFeats}
+        ownedFeatIds={ownedFeatIds}
+        protectedFeatIds={protectedFeatIds}
+        onAddFeat={handleAddFeat}
+        onRemoveFeat={handleRemoveFeat}
+        onLoadFeatDetails={handleLoadFeatDetails}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        hasNext={hasNext}
+        hasPrevious={hasPrevious}
+        onPageChange={handlePageChange}
+      />
     </div>
   );
 }
