@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
+import { inventoryAPI } from '@/services/inventoryApi';
+import { useToast } from '@/contexts/ToastContext';
 
 interface Item {
   id: string;
@@ -80,7 +82,9 @@ export default function InventoryEditor() {
   const t = useTranslations();
   const { character } = useCharacterContext();
   const inventoryData = useSubsystem('inventory');
-  
+  const { showToast } = useToast();
+  const [isEquipping, setIsEquipping] = useState(false);
+
   // Load inventory data only if character exists and data hasn't been loaded
   useEffect(() => {
     if (character && !inventoryData.data && !inventoryData.isLoading) {
@@ -147,12 +151,112 @@ export default function InventoryEditor() {
     return inv;
   };
 
-  const [inventory, setInventory] = useState<(Item | null)[]>(() => 
+  const [inventory, setInventory] = useState<(Item | null)[]>(() =>
     parseInventoryData(inventoryData.data as unknown as LocalInventoryData | null)
   );
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [selectedItemRawData, setSelectedItemRawData] = useState<Record<string, unknown> | null>(null);
+  const [selectedItemInventoryIndex, setSelectedItemInventoryIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+
+  // Handler to equip an item from inventory
+  const handleEquipItem = async (itemData: Record<string, unknown>, slot: string, inventoryIndex?: number | null) => {
+    if (!character?.id) return;
+
+    setIsEquipping(true);
+    try {
+      const response = await inventoryAPI.equipItem(character.id, {
+        item_data: itemData,
+        slot: slot.toLowerCase().replace(' ', '_'),
+        inventory_index: inventoryIndex ?? undefined,
+      });
+
+      if (response.success) {
+        showToast(response.message, 'success');
+        await inventoryData.load();
+      } else {
+        showToast(response.message, 'error');
+      }
+
+      if (response.warnings.length > 0) {
+        response.warnings.forEach(warning => showToast(warning, 'warning'));
+      }
+    } catch (error) {
+      showToast(`Failed to equip item: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      setIsEquipping(false);
+    }
+  };
+
+  // Handler to unequip an item
+  const handleUnequipItem = async (slot: string) => {
+    if (!character?.id) return;
+
+    setIsEquipping(true);
+    try {
+      const response = await inventoryAPI.unequipItem(character.id, {
+        slot: slot.toLowerCase().replace(' ', '_'),
+      });
+
+      if (response.success) {
+        showToast(response.message, 'success');
+        await inventoryData.load();
+        setSelectedItem(null);
+        setSelectedItemRawData(null);
+        setSelectedItemInventoryIndex(null);
+      } else {
+        showToast(response.message, 'error');
+      }
+    } catch (error) {
+      showToast(`Failed to unequip item: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } finally {
+      setIsEquipping(false);
+    }
+  };
+
+  // Map BaseItem ID to equipment slot
+  const getSlotForBaseItem = (baseItemId: number): string | null => {
+    // NWN2 BaseItem to slot mapping
+    const baseItemToSlot: Record<number, string> = {
+      // Armor
+      16: 'chest',
+      // Shields
+      14: 'left_hand',  // Light Shield
+      56: 'left_hand',  // Heavy Shield
+      57: 'left_hand',  // Tower Shield
+      // Helmets
+      85: 'head',
+      // Boots
+      26: 'boots',
+      // Gloves/Gauntlets
+      36: 'gloves',
+      // Cloaks
+      30: 'cloak',
+      // Belts
+      21: 'belt',
+      // Amulets
+      1: 'neck',
+      // Rings
+      52: 'left_ring',  // Can go in either ring slot, default to left
+      // Ammunition (BaseItem IDs, not slot indexes!)
+      20: 'arrows',
+      27: 'bullets',
+      25: 'bolts',
+    };
+
+    // Check direct mapping first
+    if (baseItemToSlot[baseItemId]) {
+      return baseItemToSlot[baseItemId];
+    }
+
+    // Weapons go to right_hand by default (BaseItem 0-60 range, excluding shields/armor)
+    if (baseItemId >= 0 && baseItemId < 60 && ![14, 16, 21, 26, 30, 36, 56, 57].includes(baseItemId)) {
+      return 'right_hand';
+    }
+
+    return null;
+  };
 
   // Helper function to get equipped item for a slot
   const getEquippedItemForSlot = (slotName: string) => {
@@ -192,14 +296,34 @@ export default function InventoryEditor() {
   // Equipment slot component
   const EquipmentSlot = ({ slotName }: { slotName: string }) => {
     const equippedItem = getEquippedItemForSlot(slotName);
-    
+
     const handleSlotClick = () => {
       if (equippedItem) {
-        // Create an Item object for the equipped item to show in details panel
+        const summary = (inventoryData.data as unknown as LocalInventoryData).summary;
+        const slotMapping: Record<string, string> = {
+          'helmet': 'head',
+          'chest': 'chest',
+          'belt': 'belt',
+          'boots': 'boots',
+          'neck': 'neck',
+          'cloak': 'cloak',
+          'gloves': 'gloves',
+          'l ring': 'left_ring',
+          'r ring': 'right_ring',
+          'l hand': 'left_hand',
+          'r hand': 'right_hand',
+          'arrows': 'arrows',
+          'bullets': 'bullets',
+          'bolts': 'bolts'
+        };
+
+        const mappedSlot = slotMapping[slotName.toLowerCase()];
+        const rawItemData = mappedSlot ? (summary?.equipped_items[mappedSlot] as Record<string, unknown>)?.item_data : null;
+
         const itemForDetails: Item = {
           id: `equipped_${slotName.toLowerCase().replace(' ', '_')}`,
           name: equippedItem.name,
-          type: 'misc', // We could enhance this based on slot type
+          type: 'misc',
           rarity: equippedItem.is_custom ? 'legendary' : 'common',
           equipped: true,
           slot: slotName,
@@ -210,6 +334,8 @@ export default function InventoryEditor() {
           is_stolen: false
         };
         setSelectedItem(itemForDetails);
+        setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+        setSelectedItemInventoryIndex(null); // Equipped items are not in inventory
       }
     };
     
@@ -407,9 +533,58 @@ export default function InventoryEditor() {
                       <p className="text-sm text-[rgb(var(--color-danger))]">🗡️ Stolen</p>
                     )}
                     <div className="pt-2 space-y-2">
-                      <Button className="w-full" size="sm" disabled={selectedItem.equipped}>
-                        {selectedItem.equipped ? 'Equipped' : t('actions.equip')}
-                      </Button>
+                      {selectedItem.equipped && selectedItem.slot && selectedItemRawData && (
+                        <Button
+                          className="w-full"
+                          size="sm"
+                          onClick={() => handleUnequipItem(selectedItem.slot!)}
+                          disabled={isEquipping}
+                        >
+                          {isEquipping ? t('actions.unequipping') : t('actions.unequip')}
+                        </Button>
+                      )}
+                      {!selectedItem.equipped && selectedItemRawData && (() => {
+                        const baseItemId = (selectedItemRawData as Record<string, unknown>).BaseItem as number;
+                        const targetSlot = getSlotForBaseItem(baseItemId);
+
+                        if (!targetSlot) {
+                          return (
+                            <p className="text-sm text-[rgb(var(--color-text-muted))] text-center">
+                              Cannot equip this item type
+                            </p>
+                          );
+                        }
+
+                        // Get slot display name
+                        const slotDisplayNames: Record<string, string> = {
+                          'head': 'Head',
+                          'chest': 'Chest',
+                          'boots': 'Boots',
+                          'gloves': 'Gloves',
+                          'right_hand': 'Right Hand',
+                          'left_hand': 'Left Hand',
+                          'cloak': 'Cloak',
+                          'left_ring': 'Left Ring',
+                          'right_ring': 'Right Ring',
+                          'neck': 'Neck',
+                          'belt': 'Belt',
+                          'arrows': 'Arrows',
+                          'bullets': 'Bullets',
+                          'bolts': 'Bolts',
+                        };
+
+                        return (
+                          <Button
+                            className="w-full"
+                            size="sm"
+                            onClick={() => handleEquipItem(selectedItemRawData, targetSlot, selectedItemInventoryIndex)}
+                            disabled={isEquipping}
+                            title={`Equip to ${slotDisplayNames[targetSlot]}`}
+                          >
+                            {isEquipping ? t('actions.equipping') : t('actions.equip')}
+                          </Button>
+                        );
+                      })()}
                       <Button variant="danger" size="sm" className="w-full" disabled={selectedItem.is_plot}>
                         {selectedItem.is_plot ? 'Cannot Destroy' : t('actions.destroy')}
                       </Button>
@@ -452,7 +627,12 @@ export default function InventoryEditor() {
 
               {/* Inventory Grid */}
               <div className="grid grid-cols-8 gap-1 p-2 bg-[rgb(var(--color-surface-1))] rounded">
-                {inventory.map((item, index) => (
+                {inventory.map((item, index) => {
+                  const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                  const inventoryItem = summary?.inventory_items?.[index];
+                  const rawItemData = inventoryItem?.item;
+
+                  return (
                   <div
                     key={index}
                     className={`aspect-square bg-[rgb(var(--color-surface-2))] border-2 ${
@@ -460,7 +640,11 @@ export default function InventoryEditor() {
                     } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, index)}
-                    onClick={() => setSelectedItem(item)}
+                    onClick={() => {
+                      setSelectedItem(item);
+                      setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+                      setSelectedItemInventoryIndex(index);
+                    }}
                   >
                     {item && (
                       <div
@@ -484,7 +668,8 @@ export default function InventoryEditor() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Inventory Info */}

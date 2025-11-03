@@ -203,66 +203,130 @@ class InventoryManager(EventEmitter):
 
         return None
     
-    def equip_item(self, item_data: Dict[str, Any], slot: str) -> Tuple[bool, List[str]]:
+    def equip_item(self, item_data: Dict[str, Any], slot: str, inventory_index: Optional[int] = None) -> Tuple[bool, List[str]]:
         """
-        Equip an item in a specific slot (no restrictions)
-        
+        Equip an item in a specific slot using Equip_ItemList array (battle-tested)
+
         Args:
             item_data: Item data to equip
             slot: Slot to equip in
-            
+            inventory_index: Optional index in ItemList to remove item from (prevents duplication)
+
         Returns:
             (success, list_of_warnings_or_errors)
         """
         warnings = []
-        
+
         # Only check for corruption prevention - item ID existence
         id_exists, id_messages = self.check_item_id_exists(item_data)
         warnings.extend(id_messages)
-        
-        # Get GFF slot name
-        gff_slot = self.EQUIPMENT_SLOTS.get(slot)
-        if not gff_slot:
+
+        # Map slot name to index (same as get_equipped_item - battle-tested)
+        slot_to_index = {
+            'head': 0,
+            'chest': 1,
+            'boots': 2,
+            'gloves': 3,
+            'right_hand': 4,
+            'left_hand': 5,
+            'cloak': 6,
+            'left_ring': 7,
+            'right_ring': 8,
+            'neck': 9,
+            'belt': 10,
+            'arrows': 11,
+            'bullets': 12,
+            'bolts': 13,
+        }
+
+        slot_index = slot_to_index.get(slot)
+        if slot_index is None:
             return False, ["Invalid equipment slot"]
-        
+
+        # Remove from inventory first (if coming from inventory)
+        if inventory_index is not None:
+            removed_item = self.remove_from_inventory(inventory_index)
+            if removed_item is None:
+                logger.warning(f"Could not remove item at inventory index {inventory_index}")
+                # Continue anyway - item_data is provided
+
+        # Get Equip_ItemList array
+        equipped_items = self.gff.get('Equip_ItemList', [])
+
+        # Ensure array is large enough
+        while len(equipped_items) <= slot_index:
+            equipped_items.append(None)
+
         # Store current item if any
-        current_item = self.gff.get(gff_slot)
-        
+        current_item = equipped_items[slot_index]
+
         # Equip new item (no restrictions - user freedom!)
-        self.gff.set(gff_slot, item_data)
-        
+        equipped_items[slot_index] = item_data
+        self.gff.set('Equip_ItemList', equipped_items)
+
         # If there was an item, add it to inventory
         if current_item:
             self.add_to_inventory(current_item)
-        
-        logger.info(f"Equipped item in {slot} (no restrictions)")
+
+        logger.info(f"Equipped item in {slot} at index {slot_index} (no restrictions)")
         return True, warnings
     
     def unequip_item(self, slot: str) -> Optional[Dict[str, Any]]:
         """
-        Unequip item from a slot
-        
+        Unequip item from a slot using Equip_ItemList array (battle-tested)
+
         Args:
             slot: Slot to unequip from
-            
+
         Returns:
             The unequipped item data
         """
-        gff_slot = self.EQUIPMENT_SLOTS.get(slot)
-        if not gff_slot:
+        # Map slot name to index (same as get_equipped_item - battle-tested)
+        slot_to_index = {
+            'head': 0,
+            'chest': 1,
+            'boots': 2,
+            'gloves': 3,
+            'right_hand': 4,
+            'left_hand': 5,
+            'cloak': 6,
+            'left_ring': 7,
+            'right_ring': 8,
+            'neck': 9,
+            'belt': 10,
+            'arrows': 11,
+            'bullets': 12,
+            'bolts': 13,
+        }
+
+        slot_index = slot_to_index.get(slot)
+        if slot_index is None:
+            logger.warning(f"Invalid slot name: {slot}")
             return None
-        
-        item = self.gff.get(gff_slot)
-        if item:
-            # Clear slot
-            self.gff.set(gff_slot, None)
-            
-            # Add to inventory
-            self.add_to_inventory(item)
-            
-            logger.info(f"Unequipped item from {slot}")
-        
-        return item
+
+        # Get Equip_ItemList array
+        equipped_items = self.gff.get('Equip_ItemList', [])
+
+        # Ensure it's a list
+        if not isinstance(equipped_items, list):
+            logger.error(f"Equip_ItemList is not a list: {type(equipped_items)}")
+            return None
+
+        # Check if slot has an item (use < like get_equipped_item does)
+        if slot_index < len(equipped_items):
+            item = equipped_items[slot_index]
+            if item:
+                # Clear slot
+                equipped_items[slot_index] = None
+                self.gff.set('Equip_ItemList', equipped_items)
+
+                # Add to inventory
+                self.add_to_inventory(item)
+
+                logger.info(f"Unequipped item from {slot} at index {slot_index}")
+                return item
+
+        return None
     
     def add_to_inventory(self, item_data: Dict[str, Any]) -> bool:
         """
@@ -281,7 +345,10 @@ class InventoryManager(EventEmitter):
         base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
         
         if base_item_data:
-            stacking = field_mapper.get_field_value(base_item_data, 'stacking', 0)
+            try:
+                stacking = int(field_mapper.get_field_value(base_item_data, 'stacking', 0) or 0)
+            except (ValueError, TypeError):
+                stacking = 0
             if stacking > 1:
                 # Try to stack with existing item
                 for existing_item in item_list:
@@ -469,8 +536,11 @@ class InventoryManager(EventEmitter):
         """Get informational data about item-slot compatibility (no restrictions)"""
         if not base_item_data:
             return {'item_type': 0, 'is_typical_for_slot': False, 'slot_name': slot}
-        
-        item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
+
+        try:
+            item_type = int(field_mapper.get_field_value(base_item_data, 'base_item', 0) or 0)
+        except (ValueError, TypeError):
+            item_type = 0
         
         # Typical item types for slots (informational only - no restrictions)
         typical_types = {
@@ -558,7 +628,10 @@ class InventoryManager(EventEmitter):
                 base_item = item.get('BaseItem', 0)
                 base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 if base_item_data:
-                    weight = field_mapper.get_field_value(base_item_data, 'weight', 0.0)
+                    try:
+                        weight = float(field_mapper.get_field_value(base_item_data, 'weight', 0.0) or 0.0)
+                    except (ValueError, TypeError):
+                        weight = 0.0
                     if weight > 0:
                         weight = weight / 10.0  # Convert to pounds if needed
                         total_weight += weight
@@ -569,7 +642,10 @@ class InventoryManager(EventEmitter):
             base_item = item.get('BaseItem', 0)
             base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             if base_item_data:
-                weight = field_mapper.get_field_value(base_item_data, 'weight', 0.0)
+                try:
+                    weight = float(field_mapper.get_field_value(base_item_data, 'weight', 0.0) or 0.0)
+                except (ValueError, TypeError):
+                    weight = 0.0
                 if weight > 0:
                     weight = weight / 10.0  # Convert to pounds if needed
                     stack_size = item.get('StackSize', 1)
@@ -793,8 +869,12 @@ class InventoryManager(EventEmitter):
                 armor_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
                 if armor_stats:
                     ac_value = field_mapper.get_field_value(armor_stats, 'ACBONUS', 0)
-                    if ac_value and int(ac_value) > 0:
-                        bonuses['ac']['armor'] = int(ac_value)
+                    try:
+                        ac_int = int(ac_value) if ac_value else 0
+                        if ac_int > 0:
+                            bonuses['ac']['armor'] = ac_int
+                    except (ValueError, TypeError):
+                        pass
 
         # Shield AC comes from armorrulestats.2da via ArmorRulesType
         # BaseItem 14=Light Shield, 56=Heavy Shield, 57=Tower Shield
@@ -804,8 +884,12 @@ class InventoryManager(EventEmitter):
                 shield_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
                 if shield_stats:
                     ac_value = field_mapper.get_field_value(shield_stats, 'ACBONUS', 0)
-                    if ac_value and int(ac_value) > 0:
-                        bonuses['ac']['shield'] = int(ac_value)
+                    try:
+                        ac_int = int(ac_value) if ac_value else 0
+                        if ac_int > 0:
+                            bonuses['ac']['shield'] = ac_int
+                    except (ValueError, TypeError):
+                        pass
         
         # Parse item properties for additional bonuses
         properties = item_data.get('PropertiesList', [])
@@ -888,9 +972,12 @@ class InventoryManager(EventEmitter):
         for item_id, base_item_data in enumerate(base_items):
             if base_item_data is None:
                 continue
-                
-            item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
-            
+
+            try:
+                item_type = int(field_mapper.get_field_value(base_item_data, 'base_item', 0) or 0)
+            except (ValueError, TypeError):
+                item_type = 0
+
             # Check if it's a weapon (type < 60)
             if item_type < 60:
                 weapon_name = field_mapper.get_field_value(base_item_data, 'label', f'Weapon {item_id}')
@@ -914,9 +1001,12 @@ class InventoryManager(EventEmitter):
         for item_id, base_item_data in enumerate(base_items):
             if base_item_data is None:
                 continue
-                
-            item_type = field_mapper.get_field_value(base_item_data, 'base_item', 0)
-            
+
+            try:
+                item_type = int(field_mapper.get_field_value(base_item_data, 'base_item', 0) or 0)
+            except (ValueError, TypeError):
+                item_type = 0
+
             # Check if it's armor (type 16) or shield (type 29)
             if item_type in [16, 29]:
                 armor_name = field_mapper.get_field_value(base_item_data, 'label', f'Armor {item_id}')

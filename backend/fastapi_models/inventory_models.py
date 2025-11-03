@@ -223,6 +223,7 @@ class EquipItemRequest(BaseModel):
     """Request to equip an item"""
     item_data: Dict[str, Any] = Field(..., description="GFF item data to equip")
     slot: str = Field(..., description="Equipment slot name")
+    inventory_index: Optional[int] = Field(None, description="Index in ItemList (prevents duplication)")
 
 
 class EquipItemResponse(BaseModel):

@@ -3,7 +3,7 @@ Inventory router - Complete inventory management endpoints
 """
 
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from loguru import logger
 
 from fastapi_routers.dependencies import (
@@ -220,21 +220,22 @@ def get_skill_bonuses(
 @router.post("/characters/{character_id}/inventory/equip")
 def equip_item(
     character_id: int,
-    request,  # Type removed for lazy loading
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    request: dict = Body(...)
 ):
     """Equip an item in a slot"""
     try:
         # Lazy imports for performance
         from fastapi_models.inventory_models import EquipItemRequest, EquipItemResponse
-        
+
+        req = EquipItemRequest(**request)
         session = char_session
         manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        success, warnings = inventory_manager.equip_item(request.item_data, request.slot)
-        
-        message = f"Item equipped in {request.slot}" if success else "Failed to equip item"
-        
+        success, warnings = inventory_manager.equip_item(req.item_data, req.slot, req.inventory_index)
+
+        message = f"Item equipped in {req.slot}" if success else "Failed to equip item"
+
         return EquipItemResponse(
             success=success,
             warnings=warnings,
@@ -253,22 +254,23 @@ def equip_item(
 @router.post("/characters/{character_id}/inventory/unequip")
 def unequip_item(
     character_id: int,
-    request,  # Type removed for lazy loading
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    request: dict = Body(...)
 ):
     """Unequip an item from a slot"""
     try:
         # Lazy imports for performance
         from fastapi_models.inventory_models import UnequipItemRequest, UnequipItemResponse
-        
+
+        req = UnequipItemRequest(**request)
         session = char_session
         manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        item_data = inventory_manager.unequip_item(request.slot)
-        
+        item_data = inventory_manager.unequip_item(req.slot)
+
         success = item_data is not None
-        message = f"Item unequipped from {request.slot}" if success else f"No item in {request.slot}"
-        
+        message = f"Item unequipped from {req.slot}" if success else f"No item in {req.slot}"
+
         return UnequipItemResponse(
             success=success,
             item_data=item_data,

@@ -30,6 +30,9 @@
     "importCharacter": "Import Character",
     "exportCharacter": "Export Character",
     "equip": "Equip",
+    "unequip": "Unequip",
+    "equipping": "Equipping...",
+    "unequipping": "Unequipping...",
     "destroy": "Destroy",
     "sort": "Sort",
     "dropAll": "Drop All"
@@ -131,7 +134,23 @@
     "uncommon": "Uncommon",
     "rare": "Rare",
     "epic": "Epic",
-    "legendary": "Legendary"
+    "legendary": "Legendary",
+    "slots": {
+      "head": "Head",
+      "chest": "Chest",
+      "boots": "Boots",
+      "gloves": "Gloves",
+      "rightHand": "Right Hand",
+      "leftHand": "Left Hand",
+      "cloak": "Cloak",
+      "leftRing": "Left Ring",
+      "rightRing": "Right Ring",
+      "neck": "Neck",
+      "belt": "Belt",
+      "arrows": "Arrows",
+      "bullets": "Bullets",
+      "bolts": "Bolts"
+    }
   },
   "status": {
     "ready": "Ready",
