@@ -94,6 +94,31 @@ jobs:
           maturin develop --release --manifest-path parsers/rust_erf_parser/Cargo.toml
           maturin develop --release --manifest-path parsers/rust_icon_cache/Cargo.toml
 
+      - name: create backend .env file
+        shell: bash
+        working-directory: ./backend
+        run: |
+          cat > .env << 'EOF'
+          # Production build configuration
+          DESKTOP_MODE=True
+          DEBUG=False
+          ENABLE_LOG_VIEWER=false
+          PORT=0
+          HOST=127.0.0.1
+
+          # Performance settings
+          NWN2_MEMORY_CACHE=true
+          NWN2_PRELOAD_2DA=true
+          NWN2_CACHE_MAX_MB=100
+          NWN2_COMPRESS_CACHE=true
+          NWN2_COMPRESS_THRESHOLD_KB=100
+          NWN2_SMART_PRELOAD=true
+          ICON_CACHE_LAZY_LOADING=true
+          USE_PREREQUISITE_GRAPH=true
+          ENABLE_PRECOMPILED_CACHE=true
+          FAST_STARTUP=false
+          EOF
+
       - name: build fastapi sidecar
         shell: bash
         working-directory: ./backend
