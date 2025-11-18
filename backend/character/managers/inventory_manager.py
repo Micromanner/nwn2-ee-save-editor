@@ -629,13 +629,13 @@ class InventoryManager(EventEmitter):
                 base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 if base_item_data:
                     try:
-                        weight = float(field_mapper.get_field_value(base_item_data, 'weight', 0.0) or 0.0)
+                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
                     except (ValueError, TypeError):
-                        weight = 0.0
-                    if weight > 0:
-                        weight = weight / 10.0  # Convert to pounds if needed
+                        tenth_lbs = 0.0
+                    if tenth_lbs > 0:
+                        weight = tenth_lbs / 10.0  # Convert tenths of pounds to pounds
                         total_weight += weight
-        
+
         # Calculate weight of inventory items
         item_list = self.gff.get('ItemList', [])
         for item in item_list:
@@ -643,11 +643,11 @@ class InventoryManager(EventEmitter):
             base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             if base_item_data:
                 try:
-                    weight = float(field_mapper.get_field_value(base_item_data, 'weight', 0.0) or 0.0)
+                    tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
                 except (ValueError, TypeError):
-                    weight = 0.0
-                if weight > 0:
-                    weight = weight / 10.0  # Convert to pounds if needed
+                    tenth_lbs = 0.0
+                if tenth_lbs > 0:
+                    weight = tenth_lbs / 10.0  # Convert tenths of pounds to pounds
                     stack_size = item.get('StackSize', 1)
                     total_weight += weight * stack_size
         
@@ -703,15 +703,53 @@ class InventoryManager(EventEmitter):
                 is_custom = base_item_data is None
                 
                 item_name = self._get_item_name(item)
-                
+
                 # Get decoded properties for this item
                 decoded_properties = self.get_item_property_descriptions(item)
-                
+
+                # Get item description from DescIdentified
+                description = None
+                localized_desc = item.get('DescIdentified')
+                if localized_desc and isinstance(localized_desc, dict):
+                    string_ref = localized_desc.get('string_ref')
+                    if string_ref is not None and string_ref != 4294967295:
+                        try:
+                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
+                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
+                                description = resolved_desc
+                        except Exception:
+                            pass
+
+                # Calculate weight (TenthLBS field = tenths of pounds)
+                weight = 0.0
+                if base_item_data:
+                    try:
+                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                        if tenth_lbs > 0:
+                            weight = tenth_lbs / 10.0  # Convert tenths of pounds to pounds
+                            stack_size = item.get('StackSize', 1)
+                            if stack_size > 1:
+                                weight *= stack_size
+                    except (ValueError, TypeError):
+                        weight = 0.0
+
+                # Calculate value (Cost + ModifyCost from GFF)
+                value = 0
+                try:
+                    item_cost = item.get('Cost', 0)
+                    modify_cost = item.get('ModifyCost', 0)
+                    value = int(item_cost) + int(modify_cost)
+                except (ValueError, TypeError):
+                    value = 0
+
                 inventory_items.append({
                     'index': idx,
                     'item': item,
                     'base_item': base_item,
                     'name': item_name,
+                    'description': description,
+                    'weight': weight,
+                    'value': value,
                     'is_custom': is_custom,
                     'stack_size': item.get('StackSize', 1),
                     'enhancement': item.get('Enhancement', 0),
@@ -764,14 +802,49 @@ class InventoryManager(EventEmitter):
                 
                 # Get item name
                 item_name = self._get_item_name(item)
-                
+
                 # Get decoded properties for this equipped item
                 decoded_properties = self.get_item_property_descriptions(item)
-                
+
+                # Get item description from DescIdentified
+                description = None
+                localized_desc = item.get('DescIdentified')
+                if localized_desc and isinstance(localized_desc, dict):
+                    string_ref = localized_desc.get('string_ref')
+                    if string_ref is not None and string_ref != 4294967295:
+                        try:
+                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
+                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
+                                description = resolved_desc
+                        except Exception:
+                            pass
+
+                # Calculate weight (TenthLBS field = tenths of pounds)
+                weight = 0.0
+                if base_item_data:
+                    try:
+                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                        if tenth_lbs > 0:
+                            weight = tenth_lbs / 10.0  # Convert tenths of pounds to pounds
+                    except (ValueError, TypeError):
+                        weight = 0.0
+
+                # Calculate value (Cost + ModifyCost from GFF)
+                value = 0
+                try:
+                    item_cost = item.get('Cost', 0)
+                    modify_cost = item.get('ModifyCost', 0)
+                    value = int(item_cost) + int(modify_cost)
+                except (ValueError, TypeError):
+                    value = 0
+
                 summary['equipped_items'][slot_name] = {
                     'base_item': base_item,
                     'custom': is_custom,
                     'name': item_name,
+                    'description': description,
+                    'weight': weight,
+                    'value': value,
                     'item_data': item,
                     'decoded_properties': decoded_properties
                 }

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
+import ItemDetailsPanel from './ItemDetailsPanel';
 
 interface Item {
   id: string;
@@ -33,6 +34,9 @@ interface InventoryItem {
   item: Record<string, unknown>;
   base_item: number;
   name: string;
+  description?: string;
+  weight: number;
+  value: number;
   is_custom: boolean;
   stack_size: number;
   enhancement: number;
@@ -41,6 +45,14 @@ interface InventoryItem {
   plot: boolean;
   cursed: boolean;
   stolen: boolean;
+  decoded_properties?: Array<{
+    property_id: number;
+    label: string;
+    description: string;
+    bonus_type: string;
+    bonus_value?: number;
+    [key: string]: unknown;
+  }>;
 }
 
 interface InventoryEncumbrance {
@@ -51,10 +63,28 @@ interface InventoryEncumbrance {
   encumbrance_level: string;
 }
 
+interface EquippedItem {
+  base_item: number;
+  custom: boolean;
+  name: string;
+  description?: string;
+  weight: number;
+  value: number;
+  item_data: Record<string, unknown>;
+  decoded_properties?: Array<{
+    property_id: number;
+    label: string;
+    description: string;
+    bonus_type: string;
+    bonus_value?: number;
+    [key: string]: unknown;
+  }>;
+}
+
 interface InventorySummary {
   total_items: number;
   inventory_items: InventoryItem[];
-  equipped_items: Record<string, Record<string, unknown>>;
+  equipped_items: Record<string, EquippedItem>;
   custom_items: Record<string, unknown>[];
   encumbrance: InventoryEncumbrance;
 }
@@ -65,7 +95,7 @@ interface LocalInventoryData {
 
 
 
-const INVENTORY_COLS = 8;
+const INVENTORY_COLS = 7;
 const INVENTORY_ROWS = 8;
 
 // Utility function to safely convert values to numbers
@@ -105,9 +135,9 @@ export default function InventoryEditor() {
     
     // Create a set of equipped base items for quick lookup
     const equippedBaseItems = new Set<number>();
-    Object.values(equipped_items || {}).forEach((equipData: Record<string, unknown>) => {
+    Object.values(equipped_items || {}).forEach((equipData: EquippedItem) => {
       if (equipData?.base_item) {
-        equippedBaseItems.add(equipData.base_item as number);
+        equippedBaseItems.add(equipData.base_item);
       }
     });
     
@@ -284,18 +314,19 @@ export default function InventoryEditor() {
     
     const mappedSlot = slotMapping[slotName.toLowerCase()];
     if (!mappedSlot || !equippedItems[mappedSlot]) return null;
-    
-    const equipData = equippedItems[mappedSlot] as Record<string, unknown>;
+
+    const equipData = equippedItems[mappedSlot];
     return {
-      name: (equipData.name as string) || `Item ${equipData.base_item}`, // Use backend-provided name
-      base_item: equipData.base_item as number,
-      is_custom: equipData.custom as boolean
+      name: equipData.name || `Item ${equipData.base_item}`,
+      base_item: equipData.base_item,
+      is_custom: equipData.custom
     };
   };
 
   // Equipment slot component
-  const EquipmentSlot = ({ slotName }: { slotName: string }) => {
+  const EquipmentSlot = ({ slotName, slotLabel }: { slotName: string; slotLabel?: string }) => {
     const equippedItem = getEquippedItemForSlot(slotName);
+    const displayLabel = slotLabel || slotName.charAt(0);
 
     const handleSlotClick = () => {
       if (equippedItem) {
@@ -318,7 +349,7 @@ export default function InventoryEditor() {
         };
 
         const mappedSlot = slotMapping[slotName.toLowerCase()];
-        const rawItemData = mappedSlot ? (summary?.equipped_items[mappedSlot] as Record<string, unknown>)?.item_data : null;
+        const rawItemData = mappedSlot ? summary?.equipped_items[mappedSlot]?.item_data : null;
 
         const itemForDetails: Item = {
           id: `equipped_${slotName.toLowerCase().replace(' ', '_')}`,
@@ -335,21 +366,22 @@ export default function InventoryEditor() {
         };
         setSelectedItem(itemForDetails);
         setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
-        setSelectedItemInventoryIndex(null); // Equipped items are not in inventory
+        setSelectedItemInventoryIndex(null);
       }
     };
-    
+
     return (
-      <div className="text-center">
-        <div 
-          className={`w-12 h-12 rounded border-2 mx-auto mb-1 flex items-center justify-center relative transition-colors ${
-            equippedItem 
-              ? 'bg-[rgb(var(--color-primary)/0.1)] border-[rgb(var(--color-primary))] cursor-pointer hover:bg-[rgb(var(--color-primary)/0.2)]' 
+      <div className="flex flex-col items-center">
+        <div
+          className={`w-12 h-12 rounded border-2 flex items-center justify-center relative transition-colors ${
+            equippedItem
+              ? 'bg-[rgb(var(--color-primary)/0.1)] border-[rgb(var(--color-primary))] cursor-pointer hover:bg-[rgb(var(--color-primary)/0.2)]'
               : 'bg-[rgb(var(--color-surface-1))] border-[rgb(var(--color-surface-border)/0.6)]'
           }`}
           onClick={handleSlotClick}
           role={equippedItem ? "button" : undefined}
           tabIndex={equippedItem ? 0 : undefined}
+          title={slotName}
         >
           {equippedItem ? (
             <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold pointer-events-none">
@@ -366,7 +398,7 @@ export default function InventoryEditor() {
             </span>
           )}
         </div>
-        <span className="text-xs text-[rgb(var(--color-text-muted))]">{slotName}</span>
+        <span className="text-xs text-[rgb(var(--color-text-muted))] mt-1 uppercase">{displayLabel}</span>
       </div>
     );
   };
@@ -385,16 +417,6 @@ export default function InventoryEditor() {
       case 'epic': return 'border-[rgb(var(--color-secondary))]';
       case 'legendary': return 'border-[rgb(var(--color-warning))]';
       default: return 'border-[rgb(var(--color-surface-border)/0.6)]';
-    }
-  };
-
-  const getRarityTextColor = (rarity?: string) => {
-    switch (rarity) {
-      case 'uncommon': return 'text-[rgb(var(--color-success))]';
-      case 'rare': return 'text-[rgb(var(--color-primary))]';
-      case 'epic': return 'text-[rgb(var(--color-secondary))]';
-      case 'legendary': return 'text-[rgb(var(--color-warning))]';
-      default: return 'text-[rgb(var(--color-text-primary))]';
     }
   };
 
@@ -444,257 +466,300 @@ export default function InventoryEditor() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Character Equipment */}
-        <div className="lg:col-span-1">
+    <div className="space-y-6">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Combined Equipment & Inventory */}
+        <div>
           <Card>
             <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-4">{t('inventory.equipment')}</h3>
-              
-              {/* Equipment Slots Grid */}
-              <div className="grid grid-cols-4 gap-2 mb-6">
-                {/* Column 1: Helmet, Chest, Belt, Boots */}
-                <div className="space-y-2">
-                  <EquipmentSlot slotName="Helmet" />
-                  <EquipmentSlot slotName="Chest" />
-                  <EquipmentSlot slotName="Belt" />
-                  <EquipmentSlot slotName="Boots" />
-                </div>
+              <div className="flex gap-6">
+                {/* Character Equipment */}
+                <div className="flex-shrink-0" style={{ width: '240px' }}>
+                  <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mt-1.5 mb-4">{t('inventory.equipment')}</h3>
 
-                {/* Column 2: Neck, Cloak, Gloves */}
-                <div className="space-y-2">
-                  <EquipmentSlot slotName="Neck" />
-                  <EquipmentSlot slotName="Cloak" />
-                  <EquipmentSlot slotName="Gloves" />
-                </div>
-
-                {/* Column 3: Left Ring, Right Ring */}
-                <div className="space-y-2">
-                  <EquipmentSlot slotName="L Ring" />
-                  <EquipmentSlot slotName="R Ring" />
-                </div>
-
-                {/* Column 4: Left Hand, Right Hand */}
-                <div className="space-y-2">
-                  <EquipmentSlot slotName="L Hand" />
-                  <EquipmentSlot slotName="R Hand" />
-                </div>
-              </div>
-
-              {/* Ammo Row */}
-              <div className="grid grid-cols-3 gap-2 mb-6">
-                <EquipmentSlot slotName="Arrows" />
-                <EquipmentSlot slotName="Bullets" />
-                <EquipmentSlot slotName="Bolts" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Item Details Panel - Moved here */}
-          {selectedItem && (
-            <Card className="mt-6">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-4">{t('inventory.itemDetails')}</h3>
-                <div className="space-y-4">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-2" />
-                    <h4 className={`font-medium ${getRarityTextColor(selectedItem.rarity)}`}>
-                      {selectedItem.name}
-                    </h4>
+                  {/* Row 1: Helmet, Neck */}
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    <div></div>
+                    <EquipmentSlot slotName="Helmet" slotLabel="H" />
+                    <EquipmentSlot slotName="Neck" slotLabel="N" />
+                    <div></div>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-[rgb(var(--color-text-muted))]">{t('inventory.type')}: {selectedItem.type}</p>
-                    <p className="text-sm text-[rgb(var(--color-text-muted))]">{t('inventory.rarity')}: {selectedItem.rarity || 'common'}</p>
-                    {selectedItem.slot && (
-                      <p className="text-sm text-[rgb(var(--color-text-muted))]">Equipped in: {selectedItem.slot}</p>
-                    )}
-                    {selectedItem.enhancement_bonus && selectedItem.enhancement_bonus > 0 && (
-                      <p className="text-sm text-[rgb(var(--color-text-muted))]">Enhancement: +{selectedItem.enhancement_bonus}</p>
-                    )}
-                    {selectedItem.charges && (
-                      <p className="text-sm text-[rgb(var(--color-text-muted))]">Charges: {selectedItem.charges}</p>
-                    )}
-                    {selectedItem.stackSize && (
-                      <p className="text-sm text-[rgb(var(--color-text-muted))]">
-                        {t('inventory.stack')}: {selectedItem.stackSize} / {selectedItem.maxStack}
-                      </p>
-                    )}
-                    {selectedItem.is_custom && (
-                      <p className="text-sm text-[rgb(var(--color-warning))]">⚠️ Custom/Modded Item</p>
-                    )}
-                    {selectedItem.is_plot && (
-                      <p className="text-sm text-[rgb(var(--color-primary))]">📜 Plot Item</p>
-                    )}
-                    {selectedItem.is_cursed && (
-                      <p className="text-sm text-[rgb(var(--color-danger))]">💀 Cursed</p>
-                    )}
-                    {selectedItem.is_stolen && (
-                      <p className="text-sm text-[rgb(var(--color-danger))]">🗡️ Stolen</p>
-                    )}
-                    <div className="pt-2 space-y-2">
-                      {selectedItem.equipped && selectedItem.slot && selectedItemRawData && (
-                        <Button
-                          className="w-full"
-                          size="sm"
-                          onClick={() => handleUnequipItem(selectedItem.slot!)}
-                          disabled={isEquipping}
+
+                  {/* Row 2: L Hand, Chest, Cloak, R Hand */}
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    <EquipmentSlot slotName="L Hand" slotLabel="L" />
+                    <EquipmentSlot slotName="Chest" slotLabel="A" />
+                    <EquipmentSlot slotName="Cloak" slotLabel="C" />
+                    <EquipmentSlot slotName="R Hand" slotLabel="R" />
+                  </div>
+
+                  {/* Row 3: L Ring, Belt, Gloves, R Ring */}
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    <EquipmentSlot slotName="L Ring" slotLabel="L" />
+                    <EquipmentSlot slotName="Belt" slotLabel="B" />
+                    <EquipmentSlot slotName="Gloves" slotLabel="G" />
+                    <EquipmentSlot slotName="R Ring" slotLabel="R" />
+                  </div>
+
+                  {/* Row 4: Boots */}
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    <div></div>
+                    <EquipmentSlot slotName="Boots" slotLabel="F" />
+                    <div></div>
+                    <div></div>
+                  </div>
+
+                  {/* Ammo Row */}
+                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[rgb(var(--color-surface-border)/0.3)]">
+                    <div></div>
+                    <EquipmentSlot slotName="Arrows" slotLabel="Arr" />
+                    <EquipmentSlot slotName="Bullets" slotLabel="Bul" />
+                    <EquipmentSlot slotName="Bolts" slotLabel="Bol" />
+                  </div>
+                </div>
+
+                {/* Inventory Grid */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
+                      <div className="flex items-center space-x-2">
+                        <Input
+                          type="text"
+                          placeholder={t('inventory.searchItems')}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-48"
+                        />
+                        <select
+                          value={filterType}
+                          onChange={(e) => setFilterType(e.target.value)}
+                          className="px-3 py-2 bg-[rgb(var(--color-surface-1))] border-2 border-[rgb(var(--color-surface-border)/0.6)] rounded-md text-sm text-[rgb(var(--color-text-primary))] focus:border-[rgb(var(--color-primary))] focus:outline-none transition-colors"
                         >
-                          {isEquipping ? t('actions.unequipping') : t('actions.unequip')}
-                        </Button>
-                      )}
-                      {!selectedItem.equipped && selectedItemRawData && (() => {
-                        const baseItemId = (selectedItemRawData as Record<string, unknown>).BaseItem as number;
-                        const targetSlot = getSlotForBaseItem(baseItemId);
+                          <option value="all">{t('inventory.allItems')}</option>
+                          <option value="weapon">{t('inventory.weapons')}</option>
+                          <option value="armor">{t('inventory.armor')}</option>
+                          <option value="accessory">{t('inventory.accessories')}</option>
+                          <option value="consumable">{t('inventory.consumables')}</option>
+                          <option value="misc">{t('inventory.miscellaneous')}</option>
+                        </select>
+                      </div>
+                  </div>
 
-                        if (!targetSlot) {
-                          return (
-                            <p className="text-sm text-[rgb(var(--color-text-muted))] text-center">
-                              Cannot equip this item type
-                            </p>
-                          );
-                        }
+                  {/* Inventory Grid */}
+                  <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded" style={{ gridTemplateColumns: 'repeat(7, 3rem)' }}>
+                    {inventory.map((item, index) => {
+                      const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                      const inventoryItem = summary?.inventory_items?.[index];
+                      const rawItemData = inventoryItem?.item;
 
-                        // Get slot display name
-                        const slotDisplayNames: Record<string, string> = {
-                          'head': 'Head',
-                          'chest': 'Chest',
-                          'boots': 'Boots',
-                          'gloves': 'Gloves',
-                          'right_hand': 'Right Hand',
-                          'left_hand': 'Left Hand',
-                          'cloak': 'Cloak',
-                          'left_ring': 'Left Ring',
-                          'right_ring': 'Right Ring',
-                          'neck': 'Neck',
-                          'belt': 'Belt',
-                          'arrows': 'Arrows',
-                          'bullets': 'Bullets',
-                          'bolts': 'Bolts',
-                        };
-
-                        return (
-                          <Button
-                            className="w-full"
-                            size="sm"
-                            onClick={() => handleEquipItem(selectedItemRawData, targetSlot, selectedItemInventoryIndex)}
-                            disabled={isEquipping}
-                            title={`Equip to ${slotDisplayNames[targetSlot]}`}
+                      return (
+                      <div
+                        key={index}
+                        className={`w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 ${
+                          item ? (item.equipped ? 'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : getRarityColor(item.rarity)) : 'border-[rgb(var(--color-surface-border)/0.4)]'
+                        } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onClick={() => {
+                          setSelectedItem(item);
+                          setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+                          setSelectedItemInventoryIndex(index);
+                        }}
+                      >
+                        {item && (
+                          <div
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item, index)}
+                            className="w-full h-full p-1 flex items-center justify-center"
                           >
-                            {isEquipping ? t('actions.equipping') : t('actions.equip')}
-                          </Button>
-                        );
-                      })()}
-                      <Button variant="danger" size="sm" className="w-full" disabled={selectedItem.is_plot}>
-                        {selectedItem.is_plot ? 'Cannot Destroy' : t('actions.destroy')}
+                            <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
+                              {item.name.charAt(0)}
+                            </div>
+                            {item.stackSize && (
+                              <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
+                                {item.stackSize}
+                              </span>
+                            )}
+                            {item.equipped && (
+                              <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
+                                E
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Inventory Info */}
+                  <div className="mt-4 flex items-center justify-between text-sm">
+                    <div className="flex items-center space-x-4">
+                      <span className="text-[rgb(var(--color-text-muted))]">
+                        {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
+                          {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
+                        </span>
+                      </span>
+                      <span className="text-[rgb(var(--color-text-muted))]">
+                        {t('inventory.gold')}: <span className="text-[rgb(var(--color-warning))]">{character?.gold || 0}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button variant="outline" size="sm">
+                        {t('actions.sort')}
+                      </Button>
+                      <Button variant="danger" size="sm">
+                        {t('actions.dropAll')}
                       </Button>
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Inventory Grid */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    type="text"
-                    placeholder={t('inventory.searchItems')}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-48"
-                  />
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="px-3 py-2 bg-[rgb(var(--color-surface-1))] border-2 border-[rgb(var(--color-surface-border)/0.6)] rounded-md text-sm text-[rgb(var(--color-text-primary))] focus:border-[rgb(var(--color-primary))] focus:outline-none transition-colors"
-                  >
-                    <option value="all">{t('inventory.allItems')}</option>
-                    <option value="weapon">{t('inventory.weapons')}</option>
-                    <option value="armor">{t('inventory.armor')}</option>
-                    <option value="accessory">{t('inventory.accessories')}</option>
-                    <option value="consumable">{t('inventory.consumables')}</option>
-                    <option value="misc">{t('inventory.miscellaneous')}</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Inventory Grid */}
-              <div className="grid grid-cols-8 gap-1 p-2 bg-[rgb(var(--color-surface-1))] rounded">
-                {inventory.map((item, index) => {
-                  const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                  const inventoryItem = summary?.inventory_items?.[index];
-                  const rawItemData = inventoryItem?.item;
-
-                  return (
-                  <div
-                    key={index}
-                    className={`aspect-square bg-[rgb(var(--color-surface-2))] border-2 ${
-                      item ? (item.equipped ? 'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : getRarityColor(item.rarity)) : 'border-[rgb(var(--color-surface-border)/0.4)]'
-                    } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, index)}
-                    onClick={() => {
-                      setSelectedItem(item);
-                      setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
-                      setSelectedItemInventoryIndex(index);
-                    }}
-                  >
-                    {item && (
-                      <div
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, item, index)}
-                        className="w-full h-full p-1 flex items-center justify-center"
-                      >
-                        <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
-                          {item.name.charAt(0)}
-                        </div>
-                        {item.stackSize && (
-                          <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
-                            {item.stackSize}
-                          </span>
-                        )}
-                        {item.equipped && (
-                          <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
-                            E
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-
-              {/* Inventory Info */}
-              <div className="mt-4 flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-4">
-                  <span className="text-[rgb(var(--color-text-muted))]">
-                    {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
-                      {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
-                    </span>
-                  </span>
-                  <span className="text-[rgb(var(--color-text-muted))]">
-                    {t('inventory.gold')}: <span className="text-[rgb(var(--color-warning))]">{character?.gold || 0}</span>
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="sm">
-                    {t('actions.sort')}
-                  </Button>
-                  <Button variant="danger" size="sm">
-                    {t('actions.dropAll')}
-                  </Button>
-                </div>
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Item Details Panel */}
+        <div>
+          <ItemDetailsPanel
+            item={selectedItem}
+            decodedProperties={(() => {
+              if (!selectedItem) return undefined;
+
+              if (selectedItemInventoryIndex !== null) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                return inventoryItem?.decoded_properties;
+              }
+
+              if (selectedItem.equipped && selectedItem.slot) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const slotMapping: Record<string, string> = {
+                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
+                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
+                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
+                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
+                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
+                };
+                const mappedSlot = slotMapping[selectedItem.slot];
+                const equippedItem = summary?.equipped_items?.[mappedSlot];
+                return equippedItem?.decoded_properties;
+              }
+
+              return undefined;
+            })()}
+            description={(() => {
+              if (!selectedItem) return undefined;
+
+              if (selectedItemInventoryIndex !== null) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                return inventoryItem?.description;
+              }
+
+              if (selectedItem.equipped && selectedItem.slot) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const slotMapping: Record<string, string> = {
+                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
+                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
+                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
+                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
+                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
+                };
+                const mappedSlot = slotMapping[selectedItem.slot];
+                const equippedItem = summary?.equipped_items?.[mappedSlot];
+                return equippedItem?.description;
+              }
+
+              return undefined;
+            })()}
+            weight={(() => {
+              if (!selectedItem) return undefined;
+
+              if (selectedItemInventoryIndex !== null) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                return inventoryItem?.weight;
+              }
+
+              if (selectedItem.equipped && selectedItem.slot) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const slotMapping: Record<string, string> = {
+                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
+                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
+                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
+                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
+                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
+                };
+                const mappedSlot = slotMapping[selectedItem.slot];
+                const equippedItem = summary?.equipped_items?.[mappedSlot];
+                return equippedItem?.weight;
+              }
+
+              return undefined;
+            })()}
+            value={(() => {
+              if (!selectedItem) return undefined;
+
+              if (selectedItemInventoryIndex !== null) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                return inventoryItem?.value;
+              }
+
+              if (selectedItem.equipped && selectedItem.slot) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const slotMapping: Record<string, string> = {
+                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
+                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
+                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
+                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
+                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
+                };
+                const mappedSlot = slotMapping[selectedItem.slot];
+                const equippedItem = summary?.equipped_items?.[mappedSlot];
+                return equippedItem?.value;
+              }
+
+              return undefined;
+            })()}
+            rawData={(() => {
+              if (!selectedItem) return undefined;
+
+              if (selectedItemInventoryIndex !== null) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                return inventoryItem?.item as Record<string, unknown>;
+              }
+
+              if (selectedItem.equipped && selectedItem.slot) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const slotMapping: Record<string, string> = {
+                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
+                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
+                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
+                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
+                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
+                };
+                const mappedSlot = slotMapping[selectedItem.slot];
+                const equippedItem = summary?.equipped_items?.[mappedSlot];
+                return equippedItem?.item_data;
+              }
+
+              return undefined;
+            })()}
+            onEquip={selectedItem && !selectedItem.equipped && selectedItemRawData ? () => {
+              const baseItemId = (selectedItemRawData as Record<string, unknown>).BaseItem as number;
+              const targetSlot = getSlotForBaseItem(baseItemId);
+              if (targetSlot) {
+                handleEquipItem(selectedItemRawData, targetSlot, selectedItemInventoryIndex);
+              }
+            } : undefined}
+            onUnequip={selectedItem?.equipped && selectedItem.slot ? () => handleUnequipItem(selectedItem.slot!) : undefined}
+            isEquipping={isEquipping}
+            canEquip={!!(selectedItem && !selectedItem.equipped && selectedItemRawData && getSlotForBaseItem((selectedItemRawData as Record<string, unknown>).BaseItem as number))}
+            canUnequip={!!(selectedItem?.equipped && selectedItem.slot && selectedItemRawData)}
+          />
         </div>
       </div>
     </div>

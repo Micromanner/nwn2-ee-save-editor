@@ -88,24 +88,28 @@ class ItemPropertyDecoder:
         decoded_info = self._decode_specific_property(
             property_name, prop_def, subtype, cost_value, param1, param1_value
         )
-        
+
+        # If decoder returned None (e.g., SR 0), skip this property
+        if decoded_info is None:
+            return None
+
         # Add common fields
         decoded_info.update({
             'property_id': property_name,
             'raw_data': property_data,
             'decoded': True
         })
-        
+
         return decoded_info
     
-    def _decode_specific_property(self, prop_id: int, prop_def: Dict[str, Any], 
-                                 subtype: int, cost_value: int, param1: int, 
+    def _decode_specific_property(self, prop_id: int, prop_def: Dict[str, Any],
+                                 subtype: int, cost_value: int, param1: int,
                                  param1_value: int) -> Dict[str, Any]:
         """Decode specific property types based on ID and definition"""
-        
+
         label = prop_def['label'].lower()
         base_description = prop_def['description']
-        
+
         # Property ID 0: Ability Bonus
         if prop_id == 0:
             ability_name = self._ability_map.get(subtype, f'Unknown Ability {subtype}')
@@ -137,15 +141,21 @@ class ItemPropertyDecoder:
         
         # Property ID 15: Cast Spell
         elif prop_id == 15:
-            spell_name = self._get_spell_name(subtype)
-            uses = param1 if param1 != 255 else 'Unlimited'
+            spell_data = self._get_spell_data(subtype)
+            uses_data = self._get_charge_uses(cost_value)
+
+            spell_name = spell_data.get('name', f'Spell_{subtype}')
+            caster_level = spell_data.get('caster_level', 1)
+            uses_label = uses_data.get('label', 'Unknown')
+
             return {
-                'label': f'Cast {spell_name}',
-                'description': f'Use: {spell_name} ({uses} uses per day)',
+                'label': f'Cast {spell_name} ({caster_level})',
+                'description': f'Use: {spell_name} (Caster Level {caster_level}) - {uses_label}',
                 'bonus_type': 'spell',
                 'spell_id': subtype,
                 'spell_name': spell_name,
-                'uses_per_day': uses
+                'caster_level': caster_level,
+                'uses_per_day': uses_label
             }
         
         # Property ID 40/41: Saving Throw Bonuses
@@ -174,14 +184,22 @@ class ItemPropertyDecoder:
                     }
             else:
                 # Property 41 uses iprp_savingthrow subtypes (Fort/Ref/Will)
-                save_name = self._save_map.get(subtype, f'Save {subtype}')
-                return {
-                    'label': f'{save_name.title()} Save +{cost_value}',
-                    'description': f'{base_description} +{cost_value} to {save_name} saves',
-                    'bonus_type': 'save_specific',
-                    'save_type': save_name,
-                    'bonus_value': cost_value
-                }
+                save_name = self._save_map.get(subtype)
+                if save_name:
+                    return {
+                        'label': f'{save_name.title()} Save +{cost_value}',
+                        'description': f'{base_description} +{cost_value} to {save_name} saves',
+                        'bonus_type': 'save_specific',
+                        'save_type': save_name,
+                        'bonus_value': cost_value
+                    }
+                else:
+                    return {
+                        'label': f'Saving Throw +{cost_value}',
+                        'description': f'{base_description} +{cost_value} bonus to saves',
+                        'bonus_type': 'save_specific',
+                        'bonus_value': cost_value
+                    }
         
         # Property ID 52: Skill Bonus
         elif prop_id == 52:
@@ -229,32 +247,73 @@ class ItemPropertyDecoder:
         # Property ID 23: Damage Resistance
         elif prop_id == 23:
             damage_type = self._get_damage_type_name(subtype)
+            resist_value = self._get_resistance_value(cost_value)
             return {
-                'label': f'Resist {damage_type.title()} {cost_value}/-',
-                'description': f'Damage Resistance: {cost_value} points of {damage_type} damage reduction',
+                'label': f'Resist {damage_type.title()} {resist_value}/-',
+                'description': f'Damage Resistance: {resist_value} points of {damage_type} damage reduction',
                 'bonus_type': 'resistance',
                 'damage_type': damage_type,
-                'resistance_value': cost_value
+                'resistance_value': resist_value
             }
         
+        # Property ID 37: Immunity
+        elif prop_id == 37:
+            immunity_type = self._get_immunity_type_name(subtype)
+            return {
+                'label': f'Immunity: {immunity_type}',
+                'description': f'Complete immunity to {immunity_type}',
+                'bonus_type': 'immunity',
+                'immunity_type': immunity_type.lower(),
+                'immunity_id': subtype
+            }
+
         # Property ID 39: Spell Resistance
         elif prop_id == 39:
+            actual_sr = 10 + (cost_value * 2)
             return {
-                'label': f'Spell Resistance {cost_value}',
-                'description': f'{base_description} {cost_value} spell resistance',
+                'label': f'Spell Resistance {actual_sr}',
+                'description': f'{base_description} {actual_sr} spell resistance',
                 'bonus_type': 'spell_resistance',
-                'resistance_value': cost_value
+                'resistance_value': actual_sr
             }
         
         # Property ID 44: Light
         elif prop_id == 44:
+            light_data = self._get_light_data(cost_value, param1)
+            brightness = light_data.get('brightness', 'Normal')
+            color = light_data.get('color', '')
+
+            label = f'Light {brightness}'
+            if color:
+                label += f' {color}'
+
             return {
-                'label': 'Light',
-                'description': 'Provides illumination',
+                'label': label,
+                'description': f'Provides {brightness.lower()} illumination ({color})',
                 'bonus_type': 'utility',
-                'light_radius': cost_value if cost_value > 0 else 1
+                'light_brightness': brightness,
+                'light_color': color
             }
-        
+
+        # Property ID 70: Trap
+        elif prop_id == 70:
+            trap_strength = {0: 'Minor', 1: 'Average', 2: 'Strong', 3: 'Deadly', 4: 'Epic'}
+            trap_types = {
+                0: 'Random', 1: 'Spike', 2: 'Holy', 3: 'Tangle', 4: 'Acid',
+                5: 'Fire', 6: 'Electrical', 7: 'Gas', 8: 'Frost',
+                9: 'Acid Splash', 10: 'Sonic', 11: 'Negative'
+            }
+            strength = trap_strength.get(subtype, f'Level {subtype}')
+            trap_type = trap_types.get(cost_value, f'Type {cost_value}')
+
+            return {
+                'label': f'{strength} {trap_type} Trap',
+                'description': f'Trap: {strength} {trap_type}',
+                'bonus_type': 'trap',
+                'trap_type': trap_type,
+                'trap_strength': strength
+            }
+
         # Property ID 75: Freedom of Movement
         elif prop_id == 75:
             return {
@@ -267,14 +326,15 @@ class ItemPropertyDecoder:
         # Property ID 92: Damage Vulnerability
         elif prop_id == 92:
             damage_type = self._get_damage_type_name(subtype)
+            vuln_value = self._get_vulnerability_value(cost_value)
             return {
-                'label': f'Vulnerability: {damage_type.title()} +{cost_value}',
-                'description': f'Damage Vulnerability: +{cost_value} extra {damage_type} damage taken',
+                'label': f'Vulnerability: {damage_type.title()} {vuln_value}%',
+                'description': f'Damage Vulnerability: {vuln_value}% extra {damage_type} damage taken',
                 'bonus_type': 'vulnerability',
                 'damage_type': damage_type,
-                'vulnerability_value': cost_value
+                'vulnerability_value': vuln_value
             }
-        
+
         # Property ID 90: Damage Reduction (Modern NWN2 system)
         elif prop_id == 90:
             bypass_type = self._decode_dr_bypass(param1)
@@ -285,7 +345,43 @@ class ItemPropertyDecoder:
                 'dr_amount': cost_value,
                 'dr_bypass': bypass_type
             }
-        
+
+        # Property ID 63: Use Limitation - Class Specific
+        elif prop_id == 63:
+            class_name = self._get_class_name(subtype)
+            return {
+                'label': f'Use Limitation: {class_name}',
+                'description': f'Only useable by {class_name}',
+                'bonus_type': 'use_limitation',
+                'limitation_type': 'class',
+                'class_id': subtype,
+                'class_name': class_name
+            }
+
+        # Property ID 13: Bonus Spell Slots
+        elif prop_id == 13:
+            class_name = self._get_class_name(subtype)
+            spell_level_ordinal = self._get_ordinal(cost_value)
+            return {
+                'label': f'Bonus {spell_level_ordinal} Level Spell Slot',
+                'description': f'Bonus {spell_level_ordinal} level spell slot for {class_name}',
+                'bonus_type': 'spell_slot',
+                'class_id': subtype,
+                'class_name': class_name,
+                'spell_level': cost_value
+            }
+
+        # Property ID 27: Decreased Ability Score
+        elif prop_id == 27:
+            ability_name = self._ability_map.get(subtype, f'Unknown Ability {subtype}')
+            return {
+                'label': f'{ability_name} -{cost_value}',
+                'description': f'{base_description} -{cost_value} penalty to {ability_name}',
+                'bonus_type': 'ability_penalty',
+                'ability': ability_name.lower(),
+                'penalty_value': -cost_value
+            }
+
         # Generic decode for unknown properties
         else:
             return self._generic_decode(prop_def, subtype, cost_value, param1)
@@ -309,6 +405,41 @@ class ItemPropertyDecoder:
         except Exception:
             pass
         return f'Skill {skill_id}'
+
+    def _get_class_name(self, class_id: int) -> str:
+        """Get class name from class ID"""
+        try:
+            class_data = self.rules_service.get_by_id('classes', class_id)
+            if class_data and hasattr(class_data, 'label'):
+                return class_data.label
+        except Exception as e:
+            logger.error(f"Failed to get class name for ID {class_id}: {e}")
+        return f'Class {class_id}'
+
+    def _get_ordinal(self, num: int) -> str:
+        """Convert number to ordinal string (0 -> 1st, 1 -> 2nd, etc.)"""
+        num = num + 1
+        if 10 <= num % 100 <= 20:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(num % 10, 'th')
+        return f'{num}{suffix}'
+
+    def _get_immunity_type_name(self, immunity_id: int) -> str:
+        """Get immunity type name from iprp_immunity.2da"""
+        immunity_types = {
+            0: 'Backstab',
+            1: 'Level/Ability Drain',
+            2: 'Mind-Affecting Spells',
+            3: 'Poison',
+            4: 'Disease',
+            5: 'Fear',
+            6: 'Knockdown',
+            7: 'Paralysis',
+            8: 'Critical Hits',
+            9: 'Death Magic'
+        }
+        return immunity_types.get(immunity_id, f'Immunity {immunity_id}')
 
     def _get_save_element_name(self, element_id: int) -> str:
         """Get save element name from iprp_saveelement ID"""
@@ -372,7 +503,90 @@ class ItemPropertyDecoder:
             13: 'sonic'
         }
         return damage_types.get(damage_type_id, f'type_{damage_type_id}')
-    
+
+    def _get_spell_data(self, spell_row_id: int) -> Dict[str, Any]:
+        """Look up spell data from iprp_spells.2da"""
+        try:
+            spell_table = self.rules_service.get_table('iprp_spells')
+            if spell_table and spell_row_id < len(spell_table):
+                spell_row = spell_table[spell_row_id]
+                if spell_row:
+                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+                    return {
+                        'name': field_mapper.get_field_value(spell_row, 'Label', f'Spell_{spell_row_id}'),
+                        'caster_level': int(field_mapper.get_field_value(spell_row, 'CasterLvl', 1))
+                    }
+        except Exception as e:
+            logger.debug(f"Failed to look up spell {spell_row_id}: {e}")
+        return {'name': f'Spell_{spell_row_id}', 'caster_level': 1}
+
+    def _get_charge_uses(self, cost_value: int) -> Dict[str, str]:
+        """Look up charge/uses data from iprp_chargecost.2da"""
+        try:
+            charge_table = self.rules_service.get_table('iprp_chargecost')
+            if charge_table and cost_value < len(charge_table):
+                charge_row = charge_table[cost_value]
+                if charge_row:
+                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+                    label = field_mapper.get_field_value(charge_row, 'Label', 'Unknown')
+                    return {'label': label.replace('_', ' ')}
+        except Exception as e:
+            logger.debug(f"Failed to look up charges {cost_value}: {e}")
+        return {'label': 'Unknown'}
+
+    def _get_resistance_value(self, cost_value: int) -> int:
+        """Look up resistance amount from iprp_resistcost.2da"""
+        try:
+            resist_table = self.rules_service.get_table('iprp_resistcost')
+            if resist_table and cost_value < len(resist_table):
+                resist_row = resist_table[cost_value]
+                if resist_row:
+                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+                    amount = field_mapper.get_field_value(resist_row, 'Amount', cost_value)
+                    return int(amount)
+        except Exception as e:
+            logger.debug(f"Failed to look up resistance {cost_value}: {e}")
+        return cost_value
+
+    def _get_vulnerability_value(self, cost_value: int) -> int:
+        """Look up vulnerability percentage from iprp_damvulcost.2da"""
+        try:
+            vuln_table = self.rules_service.get_table('iprp_damvulcost')
+            if vuln_table and cost_value < len(vuln_table):
+                vuln_row = vuln_table[cost_value]
+                if vuln_row:
+                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+                    value = field_mapper.get_field_value(vuln_row, 'Value', cost_value)
+                    return int(value)
+        except Exception as e:
+            logger.debug(f"Failed to look up vulnerability {cost_value}: {e}")
+        return cost_value
+
+    def _get_light_data(self, cost_value: int, param1: int) -> Dict[str, str]:
+        """Look up light brightness and color from iprp_lightcost.2da and lightcolor.2da"""
+        try:
+            light_table = self.rules_service.get_table('iprp_lightcost')
+            color_table = self.rules_service.get_table('lightcolor')
+            from gamedata.dynamic_loader.field_mapping_utility import field_mapper
+
+            brightness = 'Normal'
+            if light_table and cost_value < len(light_table):
+                light_row = light_table[cost_value]
+                if light_row:
+                    label = field_mapper.get_field_value(light_row, 'Label', 'Normal')
+                    brightness = label.replace('Type:_', '').replace('_', ' ').strip('()')
+
+            color = ''
+            if color_table and param1 < len(color_table):
+                color_row = color_table[param1]
+                if color_row:
+                    color = field_mapper.get_field_value(color_row, 'LABEL', '')
+
+            return {'brightness': brightness, 'color': color}
+        except Exception as e:
+            logger.debug(f"Failed to look up light data: {e}")
+        return {'brightness': 'Normal', 'color': ''}
+
     def _decode_dr_bypass(self, param1: int) -> str:
         """Decode damage reduction bypass type"""
         bypass_types = {
@@ -411,7 +625,8 @@ class ItemPropertyDecoder:
     
     def decode_all_properties(self, properties_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Decode all properties in a list"""
-        return [self.decode_property(prop) for prop in properties_list]
+        decoded = [self.decode_property(prop) for prop in properties_list]
+        return [p for p in decoded if p is not None]
     
     def get_item_bonuses(self, properties_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
