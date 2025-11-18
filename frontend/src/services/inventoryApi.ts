@@ -35,6 +35,13 @@ export interface UpdateGoldResponse {
   has_unsaved_changes: boolean;
 }
 
+export interface DeleteItemResponse {
+  success: boolean;
+  item_data: Record<string, unknown> | null;
+  message: string;
+  has_unsaved_changes: boolean;
+}
+
 export class InventoryAPI {
   async equipItem(characterId: number, request: EquipItemRequest): Promise<EquipItemResponse> {
     const response = await DynamicAPI.fetch(
@@ -82,6 +89,22 @@ export class InventoryAPI {
 
     if (!response.ok) {
       throw new Error(`Failed to update gold: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async deleteItem(characterId: number, itemIndex: number): Promise<DeleteItemResponse> {
+    const response = await DynamicAPI.fetch(
+      `/characters/${characterId}/inventory/${itemIndex}`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `Failed to delete item: ${response.status}`);
     }
 
     return response.json();

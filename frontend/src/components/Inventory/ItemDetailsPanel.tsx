@@ -274,10 +274,10 @@ export default function ItemDetailsPanel({
               variant="danger"
               size="sm"
               className="w-full"
-              disabled={item.is_plot}
+              disabled={!onDestroy}
               onClick={onDestroy}
             >
-              {item.is_plot ? 'Cannot Destroy' : t('actions.destroy')}
+              {t('actions.destroy')}
             </Button>
           </div>
 

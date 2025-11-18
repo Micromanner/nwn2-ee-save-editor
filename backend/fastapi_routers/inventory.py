@@ -328,7 +328,7 @@ def remove_from_inventory(
     try:
         # Lazy imports for performance
         from fastapi_models.inventory_models import RemoveFromInventoryResponse
-        
+
         session = char_session
         manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')

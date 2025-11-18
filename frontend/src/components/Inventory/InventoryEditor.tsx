@@ -192,6 +192,9 @@ export default function InventoryEditor() {
   const [filterType, setFilterType] = useState<string>('all');
   const [goldValue, setGoldValue] = useState<string>('');
   const [isUpdatingGold, setIsUpdatingGold] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{index: number; name: string; isPlot: boolean} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Handler to equip an item from inventory
   const handleEquipItem = async (itemData: Record<string, unknown>, slot: string, inventoryIndex?: number | null) => {
@@ -289,6 +292,48 @@ export default function InventoryEditor() {
     } finally {
       setIsUpdatingGold(false);
     }
+  };
+
+  const handleDeleteItem = () => {
+    if (selectedItemInventoryIndex === null || !selectedItem) return;
+
+    setItemToDelete({
+      index: selectedItemInventoryIndex,
+      name: selectedItem.name,
+      isPlot: selectedItem.is_plot || false
+    });
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!character?.id || !itemToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await inventoryAPI.deleteItem(character.id, itemToDelete.index);
+
+      if (response.success) {
+        showToast(response.message, 'success');
+        await inventoryData.load();
+        setSelectedItem(null);
+        setSelectedItemRawData(null);
+        setSelectedItemInventoryIndex(null);
+      } else {
+        showToast(response.message, 'error');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setItemToDelete(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setItemToDelete(null);
   };
 
   // Map BaseItem ID to equipment slot
@@ -830,9 +875,44 @@ export default function InventoryEditor() {
             isEquipping={isEquipping}
             canEquip={!!(selectedItem && !selectedItem.equipped && selectedItemRawData && getSlotForBaseItem((selectedItemRawData as Record<string, unknown>).BaseItem as number))}
             canUnequip={!!(selectedItem?.equipped && selectedItem.slot && selectedItemRawData)}
+            onDestroy={selectedItem && selectedItemInventoryIndex !== null ? handleDeleteItem : undefined}
           />
         </div>
       </div>
+
+      {showDeleteConfirm && itemToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <Card className="max-w-md w-full mx-4">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold mb-4">
+                {t('inventory.confirmDeleteTitle')}
+              </h3>
+              <p className="text-sm text-[rgb(var(--color-text-muted))] mb-2">
+                {t('inventory.deleteItemName')}: <span className="font-semibold text-[rgb(var(--color-text))]">{itemToDelete.name}</span>
+              </p>
+              <p className="text-sm text-[rgb(var(--color-text-muted))] mb-6">
+                {itemToDelete.isPlot ? t('inventory.deleteWarningPlot') : t('inventory.deleteWarningRegular')}
+              </p>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="ghost"
+                  onClick={cancelDelete}
+                  disabled={isDeleting}
+                >
+                  {t('actions.cancel')}
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? t('actions.deleting') : t('actions.delete')}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
