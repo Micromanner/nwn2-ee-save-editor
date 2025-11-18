@@ -487,16 +487,49 @@ def get_equipped_item(
     """Get item equipped in a specific slot"""
     session = char_session
     manager = session.character_manager
-    
+
     try:
         inventory_manager = manager.get_manager('inventory')
         item = inventory_manager.get_equipped_item(slot)
-        
+
         return {"item": item}
-        
+
     except Exception as e:
         logger.error(f"Failed to get equipped item for character {character_id}, slot {slot}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get equipped item: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/gold")
+def update_gold(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request: dict = Body(...)
+):
+    """Update character's gold amount"""
+    try:
+        from fastapi_models.inventory_models import UpdateGoldRequest, UpdateGoldResponse
+
+        req = UpdateGoldRequest(**request)
+        session = char_session
+        manager = session.character_manager
+
+        manager.gff.set('Gold', req.gold)
+
+        logger.info(f"Updated gold for character {character_id} to {req.gold}")
+
+        return UpdateGoldResponse(
+            success=True,
+            gold=req.gold,
+            message=f"Gold updated to {req.gold}",
+            has_unsaved_changes=session.has_unsaved_changes()
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to update gold for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update gold: {str(e)}"
         )

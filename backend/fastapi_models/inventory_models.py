@@ -373,3 +373,16 @@ class SkillBonusesResponse(BaseModel):
 class InventorySummaryResponse(BaseModel):
     """Response from get_inventory_summary()"""
     summary: InventorySummary
+
+
+class UpdateGoldRequest(BaseModel):
+    """Request to update character's gold"""
+    gold: int = Field(..., ge=0, le=2147483647, description="Gold amount (0 to 2,147,483,647)")
+
+
+class UpdateGoldResponse(BaseModel):
+    """Response after updating gold"""
+    success: bool
+    gold: int
+    message: str
+    has_unsaved_changes: bool = True

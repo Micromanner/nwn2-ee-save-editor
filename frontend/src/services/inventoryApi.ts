@@ -24,6 +24,17 @@ export interface UnequipItemResponse {
   has_unsaved_changes: boolean;
 }
 
+export interface UpdateGoldRequest {
+  gold: number;
+}
+
+export interface UpdateGoldResponse {
+  success: boolean;
+  gold: number;
+  message: string;
+  has_unsaved_changes: boolean;
+}
+
 export class InventoryAPI {
   async equipItem(characterId: number, request: EquipItemRequest): Promise<EquipItemResponse> {
     const response = await DynamicAPI.fetch(
@@ -54,6 +65,23 @@ export class InventoryAPI {
 
     if (!response.ok) {
       throw new Error(`Failed to unequip item: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async updateGold(characterId: number, gold: number): Promise<UpdateGoldResponse> {
+    const response = await DynamicAPI.fetch(
+      `/characters/${characterId}/gold`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gold }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to update gold: ${response.status} ${response.statusText}`);
     }
 
     return response.json();

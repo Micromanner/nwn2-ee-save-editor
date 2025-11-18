@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
+import { formatNumber } from '@/utils/dataHelpers';
 import ItemDetailsPanel from './ItemDetailsPanel';
 
 interface Item {
@@ -189,6 +190,8 @@ export default function InventoryEditor() {
   const [selectedItemInventoryIndex, setSelectedItemInventoryIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [goldValue, setGoldValue] = useState<string>('');
+  const [isUpdatingGold, setIsUpdatingGold] = useState(false);
 
   // Handler to equip an item from inventory
   const handleEquipItem = async (itemData: Record<string, unknown>, slot: string, inventoryIndex?: number | null) => {
@@ -242,6 +245,49 @@ export default function InventoryEditor() {
       showToast(`Failed to unequip item: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     } finally {
       setIsEquipping(false);
+    }
+  };
+
+  // Sync gold value when character changes
+  useEffect(() => {
+    if (character?.gold !== undefined) {
+      setGoldValue(character.gold.toString());
+    }
+  }, [character?.gold]);
+
+  // Handler to update gold
+  const handleUpdateGold = async () => {
+    if (!character?.id || isUpdatingGold) return;
+
+    const cleanValue = goldValue.replace(/,/g, '');
+    const numericValue = parseInt(cleanValue, 10);
+
+    if (isNaN(numericValue) || numericValue < 0 || numericValue > 2147483647) {
+      showToast(t('inventory.invalidGold'), 'error');
+      setGoldValue(character?.gold?.toString() || '0');
+      return;
+    }
+
+    // Only update if value changed
+    if (numericValue === character?.gold) {
+      return;
+    }
+
+    setIsUpdatingGold(true);
+    try {
+      const response = await inventoryAPI.updateGold(character.id, numericValue);
+
+      if (response.success) {
+        showToast(t('inventory.goldUpdated'), 'success');
+      } else {
+        showToast(response.message, 'error');
+        setGoldValue(character?.gold?.toString() || '0');
+      }
+    } catch (error) {
+      showToast(`Failed to update gold: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      setGoldValue(character?.gold?.toString() || '0');
+    } finally {
+      setIsUpdatingGold(false);
     }
   };
 
@@ -546,7 +592,7 @@ export default function InventoryEditor() {
                   </div>
 
                   {/* Inventory Grid */}
-                  <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded" style={{ gridTemplateColumns: 'repeat(7, 3rem)' }}>
+                  <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded w-fit" style={{ gridTemplateColumns: 'repeat(7, 3rem)' }}>
                     {inventory.map((item, index) => {
                       const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
                       const inventoryItem = summary?.inventory_items?.[index];
@@ -593,25 +639,50 @@ export default function InventoryEditor() {
                   </div>
 
                   {/* Inventory Info */}
-                  <div className="mt-4 flex items-center justify-between text-sm">
-                    <div className="flex items-center space-x-4">
-                      <span className="text-[rgb(var(--color-text-muted))]">
-                        {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
-                          {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
-                        </span>
+                  <div className="mt-4 flex items-center gap-4 text-sm w-fit">
+                    <span className="text-[rgb(var(--color-text-muted))]">
+                      {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
+                        {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
                       </span>
-                      <span className="text-[rgb(var(--color-text-muted))]">
-                        {t('inventory.gold')}: <span className="text-[rgb(var(--color-warning))]">{character?.gold || 0}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="outline" size="sm">
-                        {t('actions.sort')}
+                    </span>
+                    <span className="text-[rgb(var(--color-text-muted))] flex items-center gap-2">
+                      <span>{t('inventory.gold')}:</span>
+                      <Input
+                        type="text"
+                        value={goldValue}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || /^\d+$/.test(value)) {
+                            setGoldValue(value);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdateGold();
+                          if (e.key === 'Escape') setGoldValue(character?.gold?.toString() || '0');
+                        }}
+                        className="!w-32 h-6 text-sm"
+                        disabled={isUpdatingGold}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleUpdateGold}
+                        disabled={isUpdatingGold || goldValue === (character?.gold?.toString() || '0')}
+                        className="h-6 px-2 text-xs"
+                        title={t('actions.save')}
+                      >
+                        ✓
                       </Button>
-                      <Button variant="danger" size="sm">
-                        {t('actions.dropAll')}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setGoldValue(character?.gold?.toString() || '0')}
+                        disabled={isUpdatingGold}
+                        className="h-6 px-2 text-xs"
+                        title={t('actions.cancel')}
+                      >
+                        ✕
                       </Button>
-                    </div>
+                    </span>
                   </div>
                 </div>
               </div>

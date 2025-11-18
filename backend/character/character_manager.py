@@ -510,6 +510,7 @@ class CharacterManager(EventEmitter):
                 'law_chaos': self.gff.get('LawfulChaotic', 50),
                 'good_evil': self.gff.get('GoodEvil', 50)
             },
+            'gold': self.gff.get('Gold', 0),
             'custom_content_count': len(self.custom_content)
         }
         

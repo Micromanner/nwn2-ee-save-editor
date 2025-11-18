@@ -44,13 +44,14 @@ class CharacterSummary(BaseModel):
     alignment: Dict[str, int]
     classes: Dict[str, Any]  # Changed to match actual return from get_class_summary()
     abilities: Optional[Dict[str, int]] = None  # Made optional since not always populated
-    
+    gold: int = 0
+
     # Additional info from content manager
     campaign_name: Optional[str] = None
     module_name: Optional[str] = None
     area_name: Optional[str] = None
     quest_details: Optional[Dict[str, Any]] = None
-    
+
     # Custom content
     custom_content_count: int = 0
 
