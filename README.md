@@ -35,5 +35,4 @@ A desktop application for editing Neverwinter Nights 2 Enhanced Edition save fil
 - Game rule integration using NWN2 data
 - Edit Faction Reputation, Influence and Quests
 - Edit Module/Campaign rules
-- Character Biography Editing
 - Voice Set Selection
