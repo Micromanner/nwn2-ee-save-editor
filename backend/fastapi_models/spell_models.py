@@ -13,22 +13,22 @@ class SpellInfo(BaseModel):
     name: str = Field(..., description="Spell name")
     description: Optional[str] = None
     icon: Optional[str] = None
-    
+
     # Spell properties
     school_id: Optional[int] = Field(None, description="School of magic ID")
     school_name: Optional[str] = Field(None, description="School name (Evocation, etc.)")
     level: int = Field(..., ge=0, le=9, description="Spell level")
-    
+
     # Casting properties
     cast_time: Optional[str] = Field(None, description="Casting time")
     range: Optional[str] = Field(None, description="Spell range")
     conjuration_time: Optional[str] = Field(None, description="Conjuration time")
     components: Optional[str] = Field(None, description="V, S, M components")
-    
+
     # Target information
     target_type: Optional[str] = Field(None, description="Target type")
-    metamagic: Optional[str] = Field(None, description="Metamagic options")
-    
+    available_metamagic: Optional[str] = Field(None, description="Available metamagic options")
+
     # Class availability
     available_classes: List[str] = Field(default_factory=list, description="Classes that can cast this spell")
 
@@ -66,11 +66,13 @@ class MetamagicFeat(BaseModel):
 
 
 class MemorizedSpell(BaseModel):
-    """Individual memorized spell entry from get_all_memorized_spells()"""
+    """Individual memorized spell entry (basic info - frontend enriches from legitimate spells)"""
     level: int = Field(..., ge=0, le=9, description="Spell level")
     spell_id: int = Field(..., description="Memorized spell ID")
+    name: str = Field("Unknown Spell", description="Spell name")
+    icon: str = Field("io_unknown", description="Spell icon")
     class_id: int = Field(..., description="Spellcasting class ID")
-    metamagic: int = Field(0, description="Metamagic bitfield")
+    metamagic: int = Field(0, description="Applied metamagic bitfield")
     ready: bool = Field(True, description="Spell is ready to cast")
 
 
@@ -130,6 +132,22 @@ class AllSpellsResponse(BaseModel):
     spells: List[SpellInfo]
     count: int
     total_by_level: Dict[int, int]
+
+
+class SpellPaginationInfo(BaseModel):
+    """Pagination metadata for spell lists"""
+    page: int = Field(..., description="Current page number")
+    limit: int = Field(..., description="Results per page")
+    total: int = Field(..., description="Total number of spells")
+    pages: int = Field(..., description="Total number of pages")
+    has_next: bool = Field(..., description="Has next page")
+    has_previous: bool = Field(..., description="Has previous page")
+
+
+class LegitimateSpellsResponse(BaseModel):
+    """Response for legitimate spells endpoint with pagination"""
+    spells: List[SpellInfo]
+    pagination: SpellPaginationInfo
 
 
 class SpellManageRequest(BaseModel):

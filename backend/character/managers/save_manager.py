@@ -128,12 +128,13 @@ class SaveManager(EventEmitter):
         # Get racial bonuses
         racial_bonuses = self._calculate_racial_bonuses()
 
-        # Get resistance bonuses (from items/spells) and add equipment save bonuses
+        # Get resistance bonuses (from items/spells) and add equipment save bonuses (with null safety)
         resistance_bonuses = self._calculate_resistance_bonuses()
-        logger.info(f"Equipment save bonuses: {equipment_bonuses['saves']}")
-        resistance_bonuses['fortitude'] += equipment_bonuses['saves'].get('fortitude', 0)
-        resistance_bonuses['reflex'] += equipment_bonuses['saves'].get('reflex', 0)
-        resistance_bonuses['will'] += equipment_bonuses['saves'].get('will', 0)
+        save_bonuses = equipment_bonuses.get('saves', {}) or {}
+        logger.info(f"Equipment save bonuses: {save_bonuses}")
+        resistance_bonuses['fortitude'] += save_bonuses.get('fortitude', 0) if save_bonuses else 0
+        resistance_bonuses['reflex'] += save_bonuses.get('reflex', 0) if save_bonuses else 0
+        resistance_bonuses['will'] += save_bonuses.get('will', 0) if save_bonuses else 0
         
         # Calculate totals (base does NOT include ability mods)
         fort_total = (base_saves['base_fortitude'] + con_mod +

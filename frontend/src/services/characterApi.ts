@@ -109,6 +109,41 @@ export interface FeatValidationResponse {
   missing_requirements: string[];
 }
 
+export interface SpellResponse {
+  id: number;
+  name: string;
+  description?: string;
+  icon?: string;
+  school_id?: number;
+  school_name?: string;
+  level: number;
+  cast_time?: string;
+  range?: string;
+  conjuration_time?: string;
+  components?: string;
+  target_type?: string;
+  metamagic?: string;
+  available_classes: string[];
+}
+
+export interface LegitimateSpellsResponse {
+  spells: SpellResponse[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  };
+}
+
+export interface SpellManageResponse {
+  message: string;
+  spell_summary: Record<string, unknown>;
+  has_unsaved_changes: boolean;
+}
+
 export interface SkillEntry {
   skill_id: number;
   name: string;
@@ -529,6 +564,64 @@ export class CharacterAPI {
     if (!response.ok) {
       throw new Error(`Failed to validate feat: ${response.statusText}`);
     }
+    return response.json();
+  }
+
+  // Spells API methods
+  static async getLegitimateSpells(
+    characterId: number,
+    options: {
+      levels?: string;
+      schools?: string;
+      page?: number;
+      limit?: number;
+      search?: string;
+      class_id?: number;
+    } = {}
+  ): Promise<LegitimateSpellsResponse> {
+    const params = new URLSearchParams();
+    if (options.levels) params.append('levels', options.levels);
+    if (options.schools) params.append('schools', options.schools);
+    if (options.page !== undefined) params.append('page', options.page.toString());
+    if (options.limit !== undefined) params.append('limit', options.limit.toString());
+    if (options.search) params.append('search', options.search);
+    if (options.class_id !== undefined) params.append('class_id', options.class_id.toString());
+
+    const queryString = params.toString();
+
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/spells/legitimate${queryString ? `?${queryString}` : ''}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch legitimate spells: ${response.statusText}`);
+    }
+
+    return await response.json();
+  }
+
+  static async manageSpell(
+    characterId: number,
+    action: 'add' | 'remove',
+    spellId: number,
+    classIndex: number,
+    spellLevel?: number
+  ): Promise<SpellManageResponse> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/spells/manage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action,
+        spell_id: spellId,
+        class_index: classIndex,
+        spell_level: spellLevel,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `Failed to ${action} spell: ${response.statusText}`);
+    }
+
     return response.json();
   }
 

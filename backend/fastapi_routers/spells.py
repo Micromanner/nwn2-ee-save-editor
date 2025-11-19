@@ -80,18 +80,22 @@ def get_spells_state(
             spell_resistance=summary_data.get('spell_resistance', 0)
         )
         
-        # Get memorized spells
+        # Get memorized spells (basic info - frontend enriches from legitimate spells data)
         memorized_data = spell_manager.get_all_memorized_spells() if spellcasting_classes else []
-        memorized_spells = [
-            MemorizedSpell(
+
+        # Get spell names for basic display
+        memorized_spells = []
+        for spell in memorized_data:
+            spell_details = spell_manager.get_spell_details(spell['spell_id'])
+            memorized_spells.append(MemorizedSpell(
                 level=spell['level'],
                 spell_id=spell['spell_id'],
+                name=spell_details['name'],
+                icon=spell_details['icon'],
                 class_id=spell['class_id'],
                 metamagic=spell.get('metamagic', 0),
                 ready=spell.get('ready', True)
-            )
-            for spell in memorized_data
-        ]
+            ))
         
         # Get available spells by level if requested (expensive operation)
         available_by_level = None
@@ -112,7 +116,7 @@ def get_spells_state(
                         cast_time=spell.get('cast_time'),
                         conjuration_time=spell.get('conjuration_time'),
                         components=spell.get('components'),
-                        metamagic=spell.get('metamagic'),
+                        available_metamagic=spell.get('available_metamagic'),
                         target_type=spell.get('target_type'),
                         available_classes=spell.get('available_classes', [])
                     )
@@ -170,7 +174,7 @@ def get_available_spells(
                 cast_time=spell.get('cast_time'),
                 conjuration_time=spell.get('conjuration_time'),
                 components=spell.get('components'),
-                metamagic=spell.get('metamagic'),
+                available_metamagic=spell.get('available_metamagic'),
                 target_type=spell.get('target_type'),
                 available_classes=spell.get('available_classes', [])
             )
@@ -268,7 +272,7 @@ def get_all_spells(
                 cast_time=spell.get('cast_time'),
                 conjuration_time=spell.get('conjuration_time'),
                 components=spell.get('components'),
-                metamagic=spell.get('metamagic'),
+                available_metamagic=spell.get('available_metamagic'),
                 target_type=spell.get('target_type'),
                 available_classes=spell.get('available_classes', [])
             )
@@ -286,6 +290,94 @@ def get_all_spells(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get all spells: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/spells/legitimate")
+def get_legitimate_spells(
+    character_id: int,
+    manager: CharacterManagerDep,
+    levels: Optional[str] = Query(None, description="Comma-separated spell levels (0-9)"),
+    schools: Optional[str] = Query(None, description="Comma-separated school names"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=200, description="Results per page"),
+    search: Optional[str] = Query(None, description="Search term for spell name/description"),
+    class_id: Optional[int] = Query(None, description="Filter spells available to this class")
+):
+    """Get legitimate spells with pagination (mirrors feats endpoint)"""
+    try:
+        from fastapi_models import LegitimateSpellsResponse, SpellInfo, SpellPaginationInfo
+
+        spell_manager = manager.get_manager('spell')
+
+        level_list = None
+        if levels:
+            try:
+                level_list = [int(l.strip()) for l in levels.split(',') if l.strip()]
+                if any(l < 0 or l > 9 for l in level_list):
+                    raise ValueError("Levels must be between 0 and 9")
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid levels parameter: {str(e)}"
+                )
+
+        school_list = None
+        if schools:
+            school_list = [s.strip() for s in schools.split(',') if s.strip()]
+
+        search_term = search.strip() if search else None
+
+        result = spell_manager.get_legitimate_spells(
+            levels=level_list,
+            schools=school_list,
+            search=search_term,
+            page=page,
+            limit=limit,
+            class_id=class_id
+        )
+
+        spells = [
+            SpellInfo(
+                id=spell['id'],
+                name=spell['name'],
+                level=spell['level'],
+                school_id=spell.get('school_id'),
+                school_name=spell.get('school_name'),
+                icon=spell.get('icon'),
+                description=spell.get('description'),
+                range=spell.get('range'),
+                cast_time=spell.get('cast_time'),
+                conjuration_time=spell.get('conjuration_time'),
+                components=spell.get('components'),
+                available_metamagic=spell.get('available_metamagic'),
+                target_type=spell.get('target_type'),
+                available_classes=spell.get('available_classes', [])
+            )
+            for spell in result['spells']
+        ]
+
+        pagination = SpellPaginationInfo(
+            page=result['pagination']['page'],
+            limit=result['pagination']['limit'],
+            total=result['pagination']['total'],
+            pages=result['pagination']['pages'],
+            has_next=result['pagination']['has_next'],
+            has_previous=result['pagination']['has_previous']
+        )
+
+        return LegitimateSpellsResponse(
+            spells=spells,
+            pagination=pagination
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get legitimate spells for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get legitimate spells: {str(e)}"
         )
 
 
