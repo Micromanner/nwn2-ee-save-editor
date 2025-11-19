@@ -302,12 +302,13 @@ class SkillManager(EventEmitter):
         modifiers = self._calculate_ability_modifiers()
         ability_mod = modifiers.get(key_ability, 0)
 
-        # Get equipment bonuses from InventoryManager
+        # Get equipment bonuses from InventoryManager (with null safety)
         inventory_manager = self.character_manager.get_manager('inventory')
         if inventory_manager:
             equipment_bonuses = inventory_manager.get_equipment_bonuses()
+            skill_bonuses = equipment_bonuses.get('skills', {}) or {}
             skill_name = field_mapper.get_field_value(skill_data, 'label', '') if skill_data else ''
-            equipment_skill_bonus = equipment_bonuses['skills'].get(skill_name, 0)
+            equipment_skill_bonus = skill_bonuses.get(skill_name, 0) if skill_bonuses else 0
         else:
             equipment_skill_bonus = 0
 

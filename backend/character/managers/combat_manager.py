@@ -77,16 +77,18 @@ class CombatManager(EventEmitter):
             'ac': {}, 'attributes': {}, 'saves': {}, 'skills': {}, 'combat': {}
         }
 
-        # Apply equipment bonuses to DEX for AC calculation
-        dex_equipment_bonus = equipment_bonuses['attributes'].get('Dex', 0)
+        # Apply equipment bonuses to DEX for AC calculation (with null safety)
+        attributes_bonuses = equipment_bonuses.get('attributes', {}) or {}
+        dex_equipment_bonus = attributes_bonuses.get('Dex', 0) if attributes_bonuses else 0
         effective_dex = base_dex + dex_equipment_bonus
         dex_bonus = (effective_dex - 10) // 2
 
-        # Get armor and shield bonuses from equipment
-        armor_bonus = equipment_bonuses['ac'].get('armor', 0)
-        shield_bonus = equipment_bonuses['ac'].get('shield', 0)
-        deflection_bonus = equipment_bonuses['ac'].get('deflection', 0)
-        natural_bonus = equipment_bonuses['ac'].get('natural', 0)
+        # Get armor and shield bonuses from equipment (with null safety)
+        ac_bonuses = equipment_bonuses.get('ac', {}) or {}
+        armor_bonus = ac_bonuses.get('armor', 0) if ac_bonuses else 0
+        shield_bonus = ac_bonuses.get('shield', 0) if ac_bonuses else 0
+        deflection_bonus = ac_bonuses.get('deflection', 0) if ac_bonuses else 0
+        natural_bonus = ac_bonuses.get('natural', 0) if ac_bonuses else 0
 
         # Get max dex bonus from armor using inventory manager
         max_dex_bonus = 999
@@ -231,36 +233,39 @@ class CombatManager(EventEmitter):
         return dr_list
     
     def _get_equipped_item(self, slot: str) -> Optional[Any]:
-        """Get item equipped in specific slot from GFF data"""
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        
-        slot_mapping = {
-            'Head': 0,
-            'Chest': 1,
-            'Boots': 2,
-            'Arms': 3,
-            'RightHand': 4,
-            'LeftHand': 5,
-            'Cloak': 6,
-            'LeftRing': 7,
-            'RightRing': 8,
-            'Neck': 9,
-            'Belt': 10,
-            'Arrows': 11,
-            'Bullets': 12,
-            'Bolts': 13,
-            'Gloves': 15,
+        """
+        Get item equipped in specific slot from GFF data
+
+        Uses inventory_manager's slot mapping for consistency
+        Args:
+            slot: Old GFF slot name (e.g., 'Head', 'RightHand')
+        """
+        # Map old GFF field names to new slot names
+        old_to_new_slot_map = {
+            'Head': 'head',
+            'Chest': 'chest',
+            'Boots': 'boots',
+            'Arms': 'gloves',  # Arms is gloves
+            'Gloves': 'gloves',
+            'RightHand': 'right_hand',
+            'LeftHand': 'left_hand',
+            'Cloak': 'cloak',
+            'LeftRing': 'left_ring',
+            'RightRing': 'right_ring',
+            'Neck': 'neck',
+            'Belt': 'belt',
+            'Arrows': 'arrows',
+            'Bullets': 'bullets',
+            'Bolts': 'bolts',
         }
-        
-        slot_id = slot_mapping.get(slot)
-        if slot_id is None:
+
+        new_slot_name = old_to_new_slot_map.get(slot)
+        if not new_slot_name:
             return None
-        
-        for item in equipped_items:
-            if item.get('Slot') == slot_id:
-                return item
-        
-        return None
+
+        # Use inventory manager to get equipped item
+        inventory_manager = self.character_manager.get_manager('inventory')
+        return inventory_manager.get_equipped_item(new_slot_name)
     
     def _get_item_ac_bonus(self, item) -> int:
         """Get AC bonus from an item"""
@@ -635,9 +640,10 @@ class CombatManager(EventEmitter):
             'ac': {}, 'attributes': {}, 'saves': {}, 'skills': {}, 'combat': {}
         }
 
-        # Apply equipment bonuses to ability scores
-        str_equipment = equipment_bonuses['attributes'].get('Str', 0)
-        dex_equipment = equipment_bonuses['attributes'].get('Dex', 0)
+        # Apply equipment bonuses to ability scores (with null safety)
+        attributes_bonuses = equipment_bonuses.get('attributes', {}) or {}
+        str_equipment = attributes_bonuses.get('Str', 0) if attributes_bonuses else 0
+        dex_equipment = attributes_bonuses.get('Dex', 0) if attributes_bonuses else 0
         effective_str = base_str + str_equipment
         effective_dex = base_dex + dex_equipment
 
@@ -645,8 +651,9 @@ class CombatManager(EventEmitter):
         str_mod = (effective_str - 10) // 2
         dex_mod = (effective_dex - 10) // 2
 
-        # Get equipment attack bonuses
-        attack_equipment = equipment_bonuses['combat'].get('attack', 0)
+        # Get equipment attack bonuses (with null safety)
+        combat_bonuses = equipment_bonuses.get('combat', {}) or {}
+        attack_equipment = combat_bonuses.get('attack', 0) if combat_bonuses else 0
 
         # Get size modifier from race_manager
         race_manager = self.character_manager.get_manager('race')

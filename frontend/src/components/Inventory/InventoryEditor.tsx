@@ -99,6 +99,14 @@ interface LocalInventoryData {
 const INVENTORY_COLS = 7;
 const INVENTORY_ROWS = 8;
 
+const SLOT_MAPPING: Record<string, string> = {
+  'helmet': 'head', 'chest': 'chest', 'belt': 'belt', 'boots': 'boots',
+  'neck': 'neck', 'cloak': 'cloak', 'gloves': 'gloves',
+  'l ring': 'left_ring', 'r ring': 'right_ring',
+  'l hand': 'left_hand', 'r hand': 'right_hand',
+  'arrows': 'arrows', 'bullets': 'bullets', 'bolts': 'bolts'
+};
+
 // Utility function to safely convert values to numbers
 const safeToNumber = (value: unknown, defaultValue: number = 0): number => {
   if (typeof value === 'number') return value;
@@ -111,7 +119,7 @@ const safeToNumber = (value: unknown, defaultValue: number = 0): number => {
 
 export default function InventoryEditor() {
   const t = useTranslations();
-  const { character } = useCharacterContext();
+  const { character, invalidateSubsystems } = useCharacterContext();
   const inventoryData = useSubsystem('inventory');
   const { showToast } = useToast();
   const [isEquipping, setIsEquipping] = useState(false);
@@ -200,17 +208,24 @@ export default function InventoryEditor() {
   const handleEquipItem = async (itemData: Record<string, unknown>, slot: string, inventoryIndex?: number | null) => {
     if (!character?.id) return;
 
+    const mappedSlot = SLOT_MAPPING[slot.toLowerCase()];
+    if (!mappedSlot) {
+      showToast(`Invalid slot: ${slot}`, 'error');
+      return;
+    }
+
     setIsEquipping(true);
     try {
       const response = await inventoryAPI.equipItem(character.id, {
         item_data: itemData,
-        slot: slot.toLowerCase().replace(' ', '_'),
+        slot: mappedSlot,
         inventory_index: inventoryIndex ?? undefined,
       });
 
       if (response.success) {
         showToast(response.message, 'success');
         await inventoryData.load();
+        await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
       } else {
         showToast(response.message, 'error');
       }
@@ -229,15 +244,22 @@ export default function InventoryEditor() {
   const handleUnequipItem = async (slot: string) => {
     if (!character?.id) return;
 
+    const mappedSlot = SLOT_MAPPING[slot.toLowerCase()];
+    if (!mappedSlot) {
+      showToast(`Invalid slot: ${slot}`, 'error');
+      return;
+    }
+
     setIsEquipping(true);
     try {
       const response = await inventoryAPI.unequipItem(character.id, {
-        slot: slot.toLowerCase().replace(' ', '_'),
+        slot: mappedSlot,
       });
 
       if (response.success) {
         showToast(response.message, 'success');
         await inventoryData.load();
+        await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
         setSelectedItem(null);
         setSelectedItemRawData(null);
         setSelectedItemInventoryIndex(null);
@@ -384,26 +406,8 @@ export default function InventoryEditor() {
     if (!inventoryData.data) return null;
     const summary = (inventoryData.data as unknown as LocalInventoryData).summary;
     const equippedItems = summary?.equipped_items || {};
-    
-    // Map display slot names to backend slot names (using backend's EQUIPMENT_SLOTS mapping)
-    const slotMapping: Record<string, string> = {
-      'helmet': 'head',
-      'chest': 'chest', 
-      'belt': 'belt',
-      'boots': 'boots',
-      'neck': 'neck',
-      'cloak': 'cloak',
-      'gloves': 'gloves',
-      'l ring': 'left_ring',
-      'r ring': 'right_ring', 
-      'l hand': 'left_hand',
-      'r hand': 'right_hand',
-      'arrows': 'arrows',
-      'bullets': 'bullets',
-      'bolts': 'bolts'
-    };
-    
-    const mappedSlot = slotMapping[slotName.toLowerCase()];
+
+    const mappedSlot = SLOT_MAPPING[slotName.toLowerCase()];
     if (!mappedSlot || !equippedItems[mappedSlot]) return null;
 
     const equipData = equippedItems[mappedSlot];
@@ -422,24 +426,7 @@ export default function InventoryEditor() {
     const handleSlotClick = () => {
       if (equippedItem) {
         const summary = (inventoryData.data as unknown as LocalInventoryData).summary;
-        const slotMapping: Record<string, string> = {
-          'helmet': 'head',
-          'chest': 'chest',
-          'belt': 'belt',
-          'boots': 'boots',
-          'neck': 'neck',
-          'cloak': 'cloak',
-          'gloves': 'gloves',
-          'l ring': 'left_ring',
-          'r ring': 'right_ring',
-          'l hand': 'left_hand',
-          'r hand': 'right_hand',
-          'arrows': 'arrows',
-          'bullets': 'bullets',
-          'bolts': 'bolts'
-        };
-
-        const mappedSlot = slotMapping[slotName.toLowerCase()];
+        const mappedSlot = SLOT_MAPPING[slotName.toLowerCase()];
         const rawItemData = mappedSlot ? summary?.equipped_items[mappedSlot]?.item_data : null;
 
         const itemForDetails: Item = {
@@ -750,14 +737,7 @@ export default function InventoryEditor() {
 
               if (selectedItem.equipped && selectedItem.slot) {
                 const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const slotMapping: Record<string, string> = {
-                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
-                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
-                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
-                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
-                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
-                };
-                const mappedSlot = slotMapping[selectedItem.slot];
+                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                 const equippedItem = summary?.equipped_items?.[mappedSlot];
                 return equippedItem?.decoded_properties;
               }
@@ -775,14 +755,7 @@ export default function InventoryEditor() {
 
               if (selectedItem.equipped && selectedItem.slot) {
                 const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const slotMapping: Record<string, string> = {
-                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
-                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
-                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
-                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
-                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
-                };
-                const mappedSlot = slotMapping[selectedItem.slot];
+                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                 const equippedItem = summary?.equipped_items?.[mappedSlot];
                 return equippedItem?.description;
               }
@@ -800,14 +773,7 @@ export default function InventoryEditor() {
 
               if (selectedItem.equipped && selectedItem.slot) {
                 const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const slotMapping: Record<string, string> = {
-                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
-                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
-                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
-                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
-                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
-                };
-                const mappedSlot = slotMapping[selectedItem.slot];
+                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                 const equippedItem = summary?.equipped_items?.[mappedSlot];
                 return equippedItem?.weight;
               }
@@ -825,14 +791,7 @@ export default function InventoryEditor() {
 
               if (selectedItem.equipped && selectedItem.slot) {
                 const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const slotMapping: Record<string, string> = {
-                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
-                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
-                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
-                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
-                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
-                };
-                const mappedSlot = slotMapping[selectedItem.slot];
+                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                 const equippedItem = summary?.equipped_items?.[mappedSlot];
                 return equippedItem?.value;
               }
@@ -850,14 +809,7 @@ export default function InventoryEditor() {
 
               if (selectedItem.equipped && selectedItem.slot) {
                 const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const slotMapping: Record<string, string> = {
-                  'Helmet': 'head', 'Chest': 'chest', 'Belt': 'belt', 'Boots': 'boots',
-                  'Neck': 'neck', 'Cloak': 'cloak', 'Gloves': 'gloves',
-                  'L Ring': 'left_ring', 'R Ring': 'right_ring',
-                  'L Hand': 'left_hand', 'R Hand': 'right_hand',
-                  'Arrows': 'arrows', 'Bullets': 'bullets', 'Bolts': 'bolts'
-                };
-                const mappedSlot = slotMapping[selectedItem.slot];
+                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                 const equippedItem = summary?.equipped_items?.[mappedSlot];
                 return equippedItem?.item_data;
               }

@@ -28,11 +28,19 @@ def get_combat_state(
     
     try:
         combat_manager = manager.get_manager('combat')
-        
+
         # Get data from combat manager methods
         combat_summary = combat_manager.get_combat_summary()
         armor_class = combat_manager.calculate_armor_class()
-        
+
+        # Validate data before proceeding
+        if combat_summary is None:
+            logger.error("combat_summary is None")
+            raise ValueError("Combat summary returned None")
+        if armor_class is None:
+            logger.error("armor_class is None")
+            raise ValueError("Armor class calculation returned None")
+
         # Extract nested data properly
         bab_info = combat_summary.get('bab_info', {})
         weapons_info = combat_summary.get('weapons', {})

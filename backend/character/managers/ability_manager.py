@@ -78,8 +78,9 @@ class AbilityManager(EventEmitter):
             inventory_manager = self.character_manager.get_manager('inventory')
             if inventory_manager:
                 equipment_bonuses = inventory_manager.get_equipment_bonuses()
+                attributes_bonuses = equipment_bonuses.get('attributes', {}) or {}
                 for attr in self.ATTRIBUTES:
-                    equipment_bonus = equipment_bonuses['attributes'].get(attr, 0)
+                    equipment_bonus = attributes_bonuses.get(attr, 0) if attributes_bonuses else 0
                     if equipment_bonus > 0:
                         attributes[attr] += equipment_bonus
                         logger.debug(f"AbilityManager.get_attributes: {attr} with equipment = {attributes[attr]} (+{equipment_bonus})")
