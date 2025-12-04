@@ -17,7 +17,8 @@
     "influence": "Influence",
     "aiSettings": "AI Settings",
     "quickAccess": "Quick Access",
-    "settings": "Settings"
+    "settings": "Settings",
+    "gameState": "Game State"
   },
   "actions": {
     "openSave": "Open Save",
@@ -357,6 +358,187 @@
       "tumble": "Tumble",
       "useMagicDevice": "Use Magic Device"
     }
+  },
+  "gameState": {
+    "title": "Game State",
+    "description": "Manage quests, reputation, and campaign progression",
+    "tabs": {
+      "reputation": "Companion Influence",
+      "quests": "Quests",
+      "moduleVariables": "Module & Variables",
+      "campaignSettings": "Campaign Settings",
+      "campaignVariables": "Campaign Variables"
+    },
+    "reputation": {
+      "companionInfluence": "Companion Influence",
+      "companion": "Companion",
+      "influence": "Influence",
+      "noCompanions": "No companions found",
+      "influenceLevel": "Influence Level",
+      "saveChanges": "Save Changes",
+      "saving": "Saving...",
+      "recruited": "Recruited",
+      "met": "Met",
+      "notRecruited": "Not Recruited"
+    },
+    "quests": {
+      "allQuests": "All Quests",
+      "activeQuests": "Active Quests",
+      "completedQuests": "Completed Quests",
+      "failedQuests": "Failed Quests",
+      "questName": "Quest Name",
+      "questStatus": "Total Quests",
+      "objectives": "Objectives",
+      "noQuests": "No quests found",
+      "noVariables": "No variables found",
+      "searchQuests": "Search quests...",
+      "completionRate": "Completion Rate",
+      "questGroup": "Quest Group",
+      "questVariable": "Variable",
+      "questProgress": "Quest Progress",
+      "questVariables": "Quest Variables",
+      "questVariablesTitle": "Quest Variables (Raw Data)",
+      "questVariablesDescription": "View raw quest variables grouped by prefix",
+      "loading": "Loading quest data...",
+      "unknownCategory": "Unknown Category",
+      "status": {
+        "active": "Active",
+        "completed": "Completed",
+        "failed": "Failed",
+        "unknown": "Unknown"
+      },
+      "tabs": {
+        "mapped": "Quests",
+        "unmapped": "Unmapped Variables"
+      },
+      "stats": {
+        "total": "Total",
+        "completed": "Completed",
+        "active": "Active",
+        "unmapped": "Unmapped"
+      },
+      "filters": {
+        "all": "All",
+        "active": "Active",
+        "completed": "Completed",
+        "searchPlaceholder": "Search quests or variables...",
+        "clearFilters": "Clear Filters",
+        "category": "Category"
+      },
+      "card": {
+        "variable": "Variable",
+        "source": "Source",
+        "xp": "XP Reward",
+        "questStage": "Quest Stage",
+        "currentValue": "Current value",
+        "apply": "Apply",
+        "value": "Value"
+      },
+      "confidence": {
+        "high": "High confidence",
+        "medium": "Medium confidence",
+        "low": "Low confidence"
+      },
+      "unmapped": {
+        "title": "Unmapped Variables",
+        "description": "Quest-like variables without direct quest definitions"
+      },
+      "toast": {
+        "updateSuccess": "Quest updated successfully",
+        "updateError": "Failed to update quest"
+      }
+    },
+    "questViewer": {
+      "title": "Quest Progress",
+      "description": "View quest progress with definitions from journal files",
+      "loading": "Loading quest data...",
+      "totalQuests": "Total Quests",
+      "completed": "Completed",
+      "active": "Active",
+      "unknown": "Unknown",
+      "totalXp": "Total XP Earned",
+      "searchPlaceholder": "Search quests...",
+      "noQuests": "No quests found",
+      "category": "Category",
+      "currentStage": "Current Stage",
+      "xpReward": "XP Reward",
+      "source": "Source",
+      "variableType": "Type",
+      "filters": {
+        "all": "All",
+        "completed": "Completed",
+        "active": "Active",
+        "unknown": "Unknown"
+      },
+      "unknownVariables": {
+        "title": "Unknown Plot Variables",
+        "description": "Quest-like variables without definitions in module.jrl files"
+      }
+    },
+    "moduleCampaign": {
+      "moduleSettings": "Module Information",
+      "moduleInfo": "Current module metadata (read-only)",
+      "campaignVariables": "Campaign Variables (globals.xml)",
+      "campaignVariablesDesc": "These variables persist across all modules in the campaign",
+      "moduleVariables": "Module Variables (VarTable)",
+      "moduleVariablesDesc": "These variables are specific to the current module only",
+      "moduleName": "Module Name",
+      "moduleDescription": "Description",
+      "campaign": "Campaign",
+      "currentArea": "Current Area",
+      "entryArea": "Entry Area",
+      "currentModule": "Current Module",
+      "loadingModuleInfo": "Loading module info...",
+      "variableName": "Variable Name",
+      "variableValue": "Value",
+      "variableType": "Type",
+      "noVariables": "No campaign variables found",
+      "addVariable": "Add Variable",
+      "deleteVariable": "Delete Variable",
+      "integers": "Integers",
+      "strings": "Strings",
+      "floats": "Floats",
+      "searchVariables": "Search variables...",
+      "saveChanges": "Save Changes",
+      "saving": "Saving...",
+      "noMatches": "No matching variables found",
+      "modified": "Modified",
+      "totalVariables": "Total Variables"
+    },
+    "campaign": {
+      "campaignSettings": "Campaign Settings",
+      "campaignInfo": "Edit campaign-wide settings",
+      "noSettings": "Campaign settings not found",
+      "levelCap": "Level Cap",
+      "levelCapDesc": "Maximum character level (1-40)",
+      "xpCap": "XP Cap",
+      "xpCapDesc": "Maximum experience points (0 = unlimited)",
+      "companionXpWeight": "Companion XP Weight",
+      "companionXpWeightDesc": "Party size XP penalty for companions (0.0-1.0)",
+      "henchmanXpWeight": "Henchman XP Weight",
+      "henchmanXpWeightDesc": "Party size XP penalty for henchmen (0.0-1.0)",
+      "gameplayFlags": "Gameplay Flags",
+      "attackNeutrals": "Attack Neutrals",
+      "attackNeutralsDesc": "Allow attacking neutral creatures (0=no, 1=yes)",
+      "autoXpAward": "Auto XP Award",
+      "autoXpAwardDesc": "Automatically award XP (0=no, 1=yes)",
+      "journalSync": "Journal Sync",
+      "journalSyncDesc": "Sync journal entries (0=no, 1=yes)",
+      "lockCharChanges": "Lock Character Changes",
+      "lockCharChangesDesc": "Prevent character changes (0=no, 1=yes)",
+      "usePersonalRep": "Use Personal Reputation",
+      "usePersonalRepDesc": "Use personal reputation system (0=no, 1=yes)",
+      "startModule": "Start Module",
+      "moduleCount": "Module Count",
+      "campaignFile": "Campaign File"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "changes": "Changes",
+    "modified": "Modified",
+    "yes": "Yes",
+    "no": "No"
   },
   "errors": {
     "loadingFailed": "Failed to load data"

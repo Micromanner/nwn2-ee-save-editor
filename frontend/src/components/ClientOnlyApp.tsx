@@ -19,6 +19,7 @@ import SpellsEditor from '@/components/Spells/SpellsEditor';
 import CharacterOverview from '@/components/Overview/CharacterOverview';
 import CompanionsView from '@/components/Companions/CompanionsView';
 import CharacterBuilder from '@/components/CharacterBuilder';
+import GameStateEditor from '@/components/GameState/GameStateEditor';
 import SettingsPage from '@/app/settings/page';
 import { Button } from '@/components/ui/Button';
 import SaveFileSelectorWrapper from '@/components/Saves/SaveFileSelectorWrapper';
@@ -106,6 +107,9 @@ function AppContent() {
           case 'inventory':
             console.log('Fetching fresh inventory data...');
             await loadSubsystem('inventory');
+            break;
+          case 'gameState':
+            console.log('Fetching fresh game state data...');
             break;
           case 'overview':
             console.log('Fetching fresh overview data...');
@@ -327,7 +331,14 @@ function AppContent() {
             )}
             
             {activeTab === 'companions' && <CompanionsView onLoadCompanion={handleLoadCompanion} currentCharacterName={currentCharacter?.name} />}
-            
+
+            {activeTab === 'gameState' && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.gameState')}</h2>
+                <GameStateEditor />
+              </div>
+            )}
+
             {activeTab === 'settings' && <SettingsPage />}
           </div>
         </main>

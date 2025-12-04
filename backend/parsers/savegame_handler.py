@@ -330,26 +330,71 @@ class SaveGameHandler:
     def extract_current_module(self) -> Optional[str]:
         """
         Extract current module name from currentmodule.txt.
-        
+
         Returns:
             Module name as string, or None if file doesn't exist
-            
+
         Raises:
             SaveGameError: If file exists but cannot be read
         """
         module_path = os.path.join(self.save_dir, 'currentmodule.txt')
         logger.debug(f"Reading currentmodule.txt from: {module_path}")
-        
+
         if not os.path.exists(module_path):
             logger.debug("currentmodule.txt not found")
             return None
-            
+
         try:
             with open(module_path, 'r', encoding='utf-8') as f:
                 return f.read().strip()
         except Exception as e:
             raise SaveGameError(f"Failed to read currentmodule.txt: {e}")
-    
+
+    def extract_module_ifo(self) -> Optional[bytes]:
+        """
+        Extract module.ifo from the save directory.
+        This contains the current state of module variables (VarTable).
+
+        Returns:
+            module.ifo contents as bytes, or None if file doesn't exist
+
+        Raises:
+            SaveGameError: If file exists but cannot be read
+        """
+        module_ifo_path = os.path.join(self.save_dir, 'module.ifo')
+        logger.debug(f"Reading module.ifo from: {module_ifo_path}")
+
+        if not os.path.exists(module_ifo_path):
+            logger.debug("module.ifo not found in save directory")
+            return None
+
+        try:
+            with open(module_ifo_path, 'rb') as f:
+                return f.read()
+        except Exception as e:
+            raise SaveGameError(f"Failed to read module.ifo: {e}")
+
+    def update_module_ifo(self, module_ifo_data: bytes) -> None:
+        """
+        Write updated module.ifo back to the save directory.
+        This updates module variables (VarTable) in the save file.
+
+        Args:
+            module_ifo_data: Updated module.ifo contents as bytes
+
+        Raises:
+            SaveGameError: If write fails
+        """
+        module_ifo_path = os.path.join(self.save_dir, 'module.ifo')
+        logger.debug(f"Writing module.ifo to: {module_ifo_path}")
+
+        try:
+            with open(module_ifo_path, 'wb') as f:
+                f.write(module_ifo_data)
+            logger.info("Successfully updated module.ifo in save directory")
+        except Exception as e:
+            raise SaveGameError(f"Failed to write module.ifo: {e}")
+
     def list_files(self) -> List[str]:
         """
         List all files in the save game zip.

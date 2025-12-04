@@ -33,6 +33,6 @@ A desktop application for editing Neverwinter Nights 2 Enhanced Edition save fil
 - Prevents invalid modifications that could corrupt saves
 - Automatic prerequisite checking for feats and classes
 - Game rule integration using NWN2 data
-- Edit Faction Reputation, Influence and Quests
+- Edit Companion Influence and Quests
 - Edit Module/Campaign rules
 - Voice Set Selection

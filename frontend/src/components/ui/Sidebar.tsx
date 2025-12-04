@@ -50,6 +50,11 @@ const baseNavItems: NavItem[] = [
     labelKey: 'navigation.inventory',
     icon: 'b_inventory'
   },
+  {
+    id: 'gameState',
+    labelKey: 'navigation.gameState',
+    icon: 'b_journal'
+  },
 ];
 
 // Development items (shown at bottom)

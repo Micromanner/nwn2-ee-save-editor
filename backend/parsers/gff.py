@@ -42,14 +42,14 @@ class GFFFieldType(IntEnum):
     LIST = 15
 
 
-@dataclass
+@dataclass(slots=True)
 class LocalizedSubstring:
     string: str
     language: int
     gender: int
 
 
-@dataclass
+@dataclass(slots=True)
 class LocalizedString:
     string_ref: int
     substrings: List[LocalizedSubstring]
@@ -57,6 +57,8 @@ class LocalizedString:
 
 class GFFElement:
     """Represents a single element in the GFF structure"""
+    __slots__ = ('type', 'id', 'label', 'value')
+
     def __init__(self, field_type: int, struct_id: int, label: str, value: Any):
         self.type = field_type
         self.id = struct_id

@@ -21,8 +21,7 @@ node_modules/
 sample_save/
 test_module/
 .env.local
-backend/cache/compiled_cache/
-backend/cache/icons/
+backend/cache/
 .env
 .env.local
 2da/

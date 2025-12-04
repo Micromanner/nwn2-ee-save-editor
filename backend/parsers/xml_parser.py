@@ -1,7 +1,7 @@
 """
 Parser for NWN2 XML files containing quest states and global variables.
 This version uses a data-driven, hybrid approach for maximum flexibility
-and can heuristically discover companions and factions in custom modules.
+and can heuristically discover companions in custom modules.
 """
 import xml.etree.ElementTree as ET
 import re
@@ -226,27 +226,6 @@ class XmlParser:
                         }
         return discovered
 
-    def _discover_potential_factions(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Heuristically discovers faction reputation by searching for
-        influence/reputation variables with PascalCase or snake_case names.
-        """
-        factions = {}
-        # Pattern looks for rep/influence followed by PascalCase (FactionName) or snake_case (faction_name)
-        faction_pattern = re.compile(r'^(?:[a-zA-Z0-9_]*_)?(?:inf|influence|rep|reputation)([A-Z]\w*|[a-z]+_[a-z_]+)$', re.IGNORECASE)
-
-        for var_name, value in self.data['integers'].items():
-            match = faction_pattern.match(var_name)
-            if match:
-                faction_name = next(g for g in match.groups() if g)
-                if faction_name.lower() not in factions:
-                    factions[faction_name.lower()] = {
-                        'name': faction_name.replace('_', ' ').title(),
-                        'reputation': value,
-                        'source': 'discovered'
-                    }
-        return factions
-    
     def _identify_quest_vars(self) -> Tuple[Set[str], Set[str]]:
         """
         Internal helper to identify and categorize quest-related variables.
@@ -373,16 +352,10 @@ class XmlParser:
         Generates a comprehensive summary for frontend display, including all discovered data.
         """
         companions = self.get_companion_status()
-        factions = self._discover_potential_factions()
-        
-        # Ensure a variable isn't listed as both a companion and a faction
-        companion_keys = set(companions.keys())
-        filtered_factions = {k: v for k, v in factions.items() if k not in companion_keys}
 
         return {
             'general_info': self.get_general_info(),
             'companion_status': companions,
-            'faction_reputation': filtered_factions,
             'quest_overview': self.get_quest_overview(),
             'raw_data_counts': {
                 'integers': len(self.data['integers']),
@@ -391,4 +364,236 @@ class XmlParser:
                 'vectors': len(self.data['vectors']),
             }
         }
+    
+    def update_companion_influence(self, companion_id: str, new_influence: int) -> bool:
+        """
+        Update the influence value for a specific companion.
+        
+        Args:
+            companion_id: The companion identifier (e.g., 'neeshka', 'khelgar')
+            new_influence: The new influence value to set
+            
+        Returns:
+            True if update was successful, False otherwise
+        """
+        # Check if companion exists in definitions
+        if companion_id in COMPANION_DEFINITIONS:
+            influence_var = COMPANION_DEFINITIONS[companion_id].get('influence_var')
+            if influence_var and influence_var in self.data['integers']:
+                self.data['integers'][influence_var] = new_influence
+                logger.info(f"Updated {companion_id} influence to {new_influence}")
+                return True
+        
+        # Try discovered companions
+        discovered = self._discover_potential_companions()
+        if companion_id in discovered:
+            # Try to find the influence variable
+            influence_pattern = re.compile(rf'^(?:[a-zA-Z0-9_]*_)?(?:inf|influence){companion_id}$', re.IGNORECASE)
+            for var_name in self.data['integers'].keys():
+                if influence_pattern.match(var_name):
+                    self.data['integers'][var_name] = new_influence
+                    logger.info(f"Updated discovered companion {companion_id} influence to {new_influence}")
+                    return True
+        
+        logger.warning(f"Could not find influence variable for companion: {companion_id}")
+        return False
+
+    def get_all_integers(self) -> Dict[str, int]:
+        """Get all integer variables from globals.xml"""
+        return self.data['integers'].copy()
+
+    def get_all_strings(self) -> Dict[str, str]:
+        """Get all string variables from globals.xml"""
+        return self.data['strings'].copy()
+
+    def get_all_floats(self) -> Dict[str, float]:
+        """Get all float variables from globals.xml"""
+        return self.data['floats'].copy()
+
+    def get_variable(self, var_name: str, var_type: str) -> Any:
+        """
+        Get a specific variable value by name and type.
+
+        Args:
+            var_name: Variable name
+            var_type: Variable type ('int', 'string', 'float')
+
+        Returns:
+            Variable value or None if not found
+        """
+        type_map = {
+            'int': 'integers',
+            'string': 'strings',
+            'float': 'floats'
+        }
+
+        data_key = type_map.get(var_type)
+        if not data_key:
+            logger.warning(f"Invalid variable type: {var_type}")
+            return None
+
+        return self.data[data_key].get(var_name)
+
+    def update_integer(self, var_name: str, value: int) -> bool:
+        """
+        Update or create an integer variable.
+
+        Args:
+            var_name: Variable name
+            value: New integer value
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.data['integers'][var_name] = int(value)
+            logger.info(f"Updated integer variable {var_name} = {value}")
+            return True
+        except (ValueError, TypeError) as e:
+            logger.error(f"Failed to update integer {var_name}: {e}")
+            return False
+
+    def update_string(self, var_name: str, value: str) -> bool:
+        """
+        Update or create a string variable.
+
+        Args:
+            var_name: Variable name
+            value: New string value
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.data['strings'][var_name] = str(value)
+            logger.info(f"Updated string variable {var_name} = {value}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update string {var_name}: {e}")
+            return False
+
+    def update_float(self, var_name: str, value: float) -> bool:
+        """
+        Update or create a float variable.
+
+        Args:
+            var_name: Variable name
+            value: New float value
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.data['floats'][var_name] = float(value)
+            logger.info(f"Updated float variable {var_name} = {value}")
+            return True
+        except (ValueError, TypeError) as e:
+            logger.error(f"Failed to update float {var_name}: {e}")
+            return False
+
+    def update_variable(self, var_name: str, value: Any, var_type: str) -> bool:
+        """
+        Update a variable of any type.
+
+        Args:
+            var_name: Variable name
+            value: New value
+            var_type: Variable type ('int', 'string', 'float')
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if var_type == 'int':
+            return self.update_integer(var_name, value)
+        elif var_type == 'string':
+            return self.update_string(var_name, value)
+        elif var_type == 'float':
+            return self.update_float(var_name, value)
+        else:
+            logger.warning(f"Unknown variable type: {var_type}")
+            return False
+
+    def delete_variable(self, var_name: str, var_type: str) -> bool:
+        """
+        Delete a variable.
+
+        Args:
+            var_name: Variable name
+            var_type: Variable type ('int', 'string', 'float')
+
+        Returns:
+            True if deleted, False if not found
+        """
+        type_map = {
+            'int': 'integers',
+            'string': 'strings',
+            'float': 'floats'
+        }
+
+        data_key = type_map.get(var_type)
+        if not data_key:
+            logger.warning(f"Invalid variable type: {var_type}")
+            return False
+
+        if var_name in self.data[data_key]:
+            del self.data[data_key][var_name]
+            logger.info(f"Deleted {var_type} variable: {var_name}")
+            return True
+
+        logger.warning(f"Variable not found: {var_name} ({var_type})")
+        return False
+
+    def to_xml_string(self) -> str:
+        """
+        Convert the current data back to XML string format.
+        
+        Returns:
+            XML string representation of the data
+        """
+        root = ET.Element('Globals')
+        
+        # Add integers
+        integers_elem = ET.SubElement(root, 'Integers')
+        for name, value in self.data['integers'].items():
+            int_elem = ET.SubElement(integers_elem, 'Integer')
+            name_elem = ET.SubElement(int_elem, 'Name')
+            name_elem.text = name
+            value_elem = ET.SubElement(int_elem, 'Value')
+            value_elem.text = str(value)
+        
+        # Add strings
+        strings_elem = ET.SubElement(root, 'Strings')
+        for name, value in self.data['strings'].items():
+            str_elem = ET.SubElement(strings_elem, 'String')
+            name_elem = ET.SubElement(str_elem, 'Name')
+            name_elem.text = name
+            value_elem = ET.SubElement(str_elem, 'Value')
+            value_elem.text = value
+        
+        # Add floats
+        floats_elem = ET.SubElement(root, 'Floats')
+        for name, value in self.data['floats'].items():
+            float_elem = ET.SubElement(floats_elem, 'Float')
+            name_elem = ET.SubElement(float_elem, 'Name')
+            name_elem.text = name
+            value_elem = ET.SubElement(float_elem, 'Value')
+            value_elem.text = str(value)
+        
+        # Add vectors
+        vectors_elem = ET.SubElement(root, 'Vectors')
+        for name, value in self.data['vectors'].items():
+            vec_elem = ET.SubElement(vectors_elem, 'Vector')
+            name_elem = ET.SubElement(vec_elem, 'Name')
+            name_elem.text = name
+            if isinstance(value, dict):
+                x_elem = ET.SubElement(vec_elem, 'X')
+                x_elem.text = str(value.get('x', 0))
+                y_elem = ET.SubElement(vec_elem, 'Y')
+                y_elem.text = str(value.get('y', 0))
+                z_elem = ET.SubElement(vec_elem, 'Z')
+                z_elem.text = str(value.get('z', 0))
+        
+        # Convert to string with proper formatting
+        ET.indent(root, space='  ')
+        return ET.tostring(root, encoding='unicode', xml_declaration=True)
 

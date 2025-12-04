@@ -15,7 +15,8 @@ from .managers import (
     SaveManager,
     InventoryManager,
     ContentManager,
-    CharacterStateManager
+    CharacterStateManager,
+    GameStateManager
 )
 
 # Define all managers and their registration order
@@ -25,20 +26,21 @@ MANAGER_REGISTRY: List[Tuple[str, Type]] = [
     ('ability', AbilityManager),  # Emits ATTRIBUTE_CHANGED events
     ('race', RaceManager),           # Provides racial modifiers
     ('class', ClassManager),         # Emits CLASS_CHANGED, LEVEL_GAINED events
-    
+
     # Content detection and campaign data
-    ('content', ContentManager),     # Detects custom content and extracts campaign data
-    
+    ('content', ContentManager),     # Detects custom content and extracts campaign data (read-only)
+    ('game_state', GameStateManager), # Edits game state (quests, reputation, influence)
+
     # Feature managers
     ('feat', FeatManager),           # Emits FEAT_ADDED/REMOVED events
     ('skill', SkillManager),         # Depends on attributes and class
     ('spell', SpellManager),         # Depends on class and attributes
-    
+
     # Derived stat managers that listen to other events
     ('combat', CombatManager),       # Listens to attribute/class changes
     ('save', SaveManager),           # Listens to attribute/class/feat changes
     ('inventory', InventoryManager),  # May emit ITEM_EQUIPPED/UNEQUIPPED events
-    
+
     # State management
     ('state', CharacterStateManager), # Manages character state changes and validation
 ]
