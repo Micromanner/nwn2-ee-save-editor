@@ -37,7 +37,7 @@ class GameStateManager(EventEmitter):
 
             try:
                 from parsers.savegame_handler import SaveGameHandler
-                from parsers.xml_parser import XmlParser
+                from rust_xml_parser import XmlParser
 
                 handler = SaveGameHandler(save_path)
                 globals_xml = handler.extract_globals_xml()
