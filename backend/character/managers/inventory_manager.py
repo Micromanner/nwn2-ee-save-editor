@@ -277,48 +277,6 @@ class InventoryManager(EventEmitter):
                         new_stack = item_data.get('StackSize', 1)
                         max_stack = stacking
 
-                        total_stack = existing_stack + new_stack
-                        if total_stack <= max_stack:
-                            existing_item['StackSize'] = total_stack
-                            return True
-
-        item_list.append(item_data)
-        self.gff.set('ItemList', item_list)
-
-        return True
-    
-    def remove_from_inventory(self, item_index: int) -> Optional[Dict[str, Any]]:
-        """Remove item from inventory by index"""
-        item_list = self.gff.get('ItemList', [])
-        
-        if 0 <= item_index < len(item_list):
-            item = item_list.pop(item_index)
-            self.gff.set('ItemList', item_list)
-            return item
-        
-        return None
-    
-    def check_item_id_exists(self, item_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """
-        Check if the item's BaseItem ID exists to prevent crashes
-
-        Returns:
-            (id_exists, list_of_errors)
-        """
-        errors = []
-        base_item = item_data.get('BaseItem', 0)
-        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-
-        if not base_item_data:
-            logger.warning(f"Unknown base item type: {base_item} - may be custom content")
-            return True, [f"Custom/unknown item type: {base_item}"]
-
-        return True, []
-    
-    def get_equipment_info(self) -> Dict[str, Dict[str, Any]]:
-        """Get information about all currently equipped items"""
-        results = {}
-
         equipped_items = self.gff.get('Equip_ItemList', [])
         for slot_index, item in enumerate(equipped_items):
             if item and slot_index in self.SLOT_INDEX_MAPPING:
@@ -1014,3 +972,89 @@ class InventoryManager(EventEmitter):
             'bonuses': bonuses,
             'raw_data': item_data
         }
+
+    def remove_from_inventory(self, item_index: int) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+        """
+        Remove an item from inventory by index
+        
+        Args:
+            item_index: Index in ItemList
+            
+        Returns:
+            (success, item_data, message)
+        """
+        item_list = self.gff.get('ItemList', [])
+        
+        if not isinstance(item_list, list):
+            return False, None, "Inventory is corrupted (ItemList not a list)"
+            
+        if item_index < 0 or item_index >= len(item_list):
+            return False, None, f"Invalid item index {item_index}"
+            
+        try:
+            item = item_list.pop(item_index)
+            self.gff.set('ItemList', item_list)
+            
+            self.character_manager.emit(EventType.ITEM_REMOVED, {
+                'index': item_index,
+                'item': item
+            })
+            
+            logger.info(f"Removed item at index {item_index} from inventory")
+            return True, item, "Item removed"
+        except Exception as e:
+            logger.error(f"Error removing item: {e}")
+            return False, None, str(e)
+
+    def check_item_id_exists(self, item_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        """
+        Check if item ID exists/is valid
+        
+        Args:
+            item_data: Item GFF data
+            
+        Returns:
+            (valid, messages)
+        """
+        # Stub implementation to prevent AttributeError
+        # In the future, this could check for ObjectId uniqueness
+        return True, []
+
+    def get_equipment_info(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about all equipped items
+        
+        Returns:
+            Dict mapping slot name to item info
+        """
+        info = {}
+        equipped_items = self.gff.get('Equip_ItemList', [])
+        
+        for slot_index, item in enumerate(equipped_items):
+            if item and slot_index in self.SLOT_INDEX_MAPPING:
+                slot_name = self.SLOT_INDEX_MAPPING[slot_index]
+                
+                base_item = item.get('BaseItem', 0)
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+                item_name = self._get_item_name(item)
+                
+                description = None
+                localized_desc = item.get('DescIdentified')
+                if localized_desc and isinstance(localized_desc, dict):
+                    string_ref = localized_desc.get('string_ref')
+                    if string_ref is not None and string_ref != 4294967295:
+                        try:
+                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
+                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
+                                description = resolved_desc
+                        except Exception:
+                            pass
+
+                info[slot_name] = {
+                    'base_item': base_item,
+                    'name': item_name,
+                    'description': description,
+                    'item_data': item
+                }
+                
+        return info

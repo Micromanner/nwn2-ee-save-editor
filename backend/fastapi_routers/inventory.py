@@ -332,10 +332,7 @@ def remove_from_inventory(
         session = char_session
         manager = session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        item_data = inventory_manager.remove_from_inventory(item_index)
-        
-        success = item_data is not None
-        message = f"Item removed from inventory at index {item_index}" if success else f"No item at index {item_index}"
+        success, item_data, message = inventory_manager.remove_from_inventory(item_index)
         
         return RemoveFromInventoryResponse(
             success=success,

@@ -24,6 +24,8 @@ class EventType(Enum):
     SKILL_UPDATED = 'skill_updated'
     ITEM_EQUIPPED = 'item_equipped'
     ITEM_UNEQUIPPED = 'item_unequipped'
+    ITEM_ADDED = 'item_added'
+    ITEM_REMOVED = 'item_removed'
     ABILITY_CHANGED = 'ability_changed'
     ATTRIBUTE_CHANGED = 'attribute_changed'
     ALIGNMENT_CHANGED = 'alignment_changed'

@@ -5,6 +5,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { formatNumber } from '@/utils/dataHelpers';
+import { Trash2 } from 'lucide-react';
 
 export interface DecodedProperty {
   property_id: number;
@@ -273,10 +274,12 @@ export default function ItemDetailsPanel({
             <Button
               variant="danger"
               size="sm"
-              className="w-full"
-              disabled={!onDestroy}
+              className="w-full flex items-center justify-center gap-2"
+              disabled={!onDestroy || item.is_plot}
               onClick={onDestroy}
+              title={item.is_plot ? t('inventory.cannotDestroyPlot') : t('actions.destroy')}
             >
+              <Trash2 className="w-4 h-4" />
               {t('actions.destroy')}
             </Button>
           </div>
