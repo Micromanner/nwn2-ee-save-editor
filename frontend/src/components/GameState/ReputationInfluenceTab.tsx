@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Undo2 } from 'lucide-react';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { gameStateAPI, CompanionInfluenceData } from '@/services/gameStateApi';
 import { display, formatModifier } from '@/utils/dataHelpers';
@@ -72,6 +73,26 @@ export default function ReputationInfluenceTab() {
     }
   };
 
+  const handleRevertCompanion = (companionId: string) => {
+    setLocalCompanionInfluence((prev) => ({
+      ...prev,
+      [companionId]: companions[companionId]?.influence ?? null,
+    }));
+  };
+
+  const handleRevertAll = () => {
+    const originalInfluence: CompanionState = {};
+    Object.entries(companions).forEach(([id, data]) => {
+      originalInfluence[id] = data.influence;
+    });
+    setLocalCompanionInfluence(originalInfluence);
+  };
+
+  const isCompanionModified = (companionId: string): boolean => {
+    const current = localCompanionInfluence[companionId];
+    const original = companions[companionId]?.influence;
+    return current !== null && current !== original;
+  };
 
   const handleSaveChanges = async () => {
     if (!characterId) return;
@@ -149,10 +170,35 @@ export default function ReputationInfluenceTab() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>{t('gameState.reputation.companionInfluence')}</CardTitle>
-          <CardDescription>
-            {t('gameState.reputation.companionInfluence')}
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle>{t('gameState.reputation.companionInfluence')}</CardTitle>
+              <CardDescription>
+                {t('gameState.reputation.companionInfluence')}
+              </CardDescription>
+            </div>
+            {hasChanges && (
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleRevertAll}
+                  variant="outline"
+                  size="sm"
+                  className="text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"
+                >
+                  <Undo2 className="h-4 w-4 mr-2" />
+                  {t('common.revertAll')}
+                </Button>
+                <Button
+                  onClick={handleSaveChanges}
+                  disabled={isSaving}
+                  size="sm"
+                  className="min-w-[120px]"
+                >
+                  {isSaving ? t('common.saving') : t('actions.save')}
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {companionEntries.length === 0 ? (
@@ -160,42 +206,65 @@ export default function ReputationInfluenceTab() {
               {t('gameState.reputation.noCompanions')}
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {companionEntries.map(([companionId, companion]) => {
                 const currentInfluence = localCompanionInfluence[companionId] ?? companion.influence ?? 0;
+                const isModified = isCompanionModified(companionId);
                 return (
-                  <div key={companionId} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Label className="font-medium">{display(companion.name)}</Label>
-                        <Badge variant={getRecruitmentBadgeVariant(companion.recruitment)}>
-                          {companion.recruitment}
-                        </Badge>
+                  <div
+                    key={companionId}
+                    className={`relative p-4 rounded-lg ${isModified ? 'bg-yellow-500/5' : 'bg-[rgb(var(--color-surface-secondary))]'}`}
+                  >
+                    {isModified && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                    )}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Label className="font-medium">{display(companion.name)}</Label>
+                          <Badge variant={getRecruitmentBadgeVariant(companion.recruitment)}>
+                            {companion.recruitment}
+                          </Badge>
+                          {isModified && (
+                            <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-500 border-yellow-500/20">
+                              Modified
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{t('gameState.reputation.influence')}:</span>
+                          <Input
+                            type="number"
+                            value={currentInfluence ?? ''}
+                            onChange={(e) => handleCompanionInfluenceInputChange(companionId, e.target.value)}
+                            className={`w-20 h-8 text-right ${isModified ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                            min={-100}
+                            max={100}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 shrink-0 ${isModified ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                            onClick={() => handleRevertCompanion(companionId)}
+                            title={t('common.revert')}
+                          >
+                            <Undo2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{t('gameState.reputation.influence')}:</span>
-                        <Input
-                          type="number"
-                          value={currentInfluence ?? ''}
-                          onChange={(e) => handleCompanionInfluenceInputChange(companionId, e.target.value)}
-                          className="w-20 h-8 text-right"
-                          min={-100}
-                          max={100}
-                        />
+                      <Slider
+                        value={[currentInfluence ?? 0]}
+                        onValueChange={(value) => handleCompanionInfluenceChange(companionId, value)}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-[rgb(var(--color-text-muted))]">
+                        <span>-100</span>
+                        <span>{formatModifier(currentInfluence ?? 0)}</span>
+                        <span>+100</span>
                       </div>
-                    </div>
-                    <Slider
-                      value={[currentInfluence ?? 0]}
-                      onValueChange={(value) => handleCompanionInfluenceChange(companionId, value)}
-                      min={-100}
-                      max={100}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-[rgb(var(--color-text-muted))]">
-                      <span>-100</span>
-                      <span>{formatModifier(currentInfluence ?? 0)}</span>
-                      <span>+100</span>
                     </div>
                   </div>
                 );
@@ -204,18 +273,6 @@ export default function ReputationInfluenceTab() {
           )}
         </CardContent>
       </Card>
-
-      {companionEntries.length > 0 && (
-        <div className="flex justify-end">
-          <Button
-            onClick={handleSaveChanges}
-            disabled={!hasChanges || isSaving}
-            className="min-w-32"
-          >
-            {isSaving ? t('actions.save') + '...' : t('actions.save')}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

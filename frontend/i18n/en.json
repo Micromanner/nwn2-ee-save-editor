@@ -190,6 +190,22 @@
       "arrows": "Arrows",
       "bullets": "Bullets",
       "bolts": "Bolts"
+    },
+    "filters": {
+      "sortBy": "Sort by",
+      "sortName": "Name",
+      "sortValue": "Value",
+      "sortWeight": "Weight",
+      "sortType": "Type",
+      "clearFilters": "Clear Filters",
+      "showing": "Showing",
+      "items": "items",
+      "noResults": "No items match your filters",
+      "customItems": "Custom",
+      "plotItems": "Plot",
+      "identified": "Identified",
+      "unidentified": "Unidentified",
+      "enhanced": "Enhanced"
     }
   },
   "status": {
@@ -538,7 +554,11 @@
     "changes": "Changes",
     "modified": "Modified",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "save": "Save",
+    "saving": "Saving...",
+    "revert": "Revert",
+    "revertAll": "Revert All"
   },
   "errors": {
     "loadingFailed": "Failed to load data"

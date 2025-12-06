@@ -33,11 +33,18 @@ impl ErfVersion {
             ErfVersion::V11 => 40,
         }
     }
-    
+
     pub fn max_resource_name_length(&self) -> usize {
         match self {
             ErfVersion::V10 => 16,
             ErfVersion::V11 => 32,
+        }
+    }
+
+    pub fn version_bytes(&self) -> &'static [u8; 4] {
+        match self {
+            ErfVersion::V10 => b"V1.0",
+            ErfVersion::V11 => b"V1.1",
         }
     }
 }
@@ -58,12 +65,20 @@ impl ErfType {
             _ => None,
         }
     }
-    
+
     pub fn as_str(&self) -> &'static str {
         match self {
             ErfType::ERF => "ERF",
             ErfType::HAK => "HAK",
             ErfType::MOD => "MOD",
+        }
+    }
+
+    pub fn signature(&self) -> &'static [u8; 4] {
+        match self {
+            ErfType::ERF => b"ERF ",
+            ErfType::HAK => b"HAK ",
+            ErfType::MOD => b"MOD ",
         }
     }
 }
@@ -293,5 +308,77 @@ pub fn extension_to_resource_type(ext: &str) -> Option<u16> {
         "hak" => Some(2061),
         "sav" => Some(2057),
         _ => None,
+    }
+}
+
+pub struct ErfBuilder {
+    erf_type: ErfType,
+    version: ErfVersion,
+    resources: Vec<(String, u16, Vec<u8>)>,
+    build_year: u32,
+    build_day: u32,
+    description_str_ref: u32,
+}
+
+impl ErfBuilder {
+    pub fn new(erf_type: ErfType) -> Self {
+        Self {
+            erf_type,
+            version: ErfVersion::V11,
+            resources: Vec::new(),
+            build_year: 125,
+            build_day: 1,
+            description_str_ref: 0xFFFFFFFF,
+        }
+    }
+
+    pub fn version(mut self, version: ErfVersion) -> Self {
+        self.version = version;
+        self
+    }
+
+    pub fn build_date(mut self, year: u32, day: u32) -> Self {
+        self.build_year = year;
+        self.build_day = day;
+        self
+    }
+
+    pub fn description_str_ref(mut self, str_ref: u32) -> Self {
+        self.description_str_ref = str_ref;
+        self
+    }
+
+    pub fn add_resource(mut self, name: &str, data: Vec<u8>) -> Self {
+        let resource_type = if let Some(dot_pos) = name.rfind('.') {
+            let ext = &name[dot_pos + 1..];
+            extension_to_resource_type(ext).unwrap_or(2037)
+        } else {
+            2037
+        };
+        self.resources.push((name.to_string(), resource_type, data));
+        self
+    }
+
+    pub fn add_resource_with_type(mut self, name: &str, resource_type: u16, data: Vec<u8>) -> Self {
+        self.resources.push((name.to_string(), resource_type, data));
+        self
+    }
+
+    pub fn build(self) -> super::parser::ErfParser {
+        use super::parser::ErfParser;
+
+        let mut parser = ErfParser::new_archive(self.erf_type, self.version);
+
+        if let Some(header) = &mut parser.header {
+            header.build_year = self.build_year;
+            header.build_day = self.build_day;
+            header.description_str_ref = self.description_str_ref;
+        }
+
+        for (name, resource_type, data) in self.resources {
+            let _ = parser.add_resource(&name, resource_type, data);
+        }
+
+        parser
     }
 }

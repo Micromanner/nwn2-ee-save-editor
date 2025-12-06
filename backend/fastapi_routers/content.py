@@ -468,7 +468,12 @@ def update_module_variable(
     manager: CharacterManagerDep,
     request: Dict[str, Any]
 ):
-    """Update a single module variable in VarTable"""
+    """
+    Update a single module variable in VarTable.
+
+    If module_id is provided, updates the variable in that module's .z file.
+    Otherwise, updates the current module's standalone module.ifo file.
+    """
     from fastapi_models.content_models import ModuleVariableUpdate
 
     try:
@@ -478,7 +483,8 @@ def update_module_variable(
         success = content_manager.update_module_variable(
             update_request.variable_name,
             update_request.value,
-            update_request.variable_type
+            update_request.variable_type,
+            update_request.module_id
         )
 
         if not success:
@@ -491,7 +497,8 @@ def update_module_variable(
             'success': True,
             'variable_name': update_request.variable_name,
             'value': update_request.value,
-            'variable_type': update_request.variable_type
+            'variable_type': update_request.variable_type,
+            'module_id': update_request.module_id
         }
 
     except HTTPException:

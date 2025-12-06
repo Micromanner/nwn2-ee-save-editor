@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { gameStateAPI, CampaignSettingsResponse, CampaignVariablesResponse } from '@/services/gameStateApi';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Undo2 } from 'lucide-react';
 
 import { VariableTable, VariableEdit } from '@/components/ui/VariableTable';
 
@@ -151,6 +151,30 @@ export default function CampaignSettingsTab() {
     }
   };
 
+  const handleRevertCampaignVariable = (name: string) => {
+    setEditedCampaignVars(prev => {
+      const newVars = { ...prev };
+      delete newVars[name];
+      return newVars;
+    });
+  };
+
+  const handleRevertAllCampaignChanges = () => {
+    setEditedCampaignVars({});
+  };
+
+  const handleRevertAllSettings = () => {
+    setEditedSettings({});
+  };
+
+  const handleRevertSetting = (field: keyof CampaignSettingsResponse) => {
+    setEditedSettings(prev => {
+      const newSettings = { ...prev };
+      delete newSettings[field];
+      return newSettings;
+    });
+  };
+
   const hasUnsavedChanges = Object.keys(editedSettings).length > 0;
   const hasCampaignChanges = Object.keys(editedCampaignVars).length > 0;
 
@@ -242,13 +266,24 @@ export default function CampaignSettingsTab() {
               )}
             </div>
             {hasUnsavedChanges && (
-              <Button
-                onClick={handleSaveChanges}
-                disabled={isSaving}
-                size="sm"
-              >
-                {isSaving ? t('actions.saving') : `${t('actions.save')} ${Object.keys(editedSettings).length} ${t('common.changes')}`}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleRevertAllSettings}
+                  variant="outline"
+                  size="sm"
+                  className="text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"
+                >
+                  <Undo2 className="h-4 w-4 mr-2" />
+                  {t('common.revertAll')}
+                </Button>
+                <Button
+                  onClick={handleSaveChanges}
+                  disabled={isSaving}
+                  size="sm"
+                >
+                  {isSaving ? t('actions.saving') : `${t('actions.save')} ${Object.keys(editedSettings).length} ${t('common.changes')}`}
+                </Button>
+              </div>
             )}
           </div>
         </CardHeader>
@@ -274,79 +309,143 @@ export default function CampaignSettingsTab() {
               </h3>
               
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="level-cap" className="flex items-center gap-2">
-                    {t('gameState.campaign.levelCap')}
-                    {isFieldEdited('level_cap') && (
-                      <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
-                    )}
-                  </Label>
-                  <Input
-                    id="level-cap"
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={getCurrentValue('level_cap')}
-                    onChange={(e) => handleFieldChange('level_cap', parseInt(e.target.value, 10))}
-                    className="mt-1.5"
-                  />
+                <div className={`relative ${isFieldEdited('level_cap') ? 'bg-yellow-500/5 rounded-lg' : ''}`}>
+                  {isFieldEdited('level_cap') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
+                  <div className="pl-3 py-2">
+                    <Label htmlFor="level-cap" className="flex items-center gap-2">
+                      {t('gameState.campaign.levelCap')}
+                      {isFieldEdited('level_cap') && (
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
+                      )}
+                    </Label>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Input
+                        id="level-cap"
+                        type="number"
+                        min={1}
+                        max={40}
+                        value={getCurrentValue('level_cap')}
+                        onChange={(e) => handleFieldChange('level_cap', parseInt(e.target.value, 10))}
+                        className={`flex-1 ${isFieldEdited('level_cap') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-9 w-9 shrink-0 ${isFieldEdited('level_cap') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                        onClick={() => handleRevertSetting('level_cap')}
+                        title={t('common.revert')}
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="xp-cap" className="flex items-center gap-2">
-                    {t('gameState.campaign.xpCap')}
-                    {isFieldEdited('xp_cap') && (
-                      <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
-                    )}
-                  </Label>
-                  <Input
-                    id="xp-cap"
-                    type="number"
-                    min={0}
-                    value={getCurrentValue('xp_cap')}
-                    onChange={(e) => handleFieldChange('xp_cap', parseInt(e.target.value, 10))}
-                    className="mt-1.5"
-                  />
+                <div className={`relative ${isFieldEdited('xp_cap') ? 'bg-yellow-500/5 rounded-lg' : ''}`}>
+                  {isFieldEdited('xp_cap') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
+                  <div className="pl-3 py-2">
+                    <Label htmlFor="xp-cap" className="flex items-center gap-2">
+                      {t('gameState.campaign.xpCap')}
+                      {isFieldEdited('xp_cap') && (
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
+                      )}
+                    </Label>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Input
+                        id="xp-cap"
+                        type="number"
+                        min={0}
+                        value={getCurrentValue('xp_cap')}
+                        onChange={(e) => handleFieldChange('xp_cap', parseInt(e.target.value, 10))}
+                        className={`flex-1 ${isFieldEdited('xp_cap') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-9 w-9 shrink-0 ${isFieldEdited('xp_cap') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                        onClick={() => handleRevertSetting('xp_cap')}
+                        title={t('common.revert')}
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="companion-xp-weight" className="flex items-center gap-2">
-                    {t('gameState.campaign.companionXpWeight')}
-                    {isFieldEdited('companion_xp_weight') && (
-                      <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
-                    )}
-                  </Label>
-                  <Input
-                    id="companion-xp-weight"
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    value={getCurrentValue('companion_xp_weight')}
-                    onChange={(e) => handleFieldChange('companion_xp_weight', parseFloat(e.target.value))}
-                    className="mt-1.5"
-                  />
+                <div className={`relative ${isFieldEdited('companion_xp_weight') ? 'bg-yellow-500/5 rounded-lg' : ''}`}>
+                  {isFieldEdited('companion_xp_weight') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
+                  <div className="pl-3 py-2">
+                    <Label htmlFor="companion-xp-weight" className="flex items-center gap-2">
+                      {t('gameState.campaign.companionXpWeight')}
+                      {isFieldEdited('companion_xp_weight') && (
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
+                      )}
+                    </Label>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Input
+                        id="companion-xp-weight"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={getCurrentValue('companion_xp_weight')}
+                        onChange={(e) => handleFieldChange('companion_xp_weight', parseFloat(e.target.value))}
+                        className={`flex-1 ${isFieldEdited('companion_xp_weight') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-9 w-9 shrink-0 ${isFieldEdited('companion_xp_weight') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                        onClick={() => handleRevertSetting('companion_xp_weight')}
+                        title={t('common.revert')}
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="henchman-xp-weight" className="flex items-center gap-2">
-                    {t('gameState.campaign.henchmanXpWeight')}
-                    {isFieldEdited('henchman_xp_weight') && (
-                      <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
-                    )}
-                  </Label>
-                  <Input
-                    id="henchman-xp-weight"
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    value={getCurrentValue('henchman_xp_weight')}
-                    onChange={(e) => handleFieldChange('henchman_xp_weight', parseFloat(e.target.value))}
-                    className="mt-1.5"
-                  />
+                <div className={`relative ${isFieldEdited('henchman_xp_weight') ? 'bg-yellow-500/5 rounded-lg' : ''}`}>
+                  {isFieldEdited('henchman_xp_weight') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
+                  <div className="pl-3 py-2">
+                    <Label htmlFor="henchman-xp-weight" className="flex items-center gap-2">
+                      {t('gameState.campaign.henchmanXpWeight')}
+                      {isFieldEdited('henchman_xp_weight') && (
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
+                      )}
+                    </Label>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Input
+                        id="henchman-xp-weight"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={getCurrentValue('henchman_xp_weight')}
+                        onChange={(e) => handleFieldChange('henchman_xp_weight', parseFloat(e.target.value))}
+                        className={`flex-1 ${isFieldEdited('henchman_xp_weight') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-9 w-9 shrink-0 ${isFieldEdited('henchman_xp_weight') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                        onClick={() => handleRevertSetting('henchman_xp_weight')}
+                        title={t('common.revert')}
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -358,119 +457,189 @@ export default function CampaignSettingsTab() {
               </h3>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[rgb(var(--color-surface-secondary))]">
+                <div className={`relative flex items-center justify-between p-3 rounded-lg ${isFieldEdited('attack_neutrals') ? 'bg-yellow-500/5' : 'bg-[rgb(var(--color-surface-secondary))]'}`}>
+                  {isFieldEdited('attack_neutrals') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
                   <div>
                     <Label htmlFor="attack-neutrals" className="flex items-center gap-2">
                       {t('gameState.campaign.attackNeutrals')}
                       {isFieldEdited('attack_neutrals') && (
-                        <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
                       )}
                     </Label>
                     <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                       {t('gameState.campaign.attackNeutralsDesc')}
                     </p>
                   </div>
-                  <Input
-                    id="attack-neutrals"
-                    type="number"
-                    min={0}
-                    max={1}
-                    value={getCurrentValue('attack_neutrals')}
-                    onChange={(e) => handleFieldChange('attack_neutrals', parseInt(e.target.value, 10))}
-                    className="w-16 h-8 text-center"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="attack-neutrals"
+                      type="number"
+                      min={0}
+                      max={1}
+                      value={getCurrentValue('attack_neutrals')}
+                      onChange={(e) => handleFieldChange('attack_neutrals', parseInt(e.target.value, 10))}
+                      className={`w-16 h-8 text-center ${isFieldEdited('attack_neutrals') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 shrink-0 ${isFieldEdited('attack_neutrals') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                      onClick={() => handleRevertSetting('attack_neutrals')}
+                      title={t('common.revert')}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[rgb(var(--color-surface-secondary))]">
+                <div className={`relative flex items-center justify-between p-3 rounded-lg ${isFieldEdited('auto_xp_award') ? 'bg-yellow-500/5' : 'bg-[rgb(var(--color-surface-secondary))]'}`}>
+                  {isFieldEdited('auto_xp_award') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
                   <div>
                     <Label htmlFor="auto-xp-award" className="flex items-center gap-2">
                       {t('gameState.campaign.autoXpAward')}
                       {isFieldEdited('auto_xp_award') && (
-                        <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
                       )}
                     </Label>
                     <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                       {t('gameState.campaign.autoXpAwardDesc')}
                     </p>
                   </div>
-                  <Input
-                    id="auto-xp-award"
-                    type="number"
-                    min={0}
-                    max={1}
-                    value={getCurrentValue('auto_xp_award')}
-                    onChange={(e) => handleFieldChange('auto_xp_award', parseInt(e.target.value, 10))}
-                    className="w-16 h-8 text-center"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="auto-xp-award"
+                      type="number"
+                      min={0}
+                      max={1}
+                      value={getCurrentValue('auto_xp_award')}
+                      onChange={(e) => handleFieldChange('auto_xp_award', parseInt(e.target.value, 10))}
+                      className={`w-16 h-8 text-center ${isFieldEdited('auto_xp_award') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 shrink-0 ${isFieldEdited('auto_xp_award') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                      onClick={() => handleRevertSetting('auto_xp_award')}
+                      title={t('common.revert')}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[rgb(var(--color-surface-secondary))]">
+                <div className={`relative flex items-center justify-between p-3 rounded-lg ${isFieldEdited('journal_sync') ? 'bg-yellow-500/5' : 'bg-[rgb(var(--color-surface-secondary))]'}`}>
+                  {isFieldEdited('journal_sync') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
                   <div>
                     <Label htmlFor="journal-sync" className="flex items-center gap-2">
                       {t('gameState.campaign.journalSync')}
                       {isFieldEdited('journal_sync') && (
-                        <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
                       )}
                     </Label>
                     <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                       {t('gameState.campaign.journalSyncDesc')}
                     </p>
                   </div>
-                  <Input
-                    id="journal-sync"
-                    type="number"
-                    min={0}
-                    max={1}
-                    value={getCurrentValue('journal_sync')}
-                    onChange={(e) => handleFieldChange('journal_sync', parseInt(e.target.value, 10))}
-                    className="w-16 h-8 text-center"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="journal-sync"
+                      type="number"
+                      min={0}
+                      max={1}
+                      value={getCurrentValue('journal_sync')}
+                      onChange={(e) => handleFieldChange('journal_sync', parseInt(e.target.value, 10))}
+                      className={`w-16 h-8 text-center ${isFieldEdited('journal_sync') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 shrink-0 ${isFieldEdited('journal_sync') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                      onClick={() => handleRevertSetting('journal_sync')}
+                      title={t('common.revert')}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[rgb(var(--color-surface-secondary))]">
+                <div className={`relative flex items-center justify-between p-3 rounded-lg ${isFieldEdited('no_char_changing') ? 'bg-yellow-500/5' : 'bg-[rgb(var(--color-surface-secondary))]'}`}>
+                  {isFieldEdited('no_char_changing') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
                   <div>
                     <Label htmlFor="no-char-changing" className="flex items-center gap-2">
                       {t('gameState.campaign.lockCharChanges')}
                       {isFieldEdited('no_char_changing') && (
-                        <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
                       )}
                     </Label>
                     <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                       {t('gameState.campaign.lockCharChangesDesc')}
                     </p>
                   </div>
-                  <Input
-                    id="no-char-changing"
-                    type="number"
-                    min={0}
-                    max={1}
-                    value={getCurrentValue('no_char_changing')}
-                    onChange={(e) => handleFieldChange('no_char_changing', parseInt(e.target.value, 10))}
-                    className="w-16 h-8 text-center"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="no-char-changing"
+                      type="number"
+                      min={0}
+                      max={1}
+                      value={getCurrentValue('no_char_changing')}
+                      onChange={(e) => handleFieldChange('no_char_changing', parseInt(e.target.value, 10))}
+                      className={`w-16 h-8 text-center ${isFieldEdited('no_char_changing') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 shrink-0 ${isFieldEdited('no_char_changing') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                      onClick={() => handleRevertSetting('no_char_changing')}
+                      title={t('common.revert')}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-[rgb(var(--color-surface-secondary))]">
+                <div className={`relative flex items-center justify-between p-3 rounded-lg ${isFieldEdited('use_personal_reputation') ? 'bg-yellow-500/5' : 'bg-[rgb(var(--color-surface-secondary))]'}`}>
+                  {isFieldEdited('use_personal_reputation') && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500 rounded-l" />
+                  )}
                   <div>
                     <Label htmlFor="use-personal-rep" className="flex items-center gap-2">
                       {t('gameState.campaign.usePersonalRep')}
                       {isFieldEdited('use_personal_reputation') && (
-                        <Badge variant="secondary" className="text-xs h-5 px-1.5">Mod</Badge>
+                        <Badge variant="secondary" className="text-xs h-5 px-1.5 bg-yellow-500/20 text-yellow-500 border-yellow-500/20">Modified</Badge>
                       )}
                     </Label>
                     <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                       {t('gameState.campaign.usePersonalRepDesc')}
                     </p>
                   </div>
-                  <Input
-                    id="use-personal-rep"
-                    type="number"
-                    min={0}
-                    max={1}
-                    value={getCurrentValue('use_personal_reputation')}
-                    onChange={(e) => handleFieldChange('use_personal_reputation', parseInt(e.target.value, 10))}
-                    className="w-16 h-8 text-center"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="use-personal-rep"
+                      type="number"
+                      min={0}
+                      max={1}
+                      value={getCurrentValue('use_personal_reputation')}
+                      onChange={(e) => handleFieldChange('use_personal_reputation', parseInt(e.target.value, 10))}
+                      className={`w-16 h-8 text-center ${isFieldEdited('use_personal_reputation') ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 shrink-0 ${isFieldEdited('use_personal_reputation') ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                      onClick={() => handleRevertSetting('use_personal_reputation')}
+                      title={t('common.revert')}
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -522,14 +691,25 @@ export default function CampaignSettingsTab() {
                 />
               </div>
               {hasCampaignChanges && (
-                <Button
-                  onClick={handleSaveCampaignChanges}
-                  disabled={isSavingCampaign}
-                  size="sm"
-                  className="min-w-[120px]"
-                >
-                  {isSavingCampaign ? 'Saving...' : `Save ${Object.keys(editedCampaignVars).length} Changes`}
-                </Button>
+                <>
+                  <Button
+                    onClick={handleRevertAllCampaignChanges}
+                    variant="outline"
+                    size="sm"
+                    className="text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"
+                  >
+                    <Undo2 className="h-4 w-4 mr-2" />
+                    {t('common.revertAll')}
+                  </Button>
+                  <Button
+                    onClick={handleSaveCampaignChanges}
+                    disabled={isSavingCampaign}
+                    size="sm"
+                    className="min-w-[120px]"
+                  >
+                    {isSavingCampaign ? t('common.saving') : `${t('common.save')} ${Object.keys(editedCampaignVars).length} ${t('common.changes')}`}
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -584,33 +764,36 @@ export default function CampaignSettingsTab() {
               </div>
 
               <TabsContent value="integers" className="flex-1 min-h-0 p-0">
-                <VariableTable 
-                  variables={filteredCampaignIntegers} 
-                  type="int" 
-                  editedVars={editedCampaignVars} 
+                <VariableTable
+                  variables={filteredCampaignIntegers}
+                  type="int"
+                  editedVars={editedCampaignVars}
                   onVariableChange={handleCampaignVariableChange}
+                  onRevertVariable={handleRevertCampaignVariable}
                   searchQuery={searchQuery}
                   className="border-0 rounded-none h-full"
                 />
               </TabsContent>
 
               <TabsContent value="strings" className="flex-1 min-h-0 p-0">
-                <VariableTable 
-                  variables={filteredCampaignStrings} 
-                  type="string" 
-                  editedVars={editedCampaignVars} 
+                <VariableTable
+                  variables={filteredCampaignStrings}
+                  type="string"
+                  editedVars={editedCampaignVars}
                   onVariableChange={handleCampaignVariableChange}
+                  onRevertVariable={handleRevertCampaignVariable}
                   searchQuery={searchQuery}
                   className="border-0 rounded-none h-full"
                 />
               </TabsContent>
 
               <TabsContent value="floats" className="flex-1 min-h-0 p-0">
-                <VariableTable 
-                  variables={filteredCampaignFloats} 
-                  type="float" 
-                  editedVars={editedCampaignVars} 
+                <VariableTable
+                  variables={filteredCampaignFloats}
+                  type="float"
+                  editedVars={editedCampaignVars}
                   onVariableChange={handleCampaignVariableChange}
+                  onRevertVariable={handleRevertCampaignVariable}
                   searchQuery={searchQuery}
                   className="border-0 rounded-none h-full"
                 />

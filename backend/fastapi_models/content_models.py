@@ -177,6 +177,7 @@ class ModuleVariableUpdate(BaseModel):
     variable_name: str = Field(..., description="Module variable name")
     value: Union[int, str, float] = Field(..., description="New value")
     variable_type: str = Field("int", description="Variable type: int, string, float")
+    module_id: Optional[str] = Field(None, description="Target module ID (None for current module)")
 
 
 class CampaignSettingsResponse(BaseModel):

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import { Undo2 } from 'lucide-react';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { gameStateAPI, ModuleInfo, ModuleVariablesResponse } from '@/services/gameStateApi';
 import { display } from '@/utils/dataHelpers';
@@ -115,7 +116,8 @@ export default function ModuleCampaignTab() {
           characterId,
           edit.name,
           edit.value,
-          edit.type
+          edit.type,
+          selectedModuleId || undefined
         );
       }
 
@@ -130,6 +132,18 @@ export default function ModuleCampaignTab() {
     } finally {
       setIsSavingModule(false);
     }
+  };
+
+  const handleRevertVariable = (name: string) => {
+    setEditedModuleVars(prev => {
+      const newVars = { ...prev };
+      delete newVars[name];
+      return newVars;
+    });
+  };
+
+  const handleRevertAllChanges = () => {
+    setEditedModuleVars({});
   };
 
   const filteredModuleIntegers = useMemo(() => {
@@ -251,14 +265,25 @@ export default function ModuleCampaignTab() {
                 />
               </div>
               {hasModuleChanges && (
-                <Button
-                  onClick={handleSaveModuleChanges}
-                  disabled={isSavingModule}
-                  size="sm"
-                  className="min-w-[120px]"
-                >
-                  {isSavingModule ? 'Saving...' : `Save ${Object.keys(editedModuleVars).length} Changes`}
-                </Button>
+                <>
+                  <Button
+                    onClick={handleRevertAllChanges}
+                    variant="outline"
+                    size="sm"
+                    className="text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10"
+                  >
+                    <Undo2 className="h-4 w-4 mr-2" />
+                    {t('common.revertAll')}
+                  </Button>
+                  <Button
+                    onClick={handleSaveModuleChanges}
+                    disabled={isSavingModule}
+                    size="sm"
+                    className="min-w-[120px]"
+                  >
+                    {isSavingModule ? t('common.saving') : `${t('common.save')} ${Object.keys(editedModuleVars).length} ${t('common.changes')}`}
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -313,33 +338,36 @@ export default function ModuleCampaignTab() {
               </div>
 
               <TabsContent value="integers" className="flex-1 min-h-0 p-0">
-                <VariableTable 
-                  variables={filteredModuleIntegers} 
-                  type="int" 
-                  editedVars={editedModuleVars} 
+                <VariableTable
+                  variables={filteredModuleIntegers}
+                  type="int"
+                  editedVars={editedModuleVars}
                   onVariableChange={handleModuleVariableChange}
+                  onRevertVariable={handleRevertVariable}
                   searchQuery={searchQuery}
                   className="border-0 rounded-none h-full"
                 />
               </TabsContent>
 
               <TabsContent value="strings" className="flex-1 min-h-0 p-0">
-                <VariableTable 
-                  variables={filteredModuleStrings} 
-                  type="string" 
-                  editedVars={editedModuleVars} 
+                <VariableTable
+                  variables={filteredModuleStrings}
+                  type="string"
+                  editedVars={editedModuleVars}
                   onVariableChange={handleModuleVariableChange}
+                  onRevertVariable={handleRevertVariable}
                   searchQuery={searchQuery}
                   className="border-0 rounded-none h-full"
                 />
               </TabsContent>
 
               <TabsContent value="floats" className="flex-1 min-h-0 p-0">
-                <VariableTable 
-                  variables={filteredModuleFloats} 
-                  type="float" 
-                  editedVars={editedModuleVars} 
+                <VariableTable
+                  variables={filteredModuleFloats}
+                  type="float"
+                  editedVars={editedModuleVars}
                   onVariableChange={handleModuleVariableChange}
+                  onRevertVariable={handleRevertVariable}
                   searchQuery={searchQuery}
                   className="border-0 rounded-none h-full"
                 />

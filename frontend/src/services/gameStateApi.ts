@@ -527,7 +527,8 @@ export class GameStateAPI {
     characterId: number,
     variableName: string,
     value: number | string,
-    variableType: string
+    variableType: string,
+    moduleId?: string
   ): Promise<UpdateModuleVariableResponse> {
     const response = await DynamicAPI.fetch(
       `/characters/${characterId}/module/variable/update`,
@@ -538,6 +539,7 @@ export class GameStateAPI {
           variable_name: variableName,
           value: value,
           variable_type: variableType,
+          module_id: moduleId,
         }),
       }
     );

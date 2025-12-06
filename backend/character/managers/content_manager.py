@@ -1107,8 +1107,26 @@ class ContentManager(EventEmitter):
             'total_count': sum(len(v) for v in variables.values())
         }
 
-    def update_module_variable(self, var_name: str, value: Union[int, str, float], var_type: str = 'int') -> bool:
-        """Update a module variable in VarTable"""
+    def update_module_variable(
+        self,
+        var_name: str,
+        value: Union[int, str, float],
+        var_type: str = 'int',
+        module_id: Optional[str] = None
+    ) -> bool:
+        """
+        Update a module variable in VarTable.
+
+        Args:
+            var_name: Name of the variable to update
+            value: New value for the variable
+            var_type: Type of variable ('int', 'float', 'string')
+            module_id: Optional module ID. If None, updates current module.
+                       If specified, updates the variable in that module's .z file.
+
+        Returns:
+            True if update succeeded, False otherwise
+        """
         if not hasattr(self.character_manager, 'save_path'):
             logger.error("ContentManager: No save_path available")
             return False
@@ -1118,75 +1136,164 @@ class ContentManager(EventEmitter):
             logger.error(f"ContentManager: Save path doesn't exist: {save_path}")
             return False
 
+        target_module = module_id or self.current_module_name
+        is_current_module = (target_module == self.current_module_name)
+
         try:
-            from parsers.savegame_handler import SaveGameHandler
-            from parsers.gff import GFFParser, GFFWriter
-            from io import BytesIO
-
-            handler = SaveGameHandler(save_path)
-
-            # Extract current module.ifo
-            module_ifo_bytes = handler.extract_module_ifo()
-            if not module_ifo_bytes:
-                logger.error("ContentManager: No module.ifo found in save")
-                return False
-
-            # Parse module.ifo
-            gff_parser = GFFParser()
-            module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
-            module_ifo = module_gff.to_dict()
-
-            # Get or create VarTable
-            var_table = module_ifo.get('VarTable', [])
-            if not isinstance(var_table, list):
-                var_table = []
-
-            # Find existing variable or create new one
-            var_found = False
-            gff_type = 1 if var_type == 'int' else (2 if var_type == 'float' else 3)
-
-            for var in var_table:
-                if isinstance(var, dict) and var.get('Name') == var_name:
-                    var['Value'] = value
-                    var['Type'] = gff_type
-                    var_found = True
-                    break
-
-            # If variable doesn't exist, add it
-            if not var_found:
-                var_table.append({
-                    'Name': var_name,
-                    'Type': gff_type,
-                    'Value': value
-                })
-
-            # Update VarTable in GFF
-            module_gff.set_field('VarTable', var_table)
-
-            # Write module.ifo back to .mod file
-            writer = GFFWriter.from_parser(gff_parser)
-            module_ifo_data = writer.to_bytes(module_gff)
-
-            # Update the .mod file
-            handler.update_module_ifo(module_ifo_data)
-
-            # Update local cache
-            if var_type == 'int':
-                self.module_variables['integers'][var_name] = int(value)
-            elif var_type == 'float':
-                self.module_variables['floats'][var_name] = float(value)
-            elif var_type == 'string':
-                self.module_variables['strings'][var_name] = str(value)
-
-            logger.info(f"ContentManager: Updated module variable {var_name} = {value} ({var_type})")
-            self.emit('module_variable_updated', {
-                'variable_name': var_name,
-                'value': value,
-                'variable_type': var_type
-            })
-
-            return True
+            if is_current_module:
+                return self._update_current_module_variable(
+                    save_path, var_name, value, var_type
+                )
+            else:
+                return self._update_z_file_module_variable(
+                    save_path, target_module, var_name, value, var_type
+                )
 
         except Exception as e:
             logger.error(f"ContentManager: Failed to update module variable: {e}", exc_info=True)
             return False
+
+    def _update_current_module_variable(
+        self,
+        save_path: str,
+        var_name: str,
+        value: Union[int, str, float],
+        var_type: str
+    ) -> bool:
+        """Update variable in standalone module.ifo for current module"""
+        from parsers.savegame_handler import SaveGameHandler
+        from parsers.gff import GFFParser, GFFWriter
+        from io import BytesIO
+
+        handler = SaveGameHandler(save_path, create_load_backup=False)
+
+        module_ifo_bytes = handler.extract_module_ifo()
+        if not module_ifo_bytes:
+            logger.error("ContentManager: No module.ifo found in save")
+            return False
+
+        gff_parser = GFFParser()
+        module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
+
+        updated_gff = self._update_var_table(module_gff, var_name, value, var_type)
+
+        writer = GFFWriter.from_parser(gff_parser)
+        module_ifo_data = writer.to_bytes(updated_gff)
+
+        handler.update_module_ifo(module_ifo_data)
+
+        self._update_variable_cache(self.current_module_name, var_name, value, var_type)
+
+        logger.info(f"ContentManager: Updated current module variable {var_name} = {value} ({var_type})")
+        self.emit('module_variable_updated', {
+            'variable_name': var_name,
+            'value': value,
+            'variable_type': var_type,
+            'module_id': self.current_module_name
+        })
+
+        return True
+
+    def _update_z_file_module_variable(
+        self,
+        save_path: str,
+        module_id: str,
+        var_name: str,
+        value: Union[int, str, float],
+        var_type: str
+    ) -> bool:
+        """Update variable in .z file using ERF writer"""
+        import lzma
+        from parsers import ERFParser
+        from parsers.gff import GFFParser, GFFWriter
+        from io import BytesIO
+
+        z_file_path = os.path.join(save_path, f'{module_id}.z')
+        if not os.path.exists(z_file_path):
+            logger.error(f"ContentManager: Module .z file not found: {z_file_path}")
+            return False
+
+        logger.info(f"ContentManager: Updating variable in {module_id}.z")
+
+        with lzma.open(z_file_path, 'rb') as f:
+            decompressed_data = f.read()
+
+        parser = ERFParser()
+        parser.parse_from_bytes(decompressed_data)
+        parser.load_all_resources()
+
+        module_ifo_bytes = parser.extract_resource('module.ifo')
+        if not module_ifo_bytes:
+            logger.error(f"ContentManager: module.ifo not found in {module_id}.z")
+            return False
+
+        gff_parser = GFFParser()
+        module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
+
+        updated_gff = self._update_var_table(module_gff, var_name, value, var_type)
+
+        writer = GFFWriter.from_parser(gff_parser)
+        updated_module_ifo = writer.to_bytes(updated_gff)
+
+        parser.update_resource('module.ifo', updated_module_ifo)
+
+        updated_erf_data = parser.to_bytes()
+
+        with lzma.open(z_file_path, 'wb') as f:
+            f.write(updated_erf_data)
+
+        self._update_variable_cache(module_id, var_name, value, var_type)
+
+        logger.info(f"ContentManager: Updated {module_id} variable {var_name} = {value} ({var_type})")
+        self.emit('module_variable_updated', {
+            'variable_name': var_name,
+            'value': value,
+            'variable_type': var_type,
+            'module_id': module_id
+        })
+
+        return True
+
+    def _update_var_table(self, module_gff, var_name: str, value: Union[int, str, float], var_type: str):
+        """Update or add a variable in the VarTable of a module GFF"""
+        module_ifo = module_gff.to_dict()
+
+        var_table = module_ifo.get('VarTable', [])
+        if not isinstance(var_table, list):
+            var_table = []
+
+        var_found = False
+        gff_type = 1 if var_type == 'int' else (2 if var_type == 'float' else 3)
+
+        for var in var_table:
+            if isinstance(var, dict) and var.get('Name') == var_name:
+                var['Value'] = value
+                var['Type'] = gff_type
+                var_found = True
+                break
+
+        if not var_found:
+            var_table.append({
+                'Name': var_name,
+                'Type': gff_type,
+                'Value': value
+            })
+
+        module_gff.set_field('VarTable', var_table)
+        return module_gff
+
+    def _update_variable_cache(self, module_id: str, var_name: str, value: Union[int, str, float], var_type: str):
+        """Update the local variable cache after a successful update"""
+        if module_id in self.all_modules:
+            variables = self.all_modules[module_id]['variables']
+        elif module_id == self.current_module_name:
+            variables = self.module_variables
+        else:
+            return
+
+        if var_type == 'int':
+            variables['integers'][var_name] = int(value)
+        elif var_type == 'float':
+            variables['floats'][var_name] = float(value)
+        elif var_type == 'string':
+            variables['strings'][var_name] = str(value)

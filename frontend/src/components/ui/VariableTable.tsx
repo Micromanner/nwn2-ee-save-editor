@@ -2,7 +2,7 @@ import React from 'react';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Copy } from 'lucide-react';
+import { Copy, Undo2 } from 'lucide-react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { display } from '@/utils/dataHelpers';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,7 @@ interface VariableTableProps {
   type: 'int' | 'string' | 'float';
   editedVars: Record<string, VariableEdit>;
   onVariableChange: (name: string, value: string, type: 'int' | 'string' | 'float') => void;
+  onRevertVariable?: (name: string) => void;
   searchQuery?: string;
   className?: string;
 }
@@ -27,6 +28,7 @@ export function VariableTable({
   type,
   editedVars,
   onVariableChange,
+  onRevertVariable,
   searchQuery,
   className
 }: VariableTableProps) {
@@ -96,17 +98,30 @@ export function VariableTable({
                     {display(value)}
                   </td>
                   <td className="px-6 py-4">
-                    <Input
-                      type={type === 'string' ? 'text' : 'number'}
-                      step={type === 'float' ? '0.01' : '1'}
-                      value={currentValue}
-                      onChange={(e) => onVariableChange(name, e.target.value, type)}
-                      className={`
-                        w-full h-9 font-mono
-                        ${isEdited ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}
-                      `}
-                      placeholder={String(value)}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type={type === 'string' ? 'text' : 'number'}
+                        step={type === 'float' ? '0.01' : '1'}
+                        value={currentValue}
+                        onChange={(e) => onVariableChange(name, e.target.value, type)}
+                        className={`
+                          flex-1 h-9 font-mono
+                          ${isEdited ? 'border-yellow-500/50 focus-visible:ring-yellow-500' : ''}
+                        `}
+                        placeholder={String(value)}
+                      />
+                      {onRevertVariable && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-9 w-9 shrink-0 ${isEdited ? 'text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10' : 'invisible'}`}
+                          onClick={() => onRevertVariable(name)}
+                          title={t('common.revert')}
+                        >
+                          <Undo2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

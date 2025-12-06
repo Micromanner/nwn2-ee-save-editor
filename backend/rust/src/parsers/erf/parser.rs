@@ -1,11 +1,11 @@
 use super::error::{ErfError, ErfResult};
 use super::types::*;
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use indexmap::IndexMap;
 use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::Instant;
 use lasso::Rodeo;
@@ -416,5 +416,231 @@ impl ErfParser {
         for resource in self.resources.values_mut() {
             resource.data = None;
         }
+    }
+
+    pub fn add_resource(&mut self, name: &str, resource_type: u16, data: Vec<u8>) -> ErfResult<()> {
+        let version = self.version.unwrap_or(ErfVersion::V11);
+        let max_name_len = version.max_resource_name_length();
+
+        let (base_name, ext) = if let Some(dot_pos) = name.rfind('.') {
+            (&name[..dot_pos], &name[dot_pos + 1..])
+        } else {
+            (name, "")
+        };
+
+        if base_name.len() > max_name_len {
+            return Err(ErfError::InvalidResourceName);
+        }
+
+        if !base_name.bytes().all(|b| b.is_ascii()) {
+            return Err(ErfError::InvalidResourceName);
+        }
+
+        let full_name = if ext.is_empty() {
+            format!("{}.{}", base_name, resource_type_to_extension(resource_type))
+        } else {
+            name.to_string()
+        };
+
+        let key = KeyEntry {
+            resource_name: base_name.to_string(),
+            resource_id: self.resources.len() as u32,
+            resource_type,
+            reserved: 0,
+        };
+
+        let entry = ResourceEntry {
+            offset: 0,
+            size: data.len() as u32,
+        };
+
+        let resource = ErfResource {
+            key,
+            entry,
+            data: Some(data),
+        };
+
+        self.resources.insert(full_name.to_lowercase(), resource);
+
+        if let Some(header) = &mut self.header {
+            header.entry_count = self.resources.len() as u32;
+        }
+
+        Ok(())
+    }
+
+    pub fn remove_resource(&mut self, name: &str) -> ErfResult<bool> {
+        let name_lower = name.to_lowercase();
+        let removed = self.resources.shift_remove(&name_lower).is_some();
+
+        if removed {
+            if let Some(header) = &mut self.header {
+                header.entry_count = self.resources.len() as u32;
+            }
+        }
+
+        Ok(removed)
+    }
+
+    pub fn update_resource(&mut self, name: &str, data: Vec<u8>) -> ErfResult<()> {
+        let name_lower = name.to_lowercase();
+
+        if let Some(resource) = self.resources.get_mut(&name_lower) {
+            resource.entry.size = data.len() as u32;
+            resource.data = Some(data);
+            Ok(())
+        } else {
+            Err(ErfError::ResourceNotFound { name: name.to_string() })
+        }
+    }
+
+    pub fn to_bytes(&self) -> ErfResult<Vec<u8>> {
+        let version = self.version.ok_or_else(|| ErfError::corrupted_data("No version set"))?;
+        let erf_type = self.erf_type.ok_or_else(|| ErfError::corrupted_data("No ERF type set"))?;
+
+        let mut output = Vec::new();
+
+        self.write_header_bytes(&mut output, version, erf_type)?;
+        self.write_keys_bytes(&mut output, version)?;
+        self.write_resource_list_bytes(&mut output)?;
+        self.write_resource_data_bytes(&mut output)?;
+
+        Ok(output)
+    }
+
+    pub fn write<P: AsRef<Path>>(&self, path: P) -> ErfResult<()> {
+        let data = self.to_bytes()?;
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+        writer.write_all(&data)?;
+        writer.flush()?;
+        Ok(())
+    }
+
+    fn write_header_bytes(&self, output: &mut Vec<u8>, version: ErfVersion, erf_type: ErfType) -> ErfResult<()> {
+        let key_size = version.key_entry_size();
+        let resource_count = self.resources.len();
+
+        let header_size = 160u32;
+        let offset_to_keys = header_size;
+        let offset_to_resources = offset_to_keys + (resource_count as u32 * key_size as u32);
+
+        output.extend_from_slice(erf_type.signature());
+        output.extend_from_slice(version.version_bytes());
+
+        output.write_u32::<LittleEndian>(0)?;
+        output.write_u32::<LittleEndian>(0)?;
+        output.write_u32::<LittleEndian>(resource_count as u32)?;
+        output.write_u32::<LittleEndian>(header_size)?;
+        output.write_u32::<LittleEndian>(offset_to_keys)?;
+        output.write_u32::<LittleEndian>(offset_to_resources)?;
+
+        let header = self.header.as_ref();
+        let build_year = header.map(|h| h.build_year).unwrap_or(125);
+        let build_day = header.map(|h| h.build_day).unwrap_or(1);
+        let description_str_ref = header.map(|h| h.description_str_ref).unwrap_or(0xFFFFFFFF);
+
+        output.write_u32::<LittleEndian>(build_year)?;
+        output.write_u32::<LittleEndian>(build_day)?;
+        output.write_u32::<LittleEndian>(description_str_ref)?;
+
+        output.extend_from_slice(&[0u8; 116]);
+
+        Ok(())
+    }
+
+    fn write_keys_bytes(&self, output: &mut Vec<u8>, version: ErfVersion) -> ErfResult<()> {
+        let name_length = version.max_resource_name_length();
+
+        for (index, resource) in self.resources.values().enumerate() {
+            let mut name_bytes = vec![0u8; name_length];
+            let name = resource.key.resource_name.as_bytes();
+            let copy_len = name.len().min(name_length);
+            name_bytes[..copy_len].copy_from_slice(&name[..copy_len]);
+            output.extend_from_slice(&name_bytes);
+
+            output.write_u32::<LittleEndian>(index as u32)?;
+            output.write_u16::<LittleEndian>(resource.key.resource_type)?;
+            output.write_u16::<LittleEndian>(resource.key.reserved)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_resource_list_bytes(&self, output: &mut Vec<u8>) -> ErfResult<()> {
+        let version = self.version.ok_or_else(|| ErfError::corrupted_data("No version set"))?;
+        let key_size = version.key_entry_size();
+        let resource_count = self.resources.len();
+
+        let header_size = 160u32;
+        let keys_size = (resource_count * key_size) as u32;
+        let resource_list_size = (resource_count * 8) as u32;
+        let mut data_offset = header_size + keys_size + resource_list_size;
+
+        for resource in self.resources.values() {
+            output.write_u32::<LittleEndian>(data_offset)?;
+            output.write_u32::<LittleEndian>(resource.entry.size)?;
+            data_offset += resource.entry.size;
+        }
+
+        Ok(())
+    }
+
+    fn write_resource_data_bytes(&self, output: &mut Vec<u8>) -> ErfResult<()> {
+        for resource in self.resources.values() {
+            if let Some(data) = &resource.data {
+                output.extend_from_slice(data);
+            } else {
+                return Err(ErfError::corrupted_data(
+                    format!("Resource '{}' has no data loaded", resource.key.resource_name)
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn new_archive(erf_type: ErfType, version: ErfVersion) -> Self {
+        Self {
+            header: Some(ErfHeader {
+                file_type: erf_type.as_str().to_string() + " ",
+                version: match version {
+                    ErfVersion::V10 => "V1.0".to_string(),
+                    ErfVersion::V11 => "V1.1".to_string(),
+                },
+                language_count: 0,
+                localized_string_size: 0,
+                entry_count: 0,
+                offset_to_localized_string: 160,
+                offset_to_key_list: 160,
+                offset_to_resource_list: 160,
+                build_year: 125,
+                build_day: 1,
+                description_str_ref: 0xFFFFFFFF,
+            }),
+            erf_type: Some(erf_type),
+            version: Some(version),
+            resources: IndexMap::new(),
+            interner: Rodeo::default(),
+            security_limits: SecurityLimits::default(),
+            stats: ErfStatistics {
+                total_resources: 0,
+                total_size: 0,
+                resource_types: HashMap::new(),
+                largest_resource: None,
+                parse_time_ms: 0,
+            },
+            metadata: None,
+            mmap: None,
+            file_data: None,
+        }
+    }
+
+    pub fn load_all_resources(&mut self) -> ErfResult<()> {
+        let names: Vec<String> = self.resources.keys().cloned().collect();
+        for name in names {
+            let _ = self.extract_resource(&name)?;
+        }
+        Ok(())
     }
 }

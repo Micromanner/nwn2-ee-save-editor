@@ -1,6 +1,6 @@
 use super::error::ErfError;
 use super::parser::ErfParser;
-use super::types::extension_to_resource_type;
+use super::types::{extension_to_resource_type, ErfType, ErfVersion};
 use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
@@ -222,6 +222,58 @@ impl PyErfParser {
     
     fn __contains__(&self, name: &str) -> bool {
         self.has_resource(name)
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (erf_type, version=None))]
+    fn new_archive(erf_type: &str, version: Option<&str>) -> PyResult<Self> {
+        let erf_type_enum = match erf_type.to_uppercase().as_str() {
+            "ERF" => ErfType::ERF,
+            "HAK" => ErfType::HAK,
+            "MOD" => ErfType::MOD,
+            _ => return Err(PyValueError::new_err(format!("Invalid ERF type: {}", erf_type))),
+        };
+
+        let version_enum = match version.unwrap_or("V1.1").to_uppercase().as_str() {
+            "V1.0" | "1.0" => ErfVersion::V10,
+            "V1.1" | "1.1" => ErfVersion::V11,
+            _ => return Err(PyValueError::new_err("Invalid version, expected 'V1.0' or 'V1.1'")),
+        };
+
+        Ok(Self {
+            inner: ErfParser::new_archive(erf_type_enum, version_enum),
+        })
+    }
+
+    #[pyo3(signature = (name, resource_type, data))]
+    fn add_resource(&mut self, name: &str, resource_type: u16, data: &Bound<'_, PyBytes>) -> PyResult<()> {
+        let bytes = data.as_bytes().to_vec();
+        self.inner.add_resource(name, resource_type, bytes).map_err(erf_to_py_err)
+    }
+
+    #[pyo3(signature = (name))]
+    fn remove_resource(&mut self, name: &str) -> PyResult<bool> {
+        self.inner.remove_resource(name).map_err(erf_to_py_err)
+    }
+
+    #[pyo3(signature = (name, data))]
+    fn update_resource(&mut self, name: &str, data: &Bound<'_, PyBytes>) -> PyResult<()> {
+        let bytes = data.as_bytes().to_vec();
+        self.inner.update_resource(name, bytes).map_err(erf_to_py_err)
+    }
+
+    fn to_bytes(&self, py: Python) -> PyResult<Py<PyBytes>> {
+        let data = self.inner.to_bytes().map_err(erf_to_py_err)?;
+        Ok(PyBytes::new(py, &data).into())
+    }
+
+    #[pyo3(signature = (file_path))]
+    fn write(&self, file_path: &str) -> PyResult<()> {
+        self.inner.write(file_path).map_err(erf_to_py_err)
+    }
+
+    fn load_all_resources(&mut self) -> PyResult<()> {
+        self.inner.load_all_resources().map_err(erf_to_py_err)
     }
 }
 
