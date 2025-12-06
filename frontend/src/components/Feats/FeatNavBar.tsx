@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
-import type { FeatType } from './types';
 
 export type FeatTab = 'my-feats' | 'all-feats';
 

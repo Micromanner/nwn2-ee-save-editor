@@ -180,7 +180,7 @@ def list_backups_directory(
 
         try:
             entries = list(os.scandir(backups_dir))
-            logger.info(f"Scanning backups directory: {backups_dir}, found {len(entries)} entries")
+            logger.debug(f"Scanning backups directory: {backups_dir}, found {len(entries)} entries")
         except PermissionError:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -225,7 +225,7 @@ def list_backups_directory(
                                 timestamp_str = f"{date_str}{time_str}"
                                 dt = datetime.strptime(timestamp_str, '%Y%m%d%H%M%S')
                                 modified_time = dt.timestamp()
-                                logger.info(f"Parsed backup timestamp from {entry.name}: {dt} -> {modified_time}")
+                                logger.debug(f"Parsed backup timestamp from {entry.name}: {dt} -> {modified_time}")
                         except Exception as e:
                             logger.warning(f"Failed to parse backup timestamp from {entry.name}: {e}")
 

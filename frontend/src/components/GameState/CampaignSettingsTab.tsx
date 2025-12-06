@@ -37,6 +37,7 @@ export default function CampaignSettingsTab() {
       loadCampaignSettings();
       loadCampaignVariables();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
 
   const loadCampaignSettings = async () => {
@@ -91,7 +92,7 @@ export default function CampaignSettingsTab() {
     setSaveMessage(null);
 
     try {
-      const response = await gameStateAPI.updateCampaignSettings(characterId, editedSettings as any);
+      const response = await gameStateAPI.updateCampaignSettings(characterId, editedSettings as Partial<CampaignSettingsResponse>);
 
       if (response.warning) {
         setSaveMessage(response.warning);

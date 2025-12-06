@@ -13,11 +13,7 @@ import { Card } from '@/components/ui/Card';
 import FileBrowserModal from '@/components/FileBrowser/FileBrowserModal';
 import { apiClient } from '@/lib/api/client';
 
-interface SaveFileSelectorProps {
-  onOpenBackups?: () => void;
-}
-
-export function SaveFileSelector(_props: SaveFileSelectorProps = {}) {
+export function SaveFileSelector() {
   const { isAvailable, isLoading, api } = useTauri();
   const { importCharacter, character, isLoading: characterLoading } = useCharacterContext();
   const { gameSettings } = useSettings();
@@ -208,23 +204,6 @@ export function SaveFileSelector(_props: SaveFileSelectorProps = {}) {
       setError(err instanceof Error ? err.message : 'Failed to delete backup');
     }
   }, []);
-
-  const handleCreateBackup = useCallback(async () => {
-    if (!selectedFile) return;
-
-    try {
-      await apiClient.post('/backups/create', {
-        save_path: selectedFile.path
-      });
-
-      console.log('Backup created successfully');
-      // Refresh the backup list by incrementing refresh key
-      setBackupRefreshKey(prev => prev + 1);
-    } catch (err) {
-      console.error('Failed to create backup:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create backup');
-    }
-  }, [selectedFile]);
 
   useEffect(() => {
     console.log('🔧 SaveFileSelector: useEffect triggered:', { isAvailable, hasApi: !!api });
@@ -429,7 +408,6 @@ export function SaveFileSelector(_props: SaveFileSelectorProps = {}) {
         currentPath={backupPath}
         onPathChange={setBackupPath}
         onDeleteBackup={handleDeleteBackup}
-        onCreateBackup={handleCreateBackup}
         canRestore={!!selectedFile}
         refreshKey={backupRefreshKey}
       />

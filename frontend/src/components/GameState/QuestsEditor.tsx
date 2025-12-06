@@ -376,6 +376,7 @@ export default function QuestsEditor() {
     if (character?.id) {
       loadEnrichedQuests();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [character?.id]);
 
   const loadEnrichedQuests = async () => {

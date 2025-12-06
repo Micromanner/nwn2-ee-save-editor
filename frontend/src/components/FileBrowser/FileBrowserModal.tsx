@@ -53,7 +53,6 @@ interface FileBrowserModalProps {
   currentPath?: string;
   onPathChange?: (path: string) => void;
   onDeleteBackup?: (file: FileInfo) => Promise<void>;
-  onCreateBackup?: () => Promise<void>;
   canRestore?: boolean;
   refreshKey?: number;
 }
@@ -66,7 +65,6 @@ export default function FileBrowserModal({
   currentPath = '',
   onPathChange,
   onDeleteBackup,
-  onCreateBackup,
   canRestore = true,
   refreshKey = 0
 }: FileBrowserModalProps) {

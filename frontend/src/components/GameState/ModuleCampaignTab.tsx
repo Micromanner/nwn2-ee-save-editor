@@ -36,12 +36,14 @@ export default function ModuleCampaignTab() {
     if (characterId) {
       loadAllModules();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId]);
 
   useEffect(() => {
     if (characterId && selectedModuleId) {
       loadModuleData(selectedModuleId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterId, selectedModuleId]);
 
   const loadAllModules = async () => {

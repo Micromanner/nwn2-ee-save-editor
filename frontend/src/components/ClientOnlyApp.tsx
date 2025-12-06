@@ -5,7 +5,6 @@ console.log('📦 ClientOnlyApp: File loaded/parsed');
 import { useState, useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTauri } from '@/providers/TauriProvider';
-import { tauriCompatibleFetch } from '@/lib/utils/tauriFetch';
 import DynamicAPI from '@/lib/utils/dynamicApi';
 import CustomTitleBar from '@/components/ui/CustomTitleBar';
 import Sidebar from '@/components/ui/Sidebar';
