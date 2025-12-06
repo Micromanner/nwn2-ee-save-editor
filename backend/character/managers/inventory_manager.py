@@ -37,6 +37,25 @@ class InventoryManager(EventEmitter):
 
     SLOT_TO_INDEX = {v: k for k, v in SLOT_INDEX_MAPPING.items()}
 
+    SLOT_BITMASK_MAPPING = {
+        0x0001: 'head',
+        0x0002: 'chest',
+        0x0004: 'boots',
+        0x0008: 'gloves',
+        0x0010: 'right_hand',
+        0x0020: 'left_hand',
+        0x0040: 'cloak',
+        0x0080: 'left_ring',
+        0x0100: 'right_ring',
+        0x0200: 'neck',
+        0x0400: 'belt',
+        0x0800: 'arrows',
+        0x1000: 'bullets',
+        0x2000: 'bolts',
+    }
+
+    SLOT_TO_BITMASK = {v: k for k, v in SLOT_BITMASK_MAPPING.items()}
+
     def __init__(self, character_manager):
         """
         Initialize the data-driven InventoryManager
@@ -61,7 +80,131 @@ class InventoryManager(EventEmitter):
 
         self._build_proficiency_mappings()
         self._update_proficiency_cache()
-    
+
+    def _get_raw_equip_item_list(self) -> List[Tuple[int, Dict[str, Any]]]:
+        """
+        Get Equip_ItemList with struct_id (bitmask) preserved by reading raw GFFElement.
+
+        NWN2 stores equipped items as a sparse list where each item's struct_id
+        is a bitmask indicating the slot (e.g., 0x0001=head, 0x0002=chest, etc.).
+        The to_dict() conversion loses this struct_id, so we read directly from GFFElement.
+
+        Returns:
+            List of (bitmask, item_dict) tuples for each equipped item
+        """
+        gff_element = getattr(self.character_manager, 'gff_element', None)
+        if gff_element is None:
+            logger.warning("No gff_element available, falling back to dict-based access")
+            equipped_items = self.gff.get('Equip_ItemList', [])
+            return [(1 << i, item) for i, item in enumerate(equipped_items) if item]
+
+        for field in gff_element.value:
+            if field.label == 'Equip_ItemList':
+                result = []
+                for item_element in field.value:
+                    bitmask = item_element.id
+                    item_dict = item_element.to_dict()
+                    result.append((bitmask, item_dict))
+                return result
+
+        return []
+
+    def _get_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
+        """Get equipped item by its slot bitmask"""
+        for item_bitmask, item_dict in self._get_raw_equip_item_list():
+            if item_bitmask == bitmask:
+                return item_dict
+        return None
+
+    def _get_equip_item_list_field(self):
+        """Get the raw Equip_ItemList GFFElement field"""
+        gff_element = getattr(self.character_manager, 'gff_element', None)
+        if gff_element is None:
+            return None
+        for field in gff_element.value:
+            if field.label == 'Equip_ItemList':
+                return field
+        return None
+
+    def _set_equipped_item_by_bitmask(self, bitmask: int, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Set an equipped item at a slot bitmask, returning the previous item if any.
+
+        This method directly manipulates the GFFElement to preserve struct_ids.
+        """
+        from parsers.gff import GFFElement, GFFFieldType
+
+        equip_list_field = self._get_equip_item_list_field()
+        if equip_list_field is None:
+            logger.warning("Cannot access Equip_ItemList GFFElement directly")
+            return None
+
+        previous_item = None
+        found_index = None
+
+        for i, item_element in enumerate(equip_list_field.value):
+            if item_element.id == bitmask:
+                previous_item = item_element.to_dict()
+                found_index = i
+                break
+
+        if found_index is not None:
+            template = equip_list_field.value[found_index]
+            new_element = GFFElement(GFFFieldType.STRUCT, bitmask, template.label, [])
+            for template_field in template.value:
+                placeholder = [] if template_field.type in [GFFFieldType.STRUCT, GFFFieldType.LIST] else None
+                new_element.value.append(
+                    GFFElement(template_field.type, 0, template_field.label, placeholder)
+                )
+            new_element.update_from_dict(item_data)
+            equip_list_field.value[found_index] = new_element
+        else:
+            if equip_list_field.value:
+                template = equip_list_field.value[0]
+                new_element = GFFElement(GFFFieldType.STRUCT, bitmask, template.label, [])
+                for template_field in template.value:
+                    placeholder = [] if template_field.type in [GFFFieldType.STRUCT, GFFFieldType.LIST] else None
+                    new_element.value.append(
+                        GFFElement(template_field.type, 0, template_field.label, placeholder)
+                    )
+                new_element.update_from_dict(item_data)
+                equip_list_field.value.append(new_element)
+            else:
+                logger.error("Cannot add item to empty Equip_ItemList (no template)")
+                return None
+
+        self._sync_equip_list_to_dict()
+        return previous_item
+
+    def _remove_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
+        """
+        Remove an equipped item at a slot bitmask, returning the removed item.
+
+        This method directly manipulates the GFFElement to preserve struct_ids.
+        """
+        equip_list_field = self._get_equip_item_list_field()
+        if equip_list_field is None:
+            logger.warning("Cannot access Equip_ItemList GFFElement directly")
+            return None
+
+        for i, item_element in enumerate(equip_list_field.value):
+            if item_element.id == bitmask:
+                removed_item = item_element.to_dict()
+                equip_list_field.value.pop(i)
+                self._sync_equip_list_to_dict()
+                return removed_item
+
+        return None
+
+    def _sync_equip_list_to_dict(self):
+        """Sync the GFFElement Equip_ItemList back to the wrapper's dict"""
+        equip_list_field = self._get_equip_item_list_field()
+        if equip_list_field is None:
+            return
+
+        new_list = [item_element.to_dict() for item_element in equip_list_field.value]
+        self.gff._data['Equip_ItemList'] = new_list
+
     def _get_item_name(self, item: Dict[str, Any]) -> str:
         """Get the proper item name from LocalizedName or fallback to base item label"""
         localized_name = item.get('LocalizedName')
@@ -148,7 +291,10 @@ class InventoryManager(EventEmitter):
     
     def get_equipped_item(self, slot: str) -> Optional[Dict[str, Any]]:
         """
-        Get item equipped in a specific slot from Equip_ItemList array
+        Get item equipped in a specific slot using bitmask-based lookup.
+
+        NWN2 stores equipment as a sparse list where struct_id is a bitmask
+        indicating the slot. This method correctly handles missing slots.
 
         Args:
             slot: Slot name (e.g., 'head', 'chest', 'right_hand')
@@ -156,20 +302,18 @@ class InventoryManager(EventEmitter):
         Returns:
             Item data dict or None
         """
-        slot_index = self.SLOT_TO_INDEX.get(slot)
-        if slot_index is None:
+        bitmask = self.SLOT_TO_BITMASK.get(slot)
+        if bitmask is None:
             return None
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        if slot_index < len(equipped_items):
-            item = equipped_items[slot_index]
-            return item if item else None
-
-        return None
+        return self._get_equipped_item_by_bitmask(bitmask)
     
     def equip_item(self, item_data: Dict[str, Any], slot: str, inventory_index: Optional[int] = None) -> Tuple[bool, List[str]]:
         """
-        Equip an item in a specific slot using Equip_ItemList array
+        Equip an item in a specific slot using bitmask-based slot identification.
+
+        NWN2 stores equipment as a sparse list where struct_id is a bitmask
+        indicating the slot. This method correctly handles the bitmask system.
 
         Args:
             item_data: Item data to equip
@@ -184,8 +328,8 @@ class InventoryManager(EventEmitter):
         id_exists, id_messages = self.check_item_id_exists(item_data)
         warnings.extend(id_messages)
 
-        slot_index = self.SLOT_TO_INDEX.get(slot)
-        if slot_index is None:
+        bitmask = self.SLOT_TO_BITMASK.get(slot)
+        if bitmask is None:
             return False, ["Invalid equipment slot"]
 
         if inventory_index is not None:
@@ -193,20 +337,13 @@ class InventoryManager(EventEmitter):
             if removed_item is None:
                 logger.warning(f"Could not remove item at inventory index {inventory_index}")
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
-
-        while len(equipped_items) <= slot_index:
-            equipped_items.append(None)
-
-        current_item = equipped_items[slot_index]
-
-        equipped_items[slot_index] = item_data
-        self.gff.set('Equip_ItemList', equipped_items)
+        current_item = self._set_equipped_item_by_bitmask(bitmask, item_data)
 
         if current_item:
             self.add_to_inventory(current_item)
 
-        logger.info(f"Equipped item in {slot} at index {slot_index}")
+        slot_index = self.SLOT_TO_INDEX.get(slot, 0)
+        logger.info(f"Equipped item in {slot} (bitmask 0x{bitmask:04X})")
 
         self.character_manager.emit(EventType.ITEM_EQUIPPED, {
             'slot': slot,
@@ -219,7 +356,10 @@ class InventoryManager(EventEmitter):
     
     def unequip_item(self, slot: str) -> Optional[Dict[str, Any]]:
         """
-        Unequip item from a slot using Equip_ItemList array
+        Unequip item from a slot using bitmask-based slot identification.
+
+        NWN2 stores equipment as a sparse list where struct_id is a bitmask
+        indicating the slot. This method correctly removes items by bitmask.
 
         Args:
             slot: Slot to unequip from
@@ -227,34 +367,25 @@ class InventoryManager(EventEmitter):
         Returns:
             The unequipped item data
         """
-        slot_index = self.SLOT_TO_INDEX.get(slot)
-        if slot_index is None:
+        bitmask = self.SLOT_TO_BITMASK.get(slot)
+        if bitmask is None:
             logger.warning(f"Invalid slot name: {slot}")
             return None
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
+        item = self._remove_equipped_item_by_bitmask(bitmask)
+        if item:
+            self.add_to_inventory(item)
 
-        if not isinstance(equipped_items, list):
-            logger.error(f"Equip_ItemList is not a list: {type(equipped_items)}")
-            return None
+            slot_index = self.SLOT_TO_INDEX.get(slot, 0)
+            logger.info(f"Unequipped item from {slot} (bitmask 0x{bitmask:04X})")
 
-        if slot_index < len(equipped_items):
-            item = equipped_items[slot_index]
-            if item:
-                equipped_items[slot_index] = None
-                self.gff.set('Equip_ItemList', equipped_items)
+            self.character_manager.emit(EventType.ITEM_UNEQUIPPED, {
+                'slot': slot,
+                'slot_index': slot_index,
+                'item': item
+            })
 
-                self.add_to_inventory(item)
-
-                logger.info(f"Unequipped item from {slot} at index {slot_index}")
-
-                self.character_manager.emit(EventType.ITEM_UNEQUIPPED, {
-                    'slot': slot,
-                    'slot_index': slot_index,
-                    'item': item
-                })
-
-                return item
+            return item
 
         return None
     
@@ -275,23 +406,15 @@ class InventoryManager(EventEmitter):
                     if existing_item.get('BaseItem') == base_item:
                         existing_stack = existing_item.get('StackSize', 1)
                         new_stack = item_data.get('StackSize', 1)
-                        max_stack = stacking
+                        total = existing_stack + new_stack
+                        if total <= stacking:
+                            existing_item['StackSize'] = total
+                            self.gff.set('ItemList', item_list)
+                            return True
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        for slot_index, item in enumerate(equipped_items):
-            if item and slot_index in self.SLOT_INDEX_MAPPING:
-                slot_name = self.SLOT_INDEX_MAPPING[slot_index]
-                base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-
-                results[slot_name] = {
-                    'item': item,
-                    'base_item': base_item,
-                    'is_custom': base_item_data is None,
-                    'name': field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}') if base_item_data else f'Custom Item {base_item}'
-                }
-
-        return results
+        item_list.append(item_data)
+        self.gff.set('ItemList', item_list)
+        return True
     
     def _is_proficiency_feat(self, feat_id: int) -> bool:
         """Check if a feat grants proficiencies using dynamic mapping"""
@@ -455,19 +578,17 @@ class InventoryManager(EventEmitter):
         """Calculate character's encumbrance level using dynamic data"""
         total_weight = 0.0
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        for slot_index, item in enumerate(equipped_items):
-            if item and slot_index in self.SLOT_INDEX_MAPPING:
-                base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-                if base_item_data:
-                    try:
-                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                    except (ValueError, TypeError):
-                        tenth_lbs = 0.0
-                    if tenth_lbs > 0:
-                        weight = tenth_lbs / 10.0
-                        total_weight += weight
+        for _, item in self._get_raw_equip_item_list():
+            base_item = item.get('BaseItem', 0)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+            if base_item_data:
+                try:
+                    tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                except (ValueError, TypeError):
+                    tenth_lbs = 0.0
+                if tenth_lbs > 0:
+                    weight = tenth_lbs / 10.0
+                    total_weight += weight
 
         item_list = self.gff.get('ItemList', [])
         for item in item_list:
@@ -592,68 +713,68 @@ class InventoryManager(EventEmitter):
             'encumbrance': self.calculate_encumbrance()
         }
 
-        equipped_items_list = self.gff.get('Equip_ItemList', [])
+        for bitmask, item in self._get_raw_equip_item_list():
+            slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
+            if not slot_name:
+                continue
 
-        for slot_index, item in enumerate(equipped_items_list):
-            if item and slot_index in self.SLOT_INDEX_MAPPING:
-                slot_name = self.SLOT_INDEX_MAPPING[slot_index]
-                base_item = item.get('BaseItem', 0)
+            base_item = item.get('BaseItem', 0)
 
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-                is_custom = base_item_data is None
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+            is_custom = base_item_data is None
 
-                item_name = self._get_item_name(item)
+            item_name = self._get_item_name(item)
 
-                decoded_properties = self.get_item_property_descriptions(item)
+            decoded_properties = self.get_item_property_descriptions(item)
 
-                description = None
-                localized_desc = item.get('DescIdentified')
-                if localized_desc and isinstance(localized_desc, dict):
-                    string_ref = localized_desc.get('string_ref')
-                    if string_ref is not None and string_ref != 4294967295:
-                        try:
-                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
-                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
-                                description = resolved_desc
-                        except Exception:
-                            pass
-
-                weight = 0.0
-                if base_item_data:
+            description = None
+            localized_desc = item.get('DescIdentified')
+            if localized_desc and isinstance(localized_desc, dict):
+                string_ref = localized_desc.get('string_ref')
+                if string_ref is not None and string_ref != 4294967295:
                     try:
-                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                        if tenth_lbs > 0:
-                            weight = tenth_lbs / 10.0
-                    except (ValueError, TypeError):
-                        weight = 0.0
+                        resolved_desc = self.game_rules_service.rm.get_string(string_ref)
+                        if resolved_desc and not resolved_desc.startswith('{StrRef:'):
+                            description = resolved_desc
+                    except Exception:
+                        pass
 
-                value = 0
+            weight = 0.0
+            if base_item_data:
                 try:
-                    item_cost = item.get('Cost', 0)
-                    modify_cost = item.get('ModifyCost', 0)
-                    value = int(item_cost) + int(modify_cost)
+                    tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                    if tenth_lbs > 0:
+                        weight = tenth_lbs / 10.0
                 except (ValueError, TypeError):
-                    value = 0
+                    weight = 0.0
 
-                summary['equipped_items'][slot_name] = {
+            value = 0
+            try:
+                item_cost = item.get('Cost', 0)
+                modify_cost = item.get('ModifyCost', 0)
+                value = int(item_cost) + int(modify_cost)
+            except (ValueError, TypeError):
+                value = 0
+
+            summary['equipped_items'][slot_name] = {
+                'base_item': base_item,
+                'custom': is_custom,
+                'name': item_name,
+                'description': description,
+                'weight': weight,
+                'value': value,
+                'item_data': item,
+                'decoded_properties': decoded_properties,
+                'base_ac': self._get_item_base_ac(item)
+            }
+
+            if is_custom:
+                summary['custom_items'].append({
+                    'slot': slot_name,
                     'base_item': base_item,
-                    'custom': is_custom,
-                    'name': item_name,
-                    'description': description,
-                    'weight': weight,
-                    'value': value,
-                    'item_data': item,
-                    'decoded_properties': decoded_properties,
-                    'base_ac': self._get_item_base_ac(item)
-                }
-                
-                if is_custom:
-                    summary['custom_items'].append({
-                        'slot': slot_name,
-                        'base_item': base_item,
-                        'name': item_name
-                    })
-        
+                    'name': item_name
+                })
+
         return summary
     
     def get_equipment_bonuses(self) -> Dict[str, Dict[str, int]]:
@@ -902,19 +1023,19 @@ class InventoryManager(EventEmitter):
         """Get all custom/mod items in character's possession"""
         custom_items = []
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        for slot_index, item in enumerate(equipped_items):
-            if item and slot_index in self.SLOT_INDEX_MAPPING:
-                slot_name = self.SLOT_INDEX_MAPPING[slot_index]
-                base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+        for bitmask, item in self._get_raw_equip_item_list():
+            slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
+            if not slot_name:
+                continue
+            base_item = item.get('BaseItem', 0)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
 
-                if base_item_data is None:
-                    custom_items.append({
-                        'location': f'equipped_{slot_name}',
-                        'base_item': base_item,
-                        'item_data': item
-                    })
+            if base_item_data is None:
+                custom_items.append({
+                    'location': f'equipped_{slot_name}',
+                    'base_item': base_item,
+                    'item_data': item
+                })
 
         item_list = self.gff.get('ItemList', [])
         for idx, item in enumerate(item_list):
@@ -936,25 +1057,23 @@ class InventoryManager(EventEmitter):
     
     def get_equipment_summary_by_slot(self) -> Dict[str, Optional[Dict[str, Any]]]:
         """Get detailed summary of equipped items by slot"""
-        equipment_summary = {}
+        equipment_summary = {slot_name: None for slot_name in self.SLOT_TO_BITMASK.keys()}
 
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        for slot_index, item in enumerate(equipped_items):
-            if slot_index in self.SLOT_INDEX_MAPPING:
-                slot_name = self.SLOT_INDEX_MAPPING[slot_index]
-                if item:
-                    base_item = item.get('BaseItem', 0)
-                    base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+        for bitmask, item in self._get_raw_equip_item_list():
+            slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
+            if not slot_name:
+                continue
 
-                    equipment_summary[slot_name] = {
-                        'base_item': base_item,
-                        'item_data': item,
-                        'is_custom': base_item_data is None,
-                        'name': field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}') if base_item_data else f'Custom Item {base_item}',
-                        'bonuses': self._calculate_item_bonuses(item)
-                    }
-                else:
-                    equipment_summary[slot_name] = None
+            base_item = item.get('BaseItem', 0)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+
+            equipment_summary[slot_name] = {
+                'base_item': base_item,
+                'item_data': item,
+                'is_custom': base_item_data is None,
+                'name': field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}') if base_item_data else f'Custom Item {base_item}',
+                'bonuses': self._calculate_item_bonuses(item)
+            }
 
         return equipment_summary
     
@@ -1049,33 +1168,34 @@ class InventoryManager(EventEmitter):
             Dict mapping slot name to item info
         """
         info = {}
-        equipped_items = self.gff.get('Equip_ItemList', [])
-        
-        for slot_index, item in enumerate(equipped_items):
-            if item and slot_index in self.SLOT_INDEX_MAPPING:
-                slot_name = self.SLOT_INDEX_MAPPING[slot_index]
-                
-                base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-                item_name = self._get_item_name(item)
-                
-                description = None
-                localized_desc = item.get('DescIdentified')
-                if localized_desc and isinstance(localized_desc, dict):
-                    string_ref = localized_desc.get('string_ref')
-                    if string_ref is not None and string_ref != 4294967295:
-                        try:
-                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
-                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
-                                description = resolved_desc
-                        except Exception:
-                            pass
 
-                info[slot_name] = {
-                    'base_item': base_item,
-                    'name': item_name,
-                    'description': description,
-                    'item_data': item
-                }
-                
+        for bitmask, item in self._get_raw_equip_item_list():
+            slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
+            if not slot_name:
+                continue
+
+            base_item = item.get('BaseItem', 0)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+            item_name = self._get_item_name(item)
+
+            description = None
+            localized_desc = item.get('DescIdentified')
+            if localized_desc and isinstance(localized_desc, dict):
+                string_ref = localized_desc.get('string_ref')
+                if string_ref is not None and string_ref != 4294967295:
+                    try:
+                        resolved_desc = self.game_rules_service.rm.get_string(string_ref)
+                        if resolved_desc and not resolved_desc.startswith('{StrRef:'):
+                            description = resolved_desc
+                    except Exception:
+                        pass
+
+            info[slot_name] = {
+                'base_item': base_item,
+                'name': item_name,
+                'description': description,
+                'item_data': item,
+                'is_custom': base_item_data is None
+            }
+
         return info
