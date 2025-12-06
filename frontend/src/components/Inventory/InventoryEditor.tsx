@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -9,6 +9,8 @@ import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
 import ItemDetailsPanel from './ItemDetailsPanel';
+import { InventoryFilters, ItemTypeFilter, ItemSortOption, StatusFilter } from './InventoryFilters';
+import { useInventorySearch } from '@/hooks/useInventorySearch';
 
 interface Item {
   id: string;
@@ -46,6 +48,9 @@ interface InventoryItem {
   cursed: boolean;
   stolen: boolean;
   base_ac?: number | null;
+  category: 'weapon' | 'armor' | 'accessory' | 'consumable' | 'misc';
+  equippable_slots: string[];
+  default_slot: string | null;
   decoded_properties?: Array<{
     property_id: number;
     label: string;
@@ -136,13 +141,13 @@ export default function InventoryEditor() {
   // Parse inventory data from backend
   const parseInventoryData = (inventoryData: LocalInventoryData | null): (Item | null)[] => {
     const inv = Array(INVENTORY_COLS * INVENTORY_ROWS).fill(null);
-    
+
     if (!inventoryData?.summary) {
       return inv;
     }
 
     const { inventory_items, equipped_items } = inventoryData.summary;
-    
+
     // Create a set of equipped base items for quick lookup
     const equippedBaseItems = new Set<number>();
     Object.values(equipped_items || {}).forEach((equipData: EquippedItem) => {
@@ -150,30 +155,21 @@ export default function InventoryEditor() {
         equippedBaseItems.add(equipData.base_item);
       }
     });
-    
+
     // Convert inventory items to display format
     inventory_items?.forEach((itemInfo: InventoryItem, index: number) => {
       if (index < INVENTORY_COLS * INVENTORY_ROWS && itemInfo) {
         const baseItem = itemInfo.base_item || 0;
         const isCustom = itemInfo.is_custom || false;
         const itemName = itemInfo.name || `Item ${baseItem}`;
-        
+
         // Check if this item type is equipped
         const isEquipped = equippedBaseItems.has(baseItem);
-        
-        // Determine item type based on base item type
-        const getItemType = (baseItem: number): string => {
-          // This is a simplified mapping - could be enhanced with actual base item data
-          if (baseItem >= 0 && baseItem <= 40) return 'weapon';  // Rough weapon range
-          if (baseItem >= 41 && baseItem <= 80) return 'armor';   // Rough armor range
-          if (baseItem >= 81 && baseItem <= 120) return 'accessory'; // Rough accessory range
-          return 'misc';
-        };
-        
+
         inv[index] = {
           id: `inventory_${itemInfo.index}`,
           name: itemName,
-          type: getItemType(baseItem),
+          type: itemInfo.category || 'misc',
           rarity: isCustom ? 'legendary' : 'common',
           equipped: isEquipped,
           stackSize: itemInfo.stack_size > 1 ? itemInfo.stack_size : undefined,
@@ -198,12 +194,112 @@ export default function InventoryEditor() {
   const [selectedItemRawData, setSelectedItemRawData] = useState<Record<string, unknown> | null>(null);
   const [selectedItemInventoryIndex, setSelectedItemInventoryIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<ItemTypeFilter>('all');
+  const [statusFilters, setStatusFilters] = useState<Set<keyof StatusFilter>>(new Set());
+  const [sortBy, setSortBy] = useState<ItemSortOption>('name');
   const [goldValue, setGoldValue] = useState<string>('');
   const [isUpdatingGold, setIsUpdatingGold] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{index: number; name: string; isPlot: boolean} | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Build searchable items list with indices for filtering
+  const inventoryItemsWithIndices = useMemo(() => {
+    return inventory
+      .map((item, index) => ({ item, originalIndex: index }))
+      .filter((entry): entry is { item: Item; originalIndex: number } => entry.item !== null);
+  }, [inventory]);
+
+  // Apply fuzzy search
+  const { searchResults } = useInventorySearch(
+    inventoryItemsWithIndices.map(entry => entry.item),
+    searchQuery
+  );
+
+  // Memoize the summary for stable reference
+  const inventorySummary = useMemo(() => {
+    return (inventoryData.data as unknown as LocalInventoryData)?.summary;
+  }, [inventoryData.data]);
+
+  // Apply type, status filters and sorting
+  const filteredAndSortedItems = useMemo(() => {
+    const getItemDetails = (originalIndex: number) => {
+      return inventorySummary?.inventory_items?.[originalIndex];
+    };
+    let result = inventoryItemsWithIndices;
+
+    // Filter by search results if searching
+    if (searchQuery.trim().length >= 2) {
+      const searchResultNames = new Set(searchResults.map(item => item.id));
+      result = result.filter(entry => searchResultNames.has(entry.item.id));
+    }
+
+    // Filter by type
+    if (typeFilter !== 'all') {
+      result = result.filter(entry => entry.item.type === typeFilter);
+    }
+
+    // Filter by status
+    if (statusFilters.size > 0) {
+      result = result.filter(entry => {
+        const item = entry.item;
+
+        if (statusFilters.has('custom') && item.is_custom) return true;
+        if (statusFilters.has('plot') && item.is_plot) return true;
+        if (statusFilters.has('identified') && item.is_identified) return true;
+        if (statusFilters.has('unidentified') && !item.is_identified) return true;
+        if (statusFilters.has('enhanced') && (item.enhancement_bonus ?? 0) > 0) return true;
+
+        return false;
+      });
+    }
+
+    // Sort items
+    result = [...result].sort((a, b) => {
+      const detailsA = getItemDetails(a.originalIndex);
+      const detailsB = getItemDetails(b.originalIndex);
+
+      switch (sortBy) {
+        case 'name':
+          return a.item.name.localeCompare(b.item.name);
+        case 'value':
+          return (detailsB?.value ?? 0) - (detailsA?.value ?? 0);
+        case 'weight':
+          return (detailsB?.weight ?? 0) - (detailsA?.weight ?? 0);
+        case 'type':
+          return a.item.type.localeCompare(b.item.type);
+        default:
+          return 0;
+      }
+    });
+
+    return result;
+  }, [inventoryItemsWithIndices, searchQuery, searchResults, typeFilter, statusFilters, sortBy, inventorySummary]);
+
+  // Build display grid - shows sorted/filtered items compactly
+  const displayItems = useMemo((): { item: Item | null; originalIndex: number }[] => {
+    const hasFilters = searchQuery.trim().length >= 2 || typeFilter !== 'all' || statusFilters.size > 0;
+    const isSorting = sortBy !== 'name';
+
+    if (!hasFilters && !isSorting) {
+      // No filters or sorting - return original inventory with indices
+      return inventory.map((item, index) => ({ item, originalIndex: index }));
+    }
+
+    // Return filtered/sorted items, padded with empty slots to fill grid
+    const result: { item: Item | null; originalIndex: number }[] = filteredAndSortedItems.map(entry => ({
+      item: entry.item,
+      originalIndex: entry.originalIndex
+    }));
+
+    // Pad with empty slots to maintain grid structure
+    const totalSlots = INVENTORY_COLS * INVENTORY_ROWS;
+    while (result.length < totalSlots) {
+      result.push({ item: null, originalIndex: -1 });
+    }
+
+    return result;
+  }, [inventory, filteredAndSortedItems, searchQuery, typeFilter, statusFilters, sortBy]);
 
   // Handler to equip an item from inventory
   const handleEquipItem = async (itemData: Record<string, unknown>, slot: string, inventoryIndex?: number | null) => {
@@ -359,47 +455,18 @@ export default function InventoryEditor() {
     setItemToDelete(null);
   };
 
-  // Map BaseItem ID to equipment slot
-  const getSlotForBaseItem = (baseItemId: number): string | null => {
-    // NWN2 BaseItem to slot mapping
-    const baseItemToSlot: Record<number, string> = {
-      // Armor
-      16: 'chest',
-      // Shields
-      14: 'left_hand',  // Light Shield
-      56: 'left_hand',  // Heavy Shield
-      57: 'left_hand',  // Tower Shield
-      // Helmets
-      85: 'head',
-      // Boots
-      26: 'boots',
-      // Gloves/Gauntlets
-      36: 'gloves',
-      // Cloaks
-      30: 'cloak',
-      // Belts
-      21: 'belt',
-      // Amulets
-      1: 'neck',
-      // Rings
-      52: 'left_ring',  // Can go in either ring slot, default to left
-      // Ammunition (BaseItem IDs, not slot indexes!)
-      20: 'arrows',
-      27: 'bullets',
-      25: 'bolts',
-    };
+  // Get default equip slot for selected inventory item from backend data
+  const getSelectedItemDefaultSlot = (): string | null => {
+    if (selectedItemInventoryIndex === null) return null;
+    const inventoryItem = inventorySummary?.inventory_items?.[selectedItemInventoryIndex];
+    return inventoryItem?.default_slot || null;
+  };
 
-    // Check direct mapping first
-    if (baseItemToSlot[baseItemId]) {
-      return baseItemToSlot[baseItemId];
-    }
-
-    // Weapons go to right_hand by default (BaseItem 0-60 range, excluding shields/armor)
-    if (baseItemId >= 0 && baseItemId < 60 && ![14, 16, 21, 26, 30, 36, 56, 57].includes(baseItemId)) {
-      return 'right_hand';
-    }
-
-    return null;
+  // Check if selected inventory item can be equipped
+  const canEquipSelectedItem = (): boolean => {
+    if (selectedItemInventoryIndex === null || !selectedItem || selectedItem.equipped) return false;
+    const inventoryItem = inventorySummary?.inventory_items?.[selectedItemInventoryIndex];
+    return !!(inventoryItem?.default_slot && selectedItemRawData);
   };
 
   // Helper function to get equipped item for a slot
@@ -598,78 +665,76 @@ export default function InventoryEditor() {
                 </div>
 
                 {/* Inventory Grid */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
-                      <div className="flex items-center space-x-2">
-                        <Input
-                          type="text"
-                          placeholder={t('inventory.searchItems')}
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-48"
-                        />
-                        <select
-                          value={filterType}
-                          onChange={(e) => setFilterType(e.target.value)}
-                          className="px-3 py-2 bg-[rgb(var(--color-surface-1))] border-2 border-[rgb(var(--color-surface-border)/0.6)] rounded-md text-sm text-[rgb(var(--color-text-primary))] focus:border-[rgb(var(--color-primary))] focus:outline-none transition-colors"
-                        >
-                          <option value="all">{t('inventory.allItems')}</option>
-                          <option value="weapon">{t('inventory.weapons')}</option>
-                          <option value="armor">{t('inventory.armor')}</option>
-                          <option value="accessory">{t('inventory.accessories')}</option>
-                          <option value="consumable">{t('inventory.consumables')}</option>
-                          <option value="misc">{t('inventory.miscellaneous')}</option>
-                        </select>
-                      </div>
                   </div>
+
+                  <InventoryFilters
+                    searchTerm={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    typeFilter={typeFilter}
+                    onTypeFilterChange={setTypeFilter}
+                    statusFilters={statusFilters}
+                    onStatusFiltersChange={setStatusFilters}
+                    sortBy={sortBy}
+                    onSortChange={setSortBy}
+                    filteredCount={filteredAndSortedItems.length}
+                    totalCount={inventoryItemsWithIndices.length}
+                  />
 
                   {/* Inventory Grid */}
-                  <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded w-fit" style={{ gridTemplateColumns: 'repeat(7, 3rem)' }}>
-                    {inventory.map((item, index) => {
-                      const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                      const inventoryItem = summary?.inventory_items?.[index];
-                      const rawItemData = inventoryItem?.item;
+                  {filteredAndSortedItems.length === 0 && inventoryItemsWithIndices.length > 0 ? (
+                    <div className="p-8 bg-[rgb(var(--color-surface-1))] rounded text-center text-[rgb(var(--color-text-muted))]">
+                      {t('inventory.filters.noResults')}
+                    </div>
+                  ) : (
+                    <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded w-fit" style={{ gridTemplateColumns: 'repeat(7, 3rem)' }}>
+                      {displayItems.map((entry, displayIndex) => {
+                        const { item, originalIndex } = entry;
+                        const inventoryItem = originalIndex >= 0 ? inventorySummary?.inventory_items?.[originalIndex] : null;
+                        const rawItemData = inventoryItem?.item;
 
-                      return (
-                      <div
-                        key={index}
-                        className={`w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 ${
-                          item ? (item.equipped ? 'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : getRarityColor(item.rarity)) : 'border-[rgb(var(--color-surface-border)/0.4)]'
-                        } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, index)}
-                        onClick={() => {
-                          setSelectedItem(item);
-                          setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
-                          setSelectedItemInventoryIndex(index);
-                        }}
-                      >
-                        {item && (
-                          <div
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, item, index)}
-                            className="w-full h-full p-1 flex items-center justify-center"
-                          >
-                            <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
-                              {item.name.charAt(0)}
+                        return (
+                        <div
+                          key={displayIndex}
+                          className={`w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 ${
+                            item ? (item.equipped ? 'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : getRarityColor(item.rarity)) : 'border-[rgb(var(--color-surface-border)/0.4)]'
+                          } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, originalIndex >= 0 ? originalIndex : displayIndex)}
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+                            setSelectedItemInventoryIndex(originalIndex >= 0 ? originalIndex : null);
+                          }}
+                        >
+                          {item && (
+                            <div
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, item, originalIndex)}
+                              className="w-full h-full p-1 flex items-center justify-center"
+                            >
+                              <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
+                                {item.name.charAt(0)}
+                              </div>
+                              {item.stackSize && (
+                                <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
+                                  {item.stackSize}
+                                </span>
+                              )}
+                              {item.equipped && (
+                                <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
+                                  E
+                                </span>
+                              )}
                             </div>
-                            {item.stackSize && (
-                              <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
-                                {item.stackSize}
-                              </span>
-                            )}
-                            {item.equipped && (
-                              <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
-                                E
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      );
-                    })}
-                  </div>
+                          )}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Inventory Info */}
                   <div className="mt-4 flex items-center gap-4 text-sm w-fit">
@@ -836,15 +901,14 @@ export default function InventoryEditor() {
               return undefined;
             })()}
             onEquip={selectedItem && !selectedItem.equipped && selectedItemRawData ? () => {
-              const baseItemId = (selectedItemRawData as Record<string, unknown>).BaseItem as number;
-              const targetSlot = getSlotForBaseItem(baseItemId);
+              const targetSlot = getSelectedItemDefaultSlot();
               if (targetSlot) {
                 handleEquipItem(selectedItemRawData, targetSlot, selectedItemInventoryIndex);
               }
             } : undefined}
             onUnequip={selectedItem?.equipped && selectedItem.slot ? () => handleUnequipItem(selectedItem.slot!) : undefined}
             isEquipping={isEquipping}
-            canEquip={!!(selectedItem && !selectedItem.equipped && selectedItemRawData && getSlotForBaseItem((selectedItemRawData as Record<string, unknown>).BaseItem as number))}
+            canEquip={canEquipSelectedItem()}
             canUnequip={!!(selectedItem?.equipped && selectedItem.slot && selectedItemRawData)}
             onDestroy={selectedItem && selectedItemInventoryIndex !== null ? handleDeleteItem : undefined}
           />

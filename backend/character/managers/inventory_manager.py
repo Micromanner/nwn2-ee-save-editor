@@ -56,6 +56,10 @@ class InventoryManager(EventEmitter):
 
     SLOT_TO_BITMASK = {v: k for k, v in SLOT_BITMASK_MAPPING.items()}
 
+    HAND_SLOTS_BITMASK = 0x0030
+    AMMO_SLOTS_BITMASK = 0x3800
+    ACCESSORY_SLOTS_BITMASK = 0x07CD
+
     def __init__(self, character_manager):
         """
         Initialize the data-driven InventoryManager
@@ -224,7 +228,97 @@ class InventoryManager(EventEmitter):
             return field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
         else:
             return f'Custom Item {base_item}'
-    
+
+    def _get_equippable_slots(self, base_item_data: Any) -> List[str]:
+        """Get list of slot names where this item can be equipped based on EquipableSlots bitmask"""
+        if not base_item_data:
+            return []
+
+        equippable_slots_raw = field_mapper.get_field_value(base_item_data, 'EquipableSlots', '0x00000')
+        try:
+            if isinstance(equippable_slots_raw, str) and equippable_slots_raw.startswith('0x'):
+                equippable_bitmask = int(equippable_slots_raw, 16)
+            else:
+                equippable_bitmask = int(equippable_slots_raw or 0)
+        except (ValueError, TypeError):
+            return []
+
+        if equippable_bitmask == 0:
+            return []
+
+        slots = []
+        for bitmask, slot_name in self.SLOT_BITMASK_MAPPING.items():
+            if equippable_bitmask & bitmask:
+                slots.append(slot_name)
+
+        return slots
+
+    def _get_default_equip_slot(self, base_item_data: Any) -> Optional[str]:
+        """Get the default/primary slot for equipping this item"""
+        slots = self._get_equippable_slots(base_item_data)
+        if not slots:
+            return None
+
+        priority_order = ['chest', 'right_hand', 'head', 'neck', 'cloak', 'gloves',
+                         'belt', 'boots', 'left_hand', 'left_ring', 'arrows', 'bullets', 'bolts']
+        for slot in priority_order:
+            if slot in slots:
+                return slot
+
+        return slots[0] if slots else None
+
+    def _get_item_category(self, base_item_id: int, base_item_data: Any) -> str:
+        """
+        Determine item category based on baseitems.2da data.
+        Returns: 'weapon', 'armor', 'accessory', 'consumable', or 'misc'
+        """
+        if not base_item_data:
+            return 'misc'
+
+        equippable_slots_raw = field_mapper.get_field_value(base_item_data, 'EquipableSlots', '0x00000')
+        try:
+            if isinstance(equippable_slots_raw, str) and equippable_slots_raw.startswith('0x'):
+                equippable_bitmask = int(equippable_slots_raw, 16)
+            else:
+                equippable_bitmask = int(equippable_slots_raw or 0)
+        except (ValueError, TypeError):
+            equippable_bitmask = 0
+
+        weapon_type = field_mapper.get_field_value(base_item_data, 'WeaponType', None)
+        has_weapon_type = weapon_type is not None and weapon_type != '****' and str(weapon_type) != '0'
+
+        if base_item_id == 16:
+            return 'armor'
+
+        if base_item_id in [14, 56, 57]:
+            return 'armor'
+
+        is_accessory_slot_only = (equippable_bitmask & self.ACCESSORY_SLOTS_BITMASK) and not (equippable_bitmask & self.HAND_SLOTS_BITMASK)
+        if is_accessory_slot_only:
+            return 'accessory'
+
+        if has_weapon_type or (equippable_bitmask & self.HAND_SLOTS_BITMASK and not equippable_bitmask & 0x0002):
+            return 'weapon'
+
+        if equippable_bitmask & self.AMMO_SLOTS_BITMASK:
+            return 'consumable'
+
+        if base_item_id in [49, 101, 104, 75, 102, 105, 46, 44, 45]:
+            return 'consumable'
+
+        if equippable_bitmask & self.ACCESSORY_SLOTS_BITMASK:
+            return 'accessory'
+
+        if equippable_bitmask == 0:
+            stacking = field_mapper.get_field_value(base_item_data, 'Stacking', 1)
+            try:
+                if int(stacking or 1) > 1:
+                    return 'consumable'
+            except (ValueError, TypeError):
+                pass
+
+        return 'misc'
+
     def _build_proficiency_mappings(self):
         """Build dynamic mapping of feat IDs to proficiency types"""
         self._feat_proficiency_map.clear()
@@ -702,7 +796,10 @@ class InventoryManager(EventEmitter):
                     'cursed': item.get('Cursed', 0) == 1,
                     'stolen': item.get('Stolen', 0) == 1,
                     'decoded_properties': decoded_properties,
-                    'base_ac': self._get_item_base_ac(item)
+                    'base_ac': self._get_item_base_ac(item),
+                    'category': self._get_item_category(base_item, base_item_data),
+                    'equippable_slots': self._get_equippable_slots(base_item_data),
+                    'default_slot': self._get_default_equip_slot(base_item_data)
                 })
         
         summary = {
