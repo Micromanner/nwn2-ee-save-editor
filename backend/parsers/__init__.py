@@ -16,18 +16,10 @@ from .gff_streaming import (
 )
 # Import parsers - Rust parsers are optional for standalone mode
 try:
-    from rust_tda_parser import TDAParser
+    from nwn2_rust import TDAParser, TLKParser, ErfParser as ERFParser
 except ImportError:
     TDAParser = None
-
-try:
-    from rust_tlk_parser import TLKParser
-except ImportError:
     TLKParser = None
-
-try:
-    from rust_erf_parser import ErfParser as ERFParser
-except ImportError:
     ERFParser = None
 from .resource_manager import ResourceManager
 

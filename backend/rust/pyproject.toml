@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "nwn2_rust"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.maturin]
+module-name = "nwn2_rust"
+features = ["pyo3/extension-module"]
+strip = true

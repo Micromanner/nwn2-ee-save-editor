@@ -12,9 +12,6 @@ from fastapi_routers.dependencies import (
     CharacterManagerDep,
     CharacterSessionDep
 )
-# from fastapi_models.class_models import (...) - moved to lazy loading
-from character.service_modules.class_categorizer import ClassCategorizer, ClassType
-from gamedata.loader import get_game_data_loader
 
 router = APIRouter()
 
@@ -233,10 +230,12 @@ def get_categorized_classes_for_character(
     Includes character-specific context for prerequisites
     """
     from fastapi_models.class_models import CategorizedClassesResponse, FocusInfo
-    
+    from character.service_modules.class_categorizer import ClassCategorizer, ClassType
+    from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
+
     try:
         # Get game data loader
-        game_data_loader = get_game_data_loader()
+        game_data_loader = get_dynamic_game_data_loader()
         if not game_data_loader:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -338,9 +337,12 @@ def get_categorized_classes_standalone(
     Get all classes organized by type and focus (standalone, no character context needed)
     """
     from fastapi_models.class_models import CategorizedClassesResponse, FocusInfo
+    from character.service_modules.class_categorizer import ClassCategorizer, ClassType
+    from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
+
     try:
         # Get game data loader
-        game_data_loader = get_game_data_loader()
+        game_data_loader = get_dynamic_game_data_loader()
         if not game_data_loader:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -672,9 +674,12 @@ def get_class_features(
     Get detailed class features and progression for a specific class
     """
     from fastapi_models.class_models import ClassFeaturesResponse
+    from character.service_modules.class_categorizer import ClassCategorizer
+    from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
+
     try:
         # Get game data loader
-        game_data_loader = get_game_data_loader()
+        game_data_loader = get_dynamic_game_data_loader()
         if not game_data_loader:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

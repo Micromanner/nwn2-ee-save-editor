@@ -153,7 +153,7 @@ class DataModelLoader:
     def _get_base_character_files(self) -> List[str]:
         """Get the base list of character-related 2DA files."""
         # Load the filtered list of character-related 2DA files
-        filter_file = Path(__file__).parent.parent.parent / 'gamedata' / 'management' / 'commands' / 'nw2_data_filtered.json'
+        filter_file = Path(__file__).parent.parent.parent / 'config' / 'nw2_data_filtered.json'
     
         if filter_file.exists():
             import json
@@ -244,7 +244,7 @@ class DataModelLoader:
     
     def _get_ignore_prefixes(self) -> List[str]:
         """Get the list of prefixes to ignore when discovering custom files."""
-        filter_file = Path(__file__).parent.parent.parent / 'gamedata' / 'management' / 'commands' / 'nw2_data_filtered.json'
+        filter_file = Path(__file__).parent.parent.parent / 'config' / 'nw2_data_filtered.json'
         
         if filter_file.exists():
             import json
@@ -260,7 +260,7 @@ class DataModelLoader:
     
     def _get_character_prefixes(self) -> List[str]:
         """Get the list of prefixes that indicate character-related files."""
-        filter_file = Path(__file__).parent.parent.parent / 'gamedata' / 'management' / 'commands' / 'nw2_data_filtered.json'
+        filter_file = Path(__file__).parent.parent.parent / 'config' / 'nw2_data_filtered.json'
         
         if filter_file.exists():
             import json
@@ -316,7 +316,7 @@ class DataModelLoader:
         tables = []
         
         # Get data fetching rules instance to use scan mode
-        from gamedata.data_fetching_rules import get_data_fetching_rules
+        from gamedata.services.data_fetching_rules import get_data_fetching_rules
         rules = get_data_fetching_rules()
         
         # Use scan mode to suppress recovery messages during table scanning
@@ -606,49 +606,29 @@ class DataModelLoader:
             
             # Get the generated class
             data_class = self.generated_classes[table_name]
-            
-            # Load all rows in batches for better performance
+
+            # Collect row data
             row_count = table_data.get_resource_count() if hasattr(table_data, 'get_resource_count') else 0
-            
-            # Optimization 1: Pre-allocate list to exact size (5-10% faster)
-            instances = [None] * row_count  # Pre-allocate to avoid dynamic resizing
-            
-            # Optimization 2: Batch collect all row data with minimal overhead
             row_data_list = []
-            valid_indices = []
             for row_id in range(row_count):
                 try:
-                    # Get row data as dictionary
                     if hasattr(table_data, 'get_row_dict'):
                         row_dict = table_data.get_row_dict(row_id)
                         if row_dict:
                             row_data_list.append(row_dict)
-                            valid_indices.append(row_id)
                 except Exception as e:
                     logger.warning(f"Failed to load row {row_id} from {table_name}: {e}")
             
-            # Optimization 3: Pre-populate string cache using batch TLK lookups
+            # Pre-populate string cache using batch TLK lookups
             string_cache = self._create_string_cache(row_data_list, table_name)
-            
-            # Optimization 4: Universal batch creation for ALL tables (2.5x faster)
+
+            # Batch creation for all tables
             try:
-                # All generated classes have create_batch() method - use it universally
-                created_instances = data_class.create_batch(row_data_list, self.rm, string_cache)
-                
-                # Place instances in pre-allocated list
-                for j, instance in enumerate(created_instances):
-                    if j < len(valid_indices):
-                        instances[valid_indices[j]] = instance
-                
-                # Remove None entries
-                instances = [inst for inst in instances if inst is not None]
-                
+                instances = data_class.create_batch(row_data_list, self.rm, string_cache)
             except Exception as e:
                 logger.error(f"Batch creation failed for {table_name}: {e}")
-                # If batch creation fails, something is seriously wrong - re-raise the error
-                # This ensures we don't silently fall back to slow individual creation
                 raise RuntimeError(f"Failed to create instances for table {table_name} using batch method: {e}") from e
-            
+
             # Store instances
             self.table_data[table_name] = instances
             

@@ -1,5 +1,12 @@
 """
 NWN2 Description Parser - Converts NWN2's HTML-like descriptions into structured data
+
+TODO: Integrate this parser to display rich class descriptions in the frontend.
+      1. Fetch DescriptionStrRef from classes.2da
+      2. Look up the string in TLK to get raw NWN2 markup
+      3. Use this parser to convert to structured data or clean HTML
+      4. Return in the /classes/categorized API endpoint
+      5. Display in ClassSelectorModal.tsx when user hovers/clicks a class
 """
 import re
 from typing import Dict, List, Optional, Any

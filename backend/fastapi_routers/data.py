@@ -6,7 +6,6 @@ Provides low-level access to character data for debugging and advanced editing
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from loguru import logger
-from parsers.gff import GFFFieldType
 from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep

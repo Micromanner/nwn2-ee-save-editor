@@ -25,7 +25,7 @@ import shutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from parsers.resource_manager import ResourceManager
-from rust_tda_parser import TDAParser
+from nwn2_rust import TDAParser
 from django.conf import settings
 
 

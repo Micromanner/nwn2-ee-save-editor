@@ -25,7 +25,7 @@ sys.modules["xml_parser"] = xml_parser_mod
 spec.loader.exec_module(xml_parser_mod)
 PyXmlParser = xml_parser_mod.XmlParser
 try:
-    from rust_xml_parser import XmlParser as RustXmlParser
+    from nwn2_rust import XmlParser as RustXmlParser
 except ImportError:
     print("Rust Extension not found!")
     sys.exit(1)

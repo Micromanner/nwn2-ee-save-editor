@@ -28,8 +28,8 @@ import zlib
 
 from parsers.resource_manager import ResourceManager, ModuleLRUCache
 from parsers import TDAParser, ERFParser
-from parsers.rust_tlk_parser import TLKParser
-from rust_erf_parser import ERFResourceType
+from nwn2_rust import TLKParser
+from parsers.resource_manager import ERFResourceType
 from parsers.gff import GFFParser, GFFElement, GFFFieldType
 from gamedata.services.workshop_service import SteamWorkshopService
 

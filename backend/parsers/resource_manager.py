@@ -22,22 +22,11 @@ BASE_DIR = Path(__file__).parent.parent
 
 # Import Rust parsers - optional for standalone mode
 try:
-    from rust_tda_parser import TDAParser
+    from nwn2_rust import TDAParser, TLKParser, ErfParser as ERFParser
+    logger.info("Using high-performance Rust parsers (TDA, TLK, ERF)")
 except ImportError:
     TDAParser = None
-
-# Parser imports - Use Rust TLK parser for performance
-try:
-    from rust_tlk_parser import TLKParser
-    logger.info("Using high-performance Rust TLK parser")
-except ImportError:
     TLKParser = None
-
-# Import Rust ERF parser
-try:
-    from rust_erf_parser import ErfParser as ERFParser
-    logger.info("Using high-performance Rust ERF parser")
-except ImportError:
     ERFParser = None
 
 # Define resource types for compatibility
@@ -52,10 +41,7 @@ from .cache_helper import TDACacheHelper
 
 # Rust extensions (optional for standalone mode)
 try:
-    from rust_extensions.python.nwn2_rust_extensions import (
-        RustResourceScanner,
-        ZipContentReader
-    )
+    from nwn2_rust import ResourceScanner as RustResourceScanner, ZipContentReader
     from .rust_adapter import RustScannerAdapter
 except ImportError:
     RustResourceScanner = None
@@ -98,7 +84,7 @@ try:
 except ImportError:
     SteamWorkshopService = None
 from gamedata.cache.safe_cache import SafeCache
-from gamedata.data_fetching_rules import with_retry_limit
+from gamedata.services.data_fetching_rules import with_retry_limit
 from utils.performance_profiler import get_profiler
 
 
@@ -1963,7 +1949,7 @@ class ResourceManager:
     def _load_ignore_prefixes(self) -> List[str]:
         """Load ignore prefixes from nw2_data_filtered.json"""
         try:
-            json_path = self.cache_dir.parent / 'gamedata' / 'management' / 'commands' / 'nw2_data_filtered.json'
+            json_path = self.cache_dir.parent / 'config' / 'nw2_data_filtered.json'
             if json_path.exists():
                 import json
                 with open(json_path, 'r') as f:

@@ -9,7 +9,7 @@ import zipfile
 import io
 
 from parsers.resource_manager import ResourceManager
-from rust_tda_parser import TDAParser
+from nwn2_rust import TDAParser
 from gamedata.enhanced_icon_cache import EnhancedIconCache
 from gamedata.safe_cache import SafeCache
 

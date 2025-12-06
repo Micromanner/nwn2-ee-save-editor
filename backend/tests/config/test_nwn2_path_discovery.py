@@ -24,13 +24,12 @@ from config.nwn2_settings import (
 
 # Import Rust wrapper for direct testing
 try:
-    from rust_extensions.python.nwn2_rust_wrapper import (
-        discover_nwn2_paths, 
-        DiscoveryResult, 
+    from nwn2_rust import (
+        discover_nwn2_paths_rust as discover_nwn2_paths,
+        DiscoveryResult,
         PathTiming,
-        RUST_AVAILABLE
     )
-    RUST_EXTENSIONS_AVAILABLE = RUST_AVAILABLE
+    RUST_EXTENSIONS_AVAILABLE = True
 except ImportError:
     RUST_EXTENSIONS_AVAILABLE = False
 

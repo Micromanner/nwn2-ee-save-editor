@@ -13,7 +13,7 @@ from pathlib import Path
 from parsers.resource_manager import ResourceManager
 from gamedata.dynamic_loader.data_model_loader import DataModelLoader
 from gamedata.dynamic_loader.runtime_class_generator import RuntimeDataClassGenerator
-from gamedata.data_fetching_rules import with_retry_limit
+from gamedata.services.data_fetching_rules import with_retry_limit
 from utils.performance_profiler import get_profiler
 
 logger = logging.getLogger(__name__)

@@ -37,7 +37,7 @@ class GameStateManager(EventEmitter):
 
             try:
                 from parsers.savegame_handler import SaveGameHandler
-                from rust_xml_parser import XmlParser
+                from nwn2_rust import XmlParser
 
                 handler = SaveGameHandler(save_path)
                 globals_xml = handler.extract_globals_xml()

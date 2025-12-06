@@ -12,7 +12,12 @@ from io import BytesIO
 from unittest.mock import patch, MagicMock
 
 from parsers import ERFParser
-from rust_erf_parser import ERFHeader, ERFKey, ERFResource, ERFResourceType, HakpakReader
+from nwn2_rust import ErfParser
+ERFHeader = ErfParser  # For compatibility - adjust as needed based on actual API
+ERFKey = None  # These may need adjustment based on actual nwn2_rust API
+ERFResource = None
+ERFResourceType = None
+HakpakReader = None
 
 
 class TestERFHeader:

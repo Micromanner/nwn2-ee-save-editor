@@ -11,7 +11,7 @@ from typing import Dict, Set, Optional, Any, List, Tuple
 # Using global loguru logger
 
 # Import Rust implementation
-from rust_extensions.python.nwn2_rust_extensions.nwn2_rust_wrapper import create_prerequisite_graph
+from nwn2_rust import PrerequisiteGraph as create_prerequisite_graph
 
 
 class PrerequisiteGraph:
@@ -99,7 +99,7 @@ class PrerequisiteGraph:
         
         # Build the graph in Rust
         start_time = time.time()
-        self.rust_graph.build_from_feat_table(feat_data)
+        self.rust_graph.build_from_data(feat_data)
         build_time = time.time() - start_time
         
         # Get statistics from Rust

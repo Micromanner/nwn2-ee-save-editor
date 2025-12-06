@@ -15,16 +15,16 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import Rust path discovery - use the Python wrapper which handles the _rust suffix
+# Import Rust path discovery
 try:
-    from rust_extensions.python.nwn2_rust_extensions import (
-        discover_nwn2_paths,
-        profile_path_discovery,
-        RUST_AVAILABLE
+    from nwn2_rust import (
+        discover_nwn2_paths_rust as discover_nwn2_paths,
+        profile_path_discovery_rust as profile_path_discovery,
     )
+    RUST_AVAILABLE = True
 except ImportError as e:
     raise RuntimeError(f"Rust extensions are required for NWN2 path discovery: {e}. "
-                      f"Please ensure nwn2_rust_extensions is properly installed.")
+                      f"Please ensure nwn2_rust is properly installed.")
 
 
 class NWN2PathFinder:

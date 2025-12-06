@@ -2,6 +2,7 @@
 Lightweight FastAPI dependencies using existing session registry
 Eliminates redundant code and reduces startup time by using lazy imports
 """
+from __future__ import annotations
 
 from typing import Annotated, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status

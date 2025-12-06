@@ -317,13 +317,14 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI app with lifespan
+# Disable OpenAPI/Swagger docs to save ~200ms import time (we don't use them)
 app = FastAPI(
     title="NWN2 Enhanced Edition Save Editor API",
     description="Standalone offline desktop application for editing NWN2 save files",
     version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     lifespan=lifespan
 )
 

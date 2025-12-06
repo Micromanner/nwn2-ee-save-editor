@@ -10,16 +10,15 @@ from typing import Dict, Optional, List, Any
 
 # Import Rust cache components
 try:
-    from rust_extensions.python.nwn2_rust_extensions import CacheBuilder, CacheManager
+    from nwn2_rust import CacheBuilder, CacheManager, TDAParser
     RUST_CACHE_AVAILABLE = True
 except ImportError:
     RUST_CACHE_AVAILABLE = False
     CacheBuilder = None
     CacheManager = None
+    TDAParser = None
     logger = logging.getLogger(__name__)
     logger.warning("Rust cache extensions not available, falling back to dynamic loading")
-
-from rust_tda_parser import TDAParser
 
 logger = logging.getLogger(__name__)
 

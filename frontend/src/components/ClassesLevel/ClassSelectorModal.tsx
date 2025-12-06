@@ -227,13 +227,10 @@ export default function ClassSelectorModal({
                   </span>
                 )}
               </div>
-              {/* TODO: Replace with comprehensive class info from backend - no frontend calculations
-                   Backend should provide:
-                   - Real class descriptions from 2DA Description field (StrRef lookups)
-                   - Actual weapon/armor proficiencies from class data
-                   - Real spell progression tables for casters
-                   - Detailed prerequisite information with human-readable descriptions
-                   - Class-specific features and abilities per level
+              {/* TODO: Display rich class descriptions from backend
+                   Backend has DescriptionParser (backend/character/utils/description_parser.py) that can parse
+                   NWN2's HTML-like class descriptions into structured data (summary, requirements, features, abilities).
+                   Consider adding an expandable description panel or tooltip when hovering/selecting a class.
               */}
               <div className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                 {classInfo.primary_ability} • d{classInfo.hit_die} • {formatNumber(classInfo.skill_points)} skills
