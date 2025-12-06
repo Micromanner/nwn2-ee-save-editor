@@ -161,7 +161,7 @@
     "deleteWarningPlot": "This is a quest/plot item required for quest progression. Deleting it may break your save file or prevent quest completion. Are you absolutely sure?",
     "noDescription": "No description available",
     "noProperties": "No special properties",
-    "armorClass": "Armor Class",
+    "baseArmorClass": "Base Armor Class",
     "damage": "Damage",
     "damageBonus": "Damage Bonus",
     "attackBonus": "Attack Bonus",

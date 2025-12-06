@@ -580,7 +580,8 @@ class InventoryManager(EventEmitter):
                     'plot': item.get('Plot', 0) == 1,
                     'cursed': item.get('Cursed', 0) == 1,
                     'stolen': item.get('Stolen', 0) == 1,
-                    'decoded_properties': decoded_properties
+                    'decoded_properties': decoded_properties,
+                    'base_ac': self._get_item_base_ac(item)
                 })
         
         summary = {
@@ -642,7 +643,8 @@ class InventoryManager(EventEmitter):
                     'weight': weight,
                     'value': value,
                     'item_data': item,
-                    'decoded_properties': decoded_properties
+                    'decoded_properties': decoded_properties,
+                    'base_ac': self._get_item_base_ac(item)
                 }
                 
                 if is_custom:
@@ -701,6 +703,25 @@ class InventoryManager(EventEmitter):
         bonuses = self.get_equipment_bonuses()
         return bonuses['skills']
     
+    def _get_item_base_ac(self, item_data: Dict[str, Any]) -> Optional[int]:
+        """Get the base AC value for armor/shield items"""
+        base_item = item_data.get('BaseItem', 0)
+        base_item_int = int(base_item) if base_item else 0
+
+        if base_item_int == 16 or base_item_int in [14, 56, 57]:
+            armor_rules_type = item_data.get('ArmorRulesType', 0)
+            if armor_rules_type is not None:
+                armor_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
+                if armor_stats:
+                    ac_value = field_mapper.get_field_value(armor_stats, 'ACBONUS', 0)
+                    try:
+                        ac_int = int(ac_value) if ac_value else 0
+                        if ac_int > 0:
+                            return ac_int
+                    except (ValueError, TypeError):
+                        pass
+        return None
+
     def _calculate_item_bonuses(self, item_data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
         """Calculate bonuses provided by a single item"""
         bonuses = {

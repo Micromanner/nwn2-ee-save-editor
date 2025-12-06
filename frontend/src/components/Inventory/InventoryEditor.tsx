@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
-import { formatNumber } from '@/utils/dataHelpers';
 import ItemDetailsPanel from './ItemDetailsPanel';
 
 interface Item {
@@ -46,6 +45,7 @@ interface InventoryItem {
   plot: boolean;
   cursed: boolean;
   stolen: boolean;
+  base_ac?: number | null;
   decoded_properties?: Array<{
     property_id: number;
     label: string;
@@ -72,6 +72,7 @@ interface EquippedItem {
   weight: number;
   value: number;
   item_data: Record<string, unknown>;
+  base_ac?: number | null;
   decoded_properties?: Array<{
     property_id: number;
     label: string;
@@ -794,6 +795,24 @@ export default function InventoryEditor() {
                 const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                 const equippedItem = summary?.equipped_items?.[mappedSlot];
                 return equippedItem?.value;
+              }
+
+              return undefined;
+            })()}
+            baseAc={(() => {
+              if (!selectedItem) return undefined;
+
+              if (selectedItemInventoryIndex !== null) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                return inventoryItem?.base_ac;
+              }
+
+              if (selectedItem.equipped && selectedItem.slot) {
+                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
+                const equippedItem = summary?.equipped_items?.[mappedSlot];
+                return equippedItem?.base_ac;
               }
 
               return undefined;

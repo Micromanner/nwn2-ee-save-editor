@@ -41,6 +41,7 @@ interface ItemDetailsPanelProps {
   description?: string;
   weight?: number;
   value?: number;
+  baseAc?: number | null;
   rawData?: Record<string, unknown>;
   onEquip?: () => void;
   onUnequip?: () => void;
@@ -56,6 +57,7 @@ export default function ItemDetailsPanel({
   description,
   weight = 0,
   value = 0,
+  baseAc,
   rawData,
   onEquip,
   onUnequip,
@@ -125,6 +127,13 @@ export default function ItemDetailsPanel({
                 <div className="flex justify-between">
                   <span className="text-[rgb(var(--color-text-muted))]">{t('inventory.enhancement')}:</span>
                   <span className="text-[rgb(var(--color-success))]">+{item.enhancement_bonus}</span>
+                </div>
+              )}
+
+              {baseAc !== undefined && baseAc !== null && baseAc > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-[rgb(var(--color-text-muted))]">{t('inventory.baseArmorClass')}:</span>
+                  <span className="text-[rgb(var(--color-primary))]">+{baseAc}</span>
                 </div>
               )}
 
