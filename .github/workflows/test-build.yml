@@ -88,11 +88,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-          maturin develop --release --manifest-path rust_extensions/Cargo.toml
-          maturin develop --release --features python-bindings --manifest-path parsers/rust_tda_parser/Cargo.toml
-          maturin develop --release --features python-bindings --manifest-path parsers/rust_tlk_parser/Cargo.toml
-          maturin develop --release --manifest-path parsers/rust_erf_parser/Cargo.toml
-          maturin develop --release --manifest-path parsers/rust_icon_cache/Cargo.toml
+          maturin develop --release --manifest-path rust/Cargo.toml
 
       - name: create backend .env file
         shell: bash
