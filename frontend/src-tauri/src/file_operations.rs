@@ -10,6 +10,7 @@ pub struct SaveFile {
     pub path: String,
     pub name: String,
     pub thumbnail: Option<String>,
+    pub modified: Option<i64>,
 }
 
 #[tauri::command]
@@ -92,7 +93,12 @@ pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String>
         None
     };
     
-    Ok(SaveFile { path: path_str, name, thumbnail })
+    let modified = save_path.metadata()
+        .and_then(|m| m.modified())
+        .ok()
+        .map(|time| time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as i64);
+
+    Ok(SaveFile { path: path_str, name, thumbnail, modified })
 }
 
 #[tauri::command]
@@ -197,10 +203,16 @@ pub async fn find_nwn2_saves(app: tauri::AppHandle) -> Result<Vec<SaveFile>, Str
                     None
                 };
                 
+                let modified = entry.path().metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .map(|time| time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as i64);
+
                 saves.push(SaveFile {
                     name: save_name,
                     path: save_path,
                     thumbnail,
+                    modified,
                 });
                 
                 // Limit to 3 saves

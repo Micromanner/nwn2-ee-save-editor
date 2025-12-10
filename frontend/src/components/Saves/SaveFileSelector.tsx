@@ -315,25 +315,16 @@ export function SaveFileSelector() {
         </div>
       )}
 
-      {/* Save and Load buttons */}
+      {/* Browse button */}
       <div className="flex gap-2 mt-4 mb-6">
-        <Button
-          variant="primary"
-          size="md"
-          className="flex-1 text-sm"
-          disabled={!character || saving || characterLoading}
-          onClick={saveCharacter}
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
         <Button
           variant="outline"
           size="md"
-          className="flex-1 text-sm"
+          className="flex-1 text-sm h-10"
           onClick={handleSelectFile}
           disabled={importing || characterLoading}
         >
-          {importing ? 'Loading...' : 'Load'}
+          {importing ? 'Loading...' : 'Browse...'}
         </Button>
       </div>
 
@@ -345,23 +336,28 @@ export function SaveFileSelector() {
           <div className="recent-saves-header">
             Last 3 Saved Games
           </div>
-          <div className="space-y-2 max-h-80 overflow-y-auto">
+          <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {saves.slice(0, 5).map((save, index) => (
               <Card
                 key={index}
                 variant="interactive"
                 selected={selectedFile?.path === save.path}
                 onClick={() => handleImportSelectedSave(save)}
-                className="cursor-pointer flex items-center gap-3"
+                className="cursor-pointer flex items-center gap-4 p-3"
               >
                 <SaveThumbnail 
                   thumbnailPath={save.thumbnail} 
-                  size="md" 
+                  size="lg" 
                   className="shrink-0"
                 />
                 <div className="flex flex-col flex-1 min-w-0">
                   <div className="recent-save-name truncate">{save.name}</div>
-                  <div className="recent-save-action">
+                  {save.modified && (
+                    <div className="text-xs text-[rgb(var(--color-text-muted))] mt-0.5">
+                       {new Date(save.modified).toLocaleString()}
+                    </div>
+                  )}
+                  <div className="recent-save-action mt-1">
                     {selectedFile?.path === save.path ? 'Loaded' : 'Click to load'}
                   </div>
                 </div>

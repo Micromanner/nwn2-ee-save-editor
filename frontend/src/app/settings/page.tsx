@@ -299,19 +299,28 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Settings</h1>
+      <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">Settings</h2>
       
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="general" className="flex items-center gap-2">
+        <TabsList className="w-full flex bg-transparent p-0 gap-2 mb-6">
+          <TabsTrigger 
+            value="general" 
+            className="flex-1 h-10 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10] flex items-center justify-center gap-2"
+          >
             <CogIcon className="w-4 h-4" />
             General
           </TabsTrigger>
-          <TabsTrigger value="theme" className="flex items-center gap-2">
+          <TabsTrigger 
+            value="theme" 
+            className="flex-1 h-10 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10] flex items-center justify-center gap-2"
+          >
             <PaintBrushIcon className="w-4 h-4" />
             Theme
           </TabsTrigger>
-          <TabsTrigger value="paths" className="flex items-center gap-2">
+          <TabsTrigger 
+            value="paths" 
+            className="flex-1 h-10 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10] flex items-center justify-center gap-2"
+          >
             <FolderIcon className="w-4 h-4" />
             Game Paths
           </TabsTrigger>

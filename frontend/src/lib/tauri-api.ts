@@ -1,10 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
-import { ask } from '@tauri-apps/plugin-dialog';
+import { ask, open } from '@tauri-apps/plugin-dialog';
 
 export interface SaveFile {
   path: string;
   name: string;
   thumbnail?: string;
+  modified?: number;
 }
 
 // The TauriAPI class remains the same, as its methods are correctly defined.
@@ -45,6 +46,17 @@ export class TauriAPI {
 
   static async findNWN2Saves(): Promise<SaveFile[]> {
     return await invoke('find_nwn2_saves');
+  }
+
+  static async selectCharacterFile(): Promise<string | null> {
+    const selected = await open({
+      filters: [{
+        name: 'Character Files',
+        extensions: ['bic', 'xml']
+      }],
+      multiple: false
+    });
+    return selected as string | null;
   }
 
   static async getSteamWorkshopPath(): Promise<string | null> {
@@ -97,6 +109,10 @@ export class TauriAPI {
 
   async openFolderInExplorer(folderPath: string): Promise<void> {
     return TauriAPI.openFolderInExplorer(folderPath);
+  }
+
+  async selectCharacterFile(): Promise<string | null> {
+    return TauriAPI.selectCharacterFile();
   }
 
   // Window Management

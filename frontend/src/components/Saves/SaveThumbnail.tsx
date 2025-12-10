@@ -17,7 +17,7 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
   const sizeClasses = {
     sm: 'w-12 h-8',
     md: 'w-16 h-12',
-    lg: 'w-24 h-18'
+    lg: 'w-32 h-24'
   };
 
   useEffect(() => {

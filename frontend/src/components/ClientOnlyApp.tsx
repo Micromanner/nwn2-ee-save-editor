@@ -20,19 +20,26 @@ import CompanionsView from '@/components/Companions/CompanionsView';
 import CharacterBuilder from '@/components/CharacterBuilder';
 import GameStateEditor from '@/components/GameState/GameStateEditor';
 import SettingsPage from '@/app/settings/page';
-import { Button } from '@/components/ui/Button';
 import SaveFileSelectorWrapper from '@/components/Saves/SaveFileSelectorWrapper';
 import TauriInitializer from '@/components/TauriInitializer';
 import { CharacterProvider, useCharacterContext } from '@/contexts/CharacterContext';
 import { IconCacheProvider } from '@/contexts/IconCacheContext';
+import Dashboard from '@/components/Dashboard';
+import EditorHeader from '@/components/EditorHeader';
+import { CharacterAPI } from '@/services/characterApi';
+import { Button } from '@/components/ui/Button';
 
 // Inner component that uses the character context
 function AppContent() {
   const t = useTranslations();
   const { isAvailable, isLoading, api } = useTauri();
   const { character, isLoading: characterLoading, loadSubsystem } = useCharacterContext();
+  const { clearCharacter, characterId, importCharacter } = useCharacterContext();
+
   const [activeTab, setActiveTab] = useState('overview');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // New viewMode state to decouple character presence from UI view
+  const [viewMode, setViewMode] = useState<'dashboard' | 'editor'>('dashboard');
+
   const [currentCompanion, setCurrentCompanion] = useState<{
     name: string;
     portrait?: string;
@@ -45,6 +52,14 @@ function AppContent() {
     message: 'Starting up...'
   });
   const [backendReady, setBackendReady] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Sync viewMode when character ID changes (new load)
+  useEffect(() => {
+    if (character?.id) {
+       setViewMode('editor');
+    }
+  }, [character?.id]);
 
   // Create the current character object for the sidebar
   const currentCharacter = currentCompanion || (character ? {
@@ -67,8 +82,90 @@ function AppContent() {
     setCurrentCompanion(null);
   };
 
+  const handleEditorBack = () => {
+    // Minimize to dashboard instead of clearing
+    setViewMode('dashboard');
+    setActiveTab('overview'); // Reset tab optionally, or keep it
+  };
+
+  const handleContinueEditing = () => {
+    setViewMode('editor');
+  };
+
+  const handleCloseSession = () => {
+    clearCharacter();
+    setViewMode('dashboard');
+    setActiveTab('overview');
+  };
+  
+  const handleCloseSettings = () => {
+    setShowSettings(false);
+  };
+
+  const handleSaveCharacter = async () => {
+    if (!characterId) return;
+    try {
+      await CharacterAPI.saveCharacter(characterId);
+      // Optional: Add toast success
+      console.log('Character saved successfully');
+    } catch (error) {
+       console.error('Failed to save character', error);
+    }
+  };
+
+  const handleOpenBackups = () => {
+    (window as Window & { __openBackups?: () => void }).__openBackups?.();
+  };
+
+  const handleOpenFolder = async () => {
+      try {
+        // Try to find saves to get the directory
+        const saves = await api?.findNWN2Saves();
+        if (saves && saves.length > 0) {
+          // Open the folder of the first save
+          const firstSavePath = saves[0].path;
+          // Get directory path by removing filename
+          // Handle both Windows and Unix separators
+          const separator = firstSavePath.includes('\\') ? '\\' : '/';
+          const lastSeparatorIndex = firstSavePath.lastIndexOf(separator);
+          const folderPath = firstSavePath.substring(0, lastSeparatorIndex);
+          
+          await api?.openFolderInExplorer(folderPath);
+        } else {
+             // Fallback: try to open Documents folder or similar if no saves found?
+             // For now, let's try to detect installation or default path
+             // But simpler is to tell user
+             console.warn("No saves found to determine folder path.");
+             // Try to get standard documents path - hard without Tauri specific API for that exposed easily
+             // Let's just try to open generic "Documents" if possible or warn
+        }
+      } catch (err) {
+        console.error("Failed to open saves folder:", err);
+      }
+  };
+
+  const handleImportCharacter = async () => {
+    try {
+      const filePath = await api?.selectCharacterFile();
+      if (filePath) {
+        // Use the existing importCharacter from context which can handle BIC/XML
+        // Note: Check backend support for BIC files via this endpoint
+        await importCharacter(filePath);
+      }
+    } catch (error) {
+       console.error("Failed to import character:", error);
+    }
+  };
+
+  const handleSettings = () => {
+      setShowSettings(true);
+  };
+
   // Custom tab change handler that fetches fresh data
   const handleTabChange = async (tabId: string) => {
+    // Intercept settings tab to show the full-page settings overlay
+
+
     setActiveTab(tabId);
     
     // Fetch fresh data for subsystem-related tabs
@@ -81,7 +178,6 @@ function AppContent() {
             break;
           case 'classes':
             console.log('Fetching fresh classes data...');
-            await loadSubsystem('classes');
             break;
           case 'abilityScores':
             console.log('Fetching fresh ability scores data...');
@@ -250,148 +346,169 @@ function AppContent() {
         <CustomTitleBar />
       </div>
       
-      {/* Main Content Area - Takes remaining height */}
+      {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
-      {/* Sidebar - Full Height */}
-      <Sidebar 
-        activeTab={activeTab} 
-        onTabChange={handleTabChange}
-        isCollapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
-        currentCharacter={currentCharacter}
-        onBackToMain={handleBackToMain}
-        isLoading={characterLoading}
-      />
-      
-      <div className="flex-1 flex overflow-hidden">
-        <main className="flex-1 bg-[rgb(var(--color-background))] overflow-y-auto">
-          <div className="p-6">
-            {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.overview')}</h2>
-                <CharacterOverview onNavigate={setActiveTab} />
-              </div>
-            )}
-            
-            {activeTab === 'character-builder' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.characterBuilder')}</h2>
-                <CharacterBuilder />
-              </div>
-            )}
-            
-            {activeTab === 'abilityScores' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.abilityScores')}</h2>
-                <AbilityScoresEditor />
-              </div>
-            )}
-            
-            {activeTab === 'appearance' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.appearance')}</h2>
-                <AppearanceEditor />
-              </div>
-            )}
-            
-            {activeTab === 'classes' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.classes')}</h2>
-                <ClassAndLevelsEditor />
-              </div>
-            )}
-            
-            {activeTab === 'skills' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.skills')}</h2>
-                <SkillsEditor />
-              </div>
-            )}
-            
-            {activeTab === 'feats' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.feats')}</h2>
-                <FeatsEditor />
-              </div>
-            )}
-            
-            {activeTab === 'spells' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.spells')}</h2>
-                <SpellsEditor />
-              </div>
-            )}
-            
-            {activeTab === 'inventory' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.inventory')}</h2>
-                <InventoryEditor />
-              </div>
-            )}
-            
-            {activeTab === 'companions' && <CompanionsView onLoadCompanion={handleLoadCompanion} currentCharacterName={currentCharacter?.name} />}
+        {(() => {
+          // --- BRANCH 1: EDITOR MODE ---
+          // Condition: We have a character AND we are explicitly in editor mode.
+          // This takes precedence so that if we are editing, we stay in the editor structure.
+          if (viewMode === 'editor' && character) {
+             return (
+              <div className="flex flex-col w-full h-full overflow-hidden">
+                 {/* Editor Header - Full Width */}
+                 <EditorHeader 
+                    characterName={character.name}
+                    saveName="Save File" // TODO: Get actual save name
+                    onBack={handleEditorBack}
+                    onImport={() => console.log('Import clicked')}
+                    onExport={() => console.log('Export clicked')}
+                    onSave={handleSaveCharacter}
+                  />
+                  
+                 {/* Content Area - Sidebar + Main */}
+                 <div className="flex-1 flex overflow-hidden">
+                    {/* Left Sidebar */}
+                    <Sidebar 
+                      activeTab={activeTab === 'dashboard_minimized' ? 'overview' : activeTab} 
+                      onTabChange={handleTabChange}
+                      currentCharacter={currentCharacter}
+                      onBackToMain={handleBackToMain}
+                      isLoading={characterLoading}
+                    />
+                    
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                      <main className="flex-1 bg-[rgb(var(--color-background))] overflow-y-auto">
+                        <div className="p-6">
+                            {/* ... Content Renderers ... */}
+                          {activeTab === 'overview' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.overview')}</h2>
+                              <CharacterOverview onNavigate={setActiveTab} />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'character-builder' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.characterBuilder')}</h2>
+                              <CharacterBuilder />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'abilityScores' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.abilityScores')}</h2>
+                              <AbilityScoresEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'appearance' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.appearance')}</h2>
+                              <AppearanceEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'classes' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.classes')}</h2>
+                              <ClassAndLevelsEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'skills' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.skills')}</h2>
+                              <SkillsEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'feats' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.feats')}</h2>
+                              <FeatsEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'spells' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.spells')}</h2>
+                              <SpellsEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'inventory' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.inventory')}</h2>
+                              <InventoryEditor />
+                            </div>
+                          )}
+                          
+                          {activeTab === 'companions' && <CompanionsView onLoadCompanion={handleLoadCompanion} currentCharacterName={currentCharacter?.name} />}
+    
+                          {activeTab === 'gameState' && (
+                            <div className="space-y-6">
+                              <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.gameState')}</h2>
+                              <GameStateEditor />
+                            </div>
+                          )}
 
-            {activeTab === 'gameState' && (
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.gameState')}</h2>
-                <GameStateEditor />
-              </div>
-            )}
+                          {activeTab === 'settings' && (
+                            <div className="space-y-6">
 
-            {activeTab === 'settings' && <SettingsPage />}
-          </div>
-        </main>
-        
-        {/* Right Sidebar - File Operations */}
-        <div className="w-64 bg-[rgb(var(--color-surface-1))] border-l border-[rgb(var(--color-surface-border)/0.6)] flex flex-col shadow-elevation-2">
-          <div className="p-4 space-y-3">
-            <h3 className="text-base font-bold text-text-primary mb-3 text-center">
-              Save Files
-            </h3>
-            <div className="h-px mb-4 separator-primary"></div>
-            
-            {/* Save File Selector - Always shown */}
-            <SaveFileSelectorWrapper />
-            
-            {/* Quick Actions */}
-            <div className="mt-10 space-y-3">
-              <h3 className="text-base font-bold text-text-primary mb-3 text-center">
-                Character Actions
-              </h3>
-              <div className="h-px separator-primary"></div>
-              <div className="flex gap-2 mt-3">
-                <Button variant="outline" className="flex-1 text-sm">
-                  Import
-                </Button>
-                <Button variant="outline" className="flex-1 text-sm">
-                  Export
-                </Button>
+                               <SettingsPage />
+                            </div>
+                          )}
+                        </div>
+                      </main>
+                    </div>
+                 </div>
               </div>
-            </div>
+             );
+          }
 
-            {/* Save Management - Always visible */}
-            <div className="mt-6 space-y-3">
-              <h3 className="text-base font-bold text-text-primary mb-3 text-center">
-                Save Management
-              </h3>
-              <div className="h-px separator-primary"></div>
-              <div className="mt-3">
-                <Button
-                  variant="outline"
-                  className="w-full text-sm"
-                  onClick={() => {
-                    (window as Window & { __openBackups?: () => void }).__openBackups?.();
-                  }}
-                >
-                  Manage Backups
-                </Button>
+          // --- BRANCH 2: DASHBOARD SETTINGS OVERLAY ---
+          // Condition: NOT in editor mode, and showSettings is strictly true.
+          if (showSettings) {
+            return (
+              <div className="flex flex-col h-full w-full bg-[rgb(var(--color-background))]">
+                {/* Settings Header - Overlay Style */}
+                <div className="h-14 flex items-center px-4 bg-[rgb(var(--color-surface-2))] border-b border-[rgb(var(--color-surface-border))] shadow-sm flex-shrink-0">
+                  <div className="flex items-center w-full">
+                    <Button 
+                      variant="ghost" 
+                      onClick={handleCloseSettings}
+                      className="text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text-primary))]"
+                    >
+                      <span className="mr-2">←</span> Back to Dashboard
+                    </Button>
+                    <div className="h-6 w-px bg-[rgb(var(--color-surface-border))] mx-4"></div>
+                    <span className="text-sm font-medium text-[rgb(var(--color-text-secondary))]">Application Settings</span>
+                  </div>
+                </div>
+                
+                {/* Settings Content - Added proper padding */}
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 max-w-5xl mx-auto w-full">
+                   <SettingsPage />
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
+            );
+          }
+          
+          // --- BRANCH 3: DASHBOARD (Default) ---
+          return (
+            <Dashboard 
+              onOpenBackups={handleOpenBackups}
+              onOpenFolder={handleOpenFolder}
+              onSettings={handleSettings}
+              onImportCharacter={handleImportCharacter}
+              activeCharacter={character ? { name: character.name } : undefined}
+              onContinueEditing={handleContinueEditing}
+              onCloseSession={handleCloseSession}
+            />
+          );
+        })()}
       </div>
     </div>
-  </div>
   );
 }
 
