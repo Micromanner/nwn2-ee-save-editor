@@ -1,7 +1,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
@@ -136,55 +136,87 @@ function InventoryFiltersComponent({
           </Select>
         </div>
 
-        <span className="text-sm text-[rgb(var(--color-text-muted))] whitespace-nowrap">
-          {t('inventory.filters.showing')} {filteredCount} / {totalCount} {t('inventory.filters.items')}
-        </span>
+        <div className="relative">
+             <Button
+                variant={hasActiveFilters ? "primary" : "outline"}
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                   const el = document.getElementById('filter-dropdown');
+                   if (el) el.classList.toggle('hidden');
+                }}
+              >
+                <Filter className="w-4 h-4" />
+                {hasActiveFilters && (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs">
+                        {statusFilters.size + (typeFilter !== 'all' ? 1 : 0)}
+                    </span>
+                )}
+              </Button>
+              
+              <div id="filter-dropdown" className="hidden absolute right-0 top-full mt-2 w-64 p-4 rounded-md border border-[rgb(var(--color-surface-border))] bg-[rgb(var(--color-surface-1))] shadow-lg z-50 space-y-4">
+                  
+                  {/* Type Filters */}
+                  <div>
+                      <h4 className="text-xs font-semibold mb-2 text-[rgb(var(--color-text-muted))] uppercase tracking-wider">{t('inventory.filters.type')}</h4>
+                      <div className="space-y-1">
+                        {ITEM_TYPE_FILTERS.map(({ value, labelKey, color }) => (
+                          <div 
+                            key={value}
+                            className={cn(
+                                "flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm",
+                                typeFilter === value ? "bg-[rgb(var(--color-surface-3))]" : "hover:bg-[rgb(var(--color-surface-2))]"
+                            )}
+                            onClick={() => handleTypeToggle(value)}
+                          >
+                             <div className={cn("w-3 h-3 rounded-full", color)}></div>
+                             <span className={cn("flex-1", typeFilter === value ? "text-[rgb(var(--color-text-primary))]" : "text-[rgb(var(--color-text-secondary))]" )}>
+                                {t(labelKey)}
+                             </span>
+                             {typeFilter === value && <span className="text-[rgb(var(--color-primary))]">✓</span>}
+                          </div>
+                        ))}
+                      </div>
+                  </div>
 
-        {hasActiveFilters && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearFilters}
-          >
-            {t('inventory.filters.clearFilters')}
-          </Button>
-        )}
-      </div>
+                  <div className="border-t border-[rgb(var(--color-surface-border)/0.5)]"></div>
 
-      <div className="flex flex-wrap gap-2">
-        {ITEM_TYPE_FILTERS.map(({ value, labelKey, color }) => (
-          <button
-            key={value}
-            onClick={() => handleTypeToggle(value)}
-            className={cn(
-              'px-3 py-1 rounded-full text-xs font-medium transition-all',
-              typeFilter === value
-                ? 'bg-[rgb(var(--color-primary))] text-white'
-                : 'bg-[rgb(var(--color-surface-2))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-3))]'
-            )}
-          >
-            <span className={cn('inline-block w-2 h-2 rounded-full mr-1.5', color)} />
-            {t(labelKey)}
-          </button>
-        ))}
+                  {/* Status Filters */}
+                  <div>
+                      <h4 className="text-xs font-semibold mb-2 text-[rgb(var(--color-text-muted))] uppercase tracking-wider">{t('inventory.filters.status')}</h4>
+                      <div className="space-y-1">
+                        {STATUS_FILTERS.map(({ key, labelKey, color }) => (
+                             <div 
+                                key={key}
+                                className={cn(
+                                    "flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-sm",
+                                    statusFilters.has(key) ? "bg-[rgb(var(--color-surface-3))]" : "hover:bg-[rgb(var(--color-surface-2))]"
+                                )}
+                                onClick={() => handleStatusToggle(key)}
+                              >
+                                 <div className={cn("w-3 h-3 rounded-full", color)}></div>
+                                 <span className={cn("flex-1", statusFilters.has(key) ? "text-[rgb(var(--color-text-primary))]" : "text-[rgb(var(--color-text-secondary))]" )}>
+                                    {t(labelKey)}
+                                 </span>
+                                 {statusFilters.has(key) && <span className="text-[rgb(var(--color-primary))]">✓</span>}
+                              </div>
+                        ))}
+                      </div>
+                  </div>
 
-        <span className="w-px h-6 bg-[rgb(var(--color-surface-border))] mx-1 self-center" />
+                  {hasActiveFilters && (
+                    <div className="pt-2 border-t border-[rgb(var(--color-surface-border)/0.5)]">
+                        <Button variant="ghost" size="sm" className="w-full text-xs" onClick={clearFilters}>
+                            {t('inventory.filters.clearFilters')}
+                        </Button>
+                    </div>
+                  )}
 
-        {STATUS_FILTERS.map(({ key, labelKey, color }) => (
-          <button
-            key={key}
-            onClick={() => handleStatusToggle(key)}
-            className={cn(
-              'px-3 py-1 rounded-full text-xs font-medium transition-all',
-              statusFilters.has(key)
-                ? 'bg-[rgb(var(--color-primary))] text-white'
-                : 'bg-[rgb(var(--color-surface-2))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-3))]'
-            )}
-          >
-            <span className={cn('inline-block w-2 h-2 rounded-full mr-1.5', color)} />
-            {t(labelKey)}
-          </button>
-        ))}
+                  {/* Close on click outside is not implemented natively here for simplicity, 
+                      but in a real app ideally use a Popover component or click-outside hook. 
+                      For now, the user can toggle nicely. */}
+              </div>
+        </div>
       </div>
     </div>
   );

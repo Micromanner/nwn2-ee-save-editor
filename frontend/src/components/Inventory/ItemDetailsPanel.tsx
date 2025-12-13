@@ -84,34 +84,27 @@ export default function ItemDetailsPanel({
   };
 
   return (
-    <Card className="min-w-[320px]">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
-            {t('inventory.itemDetails')}
-          </h3>
-          <button
-            onClick={() => setShowDebug(!showDebug)}
-            className="text-xs px-2 py-1 rounded bg-[rgb(var(--color-surface-2))] hover:bg-[rgb(var(--color-surface-3))] text-[rgb(var(--color-text-secondary))] transition-colors"
-            title="Toggle debug info"
-          >
-            Debug
-          </button>
-        </div>
+    <Card className="min-w-[320px] h-full flex flex-col">
+      <CardContent className="p-6 flex flex-col h-full gap-4">
+        {/* Fixed Header Removed, keeping structure consistent */}
 
-        <div className="space-y-4">
+
+        {/* Content */}
+        <div className="flex-1 min-h-0 space-y-4 overflow-y-auto custom-scrollbar pr-2">
           <div className="text-center">
-            <div className="w-12 h-12 bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-2 flex items-center justify-center">
-              <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
+            <div className="w-[58px] h-[58px] bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-4 overflow-hidden">
+              <div className="w-full h-full bg-[rgb(var(--color-surface-3))] flex items-center justify-center text-2xl font-bold">
                 {item.name.charAt(0)}
               </div>
             </div>
             <h4 className={`font-medium ${getRarityColor(item.rarity)}`}>
               {item.name}
             </h4>
-            <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
-              {item.rarity || 'common'}
-            </p>
+            {item.rarity && item.rarity !== 'common' && (
+              <p className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
+                {item.rarity}
+              </p>
+            )}
           </div>
 
           <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4">
@@ -155,14 +148,14 @@ export default function ItemDetailsPanel({
 
               {value > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-[rgb(var(--color-text-muted))]">{t('inventory.value')}:</span>
+                  <span className="text-white font-medium">{t('inventory.value')}:</span>
                   <span className="text-[rgb(var(--color-warning))]">{formatNumber(value)} gp</span>
                 </div>
               )}
 
               {weight > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-[rgb(var(--color-text-muted))]">{t('inventory.weight')}:</span>
+                  <span className="text-white font-medium">{t('inventory.weight')}:</span>
                   <span className="text-[rgb(var(--color-text-primary))]">{weight.toFixed(1)} lbs</span>
                 </div>
               )}
@@ -174,7 +167,7 @@ export default function ItemDetailsPanel({
               <h5 className="text-sm font-semibold text-[rgb(var(--color-text-primary))] mb-2">
                 {t('inventory.description')}
               </h5>
-              <p className="text-sm text-[rgb(var(--color-text-muted))] max-h-32 overflow-y-auto">
+              <p className="text-sm text-[rgb(var(--color-text-muted))] leading-relaxed mt-2 max-h-[100px] overflow-y-auto custom-scrollbar pr-2">
                 {description}
               </p>
             </div>
@@ -185,7 +178,7 @@ export default function ItemDetailsPanel({
               <h5 className="text-sm font-semibold text-[rgb(var(--color-text-primary))] mb-2">
                 {t('inventory.properties')}
               </h5>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
+              <div className="space-y-1 max-h-[135px] overflow-y-auto custom-scrollbar pr-2">
                 {decodedProperties.map((prop, idx) => {
                   const showDescription = prop.description &&
                     typeof prop.description === 'string' &&
@@ -257,43 +250,7 @@ export default function ItemDetailsPanel({
             </div>
           )}
 
-          <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4 space-y-2">
-            {canUnequip && onUnequip && (
-              <Button
-                className="w-full"
-                size="sm"
-                onClick={onUnequip}
-                disabled={isEquipping}
-              >
-                {isEquipping ? t('actions.unequipping') : t('actions.unequip')}
-              </Button>
-            )}
-
-            {canEquip && onEquip && (
-              <Button
-                className="w-full"
-                size="sm"
-                onClick={onEquip}
-                disabled={isEquipping}
-              >
-                {isEquipping ? t('actions.equipping') : t('actions.equip')}
-              </Button>
-            )}
-
-            <Button
-              variant="danger"
-              size="sm"
-              className="w-full flex items-center justify-center gap-2"
-              disabled={!onDestroy || item.is_plot}
-              onClick={onDestroy}
-              title={item.is_plot ? t('inventory.cannotDestroyPlot') : t('actions.destroy')}
-            >
-              <Trash2 className="w-4 h-4" />
-              {t('actions.destroy')}
-            </Button>
-          </div>
-
-          {/* Debug Panel */}
+          {/* Debug Panel inside scrollable area or outside? keeping inside for now as it can be long */}
           {showDebug && (
             <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4 mt-4">
               <h5 className="text-sm font-semibold text-[rgb(var(--color-text-primary))] mb-2">
@@ -342,6 +299,54 @@ export default function ItemDetailsPanel({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Fixed Footer */}
+        <div className="flex-shrink-0 mt-auto">
+          <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4 flex gap-2">
+            {/* Primary Action: Equip/Unequip */}
+            {canUnequip && onUnequip && (
+              <Button
+                className="flex-1"
+                variant="primary"
+                onClick={onUnequip}
+                disabled={isEquipping}
+              >
+                {isEquipping ? t('actions.unequipping') : t('actions.unequip')}
+              </Button>
+            )}
+
+            {canEquip && onEquip && (
+              <Button
+                className="flex-1"
+                variant="primary"
+                onClick={onEquip}
+                disabled={isEquipping}
+              >
+                {isEquipping ? t('actions.equipping') : t('actions.equip')}
+              </Button>
+            )}
+
+            {/* Secondary Action: Destroy */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="flex-shrink-0 w-10 border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500"
+              disabled={!onDestroy || item.is_plot}
+              onClick={onDestroy}
+              title={item.is_plot ? t('inventory.cannotDestroyPlot') : t('actions.destroy')}
+            >
+              <Trash2 className="w-5 h-5" />
+            </Button>
+            
+            <button
+               onClick={() => setShowDebug(!showDebug)}
+               className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded border border-[rgb(var(--color-surface-border))] text-[rgb(var(--color-text-muted))] hover:bg-[rgb(var(--color-surface-2))] hover:text-[rgb(var(--color-text-secondary))] transition-colors ml-2"
+               title="Toggle debug info"
+            >
+               <span className="text-xs font-mono">DBG</span>
+            </button>
+          </div>
         </div>
       </CardContent>
     </Card>

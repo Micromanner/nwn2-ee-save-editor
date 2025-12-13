@@ -9,6 +9,8 @@ import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
 import ItemDetailsPanel from './ItemDetailsPanel';
+import InventoryCharacterSummary from './InventoryCharacterSummary';
+import InventorySidebarFooter from './InventorySidebarFooter';
 import { InventoryFilters, ItemTypeFilter, ItemSortOption, StatusFilter } from './InventoryFilters';
 import { useInventorySearch } from '@/hooks/useInventorySearch';
 
@@ -102,7 +104,7 @@ interface LocalInventoryData {
 
 
 
-const INVENTORY_COLS = 7;
+const INVENTORY_COLS = 8;
 const INVENTORY_ROWS = 8;
 
 const SLOT_MAPPING: Record<string, string> = {
@@ -127,15 +129,21 @@ export default function InventoryEditor() {
   const t = useTranslations();
   const { character, invalidateSubsystems } = useCharacterContext();
   const inventoryData = useSubsystem('inventory');
+  const combatSubsystem = useSubsystem('combat');
   const { showToast } = useToast();
   const [isEquipping, setIsEquipping] = useState(false);
 
-  // Load inventory data only if character exists and data hasn't been loaded
+  // Load inventory and combat data
   useEffect(() => {
-    if (character && !inventoryData.data && !inventoryData.isLoading) {
-      inventoryData.load();
+    if (character) {
+      if (!inventoryData.data && !inventoryData.isLoading) {
+        inventoryData.load();
+      }
+      if (!combatSubsystem.data && !combatSubsystem.isLoading) {
+        combatSubsystem.load();
+      }
     }
-  }, [character, inventoryData]);
+  }, [character, inventoryData, combatSubsystem]);
   
 
   // Parse inventory data from backend
@@ -197,8 +205,6 @@ export default function InventoryEditor() {
   const [typeFilter, setTypeFilter] = useState<ItemTypeFilter>('all');
   const [statusFilters, setStatusFilters] = useState<Set<keyof StatusFilter>>(new Set());
   const [sortBy, setSortBy] = useState<ItemSortOption>('name');
-  const [goldValue, setGoldValue] = useState<string>('');
-  const [isUpdatingGold, setIsUpdatingGold] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{index: number; name: string; isPlot: boolean} | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -370,48 +376,9 @@ export default function InventoryEditor() {
     }
   };
 
-  // Sync gold value when character changes
-  useEffect(() => {
-    if (character?.gold !== undefined) {
-      setGoldValue(character.gold.toString());
-    }
-  }, [character?.gold]);
 
-  // Handler to update gold
-  const handleUpdateGold = async () => {
-    if (!character?.id || isUpdatingGold) return;
 
-    const cleanValue = goldValue.replace(/,/g, '');
-    const numericValue = parseInt(cleanValue, 10);
 
-    if (isNaN(numericValue) || numericValue < 0 || numericValue > 2147483647) {
-      showToast(t('inventory.invalidGold'), 'error');
-      setGoldValue(character?.gold?.toString() || '0');
-      return;
-    }
-
-    // Only update if value changed
-    if (numericValue === character?.gold) {
-      return;
-    }
-
-    setIsUpdatingGold(true);
-    try {
-      const response = await inventoryAPI.updateGold(character.id, numericValue);
-
-      if (response.success) {
-        showToast(t('inventory.goldUpdated'), 'success');
-      } else {
-        showToast(response.message, 'error');
-        setGoldValue(character?.gold?.toString() || '0');
-      }
-    } catch (error) {
-      showToast(`Failed to update gold: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-      setGoldValue(character?.gold?.toString() || '0');
-    } finally {
-      setIsUpdatingGold(false);
-    }
-  };
 
   const handleDeleteItem = () => {
     if (selectedItemInventoryIndex === null || !selectedItem) return;
@@ -613,14 +580,12 @@ export default function InventoryEditor() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Combined Equipment & Inventory */}
-        <div>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex gap-6">
-                {/* Character Equipment */}
-                <div className="flex-shrink-0" style={{ width: '240px' }}>
+      <div className="flex flex-col lg:flex-row gap-2 items-stretch">
+        {/* Equipment & Inventory split into two cards */}
+        {/* Character Equipment Card */}
+        <Card className="flex-shrink-0 min-h-[710px] flex flex-col">
+          <CardContent className="p-6 flex-1 flex flex-col">
+            <div className="flex-shrink-0 h-full flex flex-col" style={{ width: '240px' }}>
                   <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mt-1.5 mb-4">{t('inventory.equipment')}</h3>
 
                   {/* Row 1: Helmet, Neck */}
@@ -662,10 +627,23 @@ export default function InventoryEditor() {
                     <EquipmentSlot slotName="Bullets" slotLabel="Bul" />
                     <EquipmentSlot slotName="Bolts" slotLabel="Bol" />
                   </div>
-                </div>
+
+                  {/* Gold & Weight Footer (Moved from Right Panel) */}
+                  <div className="mt-auto pt-6">
+                    <InventorySidebarFooter
+                      encumbrance={(inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance}
+                    />
+                  </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Inventory Grid Card */}
+        <Card className="flex-1 min-w-0 min-h-[710px]">
+          <CardContent className="p-6">
 
                 {/* Inventory Grid */}
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
                   </div>
@@ -689,7 +667,7 @@ export default function InventoryEditor() {
                       {t('inventory.filters.noResults')}
                     </div>
                   ) : (
-                    <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded w-fit" style={{ gridTemplateColumns: 'repeat(7, 3rem)' }}>
+                    <div className="grid gap-1.5 p-2 bg-[rgb(var(--color-surface-1))] rounded w-fit mx-auto" style={{ gridTemplateColumns: 'repeat(8, 3rem)' }}>
                       {displayItems.map((entry, displayIndex) => {
                         const { item, originalIndex } = entry;
                         const inventoryItem = originalIndex >= 0 ? inventorySummary?.inventory_items?.[originalIndex] : null;
@@ -736,183 +714,101 @@ export default function InventoryEditor() {
                     </div>
                   )}
 
-                  {/* Inventory Info */}
-                  <div className="mt-4 flex items-center gap-4 text-sm w-fit">
-                    <span className="text-[rgb(var(--color-text-muted))]">
-                      {t('inventory.weight')}: <span className="text-[rgb(var(--color-text-secondary))]">
-                        {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.total_weight).toFixed(1)} / {safeToNumber((inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance?.heavy_load, 150).toFixed(0)} lbs
-                      </span>
-                    </span>
-                    <span className="text-[rgb(var(--color-text-muted))] flex items-center gap-2">
-                      <span>{t('inventory.gold')}:</span>
-                      <Input
-                        type="text"
-                        value={goldValue}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '' || /^\d+$/.test(value)) {
-                            setGoldValue(value);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleUpdateGold();
-                          if (e.key === 'Escape') setGoldValue(character?.gold?.toString() || '0');
-                        }}
-                        className="!w-32 h-6 text-sm"
-                        disabled={isUpdatingGold}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={handleUpdateGold}
-                        disabled={isUpdatingGold || goldValue === (character?.gold?.toString() || '0')}
-                        className="h-6 px-2 text-xs"
-                        title={t('actions.save')}
-                      >
-                        ✓
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setGoldValue(character?.gold?.toString() || '0')}
-                        disabled={isUpdatingGold}
-                        className="h-6 px-2 text-xs"
-                        title={t('actions.cancel')}
-                      >
-                        ✕
-                      </Button>
-                    </span>
-                  </div>
+                  {/* Inventory Info Removed - Moved to Summary Panel */}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Item Details Panel */}
-        <div>
-          <ItemDetailsPanel
-            item={selectedItem}
-            decodedProperties={(() => {
-              if (!selectedItem) return undefined;
+        {/* Item Details Panel or Character Summary */}
+        <div className="w-[340px] flex-shrink-0 flex flex-col gap-4 min-h-[710px]">
+          <div className="flex-1 min-h-0">
+            {selectedItem ? (
+              <ItemDetailsPanel
+                item={selectedItem}
+                decodedProperties={(() => {
+                  if (!selectedItem) return undefined;
 
-              if (selectedItemInventoryIndex !== null) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
-                return inventoryItem?.decoded_properties;
-              }
+                  if (selectedItemInventoryIndex !== null) {
+                    const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                    const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
+                    return inventoryItem?.decoded_properties;
+                  }
 
-              if (selectedItem.equipped && selectedItem.slot) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
-                const equippedItem = summary?.equipped_items?.[mappedSlot];
-                return equippedItem?.decoded_properties;
-              }
-
-              return undefined;
-            })()}
-            description={(() => {
-              if (!selectedItem) return undefined;
-
-              if (selectedItemInventoryIndex !== null) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
-                return inventoryItem?.description;
-              }
-
-              if (selectedItem.equipped && selectedItem.slot) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
-                const equippedItem = summary?.equipped_items?.[mappedSlot];
-                return equippedItem?.description;
-              }
-
-              return undefined;
-            })()}
-            weight={(() => {
-              if (!selectedItem) return undefined;
-
-              if (selectedItemInventoryIndex !== null) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
-                return inventoryItem?.weight;
-              }
-
-              if (selectedItem.equipped && selectedItem.slot) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
-                const equippedItem = summary?.equipped_items?.[mappedSlot];
-                return equippedItem?.weight;
-              }
-
-              return undefined;
-            })()}
-            value={(() => {
-              if (!selectedItem) return undefined;
-
-              if (selectedItemInventoryIndex !== null) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
-                return inventoryItem?.value;
-              }
-
-              if (selectedItem.equipped && selectedItem.slot) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
-                const equippedItem = summary?.equipped_items?.[mappedSlot];
-                return equippedItem?.value;
-              }
-
-              return undefined;
-            })()}
-            baseAc={(() => {
-              if (!selectedItem) return undefined;
-
-              if (selectedItemInventoryIndex !== null) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
-                return inventoryItem?.base_ac;
-              }
-
-              if (selectedItem.equipped && selectedItem.slot) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
-                const equippedItem = summary?.equipped_items?.[mappedSlot];
-                return equippedItem?.base_ac;
-              }
-
-              return undefined;
-            })()}
-            rawData={(() => {
-              if (!selectedItem) return undefined;
-
-              if (selectedItemInventoryIndex !== null) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const inventoryItem = summary?.inventory_items?.[selectedItemInventoryIndex];
-                return inventoryItem?.item as Record<string, unknown>;
-              }
-
-              if (selectedItem.equipped && selectedItem.slot) {
-                const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
-                const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
-                const equippedItem = summary?.equipped_items?.[mappedSlot];
-                return equippedItem?.item_data;
-              }
-
-              return undefined;
-            })()}
-            onEquip={selectedItem && !selectedItem.equipped && selectedItemRawData ? () => {
-              const targetSlot = getSelectedItemDefaultSlot();
-              if (targetSlot) {
-                handleEquipItem(selectedItemRawData, targetSlot, selectedItemInventoryIndex);
-              }
-            } : undefined}
-            onUnequip={selectedItem?.equipped && selectedItem.slot ? () => handleUnequipItem(selectedItem.slot!) : undefined}
-            isEquipping={isEquipping}
-            canEquip={canEquipSelectedItem()}
-            canUnequip={!!(selectedItem?.equipped && selectedItem.slot && selectedItemRawData)}
-            onDestroy={selectedItem && selectedItemInventoryIndex !== null ? handleDeleteItem : undefined}
-          />
-        </div>
+                  if (selectedItem.equipped && selectedItem.slot) {
+                    const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+                    const itemSlot = Object.entries(SLOT_MAPPING).find(([key]) => key.toLowerCase() === selectedItem.slot?.toLowerCase())?.[1];
+                    if (itemSlot && summary?.equipped_items?.[itemSlot]) {
+                      return summary.equipped_items[itemSlot].decoded_properties;
+                    }
+                  }
+                  return undefined;
+                })()}
+                description={(() => {
+                  if (selectedItemInventoryIndex !== null) {
+                    return inventorySummary?.inventory_items?.[selectedItemInventoryIndex]?.description;
+                  }
+                  if (selectedItem.equipped && selectedItem.slot) {
+                    const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
+                    const equipData = (inventoryData.data as unknown as LocalInventoryData)?.summary?.equipped_items?.[mappedSlot];
+                    return equipData?.description;
+                  }
+                  return undefined;
+                })()}
+                weight={(() => {
+                  if (selectedItemInventoryIndex !== null) {
+                    return inventorySummary?.inventory_items?.[selectedItemInventoryIndex]?.weight;
+                  }
+                  if (selectedItem.equipped && selectedItem.slot) {
+                    const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
+                    const equipData = (inventoryData.data as unknown as LocalInventoryData)?.summary?.equipped_items?.[mappedSlot];
+                    return equipData?.weight;
+                  }
+                  return undefined;
+                })()}
+                value={(() => {
+                  if (selectedItemInventoryIndex !== null) {
+                    return inventorySummary?.inventory_items?.[selectedItemInventoryIndex]?.value;
+                  }
+                  if (selectedItem.equipped && selectedItem.slot) {
+                    const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
+                    const equipData = (inventoryData.data as unknown as LocalInventoryData)?.summary?.equipped_items?.[mappedSlot];
+                    return equipData?.value;
+                  }
+                  return undefined;
+                })()}
+                baseAc={(() => {
+                  if (selectedItemInventoryIndex !== null) {
+                    return inventorySummary?.inventory_items?.[selectedItemInventoryIndex]?.base_ac;
+                  }
+                  if (selectedItem.equipped && selectedItem.slot) {
+                    const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
+                    const equipData = (inventoryData.data as unknown as LocalInventoryData)?.summary?.equipped_items?.[mappedSlot];
+                    return equipData?.base_ac;
+                  }
+                  return undefined;
+                })()}
+                rawData={selectedItemRawData || undefined}
+                onEquip={() => canEquipSelectedItem() && getSelectedItemDefaultSlot() ? handleEquipItem(selectedItemRawData!, getSelectedItemDefaultSlot()!, selectedItemInventoryIndex) : undefined}
+                onUnequip={() => selectedItem.equipped && selectedItem.slot && getEquippedItemForSlot(selectedItem.slot) ? handleUnequipItem(selectedItem.slot) : undefined}
+                onDestroy={selectedItemInventoryIndex !== null ? handleDeleteItem : undefined}
+                isEquipping={isEquipping}
+                canEquip={canEquipSelectedItem()}
+                canUnequip={!!(selectedItem.equipped && selectedItem.slot)}
+              />
+            ) : (
+              <InventoryCharacterSummary 
+                combatStats={{
+                  ac: (combatSubsystem.data?.armor_class?.total || character.armorClass || 0),
+                  bab: (typeof combatSubsystem.data?.base_attack_bonus === 'object' && combatSubsystem.data?.base_attack_bonus?.total_bab) || 
+                      combatSubsystem.data?.summary?.base_attack_bonus || 
+                      character.baseAttackBonus || 
+                      0
+                }}
+              />
+            )}
+          </div>
+          
+          </div>
       </div>
 
       {showDeleteConfirm && itemToDelete && (
