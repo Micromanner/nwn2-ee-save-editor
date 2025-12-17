@@ -23,6 +23,7 @@ interface Item {
   type: 'weapon' | 'armor' | 'accessory' | 'consumable' | 'misc';
   equipped?: boolean;
   slot?: string;
+  defaultSlot?: string;
   rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
   enhancement_bonus?: number;
   charges?: number;
@@ -108,10 +109,17 @@ const INVENTORY_COLS = 8;
 const INVENTORY_ROWS = 8;
 
 const SLOT_MAPPING: Record<string, string> = {
-  'helmet': 'head', 'chest': 'chest', 'belt': 'belt', 'boots': 'boots',
-  'neck': 'neck', 'cloak': 'cloak', 'gloves': 'gloves',
-  'l ring': 'left_ring', 'r ring': 'right_ring',
-  'l hand': 'left_hand', 'r hand': 'right_hand',
+  'helmet': 'head', 'head': 'head',
+  'chest': 'chest',
+  'belt': 'belt',
+  'boots': 'boots',
+  'neck': 'neck',
+  'cloak': 'cloak',
+  'gloves': 'gloves',
+  'l ring': 'left_ring', 'left_ring': 'left_ring',
+  'r ring': 'right_ring', 'right_ring': 'right_ring',
+  'l hand': 'left_hand', 'left_hand': 'left_hand',
+  'r hand': 'right_hand', 'right_hand': 'right_hand',
   'arrows': 'arrows', 'bullets': 'bullets', 'bolts': 'bolts'
 };
 
@@ -132,6 +140,8 @@ export default function InventoryEditor() {
   const combatSubsystem = useSubsystem('combat');
   const { showToast } = useToast();
   const [isEquipping, setIsEquipping] = useState(false);
+  const [pendingEquipSlot, setPendingEquipSlot] = useState<string | null>(null);
+  const [pendingUnequipItem, setPendingUnequipItem] = useState<{name: string; base_item: number} | null>(null);
 
   // Load inventory and combat data
   useEffect(() => {
@@ -154,32 +164,29 @@ export default function InventoryEditor() {
       return inv;
     }
 
-    const { inventory_items, equipped_items } = inventoryData.summary;
-
-    // Create a set of equipped base items for quick lookup
-    const equippedBaseItems = new Set<number>();
-    Object.values(equipped_items || {}).forEach((equipData: EquippedItem) => {
-      if (equipData?.base_item) {
-        equippedBaseItems.add(equipData.base_item);
-      }
-    });
+    const { inventory_items } = inventoryData.summary;
 
     // Convert inventory items to display format
-    inventory_items?.forEach((itemInfo: InventoryItem, index: number) => {
-      if (index < INVENTORY_COLS * INVENTORY_ROWS && itemInfo) {
+    inventory_items?.forEach((itemInfo: InventoryItem) => {
+      const targetIndex = safeToNumber(itemInfo.index, -1);
+      
+      if (targetIndex >= 0 && targetIndex < INVENTORY_COLS * INVENTORY_ROWS && itemInfo) {
         const baseItem = itemInfo.base_item || 0;
         const isCustom = itemInfo.is_custom || false;
         const itemName = itemInfo.name || `Item ${baseItem}`;
 
-        // Check if this item type is equipped
-        const isEquipped = equippedBaseItems.has(baseItem);
+        // Items in the inventory grid are NOT equipped. 
+        // Equipped items are in the equipment slots.
+        // We previously checked based on base_item which caused duplicates to be marked as equipped.
+        const isEquipped = false;
 
-        inv[index] = {
-          id: `inventory_${itemInfo.index}`,
+        inv[targetIndex] = {
+          id: `inventory_${targetIndex}`,
           name: itemName,
           type: itemInfo.category || 'misc',
           rarity: isCustom ? 'legendary' : 'common',
           equipped: isEquipped,
+          defaultSlot: itemInfo.default_slot || undefined,
           stackSize: itemInfo.stack_size > 1 ? itemInfo.stack_size : undefined,
           enhancement_bonus: itemInfo.enhancement || 0,
           charges: itemInfo.charges,
@@ -326,6 +333,7 @@ export default function InventoryEditor() {
       });
 
       if (response.success) {
+        setPendingEquipSlot(mappedSlot);
         showToast(response.message, 'success');
         await inventoryData.load();
         await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
@@ -360,12 +368,18 @@ export default function InventoryEditor() {
       });
 
       if (response.success) {
+        // Track the item we just unequipped so we can re-select it in inventory
+        if (selectedItem) {
+          // Try to extract base_item from raw data if available, or fall back to 0
+          // We'll use name matching primarily as it's robust enough for this UI feedback
+          const baseItem = (selectedItemRawData?.base_item as number) || 0;
+          setPendingUnequipItem({ name: selectedItem.name, base_item: baseItem });
+        }
+
         showToast(response.message, 'success');
         await inventoryData.load();
         await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
-        setSelectedItem(null);
-        setSelectedItemRawData(null);
-        setSelectedItemInventoryIndex(null);
+        // Don't deselect here; let the effect handle it
       } else {
         showToast(response.message, 'error');
       }
@@ -423,17 +437,43 @@ export default function InventoryEditor() {
   };
 
   // Get default equip slot for selected inventory item from backend data
+  // Get default equip slot for selected inventory item from backend data, with smart switching for occupied slots
   const getSelectedItemDefaultSlot = (): string | null => {
     if (selectedItemInventoryIndex === null) return null;
     const inventoryItem = inventorySummary?.inventory_items?.[selectedItemInventoryIndex];
-    return inventoryItem?.default_slot || null;
+    if (!inventoryItem) return null;
+
+    let targetSlot = inventoryItem.default_slot;
+
+    // Smart slot selection for rings/weapons: prefer empty slots if default is taken
+    if (inventoryItem.equippable_slots && inventoryItem.equippable_slots.length > 1) {
+      const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+      if (summary && targetSlot) {
+        // Check if default slot is occupied
+        // Note: equipped_items keys are backend names e.g. 'left_ring'
+        const defaultOccupied = !!summary.equipped_items[targetSlot];
+
+        if (defaultOccupied) {
+          // Look for an empty slot in equippable_slots
+          // We need to match slot names carefully. equippable_slots are likely backend names.
+          const emptySlot = inventoryItem.equippable_slots.find(slot => !summary.equipped_items[slot]);
+          if (emptySlot) {
+            targetSlot = emptySlot;
+          }
+        }
+      }
+    }
+
+    return targetSlot || null;
   };
 
   // Check if selected inventory item can be equipped
   const canEquipSelectedItem = (): boolean => {
     if (selectedItemInventoryIndex === null || !selectedItem || selectedItem.equipped) return false;
-    const inventoryItem = inventorySummary?.inventory_items?.[selectedItemInventoryIndex];
-    return !!(inventoryItem?.default_slot && selectedItemRawData);
+    // Use cached defaultSlot from the selected item state instead of looking up the live inventory
+    // This prevents the button from flickering when the inventory updates (and item moves) but the 
+    // UI selection hasn't stabilized yet.
+    return !!(selectedItem.defaultSlot && selectedItemRawData);
   };
 
   // Helper function to get equipped item for a slot
@@ -523,6 +563,102 @@ export default function InventoryEditor() {
     }
   }, [inventoryData.data]);
 
+  // Sync selected item state with inventory updates
+  useEffect(() => {
+    // Priority: pending equip action
+    if (pendingEquipSlot && inventoryData.data) {
+      const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+      const equipData = summary?.equipped_items?.[pendingEquipSlot];
+      if (equipData) {
+        setSelectedItem({
+          id: `equipped_${pendingEquipSlot}`,
+          name: equipData.name,
+          type: 'misc',
+          rarity: equipData.custom ? 'legendary' : 'common',
+          equipped: true,
+          slot: pendingEquipSlot,
+          is_custom: equipData.custom,
+          is_identified: true,
+          is_plot: false,
+          is_cursed: false,
+          is_stolen: false
+        });
+        setSelectedItemRawData(equipData.item_data as Record<string, unknown> | null);
+        setSelectedItemInventoryIndex(null);
+        setPendingEquipSlot(null);
+        return; 
+      }
+      
+      // If not found yet:
+      if (!isEquipping) {
+         // We finished loading and still didn't find it. Clear pending to avoid sticking.
+         setPendingEquipSlot(null);
+      }
+      // If isEquipping is true, we assume data is stale and keep pending for next render
+    }
+
+    // Priority 2: pending unequip action
+    if (pendingUnequipItem && inventoryData.data) {
+      const currentInventory = parseInventoryData(inventoryData.data as unknown as LocalInventoryData);
+      const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+      
+      const matchIndex = currentInventory.findIndex(item => 
+        item && item.name === pendingUnequipItem.name
+      );
+
+      if (matchIndex !== -1 && currentInventory[matchIndex]) {
+        const newItem = currentInventory[matchIndex]!;
+        setSelectedItem(newItem);
+        const rawItem = summary?.inventory_items?.find(i => safeToNumber(i.index, -1) === matchIndex)?.item;
+        setSelectedItemRawData(rawItem as Record<string, unknown> | null);
+        setSelectedItemInventoryIndex(matchIndex);
+        setPendingUnequipItem(null);
+        return;
+      }
+      
+       // If not found yet:
+      if (!isEquipping) {
+         // We finished loading and still didn't find it. Clear pending.
+         setPendingUnequipItem(null);
+      }
+      // If isEquipping is true, keep pending.
+    }
+
+    // Case 1: Selected item is from the inventory grid
+    if (selectedItemInventoryIndex !== null) {
+      // Ensure inventory array is up to date with data
+      const currentInventory = parseInventoryData(inventoryData.data as unknown as LocalInventoryData);
+      const currentItem = currentInventory[selectedItemInventoryIndex];
+
+      if (!currentItem) {
+        // Item is gone (moved or deleted) -> Deselect
+        setSelectedItem(null);
+        setSelectedItemRawData(null);
+        setSelectedItemInventoryIndex(null);
+      } else {
+        // Item still exists -> Update selection to fresh object
+        setSelectedItem(currentItem);
+        const rawItem = (inventoryData.data as unknown as LocalInventoryData)?.summary?.inventory_items?.[selectedItemInventoryIndex]?.item;
+        setSelectedItemRawData(rawItem as Record<string, unknown> | null);
+      }
+    } 
+    // Case 2: Selected item is an equipped item
+    else if (selectedItem?.equipped && selectedItem.slot) {
+      const currentEquipped = getEquippedItemForSlot(selectedItem.slot);
+      if (!currentEquipped) {
+        // Slot is now empty -> Deselect
+        setSelectedItem(null);
+        setSelectedItemRawData(null);
+      } else {
+        // Slot still occupied -> Update implies re-constructing the item object, 
+        // but for now verifying it's still there is enough to prevent 'stale' empty state errors.
+        // If we really want to live-update stats of equipped items, we'd need to reconstruct the selectedItem object here.
+      }
+    }
+  }, [inventoryData.data, selectedItemInventoryIndex]); 
+  // Note: We depend on inventoryData.data to trigger this check on every refresh
+
+
   const getRarityColor = (rarity?: string) => {
     switch (rarity) {
       case 'uncommon': return 'border-[rgb(var(--color-success))]';
@@ -554,7 +690,7 @@ export default function InventoryEditor() {
   };
 
   // Early return for loading/error states
-  if (inventoryData.isLoading) {
+  if (inventoryData.isLoading && !inventoryData.data) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
