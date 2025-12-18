@@ -21,7 +21,7 @@ interface InventorySidebarFooterProps {
 
 export default function InventorySidebarFooter({ encumbrance }: InventorySidebarFooterProps) {
   const t = useTranslations();
-  const { character } = useCharacterContext();
+  const { character, refreshAll } = useCharacterContext();
   const { showToast } = useToast();
   
   // Gold State
@@ -54,6 +54,8 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
       const response = await inventoryAPI.updateGold(character.id, numericValue);
       if (response.success) {
         showToast(t('inventory.goldUpdated'), 'success');
+        // Refresh all character data to keep context in sync
+        if (refreshAll) await refreshAll();
       } else {
         showToast(response.message, 'error');
         setGoldValue(character?.gold?.toString() || '0');

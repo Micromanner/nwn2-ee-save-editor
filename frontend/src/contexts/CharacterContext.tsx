@@ -200,6 +200,7 @@ interface CharacterContextState {
   updateSubsystemData: (subsystem: SubsystemType, data: unknown) => void;
   invalidateSubsystems: (subsystems: SubsystemType[]) => Promise<void>;
   clearCharacter: () => void;
+
   refreshAll: () => Promise<void>;
 }
 
@@ -441,7 +442,10 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
+
   }, []);
+
+
 
   // Refresh all data
   const refreshAll = useCallback(async () => {
