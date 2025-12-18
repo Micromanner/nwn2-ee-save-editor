@@ -14,6 +14,7 @@
     "build:all": "npm run build:fastapi && npm run tauri:build"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
     "@heroicons/react": "^2.2.0",
     "@radix-ui/react-checkbox": "^1.3.2",
     "@radix-ui/react-label": "^2.1.7",

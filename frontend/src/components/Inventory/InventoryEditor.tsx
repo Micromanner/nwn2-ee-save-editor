@@ -13,6 +13,8 @@ import InventoryCharacterSummary from './InventoryCharacterSummary';
 import InventorySidebarFooter from './InventorySidebarFooter';
 import { InventoryFilters, ItemTypeFilter, ItemSortOption, StatusFilter } from './InventoryFilters';
 import { useInventorySearch } from '@/hooks/useInventorySearch';
+import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor, DragStartEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
+
 
 interface Item {
   id: string;
@@ -493,6 +495,63 @@ export default function InventoryEditor() {
     };
   };
 
+  // --- DnD Components ---
+
+  const DraggableInventoryItem = ({ item, index, isSelected, onClick, children }: { item: Item; index: number; isSelected: boolean; onClick: () => void; children: React.ReactNode }) => {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: `inventory-item-${index}`,
+      data: { type: 'inventory', item, index },
+    });
+    
+    // We don't apply transform to the grid item itself to keep the grid stable.
+    // Instead we rely on DragOverlay for the visual.
+    // However, we hide the original item while dragging.
+    const style: React.CSSProperties | undefined = transform ? {
+      opacity: isDragging ? 0.3 : 1,
+    } : undefined;
+
+    return (
+      <div 
+        ref={setNodeRef} 
+        style={style} 
+        {...attributes} 
+        {...listeners}
+        onClick={onClick}
+        className={`aspect-square relative rounded border-2  transition-all 
+          ${isSelected 
+            ? 'bg-[rgb(var(--color-primary)/0.2)] border-[rgb(var(--color-primary))] shadow-[0_0_10px_rgb(var(--color-primary)/0.3)]' 
+            : `bg-[rgb(var(--color-surface-2))] ${getRarityColor(item.rarity)} hover:border-[rgb(var(--color-primary)/0.5)]`
+          }
+           cursor-grab active:cursor-grabbing
+        `}
+      >
+        {children}
+      </div>
+    );
+  };
+
+  const DroppableEquipmentSlot = ({ slotName, children }: { slotName: string; children: React.ReactNode }) => {
+     const { setNodeRef, isOver } = useDroppable({
+      id: `slot-${slotName}`,
+      data: { type: 'slot', slot: slotName },
+    });
+
+    return (
+      <div ref={setNodeRef} className={`rounded transition-colors ${isOver ? 'ring-2 ring-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : ''}`}>
+        {children}
+      </div>
+    );
+  };
+
+  // Droppable area for unequip (the whole inventory list)
+  const DroppableInventoryArea = ({ children }: { children: React.ReactNode }) => {
+      const { setNodeRef, isOver } = useDroppable({
+          id: 'inventory-area',
+          data: { type: 'inventory-area' }
+      });
+      return <div ref={setNodeRef} className={`h-full ${isOver ? 'bg-[rgb(var(--color-primary)/0.05)]' : ''}`}>{children}</div>;
+  };
+
   // Equipment slot component
   const EquipmentSlot = ({ slotName, slotLabel }: { slotName: string; slotLabel?: string }) => {
     const equippedItem = getEquippedItemForSlot(slotName);
@@ -523,12 +582,20 @@ export default function InventoryEditor() {
       }
     };
 
-    return (
-      <div className="flex flex-col items-center">
+    // Make slot Draggable if it has an item (to Unequip)
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: `equipped-item-${slotName}`,
+        data: { type: 'equipped', item: equippedItem, slot: slotName },
+        disabled: !equippedItem
+    });
+
+    const content = (
         <div
+          ref={setNodeRef}
+          {...(equippedItem ? { ...attributes, ...listeners } : {})}
           className={`w-12 h-12 rounded border-2 flex items-center justify-center relative transition-colors ${
             equippedItem
-              ? 'bg-[rgb(var(--color-primary)/0.1)] border-[rgb(var(--color-primary))] cursor-pointer hover:bg-[rgb(var(--color-primary)/0.2)]'
+              ? `bg-[rgb(var(--color-primary)/0.1)] border-[rgb(var(--color-primary))] cursor-grab active:cursor-grabbing hover:bg-[rgb(var(--color-primary)/0.2)] ${isDragging ? 'opacity-50' : ''}`
               : 'bg-[rgb(var(--color-surface-1))] border-[rgb(var(--color-surface-border)/0.6)]'
           }`}
           onClick={handleSlotClick}
@@ -551,6 +618,13 @@ export default function InventoryEditor() {
             </span>
           )}
         </div>
+    );
+
+    return (
+      <div className="flex flex-col items-center">
+        <DroppableEquipmentSlot slotName={slotName}>
+            {content}
+        </DroppableEquipmentSlot>
         <span className="text-xs text-[rgb(var(--color-text-muted))] mt-1 uppercase">{displayLabel}</span>
       </div>
     );
@@ -649,15 +723,77 @@ export default function InventoryEditor() {
         // Slot is now empty -> Deselect
         setSelectedItem(null);
         setSelectedItemRawData(null);
-      } else {
-        // Slot still occupied -> Update implies re-constructing the item object, 
-        // but for now verifying it's still there is enough to prevent 'stale' empty state errors.
-        // If we really want to live-update stats of equipped items, we'd need to reconstruct the selectedItem object here.
       }
     }
   }, [inventoryData.data, selectedItemInventoryIndex]); 
   // Note: We depend on inventoryData.data to trigger this check on every refresh
 
+
+  // --- Drag and Drop Logic ---
+  const [activeDragItem, setActiveDragItem] = useState<{ item: Item; index: number } | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement to start drag (prevents accidental drags on click)
+      },
+    })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const itemData = active.data.current as { item: Item; index: number };
+    if (itemData) {
+      setActiveDragItem(itemData);
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragItem(null);
+
+    // If dropped over nothing, or over the general inventory area (id: 'inventory-area'), treat as unequip
+    const droppedOnInventory = !over || over.id === 'inventory-area'; 
+    const activeData = active.data.current as { type: 'inventory' | 'equipped'; item: Item; slot?: string; index?: number };
+    const overData = over?.data?.current as { type: 'slot' | 'inventory-area'; slot?: string } | undefined;
+
+    if (!activeData) return;
+
+    // SCENARIO 1: Equip (Inventory -> Slot)
+    if (activeData.type === 'inventory' && overData?.type === 'slot' && overData.slot) {
+      // Call equip handler
+      if (activeData.item && activeData.index !== undefined) {
+          // We need to pass the raw gff data. We can find it in the inventory summary.
+          const inventoryItemInfo = inventorySummary?.inventory_items?.find(i => safeToNumber(i.index) === activeData.index);
+          const rawItem = inventoryItemInfo?.item;
+          
+          if (inventoryItemInfo && rawItem) {
+             const targetSlotName = overData.slot.toLowerCase();
+             const mappedSlot = SLOT_MAPPING[targetSlotName];
+             
+             // VALIDATION: Check if item can go into this slot
+             const allowedSlots = inventoryItemInfo.equippable_slots || [];
+             
+             if (!mappedSlot || !allowedSlots.includes(mappedSlot)) {
+                 showToast(`Cannot equip ${activeData.item.name} in ${overData.slot}`, 'warning');
+                 return;
+             }
+
+             await handleEquipItem(rawItem, overData.slot, activeData.index);
+          }
+      }
+    }
+
+    // SCENARIO 2: Unequip (Equipped Slot -> Inventory)
+    // Trigger if dropped on inventory area OR just dropped outside any specific drop zone (like the void)
+    if (activeData.type === 'equipped' && activeData.slot && (droppedOnInventory || !overData?.type)) {
+        const slotToUnequip = activeData.slot;
+        // Don't unequip if already busy
+        if (!isEquipping) {
+             await handleUnequipItem(slotToUnequip);
+        }
+    }
+  };
 
   const getRarityColor = (rarity?: string) => {
     switch (rarity) {
@@ -667,26 +803,6 @@ export default function InventoryEditor() {
       case 'legendary': return 'border-[rgb(var(--color-warning))]';
       default: return 'border-[rgb(var(--color-surface-border)/0.6)]';
     }
-  };
-
-  const handleDragStart = (e: React.DragEvent, item: Item, index: number) => {
-    e.dataTransfer.setData('item', JSON.stringify(item));
-    e.dataTransfer.setData('fromIndex', index.toString());
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, toIndex: number) => {
-    e.preventDefault();
-    const item = JSON.parse(e.dataTransfer.getData('item'));
-    const fromIndex = parseInt(e.dataTransfer.getData('fromIndex'));
-    
-    const newInventory = [...inventory];
-    newInventory[fromIndex] = null;
-    newInventory[toIndex] = item;
-    setInventory(newInventory);
   };
 
   // Early return for loading/error states
@@ -715,6 +831,7 @@ export default function InventoryEditor() {
   }
 
   return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row gap-2 items-stretch">
         {/* Equipment & Inventory split into two cards */}
@@ -776,10 +893,9 @@ export default function InventoryEditor() {
 
         {/* Inventory Grid Card */}
         <Card className="flex-1 min-w-0 min-h-[710px]">
-          <CardContent className="p-6">
-
-                {/* Inventory Grid */}
-                <div className="min-w-0">
+          <CardContent className="p-6 h-full">
+             <DroppableInventoryArea>
+                <div className="min-w-0 h-full flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
                   </div>
@@ -808,43 +924,51 @@ export default function InventoryEditor() {
                         const { item, originalIndex } = entry;
                         const inventoryItem = originalIndex >= 0 ? inventorySummary?.inventory_items?.[originalIndex] : null;
                         const rawItemData = inventoryItem?.item;
+                        const isSelected = selectedItem?.id === item?.id;
 
+                        if (!item) {
+                            // Empty slot
+                            return (
+                                <div
+                                key={displayIndex}
+                                className="w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 border-[rgb(var(--color-surface-border)/0.4)] rounded transition-colors"
+                                />
+                            );
+                        }
+
+                        // Draggable Item
                         return (
-                        <div
-                          key={displayIndex}
-                          className={`w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 ${
-                            item ? (item.equipped ? 'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' : getRarityColor(item.rarity)) : 'border-[rgb(var(--color-surface-border)/0.4)]'
-                          } rounded hover:border-[rgb(var(--color-surface-border))] transition-colors cursor-pointer relative group`}
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, originalIndex >= 0 ? originalIndex : displayIndex)}
-                          onClick={() => {
-                            setSelectedItem(item);
-                            setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
-                            setSelectedItemInventoryIndex(originalIndex >= 0 ? originalIndex : null);
-                          }}
-                        >
-                          {item && (
-                            <div
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, item, originalIndex)}
-                              className="w-full h-full p-1 flex items-center justify-center"
+                            <DraggableInventoryItem
+                                key={displayIndex}
+                                item={item}
+                                index={originalIndex}
+                                isSelected={isSelected}
+                                onClick={() => {
+                                    setSelectedItem(item);
+                                    setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+                                    setSelectedItemInventoryIndex(originalIndex >= 0 ? originalIndex : null);
+                                }}
                             >
-                              <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
-                                {item.name.charAt(0)}
-                              </div>
-                              {item.stackSize && (
-                                <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
-                                  {item.stackSize}
-                                </span>
-                              )}
-                              {item.equipped && (
-                                <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
-                                  E
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                                <div className="w-full h-full p-1 flex items-center justify-center pointer-events-none">
+                                    <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
+                                         {item.icon ? (
+                                            <img src={`/icons/${item.icon}.png`} alt={item.name} className="w-full h-full object-contain" />
+                                         ) : (
+                                            item.name.charAt(0)
+                                         )}
+                                    </div>
+                                    {item.stackSize && (
+                                        <span className="absolute bottom-0 right-0 text-xs bg-[rgb(var(--color-background)/0.9)] px-1 rounded">
+                                        {item.stackSize}
+                                        </span>
+                                    )}
+                                    {item.equipped && (
+                                        <span className="absolute top-0 left-0 text-xs bg-[rgb(var(--color-primary))] text-white px-1 rounded-br font-bold">
+                                        E
+                                        </span>
+                                    )}
+                                </div>
+                            </DraggableInventoryItem>
                         );
                       })}
                     </div>
@@ -852,6 +976,7 @@ export default function InventoryEditor() {
 
                   {/* Inventory Info Removed - Moved to Summary Panel */}
                 </div>
+              </DroppableInventoryArea>
           </CardContent>
         </Card>
 
@@ -980,6 +1105,20 @@ export default function InventoryEditor() {
           </Card>
         </div>
       )}
-    </div>
+     </div>
+      <DragOverlay>
+        {activeDragItem ? (
+          <div className="w-12 h-12 rounded border-2 border-[rgb(var(--color-primary))] bg-[rgb(var(--color-surface-3))] shadow-2xl flex items-center justify-center opacity-90 z-50 cursor-grabbing pointer-events-none">
+             <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
+                 {activeDragItem.item.icon ? (
+                      <img src={`/icons/${activeDragItem.item.icon}.png`} alt={activeDragItem.item.name} className="w-full h-full object-contain" />
+                 ) : (
+                    activeDragItem.item.name.charAt(0)
+                 )}
+             </div>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
