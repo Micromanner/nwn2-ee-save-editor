@@ -1,11 +1,7 @@
 """
 Resource Manager for efficient loading of NWN2 game data
-
-NOTE: This file is in parsers/ for historical reasons but is not actually a parser.
-It's a manager that coordinates the various parsers (TDA, TLK, ERF, GFF).
-Consider it part of the gamedata layer despite its location.
 """
-# zipfile removed - using Rust ZipContentReader instead
+
 import os
 from loguru import logger
 from typing import Dict, Optional, List, Tuple, Any, Union
@@ -46,33 +42,8 @@ except ImportError:
     RustResourceScanner = None
     ZipContentReader = None
 
-def create_resource_scanner():
-    """Create a resource scanner from Rust extensions"""
-    class RustResourceScannerWrapper:
-        """Wrapper for Rust ResourceScanner to provide expected interface"""
-        def __init__(self):
-            self._scanner = RustResourceScanner()
+
         
-        def scan_zip_files(self, zip_paths):
-            # Convert Path objects to strings
-            str_paths = [str(p) for p in zip_paths]
-            return self._scanner.scan_zip_files(str_paths)
-        
-        def scan_workshop_directories(self, workshop_dirs):
-            # Convert Path objects to strings
-            str_dirs = [str(d) for d in workshop_dirs]
-            return self._scanner.scan_workshop_directories(str_dirs)
-        
-        def index_directory(self, directory_path, recursive=True):
-            return self._scanner.index_directory(str(directory_path), recursive)
-        
-        def comprehensive_scan(self, base_path, **kwargs):
-            return self._scanner.comprehensive_scan(str(base_path), 
-                                                   kwargs.get('enhanced_data_dir'),
-                                                   kwargs.get('workshop_dirs', []),
-                                                   kwargs.get('custom_override_dirs', []))
-    
-    return RustResourceScannerWrapper()
 
 # Config and services
 from config.nwn2_settings import nwn2_paths
@@ -265,14 +236,14 @@ class ResourceManager:
         
         # Use Rust extensions for high-performance resource scanning
         logger.info("Using Rust extensions for high-performance resource scanning")
-        # Create scanner wrapper that provides expected Python interface
-        rust_scanner = create_resource_scanner()
-        self._python_scanner = rust_scanner  # Has scan_zip_files, index_directory, etc.
-        self._zip_indexer = rust_scanner     # Same object, compatible interface
-        self._directory_walker = rust_scanner # Same object, compatible interface
+        # Direct usage of Rust scanner - no wrapper needed
+        # Note: Rust methods expect string paths, so we convert Paths to strings at call sites
+        rust_scanner = RustResourceScanner()
+        self._python_scanner = rust_scanner
+        self._zip_indexer = rust_scanner
+        self._directory_walker = rust_scanner
         
         # Initialize Rust ZIP content reader for efficient file access
-        # Initialize Rust ZIP reader (already imported at top)
         self._zip_reader = ZipContentReader()
         
         # In-memory cache settings
@@ -399,7 +370,8 @@ class ResourceManager:
         
         # Always use parallel processing - even 3 ZIPs benefit from it
         # The Rust parallel implementation is highly optimized
-        resource_locations = self._python_scanner.scan_zip_files(zip_paths)
+        # Explicit conversion to list of strings for Rust binding
+        resource_locations = self._python_scanner.scan_zip_files([str(p) for p in zip_paths])
         
         self._zip_reader.preopen_zip_archives(zip_paths)
         
@@ -521,11 +493,11 @@ class ResourceManager:
                             # Check subdirectories like override/2DA/ using Rust scanner
                             tda_subdir = workshop_override / '2DA'
                             if tda_subdir.exists():
-                                resource_locations = self._directory_walker.index_directory(tda_subdir, recursive=True)
+                                resource_locations = self._directory_walker.index_directory(str(tda_subdir), recursive=True)
                                 for resource_name in resource_locations.keys():
                                     workshop_files.append(resource_name.lower())
                             # Also check root override using Rust scanner (recursive like heavy scan)
-                            resource_locations = self._directory_walker.index_directory(workshop_override, recursive=True)
+                            resource_locations = self._directory_walker.index_directory(str(workshop_override), recursive=True)
                             for resource_name in resource_locations.keys():
                                 workshop_files.append(resource_name.lower())
             
@@ -533,7 +505,7 @@ class ResourceManager:
             override_files = []
             override_dir = nwn2_paths.user_override
             if override_dir and override_dir.exists():
-                resource_locations = self._directory_walker.index_directory(override_dir, recursive=True)
+                resource_locations = self._directory_walker.index_directory(str(override_dir), recursive=True)
                 for resource_name in resource_locations.keys():
                     override_files.append(resource_name.lower())
             
@@ -577,12 +549,12 @@ class ResourceManager:
                             # Check subdirectories like override/2DA/ using Rust scanner
                             tda_subdir = workshop_override / '2DA'
                             if tda_subdir.exists():
-                                resource_locations = self._directory_walker.index_directory(tda_subdir, recursive=True)
+                                resource_locations = self._directory_walker.index_directory(str(tda_subdir), recursive=True)
                                 for resource_name, resource_location in resource_locations.items():
                                     if resource_name.lower() in workshop_files:
                                         self._workshop_file_paths[resource_name.lower()] = Path(resource_location.source_path)
                             # Also check root override using Rust scanner (recursive like heavy scan)
-                            resource_locations = self._directory_walker.index_directory(workshop_override, recursive=True)
+                            resource_locations = self._directory_walker.index_directory(str(workshop_override), recursive=True)
                             for resource_name, resource_location in resource_locations.items():
                                 if resource_name.lower() in workshop_files:
                                     self._workshop_file_paths[resource_name.lower()] = Path(resource_location.source_path)
@@ -590,7 +562,7 @@ class ResourceManager:
             # Build override file paths mapping using same Rust scanner
             override_dir = nwn2_paths.user_override
             if override_dir and override_dir.exists():
-                resource_locations = self._directory_walker.index_directory(override_dir, recursive=True)
+                resource_locations = self._directory_walker.index_directory(str(override_dir), recursive=True)
                 for resource_name, resource_location in resource_locations.items():
                     if resource_name.lower() in override_files:
                         self._override_file_paths[resource_name.lower()] = Path(resource_location.source_path)
