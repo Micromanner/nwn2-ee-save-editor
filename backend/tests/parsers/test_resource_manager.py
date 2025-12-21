@@ -26,11 +26,10 @@ from datetime import datetime
 from collections import OrderedDict
 import zlib
 
-from parsers.resource_manager import ResourceManager, ModuleLRUCache
-from parsers import TDAParser, ERFParser
+from services.resource_manager import ResourceManager, ModuleLRUCache
+from nwn2_rust import TDAParser, ErfParser, GffParser
 from nwn2_rust import TLKParser
-from parsers.resource_manager import ERFResourceType
-from parsers.gff import GFFParser, GFFElement, GFFFieldType
+from services.resource_manager import ERFResourceType
 from gamedata.services.workshop_service import SteamWorkshopService
 
 # Import real fixtures paths
@@ -218,7 +217,7 @@ def create_test_module(temp_nwn2_dir, create_test_erf, sample_2da_content):
 @pytest.fixture
 def resource_manager(temp_nwn2_dir):
     """Create ResourceManager with temp directory"""
-    with patch('parsers.resource_manager.nwn2_paths') as mock_paths:
+    with patch('services.resource_manager.nwn2_paths') as mock_paths:
         # Mock the paths
         mock_paths.game_folder = temp_nwn2_dir
         mock_paths.user_override = temp_nwn2_dir / "override"
@@ -1681,7 +1680,7 @@ class TestPythonResourceScanner:
         })
         
         # Use the ZIP indexer directly to get ResourceLocation objects
-        from parsers.python_zip_indexer import PythonZipIndexer
+        from services.python_zip_indexer import PythonZipIndexer
         indexer = PythonZipIndexer()
         resources = indexer.index_zip(zip_path)
         

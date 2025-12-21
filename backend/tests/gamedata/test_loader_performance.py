@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from io import StringIO
 
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 from gamedata.dynamic_loader.data_model_loader import DataModelLoader
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
 from gamedata.services.game_rules_service import GameRulesService

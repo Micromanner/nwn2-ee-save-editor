@@ -30,7 +30,7 @@ HEAVY_IMPORTS = [
     
     # Parser modules (used by savegame and other heavy operations)
     {
-        'module': 'parsers.savegame_handler',
+        'module': 'services.savegame_handler',
         'description': 'Save game handler',
         'estimated_time': 0.42
     },

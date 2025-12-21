@@ -41,8 +41,7 @@ import msgpack
 from loguru import logger
 
 from config.nwn2_settings import nwn2_paths
-from parsers.gff import GFFParser
-from parsers import ERFParser
+from nwn2_rust import GffParser, ErfParser
 
 
 @dataclass
@@ -445,9 +444,7 @@ class DialogueMappingService:
                 continue
 
             try:
-                parser = GFFParser()
-                campaign_gff = parser.read(str(campaign_file))
-                campaign_data = campaign_gff.to_dict()
+                campaign_data = GffParser(str(campaign_file)).to_dict()
 
                 file_guid = campaign_data.get('GUID', '')
                 if file_guid == self.campaign_guid:
@@ -466,9 +463,7 @@ class DialogueMappingService:
         campaign_file = campaign_folder / 'campaign.cam'
         if campaign_file.exists():
             try:
-                parser = GFFParser()
-                campaign_gff = parser.read(str(campaign_file))
-                campaign_data = campaign_gff.to_dict()
+                campaign_data = GffParser(str(campaign_file)).to_dict()
 
                 mod_names = campaign_data.get('ModNames', [])
                 modules_dir = nwn2_paths.modules
@@ -505,9 +500,7 @@ class DialogueMappingService:
             return journal_tags
 
         try:
-            parser = GFFParser()
-            jrl_gff = parser.read(str(jrl_path))
-            jrl_data = jrl_gff.to_dict()
+            jrl_data = GffParser(str(jrl_path)).to_dict()
 
             for category in jrl_data.get('Categories', []):
                 if isinstance(category, dict):
@@ -617,7 +610,7 @@ class DialogueMappingService:
         dialogues = []
 
         try:
-            parser = ERFParser()
+            parser = ErfParser()
             parser.read(str(module_path))
 
             resources = parser.list_resources()
@@ -642,9 +635,7 @@ class DialogueMappingService:
         node_scripts = {}
 
         try:
-            parser = GFFParser()
-            dlg_gff = parser.load(BytesIO(dlg_data))
-            dlg_dict = dlg_gff.to_dict()
+            dlg_dict = GffParser.from_bytes(dlg_data).to_dict()
 
             node_id = 0
 

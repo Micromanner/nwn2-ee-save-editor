@@ -13,8 +13,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from io import BytesIO
 
-from parsers.gff import GFFParser
-from parsers.savegame_handler import SaveGameHandler
+from nwn2_rust import GffParser
+from services.savegame_handler import SaveGameHandler
 from .character_manager import CharacterManager
 
 logger = logging.getLogger(__name__)
@@ -37,49 +37,45 @@ class InMemorySaveManager:
         """
         self.save_path = save_path  # Store the save path
         self.save_handler = SaveGameHandler(save_path)
-        
-        # In-memory character data (from player.bic)
+
+        # In-memory character data (from player.bic) - plain dict with __struct_id__ metadata
         self.character_data: Optional[Dict[str, Any]] = None
-        self.character_gff_element: Optional[Any] = None  # Store original GFF element
-        
+
         # Track changes
         self.is_dirty = False
         self.last_loaded = None
-        
+
         # Character manager instance
         self._character_manager: Optional[CharacterManager] = None
-        
+
         logger.info(f"Initialized InMemorySaveManager for {save_path}")
     
     def load_save_files(self) -> bool:
         """
         Load player.bic into memory for editing
-        
+
         Returns:
             True if successfully loaded, False otherwise
         """
         try:
             logger.info("Loading save files into memory")
-            
+
             # Use SaveGameHandler to extract player.bic
             playerbic_data = self.save_handler.extract_player_bic()
             if not playerbic_data:
                 logger.error("No player.bic data found in save")
                 return False
-            
-            # Parse player.bic into dict for CharacterManager
-            parser = GFFParser()
-            bic_gff = parser.load(BytesIO(playerbic_data))
-            self.character_gff_element = bic_gff  # Store original GFF element
-            self.character_data = bic_gff.to_dict()
-            
+
+            # Parse player.bic into plain dict with __struct_id__ metadata
+            self.character_data = GffParser.from_bytes(playerbic_data).to_dict()
+
             # Mark as loaded
             self.last_loaded = datetime.now()
             self.is_dirty = False
-            
+
             logger.info(f"Successfully loaded player.bic - {len(self.character_data)} fields")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to load save files: {e}", exc_info=True)
             return False
@@ -87,32 +83,31 @@ class InMemorySaveManager:
     def get_character_manager(self, game_data_loader=None, rules_service=None) -> Optional[CharacterManager]:
         """
         Get CharacterManager instance working with in-memory data using factory
-        
+
         Args:
             game_data_loader: Optional DynamicGameDataLoader instance
             rules_service: Optional GameRulesService instance
-            
+
         Returns:
             CharacterManager instance or None if not loaded
         """
         if not self.is_loaded():
             logger.error("Save files not loaded - call load_save_files() first")
             return None
-        
+
         if self._character_manager is None:
             try:
                 # Use factory to create CharacterManager with all managers registered
                 from .factory import create_character_manager
-                
+
                 self._character_manager = create_character_manager(
                     self.character_data,
-                    gff_element=self.character_gff_element,  # Pass the original GFF element
                     game_data_loader=game_data_loader,
                     rules_service=rules_service,
-                    lazy=True,  # Use lazy loading for better performance
-                    save_path=self.save_path  # Pass save path for campaign data extraction
+                    lazy=True,
+                    save_path=self.save_path
                 )
-                
+
                 # Track changes by wrapping the gff.set method
                 original_set = self._character_manager.gff.set
                 def tracked_set(path: str, value: Any):
@@ -120,13 +115,13 @@ class InMemorySaveManager:
                     self.is_dirty = True
                     return result
                 self._character_manager.gff.set = tracked_set
-                
+
                 logger.info("Created CharacterManager with factory (all managers registered)")
-                
+
             except Exception as e:
                 logger.error(f"Failed to create CharacterManager: {e}", exc_info=True)
                 return None
-        
+
         return self._character_manager
     
     def is_loaded(self) -> bool:
@@ -140,88 +135,76 @@ class InMemorySaveManager:
     def save_to_disk(self, create_backup: bool = True) -> bool:
         """
         Save in-memory changes back to disk using SaveGameHandler
-        
+
         Args:
             create_backup: Whether to create backup before saving
-            
+
         Returns:
             True if saved successfully, False otherwise
         """
         if not self.is_loaded():
             logger.error("No save files loaded")
             return False
-        
+
         if not self.has_unsaved_changes():
             logger.info("No changes to save")
             return True
-        
+
         try:
             logger.info(f"Saving changes to disk (backup={create_backup})")
-            
+
             if self._character_manager:
-                # Use the original GFFElement which has been updated in-place
-                if hasattr(self._character_manager, 'gff_element') and self._character_manager.gff_element:
-                    # Create player.bic content using the original GFFElement
-                    from parsers.gff import GFFWriter
-                    
-                    playerbic_output = BytesIO()
-                    bic_writer = GFFWriter('BIC ')
-                    bic_writer.save(playerbic_output, self._character_manager.gff_element)
-                else:
-                    logger.error("No GFFElement available - cannot save character data")
-                    return False
-                
-                # We need to also sync changes to playerlist.ifo
-                # First, load the current playerlist.ifo to update it
+                from nwn2_rust import GffWriter
+
+                # Get the current character data dict from the manager
+                char_data = self._character_manager.gff.raw_data
+
+                # Write player.bic using plain dict (writer handles __struct_id__)
+                bic_writer = GffWriter('BIC ', 'V3.2')
+                playerbic_bytes = bic_writer.dump(char_data)
+
+                # Update playerlist.ifo with relevant changes
                 playerlist_data = self.save_handler.extract_player_data()
                 if playerlist_data:
-                    # Parse playerlist.ifo
-                    parser = GFFParser()
-                    player_list = parser.load(BytesIO(playerlist_data))
-                    
-                    # Get player struct from playerlist.ifo
-                    mod_player_list = player_list.get_field('Mod_PlayerList')
-                    if mod_player_list and mod_player_list.value:
-                        player_struct = mod_player_list.value[0]
-                        
-                        # Update player struct with changes from character data
-                        # Only update fields that exist in playerlist.ifo
-                        player_dict = player_struct.to_dict()
-                        character_dict = self._character_manager.gff_element.to_dict()
-                        for key in player_dict:
-                            if key in character_dict:
-                                player_struct.set_field(key, character_dict[key])
-                        
+                    player_list_dict = GffParser.from_bytes(playerlist_data).to_dict()
+
+                    # Get player struct from Mod_PlayerList
+                    mod_player_list = player_list_dict.get('Mod_PlayerList', [])
+                    if mod_player_list:
+                        player_struct = mod_player_list[0]
+
+                        # Update fields that exist in both
+                        for key in list(player_struct.keys()):
+                            if key.startswith('__'):
+                                continue
+                            if key in char_data:
+                                player_struct[key] = char_data[key]
+
                         # Write updated playerlist.ifo
-                        playerlist_output = BytesIO()
-                        writer = GFFWriter.from_parser(parser)  # Preserve IFO file type
-                        writer.save(playerlist_output, player_list)
-                        
-                        # Update both files together
+                        ifo_writer = GffWriter('IFO ', 'V3.2')
+                        playerlist_bytes = ifo_writer.dump(player_list_dict)
+
+                        # Update both files
                         self.save_handler.update_player_complete(
-                            playerlist_output.getvalue(),
-                            playerbic_output.getvalue(),
+                            playerlist_bytes,
+                            playerbic_bytes,
                             backup=create_backup
                         )
                     else:
-                        # Fallback if no playerlist data found
                         self.save_handler.update_player_bic(
-                            playerbic_output.getvalue(),
+                            playerbic_bytes,
                             backup=create_backup
                         )
                 else:
-                    # No playerlist.ifo found, just update player.bic
                     self.save_handler.update_player_bic(
-                        playerbic_output.getvalue(),
+                        playerbic_bytes,
                         backup=create_backup
                     )
-                
-                # Mark as clean
+
                 self.is_dirty = False
-                
                 logger.info("Successfully saved changes to disk")
                 return True
-                
+
         except Exception as e:
             logger.error(f"Failed to save to disk: {e}", exc_info=True)
             return False

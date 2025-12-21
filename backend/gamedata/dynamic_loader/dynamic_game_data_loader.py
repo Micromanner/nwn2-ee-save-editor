@@ -10,7 +10,7 @@ import os
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 from gamedata.dynamic_loader.data_model_loader import DataModelLoader
 from gamedata.dynamic_loader.runtime_class_generator import RuntimeDataClassGenerator
 from gamedata.services.data_fetching_rules import with_retry_limit

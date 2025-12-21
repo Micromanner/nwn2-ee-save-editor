@@ -100,7 +100,7 @@ def get_shared_resource_manager():
         _initializing = True
         logger.info("Creating shared ResourceManager instance")
         try:
-            from parsers.resource_manager import ResourceManager
+            from services.resource_manager import ResourceManager
             from config.nwn2_settings import nwn2_paths
             
             _shared_services['resource_manager'] = ResourceManager(
@@ -133,7 +133,7 @@ async def get_shared_resource_manager_async():
             logger.info("Creating shared ResourceManager instance (async)")
             try:
                 # Run ResourceManager creation in thread pool
-                from parsers.resource_manager import ResourceManager
+                from services.resource_manager import ResourceManager
                 from config.nwn2_settings import nwn2_paths
                 
                 _shared_services['resource_manager'] = await asyncio.to_thread(

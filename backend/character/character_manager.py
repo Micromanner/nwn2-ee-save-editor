@@ -247,41 +247,29 @@ class CharacterManager(EventEmitter):
     Uses DynamicGameDataLoader for all character data structure understanding
     """
     
-    def __init__(self, character_data: Dict[str, Any], game_data_loader: Optional['DynamicGameDataLoader'] = None, gff_element=None, rules_service: Optional[GameRulesService] = None):
+    def __init__(self, character_data: Dict[str, Any], game_data_loader: Optional['DynamicGameDataLoader'] = None, rules_service: Optional[GameRulesService] = None, **kwargs):
         """
         Initialize the data-driven character manager
-        
+
         Args:
-            character_data: Raw GFF character data
+            character_data: Raw GFF character data (plain dict with __struct_id__ metadata)
             game_data_loader: DynamicGameDataLoader instance (creates new one if not provided)
-            gff_element: Optional GFFElement for direct updates
             rules_service: Optional GameRulesService instance
+            **kwargs: Ignored for backward compatibility (e.g., gff_element)
         """
         super().__init__()
         self.character_data = character_data
-        
+
         # Validate character data
         if not isinstance(character_data, dict):
             raise ValueError(f"character_data must be a dictionary, got {type(character_data)}")
-        
+
         if not character_data:
             raise ValueError("character_data cannot be empty")
-        
-        # Use DirectGFFWrapper if gff_element is provided
-        if gff_element:
-            try:
-                from .gff_direct_wrapper import DirectGFFWrapper
-                self.gff = DirectGFFWrapper(gff_element)
-                self.gff_element = gff_element
-                logger.info("Using DirectGFFWrapper for character data access")
-            except ImportError as e:
-                logger.error(f"Failed to import DirectGFFWrapper: {e}")
-                self.gff = GFFDataWrapper(character_data)
-                self.gff_element = None
-        else:
-            self.gff = GFFDataWrapper(character_data)
-            self.gff_element = None
-            logger.info("Using GFFDataWrapper for character data access")
+
+        # Use GFFDataWrapper for dict access with path support
+        self.gff = GFFDataWrapper(character_data)
+        logger.info("Using GFFDataWrapper for character data access")
             
         # Use provided loader or get singleton instance - this is our source of truth
         try:

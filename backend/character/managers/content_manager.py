@@ -254,8 +254,8 @@ class ContentManager(EventEmitter):
 
         try:
             from config.nwn2_settings import nwn2_paths
-            from parsers.gff import GFFParser
-            from parsers.resource_manager import ResourceManager
+            from nwn2_rust import GffParser
+            from services.resource_manager import ResourceManager
             import tempfile
             import lzma
 
@@ -290,8 +290,8 @@ class ContentManager(EventEmitter):
                                 tmp_path = tmp.name
 
                             try:
-                                from parsers import ERFParser
-                                parser = ERFParser()
+                                from nwn2_rust import ErfParser
+                                parser = ErfParser()
                                 parser.read(tmp_path)
 
                                 module_jrl_data = parser.extract_resource('module.jrl')
@@ -311,10 +311,8 @@ class ContentManager(EventEmitter):
                 logger.info("ContentManager: No module.jrl found")
                 return
 
-            gff_parser = GFFParser()
-            from io import BytesIO
-            jrl_gff = gff_parser.load(BytesIO(module_jrl_data))
-            jrl_data = jrl_gff.to_dict()
+            from nwn2_rust import GffParser
+            jrl_data = GffParser.from_bytes(module_jrl_data).to_dict()
 
             # Initialize ResourceManager for TLK string lookups
             resource_manager = None
@@ -512,7 +510,7 @@ class ContentManager(EventEmitter):
         logger.info(f"ContentManager: Starting campaign data extraction from {save_path}")
         
         try:
-            from parsers.savegame_handler import SaveGameHandler
+            from services.savegame_handler import SaveGameHandler
             handler = SaveGameHandler(save_path)
             logger.info("ContentManager: Created SaveGameHandler")
             
@@ -537,9 +535,8 @@ class ContentManager(EventEmitter):
         """Parse module.ifo from a single .z file"""
         import lzma
         import tempfile
-        from parsers import ERFParser
-        from parsers.gff import GFFParser
-        from io import BytesIO
+        from nwn2_rust import ErfParser
+        from nwn2_rust import GffParser
 
         try:
             # Decompress LZMA
@@ -553,7 +550,7 @@ class ContentManager(EventEmitter):
 
             try:
                 # Parse ERF archive
-                parser = ERFParser()
+                parser = ErfParser()
                 parser.read(tmp_path)
 
                 # Extract module.ifo
@@ -569,15 +566,15 @@ class ContentManager(EventEmitter):
                 except:
                     pass
 
-            # Parse the module.ifo GFF file
-            gff_parser = GFFParser()
-            module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
-            module_ifo = module_gff.to_dict()
+            module_ifo = GffParser.from_bytes(module_ifo_bytes).to_dict()
 
             return module_ifo
 
         except Exception as e:
-            logger.error(f"ContentManager: Failed to parse {os.path.basename(z_file_path)}: {e}")
+            logger.error(
+                f"ContentManager: Failed to parse {os.path.basename(z_file_path)}: {e}",
+                exc_info=True
+            )
             return None
 
     def _extract_module_info(self, handler) -> None:
@@ -640,115 +637,142 @@ class ContentManager(EventEmitter):
 
     def _process_module_ifo(self, module_ifo: Dict[str, Any], module_id: str) -> Dict[str, Any]:
         """Process module.ifo data and return structured info + variables"""
+        try:
+            # Get module name (localized string)
+            mod_name_data = module_ifo.get('Mod_Name', {})
 
-        # Get module name (localized string)
-        mod_name_data = module_ifo.get('Mod_Name', {})
+            if isinstance(mod_name_data, dict) and 'substrings' in mod_name_data:
+                substrings = mod_name_data.get('substrings', [])
+                module_name = substrings[0].get('string', '') if substrings else ''
+            elif isinstance(mod_name_data, str):
+                module_name = mod_name_data
+            else:
+                module_name = ''
 
-        if isinstance(mod_name_data, dict) and 'substrings' in mod_name_data:
-            substrings = mod_name_data.get('substrings', [])
-            module_name = substrings[0].get('string', '') if substrings else ''
-        elif isinstance(mod_name_data, str):
-            module_name = mod_name_data
-        else:
-            module_name = ''
+            # Fallback to module_id if no name found
+            if not module_name:
+                module_name = module_id.replace('_', ' ').title()
 
-        # Fallback to module_id if no name found
-        if not module_name:
-            module_name = module_id.replace('_', ' ').title()
+            # Get entry area - handle bytes or string
+            area_name_raw = module_ifo.get('Mod_Entry_Area', '')
+            if isinstance(area_name_raw, bytes):
+                area_name = area_name_raw.decode('utf-8', errors='replace')
+            else:
+                area_name = str(area_name_raw) if area_name_raw else ''
 
-        # Get entry area
-        area_name = module_ifo.get('Mod_Entry_Area', '')
+            # Get Campaign_ID - handle bytes or string
+            campaign_id_raw = module_ifo.get('Campaign_ID', '')
+            if isinstance(campaign_id_raw, bytes):
+                campaign_id = campaign_id_raw.hex()
+            else:
+                campaign_id = str(campaign_id_raw) if campaign_id_raw else ''
 
-        # Get Campaign_ID
-        campaign_id = module_ifo.get('Campaign_ID', '')
+            # Parse module description (localized string)
+            mod_desc_data = module_ifo.get('Mod_Description', {})
+            module_description = ''
+            if isinstance(mod_desc_data, dict) and 'substrings' in mod_desc_data:
+                substrings = mod_desc_data.get('substrings', [])
+                module_description = substrings[0].get('string', '') if substrings else ''
+            elif isinstance(mod_desc_data, str):
+                module_description = mod_desc_data
 
-        # Parse module description (localized string)
-        mod_desc_data = module_ifo.get('Mod_Description', {})
-        module_description = ''
-        if isinstance(mod_desc_data, dict) and 'substrings' in mod_desc_data:
-            substrings = mod_desc_data.get('substrings', [])
-            module_description = substrings[0].get('string', '') if substrings else ''
-        elif isinstance(mod_desc_data, str):
-            module_description = mod_desc_data
+            # Determine campaign from module name or campaign_id
+            campaign = ''
+            if campaign_id:
+                # Look up campaign name from campaign.cam
+                # Temporarily set campaign_id in a temp dict
+                temp_info = {'campaign_id': campaign_id}
+                old_module_info = self.module_info
+                self.module_info = temp_info
+                campaign_file = self.find_campaign_file()
+                self.module_info = old_module_info
 
-        # Determine campaign from module name or campaign_id
-        campaign = ''
-        if campaign_id:
-            # Look up campaign name from campaign.cam
-            # Temporarily set campaign_id in a temp dict
-            temp_info = {'campaign_id': campaign_id}
-            old_module_info = self.module_info
-            self.module_info = temp_info
-            campaign_file = self.find_campaign_file()
-            self.module_info = old_module_info
+                if campaign_file:
+                    try:
+                        from nwn2_rust import GffParser
+                        campaign_data = GffParser(campaign_file).to_dict()
 
-            if campaign_file:
+                        display_name_data = campaign_data.get('DisplayName', {})
+                        if isinstance(display_name_data, dict) and 'substrings' in display_name_data:
+                            substrings = display_name_data.get('substrings', [])
+                            campaign = substrings[0].get('string', '') if substrings else ''
+                    except Exception as e:
+                        logger.warning(f"ContentManager: Could not load campaign name: {e}")
+
+            # Fallback to module name detection if campaign not found
+            if not campaign and module_name:
+                if 'Neverwinter' in module_name or 'West Harbor' in module_name or 'Old Owl Well' in module_name:
+                    campaign = 'Neverwinter Nights 2 Campaign'
+                elif 'Rashemen' in module_name or 'Mulsantir' in module_name:
+                    campaign = 'Mask of the Betrayer'
+                elif 'Samarach' in module_name or 'Samargol' in module_name:
+                    campaign = 'Storm of Zehir'
+
+            # Extract VarTable (module variables)
+            var_table = module_ifo.get('VarTable', [])
+
+            # Parse VarTable into separate dictionaries by type
+            module_variables: Dict[str, Dict[str, Any]] = {
+                'integers': {},
+                'floats': {},
+                'strings': {}
+            }
+
+            for var in var_table:
+                if not isinstance(var, dict):
+                    continue
+
+                var_name_raw = var.get('Name', '')
+                # Handle bytes in variable names
+                if isinstance(var_name_raw, bytes):
+                    var_name = var_name_raw.decode('utf-8', errors='replace')
+                else:
+                    var_name = str(var_name_raw) if var_name_raw else ''
+
+                var_type = var.get('Type', 0)
+                var_value = var.get('Value', None)
+
+                if not var_name or var_value is None:
+                    continue
+
+                # Type: 1=int, 2=float, 3=string (NWN2 GFF types)
+                # Handle potential bytes values
                 try:
-                    from parsers.gff import GFFParser
-                    gff_parser = GFFParser()
-                    campaign_gff = gff_parser.read(campaign_file)
-                    campaign_data = campaign_gff.to_dict()
+                    if var_type == 1:
+                        module_variables['integers'][var_name] = int(var_value)
+                    elif var_type == 2:
+                        module_variables['floats'][var_name] = float(var_value)
+                    elif var_type == 3:
+                        if isinstance(var_value, bytes):
+                            module_variables['strings'][var_name] = var_value.decode('utf-8', errors='replace')
+                        else:
+                            module_variables['strings'][var_name] = str(var_value)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"ContentManager: Could not parse variable '{var_name}' (type {var_type}): {e}")
+                    continue
 
-                    display_name_data = campaign_data.get('DisplayName', {})
-                    if isinstance(display_name_data, dict) and 'substrings' in display_name_data:
-                        substrings = display_name_data.get('substrings', [])
-                        campaign = substrings[0].get('string', '') if substrings else ''
-                except Exception as e:
-                    logger.warning(f"ContentManager: Could not load campaign name: {e}")
+            total_vars = sum(len(v) for v in module_variables.values())
+            logger.info(f"ContentManager: {module_id}: '{module_name}' has {total_vars} variables")
 
-        # Fallback to module name detection if campaign not found
-        if not campaign and module_name:
-            if 'Neverwinter' in module_name or 'West Harbor' in module_name or 'Old Owl Well' in module_name:
-                campaign = 'Neverwinter Nights 2 Campaign'
-            elif 'Rashemen' in module_name or 'Mulsantir' in module_name:
-                campaign = 'Mask of the Betrayer'
-            elif 'Samarach' in module_name or 'Samargol' in module_name:
-                campaign = 'Storm of Zehir'
+            return {
+                'info': {
+                    'module_name': module_name,
+                    'area_name': area_name,
+                    'campaign': campaign,
+                    'entry_area': area_name,
+                    'module_description': module_description,
+                    'campaign_id': campaign_id,
+                    'current_module': module_id
+                },
+                'variables': module_variables
+            }
 
-        # Extract VarTable (module variables)
-        var_table = module_ifo.get('VarTable', [])
-
-        # Parse VarTable into separate dictionaries by type
-        module_variables = {
-            'integers': {},
-            'floats': {},
-            'strings': {}
-        }
-
-        for var in var_table:
-            if not isinstance(var, dict):
-                continue
-
-            var_name = var.get('Name', '')
-            var_type = var.get('Type', 0)
-            var_value = var.get('Value', None)
-
-            if not var_name or var_value is None:
-                continue
-
-            # Type: 1=int, 2=float, 3=string (NWN2 GFF types)
-            if var_type == 1:
-                module_variables['integers'][var_name] = int(var_value)
-            elif var_type == 2:
-                module_variables['floats'][var_name] = float(var_value)
-            elif var_type == 3:
-                module_variables['strings'][var_name] = str(var_value)
-
-        total_vars = sum(len(v) for v in module_variables.values())
-        logger.info(f"ContentManager: {module_id}: '{module_name}' has {total_vars} variables")
-
-        return {
-            'info': {
-                'module_name': module_name,
-                'area_name': area_name,
-                'campaign': campaign,
-                'entry_area': area_name,
-                'module_description': module_description,
-                'campaign_id': campaign_id,
-                'current_module': module_id
-            },
-            'variables': module_variables
-        }
+        except Exception as e:
+            logger.error(
+                f"ContentManager: Failed to process module.ifo for '{module_id}': {e}",
+                exc_info=True
+            )
+            raise
     
     def _extract_quest_data(self, handler) -> None:
         """Extract quest data from globals.xml"""
@@ -844,7 +868,7 @@ class ContentManager(EventEmitter):
         logger.info("ContentManager: Looking for current module info")
         try:
             # Try to extract from SaveGameHandler first
-            from parsers.savegame_handler import SaveGameHandler
+            from services.savegame_handler import SaveGameHandler
             handler = SaveGameHandler(save_path)
             current_module = handler.extract_current_module()
             
@@ -922,12 +946,18 @@ class ContentManager(EventEmitter):
 
                 # Parse the campaign.cam to check GUID
                 try:
-                    from parsers.gff import GFFParser
-                    gff_parser = GFFParser()
-                    campaign_gff = gff_parser.read(campaign_file)
-                    campaign_data = campaign_gff.to_dict()
+                    from nwn2_rust import GffParser
+                    campaign_data = GffParser(campaign_file).to_dict()
 
-                    file_guid = campaign_data.get('GUID', '')
+                    file_guid_raw = campaign_data.get('GUID', '')
+
+                    # Normalize GUID to hex string for comparison
+                    if isinstance(file_guid_raw, bytes):
+                        file_guid = file_guid_raw.hex()
+                    else:
+                        file_guid = str(file_guid_raw) if file_guid_raw else ''
+
+                    logger.debug(f"ContentManager: Checking {campaign_name}: file_guid={file_guid}, looking_for={campaign_id}")
 
                     if file_guid == campaign_id:
                         logger.info(f"ContentManager: Found matching campaign: {campaign_name}")
@@ -952,10 +982,8 @@ class ContentManager(EventEmitter):
             return None
 
         try:
-            from parsers.gff import GFFParser
-            gff_parser = GFFParser()
-            campaign_gff = gff_parser.read(campaign_file)
-            campaign_data = campaign_gff.to_dict()
+            from nwn2_rust import GffParser
+            campaign_data = GffParser(campaign_file).to_dict()
 
             # Extract key settings
             mod_names_raw = campaign_data.get('ModNames', [])
@@ -963,13 +991,33 @@ class ContentManager(EventEmitter):
             if isinstance(mod_names_raw, list):
                 for mod in mod_names_raw:
                     if isinstance(mod, dict) and 'ModuleName' in mod:
-                        module_names.append(mod['ModuleName'])
+                        mod_name = mod['ModuleName']
+                        if isinstance(mod_name, bytes):
+                            module_names.append(mod_name.decode('utf-8', errors='replace'))
+                        else:
+                            module_names.append(str(mod_name))
                     elif isinstance(mod, str):
                         module_names.append(mod)
+                    elif isinstance(mod, bytes):
+                        module_names.append(mod.decode('utf-8', errors='replace'))
+
+            # Convert GUID bytes to hex string if needed
+            guid_raw = campaign_data.get('GUID', b'')
+            if isinstance(guid_raw, bytes):
+                guid = guid_raw.hex()
+            else:
+                guid = str(guid_raw) if guid_raw else ''
+
+            # Handle StartModule bytes
+            start_module_raw = campaign_data.get('StartModule', '')
+            if isinstance(start_module_raw, bytes):
+                start_module = start_module_raw.decode('utf-8', errors='replace')
+            else:
+                start_module = str(start_module_raw) if start_module_raw else ''
 
             settings = {
                 'campaign_file_path': campaign_file,
-                'guid': campaign_data.get('GUID', ''),
+                'guid': guid,
                 'level_cap': campaign_data.get('LvlCap', 20),
                 'xp_cap': campaign_data.get('XPCap', 0),
                 'companion_xp_weight': campaign_data.get('CompXPWt', 0.0),
@@ -979,7 +1027,7 @@ class ContentManager(EventEmitter):
                 'journal_sync': campaign_data.get('JournalSynch', 1),
                 'no_char_changing': campaign_data.get('NoCharChanging', 0),
                 'use_personal_reputation': campaign_data.get('UsePersonalRep', 0),
-                'start_module': campaign_data.get('StartModule', ''),
+                'start_module': start_module,
                 'module_names': module_names,
             }
 
@@ -1014,43 +1062,43 @@ class ContentManager(EventEmitter):
             return False
 
         try:
-            from parsers.gff import GFFParser, GFFWriter
+            from nwn2_rust import GffParser, GffWriter
 
-            # Read current campaign.cam
-            gff_parser = GFFParser()
-            campaign_gff = gff_parser.read(campaign_file)
+            campaign_gff = GffParser(campaign_file).to_dict()
 
             # Update fields
             if 'level_cap' in settings:
-                campaign_gff.set_field('LvlCap', settings['level_cap'])
+                campaign_gff['LvlCap'] = settings['level_cap']
 
             if 'xp_cap' in settings:
-                campaign_gff.set_field('XPCap', settings['xp_cap'])
+                campaign_gff['XPCap'] = settings['xp_cap']
 
             if 'companion_xp_weight' in settings:
-                campaign_gff.set_field('CompXPWt', float(settings['companion_xp_weight']))
+                campaign_gff['CompXPWt'] = float(settings['companion_xp_weight'])
 
             if 'henchman_xp_weight' in settings:
-                campaign_gff.set_field('HenchXPWt', float(settings['henchman_xp_weight']))
+                campaign_gff['HenchXPWt'] = float(settings['henchman_xp_weight'])
 
             if 'attack_neutrals' in settings:
-                campaign_gff.set_field('AttackNeut', int(settings['attack_neutrals']))
+                campaign_gff['AttackNeut'] = int(settings['attack_neutrals'])
 
             if 'auto_xp_award' in settings:
-                campaign_gff.set_field('AutoXPAwd', int(settings['auto_xp_award']))
+                campaign_gff['AutoXPAwd'] = int(settings['auto_xp_award'])
 
             if 'journal_sync' in settings:
-                campaign_gff.set_field('JournalSynch', int(settings['journal_sync']))
+                campaign_gff['JournalSynch'] = int(settings['journal_sync'])
 
             if 'no_char_changing' in settings:
-                campaign_gff.set_field('NoCharChanging', int(settings['no_char_changing']))
+                campaign_gff['NoCharChanging'] = int(settings['no_char_changing'])
 
             if 'use_personal_reputation' in settings:
-                campaign_gff.set_field('UsePersonalRep', int(settings['use_personal_reputation']))
+                campaign_gff['UsePersonalRep'] = int(settings['use_personal_reputation'])
 
-            # Write back to file
-            writer = GFFWriter.from_parser(gff_parser)
-            writer.write(campaign_file, campaign_gff)
+            writer = GffWriter('CAM ', 'V3.2')
+            campaign_bytes = writer.dump(campaign_gff)
+
+            with open(campaign_file, 'wb') as f:
+                f.write(campaign_bytes)
 
             logger.info(f"ContentManager: Successfully updated campaign settings in {campaign_file}")
             return True
@@ -1080,18 +1128,26 @@ class ContentManager(EventEmitter):
     def get_module_by_id(self, module_id: str) -> Optional[Dict[str, Any]]:
         """Get specific module data by ID"""
         if module_id not in self.all_modules:
+            logger.debug(f"ContentManager: Module '{module_id}' not found. Available: {list(self.all_modules.keys())}")
             return None
 
-        module_data = self.all_modules[module_id]
-        return {
-            **module_data['info'],
-            'variables': {
-                'integers': module_data['variables']['integers'],
-                'strings': module_data['variables']['strings'],
-                'floats': module_data['variables']['floats'],
-                'total_count': sum(len(v) for v in module_data['variables'].values())
+        try:
+            module_data = self.all_modules[module_id]
+            return {
+                **module_data['info'],
+                'variables': {
+                    'integers': module_data['variables']['integers'],
+                    'strings': module_data['variables']['strings'],
+                    'floats': module_data['variables']['floats'],
+                    'total_count': sum(len(v) for v in module_data['variables'].values())
+                }
             }
-        }
+        except Exception as e:
+            logger.error(
+                f"ContentManager: Error building response for module '{module_id}': {e}",
+                exc_info=True
+            )
+            raise
 
     def get_module_variables(self, module_id: Optional[str] = None) -> Dict[str, Any]:
         """Get module variables from VarTable"""
@@ -1161,9 +1217,8 @@ class ContentManager(EventEmitter):
         var_type: str
     ) -> bool:
         """Update variable in standalone module.ifo for current module"""
-        from parsers.savegame_handler import SaveGameHandler
-        from parsers.gff import GFFParser, GFFWriter
-        from io import BytesIO
+        from services.savegame_handler import SaveGameHandler
+        from nwn2_rust import GffParser, GffWriter
 
         handler = SaveGameHandler(save_path, create_load_backup=False)
 
@@ -1172,13 +1227,12 @@ class ContentManager(EventEmitter):
             logger.error("ContentManager: No module.ifo found in save")
             return False
 
-        gff_parser = GFFParser()
-        module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
+        module_gff = GffParser.from_bytes(module_ifo_bytes).to_dict()
 
         updated_gff = self._update_var_table(module_gff, var_name, value, var_type)
 
-        writer = GFFWriter.from_parser(gff_parser)
-        module_ifo_data = writer.to_bytes(updated_gff)
+        writer = GffWriter('IFO ', 'V3.2')
+        module_ifo_data = writer.dump(updated_gff)
 
         handler.update_module_ifo(module_ifo_data)
 
@@ -1204,9 +1258,8 @@ class ContentManager(EventEmitter):
     ) -> bool:
         """Update variable in .z file using ERF writer"""
         import lzma
-        from parsers import ERFParser
-        from parsers.gff import GFFParser, GFFWriter
-        from io import BytesIO
+        from nwn2_rust import ErfParser
+        from nwn2_rust import GffParser, GffWriter
 
         z_file_path = os.path.join(save_path, f'{module_id}.z')
         if not os.path.exists(z_file_path):
@@ -1218,7 +1271,7 @@ class ContentManager(EventEmitter):
         with lzma.open(z_file_path, 'rb') as f:
             decompressed_data = f.read()
 
-        parser = ERFParser()
+        parser = ErfParser()
         parser.parse_from_bytes(decompressed_data)
         parser.load_all_resources()
 
@@ -1227,13 +1280,12 @@ class ContentManager(EventEmitter):
             logger.error(f"ContentManager: module.ifo not found in {module_id}.z")
             return False
 
-        gff_parser = GFFParser()
-        module_gff = gff_parser.load(BytesIO(module_ifo_bytes))
+        module_gff = GffParser.from_bytes(module_ifo_bytes).to_dict()
 
         updated_gff = self._update_var_table(module_gff, var_name, value, var_type)
 
-        writer = GFFWriter.from_parser(gff_parser)
-        updated_module_ifo = writer.to_bytes(updated_gff)
+        writer = GffWriter('IFO ', 'V3.2')
+        updated_module_ifo = writer.dump(updated_gff)
 
         parser.update_resource('module.ifo', updated_module_ifo)
 
@@ -1254,10 +1306,8 @@ class ContentManager(EventEmitter):
 
         return True
 
-    def _update_var_table(self, module_gff, var_name: str, value: Union[int, str, float], var_type: str):
-        """Update or add a variable in the VarTable of a module GFF"""
-        module_ifo = module_gff.to_dict()
-
+    def _update_var_table(self, module_ifo: dict, var_name: str, value: Union[int, str, float], var_type: str):
+        """Update or add a variable in the VarTable of a module GFF dict"""
         var_table = module_ifo.get('VarTable', [])
         if not isinstance(var_table, list):
             var_table = []
@@ -1279,8 +1329,8 @@ class ContentManager(EventEmitter):
                 'Value': value
             })
 
-        module_gff.set_field('VarTable', var_table)
-        return module_gff
+        module_ifo['VarTable'] = var_table
+        return module_ifo
 
     def _update_variable_cache(self, module_id: str, var_name: str, value: Union[int, str, float], var_type: str):
         """Update the local variable cache after a successful update"""

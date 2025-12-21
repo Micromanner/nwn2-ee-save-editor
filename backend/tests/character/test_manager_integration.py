@@ -26,7 +26,7 @@ from character.managers.race_manager import RaceManager
 from character.managers.spell_manager import SpellManager
 from character.events import EventType, EventData, ClassChangedEvent, FeatChangedEvent
 
-from parsers.gff import GFFParser
+from nwn2_rust import GffParser
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
 from gamedata.services.game_rules_service import GameRulesService
 
@@ -70,8 +70,7 @@ def sample_character_data():
             zip_file.extract('player.bic', tmpdir)
             
         parser = GFFParser()
-        parser.read(os.path.join(tmpdir, 'player.bic'))
-        return parser.top_level_struct.to_dict()
+        return parser.read(os.path.join(tmpdir, 'player.bic'))
 
 
 @pytest.fixture

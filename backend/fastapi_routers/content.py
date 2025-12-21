@@ -556,10 +556,10 @@ def get_module_by_id(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get module {module_id} for character {character_id}: {e}")
+        logger.error(f"Failed to get module {module_id} for character {character_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get module: {str(e)}"
+            detail=f"Failed to get module '{module_id}': {str(e)}"
         )
 
 

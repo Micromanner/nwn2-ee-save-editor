@@ -12,8 +12,8 @@ import concurrent.futures
 import threading
 import time
 
-from parsers.savegame_handler import SaveGameHandler
-from parsers.gff import GFFParser, GFFWriter
+from services.savegame_handler import SaveGameHandler
+from nwn2_rust import GffParser, GffWriter
 
 
 # Fixtures
@@ -227,7 +227,7 @@ class TestSaveGameHandlerBasicOperations:
         
     def test_extract_nonexistent_file(self, minimal_save_zip):
         """Test extracting a file that doesn't exist."""
-        from parsers.savegame_handler import SaveGameError
+        from services.savegame_handler import SaveGameError
         handler = SaveGameHandler(minimal_save_zip)
         
         with pytest.raises(SaveGameError):
@@ -368,7 +368,7 @@ class TestSaveGameHandlerErrorHandling:
     
     def test_corrupted_zip_handling(self, corrupted_save_zip):
         """Test handling of corrupted zip files."""
-        from parsers.savegame_handler import SaveGameError
+        from services.savegame_handler import SaveGameError
         handler = SaveGameHandler(corrupted_save_zip)
         
         with pytest.raises(SaveGameError):
@@ -376,7 +376,7 @@ class TestSaveGameHandlerErrorHandling:
     
     def test_missing_file_extraction(self, minimal_save_zip):
         """Test extracting non-existent files."""
-        from parsers.savegame_handler import SaveGameError
+        from services.savegame_handler import SaveGameError
         handler = SaveGameHandler(minimal_save_zip)
         
         with pytest.raises(SaveGameError):
@@ -398,7 +398,7 @@ class TestSaveGameHandlerErrorHandling:
     @patch('os.unlink')
     def test_update_cleanup_on_error(self, mock_unlink, mock_exists, minimal_save_zip):
         """Test that temp files are cleaned up on error."""
-        from parsers.savegame_handler import SaveGameError
+        from services.savegame_handler import SaveGameError
         handler = SaveGameHandler(minimal_save_zip)
         mock_exists.return_value = True
         
@@ -429,7 +429,7 @@ class TestSaveGameHandlerErrorHandling:
     @patch('zipfile.ZipFile')
     def test_permission_error_handling(self, mock_zipfile, minimal_save_zip):
         """Test handling of permission errors."""
-        from parsers.savegame_handler import SaveGameError
+        from services.savegame_handler import SaveGameError
         mock_zipfile.side_effect = PermissionError("No permission")
         
         handler = SaveGameHandler(minimal_save_zip)
@@ -639,57 +639,54 @@ class TestSaveGameHandlerIntegration:
     
     def test_character_manager_integration(self, temp_savegame, gff_parser):
         """Test integration with CharacterManager."""
-        # Import here to avoid circular dependencies
         from character.character_manager import CharacterManager
         from character.managers import AttributeManager
-        
+
         handler = SaveGameHandler(temp_savegame)
-        
-        # Extract and modify using CharacterManager
+
+        # Extract and parse player.bic - returns plain dict with __struct_id__ metadata
         bic_data = handler.extract_player_bic()
-        gff_element = gff_parser.load(BytesIO(bic_data))
-        
-        # Create CharacterManager
-        char_data = gff_element.to_dict()
-        manager = CharacterManager(char_data, gff_element=gff_element)
+        char_data = gff_parser.load(BytesIO(bic_data))
+
+        # Create CharacterManager with plain dict
+        manager = CharacterManager(char_data)
         manager.register_manager('attribute', AttributeManager)
-        
-        # Modify attributes
+
+        # Modify attributes via manager
         attr_manager = manager.get_manager('attribute')
-        original_str = gff_element.get_field('Str').value
+        original_str = char_data.get('Str', 10)
         new_str = 20 if original_str != 20 else 18
         attr_manager.set_attribute('Str', new_str)
-        
+
         # Save back - need to update both player.bic and playerlist.ifo
         playerlist_data = handler.extract_player_data()
-        playerlist_element = gff_parser.load(BytesIO(playerlist_data))
-        
+        playerlist_dict = gff_parser.load(BytesIO(playerlist_data))
+
         # Find and update player in playerlist
-        mod_list = playerlist_element.get_field('Mod_PlayerList')
-        if mod_list and mod_list.value:
-            player_struct = mod_list.value[0]
-            player_struct.get_field('Str').value = new_str
-        
-        # Write both files
+        mod_list = playerlist_dict.get('Mod_PlayerList', [])
+        if mod_list:
+            mod_list[0]['Str'] = new_str
+
+        # Write both files - writer handles __struct_id__ metadata
         bic_writer = GFFWriter.from_parser(gff_parser)
         playerlist_writer = GFFWriter(file_type='IFO ')
-        
+
         bic_output = BytesIO()
         playerlist_output = BytesIO()
-        
-        bic_writer.save(bic_output, gff_element)
-        playerlist_writer.save(playerlist_output, playerlist_element)
-        
+
+        bic_writer.save(bic_output, manager.gff.raw_data)
+        playerlist_writer.save(playerlist_output, playerlist_dict)
+
         # Update both files
         handler.update_player_complete(
             playerlist_output.getvalue(),
             bic_output.getvalue()
         )
-        
+
         # Verify change persisted
         new_bic = handler.extract_player_bic()
-        new_element = gff_parser.load(BytesIO(new_bic))
-        assert new_element.get_field('Str').value == new_str
+        new_char_data = gff_parser.load(BytesIO(new_bic))
+        assert new_char_data.get('Str') == new_str
     
     def test_full_save_edit_workflow(self, temp_savegame, gff_parser):
         """Test complete workflow: extract, edit multiple files, repack."""

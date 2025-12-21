@@ -11,8 +11,8 @@ from pathlib import Path
 from io import BytesIO
 from unittest.mock import patch, MagicMock
 
-from parsers import ERFParser
 from nwn2_rust import ErfParser
+ERFParser = ErfParser  # Alias for backward compatibility
 ERFHeader = ErfParser  # For compatibility - adjust as needed based on actual API
 ERFKey = None  # These may need adjustment based on actual nwn2_rust API
 ERFResource = None

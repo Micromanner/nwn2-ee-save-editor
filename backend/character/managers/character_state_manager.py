@@ -8,7 +8,6 @@ import copy
 from loguru import logger
 from pathlib import Path
 
-from parsers import gff
 from ..events import EventEmitter, EventType, EventData
 
 if TYPE_CHECKING:
@@ -179,57 +178,50 @@ class CharacterStateManager(EventEmitter):
     def save_to_file(self, filepath: str) -> None:
         """
         Save character to a file
-        
+
         Args:
             filepath: Path to save the character file
         """
         try:
-            # If we have a gff_element, use it for direct write
-            if hasattr(self.character_manager, 'gff_element') and self.character_manager.gff_element:
-                gff.write_gff(self.character_manager.gff_element, filepath)
-            else:
-                # Convert dict data back to GFF format
-                gff_element = gff.dict_to_gff(self.character_manager.character_data)
-                gff.write_gff(gff_element, filepath)
-            
+            from nwn2_rust import GffWriter
+
+            char_data = self.character_manager.gff.raw_data
+
+            writer = GffWriter('BIC ', 'V3.2')
+            char_bytes = writer.dump(char_data)
+
+            with open(filepath, 'wb') as f:
+                f.write(char_bytes)
+
             logger.info(f"Character saved to {filepath}")
-            
+
         except Exception as e:
             logger.error(f"Failed to save character to {filepath}: {e}")
             raise
-    
+
     def load_from_file(self, filepath: str) -> None:
         """
         Load character from a file
-        
+
         Args:
             filepath: Path to the character file
         """
         try:
-            # Parse the GFF file
-            gff_element = gff.parse_gff(filepath)
-            character_data = gff.gff_to_dict(gff_element)
-            
+            from nwn2_rust import GffParser
+            from ..character_manager import GFFDataWrapper
+
+            # Parse the GFF file - returns plain dict directly
+            character_data = GffParser(filepath).to_dict()
+
             # Import the loaded data
             self.import_character({'gff_data': character_data, 'summary': {}})
-            
-            # Store the gff_element for direct updates
-            self.character_manager.gff_element = gff_element
-            
-            # Try to use DirectGFFWrapper if available, otherwise keep existing wrapper
-            try:
-                from ..gff_direct_wrapper import DirectGFFWrapper
-                self.character_manager.gff = DirectGFFWrapper(gff_element)
-                self.gff = self.character_manager.gff  # Update our reference
-            except ImportError:
-                logger.warning("DirectGFFWrapper not available, keeping existing GFF wrapper")
-                # Update existing wrapper with new data
-                from ..character_manager import GFFDataWrapper
-                self.character_manager.gff = GFFDataWrapper(character_data)
-                self.gff = self.character_manager.gff
-            
+
+            # Update wrapper with new data
+            self.character_manager.gff = GFFDataWrapper(character_data)
+            self.gff = self.character_manager.gff
+
             logger.info(f"Character loaded from {filepath}")
-            
+
         except Exception as e:
             logger.error(f"Failed to load character from {filepath}: {e}")
             raise

@@ -18,7 +18,7 @@ from character.character_manager import (
     CharacterManager, Transaction, GFFDataWrapper
 )
 from character.events import EventEmitter, EventData, EventType
-from parsers.gff import GFFParser, GFFElement, GFFFieldType
+from nwn2_rust import GffParser
 from gamedata.services.game_rules_service import GameRulesService
 
 
@@ -214,36 +214,13 @@ class TestCharacterManager:
     def test_initialization(self, sample_character_data, mock_game_data_loader):
         """Test CharacterManager initialization"""
         manager = CharacterManager(sample_character_data, game_data_loader=mock_game_data_loader)
-        
+
         assert manager.character_data == sample_character_data
         assert manager.game_data_loader == mock_game_data_loader
         assert isinstance(manager.gff, GFFDataWrapper)
-        assert manager.gff_element is None
         assert len(manager._managers) == 0
         assert manager._current_transaction is None
         assert len(manager.custom_content) > 0  # Should detect custom feat
-    
-    def test_initialization_with_gff_element(self, sample_character_data, mock_game_data_loader):
-        """Test CharacterManager initialization with GFFElement"""
-        mock_element = Mock()
-        
-        with patch('character.gff_direct_wrapper.DirectGFFWrapper') as mock_wrapper_class:
-            mock_wrapper = Mock()
-            # Mock the get method to return appropriate values for custom content detection
-            mock_wrapper.get.side_effect = lambda key, default=None: {
-                'FeatList': sample_character_data.get('FeatList', []),
-                'KnownList0': sample_character_data.get('KnownList0', []),
-                'KnownList1': [], 'KnownList2': [], 'KnownList3': [], 'KnownList4': [],
-                'KnownList5': [], 'KnownList6': [], 'KnownList7': [], 'KnownList8': [], 'KnownList9': [],
-                'ClassList': sample_character_data.get('ClassList', [])
-            }.get(key, default)
-            mock_wrapper_class.return_value = mock_wrapper
-            
-            manager = CharacterManager(sample_character_data, game_data_loader=mock_game_data_loader, gff_element=mock_element)
-            
-            assert manager.gff_element == mock_element
-            assert manager.gff == mock_wrapper
-            mock_wrapper_class.assert_called_once_with(mock_element)
     
     def test_register_manager(self, character_manager):
         """Test manager registration"""
@@ -599,7 +576,7 @@ class TestSavegameSessionIntegration:
     
     def test_savegame_module_detection(self, temp_save_dir):
         """Test module detection from currentmodule.txt in savegame"""
-        from parsers.resource_manager import ResourceManager
+        from services.resource_manager import ResourceManager
         
         # Mock resource manager
         mock_rm = Mock(spec=ResourceManager)
@@ -612,7 +589,7 @@ class TestSavegameSessionIntegration:
         # Should detect module from currentmodule.txt
         assert module_name == "test_module"
     
-    @patch('parsers.savegame_handler.SaveGameHandler')
+    @patch('services.savegame_handler.SaveGameHandler')
     def test_savegame_import_flow(self, mock_handler_class, temp_save_dir):
         """Test the FastAPI savegame import flow"""
         from fastapi_routers.savegame import import_savegame
@@ -712,34 +689,6 @@ class TestCharacterManagerEdgeCases:
         # Only valid dict entries are counted
         assert summary["level"] == 5  # Only first entry has ClassLevel
         assert len(summary["classes"]) == 2  # Only dict entries included
-    
-    def test_transaction_with_gff_element(self, sample_character_data, mock_game_data_loader):
-        """Test transaction rollback with DirectGFFWrapper"""
-        mock_element = Mock()
-        
-        with patch('character.gff_direct_wrapper.DirectGFFWrapper') as mock_wrapper_class:
-            # Setup mock wrapper to return proper values
-            mock_wrapper = Mock()
-            mock_wrapper.get.side_effect = lambda key, default=None: {
-                'FeatList': sample_character_data.get('FeatList', []),
-                'KnownList0': sample_character_data.get('KnownList0', []),
-                'KnownList1': [], 'KnownList2': [], 'KnownList3': [],
-                'KnownList4': [], 'KnownList5': [], 'KnownList6': [],
-                'KnownList7': [], 'KnownList8': [], 'KnownList9': [],
-                'ClassList': sample_character_data.get('ClassList', [])
-            }.get(key, default)
-            mock_wrapper_class.return_value = mock_wrapper
-            
-            manager = CharacterManager(sample_character_data, game_data_loader=mock_game_data_loader, gff_element=mock_element)
-            
-            # Start transaction and rollback
-            txn = manager.begin_transaction()
-            manager.rollback_transaction()
-            
-            # Should not recreate DirectGFFWrapper, just GFFDataWrapper
-            assert mock_wrapper_class.call_count == 1  # Only initial
-            # But GFF wrapper should be replaced with GFFDataWrapper
-            assert isinstance(manager.gff, GFFDataWrapper)
     
     def test_large_custom_content(self, mock_game_data_loader):
         """Test with many custom content items"""

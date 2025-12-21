@@ -13,8 +13,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from fastapi_core.session_registry import get_character_session, save_character_session, get_path_from_id
-# Heavy imports moved to lazy loading to improve startup time
-# from parsers.savegame_handler import SaveGameHandler, SaveGameError
 from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep,
@@ -86,30 +84,27 @@ def import_savegame(
     """Import a character from a save game directory"""
     try:
         # Lazy imports for performance
+        import io
         from fastapi_models import SavegameImportRequest, SavegameImportResponse
-        from parsers.savegame_handler import SaveGameHandler
-        
+        from services.savegame_handler import SaveGameHandler
+        from nwn2_rust import GffParser
+
         # Type validation at runtime
         if 'save_path' not in import_request:
             raise HTTPException(status_code=400, detail="Invalid import request")
-        
+
         # Use helper function - no duplicated logic
         save_path = _validate_save_directory(import_request['save_path'])
-        
-        # Create savegame handler to handle import - no duplicated logic
-        from parsers.parallel_gff import extract_and_parse_save_gff_files
-        
-        savegame_handler = SaveGameHandler(save_path)
-        
-        # Use single-threaded parsing to avoid multiprocessing duplicate imports
-        gff_results = extract_and_parse_save_gff_files(savegame_handler, max_workers=1)
-        
-        # Get playerlist.ifo data
-        if 'playerlist.ifo' not in gff_results or not gff_results['playerlist.ifo']['success']:
-            error = gff_results.get('playerlist.ifo', {}).get('error', 'Unknown error')
-            raise HTTPException(status_code=500, detail=f"Failed to parse playerlist.ifo: {error}")
 
-        player_data = gff_results['playerlist.ifo']['data']
+        savegame_handler = SaveGameHandler(save_path)
+
+        # Read and parse playerlist.ifo directly with Rust parser
+        raw_files = savegame_handler.batch_read_character_files()
+        if 'playerlist.ifo' not in raw_files:
+            raise HTTPException(status_code=500, detail="Failed to read playerlist.ifo from save")
+
+        from nwn2_rust import GffParser
+        player_data = GffParser.from_bytes(raw_files['playerlist.ifo']).to_dict()
         mod_player_list = player_data.get('Mod_PlayerList', [])
         if not mod_player_list:
             raise HTTPException(status_code=500, detail="No player data found in save game")
@@ -137,7 +132,7 @@ def import_savegame(
             'character_id': str(character_id),  # Use the registered integer ID
             'character_name': character_name,
             'save_path': save_path,
-            'files_imported': len(gff_results),
+            'files_imported': len(raw_files),
             'backup_created': False
         }
         
@@ -163,7 +158,7 @@ def list_savegame_companions(character_id: int):
     """List all companions available in a save game"""
     try:
         # Lazy imports for performance
-        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from services.savegame_handler import SaveGameHandler, SaveGameError
         from fastapi_models import SavegameCompanionsResponse, CompanionInfo
         
         # Use helper function - no duplicated logic
@@ -216,7 +211,7 @@ def get_savegame_info(character_id: int):
     """Get basic save game information using SaveGameHandler"""
     try:
         # Lazy imports for performance
-        from parsers.savegame_handler import SaveGameHandler
+        from services.savegame_handler import SaveGameHandler
         from fastapi_models import SavegameInfoResponse
         
         file_path = _validate_savegame_character(character_id)
@@ -255,7 +250,7 @@ def update_savegame_character(
     """Update character data in save game using existing session save"""
     try:
         # Lazy imports for performance
-        from parsers.savegame_handler import SaveGameHandler
+        from services.savegame_handler import SaveGameHandler
         from fastapi_models import SavegameUpdateResponse
         
         file_path = _validate_savegame_character(character_id)
@@ -306,7 +301,7 @@ def list_savegame_backups(character_id: int):
     """List all available backups for a save game"""
     try:
         # Lazy imports for performance
-        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from services.savegame_handler import SaveGameHandler, SaveGameError
         from fastapi_models import SavegameBackupsResponse, BackupInfo
         
         # Use helper function - no duplicated logic
@@ -353,7 +348,7 @@ def restore_savegame_backup(
     """Restore a save game from backup"""
     try:
         # Lazy imports for performance
-        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from services.savegame_handler import SaveGameHandler, SaveGameError
         from fastapi_models import SavegameRestoreRequest, SavegameRestoreResponse
         
         # Use helper function - no duplicated logic
@@ -409,7 +404,7 @@ def cleanup_savegame_backups(
     """Clean up old backups, keeping only the most recent ones"""
     try:
         # Lazy imports for performance
-        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from services.savegame_handler import SaveGameHandler, SaveGameError
         
         # Use helper function - no duplicated logic
         file_path = _validate_savegame_character(character_id)

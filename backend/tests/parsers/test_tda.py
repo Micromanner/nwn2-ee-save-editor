@@ -6,7 +6,7 @@ import io
 import tempfile
 import zipfile
 import os
-from parsers import TDAParser
+from nwn2_rust import TDAParser
 
 
 @pytest.fixture

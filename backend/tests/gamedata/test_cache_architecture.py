@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, MagicMock
 import zipfile
 import io
 
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 from nwn2_rust import TDAParser
 from gamedata.enhanced_icon_cache import EnhancedIconCache
 from gamedata.safe_cache import SafeCache
@@ -251,7 +251,7 @@ class TestCacheIntegration:
         # This would be an integration test with real files
         # For now, we'll use mocks to verify the architecture
         
-        with patch('parsers.resource_manager.nwn2_paths') as mock_paths:
+        with patch('services.resource_manager.nwn2_paths') as mock_paths:
             mock_paths.game_folder = temp_cache_dir
             mock_paths.user_override = temp_cache_dir / 'override'
             mock_paths.user_override.mkdir(exist_ok=True)

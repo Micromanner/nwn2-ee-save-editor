@@ -13,8 +13,8 @@ import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from parsers.resource_manager import ResourceManager
-from parsers import TDAParser
+from services.resource_manager import ResourceManager
+from nwn2_rust import TDAParser
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
 
 # Add backend directory to Python path for imports

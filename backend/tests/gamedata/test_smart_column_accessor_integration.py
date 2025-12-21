@@ -3,7 +3,7 @@ Integration tests for RuleDetector with ResourceManager.
 """
 import pytest
 from unittest.mock import Mock, patch
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 from nwn2_rust import TDAParser
 from gamedata.rule_detector import RuleDetector
 

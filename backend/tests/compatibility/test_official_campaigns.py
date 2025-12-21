@@ -10,8 +10,8 @@ from unittest.mock import patch, MagicMock, mock_open
 backend_path = Path(__file__).parent.parent.parent  # Go up 3 levels to backend
 sys.path.insert(0, str(backend_path))
 
-from parsers.resource_manager import ResourceManager
-from parsers.gff import GFFParser
+from services.resource_manager import ResourceManager
+from nwn2_rust import GffParser
 from gamedata.game_rules_service import GameRulesService
 from django.conf import settings
 
@@ -351,7 +351,7 @@ class TestCampaignErrorHandling:
             result = resource_manager.find_campaign(path)
             assert result is None, f"Should return None for invalid path: {path}"
             
-    @patch('parsers.gff.GFFParser.read')
+    @patch('services.rust_adapter.RustGFFParser.read')
     def test_corrupted_cam_file(self, mock_read, resource_manager):
         """Test handling of corrupted .cam files."""
         mock_read.side_effect = ValueError("Corrupted file")
@@ -364,26 +364,21 @@ class TestCampaignErrorHandling:
             
     def test_campaign_missing_modules(self, resource_manager):
         """Test handling of campaigns with empty module lists."""
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = {
-                'DisplayName': 'Empty Campaign',
-                'ModNames': [],
-                'StartModule': 'nonexistent'
-            }
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Mock the GFFParser constructor in resource_manager module
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    assert campaign_info is not None
-                    assert len(campaign_info['modules']) == 0
-                    assert campaign_info['name'] == 'Empty Campaign'
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = {
+            'DisplayName': 'Empty Campaign',
+            'ModNames': [],
+            'StartModule': 'nonexistent'
+        }
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+
+                campaign_info = resource_manager.find_campaign("/fake/path")
+                assert campaign_info is not None
+                assert len(campaign_info['modules']) == 0
+                assert campaign_info['name'] == 'Empty Campaign'
 
 
 class TestCampaignCompatibility:
@@ -401,23 +396,18 @@ class TestCampaignCompatibility:
             ],
             'StartModule': 'module1'
         }
-        
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = legacy_data
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Mock the GFFParser constructor in resource_manager module
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    assert campaign_info is not None
-                    assert campaign_info['name'] == 'Legacy Campaign'
-                    assert campaign_info['description'] == 'A legacy campaign'
+
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = legacy_data
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+
+                campaign_info = resource_manager.find_campaign("/fake/path")
+                assert campaign_info is not None
+                assert campaign_info['name'] == 'Legacy Campaign'
+                assert campaign_info['description'] == 'A legacy campaign'
                 
     def test_extended_campaign_fields(self, resource_manager):
         """Test handling of campaigns with additional custom fields."""
@@ -429,21 +419,16 @@ class TestCampaignCompatibility:
             'Version': '1.0.0',
             'RequiredExpansions': ['x1', 'x2']
         }
-        
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = extended_data
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Mock the GFFParser constructor in resource_manager module
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    assert campaign_info is not None
-                    # Should still extract standard fields
-                    assert campaign_info['name'] == 'Extended Campaign'
-                    assert len(campaign_info['modules']) == 1
+
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = extended_data
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+
+                campaign_info = resource_manager.find_campaign("/fake/path")
+                assert campaign_info is not None
+                # Should still extract standard fields
+                assert campaign_info['name'] == 'Extended Campaign'
+                assert len(campaign_info['modules']) == 1

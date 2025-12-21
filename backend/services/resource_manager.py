@@ -22,12 +22,12 @@ BASE_DIR = Path(__file__).parent.parent
 
 # Import Rust parsers - optional for standalone mode
 try:
-    from nwn2_rust import TDAParser, TLKParser, ErfParser as ERFParser
+    from nwn2_rust import TDAParser, TLKParser, ErfParser
     logger.info("Using high-performance Rust parsers (TDA, TLK, ERF)")
 except ImportError:
     TDAParser = None
     TLKParser = None
-    ERFParser = None
+    ErfParser = None
 
 # Define resource types for compatibility
 class ERFResourceType:
@@ -36,17 +36,15 @@ class ERFResourceType:
     GFF = 2037  # Generic file format
     IFO = 2014  # Module info files
 
-from .gff import GFFParser
+from nwn2_rust import GffParser
 from .cache_helper import TDACacheHelper
 
 # Rust extensions (optional for standalone mode)
 try:
     from nwn2_rust import ResourceScanner as RustResourceScanner, ZipContentReader
-    from .rust_adapter import RustScannerAdapter
 except ImportError:
     RustResourceScanner = None
     ZipContentReader = None
-    RustScannerAdapter = None
 
 def create_resource_scanner():
     """Create a resource scanner from Rust extensions"""
@@ -184,7 +182,7 @@ class ResourceManager:
         self._2da_locations: Dict[str, Tuple[str, str]] = {}
         
         # ERF/HAK file cache
-        self._erf_parsers: Dict[str, ERFParser] = {}
+        self._erf_parsers: Dict[str, ErfParser] = {}
         self._module_overrides: Dict[str, TDAParser] = {}
         self._hak_overrides: List[Dict[str, TDAParser]] = []  # Ordered list of HAK overrides
         self._override_dir_overrides: Dict[str, TDAParser] = {}  # Override directory
@@ -198,7 +196,7 @@ class ResourceManager:
         
         # Module information
         self._current_module: Optional[str] = None
-        self._module_parser: Optional[ERFParser] = None
+        self._module_parser: Optional[ErfParser] = None
         self._module_info: Optional[Dict[str, Any]] = None
         self._module_path: Optional[Path] = None
         
@@ -267,12 +265,11 @@ class ResourceManager:
         
         # Use Rust extensions for high-performance resource scanning
         logger.info("Using Rust extensions for high-performance resource scanning")
-        # Create adapter to make Rust scanner compatible with Python interface
+        # Create scanner wrapper that provides expected Python interface
         rust_scanner = create_resource_scanner()
-        adapter = RustScannerAdapter(rust_scanner)
-        self._python_scanner = adapter  # Has scan_zip_files, index_directory, etc.
-        self._zip_indexer = adapter     # Same object, compatible interface
-        self._directory_walker = adapter # Same object, compatible interface
+        self._python_scanner = rust_scanner  # Has scan_zip_files, index_directory, etc.
+        self._zip_indexer = rust_scanner     # Same object, compatible interface
+        self._directory_walker = rust_scanner # Same object, compatible interface
         
         # Initialize Rust ZIP content reader for efficient file access
         # Initialize Rust ZIP reader (already imported at top)
@@ -763,9 +760,7 @@ class ResourceManager:
                 logger.debug(f"Found campaign file: {cam_file}")
                 
                 # .cam files are GFF format
-                gff_parser = GFFParser()
-                gff_parser.read(str(cam_file))
-                campaign_data = gff_parser.top_level_struct.to_dict()
+                campaign_data = GffParser(str(cam_file)).to_dict()
                 
                 # Extract campaign info using helper
                 display_name = self._extract_gff_string(campaign_data.get('DisplayName'), 'Unknown Campaign')
@@ -910,7 +905,7 @@ class ResourceManager:
             return
         
         try:
-            parser = ERFParser()
+            parser = ErfParser()
             parser.read(str(hakpak_path))
             self._erf_parsers[hakpak_name] = parser
             
@@ -1286,12 +1281,12 @@ class ResourceManager:
             mod_file: Path to .mod file
             
         Returns:
-            Dict with 'info' containing module info and 'parser' containing the ERFParser instance,
+            Dict with 'info' containing module info and 'parser' containing the ErfParser instance,
             or None if extraction fails
         """
         try:
             # Parse .mod file as ERF archive
-            parser = ERFParser()
+            parser = ErfParser()
             parser.read(str(mod_file))
             
             # Extract module.ifo
@@ -1306,12 +1301,8 @@ class ResourceManager:
                 tmp.write(module_ifo_data)
                 tmp_path = tmp.name
             
-            gff_parser = GFFParser()
-            gff_parser.read(tmp_path)
+            module_data = GffParser(tmp_path).to_dict()
             os.unlink(tmp_path)
-            
-            # Extract module data
-            module_data = gff_parser.top_level_struct.to_dict()
             
             # Get module name using helper
             mod_name = self._extract_gff_string(module_data.get('Mod_Name'), '')

@@ -14,26 +14,26 @@ logger = logging.getLogger(__name__)
 
 def create_character_manager(
     character_data: Dict[str, Any],
-    gff_element=None,
     game_data_loader: Optional[DynamicGameDataLoader] = None,
     rules_service: Optional[GameRulesService] = None,
     lazy: bool = True,
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    **kwargs
 ) -> CharacterManager:
     """
     Factory function that creates a fully-configured CharacterManager with all managers registered.
-    
+
     This ensures consistent manager configuration across all views, enabling proper
     caching and event communication between managers.
-    
+
     Args:
-        character_data: Raw GFF character data
-        gff_element: Optional GFFElement for direct updates
+        character_data: Raw GFF character data (plain dict with __struct_id__ metadata)
         game_data_loader: Optional DynamicGameDataLoader instance
         rules_service: Optional GameRulesService instance
         lazy: If True (default), use lazy loading for managers
         save_path: Optional path to save directory (for campaign data extraction)
-        
+        **kwargs: Ignored for backward compatibility
+
     Returns:
         CharacterManager instance with all managers registered
     """
@@ -41,7 +41,6 @@ def create_character_manager(
     manager = CharacterManager(
         character_data,
         game_data_loader=game_data_loader,
-        gff_element=gff_element,
         rules_service=rules_service
     )
     
@@ -75,48 +74,47 @@ def create_character_manager(
 def get_or_create_character_manager(
     character_id: int,
     character_data: Dict[str, Any],
-    gff_element=None,
     game_data_loader: Optional[DynamicGameDataLoader] = None,
     rules_service: Optional[GameRulesService] = None,
-    lazy: bool = True
+    lazy: bool = True,
+    **kwargs
 ) -> CharacterManager:
     """
     Get a cached CharacterManager or create a new one using the factory.
-    
+
     This function checks the thread-local cache (request-only) and creates
     a new instance if needed. Persistent caching is now handled at the data
     level, not the CharacterManager instance level.
-    
+
     Args:
         character_id: Character database ID for cache lookup
         character_data: Raw GFF character data (used if creating new)
-        gff_element: Optional GFFElement for direct updates
         game_data_loader: Optional DynamicGameDataLoader instance
         rules_service: Optional GameRulesService instance
         lazy: If True (default), use lazy loading for managers
-        
+        **kwargs: Ignored for backward compatibility
+
     Returns:
         CharacterManager instance with all managers registered
     """
     from gamedata.middleware import get_character_manager, set_character_manager
-    
+
     # Check thread-local cache (request-only)
     cached_manager = get_character_manager(character_id)
     if cached_manager:
         # Verify it has all required managers
         required_managers = [name for name, _ in get_all_manager_specs()]
         has_all = all(name in cached_manager._managers for name in required_managers)
-        
+
         if has_all:
             logger.debug(f"Using thread-local cached CharacterManager for character {character_id}")
             return cached_manager
         else:
             logger.warning(f"Thread-local cached manager for character {character_id} missing managers, creating new")
-    
+
     # Create new manager with factory
     manager = create_character_manager(
         character_data,
-        gff_element=gff_element,
         game_data_loader=game_data_loader,
         rules_service=rules_service,
         lazy=lazy

@@ -63,6 +63,7 @@ image = { version = "0.25", default-features = false, features = ["png", "tga", 
 ddsfile = "0.5"
 texpresso = "2.0"
 image_dds = "0.7"
+serde_bytes = "0.11.19"
 
 [features]
 default = ["python-bindings"]

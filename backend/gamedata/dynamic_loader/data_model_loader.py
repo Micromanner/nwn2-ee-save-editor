@@ -14,7 +14,7 @@ import time
 from gamedata.dynamic_loader.runtime_class_generator import RuntimeDataClassGenerator
 from gamedata.dynamic_loader.code_cache import SecureCodeCache
 from gamedata.dynamic_loader.relationship_validator import RelationshipValidator, ValidationReport
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 from utils.performance_profiler import get_profiler
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ Test the batch read functionality of SaveGameHandler
 import pytest
 import os
 from pathlib import Path
-from parsers.savegame_handler import SaveGameHandler
+from services.savegame_handler import SaveGameHandler
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def test_batch_read_handles_missing_playerlist(tmp_path):
     handler = SaveGameHandler(tmp_path)
     
     # Should raise SaveGameError
-    from parsers.savegame_handler import SaveGameError
+    from services.savegame_handler import SaveGameError
     with pytest.raises(SaveGameError, match="playerlist.ifo"):
         handler.batch_read_character_files()
 

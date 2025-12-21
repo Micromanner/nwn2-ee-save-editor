@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 
 
 class TestContextAwareResourceManager:

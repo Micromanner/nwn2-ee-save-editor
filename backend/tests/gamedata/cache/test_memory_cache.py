@@ -15,7 +15,7 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-from parsers.resource_manager import ResourceManager
+from services.resource_manager import ResourceManager
 from parsers.tda import TDAParser
 from django.conf import settings
 

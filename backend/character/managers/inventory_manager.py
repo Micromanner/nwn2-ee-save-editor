@@ -87,31 +87,30 @@ class InventoryManager(EventEmitter):
 
     def _get_raw_equip_item_list(self) -> List[Tuple[int, Dict[str, Any]]]:
         """
-        Get Equip_ItemList with struct_id (bitmask) preserved by reading raw GFFElement.
+        Get Equip_ItemList with struct_id (bitmask) preserved.
 
         NWN2 stores equipped items as a sparse list where each item's struct_id
         is a bitmask indicating the slot (e.g., 0x0001=head, 0x0002=chest, etc.).
-        The to_dict() conversion loses this struct_id, so we read directly from GFFElement.
+        The Rust GFF parser embeds struct_id as __struct_id__ in each dict.
 
         Returns:
             List of (bitmask, item_dict) tuples for each equipped item
         """
-        gff_element = getattr(self.character_manager, 'gff_element', None)
-        if gff_element is None:
-            logger.warning("No gff_element available, falling back to dict-based access")
-            equipped_items = self.gff.get('Equip_ItemList', [])
-            return [(1 << i, item) for i, item in enumerate(equipped_items) if item]
+        equipped_items = self.gff.get('Equip_ItemList', [])
+        if not equipped_items:
+            return []
 
-        for field in gff_element.value:
-            if field.label == 'Equip_ItemList':
-                result = []
-                for item_element in field.value:
-                    bitmask = item_element.id
-                    item_dict = item_element.to_dict()
-                    result.append((bitmask, item_dict))
-                return result
+        result = []
+        for item in equipped_items:
+            if not item:
+                continue
+            bitmask = item.get('__struct_id__', 0)
+            if bitmask == 0:
+                logger.warning("Item in Equip_ItemList missing __struct_id__, skipping")
+                continue
+            result.append((bitmask, item))
 
-        return []
+        return result
 
     def _get_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
         """Get equipped item by its slot bitmask"""
@@ -120,94 +119,54 @@ class InventoryManager(EventEmitter):
                 return item_dict
         return None
 
-    def _get_equip_item_list_field(self):
-        """Get the raw Equip_ItemList GFFElement field"""
-        gff_element = getattr(self.character_manager, 'gff_element', None)
-        if gff_element is None:
-            return None
-        for field in gff_element.value:
-            if field.label == 'Equip_ItemList':
-                return field
-        return None
-
     def _set_equipped_item_by_bitmask(self, bitmask: int, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Set an equipped item at a slot bitmask, returning the previous item if any.
 
-        This method directly manipulates the GFFElement to preserve struct_ids.
+        Works directly with plain dicts - __struct_id__ is embedded in each item.
         """
-        from parsers.gff import GFFElement, GFFFieldType
-
-        equip_list_field = self._get_equip_item_list_field()
-        if equip_list_field is None:
-            logger.warning("Cannot access Equip_ItemList GFFElement directly")
-            return None
+        equipped_items = self.gff.get('Equip_ItemList', [])
+        if equipped_items is None:
+            equipped_items = []
 
         previous_item = None
         found_index = None
 
-        for i, item_element in enumerate(equip_list_field.value):
-            if item_element.id == bitmask:
-                previous_item = item_element.to_dict()
+        for i, item in enumerate(equipped_items):
+            if item and item.get('__struct_id__') == bitmask:
+                previous_item = dict(item)
                 found_index = i
                 break
 
-        if found_index is not None:
-            template = equip_list_field.value[found_index]
-            new_element = GFFElement(GFFFieldType.STRUCT, bitmask, template.label, [])
-            for template_field in template.value:
-                placeholder = [] if template_field.type in [GFFFieldType.STRUCT, GFFFieldType.LIST] else None
-                new_element.value.append(
-                    GFFElement(template_field.type, 0, template_field.label, placeholder)
-                )
-            new_element.update_from_dict(item_data)
-            equip_list_field.value[found_index] = new_element
-        else:
-            if equip_list_field.value:
-                template = equip_list_field.value[0]
-                new_element = GFFElement(GFFFieldType.STRUCT, bitmask, template.label, [])
-                for template_field in template.value:
-                    placeholder = [] if template_field.type in [GFFFieldType.STRUCT, GFFFieldType.LIST] else None
-                    new_element.value.append(
-                        GFFElement(template_field.type, 0, template_field.label, placeholder)
-                    )
-                new_element.update_from_dict(item_data)
-                equip_list_field.value.append(new_element)
-            else:
-                logger.error("Cannot add item to empty Equip_ItemList (no template)")
-                return None
+        new_item = dict(item_data)
+        new_item['__struct_id__'] = bitmask
 
-        self._sync_equip_list_to_dict()
+        if found_index is not None:
+            equipped_items[found_index] = new_item
+        else:
+            equipped_items.append(new_item)
+
+        self.gff.set('Equip_ItemList', equipped_items)
         return previous_item
 
     def _remove_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
         """
         Remove an equipped item at a slot bitmask, returning the removed item.
 
-        This method directly manipulates the GFFElement to preserve struct_ids.
+        Works directly with plain dicts - __struct_id__ is embedded in each item.
         """
-        equip_list_field = self._get_equip_item_list_field()
-        if equip_list_field is None:
-            logger.warning("Cannot access Equip_ItemList GFFElement directly")
+        equipped_items = self.gff.get('Equip_ItemList', [])
+        if not equipped_items:
             return None
 
-        for i, item_element in enumerate(equip_list_field.value):
-            if item_element.id == bitmask:
-                removed_item = item_element.to_dict()
-                equip_list_field.value.pop(i)
-                self._sync_equip_list_to_dict()
+        for i, item in enumerate(equipped_items):
+            if item and item.get('__struct_id__') == bitmask:
+                removed_item = dict(item)
+                equipped_items.pop(i)
+                self.gff.set('Equip_ItemList', equipped_items)
                 return removed_item
 
         return None
-
-    def _sync_equip_list_to_dict(self):
-        """Sync the GFFElement Equip_ItemList back to the wrapper's dict"""
-        equip_list_field = self._get_equip_item_list_field()
-        if equip_list_field is None:
-            return
-
-        new_list = [item_element.to_dict() for item_element in equip_list_field.value]
-        self.gff._data['Equip_ItemList'] = new_list
 
     def _get_item_name(self, item: Dict[str, Any]) -> str:
         """Get the proper item name from LocalizedName or fallback to base item label"""

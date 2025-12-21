@@ -36,7 +36,7 @@ class GameStateManager(EventEmitter):
                 return None
 
             try:
-                from parsers.savegame_handler import SaveGameHandler
+                from services.savegame_handler import SaveGameHandler
                 from nwn2_rust import XmlParser
 
                 handler = SaveGameHandler(save_path)

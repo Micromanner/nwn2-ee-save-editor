@@ -290,7 +290,7 @@ def restore_backup(restore_request: RestoreBackupRequest):
         Restore result with details
     """
     try:
-        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from services.savegame_handler import SaveGameHandler, SaveGameError
 
         if not restore_request.confirm_restore:
             raise HTTPException(
@@ -367,7 +367,7 @@ def create_manual_backup(backup_request: CreateBackupRequest):
         Backup creation result
     """
     try:
-        from parsers.savegame_handler import SaveGameHandler, SaveGameError
+        from services.savegame_handler import SaveGameHandler, SaveGameError
         import datetime
 
         if not os.path.exists(backup_request.save_path):

@@ -27,6 +27,7 @@ use pyo3::prelude::*;
 
 #[cfg(feature = "python-bindings")]
 use parsers::{PyErfParser, PyTDAParser, PyTLKParser, PyXmlParser};
+use parsers::gff::python::{PyGffParser, PyGffWriter};
 
 #[cfg(feature = "python-bindings")]
 use services::PyRustIconCache;
@@ -43,6 +44,8 @@ fn nwn2_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTLKParser>()?;
     m.add_class::<PyErfParser>()?;
     m.add_class::<PyXmlParser>()?;
+    m.add_class::<PyGffParser>()?;
+    m.add_class::<PyGffWriter>()?;
 
     m.add_class::<PyRustIconCache>()?;
 

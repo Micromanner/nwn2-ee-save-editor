@@ -5,7 +5,7 @@ import logging
 from typing import Dict, Optional, Tuple, List
 from pathlib import Path
 
-from parsers import ERFParser
+from nwn2_rust import ErfParser
 from config.nwn2_settings import nwn2_paths
 
 logger = logging.getLogger(__name__)

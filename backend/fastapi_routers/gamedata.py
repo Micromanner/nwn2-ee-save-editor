@@ -404,7 +404,7 @@ def get_base_items(search: str = None, limit: int = None, offset: int = 0):
 def get_modules():
     """Get modules list - uses ResourceManager directly"""
     from fastapi_models import GameDataModulesResponse
-    from parsers.resource_manager import ResourceManager
+    from services.resource_manager import ResourceManager
     try:
         rm = ResourceManager(suppress_warnings=True)
         
@@ -441,7 +441,7 @@ def get_modules():
 @router.get("/modules/stats")
 def get_modules_stats():
     """Get module index statistics - uses ResourceManager directly"""
-    from parsers.resource_manager import ResourceManager
+    from services.resource_manager import ResourceManager
     try:
         rm = ResourceManager(suppress_warnings=True)
         

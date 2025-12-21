@@ -5,8 +5,7 @@ Simplified to only use Rust-based serialization.
 from typing import Optional, Union
 from pathlib import Path
 import logging
-# Use the imported TDAParser (now Rust-based) from __init__.py
-from . import TDAParser
+from nwn2_rust import TDAParser
 
 logger = logging.getLogger(__name__)
 

@@ -10,8 +10,8 @@ from unittest.mock import patch, MagicMock
 backend_path = Path(__file__).parent.parent.parent  # Go up 3 levels to backend
 sys.path.insert(0, str(backend_path))
 
-from parsers.resource_manager import ResourceManager
-from parsers.gff import GFFParser
+from services.resource_manager import ResourceManager
+from nwn2_rust import GffParser
 
 
 # Test Data Fixtures
@@ -24,7 +24,7 @@ def resource_manager():
 @pytest.fixture
 def gff_parser():
     """Provide a GFFParser instance"""
-    return GFFParser(error_recovery=True)
+    return GFFParser()
 
 
 @pytest.fixture
@@ -89,8 +89,7 @@ class TestCamFileStructure:
             pytest.skip("Test campaign file not found")
             
         # Read with GFFParser
-        gff_parser.read(str(path_of_evil_cam_file))
-        campaign_data = gff_parser.top_level_struct.to_dict()
+        campaign_data = gff_parser.read(str(path_of_evil_cam_file))
         
         # Check essential fields exist
         assert 'DisplayName' in campaign_data
@@ -122,21 +121,16 @@ class TestCamFileStructure:
         
     def test_localized_string_extraction(self, resource_manager, mock_cam_data):
         """Test extraction of localized strings from CAM data"""
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = mock_cam_data
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Mock the GFFParser constructor in resource_manager module
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-            
-            assert campaign_info['name'] == 'Path of Evil'
-            assert 'Heroes have to start somewhere' in campaign_info['description']
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = mock_cam_data
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+                campaign_info = resource_manager.find_campaign("/fake/path")
+
+        assert campaign_info['name'] == 'Path of Evil'
+        assert 'Heroes have to start somewhere' in campaign_info['description']
 
 
 class TestResourceManagerCampaignLoading:
@@ -212,18 +206,13 @@ class TestResourceManagerCampaignLoading:
             mock_cam_path = MagicMock()
             mock_cam_path.exists.return_value = True
             mock_glob.side_effect = [[], [mock_cam_path]]  # First glob fails, second succeeds
-            
-            with patch.object(GFFParser, 'read') as mock_read:
-                # Create a mock GFF parser instance
-                mock_parser_instance = MagicMock()
-                mock_struct = MagicMock()
-                mock_struct.to_dict.return_value = {'DisplayName': 'Test', 'ModNames': []}
-                mock_parser_instance.top_level_struct = mock_struct
-                
-                # Mock the GFFParser constructor in resource_manager module
-                with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    assert campaign_info is not None
+
+            mock_parser_instance = MagicMock()
+            mock_parser_instance.read.return_value = {'DisplayName': 'Test', 'ModNames': []}
+
+            with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+                campaign_info = resource_manager.find_campaign("/fake/path")
+                assert campaign_info is not None
 
 
 class TestCamFileErrorHandling:
@@ -239,52 +228,42 @@ class TestCamFileErrorHandling:
             
     def test_cam_file_missing_required_fields(self, resource_manager):
         """Test handling CAM file missing required fields"""
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = {
-                'Description': 'Test',
-                'ModNames': []
-            }
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Make the GFFParser constructor return our mock instance
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    
-                    # Should still return something but with defaults
-                    assert campaign_info is not None
-                    assert campaign_info['name'] == 'Unknown Campaign'
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = {
+            'Description': 'Test',
+            'ModNames': []
+        }
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+                campaign_info = resource_manager.find_campaign("/fake/path")
+
+                # Should still return something but with defaults
+                assert campaign_info is not None
+                assert campaign_info['name'] == 'Unknown Campaign'
                 
     def test_malformed_module_list(self, resource_manager):
         """Test handling malformed module list in CAM file"""
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = {
-                'DisplayName': 'Test Campaign',
-                'ModNames': [
-                    {'ModuleName': 'module1'},
-                    'invalid_entry',  # String instead of dict
-                    {'WrongKey': 'module3'},  # Missing ModuleName
-                    {'ModuleName': 'module4'}
-                ]
-            }
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Make the GFFParser constructor return our mock instance
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    
-                    # Should only include valid modules
-                    assert len(campaign_info['modules']) == 2
-                    assert campaign_info['modules'] == ['module1', 'module4']
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = {
+            'DisplayName': 'Test Campaign',
+            'ModNames': [
+                {'ModuleName': 'module1'},
+                'invalid_entry',  # String instead of dict
+                {'WrongKey': 'module3'},  # Missing ModuleName
+                {'ModuleName': 'module4'}
+            ]
+        }
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+                campaign_info = resource_manager.find_campaign("/fake/path")
+
+                # Should only include valid modules
+                assert len(campaign_info['modules']) == 2
+                assert campaign_info['modules'] == ['module1', 'module4']
                 
     def test_permission_error_handling(self, resource_manager):
         """Test handling permission errors when reading CAM file"""
@@ -313,24 +292,19 @@ class TestCampaignValidation:
             (50, 50),    # Above common max but stored as-is
             (-5, -5),    # Negative stored as-is (no validation currently)
         ]
-        
+
         for input_cap, expected_cap in test_cases:
             mock_cam_data['LvlCap'] = input_cap
-            
-            with patch.object(GFFParser, 'read') as mock_read:
-                # Create a mock GFF parser instance
-                mock_parser_instance = MagicMock()
-                mock_struct = MagicMock()
-                mock_struct.to_dict.return_value = mock_cam_data
-                mock_parser_instance.top_level_struct = mock_struct
-                
-                # Mock the GFFParser constructor in resource_manager module
-                with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                    with patch('pathlib.Path.glob') as mock_glob:
-                        mock_glob.return_value = [Path("/fake/campaign.cam")]
-                        campaign_info = resource_manager.find_campaign("/fake/path")
-                
-                assert campaign_info['level_cap'] == expected_cap
+
+            mock_parser_instance = MagicMock()
+            mock_parser_instance.read.return_value = mock_cam_data
+
+            with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+                with patch('pathlib.Path.glob') as mock_glob:
+                    mock_glob.return_value = [Path("/fake/campaign.cam")]
+                    campaign_info = resource_manager.find_campaign("/fake/path")
+
+            assert campaign_info['level_cap'] == expected_cap
                 
     def test_validate_party_size(self, resource_manager, mock_cam_data):
         """Test party size validation"""
@@ -338,28 +312,23 @@ class TestCampaignValidation:
             (0, 0),      # Zero stored as-is
             (1, 1),      # Minimum valid
             (4, 4),      # Default
-            (6, 6),      # Maximum valid  
+            (6, 6),      # Maximum valid
             (10, 10),    # Above typical max but stored as-is
             (-1, -1),    # Negative stored as-is (validation happens elsewhere)
         ]
-        
+
         for input_size, expected_size in test_cases:
             mock_cam_data['Cam_PartySize'] = input_size
-            
-            with patch.object(GFFParser, 'read') as mock_read:
-                # Create a mock GFF parser instance
-                mock_parser_instance = MagicMock()
-                mock_struct = MagicMock()
-                mock_struct.to_dict.return_value = mock_cam_data
-                mock_parser_instance.top_level_struct = mock_struct
-                
-                # Mock the GFFParser constructor in resource_manager module
-                with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                    with patch('pathlib.Path.glob') as mock_glob:
-                        mock_glob.return_value = [Path("/fake/campaign.cam")]
-                        campaign_info = resource_manager.find_campaign("/fake/path")
-                
-                assert campaign_info['party_size'] == expected_size
+
+            mock_parser_instance = MagicMock()
+            mock_parser_instance.read.return_value = mock_cam_data
+
+            with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+                with patch('pathlib.Path.glob') as mock_glob:
+                    mock_glob.return_value = [Path("/fake/campaign.cam")]
+                    campaign_info = resource_manager.find_campaign("/fake/path")
+
+            assert campaign_info['party_size'] == expected_size
 
 
 class TestCampaignPerformance:
@@ -371,32 +340,27 @@ class TestCampaignPerformance:
         large_module_list = [
             {'ModuleName': f'module_{i}'} for i in range(100)
         ]
-        
+
         mock_cam_data = {
             'DisplayName': 'Large Campaign',
             'ModNames': large_module_list,
             'StartModule': 'module_0'
         }
-        
-        with patch.object(GFFParser, 'read') as mock_read:
-            # Create a mock GFF parser instance
-            mock_parser_instance = MagicMock()
-            mock_struct = MagicMock()
-            mock_struct.to_dict.return_value = mock_cam_data
-            mock_parser_instance.top_level_struct = mock_struct
-            
-            # Mock the GFFParser constructor in resource_manager module
-            with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                with patch('pathlib.Path.glob') as mock_glob:
-                    mock_glob.return_value = [Path("/fake/campaign.cam")]
-                    
-                    import time
-                    start_time = time.time()
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    elapsed_time = time.time() - start_time
-                    
-                    assert len(campaign_info['modules']) == 100
-                    assert elapsed_time < 0.1, "Should process large module list quickly"
+
+        mock_parser_instance = MagicMock()
+        mock_parser_instance.read.return_value = mock_cam_data
+
+        with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+            with patch('pathlib.Path.glob') as mock_glob:
+                mock_glob.return_value = [Path("/fake/campaign.cam")]
+
+                import time
+                start_time = time.time()
+                campaign_info = resource_manager.find_campaign("/fake/path")
+                elapsed_time = time.time() - start_time
+
+                assert len(campaign_info['modules']) == 100
+                assert elapsed_time < 0.1, "Should process large module list quickly"
                 
     def test_multiple_cam_files_in_directory(self, resource_manager):
         """Test behavior when multiple .cam files exist"""
@@ -408,22 +372,17 @@ class TestCampaignPerformance:
                 Path("/fake/campaign3.cam")
             ]
             mock_glob.return_value = mock_paths
-            
-            with patch.object(GFFParser, 'read') as mock_read:
-                # Create a mock GFF parser instance
-                mock_parser_instance = MagicMock()
-                mock_struct = MagicMock()
-                mock_struct.to_dict.return_value = {
-                    'DisplayName': 'First Campaign',
-                    'ModNames': []
-                }
-                mock_parser_instance.top_level_struct = mock_struct
-                
-                # Mock the GFFParser constructor in resource_manager module
-                with patch('parsers.resource_manager.GFFParser', return_value=mock_parser_instance):
-                    campaign_info = resource_manager.find_campaign("/fake/path")
-                    
-                    # Should use first cam file found
-                    assert campaign_info is not None
-                    assert campaign_info['name'] == 'First Campaign'
-                    assert campaign_info['file'] == str(mock_paths[0])
+
+            mock_parser_instance = MagicMock()
+            mock_parser_instance.read.return_value = {
+                'DisplayName': 'First Campaign',
+                'ModNames': []
+            }
+
+            with patch('services.resource_manager.GFFParser', return_value=mock_parser_instance):
+                campaign_info = resource_manager.find_campaign("/fake/path")
+
+                # Should use first cam file found
+                assert campaign_info is not None
+                assert campaign_info['name'] == 'First Campaign'
+                assert campaign_info['file'] == str(mock_paths[0])
