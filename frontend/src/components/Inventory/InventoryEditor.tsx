@@ -517,7 +517,7 @@ export default function InventoryEditor() {
         {...attributes} 
         {...listeners}
         onClick={onClick}
-        className={`aspect-square relative rounded border-2  transition-all 
+        className={`aspect-square relative rounded border-2 
           ${isSelected 
             ? 'bg-[rgb(var(--color-primary)/0.2)] border-[rgb(var(--color-primary))] shadow-[0_0_10px_rgb(var(--color-primary)/0.3)]' 
             : `bg-[rgb(var(--color-surface-2))] ${getRarityColor(item.rarity)} hover:border-[rgb(var(--color-primary)/0.5)]`
@@ -931,7 +931,7 @@ export default function InventoryEditor() {
                             return (
                                 <div
                                 key={displayIndex}
-                                className="w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 border-[rgb(var(--color-surface-border)/0.4)] rounded transition-colors"
+                                className="w-12 h-12 bg-[rgb(var(--color-surface-2))] border-2 border-[rgb(var(--color-surface-border)/0.4)] rounded"
                                 />
                             );
                         }
@@ -1106,7 +1106,7 @@ export default function InventoryEditor() {
         </div>
       )}
      </div>
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeDragItem ? (
           <div className="w-12 h-12 rounded border-2 border-[rgb(var(--color-primary))] bg-[rgb(var(--color-surface-3))] shadow-2xl flex items-center justify-center opacity-90 z-50 cursor-grabbing pointer-events-none">
              <div className="w-8 h-8 bg-[rgb(var(--color-surface-3))] rounded flex items-center justify-center text-xs font-bold">
