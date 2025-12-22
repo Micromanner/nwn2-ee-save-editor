@@ -122,6 +122,49 @@ export interface InventoryData {
   [key: string]: unknown;
 }
 
+// Add metadata interfaces for classes
+export interface ClassInfo {
+  id: number;
+  name: string;
+  label: string;
+  type: 'base' | 'prestige';
+  focus: string;
+  max_level: number;
+  hit_die: number;
+  skill_points: number;
+  is_spellcaster: boolean;
+  has_arcane: boolean;
+  has_divine: boolean;
+  primary_ability: string;
+  bab_progression: string;
+  alignment_restricted: boolean;
+  description?: string;
+  prerequisites?: Record<string, unknown>;
+}
+
+export interface FocusInfo {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export interface CategorizedClassesResponse {
+  categories: {
+    base: Record<string, ClassInfo[]>;
+    prestige: Record<string, ClassInfo[]>;
+    npc: Record<string, ClassInfo[]>;
+  };
+  focus_info: Record<string, FocusInfo>;
+  total_classes: number;
+  character_context?: {
+    current_classes: unknown;
+    prestige_requirements?: unknown[];
+    can_multiclass: boolean;
+    multiclass_slots_used: number;
+  };
+}
+
 // Generic subsystem data structure
 interface SubsystemData<T = unknown> {
   data: T | null;
@@ -192,6 +235,10 @@ interface CharacterContextState {
     classes: SubsystemData<ClassesData>;
   };
   
+  // Metadata store
+  categorizedClasses: CategorizedClassesResponse | null;
+  isMetadataLoading: boolean;
+  
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string) => Promise<void>;
@@ -202,6 +249,7 @@ interface CharacterContextState {
   clearCharacter: () => void;
 
   refreshAll: () => Promise<void>;
+  loadMetadata: () => Promise<void>;
 }
 
 // Create context
@@ -268,6 +316,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [subsystems, setSubsystems] = useState<CharacterContextState['subsystems']>(initializeSubsystems());
+  const [categorizedClasses, setCategorizedClasses] = useState<CategorizedClassesResponse | null>(null);
+  const [isMetadataLoading, setIsMetadataLoading] = useState(false);
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -389,6 +439,36 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await Promise.all(refreshPromises);
   }, [characterId, loadSubsystem]);
 
+  // Clear character data
+  const clearCharacter = useCallback(() => {
+    setCharacterId(null);
+    setCharacter(null);
+    setError(null);
+    setSubsystems(initializeSubsystems());
+    setCategorizedClasses(null);
+  }, []);
+
+  const loadMetadataInternal = useCallback(async (id: number) => {
+    setIsMetadataLoading(true);
+    try {
+      const response = await DynamicAPI.fetch(`/characters/${id}/classes/categorized?include_unplayable=true`);
+      if (response.ok) {
+        const data = await response.json();
+        setCategorizedClasses(data);
+      }
+    } catch (err) {
+      console.error('Failed to load class metadata:', err);
+    } finally {
+      setIsMetadataLoading(false);
+    }
+  }, []);
+
+  const loadMetadata = useCallback(async () => {
+    if (characterId) {
+      await loadMetadataInternal(characterId);
+    }
+  }, [characterId, loadMetadataInternal]);
+
   // Load character
   const loadCharacter = useCallback(async (id: number) => {
     setIsLoading(true);
@@ -403,6 +483,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       
       // Reset subsystems when loading new character
       setSubsystems(initializeSubsystems());
+      
+      // Load metadata
+      await loadMetadataInternal(id);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load character';
       setError(errorMessage);
@@ -410,7 +493,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadMetadataInternal]);
 
   // Import character from save
   const importCharacter = useCallback(async (savePath: string) => {
@@ -435,6 +518,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       
       // Reset subsystems
       setSubsystems(initializeSubsystems());
+      
+      // Load metadata immediately after import
+      await loadMetadataInternal(characterId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';
       setError(errorMessage);
@@ -464,20 +550,14 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await Promise.all(loadPromises);
   }, [characterId, loadCharacter, loadSubsystem]);
 
-  // Clear character data
-  const clearCharacter = useCallback(() => {
-    setCharacterId(null);
-    setCharacter(null);
-    setError(null);
-    setSubsystems(initializeSubsystems());
-  }, []);
-
   const value: CharacterContextState = {
     character,
     characterId,
     isLoading,
     error,
     subsystems,
+    categorizedClasses,
+    isMetadataLoading,
     loadCharacter,
     importCharacter,
     loadSubsystem,
@@ -486,6 +566,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     invalidateSubsystems,
     clearCharacter,
     refreshAll,
+    loadMetadata,
   };
 
   return (

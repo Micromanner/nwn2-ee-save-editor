@@ -69,6 +69,7 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
   const feats = useSubsystem('feats');
   const saves = useSubsystem('saves');
   const abilities = useSubsystem('abilityScores');
+  const classes = useSubsystem('classes');
   
   console.log('CharacterOverview component rendered/mounted');
   console.log('Character HP data:', character?.hitPoints, character?.maxHitPoints, character?.current_hit_points, character?.max_hit_points);
@@ -183,10 +184,14 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
         console.log('CharacterOverview - Loading saves data (missing)');
         saves.load().catch(err => console.warn('Failed to load saves data:', err));
       }
+      if (!classes.data && !classes.isLoading) {
+        console.log('CharacterOverview - Loading classes data (missing)');
+        classes.load().catch(err => console.warn('Failed to load classes data:', err));
+      }
     } else {
       console.log('CharacterOverview - No character loaded, skipping data loading');
     }
-  }, [character?.id, abilities, combat, skills, feats, saves]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [character?.id, abilities, combat, skills, feats, saves, classes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
     return (

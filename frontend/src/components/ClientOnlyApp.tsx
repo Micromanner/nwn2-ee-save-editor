@@ -178,6 +178,7 @@ function AppContent() {
             break;
           case 'classes':
             console.log('Fetching fresh classes data...');
+            await loadSubsystem('classes');
             break;
           case 'abilityScores':
             console.log('Fetching fresh ability scores data...');
@@ -213,6 +214,7 @@ function AppContent() {
             await loadSubsystem('skills');
             await loadSubsystem('feats');
             await loadSubsystem('saves');
+            await loadSubsystem('classes');
             break;
           // For other tabs like 'appearance', etc., no specific fetch needed
           default:

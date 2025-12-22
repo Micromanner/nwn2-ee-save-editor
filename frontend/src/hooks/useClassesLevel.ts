@@ -89,25 +89,8 @@ export interface ClassesData {
 }
 
 export function useClassesLevel(classesData?: ClassesData | null) {
-  const { characterId, invalidateSubsystems } = useCharacterContext();
-  const [categorizedClasses, setCategorizedClasses] = useState<CategorizedClassesResponse | null>(null);
+  const { characterId, invalidateSubsystems, categorizedClasses, isMetadataLoading } = useCharacterContext();
   const [isUpdating, setIsUpdating] = useState(false);
-
-  // Load categorized classes for additional class info
-  useEffect(() => {
-    const loadCategorizedClasses = async () => {
-      if (!characterId) return;
-      
-      try {
-        const categorized = await apiClient.get(`/characters/${characterId}/classes/categorized?include_unplayable=true`);
-        setCategorizedClasses(categorized as CategorizedClassesResponse);
-      } catch (err) {
-        console.error('Failed to load categorized classes:', err);
-      }
-    };
-
-    loadCategorizedClasses();
-  }, [characterId]);
 
   // Helper function to find class info from categorized data
   const findClassInfoById = useCallback((classId: number): ClassInfo | undefined => {
@@ -322,6 +305,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     
     // State
     isUpdating,
+    isMetadataLoading,
     
     // Actions
     adjustClassLevel,

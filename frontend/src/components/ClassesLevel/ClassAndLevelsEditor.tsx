@@ -75,6 +75,7 @@ export default function ClassAndLevelsEditor() {
     canLevelUp,
     getRemainingLevels,
     isAtMaxLevel,
+    isMetadataLoading, // Get this from the hook
   } = useClassesLevel(classesSubsystem.data as ClassesData | null);
 
   const [expandedClassDropdown, setExpandedClassDropdown] = useState<number | null>(null);
@@ -159,13 +160,13 @@ export default function ClassAndLevelsEditor() {
   const totalRef = classes.reduce((sum, c) => sum + c.reflexSave, 0);
   const totalWill = classes.reduce((sum, c) => sum + c.willSave, 0);
 
-  if (isLoading || classesSubsystem.isLoading || isUpdating) {
+  if (isLoading || classesSubsystem.isLoading || isUpdating || isMetadataLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))] mx-auto mb-3"></div>
           <p className="text-sm text-[rgb(var(--color-text-muted))]">
-            {isLoading ? 'Loading character...' : classesSubsystem.isLoading ? 'Loading classes...' : 'Updating classes...'}
+            {isLoading ? 'Loading character...' : (classesSubsystem.isLoading || isMetadataLoading) ? 'Loading classes...' : 'Updating classes...'}
           </p>
         </div>
       </div>
