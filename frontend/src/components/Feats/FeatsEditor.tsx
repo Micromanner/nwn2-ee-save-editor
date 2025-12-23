@@ -12,7 +12,14 @@ import type { FeatInfo, FeatsState } from './types';
 import { useToast } from '@/contexts/ToastContext';
 
 export default function FeatsEditor() {
-  const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems } = useCharacterContext();
+  const { 
+    character, 
+    isLoading: characterLoading, 
+    error: characterError, 
+    invalidateSubsystems,
+    totalFeats,
+    setTotalFeats
+  } = useCharacterContext();
   const feats = useSubsystem('feats');
   const { showToast } = useToast();
 
@@ -20,12 +27,10 @@ export default function FeatsEditor() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [selectedTypes, setSelectedTypes] = useState<Set<number>>(new Set());
-
   const [availableFeats, setAvailableFeats] = useState<FeatInfo[]>([]);
-  const [_availableFeatsLoading, setAvailableFeatsLoading] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [availableFeatsLoading, setAvailableFeatsLoading] = useState(false);
   const [availableFeatsError, setAvailableFeatsError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalFeats, setTotalFeats] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
   const FEATS_PER_PAGE = 50;
@@ -46,7 +51,7 @@ export default function FeatsEditor() {
 
   useEffect(() => {
     const loadAvailableFeats = async () => {
-      if (!character?.id || activeTab !== 'all-feats') {
+      if (!character?.id) {
         return;
       }
 
@@ -218,8 +223,28 @@ export default function FeatsEditor() {
 
   if (isLoading && !featsData) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
+      <div className="flex flex-col gap-4">
+        <FeatNavBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          selectedTypes={selectedTypes}
+          onTypesChange={setSelectedTypes}
+          myFeatsCount={0}
+          availableFeatsCount={totalFeats}
+          filteredCount={0}
+          currentPage={1}
+          totalPages={1}
+          hasNext={false}
+          hasPrevious={false}
+          onPageChange={() => {}}
+        />
+        <div className="flex items-center justify-center h-64 bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-lg">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
+        </div>
       </div>
     );
   }

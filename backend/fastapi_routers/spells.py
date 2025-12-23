@@ -92,6 +92,8 @@ def get_spells_state(
                 spell_id=spell['spell_id'],
                 name=spell_details['name'],
                 icon=spell_details['icon'],
+                school_name=spell_details.get('school_name'),
+                description=spell_details.get('description'),
                 class_id=spell['class_id'],
                 metamagic=spell.get('metamagic', 0),
                 ready=spell.get('ready', True)

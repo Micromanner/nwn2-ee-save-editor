@@ -239,6 +239,12 @@ interface CharacterContextState {
   categorizedClasses: CategorizedClassesResponse | null;
   isMetadataLoading: boolean;
   
+  // Persistent counts (prevent flickering/reset)
+  totalFeats: number;
+  totalSpells: number;
+  setTotalFeats: (count: number) => void;
+  setTotalSpells: (count: number) => void;
+  
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string) => Promise<void>;
@@ -318,6 +324,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [subsystems, setSubsystems] = useState<CharacterContextState['subsystems']>(initializeSubsystems());
   const [categorizedClasses, setCategorizedClasses] = useState<CategorizedClassesResponse | null>(null);
   const [isMetadataLoading, setIsMetadataLoading] = useState(false);
+  const [totalFeats, setTotalFeats] = useState<number>(0);
+  const [totalSpells, setTotalSpells] = useState<number>(0);
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -567,6 +575,10 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     clearCharacter,
     refreshAll,
     loadMetadata,
+    totalFeats,
+    totalSpells,
+    setTotalFeats,
+    setTotalSpells,
   };
 
   return (

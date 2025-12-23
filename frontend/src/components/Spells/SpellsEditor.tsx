@@ -12,7 +12,14 @@ import type { SpellInfo, SpellsState, SpellcastingClass } from './types';
 import { useToast } from '@/contexts/ToastContext';
 
 export default function SpellsEditor() {
-  const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems } = useCharacterContext();
+  const { 
+    character, 
+    isLoading: characterLoading, 
+    error: characterError, 
+    invalidateSubsystems,
+    totalSpells,
+    setTotalSpells
+  } = useCharacterContext();
   const spells = useSubsystem('spells');
   const { showToast } = useToast();
 
@@ -23,10 +30,9 @@ export default function SpellsEditor() {
   const [selectedLevels, setSelectedLevels] = useState<Set<number>>(new Set());
 
   const [availableSpells, setAvailableSpells] = useState<SpellInfo[]>([]);
-  const [_availableSpellsLoading, setAvailableSpellsLoading] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [availableSpellsLoading, setAvailableSpellsLoading] = useState(false);
   const [availableSpellsError, setAvailableSpellsError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalSpells, setTotalSpells] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
   const SPELLS_PER_PAGE = 50;
@@ -47,7 +53,7 @@ export default function SpellsEditor() {
 
   useEffect(() => {
     const loadAvailableSpells = async () => {
-      if (!character?.id || activeTab !== 'all-spells') {
+      if (!character?.id) {
         return;
       }
 
@@ -94,13 +100,26 @@ export default function SpellsEditor() {
     }));
   }, [spellsData]);
 
-  const allMySpells = useMemo(() => {
-    if (!spellsData?.memorized_spells || !character?.id) return [];
+  const allMySpells = useMemo((): SpellInfo[] => {
+    if (!spellsData?.memorized_spells) return [];
 
-    const uniqueSpellIds = new Set(spellsData.memorized_spells.map(s => s.spell_id));
-
-    return availableSpells.filter(spell => uniqueSpellIds.has(spell.id));
-  }, [spellsData?.memorized_spells, character?.id, availableSpells]);
+    return spellsData.memorized_spells.map(ms => {
+      const details = availableSpells.find(s => s.id === ms.spell_id);
+      
+      return {
+        id: ms.spell_id,
+        name: ms.name,
+        level: ms.level,
+        icon: ms.icon,
+        school_name: ms.school_name || details?.school_name,
+        description: ms.description || details?.description,
+        ...(details || {}), // Merge any other library details
+        // Ensure core identifiers from ms take precedence
+        spell_id: ms.spell_id,
+        class_id: ms.class_id,
+      } as any; // Cast as any because of slightly different internal structures
+    });
+  }, [spellsData?.memorized_spells, availableSpells]);
 
   const ownedSpellIds = useMemo(() => {
     return new Set(allMySpells.map(s => s.id));
@@ -204,8 +223,30 @@ export default function SpellsEditor() {
 
   if (isLoading && !spellsData) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
+      <div className="flex flex-col gap-4">
+        <SpellNavBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          selectedSchools={selectedSchools}
+          onSchoolsChange={setSelectedSchools}
+          selectedLevels={selectedLevels}
+          onLevelsChange={setSelectedLevels}
+          mySpellsCount={0}
+          availableSpellsCount={totalSpells}
+          filteredCount={0}
+          currentPage={1}
+          totalPages={1}
+          hasNext={false}
+          hasPrevious={false}
+          onPageChange={() => {}}
+        />
+        <div className="flex items-center justify-center h-64 bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-lg">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
+        </div>
       </div>
     );
   }

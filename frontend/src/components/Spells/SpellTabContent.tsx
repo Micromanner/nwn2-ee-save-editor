@@ -52,9 +52,9 @@ function MySpellsTabComponent({
 
   return (
     <div className="grid grid-cols-1 gap-3">
-      {spells.map((spell) => (
+      {spells.map((spell, index) => (
         <SpellCard
-          key={`${spell.id}-${spell.level}`}
+          key={`${spell.id}-${spell.level}-${index}`}
           spell={spell}
           isOwned={true}
           onRemove={onRemove}
@@ -93,9 +93,9 @@ function AvailableSpellsTabComponent({
 
   return (
     <div className="grid grid-cols-1 gap-3">
-      {spells.map((spell) => (
+      {spells.map((spell, index) => (
         <SpellCard
-          key={`${spell.id}-${spell.level}`}
+          key={`${spell.id}-${spell.level}-${index}`}
           spell={spell}
           isOwned={ownedSpellIds.has(spell.id)}
           onAdd={onAdd}

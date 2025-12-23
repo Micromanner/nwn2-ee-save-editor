@@ -71,6 +71,8 @@ class MemorizedSpell(BaseModel):
     spell_id: int = Field(..., description="Memorized spell ID")
     name: str = Field("Unknown Spell", description="Spell name")
     icon: str = Field("io_unknown", description="Spell icon")
+    school_name: Optional[str] = Field(None, description="School name")
+    description: Optional[str] = Field(None, description="Spell description")
     class_id: int = Field(..., description="Spellcasting class ID")
     metamagic: int = Field(0, description="Applied metamagic bitfield")
     ready: bool = Field(True, description="Spell is ready to cast")

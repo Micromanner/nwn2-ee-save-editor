@@ -59,18 +59,22 @@ export interface SpellSummary {
   spell_resistance: number;
 }
 
+export interface MemorizedSpell {
+  level: number;
+  spell_id: number;
+  name: string;
+  icon: string;
+  school_name?: string;
+  description?: string;
+  class_id: number;
+  metamagic: number;
+  ready: boolean;
+}
+
 export interface SpellsState {
   spellcasting_classes: SpellcastingClass[];
   spell_summary: SpellSummary;
-  memorized_spells: Array<{
-    level: number;
-    spell_id: number;
-    name: string;
-    icon: string;
-    class_id: number;
-    metamagic: number;
-    ready: boolean;
-  }>;
+  memorized_spells: MemorizedSpell[];
   available_by_level?: Record<number, SpellInfo[]>;
 }
 
