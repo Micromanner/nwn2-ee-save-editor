@@ -135,7 +135,7 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
         {/* Session Information */}
         <div>
           <h4 className="font-semibold text-[rgb(var(--color-text-primary))] mb-3 border-b border-[rgb(var(--color-surface-border)/0.6)] pb-1">
-            📁 Session Information
+            Session Information
           </h4>
           <div className="grid grid-cols-2 gap-3">
             {character.campaignName ? (
@@ -176,7 +176,7 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
         {/* Locale & Language */}
         <div>
           <h4 className="font-semibold text-[rgb(var(--color-text-primary))] mb-3 border-b border-[rgb(var(--color-surface-border)/0.6)] pb-1">
-            🌍 Locale & Language
+            Locale & Language
           </h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
@@ -228,7 +228,7 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
         {/* Quest Progress */}
         <div>
           <h4 className="font-semibold text-[rgb(var(--color-text-primary))] mb-3 border-b border-[rgb(var(--color-surface-border)/0.6)] pb-1">
-            🗡️ Quest Progress
+            Quest Progress
           </h4>
           
           {/* Quest Summary Stats */}
