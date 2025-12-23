@@ -174,8 +174,9 @@ function FeatCardComponent({ feat, isOwned, onAdd, onRemove, onLoadDetails, isPr
                   {typeInfo.label}
                 </Badge>
                 {isOwned && (
-                  <Badge variant="default" className="bg-[rgb(var(--color-primary))] text-white">
-                    Owned
+                  <Badge variant="default" className="bg-[rgb(var(--color-primary))] text-white flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Active
                   </Badge>
                 )}
                 {isProtected && (

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { memo, useState } from 'react';
-import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, Check } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -107,9 +107,10 @@ function SpellCardComponent({
                 <Badge variant="secondary">
                   {levelText}
                 </Badge>
-                {isOwned && (
-                  <Badge variant="default" className="bg-[rgb(var(--color-primary))] text-white">
-                    Known
+                 {isOwned && (
+                  <Badge variant="default" className="bg-[rgb(var(--color-primary))] text-white flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Active
                   </Badge>
                 )}
               </div>
@@ -132,7 +133,7 @@ function SpellCardComponent({
                       ))}
                     </select>
                   )}
-                  <Button
+                   <Button
                     variant="outline"
                     size="sm"
                     onClick={(e) => {
@@ -140,12 +141,12 @@ function SpellCardComponent({
                       onAdd(spell.id, selectedClassIndex);
                     }}
                   >
-                    Learn
+                    Add
                   </Button>
                 </div>
               )}
               {isOwned && onRemove && (
-                <Button
+                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={(e) => {
@@ -153,7 +154,7 @@ function SpellCardComponent({
                     onRemove(spell.id, selectedClassIndex);
                   }}
                 >
-                  Unlearn
+                  Remove
                 </Button>
               )}
               <Button
