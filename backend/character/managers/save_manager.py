@@ -135,19 +135,27 @@ class SaveManager(EventEmitter):
         resistance_bonuses['fortitude'] += save_bonuses.get('fortitude', 0) if save_bonuses else 0
         resistance_bonuses['reflex'] += save_bonuses.get('reflex', 0) if save_bonuses else 0
         resistance_bonuses['will'] += save_bonuses.get('will', 0) if save_bonuses else 0
+
+        # Get misc bonuses
+        misc_fort = self._get_misc_fortitude_bonus()
+        misc_ref = self._get_misc_reflex_bonus()
+        misc_will = self._get_misc_will_bonus()
         
         # Calculate totals (base does NOT include ability mods)
         fort_total = (base_saves['base_fortitude'] + con_mod +
                      feat_bonuses['fortitude'] + racial_bonuses['fortitude'] +
-                     resistance_bonuses['fortitude'] + self.temporary_modifiers['fortitude'])
+                     resistance_bonuses['fortitude'] + self.temporary_modifiers['fortitude'] +
+                     misc_fort)
 
         ref_total = (base_saves['base_reflex'] + dex_mod +
-                    feat_bonuses['reflex'] + racial_bonuses['reflex'] +
-                    resistance_bonuses['reflex'] + self.temporary_modifiers['reflex'])
+                     feat_bonuses['reflex'] + racial_bonuses['reflex'] +
+                     resistance_bonuses['reflex'] + self.temporary_modifiers['reflex'] +
+                     misc_ref)
 
         will_total = (base_saves['base_will'] + wis_mod +
-                     feat_bonuses['will'] + racial_bonuses['will'] +
-                     resistance_bonuses['will'] + self.temporary_modifiers['will'])
+                      feat_bonuses['will'] + racial_bonuses['will'] +
+                      resistance_bonuses['will'] + self.temporary_modifiers['will'] +
+                      misc_will)
 
         # Debug: Check GFF stored values vs calculated
         gff_fort = self.gff.get('FortSave', 0)
@@ -156,6 +164,7 @@ class SaveManager(EventEmitter):
         logger.info(f"GFF saves: Fort={gff_fort}, Ref={gff_ref}, Will={gff_will}")
         logger.info(f"Calculated saves: Fort={fort_total}, Ref={ref_total}, Will={will_total}")
         logger.info(f"Base saves: {base_saves}")
+        logger.info(f"Misc bonuses: Fort={misc_fort}, Ref={misc_ref}, Will={misc_will}")
         logger.info(f"Ability mods: CON={con_mod}, DEX={dex_mod}, WIS={wis_mod}")
         logger.info(f"Feat bonuses: {feat_bonuses}")
         logger.info(f"Racial bonuses: {racial_bonuses}")
@@ -170,10 +179,11 @@ class SaveManager(EventEmitter):
                 'racial': racial_bonuses['fortitude'],
                 'resistance': resistance_bonuses['fortitude'],
                 'temporary': self.temporary_modifiers['fortitude'],
+                'misc': misc_fort,
                 'breakdown': self._format_breakdown('Fortitude', fort_total, 
                     base_saves['base_fortitude'], con_mod, 'CON',
                     feat_bonuses['fortitude'], racial_bonuses['fortitude'],
-                    resistance_bonuses['fortitude'], self.temporary_modifiers['fortitude'])
+                    resistance_bonuses['fortitude'], self.temporary_modifiers['fortitude'], misc_fort)
             },
             'reflex': {
                 'total': ref_total,
@@ -183,10 +193,11 @@ class SaveManager(EventEmitter):
                 'racial': racial_bonuses['reflex'],
                 'resistance': resistance_bonuses['reflex'],
                 'temporary': self.temporary_modifiers['reflex'],
+                'misc': misc_ref,
                 'breakdown': self._format_breakdown('Reflex', ref_total,
                     base_saves['base_reflex'], dex_mod, 'DEX',
                     feat_bonuses['reflex'], racial_bonuses['reflex'],
-                    resistance_bonuses['reflex'], self.temporary_modifiers['reflex'])
+                    resistance_bonuses['reflex'], self.temporary_modifiers['reflex'], misc_ref)
             },
             'will': {
                 'total': will_total,
@@ -196,10 +207,11 @@ class SaveManager(EventEmitter):
                 'racial': racial_bonuses['will'],
                 'resistance': resistance_bonuses['will'],
                 'temporary': self.temporary_modifiers['will'],
+                'misc': misc_will,
                 'breakdown': self._format_breakdown('Will', will_total,
                     base_saves['base_will'], wis_mod, 'WIS',
                     feat_bonuses['will'], racial_bonuses['will'],
-                    resistance_bonuses['will'], self.temporary_modifiers['will'])
+                    resistance_bonuses['will'], self.temporary_modifiers['will'], misc_will)
             }
         }
 
@@ -347,7 +359,7 @@ class SaveManager(EventEmitter):
     
     def _format_breakdown(self, save_name: str, total: int, base: int, 
                          ability: int, ability_name: str, feat: int, 
-                         racial: int, resistance: int, temporary: int) -> str:
+                         racial: int, resistance: int, temporary: int, misc: int = 0) -> str:
         """Format a save breakdown string"""
         parts = [f"{save_name} +{total} ="]
         parts.append(f"base {base:+d}")
@@ -361,6 +373,8 @@ class SaveManager(EventEmitter):
             parts.append(f"resistance {resistance:+d}")
         if temporary != 0:
             parts.append(f"temporary {temporary:+d}")
+        if misc != 0:
+            parts.append(f"misc {misc:+d}")
         
         return " + ".join(parts)
     
@@ -451,6 +465,12 @@ class SaveManager(EventEmitter):
             for change in event.cascading_changes:
                 if change.get('type') == 'saving_throw_update':
                     logger.info(f"Save affected by attribute change: {change}")
+                    self._invalidate_saves_cache()
+                    return
+
+        # Fallback - if we can't determine specific saves affected, invalidate anyway to be safe
+        # when direct attribute updates happen
+        self._invalidate_saves_cache()
     
     def _on_class_changed(self, event: EventData):
         """Handle class changes that affect saves"""

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
@@ -110,10 +110,37 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
   const [localStatsOverrides, setLocalStatsOverrides] = useState<Partial<CharacterStats>>({});
 
-  // Reset local overrides when abilityScoreData changes (backend has refreshed with new data)
+  // Sticky data pattern: Keep the last valid data to prevent flickering to 0 during refreshes
+  const lastValidDataRef = useRef<AbilityScoreState | null>(null);
+  
+  // Helper to check if data is "complete enough" to replace our sticky data
+  // This prevents replacing good data with an empty/partial object causing flicker
+  const isDataValid = (data: AbilityScoreState | null | undefined): data is AbilityScoreState => {
+    if (!data) return false;
+    // Must have saving throws structure
+    if (!data.saving_throws || Object.keys(data.saving_throws).length === 0) return false;
+    // Must have combat stats
+    if (!data.combat_stats) return false;
+    // Must have detailed modifiers for breakdown
+    if (!data.detailed_modifiers || Object.keys(data.detailed_modifiers).length === 0) return false;
+    
+    return true;
+  };
+
+  if (isDataValid(abilityScoreData)) {
+    lastValidDataRef.current = abilityScoreData;
+  }
+  
+  // Use valid new data, or fallback to last valid sticky data
+  const dataToUse = isDataValid(abilityScoreData) ? abilityScoreData : lastValidDataRef.current;
+
+  // Reset local overrides when REAL (VALID) data arrives and changes
   useEffect(() => {
-    setLocalAbilityScoreOverrides({});
-    setLocalStatsOverrides({});
+    // Only clear overrides if we have actual new valid data from the backend
+    if (isDataValid(abilityScoreData)) {
+      setLocalAbilityScoreOverrides({});
+      setLocalStatsOverrides({});
+    }
   }, [abilityScoreData]);
 
   // Utility function to calculate ability modifier
@@ -123,111 +150,126 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
 
   // Transform attributeData into frontend format with local overrides
   const abilityScores = useMemo((): AbilityScore[] => {
-    if (!abilityScoreData) return [];
+    if (!dataToUse) return [];
 
     // For editing: use base attributes + local overrides (base only, no modifiers)
     // For display: use backend's pre-calculated effective attributes
     const getEditValue = (attrKey: string) => {
-      return localAbilityScoreOverrides[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
+      // Prioritize local override, then base from data, then default
+      return localAbilityScoreOverrides[attrKey] ?? dataToUse.base_attributes[attrKey] ?? 10;
     };
 
     const getDisplayValue = (attrKey: string) => {
-      // If we have a local override, we need to wait for backend refresh to get the correct effective value
-      // For now, show the backend's current effective value
-      return abilityScoreData.effective_attributes?.[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
+      // If we have a local override, we should ideally calculate the effective value
+      // But for now, we'll try to be smart: 
+      // If there's an override, use it as the base for display too, 
+      // adding the difference between effective and base from the backend data
+      const override = localAbilityScoreOverrides[attrKey];
+      if (override !== undefined) {
+          const originalBase = dataToUse.base_attributes[attrKey] ?? 10;
+          const originalEffective = dataToUse.effective_attributes?.[attrKey] ?? originalBase;
+          const bonus = originalEffective - originalBase;
+          return override + bonus;
+      }
+      return dataToUse.effective_attributes?.[attrKey] ?? dataToUse.base_attributes[attrKey] ?? 10;
     };
     
+    // Helper to safely get modifiers from detailed_modifiers
+    const getDetailedMod = (category: keyof typeof dataToUse.detailed_modifiers, attr: string) => {
+      return dataToUse.detailed_modifiers?.[category]?.[attr] ?? 0;
+    };
+
     return [
       {
         name: t('abilityScores.strength'),
         shortName: 'STR',
         value: getDisplayValue('Str'),
-        modifier: abilityScoreData.total_modifiers?.Str ?? calculateModifier(getDisplayValue('Str')),
+        modifier: calculateModifier(getDisplayValue('Str')),
         baseValue: getEditValue('Str'),
         breakdown: {
-          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Str ?? 0,
-          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Str ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Str ?? 0,
-          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Str ?? 0,
-          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Str ?? 0
+          levelUp: getDetailedMod('level_up_modifiers', 'Str'),
+          racial: getDetailedMod('racial_modifiers', 'Str'),
+          equipment: getDetailedMod('item_modifiers', 'Str'),
+          enhancement: getDetailedMod('enhancement_modifiers', 'Str'),
+          temporary: getDetailedMod('temporary_modifiers', 'Str')
         }
       },
       {
         name: t('abilityScores.dexterity'),
         shortName: 'DEX',
         value: getDisplayValue('Dex'),
-        modifier: abilityScoreData.total_modifiers?.Dex ?? calculateModifier(getDisplayValue('Dex')),
+        modifier: calculateModifier(getDisplayValue('Dex')),
         baseValue: getEditValue('Dex'),
         breakdown: {
-          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Dex ?? 0,
-          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Dex ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Dex ?? 0,
-          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Dex ?? 0,
-          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Dex ?? 0
+          levelUp: getDetailedMod('level_up_modifiers', 'Dex'),
+          racial: getDetailedMod('racial_modifiers', 'Dex'),
+          equipment: getDetailedMod('item_modifiers', 'Dex'),
+          enhancement: getDetailedMod('enhancement_modifiers', 'Dex'),
+          temporary: getDetailedMod('temporary_modifiers', 'Dex')
         }
       },
       {
         name: t('abilityScores.constitution'),
         shortName: 'CON',
         value: getDisplayValue('Con'),
-        modifier: abilityScoreData.total_modifiers?.Con ?? calculateModifier(getDisplayValue('Con')),
+        modifier: calculateModifier(getDisplayValue('Con')),
         baseValue: getEditValue('Con'),
         breakdown: {
-          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Con ?? 0,
-          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Con ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Con ?? 0,
-          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Con ?? 0,
-          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Con ?? 0
+          levelUp: getDetailedMod('level_up_modifiers', 'Con'),
+          racial: getDetailedMod('racial_modifiers', 'Con'),
+          equipment: getDetailedMod('item_modifiers', 'Con'),
+          enhancement: getDetailedMod('enhancement_modifiers', 'Con'),
+          temporary: getDetailedMod('temporary_modifiers', 'Con')
         }
       },
       {
         name: t('abilityScores.intelligence'),
         shortName: 'INT',
         value: getDisplayValue('Int'),
-        modifier: abilityScoreData.total_modifiers?.Int ?? calculateModifier(getDisplayValue('Int')),
+        modifier: calculateModifier(getDisplayValue('Int')),
         baseValue: getEditValue('Int'),
         breakdown: {
-          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Int ?? 0,
-          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Int ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Int ?? 0,
-          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Int ?? 0,
-          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Int ?? 0
+          levelUp: getDetailedMod('level_up_modifiers', 'Int'),
+          racial: getDetailedMod('racial_modifiers', 'Int'),
+          equipment: getDetailedMod('item_modifiers', 'Int'),
+          enhancement: getDetailedMod('enhancement_modifiers', 'Int'),
+          temporary: getDetailedMod('temporary_modifiers', 'Int')
         }
       },
       {
         name: t('abilityScores.wisdom'),
         shortName: 'WIS',
         value: getDisplayValue('Wis'),
-        modifier: abilityScoreData.total_modifiers?.Wis ?? calculateModifier(getDisplayValue('Wis')),
+        modifier: calculateModifier(getDisplayValue('Wis')),
         baseValue: getEditValue('Wis'),
         breakdown: {
-          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Wis ?? 0,
-          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Wis ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Wis ?? 0,
-          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Wis ?? 0,
-          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Wis ?? 0
+          levelUp: getDetailedMod('level_up_modifiers', 'Wis'),
+          racial: getDetailedMod('racial_modifiers', 'Wis'),
+          equipment: getDetailedMod('item_modifiers', 'Wis'),
+          enhancement: getDetailedMod('enhancement_modifiers', 'Wis'),
+          temporary: getDetailedMod('temporary_modifiers', 'Wis')
         }
       },
       {
         name: t('abilityScores.charisma'),
         shortName: 'CHA',
         value: getDisplayValue('Cha'),
-        modifier: abilityScoreData.total_modifiers?.Cha ?? calculateModifier(getDisplayValue('Cha')),
+        modifier: calculateModifier(getDisplayValue('Cha')),
         baseValue: getEditValue('Cha'),
         breakdown: {
-          levelUp: abilityScoreData.detailed_modifiers?.level_up_modifiers?.Cha ?? 0,
-          racial: abilityScoreData.detailed_modifiers?.racial_modifiers?.Cha ?? 0,
-          equipment: abilityScoreData.detailed_modifiers?.item_modifiers?.Cha ?? 0,
-          enhancement: abilityScoreData.detailed_modifiers?.enhancement_modifiers?.Cha ?? 0,
-          temporary: abilityScoreData.detailed_modifiers?.temporary_modifiers?.Cha ?? 0
+          levelUp: getDetailedMod('level_up_modifiers', 'Cha'),
+          racial: getDetailedMod('racial_modifiers', 'Cha'),
+          equipment: getDetailedMod('item_modifiers', 'Cha'),
+          enhancement: getDetailedMod('enhancement_modifiers', 'Cha'),
+          temporary: getDetailedMod('temporary_modifiers', 'Cha')
         }
       },
     ];
-  }, [abilityScoreData, localAbilityScoreOverrides, t, calculateModifier]);
+  }, [dataToUse, localAbilityScoreOverrides, t, calculateModifier]);
 
   // Transform stats from attributeData with local overrides
   const stats = useMemo((): CharacterStats => {
-    if (!abilityScoreData) {
+    if (!dataToUse) {
       return {
         hitPoints: 0,
         maxHitPoints: 0,
@@ -242,18 +284,29 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
     }
     
     // Extract base and total values from backend objects, checking local overrides first
-    const extractBaseTotal = (obj: unknown, statType: 'ac' | 'initiative' | 'fortitude' | 'reflex' | 'will') => {
+    const extractBaseTotal = (
+      obj: unknown, 
+      statType: 'ac' | 'initiative' | 'fortitude' | 'reflex' | 'will',
+      fallbackObj?: unknown
+    ) => {
       // Check for local overrides first (for persistence across tab switches)
       const overrideKey = statType === 'ac' ? 'armorClass' : statType;
       const localOverride = localStatsOverrides[overrideKey as keyof CharacterStats];
       
+      // If primary obj is missing but we have a fallback, use it entirely
+      if ((obj === null || obj === undefined) && fallbackObj) {
+         return extractBaseTotal(fallbackObj, statType);
+      }
+
+      const fallbackData = (fallbackObj && typeof fallbackObj === 'object') ? fallbackObj as Record<string, unknown> : {};
+
       if (typeof obj === 'number') {
-        // Simple number - assume it's total, no editable base
         const baseValue = localOverride && typeof localOverride === 'object' && 'base' in localOverride 
           ? (localOverride as { base: number }).base 
           : 0;
         return { base: baseValue, total: obj };
       }
+      
       if (typeof obj === 'object' && obj !== null) {
         const objData = obj as Record<string, unknown>;
         
@@ -263,42 +316,64 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         
         // Get total value
         total = (typeof objData.total === 'number' ? objData.total : 
-                typeof objData.value === 'number' ? objData.value : 0);
+                typeof objData.value === 'number' ? objData.value : 
+                typeof fallbackData.total === 'number' ? fallbackData.total as number : 0);
         
         // Check for local override base value first
+        // We calculate defaults/derived first, then apply override to base
+        
+        // Get base value from backend based on stat type
+        switch (statType) {
+          case 'ac':
+            const components = objData.components as Record<string, unknown> | undefined;
+            const fallbackComponents = fallbackData.components as Record<string, unknown> | undefined;
+            
+            base = (typeof components?.natural === 'number' ? components.natural : 
+                   typeof fallbackComponents?.natural === 'number' ? fallbackComponents.natural as number : 0);
+                   
+            result.dexMod = (typeof components?.dex === 'number' ? components.dex : 
+                            typeof fallbackComponents?.dex === 'number' ? fallbackComponents.dex as number : 0);
+                            
+            result.equipment = ((typeof components?.armor === 'number' ? components.armor : 
+                               typeof fallbackComponents?.armor === 'number' ? fallbackComponents.armor as number : 0) + 
+                              (typeof components?.shield === 'number' ? components.shield : 
+                               typeof fallbackComponents?.shield === 'number' ? fallbackComponents.shield as number : 0));
+            break;
+          case 'initiative':
+            base = (typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 
+                   typeof fallbackData.misc_bonus === 'number' ? fallbackData.misc_bonus as number : 0);
+                   
+            result.dexMod = (typeof objData.dex_modifier === 'number' ? objData.dex_modifier : 
+                            typeof fallbackData.dex_modifier === 'number' ? fallbackData.dex_modifier as number : 0);
+                            
+            result.feats = (typeof objData.improved_initiative === 'number' ? objData.improved_initiative : 
+                           typeof fallbackData.improved_initiative === 'number' ? fallbackData.improved_initiative as number : 0);
+            break;
+          case 'fortitude':
+          case 'reflex':
+          case 'will':
+            // Base (editable) now maps to the misc bonus from backend
+            // Class contribution (objData.base) maps to classMod
+            base = (typeof objData.misc === 'number' ? objData.misc : 
+                   typeof fallbackData.misc === 'number' ? fallbackData.misc as number : 0);
+            
+            result.abilityMod = (typeof objData.ability === 'number' ? objData.ability : 
+                                typeof fallbackData.ability === 'number' ? fallbackData.ability as number : 0);
+                                
+            result.classMod = (typeof objData.base === 'number' ? objData.base : 
+                              typeof fallbackData.base === 'number' ? fallbackData.base as number : 0);
+                              
+            result.racial = (typeof objData.racial === 'number' ? objData.racial : 
+                            typeof fallbackData.racial === 'number' ? fallbackData.racial as number : 0);
+                            
+            result.feat = (typeof objData.feat === 'number' ? objData.feat : 
+                          typeof fallbackData.feat === 'number' ? fallbackData.feat as number : 0);
+            break;
+        }
+
+        // Apply override if exists
         if (localOverride && typeof localOverride === 'object' && 'base' in localOverride) {
           base = (localOverride as { base: number }).base;
-        } else {
-          // Get base value from backend based on stat type
-          switch (statType) {
-            case 'ac':
-              // Natural Armor comes from components.natural (from NaturalAC GFF field)
-              const components = objData.components as Record<string, unknown> | undefined;
-              base = (typeof components?.natural === 'number' ? components.natural : 0);
-              // Add detailed AC breakdown
-              result.dexMod = (typeof components?.dex === 'number' ? components.dex : 0);
-              result.equipment = ((typeof components?.armor === 'number' ? components.armor : 0) + 
-                                (typeof components?.shield === 'number' ? components.shield : 0));
-              break;
-            case 'initiative':
-              // Initiative base is misc_bonus (editable miscellaneous bonus)
-              base = (typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 0);
-              // Add detailed initiative breakdown
-              result.dexMod = (typeof objData.dex_modifier === 'number' ? objData.dex_modifier : 0);
-              result.feats = (typeof objData.improved_initiative === 'number' ? objData.improved_initiative : 0);
-              break;
-            case 'fortitude':
-            case 'reflex':
-            case 'will':
-              // Saving throws base comes from the 'base' field in the save object
-              base = (typeof objData.base === 'number' ? objData.base : 0);
-              // Add detailed save breakdown
-              result.abilityMod = (typeof objData.ability === 'number' ? objData.ability : 0);
-              result.classMod = (typeof objData.base === 'number' ? objData.base : 0); // Class contribution is the base
-              result.racial = (typeof objData.racial === 'number' ? objData.racial : 0);
-              result.feat = (typeof objData.feat === 'number' ? objData.feat : 0);
-              break;
-          }
         }
         
         result.base = base;
@@ -308,21 +383,24 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       return { base: 0, total: 0 };
     };
     
-    // Build stats object with local overrides already integrated by extractBaseTotal
+    // Build stats object
+    // We pass fallback objects from the Ref if needed, using granular field fallbacks
+    const fallbackStats = lastValidDataRef.current;
+    
     const stats = {
-      hitPoints: localStatsOverrides.hitPoints ?? abilityScoreData.derived_stats.hit_points.current,
-      maxHitPoints: localStatsOverrides.maxHitPoints ?? abilityScoreData.derived_stats.hit_points.maximum,
-      experience: localStatsOverrides.experience ?? 0, // TODO: Add experience field to backend data
-      level: localStatsOverrides.level ?? 1, // TODO: Add level field to backend data
-      armorClass: extractBaseTotal(abilityScoreData.combat_stats?.armor_class, 'ac'),
-      fortitude: extractBaseTotal(abilityScoreData.saving_throws?.fortitude, 'fortitude'),
-      reflex: extractBaseTotal(abilityScoreData.saving_throws?.reflex, 'reflex'),
-      will: extractBaseTotal(abilityScoreData.saving_throws?.will, 'will'),
-      initiative: extractBaseTotal(abilityScoreData.combat_stats?.initiative, 'initiative'),
+      hitPoints: localStatsOverrides.hitPoints ?? dataToUse.derived_stats.hit_points.current,
+      maxHitPoints: localStatsOverrides.maxHitPoints ?? dataToUse.derived_stats.hit_points.maximum,
+      experience: localStatsOverrides.experience ?? 0,
+      level: localStatsOverrides.level ?? 1,
+      armorClass: extractBaseTotal(dataToUse.combat_stats?.armor_class, 'ac', fallbackStats?.combat_stats?.armor_class),
+      fortitude: extractBaseTotal(dataToUse.saving_throws?.fortitude, 'fortitude', fallbackStats?.saving_throws?.fortitude),
+      reflex: extractBaseTotal(dataToUse.saving_throws?.reflex, 'reflex', fallbackStats?.saving_throws?.reflex),
+      will: extractBaseTotal(dataToUse.saving_throws?.will, 'will', fallbackStats?.saving_throws?.will),
+      initiative: extractBaseTotal(dataToUse.combat_stats?.initiative, 'initiative', fallbackStats?.combat_stats?.initiative),
     };
 
     return stats;
-  }, [abilityScoreData, localStatsOverrides]);
+  }, [dataToUse, localStatsOverrides]);
 
   // Alignment state - fetched from backend
   const [alignment, setAlignment] = useState<Alignment>({
