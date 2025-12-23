@@ -54,12 +54,18 @@ function AppContent() {
   const [backendReady, setBackendReady] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+
   // Sync viewMode when character ID changes (new load)
   useEffect(() => {
     if (character?.id) {
        setViewMode('editor');
     }
   }, [character?.id]);
+
+  useEffect(() => {
+    setShowLoadingOverlay(characterLoading);
+  }, [characterLoading]);
 
   // Create the current character object for the sidebar
   const currentCharacter = currentCompanion || (character ? {
@@ -119,25 +125,16 @@ function AppContent() {
 
   const handleOpenFolder = async () => {
       try {
-        // Try to find saves to get the directory
         const saves = await api?.findNWN2Saves();
         if (saves && saves.length > 0) {
-          // Open the folder of the first save
           const firstSavePath = saves[0].path;
-          // Get directory path by removing filename
-          // Handle both Windows and Unix separators
           const separator = firstSavePath.includes('\\') ? '\\' : '/';
           const lastSeparatorIndex = firstSavePath.lastIndexOf(separator);
           const folderPath = firstSavePath.substring(0, lastSeparatorIndex);
           
           await api?.openFolderInExplorer(folderPath);
         } else {
-             // Fallback: try to open Documents folder or similar if no saves found?
-             // For now, let's try to detect installation or default path
-             // But simpler is to tell user
              console.warn("No saves found to determine folder path.");
-             // Try to get standard documents path - hard without Tauri specific API for that exposed easily
-             // Let's just try to open generic "Documents" if possible or warn
         }
       } catch (err) {
         console.error("Failed to open saves folder:", err);
@@ -148,8 +145,6 @@ function AppContent() {
     try {
       const filePath = await api?.selectCharacterFile();
       if (filePath) {
-        // Use the existing importCharacter from context which can handle BIC/XML
-        // Note: Check backend support for BIC files via this endpoint
         await importCharacter(filePath);
       }
     } catch (error) {
@@ -510,6 +505,18 @@ function AppContent() {
           );
         })()}
       </div>
+
+      {/* Loading Overlay Transition */}
+      {showLoadingOverlay && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[rgb(var(--color-background))] animate-in fade-in duration-200">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-[rgb(var(--color-primary)/0.2)] border-t-[rgb(var(--color-primary))] animate-spin"></div>
+            <div className="text-[rgb(var(--color-text-primary))] font-medium animate-pulse">
+              Loading save
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
