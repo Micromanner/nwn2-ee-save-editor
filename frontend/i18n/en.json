@@ -230,6 +230,7 @@
     "totalLevel": "Total Level",
     "currentClasses": "Current Classes",
     "addClass": "Add Class",
+    "changeClass": "Change Class",
     "removeClass": "Remove Class",
     "searchClasses": "Search classes...",
     "class": "Class",

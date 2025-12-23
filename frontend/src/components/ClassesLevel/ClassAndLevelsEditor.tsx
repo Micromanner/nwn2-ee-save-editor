@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Pencil, Swords, X } from 'lucide-react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -9,24 +10,7 @@ import { formatModifier, formatNumber } from '@/utils/dataHelpers';
 import { useClassesLevel, type ClassesData } from '@/hooks/useClassesLevel';
 import ClassSelectorModal from './ClassSelectorModal';
 
-// SVG Icon Components
-const ChevronDown = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-  </svg>
-);
-
-const X = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
-const Sword = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-  </svg>
-);
+// SVG Icon Components removed - using lucide-react instead
 
 
 // Removed unused ClassLevel interface - using ClassLevel from useClassesLevel hook instead
@@ -239,7 +223,7 @@ export default function ClassAndLevelsEditor() {
           <CardContent padding="p-4">
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-[rgb(var(--color-surface-2))] rounded-full flex items-center justify-center mx-auto mb-4">
-                <Sword className="w-8 h-8 text-[rgb(var(--color-text-muted))]" />
+                <Swords className="w-8 h-8 text-[rgb(var(--color-text-muted))]" />
               </div>
               <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-2">
                 No Classes Assigned
@@ -313,20 +297,21 @@ export default function ClassAndLevelsEditor() {
                 <CardContent padding="p-3">
                   {/* Main class row - using grid for consistent alignment */}
                   <div className="grid grid-cols-10 gap-3 items-center">
-                    {/* Class Selector - Fixed width */}
                     <div className="col-span-3">
                       <Button
                         onClick={() => {
                           setExpandedClassDropdown(index);
                           setShowClassSelector(true);
                         }}
-                        variant="ghost"
-                        className="w-full justify-between px-3 py-1 h-auto text-left"
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between h-9 px-3 text-sm font-medium group"
+                        title={t('classes.changeClass')}
                       >
-                        <span className="font-medium truncate">
+                        <span className="truncate">
                           {cls.name}
                         </span>
-                        <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                        <Pencil className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       </Button>
                     </div>
 

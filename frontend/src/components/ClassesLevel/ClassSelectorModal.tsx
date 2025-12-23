@@ -324,14 +324,23 @@ export default function ClassSelectorModal({
             ) : (
               /* Categorized View */
               <Tabs value={selectedClassType} onValueChange={(value) => setSelectedClassType(value as 'base' | 'prestige' | 'npc')}>
-                <TabsList className="grid w-full grid-cols-3 m-4 mb-0">
-                  <TabsTrigger value="base" className="flex items-center gap-2">
+                <TabsList className="w-full flex bg-transparent p-0 gap-2 px-4 mt-4 mb-0">
+                  <TabsTrigger 
+                    value="base" 
+                    className="flex-1 h-10 px-4 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10] truncate whitespace-nowrap"
+                  >
                     Base Classes
                   </TabsTrigger>
-                  <TabsTrigger value="prestige" className="flex items-center gap-2">
+                  <TabsTrigger 
+                    value="prestige" 
+                    className="flex-1 h-10 px-4 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10] truncate whitespace-nowrap"
+                  >
                     Prestige Classes
                   </TabsTrigger>
-                  <TabsTrigger value="npc" className="flex items-center gap-2">
+                  <TabsTrigger 
+                    value="npc" 
+                    className="flex-1 h-10 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10] truncate whitespace-nowrap"
+                  >
                     NPC Classes
                   </TabsTrigger>
                 </TabsList>
