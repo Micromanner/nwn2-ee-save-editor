@@ -71,18 +71,19 @@ def build_with_nuitka():
         "-m", "nuitka",
         f"--output-filename={output_name}",
         f"--output-dir={DIST_DIR}",
-        "--standalone",           # Bundle all dependencies
-        "--assume-yes-for-downloads",  # Auto-download C compiler if needed
-        "--lto=yes",              # Link-Time Optimization for smaller binary
-        "--follow-imports",       # Find all modules used by the script
-        
-        # Include necessary packages explicitly (fixed package names)
+        "--standalone",
+        "--assume-yes-for-downloads",
+        "--lto=yes",
+        "--follow-imports",
+
+        "--python-flag=-OO",
+
         "--include-package=fastapi",
         "--include-package=uvicorn",
         "--include-package=pydantic",
         "--include-package=starlette",
         "--include-package=fastapi_routers",
-        "--include-package=fastapi_core", 
+        "--include-package=fastapi_core",
         "--include-package=fastapi_models",
         "--include-package=config",
         "--include-package=character",
@@ -90,27 +91,36 @@ def build_with_nuitka():
         "--include-package=nwn2_rust",
         "--include-package=services",
         "--include-package=utils",
-        
-        # More specific exclusions to reduce binary size and avoid warnings
+
         "--nofollow-import-to=django",
         "--nofollow-import-to=pytest",
+        "--nofollow-import-to=test",
+        "--nofollow-import-to=tests",
         "--nofollow-import-to=pip",
         "--nofollow-import-to=setuptools",
         "--nofollow-import-to=wheel",
-        "--nofollow-import-to=distutils", 
+        "--nofollow-import-to=distutils",
         "--nofollow-import-to=tkinter",
         "--nofollow-import-to=matplotlib",
         "--nofollow-import-to=numpy",
         "--nofollow-import-to=pandas",
-        
-        # Show progress
+        "--nofollow-import-to=PIL",
+        "--nofollow-import-to=Pillow",
+        "--nofollow-import-to=maturin",
+        "--nofollow-import-to=watchdog",
+        "--nofollow-import-to=flake8",
+        "--nofollow-import-to=pycodestyle",
+        "--nofollow-import-to=pyflakes",
+        "--nofollow-import-to=mccabe",
+        "--nofollow-import-to=email",
+        "--nofollow-import-to=xml",
+
         "--show-progress",
         "--show-memory",
-        
-        # Hide the console window on Windows
+
         "--windows-console-mode=disable",
-        
-        "--remove-output",        # Clean up build artifacts
+
+        "--remove-output",
         str(BACKEND_DIR / "fastapi_server.py")
     ]
     

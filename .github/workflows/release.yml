@@ -89,10 +89,11 @@ jobs:
           else
             source venv/bin/activate
           fi
-          
+
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
+          pip install -r requirements-production.txt
+          pip install maturin nuitka
+
           maturin develop --release --manifest-path rust/Cargo.toml
 
       - name: create backend .env file

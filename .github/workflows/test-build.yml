@@ -54,7 +54,7 @@ jobs:
         with:
           path: |
             backend/venv
-          key: python-venv-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+          key: python-venv-${{ runner.os }}-${{ hashFiles('backend/requirements-production.txt') }}
           restore-keys: |
             python-venv-${{ runner.os }}-
 
@@ -66,7 +66,7 @@ jobs:
             ~/.nuitka
             frontend/src-tauri/binaries/*.build
             frontend/src-tauri/binaries/*.dist
-          key: nuitka-${{ runner.os }}-${{ hashFiles('backend/build_fastapi_sidecar.py', 'backend/fastapi_server.py', 'backend/requirements.txt') }}
+          key: nuitka-${{ runner.os }}-${{ hashFiles('backend/build_fastapi_sidecar.py', 'backend/fastapi_server.py', 'backend/requirements-production.txt') }}
           restore-keys: |
             nuitka-${{ runner.os }}-
       
@@ -78,16 +78,17 @@ jobs:
           if [ ! -d "venv" ]; then
             python -m venv venv
           fi
-          
+
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             source venv/Scripts/activate
           else
             source venv/bin/activate
           fi
-          
+
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
+          pip install -r requirements-production.txt
+          pip install maturin nuitka
+
           maturin develop --release --manifest-path rust/Cargo.toml
 
       - name: create backend .env file
@@ -135,7 +136,22 @@ jobs:
           args: ${{ matrix.args }}
           # Don't upload release assets, just test the build
           includeUpdaterJson: false
-      
+
+      - name: Rename Windows Portable Zip
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        working-directory: ./frontend/src-tauri/target/release/bundle/nsis
+        run: |
+          # Find and rename the portable zip
+          for file in *-setup.nsis.zip; do
+            if [ -f "$file" ]; then
+              version=$(echo "$file" | grep -oP '\d+\.\d+\.\d+')
+              newname="NWN2EE-Save-Editor-${version}-Portable.zip"
+              mv "$file" "$newname"
+              echo "Renamed $file to $newname"
+            fi
+          done
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:

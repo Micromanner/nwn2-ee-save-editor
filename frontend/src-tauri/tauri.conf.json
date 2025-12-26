@@ -44,12 +44,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis",
-      "appimage",
-      "deb",
-      "zip"
-    ],
+    "targets": ["nsis", "appimage", "deb"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
