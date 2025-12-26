@@ -141,26 +141,6 @@ jobs:
           projectPath: "./frontend"
           args: ${{ matrix.args }}
 
-      # Rename the confusing 'setup.nsis.zip' to a clean 'Portable.zip' name
-      # Tauri Action uploads files automatically, but we can hook in before that? 
-      # Actually, Tauri Action uploads *during* the step. 
-      # We cannot easily rename it *inside* the action execution. 
-      # However, we can use the 'includeUpdaterJson: true' output or similar? 
-      # Wait, the action handles the upload. If we want to rename it, we might need to disable auto-upload in the action 
-      # and upload manually, OR accept the name.
-      # BUT, checking the release.yml again... the 'uses: tauri-apps/tauri-action' does the upload. 
-      # There is no easy way to intercept the filename unless we change the tauri.conf.json bundle name... 
-      # which also changes the Setup.exe name.
-      # ALTERNATIVE: Let's assume the user wants me to fix it. 
-      # If I cannot rename it in-flight, I will clarify this limitation.
-      # Re-reading: tauri-action typically has no 'rename artifacts' input.
-      # However, we can disable the upload in tauri-action (`upload: false` or similar?) 
-      # Checking tauri-action docs (mental model): It usually uploads all artifacts found in the bundle dir.
-      # If we can't change it easily, I should notify the user first. 
-      
-      # Let's try to verify if I can change the artifact name config in tauri.conf.json?
-      # The zip name usually follows the pattern: {productName}_{version}_{arch}-setup.nsis.zip
-      # We can't change the suffix easily.
       - name: Rename Windows Portable Zip Asset
         if: matrix.platform == 'windows-latest'
         uses: actions/github-script@v6

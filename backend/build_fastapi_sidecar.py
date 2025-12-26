@@ -88,8 +88,8 @@ def build_with_nuitka():
         "--include-package=character",
         "--include-package=gamedata",
         "--include-package=nwn2_rust",
-        "--include-package=rust_icon_cache",
-        "--include-package=utils",  # Added missing utils package
+        "--include-package=services",
+        "--include-package=utils",
         
         # More specific exclusions to reduce binary size and avoid warnings
         "--nofollow-import-to=django",
