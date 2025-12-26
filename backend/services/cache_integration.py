@@ -7,6 +7,7 @@ import time
 import os
 from pathlib import Path
 from typing import Dict, Optional, List, Any
+from utils.paths import get_writable_dir
 
 # Import Rust cache components
 try:
@@ -35,9 +36,8 @@ class PrecompiledCacheIntegration:
             self.cache_manager = None
             return
         
-        # Initialize Rust cache manager - use backend directory as base
-        backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
-        cache_dir = backend_dir / 'cache'
+        # Initialize Rust cache manager - use AppData directory
+        cache_dir = get_writable_dir("cache")
         self.cache_manager = CacheManager(str(cache_dir))
         self.cache_builder = CacheBuilder(str(cache_dir))
         
@@ -171,8 +171,7 @@ class PrecompiledCacheIntegration:
             
         try:
             # Check if cache files exist at all
-            backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
-            cache_dir = backend_dir / 'cache' / 'compiled_cache' 
+            cache_dir = get_writable_dir("cache/compiled_cache")
             metadata_file = cache_dir / "cache_metadata.json"
             
             if not metadata_file.exists():
@@ -194,8 +193,7 @@ class PrecompiledCacheIntegration:
             
         try:
             # Check if cache files exist
-            backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
-            cache_dir = backend_dir / 'cache' / 'compiled_cache' 
+            cache_dir = get_writable_dir("cache/compiled_cache")
             metadata_file = cache_dir / "cache_metadata.json"
             
             if metadata_file.exists():
@@ -278,8 +276,7 @@ class PrecompiledCacheIntegration:
             current_override = list(self.resource_manager._override_file_paths.keys()) if hasattr(self.resource_manager, '_override_file_paths') else []
             
             # Try to get previous mod state from cache metadata
-            backend_dir = Path(__file__).parent.parent  # Go up from parsers/ to backend/
-            cache_dir = backend_dir / 'cache' / 'compiled_cache'
+            cache_dir = get_writable_dir("cache/compiled_cache")
             metadata_file = cache_dir / "cache_metadata.json"
             
             previous_workshop = []

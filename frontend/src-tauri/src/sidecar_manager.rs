@@ -10,6 +10,12 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::config::Config;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 pub struct FastAPISidecar {
     pub pid: Mutex<Option<u32>>,
     pub child: Mutex<Option<CommandChild>>,
@@ -97,7 +103,7 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
     
     // Check if FastAPI is already running before trying to kill anything
     // Skip port-based checks when using dynamic ports (port 0)
-    if cfg!(debug_assertions) && config.fastapi_port > 0 {
+    if config.fastapi_port > 0 {
         // Quick check if the configured static port is already free
         let port_in_use = match reqwest::Client::new()
             .get(&format!("http://{}:{}/api/health/", config.fastapi_host, config.fastapi_port))
@@ -116,41 +122,42 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
             
             // Use native OS commands to find and kill process on the configured port
         let kill_result = if cfg!(target_os = "windows") {
-            // Windows: Use netstat and taskkill
-            // First find the PID
-            let netstat_output = app.shell()
-                .command("cmd")
-                .args(["/C", &format!("netstat -ano | findstr :{}", config.fastapi_port)])
-                .output()
-                .await;
-                
-            if let Ok(output) = netstat_output {
-                let output_str = String::from_utf8_lossy(&output.stdout);
-                // Parse PID from netstat output (last column)
-                if let Some(line) = output_str.lines().find(|l| l.contains("LISTENING")) {
-                    if let Some(pid) = line.split_whitespace().last() {
-                        info!("Found process {} on port {}, killing it", pid, config.fastapi_port);
-                        app.shell()
-                            .command("cmd")
-                            .args(["/C", &format!("taskkill /F /PID {}", pid)])
-                            .output()
-                            .await
-                    } else {
-                        Ok(output)
+            // Windows: Use netstat and taskkill with no window
+            #[cfg(windows)]
+            {
+                let output = std::process::Command::new("cmd")
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .args(["/C", &format!("netstat -ano | findstr :{}", config.fastapi_port)])
+                    .output();
+                    
+                match output {
+                    Ok(out) => {
+                        let output_str = String::from_utf8_lossy(&out.stdout);
+                        if let Some(line) = output_str.lines().find(|l| l.contains("LISTENING")) {
+                            if let Some(pid) = line.split_whitespace().last() {
+                                info!("Found process {} on port {}, killing it", pid, config.fastapi_port);
+                                let _ = std::process::Command::new("cmd")
+                                    .creation_flags(CREATE_NO_WINDOW)
+                                    .args(["/C", &format!("taskkill /F /PID {}", pid)])
+                                    .output();
+                            }
+                        }
+                        Ok(out)
                     }
-                } else {
-                    Ok(output)
+                    Err(e) => Err(e),
                 }
-            } else {
-                netstat_output
+            }
+            #[cfg(not(windows))]
+            {
+                // Unreachable in this context but keeping for structure
+                Ok(std::process::Output { status: unsafe { std::mem::zeroed() }, stdout: vec![], stderr: vec![] })
             }
         } else {
             // Unix: Use lsof or ss and kill
-            app.shell()
-                .command("sh")
+            let output = std::process::Command::new("sh")
                 .args(["-c", &format!("lsof -ti:{} | xargs kill -9 2>/dev/null || true", config.fastapi_port)])
-                .output()
-                .await
+                .output();
+            output
         };
         
         match kill_result {
@@ -169,12 +176,21 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 Ok(_) => {
                     if port_check_attempts == 0 {
                         error!("FastAPI server is still running after kill attempt!");
-                        // Try a more aggressive kill using shell command
-                        let _ = app.shell()
-                            .command("sh")
-                            .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", config.fastapi_port)])
-                            .output()
-                            .await;
+                        if cfg!(target_os = "windows") {
+                            #[cfg(windows)]
+                            {
+                                let _ = std::process::Command::new("cmd")
+                                    .creation_flags(CREATE_NO_WINDOW)
+                                    .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
+                                    .output();
+                            }
+                        } else {
+                            let _ = app.shell()
+                                .command("sh")
+                                .args(["-c", &format!("lsof -ti :{} | xargs -r kill -9", config.fastapi_port)])
+                                .output()
+                                .await;
+                        }
                     }
                     port_check_attempts += 1;
                     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
@@ -190,15 +206,17 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 return Err(format!("Failed to free port {} after multiple attempts", config.fastapi_port));
             }
         } // End of port_in_use check
-    } else if cfg!(debug_assertions) {
-        // Using dynamic ports (port 0) - skip port-based kill logic
-        info!("Using dynamic port assignment, skipping port-based process cleanup");
+    } else {
+        // Using dynamic ports (port 0) or production without static port configured
+        info!("Skipping port-based process cleanup");
     }
     
     let sidecar_command = if cfg!(debug_assertions) {
         // In development, run FastAPI directly with Python from venv
+        let port = config.get_effective_port();
+        
         if cfg!(target_os = "windows") {
-            info!("Starting FastAPI on Windows with python.exe from venv");
+            info!("Starting FastAPI on Windows with python.exe from venv on port {}", port);
             let backend_dir = std::env::current_dir()
                 .unwrap()
                 .parent()
@@ -208,26 +226,65 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 .join("backend");
             let python_exe = backend_dir.join("venv").join("Scripts").join("python.exe");
             
-            info!("Python path: {:?}", python_exe);
-            info!("Backend dir: {:?}", backend_dir);
-            
             app.shell()
                 .command(python_exe.to_string_lossy().to_string())
-                .args(["fastapi_server.py"])
+                .args(["fastapi_server.py", "--port", &port.to_string()])
+                .env("PORT", &port.to_string())
+                .env("HOST", &config.fastapi_host)
                 .current_dir(backend_dir)
         } else {
-            info!("Starting FastAPI on Unix with venv/bin/python3");
+            info!("Starting FastAPI on Unix with venv/bin/python3 on port {}", port);
             app.shell()
                 .command("venv/bin/python3")
-                .args(["fastapi_server.py"])
+                .args(["fastapi_server.py", "--port", &port.to_string()])
+                .env("PORT", &port.to_string())
+                .env("HOST", &config.fastapi_host)
                 .current_dir("../../backend") // Relative to src-tauri
         }
     } else {
-        // In production, run the bundled FastAPI executable
+        // In production, resolve the path to the bundled resource binary
+        // Note: The structure in resources matches the path in tauri.conf.json
+        let resource_dir = app.path().resource_dir()
+            .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+        
+        // Note: Tauri bundles the directory specified in 'resources' relative to its location
+        let resource_path = resource_dir
+            .join("binaries")
+            .join("fastapi_server.dist")
+            .join(if cfg!(target_os = "windows") { "fastapi-server.exe" } else { "fastapi-server" });
+            
+        if !resource_path.exists() {
+            error!("Backend executable NOT found at: {:?}", resource_path);
+            // Diagnostic: List what IS in the resource dir to help debug
+            if let Ok(entries) = std::fs::read_dir(&resource_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                            let sub_paths: Vec<_> = sub_entries.flatten().map(|e| e.path()).collect();
+                            error!("Subdir {:?} contains: {:?}", path, sub_paths);
+                        }
+                    } else {
+                        error!("Found file in resource root: {:?}", path);
+                    }
+                }
+            }
+            return Err(format!("Backend executable not found. Checked: {:?}", resource_path));
+        }
+
+        let backend_cwd = resource_path.parent().unwrap();
+        let port = config.get_effective_port();
+        
+        info!("Starting bundled backend on port {}", port);
+        info!("Executable: {:?}", resource_path);
+        info!("CWD: {:?}", backend_cwd);
+        
         app.shell()
-            .sidecar("fastapi-server")
-            .map_err(|e| format!("Failed to create sidecar command: {}", e))?
-            .args(["--port", &config.fastapi_port.to_string()])
+            .command(resource_path.to_string_lossy().to_string())
+            .args(["--port", &port.to_string()])
+            .env("PORT", &port.to_string())
+            .env("HOST", &config.fastapi_host)
+            .current_dir(backend_cwd)
     };
 
     let (mut rx, child) = sidecar_command
@@ -252,12 +309,14 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                     let line_str = String::from_utf8_lossy(&line);
                     info!("FastAPI: {}", line_str);
 
-                    // Check for dynamic port assignment
-                    if line_str.starts_with("FASTAPI_ACTUAL_PORT=") {
-                        if let Some(port_str) = line_str.strip_prefix("FASTAPI_ACTUAL_PORT=") {
+                    // Check for dynamic port assignment (failsafe)
+                    if line_str.contains("FASTAPI_ACTUAL_PORT=") {
+                        if let Some(idx) = line_str.find("FASTAPI_ACTUAL_PORT=") {
+                            let port_part = &line_str[idx + "FASTAPI_ACTUAL_PORT=".len()..];
+                            let port_str = port_part.split_whitespace().next().unwrap_or("");
                             if let Ok(port) = port_str.trim().parse::<u16>() {
+                                info!("Updating effective port from backend logs: {}", port);
                                 crate::config::Config::set_dynamic_port(port);
-                                info!("\n\n==========================================================\n==========================================================\n  FASTAPI_ACTUAL_PORT={}\n==========================================================\n==========================================================\n", port);
                             }
                         }
                     }
@@ -265,12 +324,14 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
                 CommandEvent::Stderr(line) => {
                     let line_str = String::from_utf8_lossy(&line);
 
-                    // Check for dynamic port assignment (might be in stderr)
-                    if line_str.starts_with("FASTAPI_ACTUAL_PORT=") {
-                        if let Some(port_str) = line_str.strip_prefix("FASTAPI_ACTUAL_PORT=") {
+                    // Check for dynamic port assignment (failsafe - might be in stderr)
+                    if line_str.contains("FASTAPI_ACTUAL_PORT=") {
+                        if let Some(idx) = line_str.find("FASTAPI_ACTUAL_PORT=") {
+                            let port_part = &line_str[idx + "FASTAPI_ACTUAL_PORT=".len()..];
+                            let port_str = port_part.split_whitespace().next().unwrap_or("");
                             if let Ok(port) = port_str.trim().parse::<u16>() {
+                                info!("Updating effective port from backend error logs: {}", port);
                                 crate::config::Config::set_dynamic_port(port);
-                                info!("\n\n==========================================================\n==========================================================\n  FASTAPI_ACTUAL_PORT={}\n==========================================================\n==========================================================\n", port);
                             }
                         }
                     }
@@ -321,7 +382,6 @@ pub async fn start_fastapi_sidecar(app: tauri::AppHandle) -> Result<String, Stri
 }
 
 async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, String> {
-    let config = Config::new();
     // Wait for FastAPI health check to pass (max 30 seconds)
     let mut attempts = 0;
     let max_attempts = 30;
@@ -329,18 +389,16 @@ async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, Str
     info!("Waiting for FastAPI health check to pass...");
     
     while attempts < max_attempts {
-        match reqwest::get(&format!("{}/api/health/", config.get_base_url())).await {
+        let config = Config::new();
+        let base_url = config.get_base_url();
+        
+        match reqwest::get(&format!("{}/api/health/", base_url)).await {
             Ok(response) if response.status().is_success() => {
-                info!("FastAPI health check passed after {} attempts", attempts + 1);
+                info!("FastAPI health check passed after {} attempts on port {}", attempts + 1, config.get_effective_port());
                 break;
             }
-            Ok(response) => {
-                info!("FastAPI health check failed with status: {}", response.status());
-            }
-            Err(_) => {
-                if attempts == 0 {
-                    info!("Waiting for FastAPI to start...");
-                } else if attempts % 5 == 0 {
+            _ => {
+                if attempts % 5 == 0 {
                     info!("Still waiting for FastAPI... (attempt {}/{})", attempts + 1, max_attempts);
                 }
             }
@@ -355,7 +413,9 @@ async fn wait_for_fastapi_and_trigger_background_loading() -> Result<String, Str
     }
     
     // Health check passed, now trigger background loading
-    info!("Triggering background loading of complete game data...");
+    // Re-instantiate config to get the final resolved port
+    let config = Config::new();
+    info!("Triggering background loading of complete game data on port {}...", config.get_effective_port());
     
     match reqwest::Client::new()
         .post(&format!("{}/api/system/background-loading/trigger/", config.get_base_url()))
@@ -465,10 +525,13 @@ pub async fn force_kill_fastapi_sidecar(app: tauri::AppHandle) -> Result<String,
     // Also kill any process on the configured port directly
     let config = Config::new();
     if cfg!(target_os = "windows") {
-        let _ = tokio::process::Command::new("cmd")
-            .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
-            .output()
-            .await;
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("cmd")
+                .creation_flags(CREATE_NO_WINDOW)
+                .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
+                .output();
+        }
     } else {
         let _ = tokio::process::Command::new("sh")
             .args(["-c", &format!("lsof -ti:{} | xargs -r kill -9 2>/dev/null || true", config.fastapi_port)])
@@ -601,7 +664,35 @@ pub async fn ensure_fastapi_running(app: tauri::AppHandle) -> Result<(), String>
 #[tauri::command]
 pub async fn get_fastapi_base_url() -> Result<String, String> {
     let config = Config::new();
-    Ok(config.get_base_url())
+    let port = config.get_effective_port(); // This assigns if 0
+    let base_url = config.get_base_url();
+    
+    info!("get_fastapi_base_url: Using port {}. Verifying health...", port);
+    
+    // Wait up to 15 seconds for the backend to become ready
+    // This is crucial in Release mode where spawning can be slower
+    for i in 0..75 { // 200ms * 75 = 15s
+        match reqwest::Client::new()
+            .get(&format!("{}/api/health/", base_url))
+            .timeout(std::time::Duration::from_millis(500))
+            .send()
+            .await 
+        {
+            Ok(resp) if resp.status().is_success() => {
+                info!("Backend is healthy on {}. Returning to frontend.", base_url);
+                return Ok(base_url);
+            }
+            _ => {
+                if i % 10 == 0 {
+                    info!("Backend not ready yet on {}... (attempt {})", base_url, i);
+                }
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    }
+    
+    error!("Backend at {} failed health checks after 15s!", base_url);
+    Err("Backend is taking too long to start. Please check if it's blocked by a firewall.".to_string())
 }
 
 #[tauri::command]
@@ -631,10 +722,13 @@ pub async fn graceful_shutdown_on_exit(app: tauri::AppHandle) -> Result<String, 
     
     // Final fallback: kill any remaining Python processes on the configured port
     if cfg!(target_os = "windows") {
-        let _ = tokio::process::Command::new("cmd")
-            .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
-            .output()
-            .await;
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("cmd")
+                .creation_flags(CREATE_NO_WINDOW)
+                .args(["/C", &format!("for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :{} ^| findstr LISTENING') do taskkill /F /PID %a 2>nul", config.fastapi_port)])
+                .output();
+        }
     } else {
         let _ = tokio::process::Command::new("sh")
             .args(["-c", &format!("lsof -ti:{} | xargs -r kill -9 2>/dev/null || true", config.fastapi_port)])

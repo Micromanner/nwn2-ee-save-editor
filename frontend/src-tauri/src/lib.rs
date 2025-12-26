@@ -29,23 +29,20 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_http::init())
     .setup(move |app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      // Initialize logging
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(if cfg!(debug_assertions) { log::LevelFilter::Debug } else { log::LevelFilter::Info })
+          .build(),
+      )?;
 
-      // Auto-start FastAPI sidecar in development
-      if cfg!(debug_assertions) {
-        let app_handle = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-          if let Err(e) = start_fastapi_sidecar(app_handle).await {
-            log::error!("Failed to start FastAPI sidecar: {}", e);
-          }
-        });
-      }
+      // Auto-start FastAPI sidecar
+      let app_handle = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        if let Err(e) = start_fastapi_sidecar(app_handle).await {
+          log::error!("Failed to start FastAPI sidecar: {}", e);
+        }
+      });
 
       Ok(())
     })

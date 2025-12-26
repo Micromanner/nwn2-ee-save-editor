@@ -38,10 +38,9 @@ from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from io import BytesIO
 import msgpack
-from loguru import logger
-
-from config.nwn2_settings import nwn2_paths
 from nwn2_rust import GffParser, ErfParser
+
+from utils.paths import get_writable_dir
 
 
 @dataclass
@@ -71,7 +70,7 @@ class DialogueMappingService:
     """Service for extracting quest variable mappings from dialogue files"""
 
     CACHE_VERSION = "2.2"
-    CACHE_DIR = Path(__file__).parent.parent / "cache" / "quest_mappings"
+    CACHE_DIR = get_writable_dir("cache/quest_mappings")
 
     VARIABLE_SCRIPTS = {
         'ga_global_int',

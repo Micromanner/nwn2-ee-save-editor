@@ -7,6 +7,7 @@ import logging
 import requests
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from utils.paths import get_writable_dir
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
@@ -23,10 +24,9 @@ class SteamWorkshopService:
     """
     
     def __init__(self, cache_dir: Optional[Path] = None, auto_cleanup: bool = True):
-        # Use provided cache dir or default to backend/cache
+        # Use provided cache dir or default to AppData cache/workshop
         if cache_dir is None:
-            backend_dir = Path(__file__).parent.parent
-            self.cache_dir = backend_dir / 'cache'
+            self.cache_dir = get_writable_dir('cache/workshop')
         else:
             self.cache_dir = Path(cache_dir)
         

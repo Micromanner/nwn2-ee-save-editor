@@ -78,8 +78,8 @@ class PerformanceProfiler:
         self.log_file: Optional[Path] = None
         
         if log_to_file:
-            log_dir = Path(__file__).parent.parent / "logs"
-            log_dir.mkdir(exist_ok=True)
+            from .paths import get_writable_dir
+            log_dir = get_writable_dir("logs")
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             self.log_file = log_dir / f"performance_{timestamp}.json"
     

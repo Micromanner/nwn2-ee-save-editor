@@ -133,5 +133,12 @@ jobs:
         with:
           projectPath: "./frontend"
           args: ${{ matrix.args }}
-          # Don't upload artifacts, just test the build
+          # Don't upload release assets, just test the build
           includeUpdaterJson: false
+      
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nwn2ee-editor-build-${{ matrix.platform }}
+          path: frontend/src-tauri/target/release/bundle/
+          retention-days: 7

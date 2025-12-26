@@ -23,9 +23,35 @@ impl Config {
     }
     
     /// Get the current effective port (dynamic if available, otherwise configured)
+    /// If the configured port is 0 and no dynamic port is assigned, it finds a free one.
     pub fn get_effective_port(&self) -> u16 {
-        let dynamic_port = DYNAMIC_PORT.lock().unwrap();
-        dynamic_port.unwrap_or(self.fastapi_port)
+        let mut dynamic_port = DYNAMIC_PORT.lock().unwrap();
+        
+        // Return already assigned dynamic port (if valid)
+        if let Some(p) = *dynamic_port {
+            if p != 0 {
+                return p;
+            }
+        }
+
+        // If a specific port is configured (non-zero), use it
+        if self.fastapi_port != 0 {
+            return self.fastapi_port;
+        }
+
+        // Port is 0 (dynamic) but not yet assigned - find a free one now
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to bind to 127.0.0.1:0, trying 0.0.0.0:0");
+                std::net::TcpListener::bind("0.0.0.0:0")
+                    .expect("Critical: Could not find any free port on the system")
+            });
+            
+        let port = listener.local_addr().expect("Failed to get local addr").port();
+        log::info!("Pre-assigning dynamic port: {}", port);
+        
+        *dynamic_port = Some(port);
+        port
     }
 }
 
@@ -42,9 +68,9 @@ impl Config {
         }
         
         let port = env::var("PORT")
-            .unwrap_or_else(|_| "8001".to_string())
+            .unwrap_or_else(|_| "0".to_string())
             .parse::<u16>()
-            .unwrap_or(8001);
+            .unwrap_or(0);
             
         let host = env::var("HOST")
             .unwrap_or_else(|_| "127.0.0.1".to_string());

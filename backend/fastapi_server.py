@@ -14,6 +14,65 @@ import atexit
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
+import tempfile
+
+import psutil
+import threading
+
+# Emergency startup logging for production debugging
+try:
+    with open(os.path.join(tempfile.gettempdir(), "nwn2_fastapi_startup.log"), "a") as f:
+        f.write(f"[{datetime.now()}] FastAPI process started. Args: {sys.argv}\n")
+except:
+    pass
+
+def start_parent_watchdog():
+    """
+    Monitor the parent process (Tauri) and self-terminate if it dies.
+    This prevents orphan background processes.
+    """
+    try:
+        parent_pid = os.getppid()
+        if parent_pid <= 1: # No parent or init
+            return
+            
+        def watchdog():
+            try:
+                parent = psutil.Process(parent_pid)
+                while True:
+                    if not parent.is_running():
+                        break
+                    time.sleep(2)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+            
+            # Parent is gone, emergency exit
+            os._exit(0)
+            
+        thread = threading.Thread(target=watchdog, daemon=True)
+        thread.start()
+    except Exception:
+        pass
+
+# Global exception hook to capture early crashes
+def panic_log(exc_type, exc_value, exc_traceback):
+    try:
+        import traceback
+        import pprint
+        with open(os.path.join(tempfile.gettempdir(), "nwn2_fastapi_panic.log"), "a") as f:
+            f.write(f"\n[{datetime.now()}] CRITICAL UNCAUGHT EXCEPTION:\n")
+            f.write(f"CWD: {os.getcwd()}\n")
+            f.write(f"sys.path: {sys.path}\n")
+            f.write("Environment:\n")
+            pprint.pprint(dict(os.environ), stream=f)
+            f.write("\nTraceback:\n")
+            traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+            f.write("\n" + "="*80 + "\n")
+    except:
+        pass
+
+sys.excepthook = panic_log
+print(f"[{datetime.now()}] Panic logger initialized", flush=True)
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks
@@ -773,6 +832,9 @@ except Exception as e:
 
 def main():
     """Main entry point for FastAPI server"""
+    # Start parent-process watchdog to prevent orphans
+    start_parent_watchdog()
+    
     logger.info("Starting NWN2 Save Editor FastAPI backend...")
 
     # Mount log viewer if enabled (runs in same process, auto-stops with backend)
@@ -789,6 +851,22 @@ def main():
     host = os.environ.get("HOST", "127.0.0.1")
     debug = os.environ.get("DEBUG", "False").lower() == "true"
 
+    # Override with command line arguments if present (Tauri sidecar support)
+    if "--port" in sys.argv:
+        try:
+            idx = sys.argv.index("--port")
+            port = int(sys.argv[idx + 1])
+        except (ValueError, IndexError):
+            pass
+    if "--host" in sys.argv:
+        try:
+            idx = sys.argv.index("--host")
+            host = sys.argv[idx + 1]
+        except IndexError:
+            pass
+
+    logger.info(f"Raw CLI args: {sys.argv}")
+    logger.info(f"Raw ENV PORT: {os.environ.get('PORT')}")
     logger.info(f"Server configuration: {host}:{port} (debug={debug})")
     
     # Create uvicorn config to capture actual port

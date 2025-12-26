@@ -15,6 +15,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from utils.paths import get_writable_dir
+
+# Centralized writable paths
+BASE_WRITABLE_DIR = get_writable_dir("") # Base AppData folder
+USER_SETTINGS_PATH = BASE_WRITABLE_DIR / "settings.json"
+
 # Import Rust path discovery
 try:
     from nwn2_rust import (
@@ -180,7 +186,7 @@ class NWN2Paths:
             self._steam_workshop_folder = Path(env_steam)
         
         # Check user settings file
-        user_settings_path = Path.home() / '.nwn2_editor' / 'settings.json'
+        user_settings_path = USER_SETTINGS_PATH
         if user_settings_path.exists():
             try:
                 with open(user_settings_path, 'r') as f:
@@ -404,7 +410,7 @@ class NWN2Paths:
 
     def _save_settings(self) -> bool:
         """Save current settings to file"""
-        user_settings_path = Path.home() / '.nwn2_editor' / 'settings.json'
+        user_settings_path = USER_SETTINGS_PATH
         user_settings_path.parent.mkdir(parents=True, exist_ok=True)
         
         settings = {
@@ -581,6 +587,6 @@ NWN2_SETTINGS = {
     'installation_path': nwn2_paths.game_folder,
     'enable_custom_content': True,
     'cache_module_data': True,
-    'module_cache_dir': Path(__file__).parent.parent / 'cache' / 'modules',
+    'module_cache_dir': get_writable_dir(os.path.join('cache', 'modules')),
     'rust_path_discovery': True,  # New flag indicating Rust-powered path discovery
 }

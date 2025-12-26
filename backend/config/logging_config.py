@@ -8,8 +8,10 @@ from pathlib import Path
 from datetime import datetime
 from loguru import logger
 
-LOG_DIR = Path(__file__).parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+from utils.paths import get_writable_dir
+
+# Resolve log directory using centralized utility
+LOG_DIR = get_writable_dir("logs")
 
 ENABLE_LOG_VIEWER = os.getenv("ENABLE_LOG_VIEWER", "false").lower() == "true"
 LOG_VIEWER_PORT = int(os.getenv("LOG_VIEWER_PORT", "9999"))

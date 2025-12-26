@@ -16,6 +16,7 @@ from gamedata.dynamic_loader.code_cache import SecureCodeCache
 from gamedata.dynamic_loader.relationship_validator import RelationshipValidator, ValidationReport
 from services.resource_manager import ResourceManager
 from utils.performance_profiler import get_profiler
+from utils.paths import get_writable_dir
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +81,8 @@ class DataModelLoader:
         
         # Set up cache directory
         if cache_dir is None:
-            # Default to backend/cache/generated_code
-            backend_dir = Path(__file__).parent.parent
-            cache_dir = backend_dir / "cache" / "generated_code"
+            # Default to AppData cache/generated_code
+            cache_dir = get_writable_dir("cache/generated_code")
         self.cache = SecureCodeCache(cache_dir)
         
         # Storage for generated classes and instances

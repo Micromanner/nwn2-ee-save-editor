@@ -23,8 +23,9 @@ def build_with_nuitka():
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     
     # Clean up previous build artifacts to avoid Windows Defender conflicts
+    # But PRESERVE the cache to speed up subsequent builds!
     print("Cleaning previous build artifacts...")
-    for pattern in ["*.build", "*.dist", "*.onefile-build", ".nuitka-cache"]:
+    for pattern in ["*.build", "*.dist", "*.onefile-build"]: # Removed .nuitka-cache from cleanup
         for path in DIST_DIR.glob(pattern):
             if path.is_dir():
                 shutil.rmtree(path, ignore_errors=True)
@@ -56,8 +57,17 @@ def build_with_nuitka():
     os.environ["NUITKA_CACHE_DIR"] = str(cache_dir)
     
     # Define the Nuitka command
+    # Determine which Python to use (prefer venv)
+    venv_python = BACKEND_DIR / "venv" / "Scripts" / "python.exe"
+    if sys.platform == "win32" and venv_python.exists():
+        python_exe = str(venv_python)
+        print(f"Using venv Python: {python_exe}")
+    else:
+        python_exe = sys.executable
+        print(f"Using system Python: {python_exe}")
+        
     cmd = [
-        sys.executable,  # Use the current python interpreter
+        python_exe,
         "-m", "nuitka",
         f"--output-filename={output_name}",
         f"--output-dir={DIST_DIR}",
@@ -77,7 +87,8 @@ def build_with_nuitka():
         "--include-package=config",
         "--include-package=character",
         "--include-package=gamedata",
-        "--include-package=parsers",
+        "--include-package=nwn2_rust",
+        "--include-package=rust_icon_cache",
         "--include-package=utils",  # Added missing utils package
         
         # More specific exclusions to reduce binary size and avoid warnings
@@ -95,6 +106,9 @@ def build_with_nuitka():
         # Show progress
         "--show-progress",
         "--show-memory",
+        
+        # Hide the console window on Windows
+        "--windows-console-mode=disable",
         
         "--remove-output",        # Clean up build artifacts
         str(BACKEND_DIR / "fastapi_server.py")

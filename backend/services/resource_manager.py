@@ -118,21 +118,19 @@ class ResourceManager:
     
     def __init__(self, nwn2_path: Optional[str] = None, cache_dir: str = "cache", suppress_warnings: bool = False):
         profiler = get_profiler()
+        from utils.paths import get_writable_dir
         
         with profiler.profile("ResourceManager.__init__"):
             # Use provided path or default from nwn2_settings
             self.nwn2_path = Path(nwn2_path) if nwn2_path else nwn2_paths.game_folder
             
-            # Make cache_dir absolute - if relative, make it relative to backend directory
+            # Resolve cache directory using centralized utility if relative
             cache_path = Path(cache_dir)
-        if not cache_path.is_absolute():
-            # Find backend directory (parent of parsers directory)
-            backend_dir = Path(__file__).parent.parent.resolve()
-            self.cache_dir = (backend_dir / cache_dir).resolve()
-        else:
-            self.cache_dir = cache_path.resolve()
-            
-        self.cache_dir.mkdir(exist_ok=True)
+            if not cache_path.is_absolute():
+                self.cache_dir = get_writable_dir(cache_dir)
+            else:
+                self.cache_dir = cache_path.resolve()
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.suppress_warnings = suppress_warnings
         
         # ZIP file handles - now opened on-demand and closed after use
@@ -436,8 +434,8 @@ class ResourceManager:
         
         try:
             # First check if cache files actually exist
-            from pathlib import Path
-            cache_dir = BASE_DIR / 'cache' / 'compiled_cache' 
+            from utils.paths import get_writable_dir
+            cache_dir = get_writable_dir("cache/compiled_cache")
             metadata_file = cache_dir / "cache_metadata.json"
             
             if not metadata_file.exists():
@@ -1015,7 +1013,7 @@ class ResourceManager:
     def _index_directory_for_2das(self, directory: Path, target_dict: Dict[str, Path]):
         """Index 2DA files in a directory without parsing them using optimized scanner"""
         # Use optimized directory walker
-        resource_locations = self._directory_walker.index_directory(directory, recursive=True)
+        resource_locations = self._directory_walker.index_directory(str(directory), recursive=True)
         
         # Convert to legacy format
         for resource_name, resource_location in resource_locations.items():

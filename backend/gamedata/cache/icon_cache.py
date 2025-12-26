@@ -8,6 +8,8 @@ from pathlib import Path
 from nwn2_rust import ErfParser
 from config.nwn2_settings import nwn2_paths
 
+from utils.paths import get_writable_dir
+
 logger = logging.getLogger(__name__)
 
 # Import Rust icon cache - required, no fallback
@@ -147,8 +149,7 @@ class RustIconCacheWrapper:
 
 def create_icon_cache(resource_manager=None):
     """Create the Rust icon cache implementation"""
-    cache_dir = getattr(nwn2_paths, 'cache_dir', Path('cache')) / 'icons'
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = get_writable_dir("cache/icons")
     
     # Get NWN2 game directory
     game_folder = getattr(nwn2_paths, 'game_folder', None)

@@ -1,12 +1,12 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NWN2EE Save Editor",
-  "version": "1.0.1",
+  "version": "0.1.0",
   "identifier": "com.nwn2ee.saveeditor",
   "build": {
     "devUrl": "http://localhost:24314",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:fastapi && npm run build",
     "frontendDist": "../out"
   },
   "plugins": {
@@ -45,7 +45,10 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis"
+      "nsis",
+      "appimage",
+      "deb",
+      "zip"
     ],
     "icon": [
       "icons/32x32.png",
@@ -54,7 +57,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "both"
+      }
+    },
     "externalBin": [],
-    "resources": []
+    "resources": [
+      "binaries/fastapi_server.dist"
+    ]
   }
 }
