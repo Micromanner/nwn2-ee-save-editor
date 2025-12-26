@@ -23,6 +23,7 @@ export interface SpellInfo {
 
   // Class availability
   available_classes: string[];
+  class_id?: number;
 
   // Client-side properties for UI state (matching existing SpellList)
   isLearned?: boolean;

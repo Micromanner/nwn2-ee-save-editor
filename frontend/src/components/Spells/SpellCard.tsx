@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Sparkles, Check } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import NWN2Icon from '@/components/ui/NWN2Icon';
 import { display } from '@/utils/dataHelpers';
 import { parseSpellDescription } from '@/utils/spellParser';
@@ -120,18 +121,23 @@ function SpellCardComponent({
               {!isOwned && onAdd && casterClasses.length > 0 && (
                 <div className="flex items-center gap-2">
                   {casterClasses.length > 1 && (
-                    <select
-                      value={selectedClassIndex}
-                      onChange={(e) => setSelectedClassIndex(Number(e.target.value))}
-                      className="text-xs px-2 py-1 rounded bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] text-[rgb(var(--color-text-primary))]"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {casterClasses.map((cls) => (
-                        <option key={cls.index} value={cls.index}>
-                          {cls.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Select
+                        value={selectedClassIndex.toString()}
+                        onValueChange={(value) => setSelectedClassIndex(Number(value))}
+                      >
+                        <SelectTrigger className="w-[120px] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {casterClasses.map((cls) => (
+                            <SelectItem key={cls.index} value={cls.index.toString()}>
+                              {cls.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
                    <Button
                     variant="outline"
@@ -206,102 +212,12 @@ function SpellCardComponent({
             </div>
           )}
 
-          {!isLoadingDetails && (
-            <>
-              {displaySpell.description && (
-                <div>
-                  <h4 className="text-sm font-semibold text-[rgb(var(--color-text-primary))] mb-2">
-                    Description
-                  </h4>
-                  <p className="text-sm text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-wrap">
-                    {stripHtmlTags(displaySpell.description)}
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                {displaySpell.range && (
-                  <div>
-                    <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-1">
-                      Range
-                    </h5>
-                    <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {display(parsedDescription.range) || display(displaySpell.range)}
-                    </p>
-                  </div>
-                )}
-
-                {displaySpell.cast_time && (
-                  <div>
-                    <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-1">
-                      Casting Time
-                    </h5>
-                    <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {display(displaySpell.cast_time)}
-                    </p>
-                  </div>
-                )}
-
-                {parsedDescription.duration && (
-                  <div>
-                    <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-1">
-                      Duration
-                    </h5>
-                    <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {parsedDescription.duration}
-                    </p>
-                  </div>
-                )}
-
-                {displaySpell.components && (
-                  <div>
-                    <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-1">
-                      Components
-                    </h5>
-                    <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {display(displaySpell.components)}
-                    </p>
-                  </div>
-                )}
-
-                {parsedDescription.save && (
-                  <div>
-                    <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-1">
-                      Saving Throw
-                    </h5>
-                    <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {parsedDescription.save}
-                    </p>
-                  </div>
-                )}
-
-                {parsedDescription.spellResistance && (
-                  <div>
-                    <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-1">
-                      Spell Resistance
-                    </h5>
-                    <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {parsedDescription.spellResistance}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {displaySpell.available_classes && displaySpell.available_classes.length > 0 && (
-                <div>
-                  <h5 className="text-xs font-semibold text-[rgb(var(--color-text-primary))] mb-2">
-                    Available To
-                  </h5>
-                  <div className="flex flex-wrap gap-1">
-                    {displaySpell.available_classes.map((cls, idx) => (
-                      <Badge key={idx} variant="secondary" className="text-xs">
-                        {cls}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+          {!isLoadingDetails && displaySpell.description && (
+            <div className="px-4">
+              <p className="text-sm text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-wrap">
+                {stripHtmlTags(displaySpell.description)}
+              </p>
+            </div>
           )}
         </div>
       )}

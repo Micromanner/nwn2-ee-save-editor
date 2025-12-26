@@ -20,6 +20,9 @@ export interface SpellNavBarProps {
   sortBy: string;
   onSortChange: (value: string) => void;
 
+  selectedClasses: Set<string>;
+  onClassesChange: (classes: Set<string>) => void;
+
   selectedSchools: Set<string>;
   onSchoolsChange: (schools: Set<string>) => void;
 
@@ -35,6 +38,8 @@ export interface SpellNavBarProps {
   hasNext: boolean;
   hasPrevious: boolean;
   onPageChange: (page: number) => void;
+
+  availableClasses?: Array<{name: string; value: string}>;
 }
 
 const SORT_OPTIONS = [
@@ -75,6 +80,8 @@ function SpellNavBarComponent({
   onSearchChange,
   sortBy,
   onSortChange,
+  selectedClasses,
+  onClassesChange,
   selectedSchools,
   onSchoolsChange,
   selectedLevels,
@@ -87,7 +94,18 @@ function SpellNavBarComponent({
   hasNext,
   hasPrevious,
   onPageChange,
+  availableClasses = [],
 }: SpellNavBarProps) {
+
+  const handleClassToggle = (className: string) => {
+    const newClasses = new Set(selectedClasses);
+    if (newClasses.has(className)) {
+      newClasses.delete(className);
+    } else {
+      newClasses.add(className);
+    }
+    onClassesChange(newClasses);
+  };
 
   const handleSchoolToggle = (school: string) => {
     const newSchools = new Set(selectedSchools);
@@ -111,11 +129,12 @@ function SpellNavBarComponent({
 
   const clearFilters = () => {
     onSearchChange('');
+    onClassesChange(new Set());
     onSchoolsChange(new Set());
     onLevelsChange(new Set());
   };
 
-  const hasActiveFilters = searchTerm.length > 0 || selectedSchools.size > 0 || selectedLevels.size > 0;
+  const hasActiveFilters = searchTerm.length > 0 || selectedClasses.size > 0 || selectedSchools.size > 0 || selectedLevels.size > 0;
 
   return (
     <div className="flex flex-col gap-4 bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-lg p-4">
@@ -197,7 +216,7 @@ function SpellNavBarComponent({
 
         <div className="w-[180px]">
           <Select value={sortBy} onValueChange={onSortChange}>
-            <SelectTrigger className="hover:bg-[rgb(var(--color-surface-2))] hover:border-[rgb(var(--color-primary)/0.5)] focus:ring-[rgb(var(--color-primary)/0.2)]">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -222,6 +241,28 @@ function SpellNavBarComponent({
       </div>
 
       <div className="flex flex-col gap-3">
+        {availableClasses.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))] min-w-[60px]">Classes:</span>
+            <div className="flex flex-wrap gap-2">
+              {availableClasses.map(({ name, value }) => (
+                <button
+                  key={value}
+                  onClick={() => handleClassToggle(value)}
+                  className={cn(
+                    'px-3 py-1 rounded-full text-xs font-medium transition-all',
+                    selectedClasses.has(value)
+                      ? 'bg-[rgb(var(--color-primary))] text-white'
+                      : 'bg-[rgb(var(--color-surface-2))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-3))]'
+                  )}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))] min-w-[60px]">Schools:</span>
           <div className="flex flex-wrap gap-2">

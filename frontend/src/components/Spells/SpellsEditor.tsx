@@ -26,6 +26,7 @@ export default function SpellsEditor() {
   const [activeTab, setActiveTab] = useState<SpellTab>('my-spells');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
   const [selectedSchools, setSelectedSchools] = useState<Set<string>>(new Set());
   const [selectedLevels, setSelectedLevels] = useState<Set<number>>(new Set());
 
@@ -49,7 +50,7 @@ export default function SpellsEditor() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm, selectedSchools, selectedLevels]);
+  }, [activeTab, searchTerm, selectedClasses, selectedSchools, selectedLevels]);
 
   useEffect(() => {
     const loadAvailableSpells = async () => {
@@ -69,12 +70,17 @@ export default function SpellsEditor() {
           ? Array.from(selectedLevels).join(',')
           : undefined;
 
+        const classId = selectedClasses.size === 1
+          ? Number(Array.from(selectedClasses)[0])
+          : undefined;
+
         const response = await CharacterAPI.getLegitimateSpells(character.id, {
           page: currentPage,
           limit: SPELLS_PER_PAGE,
           schools,
           levels,
           search: (searchTerm && searchTerm.length >= 3) ? searchTerm : undefined,
+          class_id: classId,
         });
 
         setAvailableSpells(response.spells);
@@ -90,13 +96,21 @@ export default function SpellsEditor() {
     };
 
     loadAvailableSpells();
-  }, [character?.id, activeTab, currentPage, SPELLS_PER_PAGE, selectedSchools, selectedLevels, searchTerm]);
+  }, [character?.id, activeTab, currentPage, SPELLS_PER_PAGE, selectedClasses, selectedSchools, selectedLevels, searchTerm]);
 
   const casterClasses = useMemo(() => {
     if (!spellsData?.spellcasting_classes) return [];
     return spellsData.spellcasting_classes.map((cls: SpellcastingClass) => ({
       index: cls.index,
       name: cls.class_name,
+    }));
+  }, [spellsData]);
+
+  const availableClassFilters = useMemo(() => {
+    if (!spellsData?.spellcasting_classes) return [];
+    return spellsData.spellcasting_classes.map((cls: SpellcastingClass) => ({
+      name: cls.class_name,
+      value: cls.index.toString(),
     }));
   }, [spellsData]);
 
@@ -128,6 +142,13 @@ export default function SpellsEditor() {
   const filterAndSortSpells = useCallback((spells: SpellInfo[]) => {
     let filtered = [...spells];
 
+    if (selectedClasses.size > 0) {
+      const classIds = new Set(Array.from(selectedClasses).map(c => Number(c)));
+      filtered = filtered.filter(spell => {
+        return spell.class_id !== undefined && classIds.has(spell.class_id);
+      });
+    }
+
     if (selectedSchools.size > 0) {
       filtered = filtered.filter(spell => {
         return spell.school_name && selectedSchools.has(spell.school_name);
@@ -152,7 +173,7 @@ export default function SpellsEditor() {
     });
 
     return filtered;
-  }, [selectedSchools, selectedLevels, sortBy]);
+  }, [selectedClasses, selectedSchools, selectedLevels, sortBy]);
 
   const { searchResults: searchedMySpells } = useSpellSearch(allMySpells, searchTerm);
   const filteredMySpells = useMemo(() => filterAndSortSpells(searchedMySpells), [searchedMySpells, filterAndSortSpells]);
@@ -231,6 +252,8 @@ export default function SpellsEditor() {
           onSearchChange={setSearchTerm}
           sortBy={sortBy}
           onSortChange={setSortBy}
+          selectedClasses={selectedClasses}
+          onClassesChange={setSelectedClasses}
           selectedSchools={selectedSchools}
           onSchoolsChange={setSelectedSchools}
           selectedLevels={selectedLevels}
@@ -243,6 +266,7 @@ export default function SpellsEditor() {
           hasNext={false}
           hasPrevious={false}
           onPageChange={() => {}}
+          availableClasses={availableClassFilters}
         />
         <div className="flex items-center justify-center h-64 bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-lg">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
@@ -280,6 +304,8 @@ export default function SpellsEditor() {
           onSearchChange={setSearchTerm}
           sortBy={sortBy}
           onSortChange={setSortBy}
+          selectedClasses={selectedClasses}
+          onClassesChange={setSelectedClasses}
           selectedSchools={selectedSchools}
           onSchoolsChange={setSelectedSchools}
           selectedLevels={selectedLevels}
@@ -292,6 +318,7 @@ export default function SpellsEditor() {
           hasNext={hasNext}
           hasPrevious={hasPrevious}
           onPageChange={handlePageChange}
+          availableClasses={availableClassFilters}
         />
       </div>
 
