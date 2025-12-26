@@ -29,13 +29,27 @@ def get_inventory(
         
         session = char_session
         manager = session.character_manager
+        
+        if manager is None:
+            logger.error("System error: character_manager is None in session")
+            raise HTTPException(status_code=500, detail="Character manager not initialized")
+
         inventory_manager = manager.get_manager('inventory')
+        
+        if inventory_manager is None:
+            logger.error("System error: inventory_manager is None")
+            raise HTTPException(status_code=500, detail="Inventory manager not registered")
+
         summary = inventory_manager.get_inventory_summary()
+        
+        if summary is None:
+            logger.error("inventory_manager.get_inventory_summary() returned None")
+            raise HTTPException(status_code=500, detail="Failed to generate inventory summary")
         
         return InventorySummaryResponse(summary=summary)
         
     except Exception as e:
-        logger.error(f"Failed to get inventory for character {character_id}: {e}")
+        logger.error(f"Failed to get inventory for character {character_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get inventory: {str(e)}"

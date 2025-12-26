@@ -636,7 +636,21 @@ class InventoryManager(EventEmitter):
     
     def get_inventory_summary(self) -> Dict[str, Any]:
         """Get summary of character's inventory"""
-        item_list = self.gff.get('ItemList', [])
+        if self.gff is None:
+            logger.error("InventoryManager error: self.gff is None")
+            return {
+                'total_items': 0,
+                'inventory_items': [],
+                'equipped_items': {},
+                'custom_items': [],
+                'encumbrance': {}
+            }
+
+        try:
+            item_list = self.gff.get('ItemList', [])
+        except Exception as e:
+            logger.error(f"Error accessing ItemList from GFF: {e}")
+            item_list = []
 
         inventory_items = []
         for idx, item in enumerate(item_list):
@@ -704,75 +718,94 @@ class InventoryManager(EventEmitter):
                     'default_slot': self._get_default_equip_slot(base_item_data)
                 })
         
+        try:
+            encumbrance = self.calculate_encumbrance()
+        except Exception as e:
+            logger.error(f"Error calculating encumbrance: {e}")
+            encumbrance = {}
+
         summary = {
             'total_items': len(item_list),
             'inventory_items': inventory_items,
             'equipped_items': {},
             'custom_items': [],
-            'encumbrance': self.calculate_encumbrance()
+            'encumbrance': encumbrance
         }
 
-        for bitmask, item in self._get_raw_equip_item_list():
-            slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
-            if not slot_name:
+        try:
+            raw_equip_list = self._get_raw_equip_item_list()
+        except Exception as e:
+            logger.error(f"Error getting raw equip items: {e}")
+            raw_equip_list = []
+
+        for bitmask, item in raw_equip_list:
+            if item is None:
                 continue
-
-            base_item = item.get('BaseItem', 0)
-
-            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-            is_custom = base_item_data is None
-
-            item_name = self._get_item_name(item)
-
-            decoded_properties = self.get_item_property_descriptions(item)
-
-            description = None
-            localized_desc = item.get('DescIdentified')
-            if localized_desc and isinstance(localized_desc, dict):
-                string_ref = localized_desc.get('string_ref')
-                if string_ref is not None and string_ref != 4294967295:
-                    try:
-                        resolved_desc = self.game_rules_service.rm.get_string(string_ref)
-                        if resolved_desc and not resolved_desc.startswith('{StrRef:'):
-                            description = resolved_desc
-                    except Exception:
-                        pass
-
-            weight = 0.0
-            if base_item_data:
-                try:
-                    tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                    if tenth_lbs > 0:
-                        weight = tenth_lbs / 10.0
-                except (ValueError, TypeError):
-                    weight = 0.0
-
-            value = 0
+            
             try:
-                item_cost = item.get('Cost', 0)
-                modify_cost = item.get('ModifyCost', 0)
-                value = int(item_cost) + int(modify_cost)
-            except (ValueError, TypeError):
+                slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
+                if not slot_name:
+                    continue
+                
+                base_item = item.get('BaseItem', 0)
+
+                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+                is_custom = base_item_data is None
+
+                item_name = self._get_item_name(item)
+
+                decoded_properties = self.get_item_property_descriptions(item)
+
+                description = None
+                localized_desc = item.get('DescIdentified')
+                if localized_desc and isinstance(localized_desc, dict):
+                    string_ref = localized_desc.get('string_ref')
+                    if string_ref is not None and string_ref != 4294967295:
+                        try:
+                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
+                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
+                                description = resolved_desc
+                        except Exception:
+                            pass
+
+                weight = 0.0
+                if base_item_data:
+                    try:
+                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                        if tenth_lbs > 0:
+                            weight = tenth_lbs / 10.0
+                    except (ValueError, TypeError):
+                        weight = 0.0
+
                 value = 0
+                try:
+                    item_cost = item.get('Cost', 0)
+                    modify_cost = item.get('ModifyCost', 0)
+                    value = int(item_cost) + int(modify_cost)
+                except (ValueError, TypeError):
+                    value = 0
 
-            summary['equipped_items'][slot_name] = {
-                'base_item': base_item,
-                'custom': is_custom,
-                'name': item_name,
-                'description': description,
-                'weight': weight,
-                'value': value,
-                'item_data': item,
-                'decoded_properties': decoded_properties,
-                'base_ac': self._get_item_base_ac(item)
-            }
-
-            if is_custom:
-                summary['custom_items'].append({
-                    'slot': slot_name,
+                summary['equipped_items'][slot_name] = {
                     'base_item': base_item,
-                    'name': item_name
-                })
+                    'custom': is_custom,
+                    'name': item_name,
+                    'description': description,
+                    'weight': weight,
+                    'value': value,
+                    'item_data': item,
+                    'decoded_properties': decoded_properties,
+                    'base_ac': self._get_item_base_ac(item)
+                }
+
+                if is_custom:
+                    summary['custom_items'].append({
+                        'slot': slot_name,
+                        'base_item': base_item,
+                        'name': item_name
+                    })
+            except Exception as e:
+                logger.error(f"Error processing equipped item for bitmask {bitmask}: {e}", exc_info=True)
+                continue
 
         return summary
     

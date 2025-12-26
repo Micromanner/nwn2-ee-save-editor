@@ -123,7 +123,7 @@ class ItemPropertyDecoder:
         except Exception as e:
             logger.error(f"Failed to load itempropdef table: {e}")
     
-    def decode_property(self, property_data: Dict[str, Any]) -> Dict[str, Any]:
+    def decode_property(self, property_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Decode a single item property into human-readable information
         
@@ -131,8 +131,10 @@ class ItemPropertyDecoder:
             property_data: Raw property data from GFF
             
         Returns:
-            Decoded property information
+            Decoded property information or None if property is invalid
         """
+        if property_data is None:
+            return None
         property_name = property_data.get('PropertyName', 0)
         subtype = property_data.get('Subtype', 0)
         cost_table = property_data.get('CostTable', 0)
@@ -1027,6 +1029,9 @@ class ItemPropertyDecoder:
         }
         
         for prop in properties_list:
+            if prop is None:
+                continue
+                
             property_name = prop.get('PropertyName', 0)
             subtype = prop.get('Subtype', 0)
             cost_value = prop.get('CostValue', 0)
