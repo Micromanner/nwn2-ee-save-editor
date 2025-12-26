@@ -43,6 +43,7 @@ interface InventoryItem {
   index: number;
   item: Record<string, unknown>;
   base_item: number;
+  base_item_name?: string;
   name: string;
   description?: string;
   weight: number;
@@ -79,6 +80,7 @@ interface InventoryEncumbrance {
 
 interface EquippedItem {
   base_item: number;
+  base_item_name?: string;
   custom: boolean;
   name: string;
   description?: string;
@@ -1062,6 +1064,17 @@ export default function InventoryEditor() {
                     const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
                     const equipData = (inventoryData.data as unknown as LocalInventoryData)?.summary?.equipped_items?.[mappedSlot];
                     return equipData?.description;
+                  }
+                  return undefined;
+                })()}
+                baseItemName={(() => {
+                  if (selectedItemInventoryIndex !== null) {
+                    return inventorySummary?.inventory_items?.[selectedItemInventoryIndex]?.base_item_name;
+                  }
+                  if (selectedItem.equipped && selectedItem.slot) {
+                    const mappedSlot = SLOT_MAPPING[selectedItem.slot.toLowerCase()];
+                    const equipData = (inventoryData.data as unknown as LocalInventoryData)?.summary?.equipped_items?.[mappedSlot];
+                    return equipData?.base_item_name;
                   }
                   return undefined;
                 })()}

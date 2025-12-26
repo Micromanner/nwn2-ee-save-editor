@@ -39,6 +39,7 @@ interface ItemDetailsPanelProps {
   item: Item | null;
   decodedProperties?: DecodedProperty[];
   description?: string;
+  baseItemName?: string;
   weight?: number;
   value?: number;
   baseAc?: number | null;
@@ -56,6 +57,7 @@ export default function ItemDetailsPanel({
   item,
   decodedProperties,
   description,
+  baseItemName,
   weight = 0,
   value = 0,
   baseAc,
@@ -169,9 +171,18 @@ export default function ItemDetailsPanel({
               <h5 className="text-sm font-semibold text-[rgb(var(--color-text-primary))] mb-2">
                 {t('inventory.description')}
               </h5>
-              <p className="text-sm text-[rgb(var(--color-text-muted))] leading-relaxed mt-2 max-h-[100px] overflow-y-auto custom-scrollbar pr-2">
+              <p className="text-sm text-[rgb(var(--color-text-muted))] leading-relaxed mt-2 max-h-[100px] overflow-y-auto custom-scrollbar pr-2 whitespace-pre-line">
                 {description}
               </p>
+            </div>
+          )}
+
+          {baseItemName && (
+            <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4">
+              <div className="text-sm">
+                <span className="text-[rgb(var(--color-text-primary))] font-medium">{t('inventory.baseItem')}: </span>
+                <span className="text-[rgb(var(--color-text-muted))]">{baseItemName}</span>
+              </div>
             </div>
           )}
 
@@ -182,38 +193,13 @@ export default function ItemDetailsPanel({
               </h5>
               <div className="space-y-1 max-h-[135px] overflow-y-auto custom-scrollbar pr-2">
                 {decodedProperties.map((prop, idx) => {
-                  const showDescription = prop.description &&
-                    typeof prop.description === 'string' &&
-                    prop.description.toLowerCase() !== prop.label.toLowerCase() &&
-                    !prop.description.toLowerCase().startsWith(prop.label.toLowerCase());
-
-                  const usesPerDay = (prop as Record<string, unknown>).uses_per_day;
-                  const showUsesPerDay = usesPerDay !== undefined && usesPerDay !== null;
+                  const displayText = prop.description && typeof prop.description === 'string'
+                    ? prop.description
+                    : prop.label;
 
                   return (
-                    <div key={idx} className="flex flex-col text-sm bg-[rgb(var(--color-surface-1)/0.5)] rounded px-2 py-1.5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[rgb(var(--color-text-primary))] font-medium">
-                          {prop.label}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {showUsesPerDay && (
-                            <span className="text-xs text-[rgb(var(--color-text-muted))]">
-                              ({typeof usesPerDay === 'string' ? usesPerDay : `${usesPerDay} ${t('inventory.perDay')}`})
-                            </span>
-                          )}
-                          {prop.bonus_value !== undefined && (
-                            <span className="text-[rgb(var(--color-success))] font-medium">
-                              {prop.bonus_value > 0 ? `+${prop.bonus_value}` : prop.bonus_value}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {showDescription && (
-                        <span className="text-xs text-[rgb(var(--color-text-muted))] mt-0.5">
-                          {prop.description}
-                        </span>
-                      )}
+                    <div key={idx} className="text-sm text-[rgb(var(--color-text-primary))] bg-[rgb(var(--color-surface-1)/0.5)] rounded px-2 py-1.5">
+                      {displayText}
                     </div>
                   );
                 })}

@@ -659,6 +659,10 @@ class InventoryManager(EventEmitter):
                 base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 is_custom = base_item_data is None
 
+                base_item_name = None
+                if base_item_data:
+                    base_item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
+
                 item_name = self._get_item_name(item)
 
                 decoded_properties = self.get_item_property_descriptions(item)
@@ -699,6 +703,7 @@ class InventoryManager(EventEmitter):
                     'index': idx,
                     'item': item,
                     'base_item': base_item,
+                    'base_item_name': base_item_name,
                     'name': item_name,
                     'description': description,
                     'weight': weight,
@@ -752,6 +757,10 @@ class InventoryManager(EventEmitter):
                 base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
                 is_custom = base_item_data is None
 
+                base_item_name = None
+                if base_item_data:
+                    base_item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
+
                 item_name = self._get_item_name(item)
 
                 decoded_properties = self.get_item_property_descriptions(item)
@@ -787,6 +796,7 @@ class InventoryManager(EventEmitter):
 
                 summary['equipped_items'][slot_name] = {
                     'base_item': base_item,
+                    'base_item_name': base_item_name,
                     'custom': is_custom,
                     'name': item_name,
                     'description': description,
