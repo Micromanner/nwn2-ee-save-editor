@@ -5,7 +5,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { formatNumber } from '@/utils/dataHelpers';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Edit } from 'lucide-react';
 
 export interface DecodedProperty {
   property_id: number;
@@ -45,6 +45,7 @@ interface ItemDetailsPanelProps {
   rawData?: Record<string, unknown>;
   onEquip?: () => void;
   onUnequip?: () => void;
+  onEdit?: () => void;
   onDestroy?: () => void;
   isEquipping?: boolean;
   canEquip?: boolean;
@@ -61,6 +62,7 @@ export default function ItemDetailsPanel({
   rawData,
   onEquip,
   onUnequip,
+  onEdit,
   onDestroy,
   isEquipping = false,
   canEquip = false,
@@ -327,7 +329,17 @@ export default function ItemDetailsPanel({
               </Button>
             )}
 
-            {/* Secondary Action: Destroy */}
+            {/* Secondary Action: Edit & Destroy */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="flex-shrink-0 w-10 border-[rgb(var(--color-primary)/0.5)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)] hover:border-[rgb(var(--color-primary))]"
+              onClick={onEdit}
+              title="Edit Item"
+            >
+              <Edit className="w-5 h-5" />
+            </Button>
+
             <Button
               variant="outline"
               size="icon"

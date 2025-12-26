@@ -386,3 +386,49 @@ class UpdateGoldResponse(BaseModel):
     gold: int
     message: str
     has_unsaved_changes: bool = True
+
+
+class UpdateItemRequest(BaseModel):
+    """Request to update an item in inventory or equipment"""
+    item_index: Optional[int] = Field(None, description="Index in ItemList if in inventory")
+    slot: Optional[str] = Field(None, description="Slot name if equipped")
+    item_data: Dict[str, Any] = Field(..., description="Full GFF item data")
+
+
+class UpdateItemResponse(BaseModel):
+    """Response after updating an item"""
+    success: bool
+    message: str
+    has_unsaved_changes: bool = True
+
+
+class AddItemByBaseTypeRequest(BaseModel):
+    """Request to add a new item by base type ID"""
+    base_item_id: int = Field(..., description="Base item ID from baseitems.2da")
+
+
+class PropertyMetadata(BaseModel):
+    """Metadata for a single property type"""
+    id: int
+    label: str
+    description: str
+    has_subtype: bool
+    has_cost_table: bool
+    has_param1: bool
+    subtype_options: Optional[Dict[int, str]] = None
+    cost_table_options: Optional[Dict[int, str]] = None
+    param1_options: Optional[Dict[int, str]] = None
+
+
+class ItemEditorMetadataResponse(BaseModel):
+    """Metadata for the item editor UI"""
+    property_types: List[PropertyMetadata]
+    abilities: Dict[int, str]
+    skills: Dict[int, str]
+    damage_types: Dict[int, str]
+    alignment_groups: Dict[int, str]
+    racial_groups: Dict[int, str]
+    saving_throws: Dict[int, str]
+    immunity_types: Dict[int, str]
+    classes: Dict[int, str]
+    spells: Dict[int, str]

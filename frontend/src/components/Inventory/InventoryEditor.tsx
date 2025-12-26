@@ -5,12 +5,15 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { Plus, X, Search } from 'lucide-react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
 import ItemDetailsPanel from './ItemDetailsPanel';
 import InventoryCharacterSummary from './InventoryCharacterSummary';
 import InventorySidebarFooter from './InventorySidebarFooter';
+import ItemTemplateSelector from './ItemTemplateSelector';
+import ItemPropertyEditor from './ItemPropertyEditor';
 import { InventoryFilters, ItemTypeFilter, ItemSortOption, StatusFilter } from './InventoryFilters';
 import { useInventorySearch } from '@/hooks/useInventorySearch';
 import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor, DragStartEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
@@ -217,6 +220,8 @@ export default function InventoryEditor() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{index: number; name: string; isPlot: boolean} | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [showPropertyEditor, setShowPropertyEditor] = useState(false);
 
   // Build searchable items list with indices for filtering
   const inventoryItemsWithIndices = useMemo(() => {
@@ -436,6 +441,42 @@ export default function InventoryEditor() {
   const cancelDelete = () => {
     setShowDeleteConfirm(false);
     setItemToDelete(null);
+  };
+
+  const handleAddByBaseType = async (baseItemId: number) => {
+    if (!character?.id) return;
+    try {
+      const response = await inventoryAPI.addItemByBaseType(character.id, { base_item_id: baseItemId });
+      if (response.success) {
+        showToast(response.message, 'success');
+        await inventoryData.load();
+      } else {
+        showToast(response.message, 'error');
+      }
+    } catch (error) {
+      showToast(`Failed to add item: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleUpdateItem = async (updatedGffData: any) => {
+    if (!character?.id) return;
+    try {
+      const response = await inventoryAPI.updateItem(character.id, {
+        item_index: selectedItemInventoryIndex ?? undefined,
+        slot: selectedItem?.equipped ? SLOT_MAPPING[selectedItem.slot?.toLowerCase() || ''] : undefined,
+        item_data: updatedGffData
+      });
+
+      if (response.success) {
+        showToast(response.message, 'success');
+        await inventoryData.load();
+        await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
+      } else {
+        showToast(response.message, 'error');
+      }
+    } catch (error) {
+      showToast(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
   };
 
   // Get default equip slot for selected inventory item from backend data
@@ -898,6 +939,15 @@ export default function InventoryEditor() {
                 <div className="min-w-0 h-full flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
+                    <Button 
+                      onClick={() => setShowTemplateSelector(true)}
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1 border-[rgb(var(--color-primary)/0.5)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)]"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Item
+                    </Button>
                   </div>
 
                   <InventoryFilters
@@ -1051,6 +1101,7 @@ export default function InventoryEditor() {
                 rawData={selectedItemRawData || undefined}
                 onEquip={() => canEquipSelectedItem() && getSelectedItemDefaultSlot() ? handleEquipItem(selectedItemRawData!, getSelectedItemDefaultSlot()!, selectedItemInventoryIndex) : undefined}
                 onUnequip={() => selectedItem.equipped && selectedItem.slot && getEquippedItemForSlot(selectedItem.slot) ? handleUnequipItem(selectedItem.slot) : undefined}
+                onEdit={() => setShowPropertyEditor(true)}
                 onDestroy={selectedItemInventoryIndex !== null ? handleDeleteItem : undefined}
                 isEquipping={isEquipping}
                 canEquip={canEquipSelectedItem()}
@@ -1070,15 +1121,42 @@ export default function InventoryEditor() {
           </div>
           
           </div>
+
+          {/* Modals and Overlays */}
+        {showTemplateSelector && (
+          <ItemTemplateSelector
+            isOpen={showTemplateSelector}
+            onClose={() => setShowTemplateSelector(false)}
+            onSelect={handleAddByBaseType}
+            characterId={character?.id}
+          />
+        )}
+
+        {showPropertyEditor && selectedItemRawData && (
+          <ItemPropertyEditor
+            isOpen={showPropertyEditor}
+            onClose={() => setShowPropertyEditor(false)}
+            onSave={handleUpdateItem}
+            itemData={selectedItemRawData}
+            characterId={character?.id}
+            itemIndex={selectedItemInventoryIndex}
+            slot={selectedItem?.equipped ? selectedItem.slot : null}
+          />
+        )}
       </div>
 
       {showDeleteConfirm && itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <Card className="max-w-md w-full mx-4">
+          <Card className="max-w-md w-full mx-4 outline-none">
             <CardContent className="p-6">
-              <h3 className="text-lg font-semibold mb-4">
-                {t('inventory.confirmDeleteTitle')}
-              </h3>
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-semibold">
+                  {t('inventory.confirmDeleteTitle')}
+                </h3>
+                <Button variant="ghost" size="sm" onClick={cancelDelete} className="p-1 h-auto">
+                    <X className="w-5 h-5 text-[rgb(var(--color-text-muted))]" />
+                </Button>
+              </div>
               <p className="text-sm text-[rgb(var(--color-text-muted))] mb-2">
                 {t('inventory.deleteItemName')}: <span className="font-semibold text-[rgb(var(--color-text))]">{itemToDelete.name}</span>
               </p>
@@ -1106,6 +1184,7 @@ export default function InventoryEditor() {
         </div>
       )}
      </div>
+
       <DragOverlay dropAnimation={null}>
         {activeDragItem ? (
           <div className="w-12 h-12 rounded border-2 border-[rgb(var(--color-primary))] bg-[rgb(var(--color-surface-3))] shadow-2xl flex items-center justify-center opacity-90 z-50 cursor-grabbing pointer-events-none">

@@ -5,11 +5,10 @@ Decodes NWN2 item properties using the full itempropdef.2da table data.
 Maps PropertyName IDs to human-readable descriptions and bonus calculations.
 """
 
+
 from typing import Dict, List, Any, Optional, Tuple
 from loguru import logger
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-
-# Using global loguru logger
 
 
 class ItemPropertyDecoder:
@@ -25,17 +24,87 @@ class ItemPropertyDecoder:
         self.rules_service = rules_service
         self._property_cache = {}
         self._subtype_caches = {}
-        
-        # Initialize decoder mappings
-        self._init_property_mappings()
-    
-    def _init_property_mappings(self):
-        """Initialize property type mappings and caches"""
-        # Cache commonly used mappings
         self._ability_map = {0: 'Str', 1: 'Dex', 2: 'Con', 3: 'Int', 4: 'Wis', 5: 'Cha'}
         self._save_map = {0: 'fortitude', 1: 'reflex', 2: 'will'}
         
-        # Load itempropdef data
+        # Unified context lists for data-driven subtype resolution
+        # Keys correspond to the mapped values in subtype_map
+        self._context_lists = {
+            'abilities': self._ability_map,
+            'saving_throws': {0: 'Fortitude', 1: 'Reflex', 2: 'Will'},
+            'save_elements': self._get_all_save_elements(),
+            'damage_types': self._get_all_damage_types(),
+            'immunity_types': self._get_all_immunity_types(),
+            'spells': self._get_iprp_table_options('iprp_spells'),
+            'feats': self._get_iprp_table_options('iprp_feats'),
+            'alignments': self._get_iprp_table_options('iprp_alignment'),
+            'alignment_groups': {0: 'Good', 1: 'Evil', 2: 'Lawful', 3: 'Chaotic'},
+            'racial_groups': self._get_iprp_table_options('racialtypes'),
+            'visual_effects': self._get_iprp_table_options('iprp_visualfx'),
+            'light': {
+                0: 'Dim (5m)', 1: 'Bright (5m)', 2: 'Dim (10m)', 3: 'Bright (10m)', 
+                4: 'Dim (15m)', 5: 'Bright (15m)', 6: 'Dim (20m)', 7: 'Bright (20m)'
+            }
+        }
+        
+        self._init_property_mappings()
+        
+        # Property-specific overrides to fix known 2DA discrepancies or suppress noise
+        # format: prop_id: { 'subtype_table': str, 'cost_table': str, 'param1_table': str, 'suppress_p1': bool, 'suppress_cost': bool }
+        self.property_overrides = {
+            # Base Game Overrides - Correcting Table Mappings
+            0: {'cost_table': 'iprp_bonuscost', 'force_cost_idx': 1, 'suppress_p1': True},      # Ability Bonus: Value is in Cost
+            1: {'suppress_p1': True},      # AC Bonus: P1 (Abilities) is junk
+            6: {'suppress_p1': True},      # Enhancement Bonus: P1 (Abilities) is junk
+            10: {'suppress_p1': True},    # Attack/Damage Penalty: Value is in P1->Cost
+            11: {'cost_table': 'iprp_weightcost', 'force_cost_idx': 10, 'suppress_p1': True}, # Weight Reduction: Fix table index (10=iprp_weightcost)
+            # 16: Damage Bonus - Now handled by logic (Param1->CostTable, suppress Param1)
+            81: {'cost_table': 'iprp_weightinc', 'force_cost_idx': 30, 'suppress_p1': True}, # Weight Increase: Fix table (30=iprp_weightinc)
+            
+            # Properties with misaligned Value tables (using specific tables instead of junk 2DA indices)
+            45: {'param1_table': 'iprp_bonuscost'}, # Mighty: use bonuscost (+1 to +20)
+            51: {'suppress_p1': True},      # Regeneration: P1 (Abilities) is junk, uses Cost for value
+            55: {'param1_table': 'iprp_skillcost'}, # Thieves' Tools: use skillcost (+1 to +50)
+            56: {'param1_table': 'iprp_bonuscost'}, # Attack Bonus: use bonuscost
+            63: {'suppress_cost': True, 'suppress_p1': True}, # Class Limitation: metadata handled by Subtype
+            66: {'param1_table': 'iprp_bonushp'},   # Bonus Hitpoints: use bonushp table
+            67: {'param1_table': 'iprp_meleecost'}, # Regeneration Vampiric: use meleecost (+1 to +20)
+            84: {'suppress_p1': True},    # Arcane Spell Failure: use P1 (-50% to +50%), mapped to Cost
+            
+            # Pure Binary Toggles - Suppressing all options to keep UI flat
+            14: {'suppress_p1': True, 'suppress_cost': True}, # Boomerang
+            25: {'suppress_p1': True, 'suppress_cost': True}, # Dancing
+            26: {'suppress_p1': True, 'suppress_cost': True}, # Darkvision
+            30: {'suppress_p1': True, 'suppress_cost': True}, # Double Stack
+            31: {'suppress_p1': True, 'suppress_cost': True}, # Half-Elves
+            32: {'suppress_p1': True, 'suppress_cost': True}, # Enhanced Container
+            35: {'suppress_p1': True, 'suppress_cost': True}, # Haste
+            36: {'suppress_p1': True, 'suppress_cost': True}, # Holy Avenger
+            38: {'suppress_p1': True, 'suppress_cost': True}, # Improved Evasion
+            43: {'suppress_p1': True, 'suppress_cost': True}, # Keen
+            46: {'suppress_p1': True, 'suppress_cost': True}, # Mind Blank
+            47: {'suppress_p1': True, 'suppress_cost': True}, # No Combat Damage
+            61: {'suppress_p1': True, 'suppress_cost': True}, # Unlimited Ammunition
+            68: {'suppress_p1': True, 'suppress_cost': True}, # Vorpal
+            69: {'suppress_p1': True, 'suppress_cost': True}, # Wounding
+            71: {'suppress_p1': True, 'suppress_cost': True}, # True Seeing
+            75: {'suppress_p1': True, 'suppress_cost': True}, # Freedom of Movement
+            
+            # Complex Properties with specific UI needs
+            12: {'suppress_cost': True, 'suppress_p1': True}, # Bonus Feat: only needs Subtype
+            44: {'suppress_cost': True, 'suppress_p1': True}, # Light: only needs Subtype
+            63: {'suppress_cost': True, 'suppress_p1': True}, # Use Limitation Class: only needs Subtype
+            76: {'suppress_cost': True, 'suppress_p1': True}, # Poison: only needs Subtype
+            77: {'suppress_p1': True},                         # Monster Damage: only needs Subtype
+            22: {'suppress_cost': True},                       # Damage Reduction: Subtype is type, P1 is amount
+            23: {'suppress_p1': True},                         # Damage Resistance: Subtype is type, P1->Cost is amount
+            87: {'suppress_p1': True, 'suppress_cost': True},
+            88: {'suppress_p1': True, 'suppress_cost': True},
+            39: {'suppress_subtype': True},
+        }
+    
+    def _init_property_mappings(self):
+        """Initialize property type mappings and caches"""
         try:
             itempropdef_table = self.rules_service.get_table('itempropdef')
             if itempropdef_table:
@@ -71,7 +140,6 @@ class ItemPropertyDecoder:
         param1 = property_data.get('Param1', 0)
         param1_value = property_data.get('Param1Value', 0)
         
-        # Get property definition
         prop_def = self._property_cache.get(property_name)
         if not prop_def:
             return {
@@ -80,20 +148,20 @@ class ItemPropertyDecoder:
                 'description': 'Unknown property type',
                 'subtype': subtype,
                 'cost_value': cost_value,
+                'param1': param1,
+                'param1_value': param1_value,
                 'raw_data': property_data,
                 'decoded': False
             }
         
-        # Decode based on known property types
+        # Decode based on property types
         decoded_info = self._decode_specific_property(
             property_name, prop_def, subtype, cost_value, param1, param1_value
         )
 
-        # If decoder returned None (e.g., SR 0), skip this property
         if decoded_info is None:
             return None
 
-        # Add common fields
         decoded_info.update({
             'property_id': property_name,
             'raw_data': property_data,
@@ -110,7 +178,6 @@ class ItemPropertyDecoder:
         label = prop_def['label'].lower()
         base_description = prop_def['description']
 
-        # Property ID 0: Ability Bonus
         if prop_id == 0:
             ability_name = self._ability_map.get(subtype, f'Unknown Ability {subtype}')
             return {
@@ -121,7 +188,6 @@ class ItemPropertyDecoder:
                 'bonus_value': cost_value
             }
         
-        # Property ID 1: AC Bonus  
         elif prop_id == 1:
             return {
                 'label': f'AC +{cost_value}',
@@ -130,7 +196,6 @@ class ItemPropertyDecoder:
                 'bonus_value': cost_value
             }
         
-        # Property ID 6: Enhancement Bonus
         elif prop_id == 6:
             return {
                 'label': f'Enhancement +{cost_value}',
@@ -139,7 +204,6 @@ class ItemPropertyDecoder:
                 'bonus_value': cost_value
             }
         
-        # Property ID 15: Cast Spell
         elif prop_id == 15:
             spell_data = self._get_spell_data(subtype)
             uses_data = self._get_charge_uses(cost_value)
@@ -158,23 +222,17 @@ class ItemPropertyDecoder:
                 'uses_per_day': uses_label
             }
         
-        # Property ID 40/41: Saving Throw Bonuses
         elif prop_id in [40, 41]:
             if prop_id == 40:
-                # Property 40 uses iprp_saveelement subtypes
-                # Subtype 0 = Universal (applies to Fort/Ref/Will)
-                # Subtype 5 = Disease resistance (specific save type, NOT universal)
-                # Other subtypes = Fear, Poison, etc (specific save types)
                 save_element_name = self._get_save_element_name(subtype)
-
-                if subtype == 0:  # Universal - applies to all three main saves
+                if subtype == 0:
                     return {
                         'label': f'Saves +{cost_value}',
                         'description': f'{base_description} +{cost_value} to all saving throws',
                         'bonus_type': 'saves_all',
                         'bonus_value': cost_value
                     }
-                else:  # Specific element (disease, fear, poison, etc) - does NOT apply to main saves
+                else:
                     return {
                         'label': f'Saves +{cost_value} vs {save_element_name}',
                         'description': f'{base_description} +{cost_value} vs {save_element_name}',
@@ -183,7 +241,6 @@ class ItemPropertyDecoder:
                         'bonus_value': cost_value
                     }
             else:
-                # Property 41 uses iprp_savingthrow subtypes (Fort/Ref/Will)
                 save_name = self._save_map.get(subtype)
                 if save_name:
                     return {
@@ -201,7 +258,6 @@ class ItemPropertyDecoder:
                         'bonus_value': cost_value
                     }
         
-        # Property ID 52: Skill Bonus
         elif prop_id == 52:
             skill_name = self._get_skill_name(subtype)
             return {
@@ -213,7 +269,6 @@ class ItemPropertyDecoder:
                 'bonus_value': cost_value
             }
         
-        # Property ID 56-59: Attack Bonuses
         elif prop_id in [56, 57, 58, 59]:
             if prop_id == 56:
                 return {
@@ -223,7 +278,6 @@ class ItemPropertyDecoder:
                     'bonus_value': cost_value
                 }
             else:
-                # Conditional attack bonuses vs alignment/race
                 target_type = self._decode_target_type(prop_id, subtype)
                 return {
                     'label': f'Attack +{cost_value} vs {target_type}',
@@ -233,18 +287,18 @@ class ItemPropertyDecoder:
                     'bonus_value': cost_value
                 }
         
-        # Property ID 16: Damage Bonus
         elif prop_id == 16:
             damage_type = self._get_damage_type_name(subtype)
+            val = cost_value if cost_value > 0 else param1_value
+            amount_label = self._get_iprp_table_options('iprp_damagecost').get(val, f'+{val}')
             return {
-                'label': f'{damage_type.title()} Damage +{cost_value}',
-                'description': f'{base_description} +{cost_value} {damage_type} damage',
+                'label': f'{damage_type.title()} Damage {amount_label}',
+                'description': f'{base_description} {amount_label} {damage_type} damage',
                 'bonus_type': 'damage',
                 'damage_type': damage_type,
-                'bonus_value': cost_value
+                'bonus_value': amount_label
             }
         
-        # Property ID 23: Damage Resistance
         elif prop_id == 23:
             damage_type = self._get_damage_type_name(subtype)
             resist_value = self._get_resistance_value(cost_value)
@@ -256,7 +310,6 @@ class ItemPropertyDecoder:
                 'resistance_value': resist_value
             }
         
-        # Property ID 37: Immunity
         elif prop_id == 37:
             immunity_type = self._get_immunity_type_name(subtype)
             return {
@@ -267,9 +320,9 @@ class ItemPropertyDecoder:
                 'immunity_id': subtype
             }
 
-        # Property ID 39: Spell Resistance
         elif prop_id == 39:
-            actual_sr = 10 + (cost_value * 2)
+            sr_options = self._get_iprp_table_options('iprp_srcost')
+            actual_sr = sr_options.get(cost_value, str(10 + (cost_value * 2)))
             return {
                 'label': f'Spell Resistance {actual_sr}',
                 'description': f'{base_description} {actual_sr} spell resistance',
@@ -277,7 +330,6 @@ class ItemPropertyDecoder:
                 'resistance_value': actual_sr
             }
         
-        # Property ID 44: Light
         elif prop_id == 44:
             light_data = self._get_light_data(cost_value, param1)
             brightness = light_data.get('brightness', 'Normal')
@@ -295,7 +347,6 @@ class ItemPropertyDecoder:
                 'light_color': color
             }
 
-        # Property ID 70: Trap
         elif prop_id == 70:
             trap_strength = {0: 'Minor', 1: 'Average', 2: 'Strong', 3: 'Deadly', 4: 'Epic'}
             trap_types = {
@@ -314,7 +365,6 @@ class ItemPropertyDecoder:
                 'trap_strength': strength
             }
 
-        # Property ID 75: Freedom of Movement
         elif prop_id == 75:
             return {
                 'label': 'Freedom of Movement',
@@ -323,7 +373,6 @@ class ItemPropertyDecoder:
                 'immunity_type': 'movement_effects'
             }
         
-        # Property ID 92: Damage Vulnerability
         elif prop_id == 92:
             damage_type = self._get_damage_type_name(subtype)
             vuln_value = self._get_vulnerability_value(cost_value)
@@ -335,7 +384,6 @@ class ItemPropertyDecoder:
                 'vulnerability_value': vuln_value
             }
 
-        # Property ID 90: Damage Reduction (Modern NWN2 system)
         elif prop_id == 90:
             bypass_type = self._decode_dr_bypass(param1)
             return {
@@ -346,7 +394,6 @@ class ItemPropertyDecoder:
                 'dr_bypass': bypass_type
             }
 
-        # Property ID 63: Use Limitation - Class Specific
         elif prop_id == 63:
             class_name = self._get_class_name(subtype)
             return {
@@ -358,7 +405,6 @@ class ItemPropertyDecoder:
                 'class_name': class_name
             }
 
-        # Property ID 13: Bonus Spell Slots
         elif prop_id == 13:
             class_name = self._get_class_name(subtype)
             spell_level_ordinal = self._get_ordinal(cost_value)
@@ -371,7 +417,6 @@ class ItemPropertyDecoder:
                 'spell_level': cost_value
             }
 
-        # Property ID 27: Decreased Ability Score
         elif prop_id == 27:
             ability_name = self._ability_map.get(subtype, f'Unknown Ability {subtype}')
             return {
@@ -382,7 +427,6 @@ class ItemPropertyDecoder:
                 'penalty_value': -cost_value
             }
 
-        # Generic decode for unknown properties
         else:
             return self._generic_decode(prop_def, subtype, cost_value, param1)
     
@@ -427,54 +471,26 @@ class ItemPropertyDecoder:
 
     def _get_immunity_type_name(self, immunity_id: int) -> str:
         """Get immunity type name from iprp_immunity.2da"""
-        immunity_types = {
-            0: 'Backstab',
-            1: 'Level/Ability Drain',
-            2: 'Mind-Affecting Spells',
-            3: 'Poison',
-            4: 'Disease',
-            5: 'Fear',
-            6: 'Knockdown',
-            7: 'Paralysis',
-            8: 'Critical Hits',
-            9: 'Death Magic'
-        }
-        return immunity_types.get(immunity_id, f'Immunity {immunity_id}')
+        options = self._get_iprp_table_options('iprp_immunity')
+        if options and immunity_id in options:
+            return options[immunity_id]
+        return f'Immunity {immunity_id}'
 
     def _get_save_element_name(self, element_id: int) -> str:
         """Get save element name from iprp_saveelement ID"""
-        element_names = {
-            0: 'Universal',
-            1: 'Acid',
-            2: 'Backstab',
-            3: 'Cold',
-            4: 'Death',
-            5: 'Disease',
-            6: 'Divine',
-            7: 'Electrical',
-            8: 'Fear',
-            9: 'Fire',
-            10: 'Illusion',
-            11: 'Mind-Affecting',
-            12: 'Negative Energy',
-            13: 'Poison',
-            14: 'Positive Energy',
-            15: 'Sonic',
-            16: 'Traps',
-            17: 'Spells',
-            18: 'Law',
-            19: 'Chaos',
-            20: 'Good',
-            21: 'Evil'
-        }
-        return element_names.get(element_id, f'Element {element_id}')
+        options = self._get_iprp_table_options('iprp_saveelement')
+        if options and element_id in options:
+            label = options[element_id]
+            # Clean up the label which often includes "Saving Throw: " prefix in 2DA
+            return label.replace('Saving Throw: ', '').replace('Save:', '').strip()
+        return f'Element {element_id}'
     
     def _decode_target_type(self, prop_id: int, subtype: int) -> str:
         """Decode target type for conditional bonuses"""
-        if prop_id == 57:  # vs Alignment Group
+        if prop_id == 57:
             alignment_groups = {0: 'Good', 1: 'Evil', 2: 'Lawful', 3: 'Chaotic'}
             return alignment_groups.get(subtype, f'Alignment {subtype}')
-        elif prop_id == 58:  # vs Racial Group  
+        elif prop_id == 58:
             try:
                 race_data = self.rules_service.get_by_id('racialtypes', subtype)
                 if race_data:
@@ -485,24 +501,23 @@ class ItemPropertyDecoder:
         return f'Target {subtype}'
     
     def _get_damage_type_name(self, damage_type_id: int) -> str:
-        """Get damage type name from ID"""
-        damage_types = {
-            0: 'bludgeoning',
-            1: 'piercing', 
-            2: 'slashing',
-            3: 'subdual',
-            4: 'physical',
-            5: 'magical',
-            6: 'acid',
-            7: 'cold',
-            8: 'divine',
-            9: 'electrical',
-            10: 'fire',
-            11: 'negative',
-            12: 'positive',
-            13: 'sonic'
-        }
-        return damage_types.get(damage_type_id, f'type_{damage_type_id}')
+        """Get damage type name from ID using iprp_damagetype.2da"""
+        options = self._get_iprp_table_options('iprp_damagetype')
+        if options and damage_type_id in options:
+            return options[damage_type_id].lower()
+        return f'type_{damage_type_id}'
+        
+    def _get_all_save_elements(self) -> Dict[int, str]:
+        """Return all save element types mapped by ID"""
+        return self._get_iprp_table_options('iprp_saveelement') or {}
+
+    def _get_all_damage_types(self) -> Dict[int, str]:
+        """Return all damage types mapped by ID"""
+        return self._get_iprp_table_options('iprp_damagetype') or {}
+
+    def _get_all_immunity_types(self) -> Dict[int, str]:
+        """Return all immunity types mapped by ID"""
+        return self._get_iprp_table_options('iprp_immunity') or {}
 
     def _get_spell_data(self, spell_row_id: int) -> Dict[str, Any]:
         """Look up spell data from iprp_spells.2da"""
@@ -627,100 +642,472 @@ class ItemPropertyDecoder:
         """Decode all properties in a list"""
         decoded = [self.decode_property(prop) for prop in properties_list]
         return [p for p in decoded if p is not None]
+
+    def _resolve_indexed_column(self, prop_def: Dict[str, Any], column_name: str, preferred_table: str) -> Optional[int]:
+        """Extract an integer index from a 2DA column, resolving names back to indices if needed"""
+        val = field_mapper.get_field_value(prop_def, column_name)
+        if val is None or str(val) == '****':
+            return None
+            
+        try:
+            f_val = float(val)
+            if not f_val.is_integer():
+                return None
+            return int(f_val)
+        except (ValueError, TypeError):
+            pass
+            
+        if isinstance(val, str):
+            mapping_tables = [preferred_table]
+            other = 'iprp_paramtable' if preferred_table == 'iprp_costtable' else 'iprp_costtable'
+            mapping_tables.append(other)
+            
+            for m_table in mapping_tables:
+                table = self.rules_service.get_table(m_table)
+                if table:
+                    target = val.lower()
+                    for i, row in enumerate(table):
+                        if not row: continue
+                        name = str(field_mapper.get_field_value(row, 'Name') or '').lower()
+                        resref = str(field_mapper.get_field_value(row, 'TableResRef') or '').lower()
+                        if name == target or resref == target:
+                            return i
+        return None
+
+    def get_editor_property_metadata(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate metadata for the item editor UI based on itempropdef.2da"""
+        metadata = []
+        prop_defs = self.rules_service.get_table('itempropdef')
+        
+        self.subtype_map = {
+            'ability': 'abilities',
+            'decreaseabilityscore': 'abilities',
+            'abilitybonus': 'abilities',
+            'skill': 'skills',
+            'decreasedskill': 'skills',
+            'castspell': 'spells',
+            'spellimmunity_specific': 'spells',
+            'onhitcastspell': 'spells',
+            'bonusfeats': 'feats',
+            'damagetype': 'damage_types',
+            'armordamagetype': 'damage_types',
+            'damageresist': 'damage_types',
+            'damageimmunity_fixed': 'damage_types',
+            'damageimmunity': 'damage_types',
+            'damagepenalty': 'damage_types',
+            'damage_vulnerability': 'damage_types',
+            'damage_vulnerability_fixed': 'damage_types',
+            'damagemelee': 'damage_types',
+            'damageranged': 'damage_types',
+            'damage': 'damage_types',
+            'damagereduced': 'damage_types',
+            'damagenone': 'damage_types',
+            'damage_reduction': 'damage_types',
+            'damagereduction': 'damage_types',
+            'massive_criticals': 'damage_types',
+            'saveselement': 'save_elements',
+            'improvedsavingthrows': 'save_elements',
+            'reducedsavingthrows': 'save_elements',
+            'savingthrow': 'saving_throws',
+            'improvedsavingthrowsspecific': 'saving_throws',
+            'reducedspecificsavingthrow': 'saving_throws',
+            'reducedspecificsaving_throw': 'saving_throws',
+            'immunity': 'immunity_types',
+            'armorracinggroup': 'racial_groups',
+            'armorracialgroup': 'racial_groups',
+            'enhancementracialgroup': 'racial_groups',
+            'damageracialgroup': 'racial_groups',
+            'attackbonusracialgroup': 'racial_groups',
+            'uselimitationracial': 'racial_groups',
+            'damageracialtype': 'racial_groups',
+            'racialtype': 'racial_groups',
+            'racialtypes': 'racial_groups',
+            'armoralignmentgroup': 'alignment_groups',
+            'damagealignmentgroup': 'alignment_groups',
+            'enhancementalignmentgroup': 'alignment_groups',
+            'attackbonusalignmentgroup': 'alignment_groups',
+            'uselimitationalignmentgroup': 'alignment_groups',
+            'armorspecificalignment': 'alignments',
+            'damagespecificalignment': 'alignments',
+            'enhancementspecificalignment': 'alignments',
+            'attackbonusspecificalignment': 'alignments',
+            'uselimitationspecificalignment': 'alignments',
+            'specificalignment': 'alignments',
+            'uselimitationclass': 'classes',
+            'classes': 'classes',
+            'light': 'light',
+            'improvedmagicresist': 'iprp_srcost',
+            'singlebonusspellofle': 'classes'
+        }
+
+        label_overrides = {
+            12: "Bonus Feat",
+            15: "Cast Spell",
+            39: "Spell Resistance",
+            52: "Skill Bonus",
+            68: "Vorpal",
+            69: "Wounding",
+            72: "On Monster Hit",
+            73: "Turn Resistance",
+            74: "Massive Criticals",
+            75: "Freedom of Movement",
+            76: "Poison",
+            77: "Monster Damage",
+            78: "Immunity: Spells by Level",
+            79: "Special Walk",
+            80: "Healer's Kit",
+            81: "Weight Increase",
+            83: "Visual Effect",
+            84: "Arcane Spell Failure",
+            85: "Arrow Catching",
+            86: "Bashing (Shield Bash)",
+            87: "Animated (Shield)",
+            88: "Wild (Armor/Shield)",
+            89: "Etherealness",
+            90: "Damage Reduction",
+            91: "Immunity: Damage Type",
+            92: "Damage Vulnerability"
+        }
+
+        for prop_id, prop_def in enumerate(prop_defs):
+            if not prop_def: continue
+            
+            overrides = self.property_overrides.get(prop_id, {})
+            original_label = field_mapper.get_field_value(prop_def, 'Label')
+            if not original_label or original_label == '****' or original_label == 'None':
+                name_val = field_mapper.get_field_value(prop_def, 'Name')
+                if isinstance(name_val, int):
+                    original_label = self.rules_service.rm.get_string(name_val)
+                else:
+                    original_label = name_val if name_val != '****' else f'Property {prop_id}'
+            
+            if not original_label or original_label.lower().startswith('del_') or original_label.upper() == 'DELETED' or original_label.lower() == 'padding':
+                continue
+            
+            # Additional filter for SubTypeResRef == 'padding'
+            subtype_ref = field_mapper.get_field_value(prop_def, 'SubTypeResRef', '').lower()
+            if subtype_ref == 'padding':
+                continue
+
+            clean_label = original_label.replace('Property_', '').replace('_', ' ')
+            if prop_id in label_overrides:
+                clean_label = label_overrides[prop_id]
+
+            # Subtype logic
+            subtype_ref = field_mapper.get_field_value(prop_def, 'SubTypeResRef', '').lower()
+            mapping_val = self.subtype_map.get(subtype_ref, subtype_ref)
+            
+            if prop_id in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 17, 18, 19, 20, 21, 23, 24, 27, 28, 29, 39, 40, 41, 44, 45, 48, 49, 50, 52, 53, 56, 57, 58, 59, 60, 66, 67, 70, 73, 74, 76, 77, 78, 80, 81, 82, 84, 85, 91, 92]:
+                cost_table_idx = self._resolve_indexed_column(prop_def, 'Param1ResRef', 'iprp_costtable')
+                param1_idx = None
+            else:
+                cost_table_idx = self._resolve_indexed_column(prop_def, 'CostTableResRef', 'iprp_costtable')
+                param1_idx = self._resolve_indexed_column(prop_def, 'Param1ResRef', 'iprp_paramtable')
+
+            # 2. Secondary table index (Param1)
+
+            # FINAL OVERRIDE APPLICATION
+            if 'force_cost_idx' in overrides:
+                cost_table_idx = overrides['force_cost_idx']
+            if 'force_p1_idx' in overrides:
+                param1_idx = overrides['force_p1_idx']
+
+            flat_ids = {
+                14, 25, 26, 30, 31, 32, 35, 36, 
+                38, 43, 46, 47, 51, 61, 66, 
+                67, 68, 69, 71, 75, 87, 88, 89
+            }
+            
+            is_flat_bonus = prop_id in flat_ids
+            
+            has_subtype = False
+            subtype_options = {}
+            if subtype_ref and not overrides.get('suppress_subtype'):
+                try:
+                    if mapping_val in self._context_lists:
+                        subtype_options = self._context_lists[mapping_val]
+                        has_subtype = True
+                    elif context and mapping_val in context:
+                        subtype_options = context[mapping_val]
+                        has_subtype = True
+                    else:
+                        subtype_table = self.rules_service.get_table(subtype_ref)
+                        if subtype_table:
+                            subtype_options = self._get_iprp_table_options(subtype_ref)
+                            if subtype_options:
+                                has_subtype = True
+                except (ValueError, TypeError): pass
+
+            # Resolve cost table options
+            has_cost_table = False
+            cost_table_options = {}
+            if cost_table_idx is not None and not overrides.get('suppress_cost'):
+                try:
+                    table_name = overrides.get('cost_table')
+                    if not table_name:
+                        table_name = self._get_mapping_table_resref('iprp_costtable', cost_table_idx, prop_id=prop_id)
+                    
+                    if table_name:
+                        cost_table_options = self._get_iprp_table_options(table_name)
+                        has_cost_table = len(cost_table_options) > 0
+                except (ValueError, TypeError): pass
+
+            # Resolve param1 options
+            has_param1 = False
+            param1_options = {}
+            if param1_idx is not None and not overrides.get('suppress_p1'):
+                try:
+                    table_name = overrides.get('param1_table')
+                    if not table_name:
+                        table_name = self._get_mapping_table_resref('iprp_paramtable', param1_idx, prop_id=prop_id)
+                    
+                    if table_name:
+                        if table_name.lower() == 'racialtypes':
+                            param1_options = context.get('racial_groups') if context else None
+                        elif table_name.lower() == 'classes':
+                            param1_options = context.get('classes') if context else None
+                        else:
+                            param1_options = self._get_iprp_table_options(table_name)
+                        
+                        has_param1 = len(param1_options) > 0
+                except (ValueError, TypeError): pass
+
+            # Result
+            metadata.append({
+                'id': prop_id,
+                'label': clean_label,
+                'original_label': original_label,
+                'description': field_mapper.get_field_value(prop_def, 'description', ""),
+                'has_subtype': has_subtype,
+                'subtype_label': 'Subtype',
+                'subtype_options': subtype_options,
+                'has_cost_table': has_cost_table,
+                'cost_table_label': 'Value / Bonus',
+                'cost_table_options': cost_table_options,
+                'has_param1': has_param1,
+                'param1_label': 'Modifier',
+                'param1_options': param1_options,
+                'is_flat': not has_subtype and not has_cost_table and not has_param1
+            })
+            
+        return sorted(metadata, key=lambda x: x['label'])
+
+    def _get_mapping_table_resref(self, mapping_table_name: str, index: int, prop_id: Optional[int] = None) -> Optional[str]:
+        """Get the ResRef of a lookup table from a mapping table"""
+        if not hasattr(self, '_mapping_cache'):
+            self._mapping_cache = {}
+            
+        cache_key = f"{mapping_table_name}_{index}_{prop_id}"
+        if cache_key in self._mapping_cache:
+            return self._mapping_cache[cache_key]
+            
+        target_mapping_table = mapping_table_name
+        if mapping_table_name == 'iprp_paramtable':
+            if index > 0:
+                target_mapping_table = 'iprp_costtable'
+            if prop_id in [44, 70, 81, 82]:
+                target_mapping_table = 'iprp_paramtable'
+        
+        table = self.rules_service.get_table(target_mapping_table)
+        if not table or index < 0 or index >= len(table):
+            return None
+            
+        row = table[index]
+        if not row: return None
+        
+        if target_mapping_table == 'iprp_paramtable':
+            resref = field_mapper.get_field_value(row, 'TableResRef') or field_mapper.get_field_value(row, 'Name')
+        else:
+            resref = field_mapper.get_field_value(row, 'Name') or field_mapper.get_field_value(row, 'TableResRef')
+            
+        if resref == '****' or not resref:
+            resref = None
+        else:
+            resref = str(resref).lower()
+        
+        self._mapping_cache[cache_key] = resref
+        return resref
+
+    def _get_iprp_table_options(self, table_name: str) -> Optional[Dict[int, str]]:
+        """Resolve a 2DA table into a Dict[int, str] options map"""
+        if not table_name: return None
+        
+        if not hasattr(self, '_table_options_cache'):
+            self._table_options_cache = {}
+            
+        if table_name in self._table_options_cache:
+            return self._table_options_cache[table_name]
+            
+        table = self.rules_service.get_table(table_name)
+        if not table: return None
+        
+        options = {}
+        is_iprp = table_name.lower().startswith('iprp_')
+        
+        for i, row in enumerate(table):
+            if not row: continue
+            
+            name_val = field_mapper.get_field_value(row, 'Name')
+            if is_iprp and name_val and name_val != '****':
+                s_name = str(name_val).strip()
+                if s_name.startswith('+') or s_name.startswith('-') or (s_name and s_name[0].isdigit()):
+                    options[i] = s_name
+                    continue
+                if s_name.lower() == 'none': continue
+
+            game_string_ref = field_mapper.get_field_value(row, 'GameString')
+            if game_string_ref and str(game_string_ref).isdigit():
+                try:
+                    label = self.rules_service.rm.get_string(int(game_string_ref))
+                    if label and label != '****':
+                        options[i] = label
+                        continue
+                except (ValueError, TypeError): pass
+
+            label = field_mapper.get_field_value(row, 'Label')
+            
+            if isinstance(label, (int, str)) and str(label).isdigit():
+                val = int(label)
+                if val > 100:
+                    try:
+                        translated = self.rules_service.rm.get_string(val)
+                        if translated and translated != '****':
+                            label = translated
+                    except (ValueError, TypeError): pass
+
+            if (not label or label == '****') and name_val and name_val != '****':
+                label = name_val
+            
+            if label and label != '****':
+                s_label = str(label)
+                if s_label not in options.values():
+                    options[i] = s_label
+        
+        self._table_options_cache[table_name] = options
+        return options
+
+    def _get_all_save_elements(self) -> Dict[int, str]:
+        """Return all save element types mapped by ID"""
+        return {
+            0: 'Universal', 1: 'Acid', 2: 'Backstab', 3: 'Cold',
+            4: 'Death', 5: 'Disease', 6: 'Divine', 7: 'Electrical',
+            8: 'Fear', 9: 'Fire', 10: 'Illusion', 11: 'Mind-Affecting',
+            12: 'Negative Energy', 13: 'Poison', 14: 'Positive Energy',
+            15: 'Sonic', 16: 'Traps', 17: 'Spells', 18: 'Law',
+            19: 'Chaos', 20: 'Good', 21: 'Evil'
+        }
+
+    def _get_all_damage_types(self) -> Dict[int, str]:
+        """Return all damage types mapped by ID"""
+        return {
+            0: 'Bludgeoning', 1: 'Piercing', 2: 'Slashing', 3: 'Subdual',
+            4: 'Physical', 5: 'Magical', 6: 'Acid', 7: 'Cold',
+            8: 'Divine', 9: 'Electrical', 10: 'Fire', 11: 'Negative',
+            12: 'Positive', 13: 'Sonic'
+        }
+
+    def _get_all_immunity_types(self) -> Dict[int, str]:
+        """Return all immunity types mapped by ID"""
+        return {
+            0: 'Backstab', 1: 'Level/Ability Drain', 2: 'Mind-Affecting Spells',
+            3: 'Poison', 4: 'Disease', 5: 'Fear', 6: 'Knockdown',
+            7: 'Paralysis', 8: 'Critical Hits', 9: 'Death Magic'
+        }
     
     def get_item_bonuses(self, properties_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Extract quantified bonuses from raw property data for combat calculations
-        
-        This method handles ALL the business logic for converting raw property data
-        into usable bonuses that other managers can consume directly.
-        
-        Returns:
-            Dict with bonus categories and values ready for other managers
-        """
+        """Extract quantified bonuses from raw property data for combat calculations"""
         bonuses = {
-            'abilities': {},  # ability_name -> bonus_value  
-            'saves': {},      # save_type -> bonus_value  
-            'skills': {},     # skill_name -> bonus_value
-            'combat': {},     # attack/damage -> bonus_value
-            'ac': {},         # ac_type -> bonus_value
-            'immunities': [], # list of immunity types
-            'special': {}     # other special properties
+            'abilities': {},
+            'saves': {},
+            'skills': {},
+            'combat': {},
+            'ac': {},
+            'immunities': [],
+            'special': {}
         }
         
         for prop in properties_list:
-            # Extract raw values for business logic
             property_name = prop.get('PropertyName', 0)
             subtype = prop.get('Subtype', 0)
             cost_value = prop.get('CostValue', 0)
+            param1_value = prop.get('Param1Value', 0)
             
-            # Handle each property type with complete business logic
-            if property_name == 0:  # Ability Bonus
+            if property_name == 0:
                 ability = self._ability_map.get(subtype)
                 if ability and cost_value > 0:
-                    bonuses['abilities'][ability] = cost_value  # Store as 'Dex', not 'dex'
+                    bonuses['abilities'][ability] = cost_value
                     
-            elif property_name == 1:  # AC Bonus (enchantment/deflection bonus)
+            elif property_name == 1:
                 if cost_value > 0:
                     bonuses['ac']['deflection'] = cost_value
                     
-            elif property_name == 6:  # Enhancement Bonus  
+            elif property_name == 6:
                 if cost_value > 0:
                     bonuses['special']['enhancement'] = cost_value
                     
-            elif property_name in [40, 41]:  # Saving Throw Bonuses
+            elif property_name in [40, 41]:
                 if cost_value > 0:
                     if property_name == 40:
-                        # Property 40 uses iprp_saveelement
-                        # ONLY subtype 0 (Universal) applies to Fort/Ref/Will
-                        # Other subtypes (Disease=5, Fear=8, etc) are specific save elements
-                        if subtype == 0:  # Universal - applies to all three main saves
+                        if subtype == 0:
                             for save in ['fortitude', 'reflex', 'will']:
                                 bonuses['saves'][save] = bonuses['saves'].get(save, 0) + cost_value
-                        # Disease/Fear/Poison/etc saves are NOT added to main saves
-                    else:  # Property 41 - Specific save (Fort/Ref/Will)
+                    else:
                         save_type = self._save_map.get(subtype)
                         if save_type:
                             bonuses['saves'][save_type] = bonuses['saves'].get(save_type, 0) + cost_value
                             
-            elif property_name == 52:  # Skill Bonus
+            elif property_name == 10:
+                val = cost_value if cost_value > 0 else param1_value
+                if val > 0:
+                    bonuses['combat']['attack'] = bonuses['combat'].get('attack', 0) - val
+                    bonuses['combat']['damage_penalty'] = bonuses['combat'].get('damage_penalty', 0) + val
+                    
+            elif property_name == 60:
+                val = cost_value if cost_value > 0 else param1_value
+                if val > 0:
+                    bonuses['combat']['attack'] = bonuses['combat'].get('attack', 0) - val
+
+            elif property_name == 16:
+                val = cost_value if cost_value > 0 else param1_value
+                if val > 0:
+                    bonuses['combat']['damage'] = bonuses['combat'].get('damage', [])
+                    bonuses['combat']['damage'].append({
+                        'type': self._get_damage_type_name(subtype),
+                        'amount_idx': val
+                    })
+                    
+            elif property_name == 52:
                 if cost_value > 0:
                     skill_name = self._get_skill_name(subtype)
                     bonuses['skills'][skill_name] = cost_value
                     
-            elif property_name in [56, 57, 58, 59]:  # Attack Bonuses
+            elif property_name in [56, 57, 58, 59]:
                 if cost_value > 0:
                     bonuses['combat']['attack'] = bonuses['combat'].get('attack', 0) + cost_value
                     
-            elif property_name == 75:  # Freedom of Movement
+            elif property_name == 75:
                 bonuses['immunities'].append('movement_effects')
-                
-            elif property_name == 16:  # Damage Bonus
-                if cost_value > 0:
-                    bonuses['combat']['damage'] = bonuses['combat'].get('damage', 0) + cost_value
                     
-            elif property_name == 23:  # Damage Resistance
+            elif property_name == 23:
                 if cost_value > 0:
                     damage_type = self._get_damage_type_name(subtype)
                     bonuses['special'][f'resistance_{damage_type}'] = cost_value
                     
-            elif property_name == 39:  # Spell Resistance  
+            elif property_name == 39:
                 if cost_value > 0:
                     bonuses['special']['spell_resistance'] = cost_value
                     
-            elif property_name == 44:  # Light
+            elif property_name == 44:
                 bonuses['special']['light'] = 1
                 
-            elif property_name == 90:  # Damage Reduction (Modern NWN2 system only)
+            elif property_name == 90:
                 if cost_value > 0:
                     bonuses['special']['damage_reduction'] = cost_value
-                    # Note: PropertyName 22 (legacy DR system) is intentionally not supported
                     
-            elif property_name == 92:  # Damage Vulnerability
+            elif property_name == 92:
                 if cost_value > 0:
                     damage_type = self._get_damage_type_name(subtype)
                     bonuses['special'][f'vulnerability_{damage_type}'] = cost_value
                 
-            # Add more property types as needed based on actual game data
             
         return bonuses

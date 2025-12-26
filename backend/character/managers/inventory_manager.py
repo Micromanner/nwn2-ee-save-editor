@@ -61,12 +61,7 @@ class InventoryManager(EventEmitter):
     ACCESSORY_SLOTS_BITMASK = 0x07CD
 
     def __init__(self, character_manager):
-        """
-        Initialize the data-driven InventoryManager
-        
-        Args:
-            character_manager: Reference to parent CharacterManager
-        """
+        """Initialize the InventoryManager"""
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
@@ -86,16 +81,7 @@ class InventoryManager(EventEmitter):
         self._update_proficiency_cache()
 
     def _get_raw_equip_item_list(self) -> List[Tuple[int, Dict[str, Any]]]:
-        """
-        Get Equip_ItemList with struct_id (bitmask) preserved.
-
-        NWN2 stores equipped items as a sparse list where each item's struct_id
-        is a bitmask indicating the slot (e.g., 0x0001=head, 0x0002=chest, etc.).
-        The Rust GFF parser embeds struct_id as __struct_id__ in each dict.
-
-        Returns:
-            List of (bitmask, item_dict) tuples for each equipped item
-        """
+        """Get equipped item list with bitmask-based struct IDs"""
         equipped_items = self.gff.get('Equip_ItemList', [])
         if not equipped_items:
             return []
@@ -120,11 +106,7 @@ class InventoryManager(EventEmitter):
         return None
 
     def _set_equipped_item_by_bitmask(self, bitmask: int, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Set an equipped item at a slot bitmask, returning the previous item if any.
-
-        Works directly with plain dicts - __struct_id__ is embedded in each item.
-        """
+        """Set an equipped item at a slot bitmask, returning previous item if any"""
         equipped_items = self.gff.get('Equip_ItemList', [])
         if equipped_items is None:
             equipped_items = []
@@ -150,11 +132,7 @@ class InventoryManager(EventEmitter):
         return previous_item
 
     def _remove_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
-        """
-        Remove an equipped item at a slot bitmask, returning the removed item.
-
-        Works directly with plain dicts - __struct_id__ is embedded in each item.
-        """
+        """Remove an equipped item at a slot bitmask, returning removed item"""
         equipped_items = self.gff.get('Equip_ItemList', [])
         if not equipped_items:
             return None
@@ -343,18 +321,7 @@ class InventoryManager(EventEmitter):
             self._update_proficiency_cache()
     
     def get_equipped_item(self, slot: str) -> Optional[Dict[str, Any]]:
-        """
-        Get item equipped in a specific slot using bitmask-based lookup.
-
-        NWN2 stores equipment as a sparse list where struct_id is a bitmask
-        indicating the slot. This method correctly handles missing slots.
-
-        Args:
-            slot: Slot name (e.g., 'head', 'chest', 'right_hand')
-
-        Returns:
-            Item data dict or None
-        """
+        """Get item equipped in a specific slot by name"""
         bitmask = self.SLOT_TO_BITMASK.get(slot)
         if bitmask is None:
             return None
@@ -362,20 +329,7 @@ class InventoryManager(EventEmitter):
         return self._get_equipped_item_by_bitmask(bitmask)
     
     def equip_item(self, item_data: Dict[str, Any], slot: str, inventory_index: Optional[int] = None) -> Tuple[bool, List[str]]:
-        """
-        Equip an item in a specific slot using bitmask-based slot identification.
-
-        NWN2 stores equipment as a sparse list where struct_id is a bitmask
-        indicating the slot. This method correctly handles the bitmask system.
-
-        Args:
-            item_data: Item data to equip
-            slot: Slot to equip in
-            inventory_index: Optional index in ItemList to remove item from (prevents duplication)
-
-        Returns:
-            (success, list_of_warnings_or_errors)
-        """
+        """Equip an item in a specific slot, optionally removing from inventory"""
         warnings = []
 
         id_exists, id_messages = self.check_item_id_exists(item_data)
@@ -408,18 +362,7 @@ class InventoryManager(EventEmitter):
         return True, warnings
     
     def unequip_item(self, slot: str) -> Optional[Dict[str, Any]]:
-        """
-        Unequip item from a slot using bitmask-based slot identification.
-
-        NWN2 stores equipment as a sparse list where struct_id is a bitmask
-        indicating the slot. This method correctly removes items by bitmask.
-
-        Args:
-            slot: Slot to unequip from
-
-        Returns:
-            The unequipped item data
-        """
+        """Unequip item from a slot by name"""
         bitmask = self.SLOT_TO_BITMASK.get(slot)
         if bitmask is None:
             logger.warning(f"Invalid slot name: {slot}")
@@ -628,7 +571,7 @@ class InventoryManager(EventEmitter):
         return []
     
     def calculate_encumbrance(self) -> Dict[str, Any]:
-        """Calculate character's encumbrance level using dynamic data"""
+        """Calculate character's encumbrance level"""
         total_weight = 0.0
 
         for _, item in self._get_raw_equip_item_list():
@@ -692,7 +635,7 @@ class InventoryManager(EventEmitter):
         }
     
     def get_inventory_summary(self) -> Dict[str, Any]:
-        """Get summary of character's inventory using dynamic data"""
+        """Get summary of character's inventory"""
         item_list = self.gff.get('ItemList', [])
 
         inventory_items = []
@@ -854,7 +797,25 @@ class InventoryManager(EventEmitter):
                     if category in bonuses:
                         for bonus_type, value in category_bonuses.items():
                             if bonus_type in bonuses[category]:
-                                bonuses[category][bonus_type] += value
+                                target_val = bonuses[category][bonus_type]
+                                
+                                # Robust handling for mixed types (e.g. integer sums vs detailed bonus lists)
+                                if isinstance(value, list):
+                                    if isinstance(target_val, list):
+                                        target_val.extend(value)
+                                    elif target_val == 0:
+                                        bonuses[category][bonus_type] = value
+                                    else:
+                                        bonuses[category][bonus_type] = [target_val] + value
+                                elif isinstance(target_val, list):
+                                    target_val.append(value)
+                                else:
+                                    # Standard integer sum
+                                    try:
+                                        bonuses[category][bonus_type] += value
+                                    except (TypeError, ValueError):
+                                        # Fallback for incompatible types: store as list if addition fails
+                                        bonuses[category][bonus_type] = [target_val, value]
                             else:
                                 bonuses[category][bonus_type] = value
 
@@ -981,7 +942,7 @@ class InventoryManager(EventEmitter):
         return bonuses
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate inventory for corruption prevention only"""
+        """Validate inventory for corruption prevention"""
         errors = []
 
         equipment_info = self.get_equipment_info()
@@ -1170,15 +1131,7 @@ class InventoryManager(EventEmitter):
         }
 
     def remove_from_inventory(self, item_index: int) -> Tuple[bool, Optional[Dict[str, Any]], str]:
-        """
-        Remove an item from inventory by index
-        
-        Args:
-            item_index: Index in ItemList
-            
-        Returns:
-            (success, item_data, message)
-        """
+        """Remove an item from inventory by index"""
         item_list = self.gff.get('ItemList', [])
         
         if not isinstance(item_list, list):
@@ -1202,27 +1155,248 @@ class InventoryManager(EventEmitter):
             logger.error(f"Error removing item: {e}")
             return False, None, str(e)
 
-    def check_item_id_exists(self, item_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """
-        Check if item ID exists/is valid
-        
-        Args:
-            item_data: Item GFF data
+    def update_item(self, item_index: Optional[int], slot: Optional[str], item_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """Update an item in inventory or equipment"""
+        if slot:
+            # Update equipped item
+            bitmask = self.SLOT_TO_BITMASK.get(slot)
+            if bitmask is None:
+                return False, f"Invalid slot: {slot}"
             
-        Returns:
-            (valid, messages)
-        """
-        # Stub implementation to prevent AttributeError
-        # In the future, this could check for ObjectId uniqueness
+            # Ensure __struct_id__ is set correctly for the slot
+            item_data['__struct_id__'] = bitmask
+            self._set_equipped_item_by_bitmask(bitmask, item_data)
+            logger.info(f"Updated equipped item in slot {slot}")
+            return True, "Item updated in slot"
+            
+        elif item_index is not None:
+            # Update inventory item
+            item_list = self.gff.get('ItemList', [])
+            if not isinstance(item_list, list) or item_index < 0 or item_index >= len(item_list):
+                return False, f"Invalid inventory index: {item_index}"
+            
+            item_list[item_index] = item_data
+            self.gff.set('ItemList', item_list)
+            logger.info(f"Updated inventory item at index {item_index}")
+            return True, "Item updated in inventory"
+            
+        return False, "Neither slot nor index provided"
+
+    def add_item_by_base_type(self, base_item_id: int) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+        """Create a new item based on a base item type"""
+        base_item_data = self.game_rules_service.get_by_id('baseitems', base_item_id)
+        if not base_item_data:
+            return False, None, f"Invalid base item ID: {base_item_id}"
+            
+        new_item = {
+            'BaseItem': base_item_id,
+            'Tag': f"new_item_{base_item_id}",
+            'LocalizedName': {
+                'string_ref': 4294967295,
+                'substrings': [{'lang_id': 0, 'value': self._get_item_name({'BaseItem': base_item_id})}]
+            },
+            'Description': {
+                'string_ref': 4294967295,
+                'substrings': []
+            },
+            'Identified': 1,
+            'PropertiesList': [],
+            'StackSize': 1,
+            'Charges': 0,
+            'Cost': 0,
+            'Stolen': 0,
+            'Plot': 0,
+            'Cursed': 0
+        }
+        
+        success = self.add_to_inventory(new_item)
+        if success:
+            return True, new_item, "Item added to inventory"
+        return False, None, "Failed to add item to inventory"
+
+    def get_all_base_items(self) -> List[Dict[str, Any]]:
+        """Get all available base items for creation, filtering out padding/internal items"""
+        all_base_items = []
+        base_items = self.game_rules_service.get_table('baseitems')
+
+        for item_id, base_item_data in enumerate(base_items):
+            if base_item_data is None:
+                continue
+
+            # Resolve name: Name (StrRef/String) > label
+            name = field_mapper.get_field_value(base_item_data, 'Name')
+            if isinstance(name, int):
+                name = self.game_rules_service.rm.get_string(name)
+            
+            label = field_mapper.get_field_value(base_item_data, 'label', f'Item {item_id}')
+            if not name or name == '****':
+                name = label
+
+            # Filter out internal/empty labels and explicit "padding" items
+            if not name or name.lower().startswith('bad index') or name.lower() == '****' or name.upper() == 'DELETED':
+                continue
+            
+            if 'padding' in name.lower() or 'padding' in label.lower():
+                continue
+
+            try:
+                item_type = int(field_mapper.get_field_value(base_item_data, 'base_item', 0) or 0)
+            except (ValueError, TypeError):
+                item_type = 0
+
+            all_base_items.append({
+                'id': item_id,
+                'name': name,
+                'type': item_type,
+                'category': self._get_item_category(item_id, base_item_data)
+            })
+        
+        return sorted(all_base_items, key=lambda x: x['name'])
+
+    def get_item_editor_metadata(self) -> Dict[str, Any]:
+        """Get all metadata needed for the item editor UI"""
+        # Gather all metadata context for the decoder
+        abilities = self.property_decoder._ability_map
+        skills = self._get_all_skills()
+        damage_types = self.property_decoder._get_all_damage_types()
+        alignment_groups = {0: 'Good', 1: 'Evil', 2: 'Lawful', 3: 'Chaotic'}
+        alignments = {
+            0: 'Lawful Good', 1: 'Neutral Good', 2: 'Chaotic Good',
+            3: 'Lawful Neutral', 4: 'True Neutral', 5: 'Chaotic Neutral',
+            6: 'Lawful Evil', 7: 'Neutral Evil', 8: 'Chaotic Evil'
+        }
+        # Use racial types from rules
+        racial_groups = self._get_all_races() 
+        saving_throws = self.property_decoder._save_map
+        immunity_types = self.property_decoder._get_all_immunity_types()
+        save_elements = self.property_decoder._get_all_save_elements()
+        classes = self._get_all_classes()
+        spells = self._get_all_iprp_spells()
+        feats = self._get_all_iprp_feats()
+        
+        context = {
+            'abilities': abilities,
+            'skills': skills,
+            'damage_types': damage_types,
+            'alignment_groups': alignment_groups,
+            'alignments': alignments,
+            'racial_groups': racial_groups,
+            'saving_throws': saving_throws,
+            'immunity_types': immunity_types,
+            'save_elements': save_elements,
+            'classes': classes,
+            'spells': spells,
+            'iprp_feats': feats
+        }
+        
+        property_metadata = self.property_decoder.get_editor_property_metadata(context)
+
+        return {
+            'property_types': property_metadata,
+            'abilities': abilities,
+            'skills': skills,
+            'damage_types': damage_types,
+            'alignment_groups': alignment_groups,
+            'alignments': alignments,
+            'racial_groups': racial_groups,
+            'saving_throws': saving_throws,
+            'immunity_types': immunity_types,
+            'classes': classes,
+            'spells': spells
+        }
+
+    def _get_all_skills(self) -> Dict[int, str]:
+        """Get all skills from rules service with StrRef resolution"""
+        skills = {}
+        try:
+            skill_table = self.game_rules_service.get_table('skills')
+            if skill_table:
+                for skill_id, skill_data in enumerate(skill_table):
+                    if not skill_data: continue
+                    name = field_mapper.get_field_value(skill_data, 'Name')
+                    if isinstance(name, int):
+                        name = self.game_rules_service.rm.get_string(name)
+                    if not name or name == '****':
+                        name = field_mapper.get_field_value(skill_data, 'Label', f'Skill {skill_id}')
+                    if name and not name.startswith('DEL_'):
+                        skills[skill_id] = name
+        except Exception: pass
+        return skills
+
+    def _get_all_races(self) -> Dict[int, str]:
+        """Get all races from rules service with StrRef resolution"""
+        races = {}
+        try:
+            race_table = self.game_rules_service.get_table('racialtypes')
+            if race_table:
+                for race_id, race_data in enumerate(race_table):
+                    if not race_data: continue
+                    name = field_mapper.get_field_value(race_data, 'Name')
+                    if isinstance(name, int):
+                        name = self.game_rules_service.rm.get_string(name)
+                    if not name or name == '****':
+                        name = field_mapper.get_field_value(race_data, 'Label', f'Race {race_id}')
+                    races[race_id] = name
+        except Exception: pass
+        return races
+
+    def _get_all_classes(self) -> Dict[int, str]:
+        """Get all classes from rules service with StrRef resolution"""
+        classes = {}
+        try:
+            class_table = self.game_rules_service.get_table('classes')
+            if class_table:
+                for class_id, class_data in enumerate(class_table):
+                    if not class_data: continue
+                    name = field_mapper.get_field_value(class_data, 'Name')
+                    if isinstance(name, int):
+                        name = self.game_rules_service.rm.get_string(name)
+                    if not name or name == '****':
+                        name = field_mapper.get_field_value(class_data, 'Label', f'Class {class_id}')
+                    classes[class_id] = name
+        except Exception: pass
+        return classes
+
+    def _get_all_iprp_spells(self) -> Dict[int, str]:
+        """Get item property spells with StrRef resolution"""
+        spells = {}
+        try:
+            spell_table = self.game_rules_service.get_table('iprp_spells')
+            if spell_table:
+                for spell_row_id, spell_data in enumerate(spell_table):
+                    if not spell_data: continue
+                    name = field_mapper.get_field_value(spell_data, 'Name')
+                    if isinstance(name, int):
+                        name = self.game_rules_service.rm.get_string(name)
+                    if not name or name == '****':
+                        name = field_mapper.get_field_value(spell_data, 'Label', f'Spell {spell_row_id}')
+                    spells[spell_row_id] = name
+        except Exception: pass
+        return spells
+
+    def _get_all_iprp_feats(self) -> Dict[int, str]:
+        """Get item property feats with StrRef resolution"""
+        feats = {}
+        try:
+            feat_table = self.game_rules_service.get_table('iprp_feats')
+            if feat_table:
+                for i, row in enumerate(feat_table):
+                    if not row: continue
+                    name = field_mapper.get_field_value(row, 'Name')
+                    if isinstance(name, int):
+                        name = self.game_rules_service.rm.get_string(name)
+                    if not name or name == '****':
+                        name = field_mapper.get_field_value(row, 'Label', f'Feat {i}')
+                    feats[i] = name
+        except Exception: pass
+        return feats
+
+    def check_item_id_exists(self, item_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        """Check if item ID exists/is valid"""
         return True, []
 
     def get_equipment_info(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get information about all equipped items
-        
-        Returns:
-            Dict mapping slot name to item info
-        """
+        """Get information about all equipped items"""
         info = {}
 
         for bitmask, item in self._get_raw_equip_item_list():

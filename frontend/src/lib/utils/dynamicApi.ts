@@ -23,7 +23,15 @@ class DynamicAPI {
     console.log('🔧 DynamicAPI: Starting initialization...');
     
     // Get the base URL from Tauri
-    this.baseUrl = await TauriAPI.getFastAPIBaseURL();
+    const url = await TauriAPI.getFastAPIBaseURL();
+    
+    // Validate that we didn't get an unresolved port
+    if (url.endsWith(':0')) {
+      console.warn('⚠️ DynamicAPI: Got bridge URL with port 0, skipping initialization');
+      throw new Error('Backend port not yet resolved');
+    }
+
+    this.baseUrl = url;
     console.log('✅ DynamicAPI: Successfully got base URL from Tauri:', this.baseUrl);
     this.isInitialized = true;
   }
@@ -60,9 +68,21 @@ class DynamicAPI {
     endpoint: string,
     options?: RequestInit
   ): Promise<Response> {
-    const baseUrl = await this.getApiBaseUrl();
-    const url = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
-    return tauriCompatibleFetch(url, options);
+    try {
+      const baseUrl = await this.getApiBaseUrl();
+      const url = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
+      return await tauriCompatibleFetch(url, options);
+    } catch (error) {
+      // If we get a connection error, the backend might have restarted on a new port
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.warn('⚠️ DynamicAPI: Connection failed, attempting to re-resolve port...');
+        this.reset();
+        const baseUrl = await this.getApiBaseUrl();
+        const url = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
+        return await tauriCompatibleFetch(url, options);
+      }
+      throw error;
+    }
   }
 
   /**

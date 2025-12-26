@@ -399,6 +399,28 @@ def get_all_armor(
         )
 
 
+@router.get("/characters/{character_id}/inventory/base-items")
+def get_all_base_items(
+    character_id: int,
+    char_session: CharacterSessionDep
+):
+    """Get all available base items for creation"""
+    try:
+        session = char_session
+        manager = session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        base_items = inventory_manager.get_all_base_items()
+        
+        return {"base_items": base_items}
+        
+    except Exception as e:
+        logger.error(f"Failed to get all base items for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get all base items: {str(e)}"
+        )
+
+
 @router.get("/characters/{character_id}/inventory/custom")
 def get_custom_items(
     character_id: int,
@@ -496,6 +518,97 @@ def get_equipped_item(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get equipped item: {str(e)}"
+        )
+@router.get("/characters/{character_id}/inventory/editor-metadata")
+def get_item_editor_metadata(
+    character_id: int,
+    char_session: CharacterSessionDep
+):
+    """Get metadata for the item editor UI"""
+    try:
+        from fastapi_models.inventory_models import ItemEditorMetadataResponse
+        
+        manager = char_session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        metadata = inventory_manager.get_item_editor_metadata()
+        
+        return ItemEditorMetadataResponse(**metadata)
+        
+    except Exception as e:
+        logger.error(f"Failed to get editor metadata for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/characters/{character_id}/inventory/add-by-base-type")
+def add_item_by_base_type(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request: dict = Body(...)
+):
+    """Add a new item to inventory by base type ID"""
+    try:
+        from fastapi_models.inventory_models import AddItemByBaseTypeRequest, AddToInventoryResponse
+        validated_request = AddItemByBaseTypeRequest(**request)
+        
+        manager = char_session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        success, new_item, message = inventory_manager.add_item_by_base_type(validated_request.base_item_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+            
+        return AddToInventoryResponse(success=True, message=message)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add item for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.put("/characters/{character_id}/inventory/item")
+def update_item(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request: dict = Body(...)
+):
+    """Update an item in inventory or equipment"""
+    try:
+        from fastapi_models.inventory_models import UpdateItemRequest, UpdateItemResponse
+        validated_request = UpdateItemRequest(**request)
+        
+        manager = char_session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        success, message = inventory_manager.update_item(
+            validated_request.item_index,
+            validated_request.slot,
+            validated_request.item_data
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+            
+        return UpdateItemResponse(success=True, message=message)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update item for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )
 
 
