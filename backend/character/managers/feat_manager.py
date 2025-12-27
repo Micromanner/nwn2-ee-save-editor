@@ -507,17 +507,18 @@ class FeatManager(EventEmitter):
                 'spell_level': field_mapper._safe_int(fields.get('prereq_spell_level', 0))
             }
 
-            label_raw = fields.get('label', f'Feat_{feat_id}')
-            if isinstance(label_raw, int) and label_raw > 0:
-                label = self.game_rules_service._loader.get_string(label_raw) or f'Feat_{feat_id}'
-            else:
-                label = str(label_raw) if label_raw else f'Feat_{feat_id}'
+            feat_strref = field_mapper._safe_int(fields.get('feat_name_strref', 0), 0)
+            label = self.game_rules_service._loader.get_string(feat_strref) if feat_strref > 0 else f'Feat_{feat_id}'
+            label = self._strip_nwn2_tags(label)
+
+            engine_label = str(fields.get('label', ''))
 
             desc_raw = fields.get('description', '')
             if isinstance(desc_raw, int) and desc_raw > 0:
                 description = self.game_rules_service._loader.get_string(desc_raw) or ''
             else:
                 description = str(desc_raw) if desc_raw else ''
+            description = self._strip_nwn2_tags(description)
 
             feat_type = self._parse_feat_type(feat_data)
 
@@ -525,7 +526,7 @@ class FeatManager(EventEmitter):
             if self.is_domain_epithet_feat(feat_id):
                 category = 'Domain'
                 feat_type = 8192
-            elif 'BACKGROUND' in label.upper():
+            elif 'BACKGROUND' in engine_label.upper():
                 category = 'Background'
                 feat_type = 128
 
@@ -582,9 +583,10 @@ class FeatManager(EventEmitter):
             if feat_info['protected']:
                 categorized['protected'].append(feat_info)
 
-            if self.is_domain_epithet_feat(feat_id):
+            category = feat_info.get('category', 'General')
+            if category == 'Domain':
                 categorized['domain_feats'].append(feat_info)
-            elif 'BACKGROUND' in feat_info['name'].upper():
+            elif category == 'Background':
                 categorized['background_feats'].append(feat_info)
             elif feat_info['custom']:
                 categorized['custom_feats'].append(feat_info)
@@ -598,6 +600,7 @@ class FeatManager(EventEmitter):
     def invalidate_validation_cache(self):
         """Clear validation cache when character state changes."""
         self._validation_cache.clear()
+        self._display_cache.clear()
         self._has_feat_set = None
         self._has_class_set = None
         for feat_id in self._feat_cache:
@@ -1529,6 +1532,14 @@ class FeatManager(EventEmitter):
             return 'Racial'
         else:
             return 'General'
+
+    def _strip_nwn2_tags(self, text: str) -> str:
+        """Strip NWN2 markup tags like <i>, <color=Gold>, etc. from text."""
+        import re
+        if not text:
+            return text
+        text = re.sub(r'</?[a-zA-Z][^>]*>', '', text)
+        return text.strip()
 
     def _parse_feat_type(self, feat_data) -> int:
         """Parse numeric feat type from feat data by checking DESCRIPTION and FeatCategory fields."""

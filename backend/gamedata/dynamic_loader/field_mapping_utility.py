@@ -43,8 +43,9 @@ class FieldMappingUtility:
         'ac_attack_mod': ['ACATTACKMOD', 'ac_attack_mod', 'AcAttackMod', 'ACAttackMod', 'ACMod'],
         
         # Names and labels
-        'label': ['LABEL', 'label', 'Label', 'FEAT', 'Feat', 'name', 'Name', 'Description'],
-        'name': ['NAME', 'name', 'Name', 'FEAT', 'Feat', 'label', 'Label', 'NameRef'],
+        'label': ['LABEL', 'label', 'Label'],
+        'name': ['NAME', 'name', 'Name', 'label', 'Label', 'NameRef'],
+        'feat_name_strref': ['FEAT', 'Feat'],
         
         # Skill-specific fields
         'key_ability': ['KeyAbility', 'key_ability', 'keyability', 'KEYABILITY'],

@@ -515,7 +515,7 @@ class CharacterManager(EventEmitter):
                 summary['background'] = feat_summary['background_feats'][0]
 
             domain_feats = feat_summary.get('domain_feats', [])
-            summary['domains'] = [f for f in domain_feats if 'EPITHET' in f['name'].upper()]
+            summary['domains'] = [f for f in domain_feats if feat_manager.is_domain_epithet_feat(f['id'])]
         
         # Aggregate class information from ClassManager
         if class_manager and hasattr(class_manager, 'get_class_summary'):
