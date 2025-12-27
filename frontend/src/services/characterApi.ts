@@ -65,7 +65,6 @@ export interface FeatsStateResponse {
   all_feats: FeatResponse[];
   available_feats: FeatResponse[];
   legitimate_feats: FeatResponse[];
-  feat_chains: Record<string, unknown>;
   recommended_feats: FeatResponse[];
 }
 

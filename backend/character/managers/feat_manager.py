@@ -1,12 +1,10 @@
-"""
-Data-Driven Feat Manager - handles feat additions, removals, and protection
-Uses CharacterManager and DynamicGameDataLoader for all feat data access
-"""
+"""Data-Driven Feat Manager - handles feat additions, removals, and protection Uses CharacterManager and DynamicGameDataLoader for all feat data access"""
 
 from typing import Dict, List, Set, Tuple, Optional, Any
 from loguru import logger
 import time
 import os
+import re
 
 from ..events import (
     EventEmitter, EventType, EventData, 
@@ -16,20 +14,41 @@ from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 USE_PREREQUISITE_GRAPH = os.environ.get('USE_PREREQUISITE_GRAPH', 'true').lower() == 'true'
 
+_SAVE_PATTERNS = [
+    (re.compile(r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+all\s+(?:saving\s+throws|saves)', re.IGNORECASE), 'universal'),
+    (re.compile(r'([+-]\d+)\s+(?:to\s+)?all\s+(?:saving\s+throws|saves)', re.IGNORECASE), 'universal'),
+    (re.compile(r'([+-]\d+)\s+(?:bonus\s+)?(?:to|on)\s+Fortitude\s+and\s+Will\s+(?:saving\s+throws|saves?)', re.IGNORECASE), 'fortitude_and_will'),
+    (re.compile(r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Fortitude\s+(?:saving\s+throws|saves?)', re.IGNORECASE), 'fortitude'),
+    (re.compile(r'([+-]\d+)\s+Fortitude\s+Save', re.IGNORECASE), 'fortitude'),
+    (re.compile(r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Reflex\s+(?:saving\s+throws|saves?)', re.IGNORECASE), 'reflex'),
+    (re.compile(r'([+-]\d+)\s+Reflex\s+Save', re.IGNORECASE), 'reflex'),
+    (re.compile(r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Will\s+(?:saving\s+throws|saves?)', re.IGNORECASE), 'will'),
+    (re.compile(r'([+-]\d+)\s+(?:to|on)\s+all\s+Will\s+(?:saving\s+throws|saves?)', re.IGNORECASE), 'will'),
+    (re.compile(r'([+-]\d+)\s+Will\s+Save', re.IGNORECASE), 'will'),
+]
+
+_AC_PATTERNS = [
+    re.compile(r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+(?:Armor\s+Class|AC)', re.IGNORECASE),
+    re.compile(r'\+(\d+)\s+(?:to\s+)?AC(?:\s|\.|\,)', re.IGNORECASE),
+    re.compile(r'\+(\d+)\s+AC\s+bonus', re.IGNORECASE),
+]
+
+_AC_DODGE_PATTERN = re.compile(r'\+(\d+)')
+
+_INITIATIVE_PATTERNS = [
+    re.compile(r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+initiative', re.IGNORECASE),
+    re.compile(r'\+(\d+)\s+(?:to\s+)?initiative', re.IGNORECASE),
+]
+
+_SAVE_CONDITIONAL_KEYWORDS = ('against', 'vs ', 'versus', 'to avoid', 'made to')
+_AC_CONDITIONAL_KEYWORDS = ('against', 'vs ', 'versus', 'when ', 'while ', 'if ', 'when wielding', 'when wearing', 'when using', 'when fighting')
+
 
 class FeatManager(EventEmitter):
-    """
-    Data-Driven Feat Manager
-    Uses CharacterManager as hub for all character data access
-    """
+    """Data-Driven Feat Manager Uses CharacterManager as hub for all character data access"""
     
     def __init__(self, character_manager):
-        """
-        Initialize the FeatManager
-        
-        Args:
-            character_manager: Reference to parent CharacterManager
-        """
+        """Initialize FeatManager with character_manager reference"""
         super().__init__()
         self.character_manager = character_manager
         self.game_rules_service = character_manager.rules_service
@@ -49,6 +68,10 @@ class FeatManager(EventEmitter):
         self._domain_feat_map_cache: Optional[Dict[int, List[Dict]]] = None
         self._has_feat_set: Optional[Set[int]] = None
         self._has_class_set: Optional[Set[int]] = None
+
+        self._save_bonuses_cache: Optional[Dict[str, int]] = None
+        self._ac_bonuses_cache: Optional[Dict[str, int]] = None
+        self._initiative_bonus_cache: Optional[int] = None
 
         self._update_protected_feats()
 
@@ -145,6 +168,9 @@ class FeatManager(EventEmitter):
             "invalidating validation cache"
         )
         self.invalidate_validation_cache()
+        self._save_bonuses_cache = None
+        self._ac_bonuses_cache = None
+        self._initiative_bonus_cache = None
     
     def on_skill_changed(self, event: EventData):
         """Handle skill change event - invalidate cache for skill rank prerequisites"""
@@ -152,17 +178,7 @@ class FeatManager(EventEmitter):
         self.invalidate_validation_cache()
     
     def add_feat(self, feat_id: int, source: str = 'manual') -> bool:
-        """
-        Add a feat to the character
-        If the feat is a domain epithet feat, also adds all associated domain feats
-
-        Args:
-            feat_id: The feat ID to add
-            source: Source of the feat ('class', 'level', 'manual', 'domain')
-
-        Returns:
-            True if feat was added
-        """
+        """Add feat to character, cascading to all domain feats if adding a domain epithet feat"""
         if self.has_feat(feat_id):
             logger.debug(f"Character already has feat {feat_id}")
             return False
@@ -191,6 +207,12 @@ class FeatManager(EventEmitter):
         # Invalidate cached set
         self._has_feat_set = None
 
+        # Sync to level up history
+        class_manager = self.character_manager.get_manager('class')
+        if class_manager:
+            class_manager.record_feat_change(feat_id, True)
+
+
         event = FeatChangedEvent(
             event_type=EventType.FEAT_ADDED,
             source_manager='feat',
@@ -205,19 +227,7 @@ class FeatManager(EventEmitter):
         return True
 
     def add_feat_with_prerequisites(self, feat_id: int, auto_add_prerequisites: bool = True, source: str = 'manual') -> Tuple[bool, List[Dict[str, Any]]]:
-        """
-        Add a feat to the character, automatically adding missing prerequisite feats and ability scores if requested
-
-        Args:
-            feat_id: The feat ID to add
-            auto_add_prerequisites: Whether to automatically add missing prerequisite feats and ability scores
-            source: Source of the feat ('class', 'level', 'manual')
-
-        Returns:
-            (success, list_of_changes)
-            - success: True if the main feat was added successfully
-            - list_of_changes: List of changes made (feats added, abilities increased)
-        """
+        """Add feat, optionally auto-adding missing prerequisites and ability scores. Returns (success, list_of_changes)"""
         auto_changes = []
 
         if auto_add_prerequisites:
@@ -270,18 +280,7 @@ class FeatManager(EventEmitter):
         return success, auto_changes
 
     def remove_feat(self, feat_id: int, force: bool = False, skip_cascade: bool = False) -> bool:
-        """
-        Remove a feat from the character
-        If the feat is a domain epithet feat, also removes all associated domain feats
-
-        Args:
-            feat_id: The feat ID to remove
-            force: Force removal even if protected
-            skip_cascade: Skip domain cascade logic (used internally to prevent recursion)
-
-        Returns:
-            True if feat was removed
-        """
+        """Remove feat, cascading to all domain feats if removing a domain epithet feat"""
         if not force and self.is_feat_protected(feat_id):
             logger.warning(f"Cannot remove protected feat {feat_id}")
             return False
@@ -309,6 +308,12 @@ class FeatManager(EventEmitter):
             # Invalidate cached set
             self._has_feat_set = None
 
+            # Sync to level up history
+            class_manager = self.character_manager.get_manager('class')
+            if class_manager:
+                class_manager.record_feat_change(feat_id, False)
+
+
             event = FeatChangedEvent(
                 event_type=EventType.FEAT_REMOVED,
                 source_manager='feat',
@@ -332,15 +337,7 @@ class FeatManager(EventEmitter):
         return feat_id in self._has_feat_set
     
     def has_feat_by_name(self, feat_label: str) -> bool:
-        """
-        Check if character has a feat by its label
-        
-        Args:
-            feat_label: The feat label to check
-            
-        Returns:
-            True if character has the feat
-        """
+        """Check if character has a feat by its label"""
         feat_list = self.gff.get('FeatList', [])
         
         for feat in feat_list:
@@ -358,11 +355,7 @@ class FeatManager(EventEmitter):
         return feat_id in self._protected_feats
     
     def _check_feat_progression(self, new_feat_id: int, class_id: int) -> Optional[int]:
-        """
-        Check if a feat is part of a progression that replaces an older version
-
-        Returns the old feat ID that should be removed, or None
-        """
+        """Check if feat is part of a progression chain, returning old feat ID to remove or None"""
         new_feat = self.game_rules_service.get_by_id('feat', new_feat_id)
         if not new_feat:
             return None
@@ -407,14 +400,7 @@ class FeatManager(EventEmitter):
         return None
     
     def get_feat_info(self, feat_id: int, feat_data=None, skip_validation: bool = False) -> Optional[Dict[str, Any]]:
-        """
-        Get detailed information about a feat
-        
-        Args:
-            feat_id: ID of the feat
-            feat_data: Optional pre-loaded feat data to avoid redundant lookups
-            skip_validation: If True, skip expensive prerequisite validation (for display only)
-        """
+        """Get detailed feat information with prerequisite validation (use skip_validation=True for display only)"""
         # If skip_validation is True, use the fast display method
         if skip_validation:
             return self.get_feat_info_display(feat_id, feat_data)
@@ -488,17 +474,7 @@ class FeatManager(EventEmitter):
         }
     
     def get_feat_info_display(self, feat_id: int, feat_data=None) -> Optional[Dict[str, Any]]:
-        """
-        Get feat information for DISPLAY only - no prerequisite validation.
-        10-100x faster than get_feat_info() since it skips expensive validation.
-
-        Args:
-            feat_id: ID of the feat
-            feat_data: Optional pre-loaded feat data to avoid redundant lookups
-
-        Returns:
-            Dict with feat display information (no can_take or missing_requirements)
-        """
+        """Get feat information for display only without prerequisite validation, 10-100x faster than get_feat_info."""
         if feat_id in self._display_cache:
             cached = self._display_cache[feat_id].copy()
             cached['has_feat'] = self.has_feat(feat_id)
@@ -586,13 +562,7 @@ class FeatManager(EventEmitter):
         }
     
     def get_feat_summary_fast(self) -> Dict[str, Any]:
-        """
-        Fast version of get_feat_summary() for display only.
-        Uses get_feat_info_display() instead of get_feat_info() to skip validation.
-        
-        Returns:
-            Dict with categorized feats (no validation data)
-        """
+        """Get feat summary for display only using fast methods that skip validation."""
         feat_list = self.gff.get('FeatList', [])
         
         categorized = {
@@ -626,12 +596,7 @@ class FeatManager(EventEmitter):
         return categorized
     
     def invalidate_validation_cache(self):
-        """
-        Clear the validation cache when character state changes.
-        This should be called when abilities, levels, or feats change.
-
-        Note: Does NOT clear display cache or game data cache (those are static).
-        """
+        """Clear validation cache when character state changes."""
         self._validation_cache.clear()
         self._has_feat_set = None
         self._has_class_set = None
@@ -642,163 +607,10 @@ class FeatManager(EventEmitter):
                 del self._feat_cache[feat_id]['missing_requirements']
         logger.debug("Feat validation cache invalidated due to character state change")
     
-    def get_feat_prerequisites_info_batch(self, feat_ids: List[int]) -> Dict[int, Tuple[bool, List[str]]]:
-        """
-        Get prerequisite information for multiple feats at once (INFORMATIONAL ONLY)\n        NOTE: This method provides information for UI display but does NOT block feat selection.\n        Users can add any feat regardless of the prerequisites shown here.
-        
-        Args:
-            feat_ids: List of feat IDs to check
-            
-        Returns:
-            Dictionary mapping feat_id to (meets_requirements, list_of_missing_requirements)
-        """
-        if self._prerequisite_graph and self._prerequisite_graph.is_built:
-            character_feats = set()
-            feat_list = self.gff.get('FeatList', [])
-            for feat in feat_list:
-                character_feats.add(feat.get('Feat', -1))
-
-            # NOTE: Rust expects lowercase full ability names (e.g., 'strength', not 'Str')
-            class_list = self.gff.get('ClassList', [])
-            character_data = {
-                'strength': self.gff.get('Str', 10),
-                'dexterity': self.gff.get('Dex', 10),
-                'constitution': self.gff.get('Con', 10),
-                'intelligence': self.gff.get('Int', 10),
-                'wisdom': self.gff.get('Wis', 10),
-                'charisma': self.gff.get('Cha', 10),
-                'classes': set(c.get('Class') for c in class_list),
-                'level': sum(c.get('ClassLevel', 0) for c in class_list),
-                'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
-            }
-
-            batch_results = self._prerequisite_graph.validate_batch_fast(
-                feat_ids, character_feats, character_data
-            )
-
-            resolved_batch_results = {}
-            for feat_id, (can_take, errors) in batch_results.items():
-                resolved_errors = []
-                for error in errors:
-                    if error.startswith("Requires Feat "):
-                        try:
-                            feat_id_str = error.replace("Requires Feat ", "")
-                            prereq_feat_id = int(feat_id_str)
-                            prereq_info = self.get_feat_info_display(prereq_feat_id)
-                            if prereq_info:
-                                prereq_name = prereq_info.get('name', f'Feat {prereq_feat_id}')
-                            else:
-                                prereq_name = f'Feat {prereq_feat_id}'
-                            resolved_errors.append(f"Requires {prereq_name}")
-                        except (ValueError, AttributeError):
-                            resolved_errors.append(error)
-                    else:
-                        resolved_errors.append(error)
-                resolved_batch_results[feat_id] = (can_take, resolved_errors)
-
-            return resolved_batch_results
-
-        results = {}
-
-        feat_data_map = {}
-        for feat_id in feat_ids:
-            feat_data = self.game_rules_service.get_by_id('feat', feat_id)
-            if feat_data:
-                feat_data_map[feat_id] = feat_data
-
-        char_abilities = {
-            'Str': self.gff.get('Str', 10),
-            'Dex': self.gff.get('Dex', 10),
-            'Con': self.gff.get('Con', 10),
-            'Int': self.gff.get('Int', 10),
-            'Wis': self.gff.get('Wis', 10),
-            'Cha': self.gff.get('Cha', 10)
-        }
-
-        current_feat_ids = set()
-        feat_list = self.gff.get('FeatList', [])
-        for feat in feat_list:
-            current_feat_ids.add(feat.get('Feat', -1))
-
+    def _get_character_validation_data(self) -> dict:
+        """Build character data dict for Rust prerequisite validation."""
         class_list = self.gff.get('ClassList', [])
-        char_classes = set(c.get('Class') for c in class_list)
-
-        char_level = sum(c.get('ClassLevel', 0) for c in class_list)
-        char_bab = self.character_manager.get_manager('combat').get_base_attack_bonus()
-
-        for feat_id in feat_ids:
-            if feat_id not in feat_data_map:
-                results[feat_id] = (True, [])
-                continue
-
-            feat_data = feat_data_map[feat_id]
-            errors = []
-
-            prereqs = field_mapper.get_feat_prerequisites(feat_data)
-
-            for ability, min_score in prereqs['abilities'].items():
-                if min_score > 0:
-                    current_score = char_abilities.get(ability, 10)
-                    if current_score < min_score:
-                        errors.append(f"Requires {ability.upper()} {min_score}")
-
-            for prereq_feat_id in prereqs['feats']:
-                if prereq_feat_id not in current_feat_ids:
-                    prereq_info = self.get_feat_info_display(prereq_feat_id)
-                    if prereq_info:
-                        prereq_name = prereq_info.get('name', f'Feat {prereq_feat_id}')
-                    else:
-                        prereq_name = f'Feat {prereq_feat_id}'
-                    errors.append(f"Requires {prereq_name}")
-
-            if prereqs['class'] >= 0 and prereqs['class'] not in char_classes:
-                class_id = prereqs['class']
-                if class_id in self._class_cache:
-                    class_name = self._class_cache[class_id]
-                else:
-                    class_data = self.game_rules_service.get_by_id('classes', class_id)
-                    class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}') if class_data else f'Class {class_id}'
-                    self._class_cache[class_id] = class_name
-                errors.append(f"Requires {class_name} class")
-
-            if prereqs['level'] > 0 and char_level < prereqs['level']:
-                errors.append(f"Requires character level {prereqs['level']}")
-
-            if prereqs['bab'] > 0 and char_bab < prereqs['bab']:
-                errors.append(f"Requires base attack bonus +{prereqs['bab']}")
-
-            if prereqs['spell_level'] > 0:
-                pass
-            
-            results[feat_id] = (len(errors) == 0, errors)
-        
-        return results
-    
-    def get_feat_prerequisites_info(self, feat_id: int, feat_data=None) -> Tuple[bool, List[str]]:
-        """
-        Get prerequisite information for a feat using Rust PrerequisiteGraph (INFORMATIONAL ONLY)
-        NOTE: This method provides information for UI display but does NOT block feat selection.
-        Users can add any feat regardless of the prerequisites shown here.
-
-        Args:
-            feat_id: ID of the feat to check
-            feat_data: Optional pre-loaded feat data (unused, kept for API compatibility)
-
-        Returns:
-            (meets_requirements, list_of_missing_requirements)
-        """
-        if not self._prerequisite_graph or not self._prerequisite_graph.is_built:
-            logger.critical("PrerequisiteGraph not available! Cannot validate feat prerequisites.")
-            return True, []
-
-        character_feats = set()
-        feat_list = self.gff.get('FeatList', [])
-        for feat in feat_list:
-            character_feats.add(feat.get('Feat', -1))
-
-        # NOTE: Rust expects lowercase full ability names (e.g., 'strength', not 'Str')
-        class_list = self.gff.get('ClassList', [])
-        character_data = {
+        return {
             'strength': self.gff.get('Str', 10),
             'dexterity': self.gff.get('Dex', 10),
             'constitution': self.gff.get('Con', 10),
@@ -810,10 +622,8 @@ class FeatManager(EventEmitter):
             'bab': self.character_manager.get_manager('combat').get_base_attack_bonus() if self.character_manager.get_manager('combat') else 0
         }
 
-        can_take, errors = self._prerequisite_graph.validate_feat_prerequisites_fast(
-            feat_id, character_feats, character_data
-        )
-
+    def _resolve_prerequisite_errors(self, errors: List[str]) -> List[str]:
+        """Resolve 'Requires Feat 123' error strings to 'Requires Power Attack' format."""
         resolved_errors = []
         for error in errors:
             if error.startswith("Requires Feat "):
@@ -830,16 +640,54 @@ class FeatManager(EventEmitter):
                     resolved_errors.append(error)
             else:
                 resolved_errors.append(error)
+        return resolved_errors
 
+    def get_feat_prerequisites_info_batch(self, feat_ids: List[int]) -> Dict[int, Tuple[bool, List[str]]]:
+        """Get prerequisite information for multiple feats at once for UI display only."""
+        if not self._prerequisite_graph or not self._prerequisite_graph.is_built:
+            logger.error("PrerequisiteGraph not available for batch validation")
+            return {feat_id: (False, ["Validation unavailable"]) for feat_id in feat_ids}
+
+        character_feats = set()
+        feat_list = self.gff.get('FeatList', [])
+        for feat in feat_list:
+            character_feats.add(feat.get('Feat', -1))
+
+        character_data = self._get_character_validation_data()
+
+        batch_results = self._prerequisite_graph.validate_batch_fast(
+            feat_ids, character_feats, character_data
+        )
+
+        resolved_batch_results = {}
+        for feat_id, (can_take, errors) in batch_results.items():
+            resolved_errors = self._resolve_prerequisite_errors(errors)
+            resolved_batch_results[feat_id] = (can_take, resolved_errors)
+
+        return resolved_batch_results
+    
+    def get_feat_prerequisites_info(self, feat_id: int, feat_data=None) -> Tuple[bool, List[str]]:
+        """Get prerequisite information for a feat using Rust PrerequisiteGraph for UI display only."""
+        if not self._prerequisite_graph or not self._prerequisite_graph.is_built:
+            logger.critical("PrerequisiteGraph not available! Cannot validate feat prerequisites.")
+            return True, []
+
+        character_feats = set()
+        feat_list = self.gff.get('FeatList', [])
+        for feat in feat_list:
+            character_feats.add(feat.get('Feat', -1))
+
+        character_data = self._get_character_validation_data()
+
+        can_take, errors = self._prerequisite_graph.validate_feat_prerequisites_fast(
+            feat_id, character_feats, character_data
+        )
+
+        resolved_errors = self._resolve_prerequisite_errors(errors)
         return can_take, resolved_errors
     
     def get_detailed_prerequisites(self, feat_id: int) -> Dict[str, Any]:
-        """
-        Get detailed prerequisite information in a user-friendly format (INFORMATIONAL ONLY)\n        NOTE: This provides prerequisite information for UI display but does NOT block feat selection.\n        Users can add any feat regardless of the prerequisites shown here.
-        
-        Returns:
-            Dict with detailed prerequisite breakdown
-        """
+        """Get detailed prerequisite information in a user-friendly format for UI display only."""
         feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         if not feat_data:
             return {'requirements': [], 'met': [], 'unmet': []}
@@ -964,12 +812,7 @@ class FeatManager(EventEmitter):
         return detailed
     
     def _remove_class_feats(self, class_id: int, level: int, preserve_list: List[int]):
-        """
-        Remove feats granted by a class (CONSERVATIVE approach)
-        Only removes feats that are confirmed to be class-specific to avoid breaking saves
-        
-        Special handling for CLERIC CLASS (id=2) - removes domain feats when losing all cleric levels
-        """
+        """Remove feats granted by a class using conservative approach with special cleric domain handling."""
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
@@ -1036,15 +879,7 @@ class FeatManager(EventEmitter):
             logger.info(f"Removed {total_removed} feats from {class_name} ({removed_count} class feats, {domain_feats_removed} domain feats)")
     
     def _get_feats_gained_during_class_levels(self, class_id: int) -> List[int]:
-        """
-        Get all feats gained during levels of a specific class using LvlStatList
-        
-        Args:
-            class_id: The class ID to check
-            
-        Returns:
-            List of feat IDs gained during that class's levels
-        """
+        """Get all feats gained during levels of a specific class using LvlStatList."""
         feats_from_class = []
         
         # Get the level progression data
@@ -1062,15 +897,7 @@ class FeatManager(EventEmitter):
         return feats_from_class
     
     def _get_all_class_feats_all_levels(self, class_id: int) -> Set[int]:
-        """
-        Get all feats that a class can grant across all its levels
-        
-        Args:
-            class_id: The class ID to check
-            
-        Returns:
-            Set of feat IDs that this class can grant
-        """
+        """Get all feats that a class can grant across all its levels."""
         all_class_feats = set()
         
         try:
@@ -1096,17 +923,7 @@ class FeatManager(EventEmitter):
         return all_class_feats
     
     def _should_preserve_feat_level_based(self, feat_id: int, removed_class_id: int, remaining_class_ids: set) -> bool:
-        """
-        Check if a feat should be preserved because other remaining classes can also grant it
-        
-        Args:
-            feat_id: The feat ID to check
-            removed_class_id: The class being removed
-            remaining_class_ids: Set of remaining class IDs
-            
-        Returns:
-            True if feat should be preserved (other classes can grant it)
-        """
+        """Check if a feat should be preserved because other remaining classes can also grant it."""
         # Check if any remaining class can grant this feat
         for class_id in remaining_class_ids:
             class_feats = self._get_all_class_feats_all_levels(class_id)
@@ -1117,14 +934,7 @@ class FeatManager(EventEmitter):
         return False
     
     def _is_class_specific_feat(self, feat_id: int, removed_class_id: int, remaining_class_ids: set) -> bool:
-        """
-        ENHANCED: Check if a feat should be removed using level-based analysis
-        
-        This replaces the old logic with a smarter approach:
-        1. Check if feat was gained during removed class levels (from LvlStatList)
-        2. Check if any remaining class can also grant this feat
-        3. Only remove if it's unique to the removed class
-        """
+        """Check if a feat should be removed using level-based analysis from LvlStatList."""
         # Step 1: Check if this feat was actually gained during removed class levels
         feats_from_removed_class = self._get_feats_gained_during_class_levels(removed_class_id)
         if feat_id not in feats_from_removed_class:
@@ -1146,10 +956,7 @@ class FeatManager(EventEmitter):
         return True
     
     def _is_feat_from_class_table(self, feat_id: int, class_id: int) -> bool:
-        """
-        Check if a feat is granted by a specific class's feat table
-        Uses the hybrid approach: check both feat table and direct table lookup
-        """
+        """Check if a feat is granted by a specific class's feat table using hybrid lookup approach."""
         try:
             class_data = self.game_rules_service.get_by_id('classes', class_id)
             if not class_data:
@@ -1193,11 +1000,7 @@ class FeatManager(EventEmitter):
             return False  # Conservative: if we can't determine, don't remove
     
     def _add_class_feats(self, class_id: int, level: int):
-        """
-        Add feats granted by a class
-        
-        Special handling for CLERIC CLASS - adds default domain feats when gaining first cleric level
-        """
+        """Add feats granted by a class with special cleric domain handling."""
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return
@@ -1240,15 +1043,7 @@ class FeatManager(EventEmitter):
             logger.info(f"Added {total_added} feats for {class_name} ({added_count} class feats, {domain_feats_added} domain feats)")
     
     def is_legitimate_feat(self, feat_data) -> bool:
-        """
-        Check if a feat is legitimate (not a dev/broken feat)
-        
-        Args:
-            feat_data: The feat data object from dynamic game data
-            
-        Returns:
-            True if feat is legitimate and should be shown to users
-        """
+        """Check if a feat is legitimate and should be shown to users."""
         # Get label using field mapping utility
         label = field_mapper.get_field_value(feat_data, 'label', '')
         if not label:
@@ -1272,38 +1067,11 @@ class FeatManager(EventEmitter):
     def get_legitimate_feats(
         self,
         feat_type: Optional[int] = None,
-        category: str = '',
-        subcategory: str = '',
         search: Optional[str] = None,
         page: int = 1,
         limit: int = 50
     ) -> Dict[str, Any]:
-        """
-        Get list of all legitimate feats with complete filtering and pagination.
-        This is the unified method that handles ALL feat filtering and pagination logic.
-
-        Args:
-            feat_type: Optional feat type filter (bitmask - can combine multiple types with OR)
-            category: Category filter (general, combat, class, etc.)
-            subcategory: Subcategory filter (for class/racial)
-            search: Optional search term to filter by name/description
-            page: Page number (1-indexed, default: 1)
-            limit: Items per page (default: 50)
-
-        Returns:
-            Dict with structure:
-            {
-                'feats': [...],
-                'pagination': {
-                    'page': 1,
-                    'limit': 50,
-                    'total': 150,
-                    'pages': 3,
-                    'has_next': True,
-                    'has_previous': False
-                }
-            }
-        """
+        """Get list of all legitimate feats with complete filtering and pagination."""
         import time
         time_filtering = 0
         time_search = 0
@@ -1314,7 +1082,7 @@ class FeatManager(EventEmitter):
             logger.warning("get_legitimate_feats: No feats table found")
             return self._build_pagination_response([], page, limit, 0)
 
-        logger.debug(f"get_legitimate_feats: Processing {len(all_feats)} feats (feat_type={feat_type}, category={category}, subcategory={subcategory}, search={search}, page={page}, limit={limit})")
+        logger.debug(f"get_legitimate_feats: Processing {len(all_feats)} feats (feat_type={feat_type}, search={search}, page={page}, limit={limit})")
         filtered_count = 0
 
         # Phase 1: Fast filtering to get feat IDs only (no display cache building)
@@ -1327,20 +1095,6 @@ class FeatManager(EventEmitter):
                 filtered_count += 1
                 time_filtering += time.perf_counter() - t0
                 continue
-
-            # Filter by category
-            if category:
-                feat_category = self.get_feat_category(feat_data)
-                if feat_category != category:
-                    time_filtering += time.perf_counter() - t0
-                    continue
-
-                # Filter by subcategory
-                if subcategory and category in ['class', 'racial']:
-                    feat_subcategory = self.get_feat_subcategory(feat_data, category)
-                    if feat_subcategory != subcategory:
-                        time_filtering += time.perf_counter() - t0
-                        continue
 
             # Use proper row index as feat ID
             feat_id = getattr(feat_data, 'id', getattr(feat_data, 'row_index', row_index))
@@ -1456,18 +1210,7 @@ class FeatManager(EventEmitter):
         return self._build_pagination_response(legitimate, page, limit, total_count)
 
     def _build_pagination_response(self, feats: List[Dict[str, Any]], page: int, limit: int, total: int) -> Dict[str, Any]:
-        """
-        Build standardized pagination response structure.
-
-        Args:
-            feats: List of feat dictionaries
-            page: Current page number
-            limit: Items per page
-            total: Total number of items
-
-        Returns:
-            Complete response with pagination metadata
-        """
+        """Build standardized pagination response structure with metadata."""
         pages = (total + limit - 1) // limit if total > 0 else 1
 
         return {
@@ -1483,15 +1226,7 @@ class FeatManager(EventEmitter):
         }
 
     def get_available_feats(self, feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Get list of feats available for selection - OPTIMIZED VERSION
-        
-        Args:
-            feat_type: Optional feat type filter
-            
-        Returns:
-            List of feat info dicts
-        """
+        """Get list of feats available for selection with prerequisite validation."""
         available = []
         
         # Get all feats from dynamic game data
@@ -1523,47 +1258,7 @@ class FeatManager(EventEmitter):
             
             # Skip if wrong type (fast check)
             if feat_type is not None:
-                data_type = field_mapper.get_field_value(feat_data, 'type', 0)
-
-                data_type_int = 0
-                if isinstance(data_type, str):
-                    data_type_upper = data_type.upper()
-                    if 'GENERAL' in data_type_upper:
-                        data_type_int = 1
-                    elif 'PROFICIENCY' in data_type_upper:
-                        data_type_int = 2
-                    elif 'SKILLNSAVE' in data_type_upper or 'SKILL' in data_type_upper:
-                        data_type_int = 4
-                    elif 'METAMAGIC' in data_type_upper:
-                        data_type_int = 8
-                    elif 'DIVINE' in data_type_upper:
-                        data_type_int = 16
-                    elif 'EPIC' in data_type_upper:
-                        data_type_int = 32
-                    elif 'CLASSABILITY' in data_type_upper:
-                        data_type_int = 64
-                    elif 'BACKGROUND' in data_type_upper:
-                        data_type_int = 128
-                    elif 'SPELLCASTING' in data_type_upper:
-                        data_type_int = 256
-                    elif 'HISTORY' in data_type_upper:
-                        data_type_int = 512
-                    elif 'HERITAGE' in data_type_upper:
-                        data_type_int = 1024
-                    elif 'ITEMCREATION' in data_type_upper or 'ITEM' in data_type_upper:
-                        data_type_int = 2048
-                    elif 'RACIALABILITY' in data_type_upper or 'RACIAL' in data_type_upper:
-                        data_type_int = 4096
-                    else:
-                        data_type_int = 1
-                else:
-                    try:
-                        data_type_int = int(data_type) if data_type else 0
-                        if data_type_int not in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
-                            data_type_int = 1
-                    except (ValueError, TypeError):
-                        data_type_int = 1
-
+                data_type_int = self._parse_feat_type(feat_data)
                 if not (data_type_int & feat_type):
                     continue
             
@@ -1577,235 +1272,6 @@ class FeatManager(EventEmitter):
                 available.append(self.get_feat_info(feat_id, feat_data))
         
         logger.debug(f"get_available_feats: Checked {prereq_checked} prerequisites out of {total_checked} candidates from {len(all_feats)} total feats")
-        
-        return available
-    
-    def get_feat_category(self, feat_data) -> str:
-        """
-        Determine the category of a feat based on its properties
-        
-        Args:
-            feat_data: Feat data object from 2DA
-            
-        Returns:
-            Category string: 'general', 'combat', 'metamagic', 'item_creation', 
-                           'divine', 'epic', 'class', 'racial', etc.
-        """
-        # Check for Epic feats first (highest priority)
-        min_level = getattr(feat_data, 'MinLevel', getattr(feat_data, 'minlevel', 0))
-        if min_level and int(min_level) >= 21:
-            return 'epic'
-        
-        # Check feat type
-        feat_type = getattr(feat_data, 'Type', getattr(feat_data, 'type', 0))
-        if feat_type:
-            feat_type = int(feat_type)
-            if feat_type == 0:
-                return 'general'
-            elif feat_type == 1:
-                return 'combat'
-            elif feat_type == 2:
-                return 'metamagic'
-            elif feat_type == 3:
-                return 'item_creation'
-            elif feat_type == 4:
-                return 'divine'
-        
-        # Check for class-specific feats
-        label = getattr(feat_data, 'LABEL', getattr(feat_data, 'label', ''))
-        if label:
-            label_lower = label.lower()
-            # Class-specific feat patterns
-            if any(cls in label_lower for cls in ['barbarian', 'bard', 'cleric', 'druid', 
-                                                   'fighter', 'monk', 'paladin', 'ranger', 
-                                                   'rogue', 'sorcerer', 'wizard', 'warlock']):
-                return 'class'
-            
-            # Racial feat patterns  
-            if any(race in label_lower for race in ['human', 'elf', 'dwarf', 'halfling',
-                                                     'gnome', 'orc', 'tiefling', 'aasimar']):
-                return 'racial'
-        
-        # Default to general
-        return 'general'
-    
-    def get_feat_subcategory(self, feat_data, category: str) -> str:
-        """
-        Get subcategory for class or racial feats
-        
-        Args:
-            feat_data: Feat data object
-            category: Main category
-            
-        Returns:
-            Subcategory string or empty string
-        """
-        if category != 'class' and category != 'racial':
-            return ''
-            
-        label = getattr(feat_data, 'LABEL', getattr(feat_data, 'label', ''))
-        if not label:
-            return ''
-            
-        label_lower = label.lower()
-        
-        if category == 'class':
-            # Check for specific class names
-            classes = ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 
-                      'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 
-                      'wizard', 'warlock']
-            for cls in classes:
-                if cls in label_lower:
-                    return cls
-                    
-        elif category == 'racial':
-            # Check for specific race names
-            races = ['human', 'elf', 'dwarf', 'halfling', 'gnome', 
-                    'orc', 'tiefling', 'aasimar']
-            for race in races:
-                if race in label_lower:
-                    return race
-        
-        return ''
-    
-    def get_legitimate_feats_by_category(self, category: str = '', subcategory: str = '', 
-                                         feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Get legitimate feats filtered by category (no prerequisite checking)
-        
-        Args:
-            category: Category filter (general, combat, class, etc.)
-            subcategory: Subcategory filter (for class/racial)
-            feat_type: Optional feat type filter
-            
-        Returns:
-            List of feat info dicts
-        """
-        legitimate = []
-        
-        # Get all feats from dynamic game data
-        all_feats = self.game_rules_service.get_table('feat')
-        if not all_feats:
-            return legitimate
-        
-        for row_index, feat_data in enumerate(all_feats):
-            # Filter out illegitimate feats first
-            if not self.is_legitimate_feat(feat_data):
-                continue
-                
-            # Check category if specified
-            if category:
-                feat_category = self.get_feat_category(feat_data)
-                if feat_category != category:
-                    continue
-                    
-                # Check subcategory if specified
-                if subcategory and category in ['class', 'racial']:
-                    feat_subcategory = self.get_feat_subcategory(feat_data, category)
-                    if feat_subcategory != subcategory:
-                        continue
-            
-            # Use proper row index as feat ID
-            feat_id = getattr(feat_data, 'id', getattr(feat_data, 'row_index', row_index))
-            
-            # Skip if wrong type
-            if feat_type is not None:
-                data_type = field_mapper.get_field_value(feat_data, 'type', 0)
-
-                data_type_int = 0
-                if isinstance(data_type, str):
-                    data_type_upper = data_type.upper()
-                    if 'GENERAL' in data_type_upper:
-                        data_type_int = 1
-                    elif 'PROFICIENCY' in data_type_upper:
-                        data_type_int = 2
-                    elif 'SKILLNSAVE' in data_type_upper or 'SKILL' in data_type_upper:
-                        data_type_int = 4
-                    elif 'METAMAGIC' in data_type_upper:
-                        data_type_int = 8
-                    elif 'DIVINE' in data_type_upper:
-                        data_type_int = 16
-                    elif 'EPIC' in data_type_upper:
-                        data_type_int = 32
-                    elif 'CLASSABILITY' in data_type_upper:
-                        data_type_int = 64
-                    elif 'BACKGROUND' in data_type_upper:
-                        data_type_int = 128
-                    elif 'SPELLCASTING' in data_type_upper:
-                        data_type_int = 256
-                    elif 'HISTORY' in data_type_upper:
-                        data_type_int = 512
-                    elif 'HERITAGE' in data_type_upper:
-                        data_type_int = 1024
-                    elif 'ITEMCREATION' in data_type_upper or 'ITEM' in data_type_upper:
-                        data_type_int = 2048
-                    elif 'RACIALABILITY' in data_type_upper or 'RACIAL' in data_type_upper:
-                        data_type_int = 4096
-                    else:
-                        data_type_int = 1
-                else:
-                    try:
-                        data_type_int = int(data_type) if data_type else 0
-                        if data_type_int not in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
-                            data_type_int = 1
-                    except (ValueError, TypeError):
-                        data_type_int = 1
-
-                if not (data_type_int & feat_type):
-                    continue
-            
-            # Use fast display method - skip validation for performance
-            feat_info = self.get_feat_info(feat_id, feat_data, skip_validation=True)
-            if feat_info:
-                legitimate.append(feat_info)
-        
-        return legitimate
-    
-    def get_available_feats_by_category(self, category: str = '', subcategory: str = '',
-                                        feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Get available feats filtered by category (WITH prerequisite checking)
-        
-        Args:
-            category: Category filter (general, combat, class, etc.)
-            subcategory: Subcategory filter (for class/racial)
-            feat_type: Optional feat type filter
-            
-        Returns:
-            List of feat info dicts that character can actually take
-        """
-        available = []
-        
-        # First get legitimate feats by category (no prereq checking)
-        category_feats = self.get_legitimate_feats_by_category(category, subcategory, feat_type)
-        
-        # Get character's current feats once to avoid repeated has_feat() calls
-        current_feat_ids = set()
-        feat_list = self.gff.get('FeatList', [])
-        for feat in feat_list:
-            current_feat_ids.add(feat.get('Feat', -1))
-        
-        # Filter out feats the character already has and collect IDs for batch validation
-        feats_to_validate = []
-        feat_info_map = {}
-        for feat_info in category_feats:
-            feat_id = feat_info['id']
-            
-            # Skip if already has feat
-            if feat_id in current_feat_ids:
-                continue
-            
-            feats_to_validate.append(feat_id)
-            feat_info_map[feat_id] = feat_info
-        
-        # Batch validate all prerequisites at once
-        if feats_to_validate:
-            validation_results = self.get_feat_prerequisites_info_batch(feats_to_validate)
-            
-            # Add only valid feats to available list
-            for feat_id, (is_valid, _) in validation_results.items():
-                if is_valid:
-                    available.append(feat_info_map[feat_id])
         
         return available
     
@@ -1866,12 +1332,7 @@ class FeatManager(EventEmitter):
         return len(errors) == 0, errors
     
     def get_all_feats(self) -> List[Dict[str, Any]]:
-        """
-        Get all character feats (not just summary)
-        
-        Returns:
-            List of detailed feat information
-        """
+        """Get all character feats with detailed information."""
         feats = []
         feat_list = self.gff.get('FeatList', [])
         
@@ -1889,15 +1350,7 @@ class FeatManager(EventEmitter):
         return feats
     
     def batch_add_feats(self, feat_ids: List[int]) -> List[Dict[str, Any]]:
-        """
-        Add multiple feats at once
-        
-        Args:
-            feat_ids: List of feat IDs to add
-            
-        Returns:
-            List of results for each feat
-        """
+        """Add multiple feats at once and return results for each."""
         results = []
         
         # Start transaction
@@ -1929,85 +1382,9 @@ class FeatManager(EventEmitter):
             raise
         
         return results
-    
-    def get_feat_chains(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Get related feat progressions (e.g., Weapon Focus -> Weapon Specialization)
-        
-        Returns:
-            Dict mapping chain names to feat lists
-        """
-        chains = {}
-        
-        # Define common feat chains
-        chain_definitions = {
-            'weapon_focus': {
-                'pattern': ['weapon_focus', 'weapon_specialization', 'greater_weapon_focus', 'greater_weapon_specialization'],
-                'name': 'Weapon Mastery'
-            },
-            'power_attack': {
-                'pattern': ['power_attack', 'cleave', 'great_cleave'],
-                'name': 'Power Attack Chain'
-            },
-            'combat_expertise': {
-                'pattern': ['combat_expertise', 'improved_disarm', 'improved_trip'],
-                'name': 'Combat Expertise Chain'
-            },
-            'dodge': {
-                'pattern': ['dodge', 'mobility', 'spring_attack'],
-                'name': 'Dodge Chain'
-            },
-            'toughness': {
-                'pattern': ['toughness', 'improved_toughness', 'epic_toughness'],
-                'name': 'Toughness Chain'
-            }
-        }
-        
-        # Get all feats
-        feat_table = self.game_rules_service.get_table('feat')
-        if not feat_table:
-            return chains
-        
-        # Check each chain
-        for chain_key, chain_def in chain_definitions.items():
-            chain_feats = []
-            
-            for feat_pattern in chain_def['pattern']:
-                # Find feats matching pattern
-                for feat_data in feat_table:
-                    feat_label = field_mapper.get_field_value(feat_data, 'label', '').lower()
-                    if feat_pattern in feat_label:
-                        feat_id = field_mapper.get_field_value(feat_data, 'id', -1)
-                        if feat_id >= 0:
-                            has_feat = self.has_feat(feat_id)
-                            can_take, _ = self.get_feat_prerequisites_info(feat_id)
-                            
-                            chain_feats.append({
-                                'id': feat_id,
-                                'name': field_mapper.get_field_value(feat_data, 'label', f'Feat {feat_id}'),
-                                'has_feat': has_feat,
-                                'can_take': can_take and not has_feat,
-                                'position': chain_def['pattern'].index(feat_pattern)
-                            })
-            
-            if chain_feats:
-                # Sort by position in chain
-                chain_feats.sort(key=lambda x: x['position'])
-                chains[chain_def['name']] = chain_feats
-        
-        return chains
-    
+
     def swap_feat(self, old_feat_id: int, new_feat_id: int) -> bool:
-        """
-        Replace a feat with another (useful for retraining)
-        
-        Args:
-            old_feat_id: Feat to remove
-            new_feat_id: Feat to add
-            
-        Returns:
-            True if successful
-        """
+        """Replace a feat with another for retraining purposes."""
         # Check if old feat can be removed
         if self.is_feat_protected(old_feat_id):
             raise ValueError(f"Cannot swap protected feat {old_feat_id}")
@@ -2042,15 +1419,7 @@ class FeatManager(EventEmitter):
             raise
     
     def can_take_feat(self, feat_id: int) -> Tuple[bool, str]:
-        """
-        Public method to check if feat can be taken
-        
-        Args:
-            feat_id: The feat ID to check
-            
-        Returns:
-            (can_take, reason) tuple
-        """
+        """Check if feat can be taken and return reason."""
         # Check if already has the feat
         if self.has_feat(feat_id):
             return False, "Already has this feat"
@@ -2064,15 +1433,7 @@ class FeatManager(EventEmitter):
             return False, "; ".join(errors)
     
     def get_feat_uses(self, feat_id: int) -> Optional[int]:
-        """
-        Get remaining uses for a feat (for feats with limited uses/day)
-        
-        Args:
-            feat_id: The feat ID
-            
-        Returns:
-            Number of uses remaining, or None if unlimited
-        """
+        """Get remaining uses for a feat with limited uses per day."""
         feat_list = self.gff.get('FeatList', [])
         
         for feat in feat_list:
@@ -2083,16 +1444,7 @@ class FeatManager(EventEmitter):
         return None
     
     def set_feat_uses(self, feat_id: int, uses: int) -> bool:
-        """
-        Set remaining uses for a feat
-        
-        Args:
-            feat_id: The feat ID
-            uses: Number of uses to set
-            
-        Returns:
-            True if successful
-        """
+        """Set remaining uses for a feat."""
         feat_list = self.gff.get('FeatList', [])
         
         for feat in feat_list:
@@ -2103,24 +1455,14 @@ class FeatManager(EventEmitter):
         return False
     
     def get_bonus_feats_available(self) -> int:
-        """
-        Get number of bonus feats available to select
-        
-        Returns:
-            Number of unallocated bonus feats
-        """
+        """Get number of unallocated bonus feats available to select."""
         # This is complex as it depends on class levels and feat selections
         # For now, return a placeholder
         # TODO: Implement proper bonus feat tracking
         return 0
     
     def get_feat_categories(self) -> Dict[str, List[int]]:
-        """
-        Get feats organized by category
-        
-        Returns:
-            Dict mapping category names to feat ID lists
-        """
+        """Get feats organized by category."""
         from collections import defaultdict
         categories = defaultdict(list)
         feat_list = self.gff.get('FeatList', [])
@@ -2140,13 +1482,7 @@ class FeatManager(EventEmitter):
         return dict(categories)
     
     def get_feat_categories_fast(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Get feats organized by category using fast display methods (no validation).
-        Performance-optimized version that skips prerequisite checking.
-        
-        Returns:
-            Dict mapping category names to lists of feat info (display only)
-        """
+        """Get feats organized by category using fast display methods without validation."""
         from collections import defaultdict
         categories = defaultdict(list)
         feat_list = self.gff.get('FeatList', [])
@@ -2164,16 +1500,7 @@ class FeatManager(EventEmitter):
         return dict(categories)
     
     def get_feat_category_by_type(self, feat_type: int) -> str:
-        """
-        Get category name based on feat type number.
-        Helper method for fast categorization.
-
-        Args:
-            feat_type: The feat type number
-
-        Returns:
-            Category name string
-        """
+        """Get category name based on feat type number."""
         if feat_type == 1:
             return 'General'
         elif feat_type == 2:
@@ -2204,18 +1531,7 @@ class FeatManager(EventEmitter):
             return 'General'
 
     def _parse_feat_type(self, feat_data) -> int:
-        """
-        Parse numeric feat type from feat data by checking both DESCRIPTION and FeatCategory fields.
-
-        Args:
-            feat_data: The feat data object
-
-        Returns:
-            Numeric feat type bitflag:
-            1=General, 2=Proficiency, 4=Skill/Save, 8=Metamagic, 16=Divine, 32=Epic,
-            64=Class, 128=Background, 256=Spellcasting, 512=History, 1024=Heritage,
-            2048=ItemCreation, 4096=Racial
-        """
+        """Parse numeric feat type from feat data by checking DESCRIPTION and FeatCategory fields."""
         import re
 
         description = field_mapper.get_field_value(feat_data, 'description', '')
@@ -2279,12 +1595,7 @@ class FeatManager(EventEmitter):
         return 1
     
     def detect_epithet_feats(self) -> Set[int]:
-        """
-        Detect epithet feats (special story/custom feats that should be protected)
-        
-        Returns:
-            Set of feat IDs that are epithet feats
-        """
+        """Detect epithet feats like special story or custom feats that should be protected."""
         epithet_feats = set()
         
         # Get all feats from character
@@ -2338,12 +1649,7 @@ class FeatManager(EventEmitter):
     # ===== DOMAIN FEAT MANAGEMENT =====
     
     def _build_domain_feat_map(self) -> Dict[int, List[Dict]]:
-        """
-        Build mapping of feat_id -> list of domains that grant it
-        
-        Returns:
-            Dict mapping feat IDs to domain information
-        """
+        """Build mapping of feat_id to list of domains that grant it."""
         if self._domain_feat_map_cache is not None:
             return self._domain_feat_map_cache
         
@@ -2393,12 +1699,7 @@ class FeatManager(EventEmitter):
         return self._domain_feat_map_cache
     
     def get_all_domain_feat_ids(self) -> Set[int]:
-        """
-        Get set of all feat IDs that are domain feats
-        
-        Returns:
-            Set of domain feat IDs
-        """
+        """Get set of all feat IDs that are domain feats."""
         if self._domain_feats_cache is not None:
             return self._domain_feats_cache
         
@@ -2409,29 +1710,12 @@ class FeatManager(EventEmitter):
         return self._domain_feats_cache
     
     def is_domain_feat(self, feat_id: int) -> bool:
-        """
-        Check if a feat is a domain feat (from domains.2da)
-        This distinguishes domain feats from quest epithet feats with similar names
-
-        Args:
-            feat_id: The feat ID to check
-
-        Returns:
-            True if feat is listed in any domain's GrantedFeat/CastableFeat/EpithetFeat
-        """
+        """Check if a feat is a domain feat from domains.2da."""
         domain_feats = self.get_all_domain_feat_ids()
         return feat_id in domain_feats
 
     def is_domain_epithet_feat(self, feat_id: int) -> bool:
-        """
-        Check if a feat is a domain EPITHET feat (the selectable domain marker)
-
-        Args:
-            feat_id: The feat ID to check
-
-        Returns:
-            True if feat is an EpithetFeat for a domain
-        """
+        """Check if a feat is a domain epithet feat, the selectable domain marker."""
         domain_feat_map = self._build_domain_feat_map()
         if feat_id not in domain_feat_map:
             return False
@@ -2443,12 +1727,7 @@ class FeatManager(EventEmitter):
         return False
     
     def get_character_domain_feats(self) -> Set[int]:
-        """
-        Get domain feats that the character currently has
-        
-        Returns:
-            Set of domain feat IDs that character possesses
-        """
+        """Get domain feats that the character currently has."""
         character_feats = set()
         feat_list = self.gff.get('FeatList', [])
         
@@ -2462,12 +1741,7 @@ class FeatManager(EventEmitter):
         return character_feats.intersection(domain_feats)
     
     def get_character_active_domains(self) -> Set[int]:
-        """
-        Determine which domains are active based on character's domain feats
-        
-        Returns:
-            Set of domain IDs that character has feats for
-        """
+        """Determine which domains are active based on character's domain feats."""
         character_domain_feats = self.get_character_domain_feats()
         domain_feat_map = self._build_domain_feat_map()
         
@@ -2482,15 +1756,7 @@ class FeatManager(EventEmitter):
         return active_domains
     
     def get_domain_feats_for_domains(self, domain_ids: Set[int]) -> Set[int]:
-        """
-        Get all feat IDs associated with specific domains
-        
-        Args:
-            domain_ids: Set of domain IDs
-            
-        Returns:
-            Set of feat IDs granted by those domains
-        """
+        """Get all feat IDs associated with specific domains."""
         domain_feat_map = self._build_domain_feat_map()
         domain_feats = set()
         
@@ -2503,15 +1769,7 @@ class FeatManager(EventEmitter):
         return domain_feats
     
     def add_domain(self, domain_id: int) -> Dict[str, Any]:
-        """
-        Add a domain to the character by granting all associated feats
-
-        Args:
-            domain_id: The domain ID from domains.2da
-
-        Returns:
-            Dict with added feats and domain info
-        """
+        """Add a domain to the character by granting all associated feats."""
         from ..events import DomainChangedEvent
         import time
 
@@ -2597,15 +1855,7 @@ class FeatManager(EventEmitter):
         }
 
     def remove_domain(self, domain_id: int) -> Dict[str, Any]:
-        """
-        Remove a domain from the character by removing all associated feats
-
-        Args:
-            domain_id: The domain ID from domains.2da
-
-        Returns:
-            Dict with removed feats and domain info
-        """
+        """Remove a domain from the character by removing all associated feats."""
         from ..events import DomainChangedEvent
         import time
 
@@ -2680,12 +1930,7 @@ class FeatManager(EventEmitter):
         logger.debug("Domain feat caches invalidated")
     
     def remove_all_domain_feats(self) -> int:
-        """
-        Remove ALL domain feats from character (for cleric -> non-cleric transition)
-        
-        Returns:
-            Number of domain feats removed
-        """
+        """Remove all domain feats from character for cleric to non-cleric transition."""
         character_domain_feats = self.get_character_domain_feats()
         removed_count = 0
         
@@ -2703,15 +1948,7 @@ class FeatManager(EventEmitter):
         return removed_count
     
     def remove_domain_feats_for_domains(self, domain_ids: Set[int]) -> int:
-        """
-        Remove domain feats for specific domains (for domain change within cleric)
-        
-        Args:
-            domain_ids: Set of domain IDs to remove feats for
-            
-        Returns:
-            Number of feats removed
-        """
+        """Remove domain feats for specific domains when changing cleric domains."""
         if not domain_ids:
             return 0
         
@@ -2735,15 +1972,7 @@ class FeatManager(EventEmitter):
         return removed_count
     
     def add_domain_feats_for_domains(self, domain_ids: Set[int]) -> int:
-        """
-        Add domain feats for specific domains (for cleric class gain or domain change)
-        
-        Args:
-            domain_ids: Set of domain IDs to add feats for
-            
-        Returns:
-            Number of feats added
-        """
+        """Add domain feats for specific domains when gaining cleric class or changing domains."""
         if not domain_ids:
             return 0
         
@@ -2767,16 +1996,7 @@ class FeatManager(EventEmitter):
         return added_count
     
     def change_cleric_domains(self, old_domain_ids: Set[int], new_domain_ids: Set[int]) -> Dict[str, int]:
-        """
-        Change cleric domains by removing old domain feats and adding new ones
-        
-        Args:
-            old_domain_ids: Set of current domain IDs
-            new_domain_ids: Set of new domain IDs
-            
-        Returns:
-            Dict with 'removed' and 'added' counts
-        """
+        """Change cleric domains by removing old domain feats and adding new ones."""
         logger.info(f"Changing cleric domains from {old_domain_ids} to {new_domain_ids}")
         
         # Determine which domains to remove and add
@@ -2805,12 +2025,7 @@ class FeatManager(EventEmitter):
         return result
     
     def get_available_domains(self) -> List[Dict[str, Any]]:
-        """
-        Get list of available domains for cleric selection
-        
-        Returns:
-            List of domain information dicts
-        """
+        """Get list of available domains for cleric selection."""
         domains_table = self.game_rules_service.get_table('domains')
         if not domains_table:
             return []
@@ -2847,57 +2062,30 @@ class FeatManager(EventEmitter):
         return available_domains
 
     def get_save_bonuses(self) -> Dict[str, int]:
-        """
-        Calculate total save bonuses from all character feats by parsing feat descriptions.
-        Automatically detects save bonuses from any feat, including modded feats.
+        """Calculate total save bonuses from all character feats by parsing feat descriptions."""
+        if self._save_bonuses_cache is not None:
+            return self._save_bonuses_cache.copy()
 
-        Returns:
-            Dict with fortitude, reflex, will save bonuses from feats
-        """
-        import re
-
-        bonuses = {
-            'fortitude': 0,
-            'reflex': 0,
-            'will': 0
-        }
-
+        bonuses = {'fortitude': 0, 'reflex': 0, 'will': 0}
         feat_list = self.gff.get('FeatList', [])
 
         for feat_entry in feat_list:
             feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
-
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if not feat_data:
                 continue
 
             label = (getattr(feat_data, 'LABEL', '') or '').lower()
             description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+            description_lower = description.lower()
 
-            conditional_keywords = [
-                'against', 'vs ', 'versus', 'to avoid', 'made to'
-            ]
-            if any(keyword in description.lower() for keyword in conditional_keywords):
+            if any(kw in description_lower for kw in _SAVE_CONDITIONAL_KEYWORDS):
                 continue
 
-            save_patterns = [
-                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+all\s+(?:saving\s+throws|saves)', 'universal'),
-                (r'([+-]\d+)\s+(?:to\s+)?all\s+(?:saving\s+throws|saves)', 'universal'),
-                (r'([+-]\d+)\s+(?:bonus\s+)?(?:to|on)\s+Fortitude\s+and\s+Will\s+(?:saving\s+throws|saves?)', 'fortitude_and_will'),
-                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Fortitude\s+(?:saving\s+throws|saves?)', 'fortitude'),
-                (r'([+-]\d+)\s+Fortitude\s+Save', 'fortitude'),
-                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Reflex\s+(?:saving\s+throws|saves?)', 'reflex'),
-                (r'([+-]\d+)\s+Reflex\s+Save', 'reflex'),
-                (r'([+-]\d+)\s+(?:\w+\s+)?bonus\s+(?:to|on)\s+(?:all\s+)?Will\s+(?:saving\s+throws|saves?)', 'will'),
-                (r'([+-]\d+)\s+(?:to|on)\s+all\s+Will\s+(?:saving\s+throws|saves?)', 'will'),
-                (r'([+-]\d+)\s+Will\s+Save', 'will'),
-            ]
-
-            for pattern, save_type in save_patterns:
-                match = re.search(pattern, description, re.IGNORECASE)
+            for pattern, save_type in _SAVE_PATTERNS:
+                match = pattern.search(description)
                 if match:
                     bonus_value = int(match.group(1))
-
                     if save_type == 'universal':
                         bonuses['fortitude'] += bonus_value
                         bonuses['reflex'] += bonus_value
@@ -2907,84 +2095,59 @@ class FeatManager(EventEmitter):
                         bonuses['will'] += bonus_value
                     else:
                         bonuses[save_type] += bonus_value
-
-                    sign = '+' if bonus_value >= 0 else ''
-                    logger.info(f"Applied {label} bonus {sign}{bonus_value} to {save_type} saves")
                     break
 
-        return bonuses
+        self._save_bonuses_cache = bonuses
+        return bonuses.copy()
 
     def get_ac_bonuses(self) -> Dict[str, int]:
-        """
-        Calculate all AC bonuses from feats by parsing feat descriptions.
-        Automatically detects AC bonuses from any feat, including modded feats.
-
-        Returns:
-            Dict with 'dodge' and 'misc' AC bonuses
-        """
-        import re
+        """Calculate all AC bonuses from feats by parsing feat descriptions."""
+        if self._ac_bonuses_cache is not None:
+            return self._ac_bonuses_cache.copy()
 
         bonuses = {'dodge': 0, 'misc': 0}
-
         feat_list = self.gff.get('FeatList', [])
 
         for feat_entry in feat_list:
             feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
-
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if not feat_data:
                 continue
 
             label = (getattr(feat_data, 'LABEL', '') or '').lower()
             description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+            description_lower = description.lower()
 
-            conditional_keywords = [
-                'against', 'vs ', 'versus', 'when ', 'while ', 'if ',
-                'when wielding', 'when wearing', 'when using', 'when fighting'
-            ]
-            if any(keyword in description.lower() for keyword in conditional_keywords):
+            if any(kw in description_lower for kw in _AC_CONDITIONAL_KEYWORDS):
                 continue
 
             if 'dodge' in label or 'mobility' in label:
-                match = re.search(r'\+(\d+)', description)
+                match = _AC_DODGE_PATTERN.search(description)
                 if match:
                     bonuses['dodge'] += int(match.group(1))
-                elif 'dodge' in label and not match:
+                elif 'dodge' in label:
                     bonuses['dodge'] += 1
                 continue
 
-            ac_patterns = [
-                r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+(?:Armor\s+Class|AC)',
-                r'\+(\d+)\s+(?:to\s+)?AC(?:\s|\.|\,)',
-                r'\+(\d+)\s+AC\s+bonus',
-            ]
-
-            for pattern in ac_patterns:
-                match = re.search(pattern, description, re.IGNORECASE)
+            for pattern in _AC_PATTERNS:
+                match = pattern.search(description)
                 if match:
-                    bonus_value = int(match.group(1))
-                    bonuses['misc'] += bonus_value
-                    logger.debug(f"Found AC bonus +{bonus_value} from feat {feat_id}: {label}")
+                    bonuses['misc'] += int(match.group(1))
                     break
 
-        return bonuses
+        self._ac_bonuses_cache = bonuses
+        return bonuses.copy()
 
     def get_initiative_bonus(self) -> int:
-        """
-        Calculate initiative bonus from feats by parsing feat descriptions.
-
-        Returns:
-            Total initiative bonus from feats
-        """
-        import re
+        """Calculate initiative bonus from feats by parsing feat descriptions."""
+        if self._initiative_bonus_cache is not None:
+            return self._initiative_bonus_cache
 
         bonus = 0
-
         feat_list = self.gff.get('FeatList', [])
 
         for feat_entry in feat_list:
             feat_id = feat_entry.get('Feat') if isinstance(feat_entry, dict) else feat_entry
-
             feat_data = self.game_rules_service.get_by_id('feat', feat_id)
             if not feat_data:
                 continue
@@ -2994,20 +2157,13 @@ class FeatManager(EventEmitter):
 
             if 'improvedinitiative' in label.replace('_', '').replace(' ', ''):
                 bonus += 4
-                logger.debug(f"Found Improved Initiative feat: +4 initiative")
                 continue
 
-            initiative_patterns = [
-                r'\+(\d+)\s+(?:\w+\s+)?bonus\s+to\s+initiative',
-                r'\+(\d+)\s+(?:to\s+)?initiative',
-            ]
-
-            for pattern in initiative_patterns:
-                match = re.search(pattern, description, re.IGNORECASE)
+            for pattern in _INITIATIVE_PATTERNS:
+                match = pattern.search(description)
                 if match:
-                    bonus_value = int(match.group(1))
-                    bonus += bonus_value
-                    logger.debug(f"Found initiative bonus +{bonus_value} from feat: {label}")
+                    bonus += int(match.group(1))
                     break
 
+        self._initiative_bonus_cache = bonus
         return bonus

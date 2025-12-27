@@ -92,20 +92,14 @@ def get_feats_state(
     try:
         feat_manager = manager.get_manager('feat')
         
-        # Use existing manager methods to build feat state (fast version - no expensive operations)
         feat_summary = feat_manager.get_feat_summary_fast()
         all_feats = feat_manager.get_all_feats()
-        # Skip expensive operations for state endpoint
-        available_feats = []
-        legitimate_feats = []
-        feat_chains = {}
-        
+
         feat_state = {
             'summary': feat_summary,
             'all_feats': all_feats,
-            'available_feats': available_feats,
-            'legitimate_feats': legitimate_feats,
-            'feat_chains': feat_chains,
+            'available_feats': [],
+            'legitimate_feats': [],
             'recommended_feats': []
         }
         
@@ -151,9 +145,7 @@ def get_available_feats(
 def get_legitimate_feats(
     character_id: int,
     manager: CharacterManagerDep,
-    feat_type: Optional[int] = Query(None, description="Filter by feat type"),
-    category: str = Query("", description="Filter by category"),
-    subcategory: str = Query("", description="Filter by subcategory"),
+    feat_type: Optional[int] = Query(None, description="Filter by feat type (bitflag)"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=200, description="Items per page"),
     search: str = Query("", description="Search term")
@@ -170,8 +162,6 @@ def get_legitimate_feats(
     cache_key = _get_feat_cache_key(
         character_id,
         "legitimate",
-        category=category.lower(),
-        subcategory=subcategory.lower(),
         feat_type=feat_type_int,
         page=page,
         limit=limit,
@@ -186,12 +176,10 @@ def get_legitimate_feats(
     try:
         feat_manager = manager.get_manager('feat')
 
-        logger.info(f"get_legitimate_feats endpoint: character_id={character_id}, page={page}, limit={limit}, category='{category}', subcategory='{subcategory}', search='{search}', feat_type={feat_type_int}")
+        logger.info(f"get_legitimate_feats endpoint: character_id={character_id}, page={page}, limit={limit}, search='{search}', feat_type={feat_type_int}")
 
         result = feat_manager.get_legitimate_feats(
             feat_type=feat_type_int,
-            category=category.lower(),
-            subcategory=subcategory.lower(),
             search=search.strip() if search.strip() else None,
             page=page,
             limit=limit
@@ -694,219 +682,4 @@ def get_feats_by_category(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get feats by category: {str(e)}"
-        )
-
-
-@router.get("/characters/{character_id}/feats/debug-table-lookup")
-def debug_feat_table_lookup(
-    character_id: int,
-    manager: CharacterManagerDep,
-    class_id: int = Query(56, description="Class ID to test"),
-    feat_id: int = Query(2038, description="Feat ID to search for")
-):
-    """Debug endpoint to test feat table lookup"""
-    feat_manager = manager.get_manager('feat')
-    
-    debug_info = {
-        "class_id": class_id,
-        "feat_id": feat_id,
-        "steps": []
-    }
-    
-    try:
-        # Step 1: Get class data
-        class_data = feat_manager.game_rules_service.get_by_id('classes', class_id)
-        if not class_data:
-            debug_info["steps"].append(f"FAIL: Class {class_id} not found")
-            return debug_info
-        
-        debug_info["steps"].append(f"OK: Found class: {getattr(class_data, 'name', 'Unknown')}")
-        
-        # Step 2: Get feat table name using field mapper
-        from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-        feat_table_name = field_mapper.get_field_value(class_data, 'feats_table', None)
-        if not feat_table_name:
-            debug_info["steps"].append("FAIL: No feats_table in class data")
-            return debug_info
-        
-        debug_info["steps"].append(f"OK: Feat table name: {feat_table_name}")
-        
-        # Step 3: Load feat table
-        feat_table = feat_manager.game_rules_service.get_table(feat_table_name.lower())
-        if not feat_table:
-            debug_info["steps"].append(f"FAIL: Could not load table {feat_table_name}")
-            return debug_info
-        
-        debug_info["steps"].append(f"OK: Loaded table with {len(feat_table)} entries")
-        
-        # Step 4: Search for feat
-        found_entries = []
-        for i, feat_entry in enumerate(feat_table):
-            # Try different ways to get feat index
-            entry_feat_id_raw = getattr(feat_entry, 'feat_index', None)
-            entry_feat_id_mapped = field_mapper.get_field_value(feat_entry, 'feat_index', None)
-            
-            # Also try direct attribute access
-            entry_feat_id_direct = getattr(feat_entry, 'FeatIndex', None)
-            
-            found_entries.append({
-                "index": i,
-                "feat_index_attr": entry_feat_id_raw,
-                "feat_index_mapped": entry_feat_id_mapped,
-                "feat_index_direct": entry_feat_id_direct,
-                "all_attrs": [attr for attr in dir(feat_entry) if not attr.startswith('_')][:10]  # First 10 attrs
-            })
-            
-            # Check if any matches our target feat
-            for val in [entry_feat_id_raw, entry_feat_id_mapped, entry_feat_id_direct]:
-                if val is not None:
-                    try:
-                        if int(val) == feat_id:
-                            debug_info["steps"].append(f"SUCCESS: FOUND feat {feat_id} at index {i}!")
-                            break
-                    except (ValueError, TypeError):
-                        pass
-        
-        debug_info["table_entries"] = found_entries[:5]  # First 5 entries for debugging
-        
-        # Step 5: Test the actual method
-        result = feat_manager._is_feat_from_class_table(feat_id, class_id)
-        debug_info["method_result"] = result
-        debug_info["steps"].append(f"Method result: {result}")
-        
-    except Exception as e:
-        debug_info["steps"].append(f"ERROR: Exception: {str(e)}")
-        import traceback
-        debug_info["traceback"] = traceback.format_exc()
-    
-    return debug_info
-
-@router.get("/characters/{character_id}/feats/check-class-specific")
-@log_performance
-def check_character_feats(
-    character_id: int,
-    manager: CharacterManagerDep,
-    removed_class_id: int = Query(..., description="Class ID to simulate removal (e.g., 56 for Stormlord)")
-):
-    """
-    TEST ENDPOINT: Check which feats would be removed if a specific class was changed
-    This tests our enhanced class-specific feat removal logic without actually changing the class
-    """
-    try:
-        feat_manager = manager.get_manager('feat')
-        
-        # Get current classes (remaining after removal)
-        class_list = manager.gff.get('ClassList', [])
-        remaining_class_ids = {cls.get('Class') for cls in class_list if cls.get('Class') != removed_class_id}
-        
-        # Get all current feats - USE FEAT MANAGER'S METHOD INSTEAD
-        all_feats = feat_manager.get_all_feats()
-        current_feats = [feat['id'] for feat in all_feats]
-        
-        # Debug: Check if we have any Stormlord feats in the list
-        stormlord_feats_found = [f for f in current_feats if 2033 <= f <= 2048]
-        logger.info(f"STORMLORD DEBUG: Found {len(stormlord_feats_found)} Stormlord feats in character: {stormlord_feats_found}")
-        logger.info(f"STORMLORD DEBUG: Total feats in character: {len(current_feats)}")
-        
-        # DIRECT TEST: Check if our logic works on known Stormlord feat
-        test_feat_2033 = feat_manager._is_class_specific_feat(2033, removed_class_id, remaining_class_ids)
-        is_protected_2033 = feat_manager.is_feat_protected(2033)
-        logger.info(f"STORMLORD DEBUG: Direct test of feat 2033 removal: {test_feat_2033}, protected: {is_protected_2033}")
-        
-        # Test why 2033 might not be in current_feats
-        logger.info(f"STORMLORD DEBUG: Is 2033 in current_feats? {2033 in current_feats}")
-        
-        # Check each feat to see if it would be removed
-        feats_to_remove = []
-        feats_to_keep = []
-        protected_feats = []
-        
-        for feat_id in current_feats:
-            # Check if this is a Stormlord feat (for debug)
-            is_stormlord_feat = 2033 <= feat_id <= 2048
-            
-            # Check if protected
-            if feat_manager.is_feat_protected(feat_id):
-                protected_feats.append(feat_id)
-                continue
-                
-            # Test our enhanced logic
-            should_remove = feat_manager._is_class_specific_feat(feat_id, removed_class_id, remaining_class_ids)
-            if should_remove:
-                feats_to_remove.append(feat_id)
-            else:
-                feats_to_keep.append(feat_id)
-                
-            # Debug log for Stormlord feats
-            if is_stormlord_feat:
-                feat_data = feat_manager.game_rules_service.get_by_id('feat', feat_id)
-                feat_name = "Unknown"
-                if feat_data:
-                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-                    feat_name = field_mapper.get_field_value(feat_data, 'label', f'Feat {feat_id}')
-                logger.info(f"STORMLORD DEBUG: Feat {feat_id} ({feat_name}) - should_remove={should_remove}")
-        
-        # Get detailed feat info for the results
-        def get_feat_info(feat_id):
-            feat_data = feat_manager.game_rules_service.get_by_id('feat', feat_id)
-            if feat_data:
-                from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-                return {
-                    'id': feat_id,
-                    'name': field_mapper.get_field_value(feat_data, 'label', f'Feat {feat_id}'),
-                    'description': field_mapper.get_field_value(feat_data, 'description', '')[:100] + '...' if field_mapper.get_field_value(feat_data, 'description', '') else ''
-                }
-            return {'id': feat_id, 'name': f'Feat {feat_id}', 'description': 'Unknown feat'}
-        
-        # Get class names
-        removed_class_data = feat_manager.game_rules_service.get_by_id('classes', removed_class_id)
-        removed_class_name = 'Unknown'
-        if removed_class_data:
-            from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-            removed_class_name = field_mapper.get_field_value(removed_class_data, 'label', f'Class {removed_class_id}')
-        
-        remaining_class_names = []
-        for class_id in remaining_class_ids:
-            class_data = feat_manager.game_rules_service.get_by_id('classes', class_id)
-            if class_data:
-                from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-                class_name = field_mapper.get_field_value(class_data, 'label', f'Class {class_id}')
-                remaining_class_names.append(f"{class_name} ({class_id})")
-        
-        return {
-            'test_scenario': {
-                'removed_class_id': removed_class_id,
-                'removed_class_name': removed_class_name,
-                'remaining_classes': remaining_class_names
-            },
-            'results': {
-                'total_feats': len(current_feats),
-                'feats_to_remove': {
-                    'count': len(feats_to_remove),
-                    'feat_ids': feats_to_remove,
-                    'details': [get_feat_info(fid) for fid in feats_to_remove[:10]]  # Limit to first 10 for readability
-                },
-                'feats_to_keep': {
-                    'count': len(feats_to_keep),
-                    'feat_ids': feats_to_keep[:10] if len(feats_to_keep) > 10 else feats_to_keep,  # Show first 10
-                    'total_kept': len(feats_to_keep)
-                },
-                'protected_feats': {
-                    'count': len(protected_feats),
-                    'feat_ids': protected_feats,
-                    'details': [get_feat_info(fid) for fid in protected_feats]
-                }
-            },
-            'validation': {
-                'logic_working': len(feats_to_remove) > 0 if removed_class_id == 56 else 'N/A (test with Stormlord class 56)',
-                'protected_feats_respected': len(protected_feats) > 0,
-                'no_feats_lost_unexpectedly': True  # Would need more complex validation
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to check class-specific feats for character {character_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check class-specific feats: {str(e)}"
         )

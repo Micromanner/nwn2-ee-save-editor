@@ -47,7 +47,6 @@ export interface FeatsState {
   all_feats: FeatInfo[];
   available_feats: FeatInfo[];
   legitimate_feats: FeatInfo[];
-  feat_chains: Record<string, unknown>;
   recommended_feats: FeatInfo[];
 }
 

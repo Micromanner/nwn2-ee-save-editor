@@ -144,31 +144,16 @@ from .skill_models import (
 # Feat models
 from .feat_models import (
     FeatPrerequisites,
-    DetailedPrerequisite,
-    FeatInfo,
-    FeatChain,
-    FeatSlots,
-    FeatCategories,
-    CurrentFeats,
-    FeatSummary,
     FeatState,
     FeatAddRequest,
     FeatAddResponse,
     FeatRemoveRequest,
     FeatRemoveResponse,
-    FeatValidationRequest,
     FeatValidationResponse,
-    FeatSearchRequest,
-    FeatSearchResponse,
-    FeatBuild,
-    FeatRespecRequest,
-    FeatRespecResponse,
-    FeatUpdateRequest,
-    FeatUpdateResponse,
     AvailableFeatsResponse,
     LegitimateFeatsResponse,
-    FeatDetails,
-    FeatsByCategoryResponse
+    FeatsByCategoryResponse,
+    PaginationMetadata
 )
 
 # Character models (top-level orchestration)
@@ -402,13 +387,10 @@ __all__ = [
     'SkillBuildImportResponse', 'SkillValidation',
     
     # Feat models
-    'FeatPrerequisites', 'DetailedPrerequisite', 'FeatInfo', 'FeatChain',
-    'FeatSlots', 'FeatCategories', 'CurrentFeats', 'FeatSummary', 'FeatState',
-    'FeatAddRequest', 'FeatAddResponse', 'FeatRemoveRequest', 'FeatRemoveResponse',
-    'FeatValidationRequest', 'FeatValidationResponse', 'FeatSearchRequest',
-    'FeatSearchResponse', 'FeatBuild', 'FeatRespecRequest', 'FeatRespecResponse',
-    'FeatUpdateRequest', 'FeatUpdateResponse', 'AvailableFeatsResponse',
-    'LegitimateFeatsResponse', 'FeatDetails', 'FeatsByCategoryResponse',
+    'FeatPrerequisites', 'FeatState', 'FeatAddRequest', 'FeatAddResponse',
+    'FeatRemoveRequest', 'FeatRemoveResponse', 'FeatValidationResponse',
+    'AvailableFeatsResponse', 'LegitimateFeatsResponse', 'FeatsByCategoryResponse',
+    'PaginationMetadata',
     
     # Character models
     'CharacterInfo', 'CharacterSummary', 'ManagerStatus', 'ManagersStatus',
