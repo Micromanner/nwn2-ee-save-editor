@@ -85,15 +85,6 @@ class RuleDetector:
     def __init__(self, resource_manager: ResourceManager):
         self.rm = resource_manager
         self._cache: Dict[str, Dict[str, Any]] = {}
-        self._spells_2da_cache: Optional[TwoDA] = None
-        self._classes_2da_cache: Optional[TwoDA] = None
-        self._class_spell_columns_cache: Optional[List[str]] = None
-
-    def _get_classes_2da(self) -> Optional[TwoDA]:
-        """Loads and caches the classes.2da file."""
-        if self._classes_2da_cache is None:
-            self._classes_2da_cache = self.rm.get_2da_with_overrides('classes')
-        return self._classes_2da_cache
 
     def get_requirements(self, table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -170,58 +161,6 @@ class RuleDetector:
         """Internal method to identify table type without checking cache."""
         for table_type, pattern in self.TABLE_TYPE_PATTERNS.items():
             if pattern.match(table_name.lower()): return table_type
-        return None
-    
-    def find_class_progression_table(self, class_label: str, table_type: str) -> Optional[str]:
-        """
-        Find the progression table for a class based on its label and type.
-        
-        Args:
-            class_label: The class label (e.g., 'Fighter', 'Wizard')
-            table_type: Type of table to find ('feat', 'skill', 'pres', 'savthr', etc.)
-            
-        Returns:
-            Table name if found, None otherwise
-        """
-        # First check if class has explicit table reference
-        classes_2da = self._get_classes_2da()
-        if classes_2da:
-            # Find the class row
-            for i in range(classes_2da.get_resource_count()):
-                label = classes_2da.get_string(i, "Label")
-                if label and label.lower() == class_label.lower():
-                    # Check for explicit table references
-                    if table_type == 'feat':
-                        table_ref = classes_2da.get_string(i, "FeatsTable")
-                        if table_ref and str(table_ref) != self.NULL_VALUE:
-                            return table_ref
-                    elif table_type == 'skill':
-                        table_ref = classes_2da.get_string(i, "SkillsTable")
-                        if table_ref and str(table_ref) != self.NULL_VALUE:
-                            return table_ref
-                    elif table_type == 'savthr':
-                        table_ref = classes_2da.get_string(i, "SavingThrowTable")
-                        if table_ref and str(table_ref) != self.NULL_VALUE:
-                            return table_ref
-                    elif table_type == 'pres':
-                        table_ref = classes_2da.get_string(i, "PreReqTable")
-                        if table_ref and str(table_ref) != self.NULL_VALUE:
-                            return table_ref
-                    break
-        
-        # Fallback to pattern-based search
-        # Try common naming patterns
-        patterns = [
-            f"cls_{table_type}_{class_label.lower()}",
-            f"cls_{table_type}_{class_label.lower()[:4]}",  # Shortened version
-            f"cls_{table_type}_{class_label.lower()[:3]}",  # Even shorter
-        ]
-        
-        for pattern in patterns:
-            table = self.rm.get_2da_with_overrides(pattern)
-            if table:
-                return pattern
-        
         return None
     
     def get_available_feats(self, character_data: Dict[str, Any]) -> List[int]:
@@ -315,57 +254,6 @@ class RuleDetector:
                 available_feats.append(i)
         
         return available_feats
-    
-    def get_spell_classes(self, spell_id: int) -> Dict[str, int]:
-        """
-        Get which classes can cast a spell and at what level.
-        
-        Args:
-            spell_id: The spell ID to check
-            
-        Returns:
-            Dict mapping class column names to spell levels
-        """
-        if self._spells_2da_cache is None:
-            self._spells_2da_cache = self.rm.get_2da_with_overrides('spells')
-        
-        if not self._spells_2da_cache or spell_id >= self._spells_2da_cache.get_resource_count():
-            return {}
-        
-        # Get spell row
-        spell_row = self._spells_2da_cache.get_row_dict(spell_id)
-        if not spell_row:
-            return {}
-        
-        # Cache class spell columns if not already done
-        if self._class_spell_columns_cache is None:
-            self._class_spell_columns_cache = []
-            # Common class spell columns in spells.2da
-            potential_columns = [
-                'Bard', 'Cleric', 'Druid', 'Paladin', 'Ranger',
-                'Wiz_Sorc', 'Wizard', 'Sorcerer', 'Warlock',
-                'Spirit_Shaman', 'Favored_Soul'
-            ]
-            
-            # Check which columns actually exist
-            headers = self._spells_2da_cache.get_column_headers()
-            for col in potential_columns:
-                if col in headers:
-                    self._class_spell_columns_cache.append(col)
-        
-        # Extract spell levels for each class
-        result = {}
-        for col in self._class_spell_columns_cache:
-            level = spell_row.get(col)
-            if level is not None and str(level) != self.NULL_VALUE:
-                try:
-                    level_int = int(level)
-                    if level_int >= 0 and level_int <= 9:  # Valid spell levels
-                        result[col] = level_int
-                except (ValueError, TypeError):
-                    pass
-        
-        return result
     
     def detect_relationships(self, table_name: str, columns: List[str]) -> Dict[str, Tuple[str, str]]:
         """

@@ -1,14 +1,6 @@
 """
 Data-Driven Spell Manager - handles spell slots, spell lists, domain spells, and caster progression
 Uses CharacterManager and DynamicGameDataLoader for all spell data access
-
-VALIDATION CLEANUP APPLIED:
-- Removed spell slot limits (users can memorize more spells than slots)
-- Removed class spell access restrictions (any class can memorize any spell)
-- Kept spell ID existence checks to prevent crashes on save load
-- Kept all spell calculations (slots, DCs, caster levels, metamagic costs)
-- Kept all data access methods and live functionality
-- validate() now only checks for data corruption prevention
 """
 
 from typing import Dict, List, Tuple, Optional, Any
@@ -17,7 +9,7 @@ from collections import defaultdict
 
 from ..events import (
     EventEmitter, EventType,
-    ClassChangedEvent, LevelGainedEvent, FeatChangedEvent
+    ClassChangedEvent, LevelGainedEvent, FeatChangedEvent, DomainChangedEvent
 )
 # Import field_mapper at module level to avoid circular imports
 try:
@@ -58,18 +50,14 @@ class SpellManager(EventEmitter):
         # Register for events
         self._register_event_handlers()
         
-        # Cache for performance
         self._spell_slots_cache = {}
         self._spell_table_cache = {}
         self._domain_spells_cache = {}
         self._spell_data_cache = {}
         self._legitimate_spells_cache = None
+        self._master_spell_cache = None
+        self._column_to_class_id_cache = None
     
-    @property
-    def rules_service_ref(self):
-        """Convenience property for accessing rules service"""
-        return self.rules_service
-
     def get_spell_details(self, spell_id: int) -> Dict[str, Any]:
         """
         Get details for a specific spell, including resolved name and school
@@ -168,14 +156,15 @@ class SpellManager(EventEmitter):
         self.character_manager.on(EventType.LEVEL_GAINED, self.on_level_gained)
         self.character_manager.on(EventType.FEAT_ADDED, self.on_feat_added)
         self.character_manager.on(EventType.FEAT_REMOVED, self.on_feat_removed)
+        self.character_manager.on(EventType.DOMAIN_ADDED, self.on_domain_added)
+        self.character_manager.on(EventType.DOMAIN_REMOVED, self.on_domain_removed)
     
     def on_class_changed(self, event: ClassChangedEvent):
         """Handle class change event"""
         logger.info(f"SpellManager handling class change: {event.old_class_id} -> {event.new_class_id}")
         
-        # Clear all spell lists for non-casters
         new_class = self.rules_service.get_by_id('classes', event.new_class_id)
-        if not self._is_spellcaster(new_class):
+        if not self.is_spellcaster(class_data=new_class):
             self._clear_all_spell_lists()
             return
         
@@ -193,9 +182,8 @@ class SpellManager(EventEmitter):
         """Handle level gain event"""
         logger.info(f"SpellManager handling level gain: Class {event.class_id}, Level {event.new_level}")
         
-        # Check if this class can cast spells
         class_data = self.rules_service.get_by_id('classes', event.class_id)
-        if not self._is_spellcaster(class_data):
+        if not self.is_spellcaster(class_data=class_data):
             return
         
         # Update spell slots
@@ -236,7 +224,7 @@ class SpellManager(EventEmitter):
     def on_feat_removed(self, event: FeatChangedEvent):
         """Handle feat removal event"""
         feat_id = event.feat_id
-        
+
         # Check if it's a metamagic feat
         if self._is_metamagic_feat(feat_id):
             logger.info(f"SpellManager: Metamagic feat {feat_id} removed")
@@ -244,7 +232,69 @@ class SpellManager(EventEmitter):
                 'source': 'metamagic_removed',
                 'feat_id': feat_id
             })
-    
+
+    def on_domain_added(self, event: DomainChangedEvent):
+        """Handle domain addition event - domain spells are automatically available based on Domain1/Domain2 fields"""
+        self._domain_spells_cache.clear()
+        self._spell_slots_cache.clear()
+
+        self.emit(EventType.SPELLS_CHANGED, {
+            'source': 'domain_added',
+            'domain_id': event.domain_id,
+            'domain_name': event.domain_name
+        })
+
+    def on_domain_removed(self, event: DomainChangedEvent):
+        """Handle domain removal event - removes memorized domain spells"""
+        self._domain_spells_cache.clear()
+        self._spell_slots_cache.clear()
+
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            class_id = class_entry.get('Class')
+            class_data = self.rules_service.get_by_id('classes', class_id)
+            if self._is_divine_caster(class_data):
+                domain_spells_by_level = self._get_domain_spells_for_domain(event.domain_id)
+
+                for spell_level, spell_ids in domain_spells_by_level.items():
+                    memorized_list = class_entry.get(f'MemorizedList{spell_level}', [])
+                    memorized_filtered = [
+                        spell_entry for spell_entry in memorized_list
+                        if not (spell_entry.get('SpellDomain', 0) == 1 and
+                               spell_entry.get('Spell', -1) in spell_ids)
+                    ]
+
+                    if len(memorized_filtered) < len(memorized_list):
+                        class_entry[f'MemorizedList{spell_level}'] = memorized_filtered
+
+        self.gff.set('ClassList', class_list)
+
+        self.emit(EventType.SPELLS_CHANGED, {
+            'source': 'domain_removed',
+            'domain_id': event.domain_id,
+            'domain_name': event.domain_name
+        })
+
+    def _get_domain_spells_for_domain(self, domain_id: int) -> Dict[int, List[int]]:
+        """Get all spell IDs for a specific domain by spell level"""
+        domain_spells = defaultdict(list)
+
+        domain_data = self.rules_service.get_by_id('domains', domain_id)
+        if not domain_data:
+            return dict(domain_spells)
+
+        for spell_level in range(1, 10):
+            field_name = f'Level_{spell_level}'
+            spell_id = field_mapper.get_field_value(domain_data, field_name, -1)
+
+            if isinstance(spell_id, str) and spell_id.isdigit():
+                spell_id = int(spell_id)
+
+            if spell_id >= 0:
+                domain_spells[spell_level].append(spell_id)
+
+        return dict(domain_spells)
+
     def calculate_spell_slots(self) -> Dict[int, Dict[int, int]]:
         """
         Calculate total spell slots per day for all classes and levels
@@ -255,37 +305,26 @@ class SpellManager(EventEmitter):
         slots_by_class = {}
         class_list = self.gff.get('ClassList', [])
 
-        logger.info(f"[SPELL_DEBUG] calculate_spell_slots: Found {len(class_list)} classes")
-
         for class_entry in class_list:
             class_id = class_entry.get('Class', -1)
             class_level = class_entry.get('ClassLevel', 0)
 
-            logger.info(f"[SPELL_DEBUG]   Class ID={class_id}, Level={class_level}")
-
             if class_level == 0:
-                logger.info(f"[SPELL_DEBUG]     Skipping - level is 0")
                 continue
 
             class_data = self.rules_service.get_by_id('classes', class_id)
             if not class_data:
-                logger.warning(f"[SPELL_DEBUG]     Class data not found for class_id={class_id}")
+                logger.warning(f"Class data not found for class_id={class_id}")
                 continue
 
-            is_caster = self._is_spellcaster(class_data)
-            logger.info(f"[SPELL_DEBUG]     Is spellcaster: {is_caster}")
-
-            if not is_caster:
+            if not self.is_spellcaster(class_data=class_data):
                 continue
 
-            # Get spell slots for this class
             class_slots = self._calculate_class_spell_slots(class_data, class_level, class_entry)
-            logger.info(f"[SPELL_DEBUG]     Calculated slots: {class_slots}")
 
             if class_slots:
                 slots_by_class[class_id] = class_slots
 
-        logger.info(f"[SPELL_DEBUG] calculate_spell_slots: Returning {len(slots_by_class)} caster classes")
         return slots_by_class
     
     def _calculate_class_spell_slots(self, class_data: Any, level: int, class_entry: Dict) -> Dict[int, int]:
@@ -302,20 +341,14 @@ class SpellManager(EventEmitter):
         """
         slots = {}
 
-        # Get the spell gain table name - use proper column names with FieldMappingUtility
         spell_table_name = field_mapper.get_field_value(class_data, 'SpellGainTable', '')
-        logger.info(f"[SPELL_DEBUG]       Spell gain table name: '{spell_table_name}'")
 
         if not spell_table_name or spell_table_name == '****':
-            logger.warning(f"[SPELL_DEBUG] No spell gain table for class {field_mapper.get_field_value(class_data, 'Label', 'Unknown')}")
             return slots
 
-        # Load the spell gain table
         spell_table = self._get_spell_table(spell_table_name.lower())
-        logger.info(f"[SPELL_DEBUG]       Spell table loaded: {spell_table is not None}, rows={len(spell_table) if spell_table else 0}")
 
         if not spell_table:
-            logger.warning(f"Could not load spell table '{spell_table_name}'")
             return slots
         
         # Get base slots from table
@@ -328,11 +361,8 @@ class SpellManager(EventEmitter):
                 base_slots = self._safe_int(field_mapper.get_field_value(table_row, field_name, 0))
                 
                 if base_slots > 0:
-                    # Add bonus slots from high ability scores
                     bonus_slots = self._calculate_bonus_spell_slots(class_data, spell_level)
                     slots[spell_level] = base_slots + bonus_slots
-                    logger.debug(f"Spell level {spell_level}: base={base_slots}, "
-                                 f"bonus={bonus_slots}, total={base_slots + bonus_slots}")
         
         # Add domain spell slots for divine casters
         if self._is_divine_caster(class_data):
@@ -456,7 +486,129 @@ class SpellManager(EventEmitter):
                 known_spells[spell_level] = class_spells
 
         return dict(known_spells)
-    
+
+    def uses_all_spells_known(self, class_id: int) -> bool:
+        """
+        Check if a class gets all spells from spells.2da (AllSpellsKnown=1)
+        vs using KnownList from GFF.
+
+        Classes with AllSpellsKnown=1: Cleric, Druid, Paladin, Ranger
+        Classes using KnownList: Wizard, Sorcerer, Bard, Favored Soul, Spirit Shaman
+
+        Args:
+            class_id: Class ID to check
+
+        Returns:
+            True if class uses all spells from spells.2da, False if uses KnownList
+        """
+        class_data = self.rules_service.get_by_id('classes', class_id)
+        if not class_data:
+            return False
+
+        all_spells_known = field_mapper.get_field_value(class_data, 'AllSpellsKnown', '0')
+        return str(all_spells_known) == '1'
+
+    def get_max_castable_spell_level(self, class_id: int) -> int:
+        """
+        Get the maximum spell level a character can cast for a specific class.
+        Based on their class level and spell slot progression.
+
+        Args:
+            class_id: Class ID
+
+        Returns:
+            Maximum spell level (0-9), or -1 if not a caster
+        """
+        slots = self.calculate_spell_slots()
+        class_slots = slots.get(class_id, {})
+        if not class_slots:
+            return -1
+        return max(class_slots.keys())
+
+    def get_character_spells_for_class(self, class_id: int) -> List[Dict[str, Any]]:
+        """Get all spells the character knows for a specific class."""
+        max_level = self.get_max_castable_spell_level(class_id)
+        if max_level < 0:
+            return []
+
+        spells = []
+        known_spell_ids = set()
+
+        if self.uses_all_spells_known(class_id):
+            master_cache = self._get_master_spell_cache()
+            for spell_id, spell_data in master_cache.items():
+                class_levels = spell_data.get('class_levels', {})
+                if class_id in class_levels:
+                    spell_level = class_levels[class_id]
+                    if spell_level <= max_level:
+                        known_spell_ids.add(spell_id)
+                        spells.append({
+                            'spell_id': spell_id,
+                            'level': spell_level,
+                            'name': spell_data['name'],
+                            'icon': spell_data.get('icon', 'io_unknown'),
+                            'school_name': spell_data.get('school_name'),
+                            'description': spell_data.get('description'),
+                            'class_id': class_id,
+                            'is_domain_spell': False,
+                        })
+
+            domain_spells = self.get_domain_spells(class_id)
+            for level, spell_ids in domain_spells.items():
+                if level <= max_level:
+                    for spell_id in spell_ids:
+                        if spell_id not in known_spell_ids:
+                            spell_details = self.get_spell_details(spell_id)
+                            if spell_details:
+                                known_spell_ids.add(spell_id)
+                                spells.append({
+                                    'spell_id': spell_id,
+                                    'level': level,
+                                    'name': spell_details['name'],
+                                    'icon': spell_details.get('icon', 'io_unknown'),
+                                    'school_name': spell_details.get('school_name'),
+                                    'description': spell_details.get('description'),
+                                    'class_id': class_id,
+                                    'is_domain_spell': True,
+                                })
+        else:
+            known_by_level = self.get_known_spells(class_id)
+            for level, spell_ids in known_by_level.items():
+                if level <= max_level:
+                    for spell_id in spell_ids:
+                        spell_details = self.get_spell_details(spell_id)
+                        spells.append({
+                            'spell_id': spell_id,
+                            'level': level,
+                            'name': spell_details['name'],
+                            'icon': spell_details.get('icon', 'io_unknown'),
+                            'school_name': spell_details.get('school_name'),
+                            'description': spell_details.get('description'),
+                            'class_id': class_id,
+                            'is_domain_spell': False,
+                        })
+
+        return spells
+
+    def get_all_character_spells(self) -> List[Dict[str, Any]]:
+        """
+        Get all spells the character knows across all spellcasting classes.
+
+        Returns:
+            List of spell data dicts, each containing spell_id, level, name,
+            icon, school_name, description, class_id
+        """
+        all_spells = []
+
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            class_id = class_entry.get('Class', -1)
+            if self.is_spellcaster(class_id):
+                class_spells = self.get_character_spells_for_class(class_id)
+                all_spells.extend(class_spells)
+
+        return all_spells
+
     def get_memorized_spells(self, class_id: int) -> Dict[int, List[Dict[str, Any]]]:
         """
         Get memorized/prepared spells for a class
@@ -537,17 +689,12 @@ class SpellManager(EventEmitter):
             
             # Get spells for each level (1-9)
             for spell_level in range(1, 10):
-                field_name = f'level_{spell_level}'
+                field_name = f'Level_{spell_level}'
                 spell_id = field_mapper.get_field_value(domain_data, field_name, -1)
-                # Also try without underscore
-                if spell_id < 0:
-                    field_name = f'level{spell_level}'
-                    spell_id = field_mapper.get_field_value(domain_data, field_name, -1)
-                
-                # Convert string to int if needed
+
                 if isinstance(spell_id, str) and spell_id.isdigit():
                     spell_id = int(spell_id)
-                
+
                 if spell_id >= 0 and spell_id not in domain_spells[spell_level]:
                     domain_spells[spell_level].append(spell_id)
         
@@ -596,14 +743,11 @@ class SpellManager(EventEmitter):
             'SpellDomain': 1 if domain else 0
         })
 
-        # Update the class entry
         class_entry[f'MemorizedList{spell_level}'] = memorized_list
-
-        # Write back the ClassList
         self.gff.set('ClassList', class_list)
 
         return True
-    
+
     def clear_memorized_spells(self, class_id: int, spell_level: Optional[int] = None):
         """
         Clear memorized spells for a class
@@ -673,14 +817,14 @@ class SpellManager(EventEmitter):
             'SpellClass': class_id
         })
 
-        # Update the class entry
         class_entry[f'KnownList{spell_level}'] = known_list
-
-        # Write back the ClassList
         self.gff.set('ClassList', class_list)
 
+        spell_details = self.get_spell_details(spell_id)
+        logger.info(f"Spell added: {spell_details['name']} (ID {spell_id})")
+
         return True
-    
+
     def remove_known_spell(self, class_id: int, spell_level: int, spell_id: int) -> bool:
         """
         Remove a spell from the known spell list
@@ -715,10 +859,12 @@ class SpellManager(EventEmitter):
             if spell.get('Spell') != spell_id
         ]
 
-        # Update the list if anything was removed
         if len(known_list) < original_length:
             class_entry[f'KnownList{spell_level}'] = known_list
             self.gff.set('ClassList', class_list)
+
+            spell_details = self.get_spell_details(spell_id)
+            logger.info(f"Spell removed: {spell_details['name']} (ID {spell_id})")
             return True
 
         return False
@@ -726,87 +872,39 @@ class SpellManager(EventEmitter):
     def get_spell_level_for_class(self, spell_id: int, class_id: int) -> Optional[int]:
         """
         Get the spell level for a specific spell and class
-        
+
         Args:
             spell_id: Spell ID
             class_id: Class ID
-            
+
         Returns:
             Spell level (0-9) or None if spell not available for class
         """
-        spell_data = self.rules_service.get_by_id('spells', spell_id)
+        master_cache = self._get_master_spell_cache()
+        spell_data = master_cache.get(spell_id)
         if not spell_data:
             return None
-            
-        class_data = self.rules_service.get_by_id('classes', class_id)
-        if not class_data:
-            return None
-        
-        # Get the spell list field name from class data
-        # This is stored in SpellTableColumn in classes.2da
-        spell_table_column = field_mapper.get_field_value(class_data, 'SpellTableColumn', '')
-        
-        if not spell_table_column or spell_table_column == '****':
-            # Try to infer from class label
-            class_label = field_mapper.get_field_value(class_data, 'Label', '')
-            
-            # Common mappings
-            if 'wizard' in class_label.lower() or 'sorcerer' in class_label.lower():
-                spell_field = 'Wiz_Sorc'
-            elif 'warlock' in class_label.lower():
-                spell_field = 'Warlock'
-            elif 'bard' in class_label.lower():
-                spell_field = 'Bard'
-            elif 'cleric' in class_label.lower():
-                spell_field = 'Cleric'
-            elif 'druid' in class_label.lower():
-                spell_field = 'Druid'
-            elif 'paladin' in class_label.lower():
-                spell_field = 'Paladin'
-            elif 'ranger' in class_label.lower():
-                spell_field = 'Ranger'
-            else:
-                return None
-        else:
-            spell_field = spell_table_column
-        
-        # Get the spell level for this class
-        spell_level = field_mapper.get_field_value(spell_data, spell_field, None)
-        
-        # Convert to int if needed and validate
-        if spell_level is not None:
-            try:
-                level = int(spell_level)
-                if 0 <= level <= 9:
-                    return level
-            except (ValueError, TypeError):
-                pass
-        
-        return None
+
+        class_levels = spell_data.get('class_levels', {})
+        return class_levels.get(class_id)
     
-    def is_spellcaster(self, class_id: int) -> bool:
-        """
-        Check if a class can cast spells
-        
-        Args:
-            class_id: Class ID
-            
-        Returns:
-            True if the class can cast spells
-        """
-        # Check if class has spell slots
-        class_data = self.rules_service.get_by_id('classes', class_id)
+    def is_spellcaster(self, class_id: Optional[int] = None, class_data: Any = None) -> bool:
+        """Check if a class can cast spells. Pass either class_id or class_data."""
+        if class_data is None:
+            if class_id is None:
+                return False
+            class_data = self.rules_service.get_by_id('classes', class_id)
         if not class_data:
             return False
-            
-        # Check if it has any spell progression
-        return (
-            field_mapper.get_field_value(class_data, 'SpellGainTable', '') != '' or
-            any(
-                field_mapper.get_field_value(class_data, f'SpellGainTable{i}', '') != ''
-                for i in range(10)
-            )
-        )
+
+        is_caster = field_mapper.get_field_value(class_data, 'SpellCaster', '0')
+        if isinstance(is_caster, str):
+            is_caster = is_caster != '0' and is_caster != '****'
+        if is_caster:
+            return True
+
+        spell_table = field_mapper.get_field_value(class_data, 'SpellGainTable', '')
+        return bool(spell_table and spell_table != '****')
     
     def get_class_name(self, class_id: int) -> str:
         """
@@ -864,37 +962,27 @@ class SpellManager(EventEmitter):
         
         return class_level
     
-    def is_prepared_caster(self, class_id: int) -> bool:
-        """
-        Check if a class prepares spells (vs spontaneous casting)
-        
-        Args:
-            class_id: Class ID
-            
-        Returns:
-            True if class prepares spells, False if spontaneous
-        """
-        class_data = self.rules_service.get_by_id('classes', class_id)
+    def is_prepared_caster(self, class_id: Optional[int] = None, class_data: Any = None) -> bool:
+        """Check if a class prepares spells (vs spontaneous). Pass either class_id or class_data."""
+        if class_data is None:
+            if class_id is None:
+                return False
+            class_data = self.rules_service.get_by_id('classes', class_id)
         if not class_data:
             return False
-        
-        # Check the MemorizesSpells field in the class data
-        # 1 = prepares spells, 0 = spontaneous caster
+
         memorizes_spells = field_mapper.get_field_value(class_data, 'MemorizesSpells', None)
         if memorizes_spells is not None and memorizes_spells != '****':
             try:
                 return bool(int(memorizes_spells))
             except (ValueError, TypeError):
                 pass
-        
-        # Fallback: check SpellKnownTable
-        # Classes with SpellKnownTable are spontaneous casters
+
         spell_known_table = field_mapper.get_field_value(class_data, 'SpellKnownTable', '')
         if spell_known_table and spell_known_table != '****':
-            return False  # Has known spell table = spontaneous
-        
-        # Default to prepared if it has spell progression
-        return self.is_spellcaster(class_id)
+            return False
+
+        return self.is_spellcaster(class_data=class_data)
     
     def get_all_memorized_spells(self) -> List[Dict[str, Any]]:
         """
@@ -905,19 +993,13 @@ class SpellManager(EventEmitter):
         """
         memorized = []
 
-        # Get all class entries from ClassList
         class_list = self.gff.get('ClassList', [])
-        logger.debug(f"[SPELL_DEBUG] get_all_memorized_spells: Found {len(class_list)} classes")
 
         for class_entry in class_list:
             class_id = class_entry.get('Class', -1)
-            logger.debug(f"[SPELL_DEBUG]   Processing class {class_id}")
 
-            # Check each spell level's memorized list
             for spell_level in range(10):
                 mem_list = class_entry.get(f'MemorizedList{spell_level}', [])
-                if mem_list:
-                    logger.debug(f"[SPELL_DEBUG]     MemorizedList{spell_level}: {len(mem_list)} spells")
 
                 for spell in mem_list:
                     if not isinstance(spell, dict):
@@ -931,7 +1013,6 @@ class SpellManager(EventEmitter):
                         'ready': spell.get('Ready', 1) == 1
                     })
 
-        logger.debug(f"[SPELL_DEBUG] get_all_memorized_spells: Returning {len(memorized)} total memorized spells")
         return memorized
 
     def get_metamagic_feats(self) -> List[int]:
@@ -984,23 +1065,6 @@ class SpellManager(EventEmitter):
             return (flags & bit_value) != 0
         except (ValueError, TypeError):
             return False
-    
-    def _is_spellcaster(self, class_data: Any) -> bool:
-        """Check if a class can cast spells"""
-        if not class_data:
-            return False
-        
-        # Check SpellCaster field - use proper column name
-        is_caster = field_mapper.get_field_value(class_data, 'SpellCaster', '0')
-        # Ensure we're getting a proper boolean value
-        if isinstance(is_caster, str):
-            is_caster = is_caster != '0' and is_caster != '****'
-        if is_caster:
-            return True
-        
-        # Check for spell gain table - use proper column name
-        spell_table = field_mapper.get_field_value(class_data, 'SpellGainTable', '')
-        return bool(spell_table and spell_table != '****')
     
     def _is_spell_related_feat(self, feat_data: Any) -> bool:
         """Check if a feat affects spellcasting"""
@@ -1090,33 +1154,14 @@ class SpellManager(EventEmitter):
         # Update known spells for spontaneous casters
         self._update_known_spells(class_id, new_level)
         
-        # Clear memorized spells for prepared casters to force re-preparation
         class_data = self.rules_service.get_by_id('classes', class_id)
-        if class_data and self._is_prepared_caster(class_data):
+        if class_data and self.is_prepared_caster(class_data=class_data):
             logger.info("Clearing memorized spells for prepared caster level up")
             # Don't actually clear - just mark as needing preparation
             self.emit(EventType.SPELLS_CHANGED, {
                 'source': 'need_preparation',
                 'class_id': class_id
             })
-    
-    def _is_prepared_caster(self, class_data: Any) -> bool:
-        """Check if a class prepares spells (vs spontaneous)"""
-        # Use the same logic as is_prepared_caster method but for class_data directly
-        memorizes_spells = field_mapper.get_field_value(class_data, 'MemorizesSpells', None)
-        if memorizes_spells is not None and memorizes_spells != '****':
-            try:
-                return bool(int(memorizes_spells))
-            except (ValueError, TypeError):
-                pass
-        
-        # Fallback: check SpellKnownTable - classes with this are spontaneous
-        spell_known_table = field_mapper.get_field_value(class_data, 'SpellKnownTable', '')
-        if spell_known_table and spell_known_table != '****':
-            return False  # Has known spell table = spontaneous
-        
-        # Default to prepared if it has spell progression
-        return self._is_spellcaster(class_data)
     
     def _safe_int(self, value: Any, default: int = 0) -> int:
         """Safely convert value to int"""
@@ -1225,175 +1270,39 @@ class SpellManager(EventEmitter):
         return summary
     
     def get_available_spells(self, spell_level: int, class_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Get all spells available at a specific level, optionally filtered by class
-        
-        Args:
-            spell_level: Spell level (0-9)
-            class_id: Optional class ID to filter spells for that class
-            
-        Returns:
-            List of available spell data
-        """
-        available_spells = []
-        
-        try:
-            # Get all spells from the game data
-            all_spells = self.rules_service.get_table('spells')
-            if not all_spells:
-                return available_spells
-            
-            # Filter out dev/test spells first, keeping track of original indices
-            legitimate_spells = self._filter_legitimate_spells_with_indices(all_spells)
+        """Get all spells available at a specific level, optionally filtered by class."""
+        master_cache = self._get_master_spell_cache()
+        column_to_classes = self._get_column_to_class_id_map()
+        class_id_to_label = {}
+        for col, class_ids in column_to_classes.items():
+            for cid in class_ids:
+                class_id_to_label[cid] = col.lower()
 
-            # PERFORMANCE: Cache class_data lookup outside the loop (was doing 1000+ redundant lookups)
-            class_data = None
+        result = []
+        for spell_id, spell_data in master_cache.items():
+            class_levels = spell_data.get('class_levels', {})
+
             if class_id is not None:
-                class_data = self.rules_service.get_by_id('classes', class_id)
-
-            for original_idx, spell_data in legitimate_spells:
-                spell_id = original_idx  # Use original index as spell ID
-                
-                # Check if this spell is available at the requested level
-                spell_available = False
-                available_classes = []
-                
-                # Check each class column for this spell level
-                class_columns = {
-                    'Bard': 'bard',
-                    'Cleric': 'cleric',
-                    'Druid': 'druid', 
-                    'Paladin': 'paladin',
-                    'Ranger': 'ranger',
-                    'Wiz_Sorc': 'wizard/sorcerer',
-                    'Warlock': 'warlock'
-                }
-                
-                for column_name, class_name in class_columns.items():
-                    try:
-                        level_value = field_mapper.get_field_value(spell_data, column_name, -1)
-                        if level_value is not None and level_value != '****' and level_value != '':
-                            level_int = int(level_value)
-                            if level_int == spell_level:
-                                spell_available = True
-                                available_classes.append(class_name)
-                                
-                                # If filtering by class, check if this class matches
-                                if class_data is not None:
-                                    if self._class_matches_column(class_data, column_name):
-                                        spell_available = True
-                                        break
-                    except (ValueError, TypeError):
-                        continue
-                
-                # If spell is available at this level, add it to results
-                if spell_available:
-                    # Get spell metadata - use Name field for display name
-                    # Resolve name properly using TLK lookup
-                    name_raw = field_mapper.get_field_value(spell_data, 'Name', f'Spell_{spell_id}')
-                    if isinstance(name_raw, int):
-                        spell_name = self.rules_service._loader.get_string(name_raw)
-                    elif isinstance(name_raw, str) and name_raw.isdigit():
-                        spell_name = self.rules_service._loader.get_string(int(name_raw))
-                    else:
-                        spell_name = str(name_raw)
-                        
-                    if not spell_name:
-                        spell_name = f'Spell {spell_id}'
-                    spell_icon = field_mapper.get_field_value(spell_data, 'IconResRef', '')
-                    school_id_raw = field_mapper.get_field_value(spell_data, 'School', 0)
-                    
-                    # Get additional spell details first (needed for invocation detection)
-                    spell_desc = field_mapper.get_field_value(spell_data, 'SpellDesc', '')
-                    
-                    # Convert school_id to integer properly
-                    # NWN2 spells.2da uses letter codes for schools, need to map to IDs
-                    school_id = None
-                    school_name = None
-                    
-                    # Handle school mapping
-                    if school_id_raw not in [None, '', '****', 0]:
-                        # Try to map letter codes to school IDs first
-                        school_letter_map = {
-                            'G': 0,  # General
-                            'A': 1,  # Abjuration
-                            'C': 2,  # Conjuration  
-                            'D': 3,  # Divination
-                            'E': 4,  # Enchantment
-                            'V': 5,  # Evocation
-                            'I': 6,  # Illusion
-                            'N': 7,  # Necromancy
-                            'T': 8   # Transmutation
-                        }
-                        
-                        school_letter = str(school_id_raw).upper().strip()
-                        if school_letter in school_letter_map:
-                            school_id = school_letter_map[school_letter]
-                        else:
-                            # Fallback: try direct integer conversion
-                            try:
-                                school_id = int(school_id_raw)
-                            except (ValueError, TypeError):
-                                school_id = 0  # Default to General
-                        
-                        # Get school name from spellschools table
-                        if school_id is not None:
-                            school_data = self.rules_service.get_by_id('spellschools', school_id)
-                            if school_data:
-                                school_name = field_mapper.get_field_value(school_data, 'Label', None)
-                    else:
-                        # Handle spells with no school (null, '', '****', 0)
-                        # Check if this is a warlock invocation
-                        if available_classes == ['warlock']:
-                            school_id = 9  # Custom school ID for invocations
-                            school_name = "Invocation"
-                            
-                            # Optional: Add detailed subtyping based on description
-                            if spell_desc:
-                                desc_upper = spell_desc.upper()
-                                if 'INVOCATION TYPE:' in desc_upper or 'INVOCATION LEVEL:' in desc_upper:
-                                    if 'LEAST' in desc_upper:
-                                        school_name = "Invocation (Least)"
-                                    elif 'LESSER' in desc_upper:
-                                        school_name = "Invocation (Lesser)"
-                                    elif 'GREATER' in desc_upper:
-                                        school_name = "Invocation (Greater)"
-                                    elif 'DARK' in desc_upper:
-                                        school_name = "Invocation (Dark)"
-                        else:
-                            # Truly unknown/no school
-                            school_id = None
-                            school_name = None
-                    spell_range = field_mapper.get_field_value(spell_data, 'Range', '')
-                    cast_time = field_mapper.get_field_value(spell_data, 'CastTime', '')
-                    conj_time = field_mapper.get_field_value(spell_data, 'ConjTime', '')
-                    components = field_mapper.get_field_value(spell_data, 'VS', '')
-                    available_metamagic = field_mapper.get_field_value(spell_data, 'MetaMagic', '')
-                    target_type = field_mapper.get_field_value(spell_data, 'TargetType', '')
-
-                    spell_info = {
-                        'id': spell_id,
-                        'name': spell_name,
-                        'icon': spell_icon,
-                        'school_id': school_id,
-                        'school_name': school_name,
+                if class_id in class_levels and class_levels[class_id] == spell_level:
+                    result.append({
+                        **spell_data,
                         'level': spell_level,
-                        'available_classes': available_classes,
-                        'description': spell_desc,
-                        'range': spell_range,
-                        'cast_time': cast_time,
-                        'conjuration_time': conj_time,
-                        'components': components,
-                        'available_metamagic': available_metamagic,
-                        'target_type': target_type
-                    }
-                    
-                    available_spells.append(spell_info)
-        
-        except Exception as e:
-            logger.error(f"Error getting available spells: {e}")
-            
-        return available_spells
+                        'available_classes': [class_id_to_label.get(class_id, str(class_id))]
+                    })
+            else:
+                matching_classes = list(set(
+                    class_id_to_label.get(cid, str(cid))
+                    for cid, lvl in class_levels.items()
+                    if lvl == spell_level
+                ))
+                if matching_classes:
+                    result.append({
+                        **spell_data,
+                        'level': spell_level,
+                        'available_classes': matching_classes
+                    })
+
+        return result
     
     def get_legitimate_spells(
         self,
@@ -1459,38 +1368,42 @@ class SpellManager(EventEmitter):
         }
 
     def _get_all_legitimate_spells_cached(self) -> List[Dict[str, Any]]:
-        """Cache all legitimate spells to avoid repeated 2DA parsing"""
+        """Return list with one entry per spell-level combination (for paginated browser)."""
         if self._legitimate_spells_cache is not None:
             return self._legitimate_spells_cache
 
+        master_cache = self._get_master_spell_cache()
+        column_to_classes = self._get_column_to_class_id_map()
+        class_id_to_label = {}
+        for col, class_ids in column_to_classes.items():
+            for cid in class_ids:
+                class_id_to_label[cid] = col.lower()
+
         all_spells = []
-        for level in range(10):
-            level_spells = self.get_available_spells(level)
-            all_spells.extend(level_spells)
+        for spell_id, spell_data in master_cache.items():
+            class_levels = spell_data.get('class_levels', {})
+            levels_to_classes: Dict[int, List[str]] = {}
+            for class_id, level in class_levels.items():
+                if level not in levels_to_classes:
+                    levels_to_classes[level] = []
+                label = class_id_to_label.get(class_id, str(class_id))
+                if label not in levels_to_classes[level]:
+                    levels_to_classes[level].append(label)
+
+            for spell_level, available_classes in levels_to_classes.items():
+                all_spells.append({
+                    **spell_data,
+                    'level': spell_level,
+                    'available_classes': available_classes
+                })
 
         self._legitimate_spells_cache = all_spells
-        logger.debug(f"Cached {len(all_spells)} legitimate spells")
-
         return all_spells
 
     def _spell_available_to_class(self, spell: Dict[str, Any], class_id: int) -> bool:
         """Check if a spell is available to a specific class"""
-        available_classes = spell.get('available_classes', [])
-
-        if not available_classes:
-            return False
-
-        class_data = self.rules_service.get_by_id('classes', class_id)
-        if not class_data:
-            return False
-
-        class_label = field_mapper.get_field_value(class_data, 'Label', '').lower()
-
-        for class_name in available_classes:
-            if class_name.lower() in class_label:
-                return True
-
-        return False
+        class_levels = spell.get('class_levels', {})
+        return class_id in class_levels
 
     def _filter_legitimate_spells_with_indices(self, all_spells: List[Any]) -> List[Tuple[int, Any]]:
         """
@@ -1531,26 +1444,181 @@ class SpellManager(EventEmitter):
             legitimate_spells.append((spell_idx, spell))
         
         return legitimate_spells
-    
-    def _class_matches_column(self, class_data: Any, column_name: str) -> bool:
-        """Check if a class matches a spell table column - optimized with set lookups"""
-        class_label = field_mapper.get_field_value(class_data, 'Label', '').lower()
 
-        column_mappings = {
-            'Bard': {'bard'},
-            'Cleric': {'cleric'},
-            'Druid': {'druid'},
-            'Paladin': {'paladin'},
-            'Ranger': {'ranger'},
-            'Wiz_Sorc': {'wizard', 'sorcerer'},
-            'Warlock': {'warlock'}
+    def _get_all_spell_columns(self) -> Dict[str, str]:
+        """Get all SpellTableColumn values from classes.2da."""
+        if hasattr(self, '_spell_columns_cache') and self._spell_columns_cache:
+            return self._spell_columns_cache
+
+        spell_columns = {}
+        all_classes = self.rules_service.get_table('classes')
+
+        if all_classes:
+            for cls in all_classes:
+                spell_col = field_mapper.get_field_value(cls, 'SpellTableColumn', '')
+                if spell_col and spell_col != '****' and spell_col not in spell_columns:
+                    class_label = field_mapper.get_field_value(cls, 'Label', spell_col)
+                    spell_columns[spell_col] = class_label.lower().replace('_', ' ')
+
+        self._spell_columns_cache = spell_columns
+        return spell_columns
+
+    def _get_column_to_class_id_map(self) -> Dict[str, List[int]]:
+        """Build mapping from spell column name to list of class_ids."""
+        if self._column_to_class_id_cache is not None:
+            return self._column_to_class_id_cache
+
+        spell_columns = self._get_spell_columns_from_spells_table()
+        all_classes = self.rules_service.get_table('classes')
+        column_to_classes: Dict[str, List[int]] = {col: [] for col in spell_columns}
+
+        if all_classes:
+            for class_id, cls in enumerate(all_classes):
+                if not self.is_spellcaster(class_data=cls):
+                    continue
+                label = field_mapper.get_field_value(cls, 'Label', '').lower()
+                if not label:
+                    continue
+
+                matched = False
+                if 'wizard' in label or 'sorcerer' in label:
+                    if 'Wiz_Sorc' in column_to_classes:
+                        column_to_classes['Wiz_Sorc'].append(class_id)
+                        matched = True
+                elif 'spirit' in label and 'shaman' in label:
+                    if 'Druid' in column_to_classes:
+                        column_to_classes['Druid'].append(class_id)
+                        matched = True
+                elif 'favored' in label and 'soul' in label:
+                    if 'Cleric' in column_to_classes:
+                        column_to_classes['Cleric'].append(class_id)
+                        matched = True
+
+                if not matched:
+                    for col in spell_columns:
+                        if col.lower() == label or col.lower() in label:
+                            column_to_classes[col].append(class_id)
+                            break
+
+        self._column_to_class_id_cache = column_to_classes
+        return column_to_classes
+
+    def _get_spell_columns_from_spells_table(self) -> List[str]:
+        """Scan spells.2da to find class column names."""
+        all_spells = self.rules_service.get_table('spells')
+        if not all_spells or len(all_spells) == 0:
+            return []
+
+        known_non_class = {
+            'Label', 'Name', 'IconResRef', 'School', 'Range', 'VS', 'MetaMagic', 'TargetType',
+            'ImpactScript', 'ConjTime', 'ConjAnim', 'ConjVisual0', 'LowConjVisual0',
+            'ConjSoundMale', 'ConjSoundFemale', 'CastAnim', 'CastTime', 'CastVisual0', 'LowCastVisual0',
+            'Proj', 'ProjSEF', 'LowProjSEF', 'ProjType', 'ProjSpwnPoint', 'ProjOrientation',
+            'ImpactSEF', 'LowImpactSEF', 'ImmunityType', 'ItemImmunity', 'Category', 'UserType',
+            'SpellDesc', 'UseConcentration', 'SpontaneouslyCast', 'SpontCastClassReq', 'HostileSetting',
+            'HasProjectile', 'TargetingUI', 'CastableOnDead', 'REMOVED', 'Innate', 'ConjSoundOverride',
+            'Counter1', 'Counter2', 'Counter3', 'Counter4', 'Counter5', 'Master', 'ProjModel',
+            'SubRadSpell1', 'SubRadSpell2', 'SubRadSpell3', 'SubRadSpell4', 'SubRadSpell5',
+            'AltMessage', 'ConjHeadVisual', 'ConjHandVisual', 'ConjGrndVisual',
+            'CastHeadVisual', 'CastHandVisual', 'CastGrndVisual', 'FeatID', 'AsMetaMagic',
+            'ConjSoundVFX', 'ProjSound'
         }
 
-        if column_name in column_mappings:
-            # Check if any keyword from the set is in class_label
-            return any(class_name in class_label for class_name in column_mappings[column_name])
+        all_keys = set()
+        for spell in all_spells[:100]:
+            if isinstance(spell, dict):
+                all_keys.update(spell.keys())
+            elif hasattr(spell, 'get_column_mapping'):
+                all_keys.update(spell.get_column_mapping().keys())
+                break
+            elif hasattr(spell, '__slots__'):
+                all_keys.update(s.lstrip('_') for s in spell.__slots__
+                               if s.startswith('_') and s not in ['_resource_manager'])
+                break
 
-        return False
+        return [k for k in all_keys if k not in known_non_class]
+
+    def _get_master_spell_cache(self) -> Dict[int, Dict[str, Any]]:
+        """Build master spell cache indexed by spell_id with class_levels mapping."""
+        if self._master_spell_cache is not None:
+            return self._master_spell_cache
+
+        all_spells_raw = self.rules_service.get_table('spells')
+        if not all_spells_raw:
+            self._master_spell_cache = {}
+            return {}
+
+        legitimate = self._filter_legitimate_spells_with_indices(all_spells_raw)
+        column_to_classes = self._get_column_to_class_id_map()
+
+        cache = {}
+        for spell_id, spell_data in legitimate:
+            class_levels = {}
+            for column_name, class_ids in column_to_classes.items():
+                level_value = field_mapper.get_field_value(spell_data, column_name, -1)
+                if level_value not in [None, '', '****', -1]:
+                    try:
+                        level_int = int(level_value)
+                        if 0 <= level_int <= 9:
+                            for class_id in class_ids:
+                                class_levels[class_id] = level_int
+                    except (ValueError, TypeError):
+                        pass
+
+            if not class_levels:
+                continue
+
+            name_raw = field_mapper.get_field_value(spell_data, 'Name', f'Spell_{spell_id}')
+            if isinstance(name_raw, int):
+                spell_name = self.rules_service._loader.get_string(name_raw)
+            elif isinstance(name_raw, str) and name_raw.isdigit():
+                spell_name = self.rules_service._loader.get_string(int(name_raw))
+            else:
+                spell_name = str(name_raw)
+            if not spell_name:
+                spell_name = f'Spell {spell_id}'
+
+            school_id_raw = field_mapper.get_field_value(spell_data, 'School', 0)
+            school_id = None
+            school_name = None
+            if school_id_raw not in [None, '', '****', 0]:
+                school_letter_map = {'G': 0, 'A': 1, 'C': 2, 'D': 3, 'E': 4, 'V': 5, 'I': 6, 'N': 7, 'T': 8}
+                school_letter = str(school_id_raw).upper().strip()
+                if school_letter in school_letter_map:
+                    school_id = school_letter_map[school_letter]
+                else:
+                    try:
+                        school_id = int(school_id_raw)
+                    except (ValueError, TypeError):
+                        school_id = 0
+                if school_id is not None:
+                    school_data = self.rules_service.get_by_id('spellschools', school_id)
+                    if school_data:
+                        school_name = field_mapper.get_field_value(school_data, 'Label', None)
+
+            cache[spell_id] = {
+                'id': spell_id,
+                'name': spell_name,
+                'icon': field_mapper.get_field_value(spell_data, 'IconResRef', ''),
+                'school_id': school_id,
+                'school_name': school_name,
+                'description': field_mapper.get_field_value(spell_data, 'SpellDesc', ''),
+                'range': field_mapper.get_field_value(spell_data, 'Range', ''),
+                'cast_time': field_mapper.get_field_value(spell_data, 'CastTime', ''),
+                'conjuration_time': field_mapper.get_field_value(spell_data, 'ConjTime', ''),
+                'components': field_mapper.get_field_value(spell_data, 'VS', ''),
+                'available_metamagic': field_mapper.get_field_value(spell_data, 'MetaMagic', ''),
+                'target_type': field_mapper.get_field_value(spell_data, 'TargetType', ''),
+                'class_levels': class_levels
+            }
+
+        self._master_spell_cache = cache
+        return cache
+
+    def _class_matches_column(self, class_data: Any, column_name: str) -> bool:
+        """Check if a class matches a spell table column using SpellTableColumn from classes.2da"""
+        spell_table_column = field_mapper.get_field_value(class_data, 'SpellTableColumn', '')
+        return spell_table_column == column_name
     
     def _is_metamagic_feat(self, feat_id: int) -> bool:
         """Check if a feat is a metamagic feat"""

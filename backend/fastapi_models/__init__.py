@@ -208,6 +208,7 @@ from .spell_models import (
     SpellcastingClass,
     MetamagicFeat,
     MemorizedSpell,
+    KnownSpell,
     SpellSummary,
     SpellsState,
     SpellSummaryClass,
@@ -420,7 +421,7 @@ __all__ = [
     
     # Spell models
     'SpellInfo', 'SpellSchool', 'SpellcastingClass', 'MetamagicFeat', 'MemorizedSpell',
-    'SpellSummary', 'SpellsState', 'SpellSummaryClass',
+    'KnownSpell', 'SpellSummary', 'SpellsState', 'SpellSummaryClass',
     'AvailableSpellsResponse', 'AllSpellsResponse', 'SpellPaginationInfo', 'LegitimateSpellsResponse',
     'SpellManageRequest', 'SpellManageResponse',
     

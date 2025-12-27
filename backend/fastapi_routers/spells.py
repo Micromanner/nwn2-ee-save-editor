@@ -29,7 +29,7 @@ def get_spells_state(
         # Lazy imports for performance
         from fastapi_models import (
             SpellsState, SpellcastingClass, SpellSummaryClass, MetamagicFeat,
-            SpellSummary, MemorizedSpell, SpellInfo
+            SpellSummary, MemorizedSpell, KnownSpell, SpellInfo
         )
         
         spell_manager = manager.get_manager('spell')
@@ -40,13 +40,15 @@ def get_spells_state(
             class_id = class_info.get('Class', -1)
             class_level = class_info.get('ClassLevel', 0)
             if spell_manager.is_spellcaster(class_id):
+                can_edit = not spell_manager.uses_all_spells_known(class_id)
                 spellcasting_classes.append(SpellcastingClass(
                     index=idx,
                     class_id=class_id,
                     class_name=spell_manager.get_class_name(class_id),
                     class_level=class_level,
                     caster_level=spell_manager.get_caster_level(idx),
-                    spell_type='prepared' if spell_manager.is_prepared_caster(class_id) else 'spontaneous'
+                    spell_type='prepared' if spell_manager.is_prepared_caster(class_id) else 'spontaneous',
+                    can_edit_spells=can_edit
                 ))
         
         # Get spell summary
@@ -80,10 +82,9 @@ def get_spells_state(
             spell_resistance=summary_data.get('spell_resistance', 0)
         )
         
-        # Get memorized spells (basic info - frontend enriches from legitimate spells data)
+        # Get memorized spells (for prepared casters - basic info)
         memorized_data = spell_manager.get_all_memorized_spells() if spellcasting_classes else []
 
-        # Get spell names for basic display
         memorized_spells = []
         for spell in memorized_data:
             spell_details = spell_manager.get_spell_details(spell['spell_id'])
@@ -98,6 +99,24 @@ def get_spells_state(
                 metamagic=spell.get('metamagic', 0),
                 ready=spell.get('ready', True)
             ))
+
+        # Get known spells - uses AllSpellsKnown field to determine source:
+        # - AllSpellsKnown=1 (Cleric, Druid, etc.): All class spells from spells.2da
+        # - AllSpellsKnown=0 (Wizard, Sorcerer, etc.): Spells from KnownList in GFF
+        known_spells = []
+        if spellcasting_classes:
+            all_character_spells = spell_manager.get_all_character_spells()
+            for spell in all_character_spells:
+                known_spells.append(KnownSpell(
+                    level=spell['level'],
+                    spell_id=spell['spell_id'],
+                    name=spell['name'],
+                    icon=spell['icon'],
+                    school_name=spell.get('school_name'),
+                    description=spell.get('description'),
+                    class_id=spell['class_id'],
+                    is_domain_spell=spell.get('is_domain_spell', False)
+                ))
         
         # Get available spells by level if requested (expensive operation)
         available_by_level = None
@@ -129,6 +148,7 @@ def get_spells_state(
             spellcasting_classes=spellcasting_classes,
             spell_summary=spell_summary,
             memorized_spells=memorized_spells,
+            known_spells=known_spells,
             available_by_level=available_by_level
         )
         
@@ -422,6 +442,13 @@ def manage_spells(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Selected class cannot cast spells"
+            )
+
+        if spell_manager.uses_all_spells_known(class_id):
+            class_name = spell_manager.get_class_name(class_id)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{class_name} spells cannot be modified - this class automatically knows all spells from game rules"
             )
         
         if spell_request.action == 'add':

@@ -12,6 +12,7 @@ export interface SpellTabContentProps {
   activeTab: SpellTab;
 
   mySpells: SpellInfo[];
+  preparedSpells: SpellInfo[];
   allSpells: SpellInfo[];
 
   ownedSpellIds: Set<number>;
@@ -26,7 +27,7 @@ export interface SpellTabContentProps {
   hasPrevious: boolean;
   onPageChange: (page: number) => void;
 
-  casterClasses: Array<{index: number; name: string}>;
+  casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
 }
 
 function MySpellsTabComponent({
@@ -38,7 +39,7 @@ function MySpellsTabComponent({
   spells: SpellInfo[];
   onRemove: (spellId: number, classIndex: number) => void;
   onLoadDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
-  casterClasses: Array<{index: number; name: string}>;
+  casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
 }) {
   if (spells.length === 0) {
     return (
@@ -79,7 +80,7 @@ function AvailableSpellsTabComponent({
   ownedSpellIds: Set<number>;
   onAdd: (spellId: number, classIndex: number) => void;
   onLoadDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
-  casterClasses: Array<{index: number; name: string}>;
+  casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
 }) {
   if (spells.length === 0) {
     return (
@@ -112,6 +113,7 @@ const AvailableSpellsTab = memo(AvailableSpellsTabComponent);
 function SpellTabContentComponent({
   activeTab,
   mySpells,
+  preparedSpells,
   allSpells,
   ownedSpellIds,
   onAddSpell,
@@ -132,6 +134,15 @@ function SpellTabContentComponent({
           <div className={cn('transition-opacity duration-200', activeTab === 'my-spells' ? 'block' : 'hidden')}>
             <MySpellsTab
               spells={mySpells}
+              onRemove={onRemoveSpell}
+              onLoadDetails={onLoadSpellDetails}
+              casterClasses={casterClasses}
+            />
+          </div>
+
+          <div className={cn('transition-opacity duration-200', activeTab === 'prepared' ? 'block' : 'hidden')}>
+            <MySpellsTab
+              spells={preparedSpells}
               onRemove={onRemoveSpell}
               onLoadDetails={onLoadSpellDetails}
               casterClasses={casterClasses}

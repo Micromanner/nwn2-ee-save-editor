@@ -498,9 +498,24 @@ class CharacterManager(EventEmitter):
                 'law_chaos': self.gff.get('LawfulChaotic', 50),
                 'good_evil': self.gff.get('GoodEvil', 50)
             },
+            'gender': self.gff.get('Gender', 0),  # Raw gender INT
             'gold': self.gff.get('Gold', 0),
-            'custom_content_count': len(self.custom_content)
+            'custom_content_count': len(self.custom_content),
+            # New fields for Overview
+            'background': {}, 
+            'domains': []
         }
+        
+        # Populate Background and Domains
+        feat_manager = self.get_manager('feat')
+        if feat_manager and hasattr(feat_manager, 'get_feat_summary_fast'):
+            feat_summary = feat_manager.get_feat_summary_fast()
+
+            if feat_summary.get('background_feats'):
+                summary['background'] = feat_summary['background_feats'][0]
+
+            domain_feats = feat_summary.get('domain_feats', [])
+            summary['domains'] = [f for f in domain_feats if 'EPITHET' in f['name'].upper()]
         
         # Aggregate class information from ClassManager
         if class_manager and hasattr(class_manager, 'get_class_summary'):
@@ -797,6 +812,7 @@ class CharacterManager(EventEmitter):
                 'race_name': character_info.get('race', ''),
                 'alignment': character_info.get('alignment', {}),
                 'alignment_string': character_info.get('alignment_string', ''),
+                'gender': int(self.gff.get('Gender', 0)),
                 'is_savegame': False,
                 'is_companion': False
             },

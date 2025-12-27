@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { cn } from '@/lib/utils';
 
-export type SpellTab = 'my-spells' | 'all-spells';
+export type SpellTab = 'my-spells' | 'prepared' | 'all-spells';
 
 export interface SpellNavBarProps {
   activeTab: SpellTab;
@@ -30,6 +30,7 @@ export interface SpellNavBarProps {
   onLevelsChange: (levels: Set<number>) => void;
 
   mySpellsCount: number;
+  preparedSpellsCount: number;
   availableSpellsCount: number;
   filteredCount: number;
 
@@ -87,6 +88,7 @@ function SpellNavBarComponent({
   selectedLevels,
   onLevelsChange,
   mySpellsCount,
+  preparedSpellsCount,
   availableSpellsCount,
   filteredCount,
   currentPage,
@@ -145,9 +147,20 @@ function SpellNavBarComponent({
             onClick={() => onTabChange('my-spells')}
             size="sm"
           >
-            My Spells
+            Known Spells
             <Badge variant="secondary" className="ml-2">
               {mySpellsCount}
+            </Badge>
+          </Button>
+
+          <Button
+            variant={activeTab === 'prepared' ? 'primary' : 'outline'}
+            onClick={() => onTabChange('prepared')}
+            size="sm"
+          >
+            Prepared
+            <Badge variant="secondary" className="ml-2">
+              {preparedSpellsCount}
             </Badge>
           </Button>
 

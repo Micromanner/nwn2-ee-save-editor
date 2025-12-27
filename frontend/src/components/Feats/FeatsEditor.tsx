@@ -93,6 +93,8 @@ export default function FeatsEditor() {
       ...(featsData.summary.class_feats || []),
       ...(featsData.summary.general_feats || []),
       ...(featsData.summary.custom_feats || []),
+      ...(featsData.summary.background_feats || []),
+      ...(featsData.summary.domain_feats || []),
     ];
 
     const uniqueFeats = new Map<number, FeatInfo>();

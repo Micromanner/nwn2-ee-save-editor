@@ -462,6 +462,132 @@ def get_feat_details(
         )
 
 
+@router.post("/characters/{character_id}/domains/add")
+def add_domain(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    domain_request: dict = Body(...)
+):
+    """Add a domain to character (grants all associated feats)"""
+    try:
+        domain_id = domain_request.get('domain_id')
+        if domain_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='domain_id is required'
+            )
+
+        session = char_session
+        manager = session.character_manager
+        feat_manager = manager.get_manager('feat')
+
+        result = feat_manager.add_domain(domain_id)
+
+        _invalidate_feat_cache(character_id)
+
+        return {
+            'message': f"Domain '{result['domain_name']}' added successfully",
+            'domain_info': result,
+            'has_unsaved_changes': getattr(session, 'has_unsaved_changes', lambda: True)()
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add domain for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add domain: {str(e)}"
+        )
+
+
+@router.delete("/characters/{character_id}/domains/{domain_id}")
+def remove_domain(
+    character_id: int,
+    domain_id: int,
+    char_session: CharacterSessionDep
+):
+    """Remove a domain from character (removes all associated feats)"""
+    try:
+        session = char_session
+        manager = session.character_manager
+        feat_manager = manager.get_manager('feat')
+
+        result = feat_manager.remove_domain(domain_id)
+
+        _invalidate_feat_cache(character_id)
+
+        return {
+            'message': f"Domain '{result['domain_name']}' removed successfully",
+            'domain_info': result,
+            'has_unsaved_changes': getattr(session, 'has_unsaved_changes', lambda: True)()
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remove domain for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove domain: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/domains/available")
+def get_available_domains(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get list of available domains"""
+    try:
+        feat_manager = manager.get_manager('feat')
+        game_rules = feat_manager.game_rules_service
+
+        domains_table = game_rules.get_table('domains')
+        if not domains_table:
+            return {'domains': []}
+
+        from gamedata.field_mapper import field_mapper
+
+        domains = []
+        for domain_id, domain_data in enumerate(domains_table):
+            domain_name = field_mapper.get_field_value(domain_data, 'label', f'Domain_{domain_id}')
+            epithet_feat_id = field_mapper.get_field_value(domain_data, 'EpithetFeat', None)
+
+            has_domain = False
+            if epithet_feat_id:
+                try:
+                    has_domain = feat_manager.has_feat(int(epithet_feat_id))
+                except (ValueError, TypeError):
+                    pass
+
+            domains.append({
+                'id': domain_id,
+                'name': domain_name,
+                'has_domain': has_domain,
+                'epithet_feat_id': epithet_feat_id
+            })
+
+        return {'domains': domains}
+
+    except Exception as e:
+        logger.error(f"Failed to get available domains for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available domains: {str(e)}"
+        )
+
+
 @router.get("/characters/{character_id}/feats/{feat_id}/validate")
 @log_performance
 def validate_feat(

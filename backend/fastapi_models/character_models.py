@@ -26,6 +26,7 @@ class CharacterInfo(BaseModel):
     race_name: str = ""
     alignment: Dict[str, int] = Field(default_factory=dict)
     alignment_string: str = ""
+    gender: int = 0  # Raw gender from GFF
     
     # File metadata
     is_savegame: bool = False
@@ -45,6 +46,7 @@ class CharacterSummary(BaseModel):
     classes: Dict[str, Any]  # Changed to match actual return from get_class_summary()
     abilities: Optional[Dict[str, int]] = None  # Made optional since not always populated
     gold: int = 0
+    gender: int = 0  # Added gender field (raw int)
 
     # Additional info from content manager
     campaign_name: Optional[str] = None
@@ -54,6 +56,10 @@ class CharacterSummary(BaseModel):
 
     # Custom content
     custom_content_count: int = 0
+    
+    # New fields
+    background: Optional[Dict[str, Any]] = None
+    domains: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ManagerStatus(BaseModel):

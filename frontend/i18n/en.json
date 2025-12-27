@@ -563,5 +563,9 @@
   },
   "errors": {
     "loadingFailed": "Failed to load data"
+  },
+  "spells": {
+    "readOnlyClassNotice": "automatically knows all spells from game rules and cannot be modified.",
+    "noEditableClasses": "All spellcasting classes on this character have fixed spell lists that cannot be modified."
   }
 }

@@ -41,6 +41,8 @@ export interface FeatsState {
     class_feats: FeatInfo[];
     general_feats: FeatInfo[];
     custom_feats: FeatInfo[];
+    background_feats: FeatInfo[];
+    domain_feats: FeatInfo[];
   };
   all_feats: FeatInfo[];
   available_feats: FeatInfo[];
@@ -91,7 +93,7 @@ export const FEAT_TYPES = {
   EPIC: 32,
   CLASS: 64,
   BACKGROUND: 128,
-  DOMAIN: 256,
+  DOMAIN: 8192,
 } as const;
 
 export type FeatType = typeof FEAT_TYPES[keyof typeof FEAT_TYPES];

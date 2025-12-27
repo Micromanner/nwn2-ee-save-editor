@@ -19,7 +19,7 @@ export interface SpellCardProps {
   onAdd?: (spellId: number, classIndex: number) => void;
   onRemove?: (spellId: number, classIndex: number) => void;
   onLoadDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
-  casterClasses: Array<{index: number; name: string}>;
+  casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
 }
 
 function getSchoolColorClass(schoolName?: string): string {
@@ -55,9 +55,15 @@ function SpellCardComponent({
   const [isExpanded, setIsExpanded] = useState(false);
   const [detailedSpell, setDetailedSpell] = useState<SpellInfo | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+
+  const editableClasses = casterClasses.filter(cls => cls.can_edit_spells);
   const [selectedClassIndex, setSelectedClassIndex] = useState<number>(
-    casterClasses.length > 0 ? casterClasses[0].index : 0
+    editableClasses.length > 0 ? editableClasses[0].index : 0
   );
+
+  const spellClassCanEdit = spell.class_id !== undefined
+    ? casterClasses.find(cls => cls.class_id === spell.class_id)?.can_edit_spells ?? false
+    : false;
 
   const handleToggleExpand = async () => {
     if (!isExpanded && onLoadDetails && !detailedSpell) {
@@ -108,37 +114,43 @@ function SpellCardComponent({
                 <Badge variant="secondary">
                   {levelText}
                 </Badge>
-                 {isOwned && (
+                {spell.is_domain_spell && (
+                  <Badge variant="outline" className="text-amber-500 border-amber-500">
+                    Domain
+                  </Badge>
+                )}
+                {isOwned && (
                   <Badge variant="default" className="bg-[rgb(var(--color-primary))] text-white flex items-center gap-1">
                     <Check className="w-3 h-3" />
-                    Active
+                    {spell.memorized_count && spell.memorized_count > 1
+                      ? `x${spell.memorized_count}`
+                      : 'Active'}
                   </Badge>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
-              {!isOwned && onAdd && casterClasses.length > 0 && (
+              {!isOwned && onAdd && editableClasses.length > 0 && (
                 <div className="flex items-center gap-2">
-                  {casterClasses.length > 1 && (
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Select
-                        value={selectedClassIndex.toString()}
-                        onValueChange={(value) => setSelectedClassIndex(Number(value))}
-                      >
-                        <SelectTrigger className="w-[120px] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {casterClasses.map((cls) => (
-                            <SelectItem key={cls.index} value={cls.index.toString()}>
-                              {cls.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Select
+                      value={selectedClassIndex.toString()}
+                      onValueChange={(value) => setSelectedClassIndex(Number(value))}
+                      disabled={editableClasses.length === 1}
+                    >
+                      <SelectTrigger className="w-[120px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {editableClasses.map((cls) => (
+                          <SelectItem key={cls.index} value={cls.index.toString()}>
+                            {cls.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                    <Button
                     variant="outline"
                     size="sm"
@@ -151,13 +163,14 @@ function SpellCardComponent({
                   </Button>
                 </div>
               )}
-              {isOwned && onRemove && (
+              {isOwned && onRemove && spellClassCanEdit && (
                  <Button
                   variant="ghost"
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRemove(spell.id, selectedClassIndex);
+                    const classIndex = casterClasses.find(cls => cls.class_id === spell.class_id)?.index ?? selectedClassIndex;
+                    onRemove(spell.id, classIndex);
                   }}
                 >
                   Remove

@@ -39,8 +39,8 @@ function CollapsibleSection({ title, children, defaultOpen = false, badge }: Col
           </svg>
         </Button>
         <div className={`transition-all duration-300 ease-out ${isOpen ? 'max-h-none opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-          <div className="px-4 pb-4 border-t border-[rgb(var(--color-surface-border)/0.3)]">
-            <div className="pt-4">
+          <div className="px-6 md:px-8 pb-6 md:pb-8 border-t border-[rgb(var(--color-surface-border)/0.3)]">
+            <div className="pt-6 md:pt-8 grid-flow-row">
               {children}
             </div>
           </div>
@@ -108,23 +108,23 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
           <h4 className="font-semibold text-[rgb(var(--color-text-primary))] mb-3 border-b border-[rgb(var(--color-surface-border)/0.6)] pb-1">
             General Information
           </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Game Act</div>
-              <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4">
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Game Act</div>
+              <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                 {character.gameAct ? `Act ${character.gameAct}` : 'Unknown'}
               </div>
             </div>
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Difficulty</div>
-              <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Difficulty</div>
+              <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                 {getDifficultyName(character.difficultyLevel)}
               </div>
             </div>
             {character.lastSavedTimestamp ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)] col-span-2">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Last Saved</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div className="col-span-2">
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Last Saved</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {formatTimestamp(character.lastSavedTimestamp)}
                 </div>
               </div>
@@ -137,35 +137,35 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
           <h4 className="font-semibold text-[rgb(var(--color-text-primary))] mb-3 border-b border-[rgb(var(--color-surface-border)/0.6)] pb-1">
             Session Information
           </h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4">
             {character.campaignName ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Campaign</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Campaign</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {display(character.campaignName)}
                 </div>
               </div>
             ) : null}
             {character.moduleName ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Module</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Module</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {display(character.moduleName)}
                 </div>
               </div>
             ) : null}
             {character.location ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Location</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Location</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {display(character.location)}
                 </div>
               </div>
             ) : null}
             {character.playTime ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Play Time</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Play Time</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {display(character.playTime)}
                 </div>
               </div>
@@ -178,45 +178,45 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
           <h4 className="font-semibold text-[rgb(var(--color-text-primary))] mb-3 border-b border-[rgb(var(--color-surface-border)/0.6)] pb-1">
             Locale & Language
           </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Language</div>
-              <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4">
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Language</div>
+              <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                 {getLanguageName(character.languageId)}
               </div>
             </div>
             {character.lastSavedTimestamp ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Timezone</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Timezone</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {Intl.DateTimeFormat().resolvedOptions().timeZone}
                 </div>
               </div>
             ) : null}
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Localization</div>
-              <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Localization</div>
+              <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                 {character.localizationStatus || (character.name ? 'Active' : 'Default')}
               </div>
             </div>
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Region Format</div>
-              <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Region Format</div>
+              <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                 {Intl.DateTimeFormat().resolvedOptions().locale || 'en-US'}
               </div>
             </div>
             {character.createdAt ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Imported</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Imported</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {new Date(character.createdAt).toLocaleDateString()}
                 </div>
               </div>
             ) : null}
             {character.updatedAt ? (
-              <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)]">
-                <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Last Modified</div>
-                <div className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Last Modified</div>
+                <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
                   {new Date(character.updatedAt).toLocaleDateString()}
                 </div>
               </div>
@@ -232,21 +232,22 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
           </h4>
           
           {/* Quest Summary Stats */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)] text-center">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Completed</div>
+          {/* Quest Summary Stats */}
+          <div className="grid grid-cols-3 gap-y-6 gap-x-4">
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Completed</div>
               <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">
                 {formatNumber(character.questDetails?.summary?.completed_quests || 0)}
               </div>
             </div>
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)] text-center">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Active</div>
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Active</div>
               <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">
                 {formatNumber(character.questDetails?.summary?.active_quests || 0)}
               </div>
             </div>
-            <div className="bg-[rgb(var(--color-surface-1)/0.5)] backdrop-blur rounded-lg p-3 border border-[rgb(var(--color-surface-border)/0.3)] text-center">
-              <div className="text-xs text-[rgb(var(--color-text-muted))] mb-1">Complete</div>
+            <div>
+              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Complete</div>
               <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">
                 {character.questDetails?.progress_stats?.total_completion_rate || 0}%
               </div>

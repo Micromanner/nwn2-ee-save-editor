@@ -54,6 +54,7 @@ const FEAT_TYPE_FILTERS = [
   { value: 1024, label: 'Heritage', color: 'bg-rose-500' },
   { value: 2048, label: 'Item Creation', color: 'bg-lime-500' },
   { value: 4096, label: 'Racial', color: 'bg-pink-500' },
+  { value: 8192, label: 'Domain', color: 'bg-indigo-500' },
 ];
 
 function FeatNavBarComponent({

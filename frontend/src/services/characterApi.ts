@@ -15,6 +15,10 @@ export interface CharacterSaves {
   fortitude: number;
   reflex: number;
   will: number;
+  portrait?: string;
+  // New fields
+  background?: { name: string; id: number; icon?: string; description?: string };
+  domains?: Array<{ name: string; id: number; icon?: string; description?: string }>;
 }
 
 export interface CharacterClass {
@@ -283,6 +287,9 @@ export interface CharacterData {
   lastSaved?: string;
   portrait?: string;
   customPortrait?: string;
+  // New fields
+  background?: { name: string; id: number; icon?: string; description?: string };
+  domains?: Array<{ name: string; id: number; icon?: string; description?: string }>;
   // Appearance properties
   appearance?: number;
   soundset?: number;
@@ -823,7 +830,7 @@ export class CharacterAPI {
       name: String(name),
       race: String(summary.race || info.race_name || 'Unknown'),
       subrace: summary.subrace ? String(summary.subrace) : undefined,
-      gender: info.gender === 0 || info.gender === 'Male' ? 'Male' : 'Female',
+      gender: info.gender === 0 ? 'Male' : info.gender === 1 ? 'Female' : 'Other',
       classes: classesArray.map((cls) => ({
         name: String(cls.name || 'Unknown Class'),
         level: Number(cls.level || 1)
@@ -848,9 +855,12 @@ export class CharacterAPI {
         will: Number((backendData.saves as SavesData)?.will || 0)
       },
       armorClass: Number(summary.armor_class || 10),
+      // New fields
+      background: (summary.background as any) || undefined,
+      domains: (summary.domains as any[]) || [],
       gold: Number(summary.gold || 0),
       location: String(summary.area_name || backendData.area_name || ''),
-      portrait: summary.portrait ? String(summary.portrait) : undefined,
+      portrait: String(summary.portrait || info.portrait || ''),
       customPortrait: summary.custom_portrait ? String(summary.custom_portrait) : undefined,
       // Combat stats
       baseAttackBonus: Number(summary.base_attack_bonus || 0),

@@ -79,7 +79,7 @@ class FeatManager(EventEmitter):
         return self.character_manager.get_manager('content')
     
     def _update_protected_feats(self):
-        """Update the set of protected feat IDs"""
+        """Update the set of protected feat IDs (excludes domain feats - they're removable)"""
         self._protected_feats.clear()
 
         for content_id, info in self.character_manager.custom_content.items():
@@ -87,9 +87,14 @@ class FeatManager(EventEmitter):
                 self._protected_feats.add(info['id'])
 
         epithet_feats = self.detect_epithet_feats()
+
+        # Remove domain feats from protected set (domains are changeable)
+        domain_feat_ids = self.get_all_domain_feat_ids()
+        epithet_feats = epithet_feats - domain_feat_ids
+
         self._protected_feats.update(epithet_feats)
 
-        logger.debug(f"Protected feats updated: {len(self._protected_feats)} feats protected")
+        logger.debug(f"Protected feats updated: {len(self._protected_feats)} feats protected (domain feats excluded)")
     
     def on_class_changed(self, event: ClassChangedEvent):
         """Handle class change event"""
@@ -149,10 +154,11 @@ class FeatManager(EventEmitter):
     def add_feat(self, feat_id: int, source: str = 'manual') -> bool:
         """
         Add a feat to the character
+        If the feat is a domain epithet feat, also adds all associated domain feats
 
         Args:
             feat_id: The feat ID to add
-            source: Source of the feat ('class', 'level', 'manual')
+            source: Source of the feat ('class', 'level', 'manual', 'domain')
 
         Returns:
             True if feat was added
@@ -161,6 +167,19 @@ class FeatManager(EventEmitter):
             logger.debug(f"Character already has feat {feat_id}")
             return False
 
+        # Check if this is a domain epithet feat - if so, add the entire domain
+        if source != 'domain' and self.is_domain_epithet_feat(feat_id):
+            domain_feat_map = self._build_domain_feat_map()
+            if feat_id in domain_feat_map:
+                # Get the domain ID
+                domain_info = domain_feat_map[feat_id][0]
+                domain_id = domain_info['domain_id']
+                logger.info(f"Adding domain epithet feat {feat_id}, will cascade to all domain {domain_id} feats")
+
+                # Use add_domain to cascade addition
+                self.add_domain(domain_id)
+                return True
+
         feat_data = self.game_rules_service.get_by_id('feat', feat_id)
         if not feat_data and feat_id >= 0:
             logger.warning(f"Feat ID {feat_id} not found in feat table")
@@ -168,6 +187,9 @@ class FeatManager(EventEmitter):
         feat_list = self.gff.get('FeatList', [])
         feat_list.append({'Feat': feat_id})
         self.gff.set('FeatList', feat_list)
+
+        # Invalidate cached set
+        self._has_feat_set = None
 
         event = FeatChangedEvent(
             event_type=EventType.FEAT_ADDED,
@@ -247,13 +269,15 @@ class FeatManager(EventEmitter):
 
         return success, auto_changes
 
-    def remove_feat(self, feat_id: int, force: bool = False) -> bool:
+    def remove_feat(self, feat_id: int, force: bool = False, skip_cascade: bool = False) -> bool:
         """
         Remove a feat from the character
+        If the feat is a domain epithet feat, also removes all associated domain feats
 
         Args:
             feat_id: The feat ID to remove
             force: Force removal even if protected
+            skip_cascade: Skip domain cascade logic (used internally to prevent recursion)
 
         Returns:
             True if feat was removed
@@ -262,12 +286,28 @@ class FeatManager(EventEmitter):
             logger.warning(f"Cannot remove protected feat {feat_id}")
             return False
 
+        # Check if this is a domain epithet feat - if so, remove the entire domain
+        if not skip_cascade and self.is_domain_epithet_feat(feat_id):
+            domain_feat_map = self._build_domain_feat_map()
+            if feat_id in domain_feat_map:
+                # Get the domain ID
+                domain_info = domain_feat_map[feat_id][0]
+                domain_id = domain_info['domain_id']
+                logger.info(f"Removing domain epithet feat {feat_id}, will cascade to all domain {domain_id} feats")
+
+                # Use remove_domain to cascade removal
+                self.remove_domain(domain_id)
+                return True
+
         feat_list = self.gff.get('FeatList', [])
         original_count = len(feat_list)
         feat_list = [f for f in feat_list if f.get('Feat') != feat_id]
 
         if len(feat_list) < original_count:
             self.gff.set('FeatList', feat_list)
+
+            # Invalidate cached set
+            self._has_feat_set = None
 
             event = FeatChangedEvent(
                 event_type=EventType.FEAT_REMOVED,
@@ -402,14 +442,23 @@ class FeatManager(EventEmitter):
                 description = str(desc_raw) if desc_raw else ''
 
             icon = field_mapper.get_field_value(feat_data, 'icon', '')
-            
+
             feat_type = self._parse_feat_type(feat_data)
+
+            category = self.get_feat_category_by_type(feat_type)
+            if self.is_domain_epithet_feat(feat_id):
+                category = 'Domain'
+                feat_type = 8192
+            elif 'BACKGROUND' in label.upper():
+                category = 'Background'
+                feat_type = 128
+
             info = {
                 'id': feat_id,
                 'label': label,
                 'name': label,
                 'type': feat_type,
-                'category': self.get_feat_category_by_type(feat_type),
+                'category': category,
                 'protected': self.is_feat_protected(feat_id),
                 'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
@@ -495,12 +544,21 @@ class FeatManager(EventEmitter):
                 description = str(desc_raw) if desc_raw else ''
 
             feat_type = self._parse_feat_type(feat_data)
+
+            category = self.get_feat_category_by_type(feat_type)
+            if self.is_domain_epithet_feat(feat_id):
+                category = 'Domain'
+                feat_type = 8192
+            elif 'BACKGROUND' in label.upper():
+                category = 'Background'
+                feat_type = 128
+
             info = {
                 'id': feat_id,
                 'label': label,
                 'name': label,
                 'type': feat_type,
-                'category': self.get_feat_category_by_type(feat_type),
+                'category': category,
                 'protected': self.is_feat_protected(feat_id),
                 'custom': self._get_content_manager().is_custom_content('feat', feat_id) if self._get_content_manager() else False,
                 'description': description,
@@ -542,19 +600,25 @@ class FeatManager(EventEmitter):
             'protected': [],
             'class_feats': [],
             'general_feats': [],
-            'custom_feats': []
+            'custom_feats': [],
+            'background_feats': [],
+            'domain_feats': []
         }
         
         for feat in feat_list:
             feat_id = feat.get('Feat', 0)
             feat_info = self.get_feat_info_display(feat_id)
-            
+
             if feat_info['protected']:
                 categorized['protected'].append(feat_info)
-            
-            if feat_info['custom']:
+
+            if self.is_domain_epithet_feat(feat_id):
+                categorized['domain_feats'].append(feat_info)
+            elif 'BACKGROUND' in feat_info['name'].upper():
+                categorized['background_feats'].append(feat_info)
+            elif feat_info['custom']:
                 categorized['custom_feats'].append(feat_info)
-            elif feat_info['type'] == 1:
+            elif feat_info['type'] & 1:
                 categorized['general_feats'].append(feat_info)
             else:
                 categorized['class_feats'].append(feat_info)
@@ -1324,6 +1388,14 @@ class FeatManager(EventEmitter):
                     except (ValueError, TypeError):
                         data_type_int = 1
 
+                # Override type for domains and backgrounds
+                if self.is_domain_epithet_feat(feat_id):
+                    data_type_int = 8192
+                else:
+                    label = field_mapper.get_field_value(feat_data, 'label', '')
+                    if 'BACKGROUND' in str(label).upper():
+                        data_type_int = 128
+
                 if not (data_type_int & feat_type):
                     time_filtering += time.perf_counter() - t0
                     continue
@@ -1746,7 +1818,9 @@ class FeatManager(EventEmitter):
             'protected': [],
             'class_feats': [],
             'general_feats': [],
-            'custom_feats': []
+            'custom_feats': [],
+            'background_feats': [],
+            'domain_feats': []
         }
         
         for feat in feat_list:
@@ -2338,15 +2412,35 @@ class FeatManager(EventEmitter):
         """
         Check if a feat is a domain feat (from domains.2da)
         This distinguishes domain feats from quest epithet feats with similar names
-        
+
         Args:
             feat_id: The feat ID to check
-            
+
         Returns:
             True if feat is listed in any domain's GrantedFeat/CastableFeat/EpithetFeat
         """
         domain_feats = self.get_all_domain_feat_ids()
         return feat_id in domain_feats
+
+    def is_domain_epithet_feat(self, feat_id: int) -> bool:
+        """
+        Check if a feat is a domain EPITHET feat (the selectable domain marker)
+
+        Args:
+            feat_id: The feat ID to check
+
+        Returns:
+            True if feat is an EpithetFeat for a domain
+        """
+        domain_feat_map = self._build_domain_feat_map()
+        if feat_id not in domain_feat_map:
+            return False
+
+        # Check if this feat is listed as EpithetFeat for any domain
+        for domain_info in domain_feat_map[feat_id]:
+            if domain_info.get('feat_type') == 'EpithetFeat':
+                return True
+        return False
     
     def get_character_domain_feats(self) -> Set[int]:
         """
@@ -2408,6 +2502,177 @@ class FeatManager(EventEmitter):
         
         return domain_feats
     
+    def add_domain(self, domain_id: int) -> Dict[str, Any]:
+        """
+        Add a domain to the character by granting all associated feats
+
+        Args:
+            domain_id: The domain ID from domains.2da
+
+        Returns:
+            Dict with added feats and domain info
+        """
+        from ..events import DomainChangedEvent
+        import time
+
+        domains_table = self.game_rules_service.get_table('domains')
+        if not domains_table or domain_id >= len(domains_table):
+            raise ValueError(f"Invalid domain ID: {domain_id}")
+
+        domain_data = domains_table[domain_id]
+        domain_name = field_mapper.get_field_value(domain_data, 'label', f'Domain_{domain_id}')
+
+        added_feats = []
+
+        # Get all feat types for this domain
+        feat_types = ['GrantedFeat', 'CastableFeat', 'EpithetFeat']
+
+        for feat_type in feat_types:
+            feat_id = field_mapper.get_field_value(domain_data, feat_type, None)
+
+            if feat_id and str(feat_id).strip() not in ['', '****', '-1', '0']:
+                try:
+                    feat_id_int = int(feat_id)
+                    if feat_id_int > 0:
+                        if not self.has_feat(feat_id_int):
+                            success = self.add_feat(feat_id_int, source='domain')
+                            if success:
+                                feat_info = self.get_feat_info_display(feat_id_int)
+                                added_feats.append({
+                                    'feat_id': feat_id_int,
+                                    'feat_name': feat_info.get('name', f'Feat_{feat_id_int}'),
+                                    'feat_type': feat_type
+                                })
+                                logger.info(f"Added {feat_type} feat {feat_id_int} ({feat_info.get('name')}) for domain {domain_name}")
+                        else:
+                            logger.debug(f"Character already has {feat_type} feat {feat_id_int} for domain {domain_name}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid feat ID in domain {domain_id} {feat_type}: {feat_id} - {e}")
+
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            class_id = class_entry.get('Class')
+            class_data = self.game_rules_service.get_by_id('classes', class_id)
+
+            has_domains = (
+                field_mapper.get_field_value(class_data, 'HasDomains', '') == '1' or
+                field_mapper.get_field_value(class_data, 'MaxDomains', '0') != '0'
+            )
+
+            if has_domains:
+                domain1 = class_entry.get('Domain1', -1)
+                domain2 = class_entry.get('Domain2', -1)
+
+                if domain1 == -1:
+                    class_entry['Domain1'] = domain_id
+                    logger.info(f"Set Domain1 to {domain_id} ({domain_name})")
+                    break
+                elif domain2 == -1:
+                    class_entry['Domain2'] = domain_id
+                    logger.info(f"Set Domain2 to {domain_id} ({domain_name})")
+                    break
+                else:
+                    raise ValueError(f"Character already has 2 domains (Domain1={domain1}, Domain2={domain2})")
+
+        self.gff.set('ClassList', class_list)
+
+        from ..events import EventType
+
+        event = DomainChangedEvent(
+            event_type=EventType.DOMAIN_ADDED,
+            source_manager='FeatManager',
+            timestamp=time.time(),
+            domain_id=domain_id,
+            domain_name=domain_name,
+            action='added',
+            feats_affected=added_feats
+        )
+        self.character_manager.emit(event)
+
+        return {
+            'domain_id': domain_id,
+            'domain_name': domain_name,
+            'added_feats': added_feats,
+            'total_feats_added': len(added_feats)
+        }
+
+    def remove_domain(self, domain_id: int) -> Dict[str, Any]:
+        """
+        Remove a domain from the character by removing all associated feats
+
+        Args:
+            domain_id: The domain ID from domains.2da
+
+        Returns:
+            Dict with removed feats and domain info
+        """
+        from ..events import DomainChangedEvent
+        import time
+
+        domains_table = self.game_rules_service.get_table('domains')
+        if not domains_table or domain_id >= len(domains_table):
+            raise ValueError(f"Invalid domain ID: {domain_id}")
+
+        domain_data = domains_table[domain_id]
+        domain_name = field_mapper.get_field_value(domain_data, 'label', f'Domain_{domain_id}')
+
+        removed_feats = []
+
+        # Get all feat types for this domain
+        feat_types = ['GrantedFeat', 'CastableFeat', 'EpithetFeat']
+
+        for feat_type in feat_types:
+            feat_id = field_mapper.get_field_value(domain_data, feat_type, None)
+
+            if feat_id and str(feat_id).strip() not in ['', '****', '-1', '0']:
+                try:
+                    feat_id_int = int(feat_id)
+                    if feat_id_int > 0:
+                        if self.has_feat(feat_id_int):
+                            success = self.remove_feat(feat_id_int, skip_cascade=True)
+                            if success:
+                                removed_feats.append({
+                                    'feat_id': feat_id_int,
+                                    'feat_type': feat_type
+                                })
+                                logger.info(f"Removed {feat_type} feat {feat_id_int} for domain {domain_name}")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid feat ID in domain {domain_id} {feat_type}: {feat_id} - {e}")
+
+        class_list = self.gff.get('ClassList', [])
+        for class_entry in class_list:
+            domain1 = class_entry.get('Domain1', -1)
+            domain2 = class_entry.get('Domain2', -1)
+
+            if domain1 == domain_id:
+                class_entry['Domain1'] = -1
+                logger.info(f"Cleared Domain1 (was {domain_id} - {domain_name})")
+            elif domain2 == domain_id:
+                class_entry['Domain2'] = -1
+                logger.info(f"Cleared Domain2 (was {domain_id} - {domain_name})")
+
+        self.gff.set('ClassList', class_list)
+
+        from ..events import EventType
+
+        event = DomainChangedEvent(
+            event_type=EventType.DOMAIN_REMOVED,
+            source_manager='FeatManager',
+            timestamp=time.time(),
+            domain_id=domain_id,
+            domain_name=domain_name,
+            action='removed',
+            feats_affected=removed_feats
+        )
+        self.character_manager.emit(event)
+
+        return {
+            'domain_id': domain_id,
+            'domain_name': domain_name,
+            'removed_feats': removed_feats,
+            'total_feats_removed': len(removed_feats)
+        }
+
     def invalidate_domain_caches(self):
         """Clear domain feat caches when game data changes"""
         self._domain_feats_cache = None

@@ -32,6 +32,12 @@ export interface SpellInfo {
   // Computed properties for compatibility
   school?: string;
   innate_level?: number;
+
+  // UI grouping - number of times this spell is memorized
+  memorized_count?: number;
+
+  // Domain spell indicator
+  is_domain_spell?: boolean;
 }
 
 export interface SpellcastingClass {
@@ -41,6 +47,7 @@ export interface SpellcastingClass {
   class_level: number;
   caster_level: number;
   spell_type: 'prepared' | 'spontaneous';
+  can_edit_spells: boolean;
 }
 
 export interface SpellSummary {
@@ -72,10 +79,22 @@ export interface MemorizedSpell {
   ready: boolean;
 }
 
+export interface KnownSpell {
+  level: number;
+  spell_id: number;
+  name: string;
+  icon: string;
+  school_name?: string;
+  description?: string;
+  class_id: number;
+  is_domain_spell?: boolean;
+}
+
 export interface SpellsState {
   spellcasting_classes: SpellcastingClass[];
   spell_summary: SpellSummary;
   memorized_spells: MemorizedSpell[];
+  known_spells: KnownSpell[];
   available_by_level?: Record<number, SpellInfo[]>;
 }
 

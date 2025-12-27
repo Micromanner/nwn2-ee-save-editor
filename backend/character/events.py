@@ -18,6 +18,8 @@ class EventType(Enum):
     LEVEL_GAINED = 'level_gained'
     FEAT_ADDED = 'feat_added'
     FEAT_REMOVED = 'feat_removed'
+    DOMAIN_ADDED = 'domain_added'
+    DOMAIN_REMOVED = 'domain_removed'
     SPELL_LEARNED = 'spell_learned'
     SPELL_FORGOTTEN = 'spell_forgotten'
     SPELLS_CHANGED = 'spells_changed'  # General spell system change
@@ -93,9 +95,26 @@ class LevelGainedEvent(EventData):
     class_id: int
     new_level: int
     total_level: int
-    
+
     def __post_init__(self):
         self.event_type = EventType.LEVEL_GAINED
+
+
+@dataclass
+class DomainChangedEvent(EventData):
+    """Data for domain add/remove events"""
+    domain_id: int
+    domain_name: str
+    action: str  # 'added' or 'removed'
+    feats_affected: List[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        if self.action == 'added':
+            self.event_type = EventType.DOMAIN_ADDED
+        else:
+            self.event_type = EventType.DOMAIN_REMOVED
+        if self.feats_affected is None:
+            self.feats_affected = []
 
 
 class EventEmitter:

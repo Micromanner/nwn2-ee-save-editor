@@ -2,26 +2,28 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/Card';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
 import { useSpellSearch } from '@/hooks/useSpellSearch';
 import { SpellNavBar, type SpellTab } from './SpellNavBar';
 import { SpellTabContent } from './SpellTabContent';
-import type { SpellInfo, SpellsState, SpellcastingClass } from './types';
+import type { SpellInfo, SpellsState, SpellcastingClass, KnownSpell } from './types';
 import { useToast } from '@/contexts/ToastContext';
+import { useTranslations } from '@/hooks/useTranslations';
 
 export default function SpellsEditor() {
-  const { 
-    character, 
-    isLoading: characterLoading, 
-    error: characterError, 
+  const {
+    character,
+    isLoading: characterLoading,
+    error: characterError,
     invalidateSubsystems,
     totalSpells,
     setTotalSpells
   } = useCharacterContext();
   const spells = useSubsystem('spells');
   const { showToast } = useToast();
+  const t = useTranslations();
 
   const [activeTab, setActiveTab] = useState<SpellTab>('my-spells');
   const [searchTerm, setSearchTerm] = useState('');
@@ -103,37 +105,80 @@ export default function SpellsEditor() {
     return spellsData.spellcasting_classes.map((cls: SpellcastingClass) => ({
       index: cls.index,
       name: cls.class_name,
+      class_id: cls.class_id,
+      can_edit_spells: cls.can_edit_spells,
     }));
   }, [spellsData]);
+
+  const hasEditableClasses = useMemo(() => {
+    return casterClasses.some(cls => cls.can_edit_spells);
+  }, [casterClasses]);
+
+  const readOnlyClassNames = useMemo(() => {
+    return casterClasses
+      .filter(cls => !cls.can_edit_spells)
+      .map(cls => cls.name);
+  }, [casterClasses]);
 
   const availableClassFilters = useMemo(() => {
     if (!spellsData?.spellcasting_classes) return [];
     return spellsData.spellcasting_classes.map((cls: SpellcastingClass) => ({
       name: cls.class_name,
-      value: cls.index.toString(),
+      value: cls.class_id.toString(),
     }));
   }, [spellsData]);
 
+  // Known spells - what the character CAN cast (from known_spells API)
   const allMySpells = useMemo((): SpellInfo[] => {
+    if (!spellsData?.known_spells) return [];
+
+    return spellsData.known_spells.map((ks: KnownSpell) => ({
+      id: ks.spell_id,
+      name: ks.name,
+      level: ks.level,
+      icon: ks.icon,
+      school_name: ks.school_name,
+      description: ks.description,
+      class_id: ks.class_id,
+      available_classes: [],
+      is_domain_spell: ks.is_domain_spell,
+    })) as SpellInfo[];
+  }, [spellsData?.known_spells]);
+
+  // Prepared spells - what's in slots TODAY (grouped by spell to show count)
+  const preparedSpells = useMemo((): SpellInfo[] => {
     if (!spellsData?.memorized_spells) return [];
 
-    return spellsData.memorized_spells.map(ms => {
-      const details = availableSpells.find(s => s.id === ms.spell_id);
-      
-      return {
-        id: ms.spell_id,
-        name: ms.name,
-        level: ms.level,
-        icon: ms.icon,
-        school_name: ms.school_name || details?.school_name,
-        description: ms.description || details?.description,
-        ...(details || {}), // Merge any other library details
-        // Ensure core identifiers from ms take precedence
-        spell_id: ms.spell_id,
-        class_id: ms.class_id,
-      } as any; // Cast as any because of slightly different internal structures
-    });
-  }, [spellsData?.memorized_spells, availableSpells]);
+    const spellMap = new Map<string, { spell: SpellInfo; count: number }>();
+
+    for (const ms of spellsData.memorized_spells) {
+      const key = `${ms.spell_id}-${ms.level}-${ms.class_id}`;
+      const existing = spellMap.get(key);
+
+      if (existing) {
+        existing.count++;
+      } else {
+        spellMap.set(key, {
+          spell: {
+            id: ms.spell_id,
+            name: ms.name,
+            level: ms.level,
+            icon: ms.icon,
+            school_name: ms.school_name,
+            description: ms.description,
+            class_id: ms.class_id,
+            available_classes: [],
+          },
+          count: 1,
+        });
+      }
+    }
+
+    return Array.from(spellMap.values()).map(({ spell, count }) => ({
+      ...spell,
+      memorized_count: count,
+    }));
+  }, [spellsData?.memorized_spells]);
 
   const ownedSpellIds = useMemo(() => {
     return new Set(allMySpells.map(s => s.id));
@@ -232,11 +277,16 @@ export default function SpellsEditor() {
     return Math.ceil(totalSpells / SPELLS_PER_PAGE);
   }, [totalSpells, SPELLS_PER_PAGE]);
 
+  // Apply search/filter to prepared spells
+  const { searchResults: searchedPreparedSpells } = useSpellSearch(preparedSpells, searchTerm);
+  const filteredPreparedSpells = useMemo(() => filterAndSortSpells(searchedPreparedSpells), [searchedPreparedSpells, filterAndSortSpells]);
+
   const filteredCount = useMemo(() => {
     if (activeTab === 'my-spells') return filteredMySpells.length;
+    if (activeTab === 'prepared') return filteredPreparedSpells.length;
     if (activeTab === 'all-spells') return totalSpells;
     return 0;
-  }, [activeTab, filteredMySpells.length, totalSpells]);
+  }, [activeTab, filteredMySpells.length, filteredPreparedSpells.length, totalSpells]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setCurrentPage(newPage);
@@ -259,6 +309,7 @@ export default function SpellsEditor() {
           selectedLevels={selectedLevels}
           onLevelsChange={setSelectedLevels}
           mySpellsCount={0}
+          preparedSpellsCount={0}
           availableSpellsCount={totalSpells}
           filteredCount={0}
           currentPage={1}
@@ -311,6 +362,7 @@ export default function SpellsEditor() {
           selectedLevels={selectedLevels}
           onLevelsChange={setSelectedLevels}
           mySpellsCount={allMySpells.length}
+          preparedSpellsCount={preparedSpells.length}
           availableSpellsCount={totalSpells}
           filteredCount={filteredCount}
           currentPage={currentPage}
@@ -322,9 +374,28 @@ export default function SpellsEditor() {
         />
       </div>
 
+      {readOnlyClassNames.length > 0 && (
+        <div className="mb-4 flex items-start gap-3 p-3 bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] rounded-lg">
+          <Info className="w-5 h-5 text-[rgb(var(--color-text-muted))] flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-[rgb(var(--color-text-secondary))]">
+            {hasEditableClasses ? (
+              <>
+                <span className="font-medium text-[rgb(var(--color-text-primary))]">
+                  {readOnlyClassNames.join(', ')}
+                </span>
+                {' '}{t('spells.readOnlyClassNotice')}
+              </>
+            ) : (
+              t('spells.noEditableClasses')
+            )}
+          </p>
+        </div>
+      )}
+
       <SpellTabContent
         activeTab={activeTab}
         mySpells={filteredMySpells}
+        preparedSpells={filteredPreparedSpells}
         allSpells={finalAvailableSpells}
         ownedSpellIds={ownedSpellIds}
         onAddSpell={handleAddSpell}

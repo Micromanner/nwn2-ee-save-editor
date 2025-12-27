@@ -50,6 +50,7 @@ class SpellcastingClass(BaseModel):
     class_level: int = Field(..., description="Levels in this class")
     caster_level: int = Field(..., description="Effective caster level")
     spell_type: Literal['prepared', 'spontaneous'] = Field(..., description="Spellcasting type")
+    can_edit_spells: bool = Field(True, description="Whether spells can be added/removed (False for AllSpellsKnown=1 classes)")
 
 
 class MetamagicFeat(BaseModel):
@@ -76,6 +77,18 @@ class MemorizedSpell(BaseModel):
     class_id: int = Field(..., description="Spellcasting class ID")
     metamagic: int = Field(0, description="Applied metamagic bitfield")
     ready: bool = Field(True, description="Spell is ready to cast")
+
+
+class KnownSpell(BaseModel):
+    """Known spell entry (from spells.2da for AllSpellsKnown classes, or KnownList for others)"""
+    level: int = Field(..., ge=0, le=9, description="Spell level")
+    spell_id: int = Field(..., description="Spell ID")
+    name: str = Field("Unknown Spell", description="Spell name")
+    icon: str = Field("io_unknown", description="Spell icon")
+    school_name: Optional[str] = Field(None, description="School name")
+    description: Optional[str] = Field(None, description="Spell description")
+    class_id: int = Field(..., description="Class that knows this spell")
+    is_domain_spell: bool = Field(False, description="Spell granted by domain")
 
 
 
@@ -118,6 +131,7 @@ class SpellsState(BaseModel):
     spellcasting_classes: List[SpellcastingClass] = Field(default_factory=list)
     spell_summary: SpellSummary
     memorized_spells: List[MemorizedSpell] = Field(default_factory=list)
+    known_spells: List[KnownSpell] = Field(default_factory=list, description="Known spells for spontaneous casters")
     available_by_level: Optional[Dict[int, List[SpellInfo]]] = None
 
 
