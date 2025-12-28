@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+import AboutDialog from '@/components/AboutDialog';
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getName } from '@tauri-apps/api/app';
@@ -9,6 +10,7 @@ import { getName } from '@tauri-apps/api/app';
 export default function CustomTitleBar() {
   const [appName, setAppName] = useState('NWN2:EE Save Editor');
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   useEffect(() => {
     const getAppName = async () => {
@@ -78,7 +80,6 @@ export default function CustomTitleBar() {
 
   return (
     <div data-tauri-drag-region className="h-8 bg-[rgb(var(--color-surface-2))] flex items-center justify-between px-3 border-b border-[rgb(var(--color-surface-border)/0.6)] select-none">
-      {/* Left: App Title */}
       <div className="flex items-center space-x-2 text-sm">
         <div className="w-4 h-4 bg-gradient-to-br from-[rgb(var(--color-primary))] to-[rgb(var(--color-primary-600))] rounded flex items-center justify-center">
           <span className="text-white font-bold text-xs">N</span>
@@ -86,11 +87,22 @@ export default function CustomTitleBar() {
         <span className="text-[rgb(var(--color-text-primary))] font-medium">{appName}</span>
       </div>
 
-      {/* Center: Empty space for clean look */}
       <div className="flex-1"></div>
 
-      {/* Right: Window Controls */}
       <div className="flex items-center space-x-1">
+        <Button
+          variant="ghost"
+          className="p-1 hover:bg-[rgb(var(--color-surface-3))] rounded-md"
+          onClick={() => setIsAboutOpen(true)}
+          title="About"
+        >
+          <svg className="!w-4 !h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <path d="M12 17h.01" />
+          </svg>
+        </Button>
+        <div className="w-px h-4 bg-[rgb(var(--color-surface-border))] mx-1" />
         <Button
           variant="ghost"
           size="sm"
@@ -110,12 +122,10 @@ export default function CustomTitleBar() {
           title={isMaximized ? "Restore" : "Maximize"}
         >
           {isMaximized ? (
-            // Restore icon - two overlapping squares
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 12 12">
               <path d="M3.5 4.5h4v4h-4z M4.5 3.5v-1h4v4h-1" strokeWidth="1.2" />
             </svg>
           ) : (
-            // Maximize icon - single square
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 12 12">
               <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.2" />
             </svg>
@@ -133,6 +143,8 @@ export default function CustomTitleBar() {
           </svg>
         </Button>
       </div>
+      
+      <AboutDialog isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </div>
   );
 }
