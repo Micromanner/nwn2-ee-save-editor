@@ -79,6 +79,7 @@ jobs:
         with:
           python-version: '3.11'
 
+
       - name: install python dependencies and build rust extensions
         shell: bash
         working-directory: ./backend
@@ -86,8 +87,10 @@ jobs:
           python -m venv venv
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             source venv/Scripts/activate
+            echo "$PWD/venv/Scripts" >> $GITHUB_PATH
           else
             source venv/bin/activate
+            echo "$PWD/venv/bin" >> $GITHUB_PATH
           fi
 
           python -m pip install --upgrade pip
@@ -121,16 +124,6 @@ jobs:
           FAST_STARTUP=false
           EOF
 
-      - name: build fastapi sidecar
-        shell: bash
-        working-directory: ./backend
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            source venv/Scripts/activate
-          else
-            source venv/bin/activate
-          fi
-          python build_fastapi_sidecar.py
 
       - uses: tauri-apps/tauri-action@v0
         env:

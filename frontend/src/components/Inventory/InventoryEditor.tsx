@@ -12,7 +12,6 @@ import { useToast } from '@/contexts/ToastContext';
 import ItemDetailsPanel from './ItemDetailsPanel';
 import InventoryCharacterSummary from './InventoryCharacterSummary';
 import InventorySidebarFooter from './InventorySidebarFooter';
-import ItemTemplateSelector from './ItemTemplateSelector';
 import ItemPropertyEditor from './ItemPropertyEditor';
 import { InventoryFilters, ItemTypeFilter, ItemSortOption, StatusFilter } from './InventoryFilters';
 import { useInventorySearch } from '@/hooks/useInventorySearch';

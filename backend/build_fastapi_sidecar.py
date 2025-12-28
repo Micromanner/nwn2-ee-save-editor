@@ -62,6 +62,9 @@ def build_with_nuitka():
     if sys.platform == "win32" and venv_python.exists():
         python_exe = str(venv_python)
         print(f"Using venv Python: {python_exe}")
+    elif (BACKEND_DIR / "venv" / "bin" / "python").exists():
+        python_exe = str(BACKEND_DIR / "venv" / "bin" / "python")
+        print(f"Using venv Python: {python_exe}")
     else:
         python_exe = sys.executable
         print(f"Using system Python: {python_exe}")
