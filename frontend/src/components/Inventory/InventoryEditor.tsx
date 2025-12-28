@@ -17,6 +17,8 @@ import ItemPropertyEditor from './ItemPropertyEditor';
 import { InventoryFilters, ItemTypeFilter, ItemSortOption, StatusFilter } from './InventoryFilters';
 import { useInventorySearch } from '@/hooks/useInventorySearch';
 import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor, DragStartEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
+import AddItemModal from './AddItemModal';
+import { BaseItem, ItemTemplate } from '@/services/inventoryApi';
 
 
 interface Item {
@@ -130,7 +132,6 @@ const SLOT_MAPPING: Record<string, string> = {
   'arrows': 'arrows', 'bullets': 'bullets', 'bolts': 'bolts'
 };
 
-// Utility function to safely convert values to numbers
 const safeToNumber = (value: unknown, defaultValue: number = 0): number => {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
@@ -150,7 +151,6 @@ export default function InventoryEditor() {
   const [pendingEquipSlot, setPendingEquipSlot] = useState<string | null>(null);
   const [pendingUnequipItem, setPendingUnequipItem] = useState<{name: string; base_item: number} | null>(null);
 
-  // Load inventory and combat data
   useEffect(() => {
     if (character) {
       if (!inventoryData.data && !inventoryData.isLoading) {
@@ -163,7 +163,6 @@ export default function InventoryEditor() {
   }, [character, inventoryData, combatSubsystem]);
   
 
-  // Parse inventory data from backend
   const parseInventoryData = (inventoryData: LocalInventoryData | null): (Item | null)[] => {
     const inv = Array(INVENTORY_COLS * INVENTORY_ROWS).fill(null);
 
@@ -173,7 +172,6 @@ export default function InventoryEditor() {
 
     const { inventory_items } = inventoryData.summary;
 
-    // Convert inventory items to display format
     inventory_items?.forEach((itemInfo: InventoryItem) => {
       const targetIndex = safeToNumber(itemInfo.index, -1);
       
@@ -182,9 +180,6 @@ export default function InventoryEditor() {
         const isCustom = itemInfo.is_custom || false;
         const itemName = itemInfo.name || `Item ${baseItem}`;
 
-        // Items in the inventory grid are NOT equipped. 
-        // Equipped items are in the equipment slots.
-        // We previously checked based on base_item which caused duplicates to be marked as equipped.
         const isEquipped = false;
 
         inv[targetIndex] = {
@@ -222,46 +217,46 @@ export default function InventoryEditor() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{index: number; name: string; isPlot: boolean} | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showPropertyEditor, setShowPropertyEditor] = useState(false);
 
-  // Build searchable items list with indices for filtering
+  // Add Item Modal State
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [baseItems, setBaseItems] = useState<BaseItem[]>([]);
+  const [templates, setTemplates] = useState<ItemTemplate[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [hasLoadedAddData, setHasLoadedAddData] = useState(false);
+  const [pendingNewItemIndex, setPendingNewItemIndex] = useState<number | null>(null);
+
   const inventoryItemsWithIndices = useMemo(() => {
     return inventory
       .map((item, index) => ({ item, originalIndex: index }))
       .filter((entry): entry is { item: Item; originalIndex: number } => entry.item !== null);
   }, [inventory]);
 
-  // Apply fuzzy search
   const { searchResults } = useInventorySearch(
     inventoryItemsWithIndices.map(entry => entry.item),
     searchQuery
   );
 
-  // Memoize the summary for stable reference
   const inventorySummary = useMemo(() => {
     return (inventoryData.data as unknown as LocalInventoryData)?.summary;
   }, [inventoryData.data]);
 
-  // Apply type, status filters and sorting
   const filteredAndSortedItems = useMemo(() => {
     const getItemDetails = (originalIndex: number) => {
       return inventorySummary?.inventory_items?.[originalIndex];
     };
     let result = inventoryItemsWithIndices;
 
-    // Filter by search results if searching
     if (searchQuery.trim().length >= 2) {
       const searchResultNames = new Set(searchResults.map(item => item.id));
       result = result.filter(entry => searchResultNames.has(entry.item.id));
     }
 
-    // Filter by type
     if (typeFilter !== 'all') {
       result = result.filter(entry => entry.item.type === typeFilter);
     }
 
-    // Filter by status
     if (statusFilters.size > 0) {
       result = result.filter(entry => {
         const item = entry.item;
@@ -276,7 +271,6 @@ export default function InventoryEditor() {
       });
     }
 
-    // Sort items
     result = [...result].sort((a, b) => {
       const detailsA = getItemDetails(a.originalIndex);
       const detailsB = getItemDetails(b.originalIndex);
@@ -298,7 +292,6 @@ export default function InventoryEditor() {
     return result;
   }, [inventoryItemsWithIndices, searchQuery, searchResults, typeFilter, statusFilters, sortBy, inventorySummary]);
 
-  // Build display grid - shows sorted/filtered items compactly
   const displayItems = useMemo((): { item: Item | null; originalIndex: number }[] => {
     const hasFilters = searchQuery.trim().length >= 2 || typeFilter !== 'all' || statusFilters.size > 0;
     const isSorting = sortBy !== 'name';
@@ -308,13 +301,11 @@ export default function InventoryEditor() {
       return inventory.map((item, index) => ({ item, originalIndex: index }));
     }
 
-    // Return filtered/sorted items, padded with empty slots to fill grid
     const result: { item: Item | null; originalIndex: number }[] = filteredAndSortedItems.map(entry => ({
       item: entry.item,
       originalIndex: entry.originalIndex
     }));
 
-    // Pad with empty slots to maintain grid structure
     const totalSlots = INVENTORY_COLS * INVENTORY_ROWS;
     while (result.length < totalSlots) {
       result.push({ item: null, originalIndex: -1 });
@@ -323,7 +314,6 @@ export default function InventoryEditor() {
     return result;
   }, [inventory, filteredAndSortedItems, searchQuery, typeFilter, statusFilters, sortBy]);
 
-  // Handler to equip an item from inventory
   const handleEquipItem = async (itemData: Record<string, unknown>, slot: string, inventoryIndex?: number | null) => {
     if (!character?.id) return;
 
@@ -360,7 +350,6 @@ export default function InventoryEditor() {
     }
   };
 
-  // Handler to unequip an item
   const handleUnequipItem = async (slot: string) => {
     if (!character?.id) return;
 
@@ -377,10 +366,7 @@ export default function InventoryEditor() {
       });
 
       if (response.success) {
-        // Track the item we just unequipped so we can re-select it in inventory
         if (selectedItem) {
-          // Try to extract base_item from raw data if available, or fall back to 0
-          // We'll use name matching primarily as it's robust enough for this UI feedback
           const baseItem = (selectedItemRawData?.base_item as number) || 0;
           setPendingUnequipItem({ name: selectedItem.name, base_item: baseItem });
         }
@@ -388,7 +374,6 @@ export default function InventoryEditor() {
         showToast(response.message, 'success');
         await inventoryData.load();
         await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
-        // Don't deselect here; let the effect handle it
       } else {
         showToast(response.message, 'error');
       }
@@ -445,18 +430,25 @@ export default function InventoryEditor() {
     setItemToDelete(null);
   };
 
-  const handleAddByBaseType = async (baseItemId: number) => {
-    if (!character?.id) return;
+  const handleAddByBaseType = async (baseItemId: number): Promise<number | null> => {
+    if (!character?.id) return null;
     try {
       const response = await inventoryAPI.addItemByBaseType(character.id, { base_item_id: baseItemId });
       if (response.success) {
         showToast(response.message, 'success');
+        const itemIndex = response.item_index ?? null;
+        if (itemIndex !== null) {
+          setPendingNewItemIndex(itemIndex);
+        }
         await inventoryData.load();
+        return itemIndex;
       } else {
         showToast(response.message, 'error');
+        return null;
       }
     } catch (error) {
       showToast(`Failed to add item: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      return null;
     }
   };
 
@@ -481,8 +473,43 @@ export default function InventoryEditor() {
     }
   };
 
-  // Get default equip slot for selected inventory item from backend data
-  // Get default equip slot for selected inventory item from backend data, with smart switching for occupied slots
+
+  const handleOpenAddItem = async () => {
+    setShowAddItemModal(true);
+    if (!hasLoadedAddData && character?.id) {
+        setIsLoadingTemplates(true);
+        try {
+            const [baseItemsRes, templatesRes] = await Promise.all([
+                inventoryAPI.getAllBaseItems(character.id),
+                inventoryAPI.getAvailableTemplates(character.id)
+            ]);
+            setBaseItems(baseItemsRes.base_items);
+            setTemplates(templatesRes.templates);
+            setHasLoadedAddData(true);
+        } catch (error) {
+             showToast(`Failed to load item data: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        } finally {
+            setIsLoadingTemplates(false);
+        }
+    }
+  };
+
+  const handleAddTemplate = async (templateResref: string) => {
+      if (!character?.id) return;
+      try {
+          const response = await inventoryAPI.addItemFromTemplate(character.id, templateResref);
+          if (response.success) {
+              showToast(response.message, 'success');
+              await inventoryData.load();
+              await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
+          } else {
+              showToast(response.message, 'error');
+          }
+      } catch (error) {
+          showToast(`Failed to add template: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      }
+  };
+
   const getSelectedItemDefaultSlot = (): string | null => {
     if (selectedItemInventoryIndex === null) return null;
     const inventoryItem = inventorySummary?.inventory_items?.[selectedItemInventoryIndex];
@@ -490,17 +517,12 @@ export default function InventoryEditor() {
 
     let targetSlot = inventoryItem.default_slot;
 
-    // Smart slot selection for rings/weapons: prefer empty slots if default is taken
     if (inventoryItem.equippable_slots && inventoryItem.equippable_slots.length > 1) {
       const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
       if (summary && targetSlot) {
-        // Check if default slot is occupied
-        // Note: equipped_items keys are backend names e.g. 'left_ring'
         const defaultOccupied = !!summary.equipped_items[targetSlot];
 
         if (defaultOccupied) {
-          // Look for an empty slot in equippable_slots
-          // We need to match slot names carefully. equippable_slots are likely backend names.
           const emptySlot = inventoryItem.equippable_slots.find(slot => !summary.equipped_items[slot]);
           if (emptySlot) {
             targetSlot = emptySlot;
@@ -512,16 +534,11 @@ export default function InventoryEditor() {
     return targetSlot || null;
   };
 
-  // Check if selected inventory item can be equipped
   const canEquipSelectedItem = (): boolean => {
     if (selectedItemInventoryIndex === null || !selectedItem || selectedItem.equipped) return false;
-    // Use cached defaultSlot from the selected item state instead of looking up the live inventory
-    // This prevents the button from flickering when the inventory updates (and item moves) but the 
-    // UI selection hasn't stabilized yet.
     return !!(selectedItem.defaultSlot && selectedItemRawData);
   };
 
-  // Helper function to get equipped item for a slot
   const getEquippedItemForSlot = (slotName: string) => {
     if (!inventoryData.data) return null;
     const summary = (inventoryData.data as unknown as LocalInventoryData).summary;
@@ -538,17 +555,12 @@ export default function InventoryEditor() {
     };
   };
 
-  // --- DnD Components ---
-
   const DraggableInventoryItem = ({ item, index, isSelected, onClick, children }: { item: Item; index: number; isSelected: boolean; onClick: () => void; children: React.ReactNode }) => {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
       id: `inventory-item-${index}`,
       data: { type: 'inventory', item, index },
     });
-    
-    // We don't apply transform to the grid item itself to keep the grid stable.
-    // Instead we rely on DragOverlay for the visual.
-    // However, we hide the original item while dragging.
+
     const style: React.CSSProperties | undefined = transform ? {
       opacity: isDragging ? 0.3 : 1,
     } : undefined;
@@ -586,7 +598,6 @@ export default function InventoryEditor() {
     );
   };
 
-  // Droppable area for unequip (the whole inventory list)
   const DroppableInventoryArea = ({ children }: { children: React.ReactNode }) => {
       const { setNodeRef, isOver } = useDroppable({
           id: 'inventory-area',
@@ -595,7 +606,6 @@ export default function InventoryEditor() {
       return <div ref={setNodeRef} className={`h-full ${isOver ? 'bg-[rgb(var(--color-primary)/0.05)]' : ''}`}>{children}</div>;
   };
 
-  // Equipment slot component
   const EquipmentSlot = ({ slotName, slotLabel }: { slotName: string; slotLabel?: string }) => {
     const equippedItem = getEquippedItemForSlot(slotName);
     const displayLabel = slotLabel || slotName.charAt(0);
@@ -625,7 +635,6 @@ export default function InventoryEditor() {
       }
     };
 
-    // Make slot Draggable if it has an item (to Unequip)
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: `equipped-item-${slotName}`,
         data: { type: 'equipped', item: equippedItem, slot: slotName },
@@ -673,16 +682,44 @@ export default function InventoryEditor() {
     );
   };
 
-  // Update inventory when backend data changes
   useEffect(() => {
     if (inventoryData.data) {
       setInventory(parseInventoryData(inventoryData.data as unknown as LocalInventoryData));
     }
   }, [inventoryData.data]);
 
-  // Sync selected item state with inventory updates
   useEffect(() => {
-    // Priority: pending equip action
+    if (pendingNewItemIndex !== null && inventoryData.data) {
+      const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
+      const inventoryItem = summary?.inventory_items?.find(i => safeToNumber(i.index, -1) === pendingNewItemIndex);
+
+      if (inventoryItem) {
+        const item: Item = {
+          id: `inventory_${pendingNewItemIndex}`,
+          name: inventoryItem.name || `Item ${inventoryItem.base_item}`,
+          type: inventoryItem.category || 'misc',
+          rarity: inventoryItem.is_custom ? 'legendary' : 'common',
+          equipped: false,
+          defaultSlot: inventoryItem.default_slot || undefined,
+          stackSize: inventoryItem.stack_size > 1 ? inventoryItem.stack_size : undefined,
+          enhancement_bonus: inventoryItem.enhancement || 0,
+          charges: inventoryItem.charges,
+          is_custom: inventoryItem.is_custom,
+          is_identified: inventoryItem.identified,
+          is_plot: inventoryItem.plot,
+          is_cursed: inventoryItem.cursed,
+          is_stolen: inventoryItem.stolen
+        };
+
+        setSelectedItem(item);
+        setSelectedItemRawData(inventoryItem.item as Record<string, unknown> | null);
+        setSelectedItemInventoryIndex(pendingNewItemIndex);
+        setShowPropertyEditor(true);
+        setPendingNewItemIndex(null);
+        return;
+      }
+    }
+
     if (pendingEquipSlot && inventoryData.data) {
       const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
       const equipData = summary?.equipped_items?.[pendingEquipSlot];
@@ -706,15 +743,11 @@ export default function InventoryEditor() {
         return; 
       }
       
-      // If not found yet:
       if (!isEquipping) {
-         // We finished loading and still didn't find it. Clear pending to avoid sticking.
          setPendingEquipSlot(null);
       }
-      // If isEquipping is true, we assume data is stale and keep pending for next render
     }
 
-    // Priority 2: pending unequip action
     if (pendingUnequipItem && inventoryData.data) {
       const currentInventory = parseInventoryData(inventoryData.data as unknown as LocalInventoryData);
       const summary = (inventoryData.data as unknown as LocalInventoryData)?.summary;
@@ -733,52 +766,39 @@ export default function InventoryEditor() {
         return;
       }
       
-       // If not found yet:
       if (!isEquipping) {
-         // We finished loading and still didn't find it. Clear pending.
          setPendingUnequipItem(null);
       }
-      // If isEquipping is true, keep pending.
     }
 
-    // Case 1: Selected item is from the inventory grid
     if (selectedItemInventoryIndex !== null) {
-      // Ensure inventory array is up to date with data
       const currentInventory = parseInventoryData(inventoryData.data as unknown as LocalInventoryData);
       const currentItem = currentInventory[selectedItemInventoryIndex];
 
       if (!currentItem) {
-        // Item is gone (moved or deleted) -> Deselect
         setSelectedItem(null);
         setSelectedItemRawData(null);
         setSelectedItemInventoryIndex(null);
       } else {
-        // Item still exists -> Update selection to fresh object
         setSelectedItem(currentItem);
         const rawItem = (inventoryData.data as unknown as LocalInventoryData)?.summary?.inventory_items?.[selectedItemInventoryIndex]?.item;
         setSelectedItemRawData(rawItem as Record<string, unknown> | null);
       }
-    } 
-    // Case 2: Selected item is an equipped item
-    else if (selectedItem?.equipped && selectedItem.slot) {
+    } else if (selectedItem?.equipped && selectedItem.slot) {
       const currentEquipped = getEquippedItemForSlot(selectedItem.slot);
       if (!currentEquipped) {
-        // Slot is now empty -> Deselect
         setSelectedItem(null);
         setSelectedItemRawData(null);
       }
     }
-  }, [inventoryData.data, selectedItemInventoryIndex]); 
-  // Note: We depend on inventoryData.data to trigger this check on every refresh
+  }, [inventoryData.data, selectedItemInventoryIndex]);
 
-
-  // --- Drag and Drop Logic ---
   const [activeDragItem, setActiveDragItem] = useState<{ item: Item; index: number } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px movement to start drag (prevents accidental drags on click)
+        distance: 8,
       },
     })
   );
@@ -795,28 +815,22 @@ export default function InventoryEditor() {
     const { active, over } = event;
     setActiveDragItem(null);
 
-    // If dropped over nothing, or over the general inventory area (id: 'inventory-area'), treat as unequip
-    const droppedOnInventory = !over || over.id === 'inventory-area'; 
+    const droppedOnInventory = !over || over.id === 'inventory-area';
     const activeData = active.data.current as { type: 'inventory' | 'equipped'; item: Item; slot?: string; index?: number };
     const overData = over?.data?.current as { type: 'slot' | 'inventory-area'; slot?: string } | undefined;
 
     if (!activeData) return;
 
-    // SCENARIO 1: Equip (Inventory -> Slot)
     if (activeData.type === 'inventory' && overData?.type === 'slot' && overData.slot) {
-      // Call equip handler
       if (activeData.item && activeData.index !== undefined) {
-          // We need to pass the raw gff data. We can find it in the inventory summary.
           const inventoryItemInfo = inventorySummary?.inventory_items?.find(i => safeToNumber(i.index) === activeData.index);
           const rawItem = inventoryItemInfo?.item;
-          
+
           if (inventoryItemInfo && rawItem) {
              const targetSlotName = overData.slot.toLowerCase();
              const mappedSlot = SLOT_MAPPING[targetSlotName];
-             
-             // VALIDATION: Check if item can go into this slot
              const allowedSlots = inventoryItemInfo.equippable_slots || [];
-             
+
              if (!mappedSlot || !allowedSlots.includes(mappedSlot)) {
                  showToast(`Cannot equip ${activeData.item.name} in ${overData.slot}`, 'warning');
                  return;
@@ -827,11 +841,8 @@ export default function InventoryEditor() {
       }
     }
 
-    // SCENARIO 2: Unequip (Equipped Slot -> Inventory)
-    // Trigger if dropped on inventory area OR just dropped outside any specific drop zone (like the void)
     if (activeData.type === 'equipped' && activeData.slot && (droppedOnInventory || !overData?.type)) {
         const slotToUnequip = activeData.slot;
-        // Don't unequip if already busy
         if (!isEquipping) {
              await handleUnequipItem(slotToUnequip);
         }
@@ -848,7 +859,6 @@ export default function InventoryEditor() {
     }
   };
 
-  // Early return for loading/error states
   if (inventoryData.isLoading && !inventoryData.data) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -877,14 +887,11 @@ export default function InventoryEditor() {
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row gap-2 items-stretch">
-        {/* Equipment & Inventory split into two cards */}
-        {/* Character Equipment Card */}
         <Card className="flex-shrink-0 min-h-[710px] flex flex-col">
           <CardContent className="p-6 flex-1 flex flex-col">
             <div className="flex-shrink-0 h-full flex flex-col" style={{ width: '240px' }}>
                   <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mt-1.5 mb-4">{t('inventory.equipment')}</h3>
 
-                  {/* Row 1: Helmet, Neck */}
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     <div></div>
                     <EquipmentSlot slotName="Helmet" slotLabel="H" />
@@ -892,7 +899,6 @@ export default function InventoryEditor() {
                     <div></div>
                   </div>
 
-                  {/* Row 2: L Hand, Chest, Cloak, R Hand */}
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     <EquipmentSlot slotName="L Hand" slotLabel="L" />
                     <EquipmentSlot slotName="Chest" slotLabel="A" />
@@ -900,7 +906,6 @@ export default function InventoryEditor() {
                     <EquipmentSlot slotName="R Hand" slotLabel="R" />
                   </div>
 
-                  {/* Row 3: L Ring, Belt, Gloves, R Ring */}
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     <EquipmentSlot slotName="L Ring" slotLabel="L" />
                     <EquipmentSlot slotName="Belt" slotLabel="B" />
@@ -908,7 +913,6 @@ export default function InventoryEditor() {
                     <EquipmentSlot slotName="R Ring" slotLabel="R" />
                   </div>
 
-                  {/* Row 4: Boots */}
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     <div></div>
                     <EquipmentSlot slotName="Boots" slotLabel="F" />
@@ -916,7 +920,6 @@ export default function InventoryEditor() {
                     <div></div>
                   </div>
 
-                  {/* Ammo Row */}
                   <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[rgb(var(--color-surface-border)/0.3)]">
                     <div></div>
                     <EquipmentSlot slotName="Arrows" slotLabel="Arr" />
@@ -924,7 +927,6 @@ export default function InventoryEditor() {
                     <EquipmentSlot slotName="Bolts" slotLabel="Bol" />
                   </div>
 
-                  {/* Gold & Weight Footer (Moved from Right Panel) */}
                   <div className="mt-auto pt-6">
                     <InventorySidebarFooter
                       encumbrance={(inventoryData.data as unknown as LocalInventoryData)?.summary?.encumbrance}
@@ -934,7 +936,6 @@ export default function InventoryEditor() {
           </CardContent>
         </Card>
 
-        {/* Inventory Grid Card */}
         <Card className="flex-1 min-w-0 min-h-[710px]">
           <CardContent className="p-6 h-full">
              <DroppableInventoryArea>
@@ -942,7 +943,7 @@ export default function InventoryEditor() {
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">{t('inventory.inventory')}</h3>
                     <Button 
-                      onClick={() => setShowTemplateSelector(true)}
+                      onClick={handleOpenAddItem}
                       variant="outline"
                       size="sm"
                       className="h-8 gap-1 border-[rgb(var(--color-primary)/0.5)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)]"
@@ -965,7 +966,6 @@ export default function InventoryEditor() {
                     totalCount={inventoryItemsWithIndices.length}
                   />
 
-                  {/* Inventory Grid */}
                   {filteredAndSortedItems.length === 0 && inventoryItemsWithIndices.length > 0 ? (
                     <div className="p-8 bg-[rgb(var(--color-surface-1))] rounded text-center text-[rgb(var(--color-text-muted))]">
                       {t('inventory.filters.noResults')}
@@ -979,7 +979,6 @@ export default function InventoryEditor() {
                         const isSelected = selectedItem?.id === item?.id;
 
                         if (!item) {
-                            // Empty slot
                             return (
                                 <div
                                 key={displayIndex}
@@ -988,7 +987,6 @@ export default function InventoryEditor() {
                             );
                         }
 
-                        // Draggable Item
                         return (
                             <DraggableInventoryItem
                                 key={displayIndex}
@@ -1025,14 +1023,11 @@ export default function InventoryEditor() {
                       })}
                     </div>
                   )}
-
-                  {/* Inventory Info Removed - Moved to Summary Panel */}
                 </div>
               </DroppableInventoryArea>
           </CardContent>
         </Card>
 
-        {/* Item Details Panel or Character Summary */}
         <div className="w-[340px] flex-shrink-0 flex flex-col gap-4 min-h-[710px]">
           <div className="flex-1 min-h-0">
             {selectedItem ? (
@@ -1121,7 +1116,7 @@ export default function InventoryEditor() {
                 canUnequip={!!(selectedItem.equipped && selectedItem.slot)}
               />
             ) : (
-              <InventoryCharacterSummary 
+              <InventoryCharacterSummary
                 combatStats={{
                   ac: (combatSubsystem.data?.armor_class?.total || character.armorClass || 0),
                   bab: (typeof combatSubsystem.data?.base_attack_bonus === 'object' && combatSubsystem.data?.base_attack_bonus?.total_bab) || 
@@ -1136,14 +1131,16 @@ export default function InventoryEditor() {
           </div>
 
           {/* Modals and Overlays */}
-        {showTemplateSelector && (
-          <ItemTemplateSelector
-            isOpen={showTemplateSelector}
-            onClose={() => setShowTemplateSelector(false)}
-            onSelect={handleAddByBaseType}
-            characterId={character?.id}
-          />
-        )}
+        <AddItemModal
+            isOpen={showAddItemModal}
+            onClose={() => setShowAddItemModal(false)}
+            onAddBaseItem={handleAddByBaseType}
+            onAddTemplate={handleAddTemplate}
+            baseItems={baseItems}
+            templates={templates}
+            isLoadingTemplates={isLoadingTemplates}
+        />
+
 
         {showPropertyEditor && selectedItemRawData && (
           <ItemPropertyEditor

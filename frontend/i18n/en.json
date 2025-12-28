@@ -215,6 +215,7 @@
     "noBaseItemsFound": "No base items found.",
     "noTemplatesFound": "No templates found matching",
     "loadingTemplates": "Loading templates...",
+    "loadingBaseItems": "Loading base items...",
     "selectedId": "Selected ID",
     "selectedResref": "Selected ResRef",
     "source": "Source"

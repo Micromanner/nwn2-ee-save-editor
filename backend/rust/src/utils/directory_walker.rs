@@ -137,9 +137,10 @@ impl DirectoryWalker {
                 continue;
             }
             
-            // Check if it's a 2DA file (case-insensitive)
+            // Check if it's a 2DA or UTI file (case-insensitive)
             if let Some(extension) = path.extension() {
-                if extension.to_string_lossy().to_lowercase() == "2da" {
+                let ext_lower = extension.to_string_lossy().to_lowercase();
+                if ext_lower == "2da" || ext_lower == "uti" {
                     let metadata = path.metadata()?;
                     let modified_time = metadata
                         .modified()?

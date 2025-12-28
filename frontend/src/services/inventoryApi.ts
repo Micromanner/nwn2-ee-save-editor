@@ -62,6 +62,7 @@ export interface AddToInventoryResponse {
   success: boolean;
   message: string;
   has_unsaved_changes: boolean;
+  item_index?: number;
 }
 
 export interface PropertyMetadata {
@@ -96,6 +97,28 @@ export interface BaseItem {
   name: string;
   type: number;
   category: string;
+}
+
+export interface ItemTemplate {
+  resref: string;
+  name: string;
+  base_item: number;
+  category: number;
+  source: string;
+}
+
+export const ITEM_CATEGORIES = {
+  0: 'Armor & Clothing',
+  1: 'Weapons',
+  2: 'Magic Items',
+  3: 'Accessories',
+  4: 'Miscellaneous'
+} as const;
+
+export interface AddItemFromTemplateResponse {
+    success: boolean;
+    message: string;
+    new_item: Record<string, unknown>;
 }
 
 export class InventoryAPI {
@@ -180,7 +203,7 @@ export class InventoryAPI {
 
   async addItemByBaseType(characterId: number, request: AddItemByBaseTypeRequest): Promise<AddToInventoryResponse> {
     const response = await DynamicAPI.fetch(
-      `/characters/${characterId}/inventory/add-by-base-type`,
+      `/characters/${characterId}/inventory/create-new-item`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -224,6 +247,37 @@ export class InventoryAPI {
     }
 
     return response.json();
+  }
+
+
+  async getAvailableTemplates(characterId: number): Promise<{ templates: ItemTemplate[] }> {
+    const response = await DynamicAPI.fetch(
+      `/characters/${characterId}/inventory/templates`
+    );
+
+    if (!response.ok) {
+        throw new Error(`Failed to get item templates: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async addItemFromTemplate(characterId: number, resref: string): Promise<AddItemFromTemplateResponse> {
+      const response = await DynamicAPI.fetch(
+          `/characters/${characterId}/inventory/add-from-template`,
+          {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ template_resref: resref }),
+          }
+      );
+      
+      if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(errorData.detail || `Failed to add template item: ${response.status}`);
+      }
+
+      return response.json();
   }
 }
 

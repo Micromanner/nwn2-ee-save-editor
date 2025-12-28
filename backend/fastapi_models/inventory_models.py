@@ -257,6 +257,7 @@ class AddToInventoryResponse(BaseModel):
     success: bool
     message: str
     has_unsaved_changes: bool = True
+    item_index: Optional[int] = None
 
 
 class RemoveFromInventoryRequest(BaseModel):

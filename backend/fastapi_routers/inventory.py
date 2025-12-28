@@ -556,20 +556,73 @@ def get_item_editor_metadata(
         )
 
 
-@router.post("/characters/{character_id}/inventory/add-by-base-type")
-def add_item_by_base_type(
+
+        
+@router.post("/characters/{character_id}/inventory/create-new-item")
+def create_new_item(
     character_id: int,
     char_session: CharacterSessionDep,
     request: dict = Body(...)
 ):
-    """Add a new item to inventory by base type ID"""
+    """Create a new item (blank/template) from base item type ID"""
     try:
         from fastapi_models.inventory_models import AddItemByBaseTypeRequest, AddToInventoryResponse
         validated_request = AddItemByBaseTypeRequest(**request)
-        
+
         manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        success, new_item, message = inventory_manager.add_item_by_base_type(validated_request.base_item_id)
+        success, new_item, message, item_index = inventory_manager.add_item_by_base_type(validated_request.base_item_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        return AddToInventoryResponse(success=True, message=message, item_index=item_index)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create item for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.get("/characters/{character_id}/inventory/templates")
+def get_available_item_templates(
+    character_id: int,
+    char_session: CharacterSessionDep
+):
+    """Get all available item templates (from game files & mods)"""
+    try:
+        manager = char_session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        templates = inventory_manager.get_available_templates()
+        return {"templates": templates}
+    except Exception as e:
+        logger.error(f"Failed to get item templates: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/characters/{character_id}/inventory/add-from-template")
+def add_item_from_template(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request: dict = Body(...)
+):
+    """Add an existing item (from template) to inventory"""
+    try:
+        template_resref = request.get('template_resref')
+        if not template_resref:
+             raise HTTPException(status_code=400, detail="template_resref is required")
+             
+        manager = char_session.character_manager
+        inventory_manager = manager.get_manager('inventory')
+        success, new_item, message = inventory_manager.add_item_from_template(template_resref)
         
         if not success:
             raise HTTPException(
@@ -577,16 +630,17 @@ def add_item_by_base_type(
                 detail=message
             )
             
-        return AddToInventoryResponse(success=True, message=message)
+        return {"success": True, "message": message, "new_item": new_item}
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to add item for character {character_id}: {e}")
+        logger.error(f"Failed to add item from template {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
 
 
 @router.put("/characters/{character_id}/inventory/item")

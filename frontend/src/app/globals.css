@@ -2429,6 +2429,404 @@
 }
 
 /* ============================================================================
+   LEVEL HISTORY MODAL COMPONENTS
+   ============================================================================ */
+
+.level-history-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.level-history-modal-container {
+  width: 100%;
+  max-width: 48rem;
+  height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.level-history-modal-header {
+  padding: 1rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border));
+  flex-shrink: 0;
+}
+
+.level-history-modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.level-history-modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+}
+
+.level-history-modal-close-button {
+  padding: 0.25rem;
+}
+
+.level-history-modal-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1rem 1rem 1rem 0.5rem;
+}
+
+.level-history-modal-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.level-history-modal-error {
+  text-align: center;
+  padding: 2rem;
+  color: rgb(239, 68, 68);
+}
+
+.level-history-modal-empty {
+  text-align: center;
+  padding: 2rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.level-history-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.level-history-modal-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.level-history-modal-level-card {
+  overflow: hidden;
+}
+
+.level-history-modal-level-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: rgb(var(--color-surface-2));
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.level-history-modal-level-header:hover {
+  background: rgb(var(--color-surface-3));
+}
+
+.level-history-modal-level-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.level-history-modal-level-number {
+  font-weight: 600;
+  color: rgb(var(--color-primary));
+}
+
+.level-history-modal-class-name {
+  color: rgb(var(--color-text-secondary));
+}
+
+.level-history-modal-hp {
+  color: rgb(248, 113, 113);
+}
+
+.level-history-modal-ability {
+  color: rgb(250, 204, 21);
+}
+
+.level-history-modal-level-details {
+  padding: 0.75rem;
+  border-top: 1px solid rgb(var(--color-surface-border));
+  background: rgb(var(--color-surface-1));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.level-history-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.level-history-modal-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgb(var(--color-text-muted));
+}
+
+.level-history-modal-skill-rank {
+  color: rgb(74, 222, 128);
+}
+
+.level-history-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.level-history-modal-list-item {
+  font-size: 0.875rem;
+  color: rgb(var(--color-text-secondary));
+}
+
+.level-history-modal-list-item::marker {
+  color: rgb(var(--color-text-muted));
+}
+
+.level-history-modal-list-removed .level-history-modal-list-item {
+  color: rgb(248, 113, 113);
+  opacity: 0.8;
+}
+
+.level-history-modal-spell-level {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.level-history-modal-empty-level {
+  font-size: 0.875rem;
+  color: rgb(var(--color-text-muted));
+  font-style: italic;
+}
+
+.level-history-modal-footer {
+  padding: 1rem;
+  border-top: 1px solid rgb(var(--color-surface-border));
+  background: rgb(var(--color-surface-1));
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  color: rgb(var(--color-text-muted));
+}
+
+/* ============================================================================
+   ADD ITEM MODAL COMPONENTS
+   ============================================================================ */
+
+.add-item-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.add-item-modal-container {
+  width: 100%;
+  max-width: 64rem;
+  height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.add-item-modal-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border));
+  flex-shrink: 0;
+}
+
+.add-item-modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.add-item-modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+}
+
+.add-item-modal-close-button {
+  padding: 0.25rem;
+}
+
+.add-item-modal-tabs {
+  padding: 1rem 1.5rem 0;
+}
+
+.add-item-modal-search {
+  position: relative;
+  padding: 1rem 1.5rem 0.5rem;
+}
+
+.add-item-modal-search-icon {
+  position: absolute;
+  left: 2.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1rem;
+  height: 1rem;
+  color: rgb(var(--color-text-muted));
+  margin-top: 0.25rem;
+}
+
+.add-item-modal-search-input {
+  padding-left: 2.5rem !important;
+}
+
+.add-item-modal-content {
+  flex: 1;
+  overflow: hidden;
+  padding: 0 1.5rem 1rem;
+}
+
+.add-item-modal-category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border));
+  background: rgb(var(--color-surface-1));
+}
+
+.add-item-modal-category-filter button {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  height: auto;
+}
+
+.add-item-modal-tab-content {
+  height: 100%;
+  margin-top: 0;
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.375rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.add-item-modal-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.add-item-modal-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+
+.add-item-modal-list-item:hover:not(.selected) {
+  background: rgb(var(--color-text-primary) / 0.1);
+}
+
+.add-item-modal-list-item.selected {
+  background: rgb(var(--color-primary) / 0.2);
+  color: rgb(var(--color-primary));
+  box-shadow: inset 0 0 0 1px rgb(var(--color-primary));
+}
+
+.add-item-modal-item-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.add-item-modal-item-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-item-modal-item-category {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.add-item-modal-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem;
+  color: rgb(var(--color-text-muted));
+  text-align: center;
+}
+
+.add-item-modal-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.5rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.add-item-modal-virtualized-list {
+  flex: 1;
+  min-height: 0;
+}
+
+
+
+.add-item-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgb(var(--color-surface-border));
+  background: rgb(var(--color-surface-1));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.add-item-modal-footer-info {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.add-item-modal-footer-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ============================================================================
    FILE BROWSER MODAL COMPONENTS
    ============================================================================ */
 

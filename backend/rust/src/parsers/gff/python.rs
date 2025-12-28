@@ -43,6 +43,13 @@ impl PyGffParser {
         self.inner.get_value(path).is_ok()
     }
 
+    fn get_field(&self, py: Python, path: &str) -> PyResult<Option<Py<PyAny>>> {
+        match self.inner.get_value(path) {
+            Ok(value) => Ok(Some(gff_value_to_py(py, value)?)),
+            Err(_) => Ok(None),
+        }
+    }
+
     fn _get_label(&self, index: u32) -> PyResult<String> {
         self.inner.get_label(index)
              .map(|cow| cow.into_owned())

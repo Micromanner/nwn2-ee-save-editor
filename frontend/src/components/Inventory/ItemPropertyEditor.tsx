@@ -163,245 +163,256 @@ export default function ItemPropertyEditor({
   if (!isOpen || !localData) return null;
 
   return (
-    <div className="class-modal-overlay">
-      <Card className="class-modal-container max-w-3xl h-[85vh]">
+    <div className="add-item-modal-overlay">
+      <Card className="add-item-modal-container">
         <CardContent padding="p-0" className="flex flex-col h-full">
           {/* Header */}
-          <div className="class-modal-header">
-            <div className="class-modal-header-row">
-              <h3 className="class-modal-title">Edit Item: {getLocalizedValue('LocalizedName') || 'New Item'}</h3>
-              <div className="flex gap-2">
-                <Button onClick={handleSave} variant="primary" size="sm" className="gap-2">
-                  <Save className="w-4 h-4" /> Save
-                </Button>
-                <Button onClick={onClose} variant="ghost" size="sm" className="p-1">
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
+          <div className="add-item-modal-header">
+            <div className="add-item-modal-header-row">
+              <h3 className="add-item-modal-title">Edit Item: {getLocalizedValue('LocalizedName') || 'New Item'}</h3>
+              <Button onClick={onClose} variant="ghost" size="sm" className="add-item-modal-close-button">
+                <X className="w-4 h-4" />
+              </Button>
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-              <TabsList className="bg-[rgb(var(--color-surface-2))] border-b border-[rgb(var(--color-surface-border))] rounded-none px-4">
-                <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                <TabsTrigger value="properties">Properties</TabsTrigger>
-                {/* <TabsTrigger value="appearance">Appearance</TabsTrigger> */}
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+            <div className="add-item-modal-tabs">
+              <TabsList className="w-full flex bg-transparent p-0 gap-2">
+                <TabsTrigger
+                  value="basic"
+                  className="flex-1 h-10 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10]"
+                >
+                  Basic Info
+                </TabsTrigger>
+                <TabsTrigger
+                  value="properties"
+                  className="flex-1 h-10 rounded-md border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-transparent data-[state=active]:!bg-[rgb(var(--color-primary))] data-[state=active]:!text-white transition-colors hover:bg-[rgb(var(--color-primary))/10]"
+                >
+                  Properties
+                </TabsTrigger>
               </TabsList>
+            </div>
 
-              <div className="flex-1 overflow-hidden p-4">
+            {/* Content */}
+            <div className="add-item-modal-content">
+              <TabsContent value="basic" className="add-item-modal-tab-content">
                 <ScrollArea className="h-full">
-                  <TabsContent value="basic" className="m-0 space-y-6 mr-4">
-                    <div className="space-y-4">
+                  <div className="space-y-4 p-4">
+                    <div>
+                      <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Name</label>
+                      <Input
+                        value={getLocalizedValue('LocalizedName')}
+                        onChange={(e) => handleLocalizedChange('LocalizedName', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Description</label>
+                      <textarea
+                        className="w-full bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] rounded-md p-2 text-sm text-[rgb(var(--color-text-primary))] outline-none min-h-[100px]"
+                        value={getLocalizedValue('Description')}
+                        onChange={(e) => handleLocalizedChange('Description', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Name</label>
+                        <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Stack Size</label>
                         <Input
-                          value={getLocalizedValue('LocalizedName')}
-                          onChange={(e) => handleLocalizedChange('LocalizedName', e.target.value)}
+                          type="number"
+                          value={localData.StackSize || 1}
+                          onChange={(e) => handleBasicChange('StackSize', parseInt(e.target.value))}
                         />
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Description</label>
-                        <textarea
-                          className="w-full bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] rounded-md p-2 text-sm text-[rgb(var(--color-text-primary))] outline-none min-h-[100px]"
-                          value={getLocalizedValue('Description')}
-                          onChange={(e) => handleLocalizedChange('Description', e.target.value)}
+                        <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Charges</label>
+                        <Input
+                          type="number"
+                          value={localData.Charges || 0}
+                          onChange={(e) => handleBasicChange('Charges', parseInt(e.target.value))}
                         />
                       </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Stack Size</label>
-                          <Input
-                            type="number"
-                            value={localData.StackSize || 1}
-                            onChange={(e) => handleBasicChange('StackSize', parseInt(e.target.value))}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Charges</label>
-                          <Input
-                            type="number"
-                            value={localData.Charges || 0}
-                            onChange={(e) => handleBasicChange('Charges', parseInt(e.target.value))}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
-                          <Checkbox
-                            checked={localData.Identified === 1}
-                            onCheckedChange={(checked) => handleBasicChange('Identified', checked ? 1 : 0)}
-                          />
-                          <span className="text-sm">Identified</span>
-                        </div>
-                        <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
-                          <Checkbox
-                            checked={localData.Plot === 1}
-                            onCheckedChange={(checked) => handleBasicChange('Plot', checked ? 1 : 0)}
-                          />
-                          <span className="text-sm text-[rgb(var(--color-warning))]">Plot Item</span>
-                        </div>
-                        <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
-                          <Checkbox
-                            checked={localData.Cursed === 1}
-                            onCheckedChange={(checked) => handleBasicChange('Cursed', checked ? 1 : 0)}
-                          />
-                          <span className="text-sm text-[rgb(var(--color-danger))]">Cursed</span>
-                        </div>
-                        <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
-                          <Checkbox
-                            checked={localData.Stolen === 1}
-                            onCheckedChange={(checked) => handleBasicChange('Stolen', checked ? 1 : 0)}
-                          />
-                          <span className="text-sm">Stolen</span>
-                        </div>
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="properties" className="m-0 space-y-4 mr-4">
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-sm font-semibold text-[rgb(var(--color-text-primary))]">Enchantments</h4>
-                      <Button onClick={handleAddProperty} variant="outline" size="sm" className="gap-1">
-                        <Plus className="w-4 h-4" /> Add Property
-                      </Button>
                     </div>
 
-                    <div className="space-y-3">
-                      {(localData.PropertiesList || []).map((prop: any, index: number) => {
-                        const subtypeOptions = getSubtypeOptions(prop.PropertyName);
-                        const propMeta = metadata?.property_types.find(p => p.id === prop.PropertyName);
-                        
-                        return (
-                          <Card key={index} className="bg-[rgb(var(--color-surface-2))] border-[rgb(var(--color-surface-border))]">
-                            <CardContent className="p-3">
-                              <div className="flex justify-between items-start gap-4">
-                                <div className="flex-1 grid grid-cols-4 gap-3 items-end">
-                                  <div className="col-span-1">
-                                    <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
-                                      Property Type
-                                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
+                        <Checkbox
+                          checked={localData.Identified === 1}
+                          onCheckedChange={(checked) => handleBasicChange('Identified', checked ? 1 : 0)}
+                        />
+                        <span className="text-sm">Identified</span>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
+                        <Checkbox
+                          checked={localData.Plot === 1}
+                          onCheckedChange={(checked) => handleBasicChange('Plot', checked ? 1 : 0)}
+                        />
+                        <span className="text-sm text-[rgb(var(--color-warning))]">Plot Item</span>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
+                        <Checkbox
+                          checked={localData.Cursed === 1}
+                          onCheckedChange={(checked) => handleBasicChange('Cursed', checked ? 1 : 0)}
+                        />
+                        <span className="text-sm text-[rgb(var(--color-danger))]">Cursed</span>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 bg-[rgb(var(--color-surface-2))] rounded">
+                        <Checkbox
+                          checked={localData.Stolen === 1}
+                          onCheckedChange={(checked) => handleBasicChange('Stolen', checked ? 1 : 0)}
+                        />
+                        <span className="text-sm">Stolen</span>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="properties" className="add-item-modal-tab-content">
+                <div className="add-item-modal-category-filter">
+                  <span className="text-sm font-semibold text-[rgb(var(--color-text-primary))]">Enchantments</span>
+                  <Button onClick={handleAddProperty} variant="outline" size="sm" className="gap-1 ml-auto">
+                    <Plus className="w-4 h-4" /> Add Property
+                  </Button>
+                </div>
+                <ScrollArea className="flex-1">
+                  <div className="space-y-3 p-4">
+                    {(localData.PropertiesList || []).map((prop: any, index: number) => {
+                      const subtypeOptions = getSubtypeOptions(prop.PropertyName);
+                      const propMeta = metadata?.property_types.find(p => p.id === prop.PropertyName);
+
+                      return (
+                        <Card key={index} className="bg-[rgb(var(--color-surface-2))] border-[rgb(var(--color-surface-border))]">
+                          <CardContent className="p-3">
+                            <div className="flex justify-between items-start gap-4">
+                              <div className="flex-1 grid grid-cols-4 gap-3 items-end">
+                                <div className="col-span-1">
+                                  <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
+                                    Property Type
+                                  </label>
+                                  <select
+                                    className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
+                                    value={prop.PropertyName || 0}
+                                    onChange={(e) => handlePropertyChange(index, 'PropertyName', parseInt(e.target.value))}
+                                  >
+                                    {metadata?.property_types.map(pt => (
+                                      <option key={pt.id} value={pt.id}>{pt.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div className={`col-span-1 ${!propMeta?.has_subtype ? "opacity-30 pointer-events-none" : ""}`}>
+                                  <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
+                                    Subtype {!propMeta?.has_subtype && "(N/A)"}
+                                  </label>
+                                  {subtypeOptions ? (
                                     <select
                                       className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
-                                      value={prop.PropertyName || 0}
-                                      onChange={(e) => handlePropertyChange(index, 'PropertyName', parseInt(e.target.value))}
+                                      value={prop.Subtype || 0}
+                                      onChange={(e) => handlePropertyChange(index, 'Subtype', parseInt(e.target.value))}
+                                      disabled={!propMeta?.has_subtype}
                                     >
-                                      {metadata?.property_types.map(pt => (
-                                        <option key={pt.id} value={pt.id}>{pt.label}</option>
+                                      {Object.entries(subtypeOptions).map(([id, label]) => (
+                                        <option key={id} value={id}>{label}</option>
                                       ))}
                                     </select>
-                                  </div>
-                                  
-                                  <div className={`col-span-1 ${!propMeta?.has_subtype ? "opacity-30 pointer-events-none" : ""}`}>
-                                    <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
-                                      Subtype {!propMeta?.has_subtype && "(N/A)"}
-                                    </label>
-                                    {subtypeOptions ? (
-                                      <select
-                                        className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
-                                        value={prop.Subtype || 0}
-                                        onChange={(e) => handlePropertyChange(index, 'Subtype', parseInt(e.target.value))}
-                                        disabled={!propMeta?.has_subtype}
-                                      >
-                                        {Object.entries(subtypeOptions).map(([id, label]) => (
-                                          <option key={id} value={id}>{label}</option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <Input 
-                                        type="number" 
-                                        className="h-9" 
-                                        value={prop.Subtype || 0}
-                                        onChange={(e) => handlePropertyChange(index, 'Subtype', parseInt(e.target.value))}
-                                        disabled={!propMeta?.has_subtype}
-                                      />
-                                    )}
-                                  </div>
-
-                                  <div className={`col-span-1 ${!propMeta?.has_cost_table ? "hidden" : ""}`}>
-                                    <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
-                                      {propMeta?.has_param1 ? "Value" : "Value / Bonus"}
-                                    </label>
-                                    {propMeta?.cost_table_options ? (
-                                      <select
-                                        className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
-                                        value={prop.CostValue || 0}
-                                        onChange={(e) => handlePropertyChange(index, 'CostValue', parseInt(e.target.value))}
-                                      >
-                                        {Object.entries(propMeta.cost_table_options).map(([id, label]) => (
-                                          <option key={id} value={id}>{label}</option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <Input 
-                                        type="number" 
-                                        className="h-9" 
-                                        value={prop.CostValue || 0}
-                                        onChange={(e) => handlePropertyChange(index, 'CostValue', parseInt(e.target.value))}
-                                      />
-                                    )}
-                                  </div>
-
-                                  <div className={`col-span-1 ${!propMeta?.has_param1 ? "hidden" : ""}`}>
-                                    <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
-                                      {propMeta?.has_cost_table ? "Modifier" : "Value / Bonus"}
-                                    </label>
-                                    {propMeta?.param1_options ? (
-                                      <select
-                                        className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
-                                        value={prop.Param1Value || 0}
-                                        onChange={(e) => handlePropertyChange(index, 'Param1Value', parseInt(e.target.value))}
-                                      >
-                                        {Object.entries(propMeta.param1_options).map(([id, label]) => (
-                                          <option key={id} value={id}>{label}</option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <Input 
-                                        type="number" 
-                                        className="h-9" 
-                                        value={prop.Param1Value || 0}
-                                        onChange={(e) => handlePropertyChange(index, 'Param1Value', parseInt(e.target.value))}
-                                      />
-                                    )}
-                                  </div>
+                                  ) : (
+                                    <Input
+                                      type="number"
+                                      className="h-9"
+                                      value={prop.Subtype || 0}
+                                      onChange={(e) => handlePropertyChange(index, 'Subtype', parseInt(e.target.value))}
+                                      disabled={!propMeta?.has_subtype}
+                                    />
+                                  )}
                                 </div>
-                                <Button
-                                  onClick={() => handleRemoveProperty(index)}
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] p-1 h-auto mt-1"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                      {(localData.PropertiesList || []).length === 0 && (
-                        <div className="text-center py-8 border-2 border-dashed border-[rgb(var(--color-surface-border))] rounded-lg text-[rgb(var(--color-text-muted))] text-sm">
-                          No properties added.
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
 
-                  {/* <TabsContent value="appearance" className="m-0 mr-4">
-                    <div className="py-20 text-center">
-                      <div className="text-4xl mb-4">🎨</div>
-                      <h4 className="text-lg font-medium text-[rgb(var(--color-text-primary))]">Visual Editor Coming Soon</h4>
-                      <p className="text-sm text-[rgb(var(--color-text-muted))] max-w-sm mx-auto mt-2">
-                        Appearance editing (model parts and colors) is a complex feature that will be implemented in a future update.
-                      </p>
-                    </div>
-                  </TabsContent> */}
+                                <div className={`col-span-1 ${!propMeta?.has_cost_table ? "hidden" : ""}`}>
+                                  <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
+                                    {propMeta?.has_param1 ? "Value" : "Value / Bonus"}
+                                  </label>
+                                  {propMeta?.cost_table_options ? (
+                                    <select
+                                      className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
+                                      value={prop.CostValue || 0}
+                                      onChange={(e) => handlePropertyChange(index, 'CostValue', parseInt(e.target.value))}
+                                    >
+                                      {Object.entries(propMeta.cost_table_options).map(([id, label]) => (
+                                        <option key={id} value={id}>{label}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <Input
+                                      type="number"
+                                      className="h-9"
+                                      value={prop.CostValue || 0}
+                                      onChange={(e) => handlePropertyChange(index, 'CostValue', parseInt(e.target.value))}
+                                    />
+                                  )}
+                                </div>
+
+                                <div className={`col-span-1 ${!propMeta?.has_param1 ? "hidden" : ""}`}>
+                                  <label className="text-[10px] text-[rgb(var(--color-text-muted))] uppercase tracking-wider block mb-1">
+                                    {propMeta?.has_cost_table ? "Modifier" : "Value / Bonus"}
+                                  </label>
+                                  {propMeta?.param1_options ? (
+                                    <select
+                                      className="w-full bg-[rgb(var(--color-surface-3))] border border-[rgb(var(--color-surface-border))] rounded p-1.5 text-sm outline-none"
+                                      value={prop.Param1Value || 0}
+                                      onChange={(e) => handlePropertyChange(index, 'Param1Value', parseInt(e.target.value))}
+                                    >
+                                      {Object.entries(propMeta.param1_options).map(([id, label]) => (
+                                        <option key={id} value={id}>{label}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <Input
+                                      type="number"
+                                      className="h-9"
+                                      value={prop.Param1Value || 0}
+                                      onChange={(e) => handlePropertyChange(index, 'Param1Value', parseInt(e.target.value))}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => handleRemoveProperty(index)}
+                                variant="ghost"
+                                size="sm"
+                                className="text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] p-1 h-auto mt-1"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    {(localData.PropertiesList || []).length === 0 && (
+                      <div className="add-item-modal-empty">
+                        No properties added. Click "Add Property" to add enchantments.
+                      </div>
+                    )}
+                  </div>
                 </ScrollArea>
-              </div>
-            </Tabs>
+              </TabsContent>
+            </div>
+          </Tabs>
+
+          {/* Footer */}
+          <div className="add-item-modal-footer">
+            <div className="add-item-modal-footer-info">
+              {(localData.PropertiesList || []).length} properties
+            </div>
+            <div className="add-item-modal-footer-actions">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave} className="gap-2">
+                <Save className="w-4 h-4" /> Save
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

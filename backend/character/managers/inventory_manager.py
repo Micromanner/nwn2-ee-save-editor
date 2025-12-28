@@ -204,57 +204,31 @@ class InventoryManager(EventEmitter):
 
         return slots[0] if slots else None
 
+    STORE_PANEL_CATEGORIES = {
+        0: 'Armor & Clothing',
+        1: 'Weapons',
+        2: 'Magic Items',
+        3: 'Accessories',
+        4: 'Miscellaneous'
+    }
+
     def _get_item_category(self, base_item_id: int, base_item_data: Any) -> str:
         """
-        Determine item category based on baseitems.2da data.
-        Returns: 'weapon', 'armor', 'accessory', 'consumable', or 'misc'
+        Determine item category based on baseitems.2da StorePanel column.
+        Returns category name matching ITEM_CATEGORIES (Armor & Clothing, Weapons, etc.)
         """
         if not base_item_data:
-            return 'misc'
+            return 'Miscellaneous'
 
-        equippable_slots_raw = field_mapper.get_field_value(base_item_data, 'EquipableSlots', '0x00000')
-        try:
-            if isinstance(equippable_slots_raw, str) and equippable_slots_raw.startswith('0x'):
-                equippable_bitmask = int(equippable_slots_raw, 16)
-            else:
-                equippable_bitmask = int(equippable_slots_raw or 0)
-        except (ValueError, TypeError):
-            equippable_bitmask = 0
-
-        weapon_type = field_mapper.get_field_value(base_item_data, 'WeaponType', None)
-        has_weapon_type = weapon_type is not None and weapon_type != '****' and str(weapon_type) != '0'
-
-        if base_item_id == 16:
-            return 'armor'
-
-        if base_item_id in [14, 56, 57]:
-            return 'armor'
-
-        is_accessory_slot_only = (equippable_bitmask & self.ACCESSORY_SLOTS_BITMASK) and not (equippable_bitmask & self.HAND_SLOTS_BITMASK)
-        if is_accessory_slot_only:
-            return 'accessory'
-
-        if has_weapon_type or (equippable_bitmask & self.HAND_SLOTS_BITMASK and not equippable_bitmask & 0x0002):
-            return 'weapon'
-
-        if equippable_bitmask & self.AMMO_SLOTS_BITMASK:
-            return 'consumable'
-
-        if base_item_id in [49, 101, 104, 75, 102, 105, 46, 44, 45]:
-            return 'consumable'
-
-        if equippable_bitmask & self.ACCESSORY_SLOTS_BITMASK:
-            return 'accessory'
-
-        if equippable_bitmask == 0:
-            stacking = field_mapper.get_field_value(base_item_data, 'Stacking', 1)
+        store_panel = field_mapper.get_field_value(base_item_data, 'StorePanel', None)
+        if store_panel is not None and store_panel != '****':
             try:
-                if int(stacking or 1) > 1:
-                    return 'consumable'
+                panel_id = int(store_panel)
+                return self.STORE_PANEL_CATEGORIES.get(panel_id, 'Miscellaneous')
             except (ValueError, TypeError):
                 pass
 
-        return 'misc'
+        return 'Miscellaneous'
 
     def _build_proficiency_mappings(self):
         """Build dynamic mapping of feat IDs to proficiency types"""
@@ -385,8 +359,8 @@ class InventoryManager(EventEmitter):
 
         return None
     
-    def add_to_inventory(self, item_data: Dict[str, Any]) -> bool:
-        """Add an item to inventory"""
+    def add_to_inventory(self, item_data: Dict[str, Any]) -> Tuple[bool, Optional[int]]:
+        """Add an item to inventory. Returns (success, item_index)."""
         item_list = self.gff.get('ItemList', [])
 
         base_item = item_data.get('BaseItem', 0)
@@ -398,7 +372,7 @@ class InventoryManager(EventEmitter):
             except (ValueError, TypeError):
                 stacking = 0
             if stacking > 1:
-                for existing_item in item_list:
+                for idx, existing_item in enumerate(item_list):
                     if existing_item.get('BaseItem') == base_item:
                         existing_stack = existing_item.get('StackSize', 1)
                         new_stack = item_data.get('StackSize', 1)
@@ -406,11 +380,12 @@ class InventoryManager(EventEmitter):
                         if total <= stacking:
                             existing_item['StackSize'] = total
                             self.gff.set('ItemList', item_list)
-                            return True
+                            return True, idx
 
+        new_index = len(item_list)
         item_list.append(item_data)
         self.gff.set('ItemList', item_list)
-        return True
+        return True, new_index
     
     def _is_proficiency_feat(self, feat_id: int) -> bool:
         """Check if a feat grants proficiencies using dynamic mapping"""
@@ -1225,12 +1200,12 @@ class InventoryManager(EventEmitter):
             
         return False, "Neither slot nor index provided"
 
-    def add_item_by_base_type(self, base_item_id: int) -> Tuple[bool, Optional[Dict[str, Any]], str]:
-        """Create a new item based on a base item type"""
+    def add_item_by_base_type(self, base_item_id: int) -> Tuple[bool, Optional[Dict[str, Any]], str, Optional[int]]:
+        """Create a new item based on a base item type. Returns (success, item_data, message, item_index)."""
         base_item_data = self.game_rules_service.get_by_id('baseitems', base_item_id)
         if not base_item_data:
-            return False, None, f"Invalid base item ID: {base_item_id}"
-            
+            return False, None, f"Invalid base item ID: {base_item_id}", None
+
         new_item = {
             'BaseItem': base_item_id,
             'Tag': f"new_item_{base_item_id}",
@@ -1251,11 +1226,11 @@ class InventoryManager(EventEmitter):
             'Plot': 0,
             'Cursed': 0
         }
-        
-        success = self.add_to_inventory(new_item)
+
+        success, item_index = self.add_to_inventory(new_item)
         if success:
-            return True, new_item, "Item added to inventory"
-        return False, None, "Failed to add item to inventory"
+            return True, new_item, "Item added to inventory", item_index
+        return False, None, "Failed to add item to inventory", None
 
     def get_all_base_items(self) -> List[Dict[str, Any]]:
         """Get all available base items for creation, filtering out padding/internal items"""
@@ -1399,6 +1374,33 @@ class InventoryManager(EventEmitter):
                     classes[class_id] = name
         except Exception: pass
         return classes
+
+    def get_available_templates(self) -> List[Dict[str, Any]]:
+        return self.game_rules_service.rm.build_item_template_index()
+
+    def add_item_from_template(self, template_resref: str) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+        resref = template_resref.lower()
+        if not resref.endswith('.uti'):
+            resref += '.uti'
+            
+        all_templates = self.game_rules_service.rm.get_all_item_templates()
+        template_info = all_templates.get(resref)
+        
+        if not template_info:
+            return False, None, f"Template {template_resref} not found"
+            
+        item_data = self.game_rules_service.rm.get_item_template_data(template_info)
+
+        if not item_data:
+            return False, None, f"Failed to load data for {template_resref}"
+
+        success = self.add_to_inventory(item_data)
+
+        if success:
+            name = self._get_item_name(item_data)
+            return True, item_data, f"Added {name}"
+            
+        return False, None, "Failed to add item to inventory"
 
     def _get_all_iprp_spells(self) -> Dict[int, str]:
         """Get item property spells with StrRef resolution"""

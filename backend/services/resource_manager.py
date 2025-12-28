@@ -3,6 +3,7 @@ Resource Manager for efficient loading of NWN2 game data
 """
 
 import os
+import re
 from loguru import logger
 from typing import Dict, Optional, List, Tuple, Any, Union
 from pathlib import Path
@@ -18,22 +19,22 @@ BASE_DIR = Path(__file__).parent.parent
 
 # Import Rust parsers - optional for standalone mode
 try:
-    from nwn2_rust import TDAParser, TLKParser, ErfParser
-    logger.info("Using high-performance Rust parsers (TDA, TLK, ERF)")
+    from nwn2_rust import TDAParser, TLKParser, ErfParser, GffParser
+    logger.info("Using high-performance Rust parsers (TDA, TLK, ERF, GFF)")
 except ImportError:
     TDAParser = None
     TLKParser = None
     ErfParser = None
+    GffParser = None
 
-# Define resource types for compatibility
 class ERFResourceType:
     TDA = 2017  # 2DA files
     TLK = 2018  # Talk table files
     GFF = 2037  # Generic file format
     IFO = 2014  # Module info files
-
 from nwn2_rust import GffParser
 from .cache_helper import TDACacheHelper
+import zipfile
 
 # Rust extensions (optional for standalone mode)
 try:
@@ -149,6 +150,8 @@ class ResourceManager:
         
         # Track what 2DA files are in which ZIP
         self._2da_locations: Dict[str, Tuple[str, str]] = {}
+        # Track where item templates are located (zip_path, internal_path)
+        self._template_locations: Dict[str, Tuple[str, str]] = {}
         
         # ERF/HAK file cache
         self._erf_parsers: Dict[str, ErfParser] = {}
@@ -344,6 +347,9 @@ class ResourceManager:
             "2da.zip",      # Base game
             "2da_x1.zip",   # Mask of the Betrayer
             "2da_x2.zip",   # Storm of Zehir
+            "Templates.zip",    # Base game items
+            "Templates_X1.zip", # MotB items
+            "Templates_X2.zip", # SoZ items
         ]
         
         # Build list of ZIP paths to scan
@@ -378,7 +384,10 @@ class ResourceManager:
             zip_path_str = resource_location.source_path
             internal_path = resource_location.internal_path
             
-            self._2da_locations[resource_name.lower()] = (zip_path_str, internal_path)
+            if resource_name.lower().endswith('.uti'):
+                self._template_locations[resource_name.lower()] = (zip_path_str, internal_path)
+            else:
+                self._2da_locations[resource_name.lower()] = (zip_path_str, internal_path)
         
         scan_time_ms = int((time.time() - start_time) * 1000)
         logger.info(f"ZIP scan completed: {len(resource_locations)} 2DA files from {len(zip_paths)} ZIPs in {scan_time_ms}ms")
@@ -1867,6 +1876,177 @@ class ResourceManager:
         ignored = 0
         
         # Load all msgpack files from cache directory and module overrides
+    
+    def get_all_base_items(self) -> List[Dict[str, Any]]:
+        """Get all available base items for creation"""
+        # ... (implemented in inventory_manager, this seems like a placeholder or utility if present)
+        pass
+
+    def get_all_item_templates(self) -> Dict[str, Any]:
+        """
+        Get all available item templates from all sources (Zips, Overrides, Module).
+        Returns a dict mapping ResRef (lowercased) to location info.
+        """
+        all_templates = {}
+        
+        # 1. Base Game & Expansions (Templates.zip) - Lowest Priority
+        for resref, location in self._template_locations.items():
+            all_templates[resref] = {
+                'resref': resref,
+                'source': 'base' if 'templates.zip' in location[0].lower() else 'expansion',
+                'path': location[0],
+                'internal_path': location[1],
+                'container_type': 'zip'
+            }
+            
+        # 2. Workshop Content
+        for resref, path in self._workshop_file_paths.items():
+            if resref.endswith('.uti'):
+                all_templates[resref] = {
+                    'resref': resref,
+                    'source': 'workshop',
+                    'path': str(path),
+                    'container_type': 'file'
+                }
+
+        # 3. User Overrides
+        for resref, path in self._override_file_paths.items():
+            if resref.endswith('.uti'):
+                all_templates[resref] = {
+                    'resref': resref,
+                    'source': 'override',
+                    'path': str(path),
+                    'container_type': 'file'
+                }
+                
+        if self._module_parser:
+             try:
+                if hasattr(self._module_parser, 'get_resource_list'):
+                    for res_name in self._module_parser.get_resource_list():
+                        if res_name.lower().endswith('.uti'):
+                            all_templates[res_name.lower()] = {
+                                'resref': res_name.lower(),
+                                'source': 'module',
+                                'path': self._current_module,
+                                'internal_path': res_name,
+                                'container_type': 'erf'
+                            }
+             except Exception:
+                 pass
+
+        return all_templates
+
+    def build_item_template_index(self) -> List[Dict[str, Any]]:
+        all_templates = self.get_all_item_templates()
+
+        baseitems_parser = self.get_2da('baseitems')
+        baseitems_count = baseitems_parser.row_count() if baseitems_parser else 0
+
+        index = []
+
+        for resref, template_info in all_templates.items():
+            try:
+                data = None
+                container_type = template_info.get('container_type')
+                path = template_info.get('path')
+
+                if container_type == 'zip':
+                    internal_path = template_info.get('internal_path')
+                    data = self._zip_reader.read_file_from_zip(path, internal_path)
+                elif container_type == 'file':
+                    with open(path, 'rb') as f:
+                        data = f.read()
+                elif container_type == 'erf' and self._module_parser:
+                    data = self._module_parser.extract_resource(template_info.get('internal_path'))
+
+                if not data:
+                    continue
+
+                gff = GffParser.from_bytes(data)
+                base_item = gff.get_field('BaseItem') or 0
+                loc_name = gff.get_field('LocalizedName') or {}
+
+                strref = loc_name.get('string_ref', -1) if isinstance(loc_name, dict) else -1
+                substrings = loc_name.get('substrings', []) if isinstance(loc_name, dict) else []
+
+                if substrings:
+                    name = substrings[0].get('string', '')
+                elif strref >= 0:
+                    name = self.get_string(strref)
+                else:
+                    name = resref.replace('.uti', '')
+
+                # Strip NWN2 formatting tags like <color=...>, </color>, etc.
+                if name and '<' in name:
+                    name = re.sub(r'<[^>]+>', '', name)
+
+                category = 4
+                if baseitems_parser and 0 <= base_item < baseitems_count:
+                    store_panel = baseitems_parser.get_string(base_item, 'StorePanel')
+                    if store_panel and store_panel != '****':
+                        try:
+                            category = int(store_panel)
+                        except ValueError:
+                            pass
+
+                index.append({
+                    'resref': resref,
+                    'name': name or resref.replace('.uti', ''),
+                    'base_item': base_item,
+                    'category': category,
+                    'source': template_info.get('source', 'unknown')
+                })
+
+            except Exception as e:
+                logger.debug(f"Failed to index template {resref}: {e}")
+                continue
+
+        index.sort(key=lambda x: x['name'].lower())
+        return index
+
+    def get_item_template_data(self, template_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        try:
+            container_type = template_info.get('container_type')
+            path = template_info.get('path')
+            
+            data = None
+            
+            if container_type == 'zip':
+                internal_path = template_info.get('internal_path')
+                with zipfile.ZipFile(path, 'r') as zf:
+                    data = zf.read(internal_path)
+                    
+            elif container_type == 'file':
+                with open(path, 'rb') as f:
+                    data = f.read()
+                    
+            elif container_type == 'erf':
+                if self._module_parser:
+                    data = self._module_parser.extract_resource(template_info.get('internal_path'))
+            
+            if data:
+                if GffParser:
+                    if hasattr(GffParser, 'from_bytes'):
+                         return GffParser.from_bytes(data).to_dict()
+                    else:
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                            tmp.write(data)
+                            tmp_path = tmp.name
+                        
+                        try:
+                            parsed = GffParser(tmp_path).to_dict()
+                            return parsed
+                        finally:
+                           try:
+                               os.unlink(tmp_path)
+                           except:
+                               pass
+                               
+            return None
+        except Exception as e:
+            logger.error(f"Error loading template {template_info}: {e}")
+            return None
         if self.cache_dir.exists():
             # First load from base cache
             for msgpack_file in self.cache_dir.glob('*.msgpack'):
@@ -2044,8 +2224,7 @@ class ResourceManager:
                     parser = TLKParser()
                     parser.read(str(tlk_path))
                     self._custom_tlk_cache = parser
-                    logger.info(f"Loaded workshop TLK: {tlk_path}")
-                    logger.info(f"Found and loaded workshop TLK: {workshop_item.name}/dialog.tlk ({len(parser.string_entries)} strings)")
+                    logger.info(f"Loaded workshop TLK: {workshop_item.name}/dialog.tlk")
                     return
                 except Exception as e:
                     logger.error(f"Error loading workshop TLK {tlk_path}: {e}")
@@ -2057,8 +2236,7 @@ class ResourceManager:
                     parser = TLKParser()
                     parser.read(str(tlk_path))
                     self._custom_tlk_cache = parser
-                    logger.info(f"Loaded workshop TLK: {tlk_path}")
-                    logger.info(f"Found and loaded workshop TLK: {workshop_item.name}/{tlk_path.name} ({len(parser.string_entries)} strings)")
+                    logger.info(f"Loaded workshop TLK: {workshop_item.name}/{tlk_path.name}")
                     return
                 except Exception as e:
                     logger.error(f"Error loading workshop TLK {tlk_path}: {e}")

@@ -17,18 +17,17 @@ interface InventorySidebarFooterProps {
     heavy_load: number | string;
     encumbrance_level: string;
   };
+  onAdd?: () => void;
 }
 
-export default function InventorySidebarFooter({ encumbrance }: InventorySidebarFooterProps) {
+export default function InventorySidebarFooter({ encumbrance, onAdd }: InventorySidebarFooterProps) {
   const t = useTranslations();
   const { character, refreshAll } = useCharacterContext();
   const { showToast } = useToast();
-  
-  // Gold State
+
   const [goldValue, setGoldValue] = useState<string>('');
   const [isUpdatingGold, setIsUpdatingGold] = useState(false);
 
-  // Sync gold value when character changes
   useEffect(() => {
     if (character?.gold !== undefined) {
       setGoldValue(character.gold.toString());
@@ -54,7 +53,6 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
       const response = await inventoryAPI.updateGold(character.id, numericValue);
       if (response.success) {
         showToast(t('inventory.goldUpdated'), 'success');
-        // Refresh all character data to keep context in sync
         if (refreshAll) await refreshAll();
       } else {
         showToast(response.message, 'error');
@@ -68,7 +66,6 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
     }
   };
 
-  // Safe number parsing
   const safeToNumber = (value: unknown, defaultValue: number = 0): number => {
     if (typeof value === 'number') return value;
     if (typeof value === 'string') {
@@ -82,7 +79,6 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
   const maxWeight = safeToNumber(encumbrance?.heavy_load, 150);
   const weightPercentage = Math.min(100, (currentWeight / maxWeight) * 100);
 
-  // Determine progress bar color
   let progressBarColor = 'bg-[rgb(var(--color-success))]';
   if (weightPercentage > 66) progressBarColor = 'bg-[rgb(var(--color-error))]';
   else if (weightPercentage > 33) progressBarColor = 'bg-[rgb(var(--color-warning))]';
@@ -93,7 +89,6 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
 
   return (
     <div className="w-full pt-4 border-t border-[rgb(var(--color-surface-border)/0.4)] space-y-4">
-        {/* Carry Weight Section */}
         <div className="space-y-2">
              <div className="flex justify-between items-end">
                 <h4 className="text-xs font-semibold uppercase text-[rgb(var(--color-text-muted))] tracking-wider">
@@ -110,11 +105,8 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
                     style={{ width: `${weightPercentage}%` }}
                 />
             </div>
-            
-
         </div>
 
-        {/* Gold Section */}
         <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase text-[rgb(var(--color-text-muted))] tracking-wider">
                 {t('inventory.gold')}
@@ -160,6 +152,15 @@ export default function InventorySidebarFooter({ encumbrance }: InventorySidebar
                 </div>
             </div>
         </div>
+
+        {onAdd && (
+            <Button 
+                onClick={onAdd}
+                className="w-full bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)]"
+            >
+                Add Item
+            </Button>
+        )}
     </div>
   );
 }

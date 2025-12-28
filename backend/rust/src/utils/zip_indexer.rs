@@ -56,9 +56,10 @@ impl ZipIndexer {
             let file_name = file.name();
             
             files_processed += 1;
-            
-            // Check if it's a 2DA file (case-insensitive)
-            if file_name.to_lowercase().ends_with(".2da") {
+
+            // Check if it's a 2DA or UTI file (case-insensitive)
+            let lower_name = file_name.to_lowercase();
+            if lower_name.ends_with(".2da") || lower_name.ends_with(".uti") {
                 tda_files_found += 1;
                 
                 // Extract the base filename (without path)
