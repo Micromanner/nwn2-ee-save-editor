@@ -662,6 +662,31 @@ def get_class_level_info(
         )
 
 
+@router.get("/characters/{character_id}/classes/history")
+def get_level_history(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get character level up history"""
+    try:
+        class_manager = manager.get_manager('class')
+        if not class_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Class manager not available"
+            )
+        
+        history = class_manager.get_level_history()
+        return {'history': history}
+        
+    except Exception as e:
+        logger.error(f"Failed to get level history for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get level history: {str(e)}"
+        )
+
+
 @router.get("/classes/features/{class_id}")
 def get_class_features(
     class_id: int,

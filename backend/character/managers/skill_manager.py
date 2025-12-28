@@ -221,8 +221,13 @@ class SkillManager(EventEmitter):
                 skill_list.append({'Rank': ranks if i == skill_id else 0})
         
         self.gff.set('SkillList', skill_list)
-        
-        
+
+        rank_delta = ranks - current_ranks
+        if rank_delta != 0:
+            class_manager = self.character_manager.get_manager('class')
+            if class_manager:
+                class_manager.record_skill_change(skill_id, rank_delta)
+
         # Update available points (can go negative - user freedom)
         self.gff.set('SkillPoints', available_points - net_cost)
         

@@ -820,6 +820,10 @@ class SpellManager(EventEmitter):
         class_entry[f'KnownList{spell_level}'] = known_list
         self.gff.set('ClassList', class_list)
 
+        class_manager = self.character_manager.get_manager('class')
+        if class_manager:
+            class_manager.record_spell_change(spell_level, spell_id, True)
+
         spell_details = self.get_spell_details(spell_id)
         logger.info(f"Spell added: {spell_details['name']} (ID {spell_id})")
 
@@ -862,6 +866,10 @@ class SpellManager(EventEmitter):
         if len(known_list) < original_length:
             class_entry[f'KnownList{spell_level}'] = known_list
             self.gff.set('ClassList', class_list)
+
+            class_manager = self.character_manager.get_manager('class')
+            if class_manager:
+                class_manager.record_spell_change(spell_level, spell_id, False)
 
             spell_details = self.get_spell_details(spell_id)
             logger.info(f"Spell removed: {spell_details['name']} (ID {spell_id})")

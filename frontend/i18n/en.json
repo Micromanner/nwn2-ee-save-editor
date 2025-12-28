@@ -206,7 +206,18 @@
       "identified": "Identified",
       "unidentified": "Unidentified",
       "enhanced": "Enhanced"
-    }
+    },
+    "addItem": "Add Item",
+    "createNewBaseType": "Create New",
+    "addExistingTemplate": "Add Existing",
+    "searchBaseItems": "Search base item types...",
+    "searchTemplates": "Search item templates...",
+    "noBaseItemsFound": "No base items found.",
+    "noTemplatesFound": "No templates found matching",
+    "loadingTemplates": "Loading templates...",
+    "selectedId": "Selected ID",
+    "selectedResref": "Selected ResRef",
+    "source": "Source"
   },
   "status": {
     "ready": "Ready",
@@ -265,6 +276,19 @@
     "confirmRemoveClassMessage": "This will remove all levels in {className}. This action cannot be undone.",
     "remove": "Remove",
     "cancel": "Cancel",
+    "levelHistory": "Level History",
+    "noLevelHistory": "No level history recorded.",
+    "levelsRecorded": "levels recorded",
+    "stats": "Stats",
+    "hpGained": "HP Gained",
+    "skillPointsRemaining": "Skill Points Remaining",
+    "abilityIncrease": "Ability Increase",
+    "skills": "Skills",
+    "feats": "Feats",
+    "spellsLearned": "Spells Learned",
+    "spellsRemoved": "Spells Removed",
+    "lvl": "Lvl",
+    "noGainsRecorded": "No additional gains recorded for this level.",
     "classNames": {
       "barbarian": "Barbarian",
       "bard": "Bard",
@@ -559,7 +583,13 @@
     "save": "Save",
     "saving": "Saving...",
     "revert": "Revert",
-    "revertAll": "Revert All"
+    "revertAll": "Revert All",
+    "close": "Close",
+    "error": "Error",
+    "expandAll": "Expand All",
+    "collapseAll": "Collapse All",
+    "none": "None",
+    "all": "All"
   },
   "errors": {
     "loadingFailed": "Failed to load data"

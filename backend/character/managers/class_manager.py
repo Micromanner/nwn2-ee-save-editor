@@ -10,6 +10,17 @@ import time
 from ..events import EventEmitter, EventType, ClassChangedEvent, LevelGainedEvent
 from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
 
+# LvlStatList field names
+LVL_STAT_LIST = "LvlStatList"
+LVL_STAT_CLASS = "LvlStatClass"
+LVL_STAT_HITDIE = "LvlStatHitDie"
+LVL_STAT_ABILITY = "LvlStatAbility"
+LVL_STAT_SKILL_LIST = "SkillList"
+LVL_STAT_SKILL_POINTS = "SkillPoints"
+LVL_STAT_FEAT_LIST = "FeatList"
+LVL_STAT_KNOWN_LIST = "KnownList" # Prefix for known spells
+LVL_STAT_KNOWN_REMOVE_LIST = "KnownRemoveList" # Prefix for removed spells
+
 # Using global loguru logger
 
 
@@ -182,6 +193,10 @@ class ClassManager(EventEmitter):
             total_level=total_level
         )
         self.emit(event)
+
+        modifiers = self._calculate_ability_modifiers()
+        hp_gained = self._calculate_hit_points(new_class, 1, modifiers['CON'])
+        self._record_level_up(class_id, hp_gained)
         
         return {
             'class_id': class_id,
@@ -794,10 +809,257 @@ class ClassManager(EventEmitter):
         
         return False
     
-    def _get_racial_feats(self, race_id: int) -> List[int]:
-        """Get racial feats for a specific race"""
-        racial_feats = []
         
+        return racial_feats
+
+    def _get_background_feat(self) -> Optional[int]:
+        """Get background feat ID if present"""
+        return None
+
+    def _is_background_feat(self, feat_id: int) -> bool:
+        """Check if a feat is a background feat"""
+        return False
+
+    # =========================================================================================
+    # Level Up History Management
+    # =========================================================================================
+
+    def _record_level_up(self, class_id: int, hp_gained: int):
+        """
+        Create a new entry in the LvlStatList history for the new level.
+        Called when a level is added.
+        """
+        lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
+        if not isinstance(lvl_stat_list, list):
+            lvl_stat_list = []
+        
+        new_entry = {
+            LVL_STAT_CLASS: class_id,
+            LVL_STAT_HITDIE: hp_gained,
+            LVL_STAT_SKILL_POINTS: 0,
+            LVL_STAT_FEAT_LIST: [],
+            LVL_STAT_SKILL_LIST: []
+        }
+        
+        for i in range(10):
+            new_entry[f"{LVL_STAT_KNOWN_LIST}{i}"] = []
+            new_entry[f"{LVL_STAT_KNOWN_REMOVE_LIST}{i}"] = []
+
+        lvl_stat_list.append(new_entry)
+        self.gff.set(LVL_STAT_LIST, lvl_stat_list)
+        logger.info(f"Recorded level up history: Class {class_id}, HP {hp_gained}")
+
+    def record_feat_change(self, feat_id: int, added: bool):
+        """
+        Sync a feat change to the current level history.
+        Called by FeatManager when feats are added/removed.
+        
+        Args:
+            feat_id: The ID of the feat
+            added: True if added, False if removed
+        """
+        lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
+        if not lvl_stat_list or not isinstance(lvl_stat_list, list):
+            logger.warning("No level history found to sync feat change.")
+            return
+
+        current_level_idx = len(lvl_stat_list) - 1
+        current_level_entry = lvl_stat_list[current_level_idx]
+
+        feat_list = current_level_entry.get(LVL_STAT_FEAT_LIST, [])
+        if not isinstance(feat_list, list):
+            feat_list = []
+
+        if added:
+            if not any(f.get('Feat') == feat_id for f in feat_list):
+                feat_list.append({'Feat': feat_id})
+                logger.info(f"Synced feat {feat_id} addition to level history.")
+        else:
+            original_len = len(feat_list)
+            feat_list = [f for f in feat_list if f.get('Feat') != feat_id]
+            if len(feat_list) < original_len:
+                logger.info(f"Synced feat {feat_id} removal from level history.")
+        
+        current_level_entry[LVL_STAT_FEAT_LIST] = feat_list
+        self.gff.set(LVL_STAT_LIST, lvl_stat_list)
+
+    def record_skill_change(self, skill_id: int, rank_delta: int):
+        """
+        Sync a skill rank change to the current level history.
+        Called by SkillManager when skills are modified.
+        
+        Args:
+            skill_id: The ID of the skill
+            rank_delta: The change in rank (+1, -1, etc.)
+        """
+        if rank_delta == 0:
+            return
+
+        lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
+        if not lvl_stat_list or not isinstance(lvl_stat_list, list):
+            logger.warning("No level history found to sync skill change.")
+            return
+
+        current_level_idx = len(lvl_stat_list) - 1
+        current_level_entry = lvl_stat_list[current_level_idx]
+
+        skill_list = current_level_entry.get(LVL_STAT_SKILL_LIST, [])
+        if not isinstance(skill_list, list):
+            skill_list = []
+
+        current_count = len(skill_list)
+        if skill_id >= current_count:
+            for _ in range(skill_id - current_count + 1):
+                skill_list.append({'Rank': 0})
+
+        current_rank_entry = skill_list[skill_id]
+        if isinstance(current_rank_entry, dict):
+            new_rank = current_rank_entry.get('Rank', 0) + rank_delta
+            current_rank_entry['Rank'] = new_rank
+            logger.debug(f"Synced skill {skill_id} rank change ({rank_delta}) to history. Level delta: {new_rank}")
+        else:
+            logger.warning(f"Invalid skill history entry format at index {skill_id}")
+            
+        current_level_entry[LVL_STAT_SKILL_LIST] = skill_list
+        self.gff.set(LVL_STAT_LIST, lvl_stat_list)
+    
+    
+    def record_spell_change(self, spell_level: int, spell_id: int, added: bool):
+        """
+        Sync a spell change to the current level history.
+        Called by SpellManager when spells are added/removed.
+        """
+        if spell_level < 0 or spell_level > 9:
+            logger.warning(f"Invalid spell level {spell_level} for history sync.")
+            return
+
+        lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
+        if not lvl_stat_list or not isinstance(lvl_stat_list, list):
+            logger.warning("No level history found to sync spell change.")
+            return
+
+        current_level_idx = len(lvl_stat_list) - 1
+        current_level_entry = lvl_stat_list[current_level_idx]
+
+        if added:
+            list_key = f"{LVL_STAT_KNOWN_LIST}{spell_level}"
+            spell_list = current_level_entry.get(list_key, [])
+            if not isinstance(spell_list, list):
+                spell_list = []
+
+            if not any(s.get('Spell') == spell_id for s in spell_list):
+                spell_list.append({'Spell': spell_id})
+                logger.debug(f"Synced spell {spell_id} (level {spell_level}) addition to level history.")
+
+            current_level_entry[list_key] = spell_list
+        else:
+            list_key = f"{LVL_STAT_KNOWN_REMOVE_LIST}{spell_level}"
+            remove_list = current_level_entry.get(list_key, [])
+            if not isinstance(remove_list, list):
+                remove_list = []
+
+            if not any(s.get('Spell') == spell_id for s in remove_list):
+                remove_list.append({'Spell': spell_id})
+                logger.debug(f"Synced spell {spell_id} (level {spell_level}) removal to level history.")
+
+            current_level_entry[list_key] = remove_list
+
+        self.gff.set(LVL_STAT_LIST, lvl_stat_list)
+    
+    def get_level_history(self) -> List[Dict[str, Any]]:
+        """
+        Get the full level up history for display.
+        Parses LvlStatList and resolves IDs to human-readable names.
+        """
+        history_data = []
+        lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
+        if not lvl_stat_list:
+            return []
+
+        class_level_counts: Dict[int, int] = {}
+
+        for level_idx, entry in enumerate(lvl_stat_list):
+            class_id = entry.get(LVL_STAT_CLASS, -1)
+            class_level_counts[class_id] = class_level_counts.get(class_id, 0) + 1
+
+            level_info = {
+                'level': level_idx + 1,
+                'class': 'Unknown',
+                'class_level': class_level_counts[class_id],
+                'hp_gained': entry.get(LVL_STAT_HITDIE, 0),
+                'skill_points_remaining': entry.get(LVL_STAT_SKILL_POINTS, 0),
+                'ability_increase': None,
+                'skills_gained': [],
+                'feats_gained': [],
+                'spells_learned': [],
+                'spells_removed': [],
+            }
+
+            level_info['class'] = self._get_rule_label('classes', class_id, f"Class {class_id}")
+            
+            ability_id = entry.get(LVL_STAT_ABILITY)
+            if ability_id is not None:
+                abilities = ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma']
+                if 0 <= ability_id < len(abilities):
+                    level_info['ability_increase'] = abilities[ability_id]
+
+            skill_list = entry.get(LVL_STAT_SKILL_LIST, [])
+            for skill_id, skill_entry in enumerate(skill_list):
+                rank = skill_entry.get('Rank', 0)
+                if rank != 0:
+                    skill_name = self._get_rule_label('skills', skill_id, f"Skill {skill_id}")
+                    level_info['skills_gained'].append({'name': skill_name, 'rank': rank})
+
+            feat_list = entry.get(LVL_STAT_FEAT_LIST, [])
+            feat_manager = self.character_manager.get_manager('feat')
+            for feat_entry in feat_list:
+                feat_id = feat_entry.get('Feat', -1)
+                if feat_id >= 0 and feat_manager:
+                    feat_info = feat_manager.get_feat_info_display(feat_id)
+                    feat_name = feat_info.get('name', f"Feat {feat_id}") if feat_info else f"Feat {feat_id}"
+                else:
+                    feat_name = f"Feat {feat_id}"
+                level_info['feats_gained'].append({'name': feat_name})
+
+            spell_manager = self.character_manager.get_manager('spell')
+            for i in range(10):
+                known_list = entry.get(f"{LVL_STAT_KNOWN_LIST}{i}", [])
+                for spell_entry in known_list:
+                    spell_id = spell_entry.get('Spell', -1)
+                    if spell_id >= 0 and spell_manager:
+                        spell_info = spell_manager.get_spell_details(spell_id)
+                        spell_name = spell_info.get('name', f"Spell {spell_id}")
+                    else:
+                        spell_name = f"Spell {spell_id}"
+                    level_info['spells_learned'].append({'name': spell_name, 'level': i})
+
+                remove_list = entry.get(f"{LVL_STAT_KNOWN_REMOVE_LIST}{i}", [])
+                for spell_entry in remove_list:
+                    spell_id = spell_entry.get('Spell', -1)
+                    if spell_id >= 0 and spell_manager:
+                        spell_info = spell_manager.get_spell_details(spell_id)
+                        spell_name = spell_info.get('name', f"Spell {spell_id}")
+                    else:
+                        spell_name = f"Spell {spell_id}"
+                    level_info['spells_removed'].append({'name': spell_name, 'level': i})
+
+            history_data.append(level_info)
+            
+        return history_data
+
+    def _get_rule_label(self, rule_type: str, rule_id: int, default: str) -> str:
+        """Helper to get a human-readable label from game rules"""
+        if rule_id is None or rule_id < 0:
+            return default
+
+        try:
+            data = self.rules_service.get_by_id(rule_type, rule_id)
+            if data:
+                return self.field_mapper.get_field_value(data, 'label',
+                       self.field_mapper.get_field_value(data, 'name', default))
+        except Exception:
+            pass
+        return default
         # Get race data
         race_data = self.rules_service.get_by_id('racialtypes', race_id)
         if not race_data:

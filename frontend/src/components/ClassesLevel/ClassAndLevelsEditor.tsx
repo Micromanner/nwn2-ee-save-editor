@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Pencil, Swords, X } from 'lucide-react';
+import { Pencil, Swords, X, History } from 'lucide-react';
 import { useTranslations } from '@/hooks/useTranslations';
+
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { formatModifier, formatNumber } from '@/utils/dataHelpers';
 import { useClassesLevel, type ClassesData } from '@/hooks/useClassesLevel';
 import ClassSelectorModal from './ClassSelectorModal';
+import LevelHistoryModal from './LevelHistoryModal';
+
 
 // SVG Icon Components removed - using lucide-react instead
 
@@ -64,8 +67,10 @@ export default function ClassAndLevelsEditor() {
 
   const [expandedClassDropdown, setExpandedClassDropdown] = useState<number | null>(null);
   const [showClassSelector, setShowClassSelector] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const maxLevel = 60;
+
   const maxClasses = 4;
 
   // Load subsystem data when character changes
@@ -284,11 +289,23 @@ export default function ClassAndLevelsEditor() {
       {/* Classes List */}
       <Card>
         <CardContent padding="p-4">
-          <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))] mb-3">
-            {t('classes.currentClasses')}
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
+              {t('classes.currentClasses')}
+            </h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowHistoryModal(true)}
+              className="flex items-center gap-2 h-8"
+            >
+              <History className="w-4 h-4" />
+              <span>History</span>
+            </Button>
+          </div>
           
           <div className="space-y-2">
+
             {classes.map((cls, index) => (
               <Card 
                 key={`${cls.id}-${index}`} 
@@ -434,6 +451,12 @@ export default function ClassAndLevelsEditor() {
         maxLevel={maxLevel}
         maxClasses={maxClasses}
       />
+      
+      <LevelHistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+      />
     </div>
   );
+
 }
