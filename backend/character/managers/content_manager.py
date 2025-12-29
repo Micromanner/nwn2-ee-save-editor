@@ -42,6 +42,10 @@ class ContentManager(EventEmitter):
         # Campaign.cam backup tracking
         self._campaign_backup_path: Optional[str] = None
 
+        # Cache for campaign file path (to avoid repeated scanning)
+        self._cached_campaign_file: Optional[str] = None
+        self._campaign_file_searched: bool = False
+
         # Extract campaign data if this is from a savegame
         self._extract_campaign_data()
         
@@ -672,6 +676,25 @@ class ContentManager(EventEmitter):
             else:
                 campaign_id = str(campaign_id_raw) if campaign_id_raw else ''
 
+            # Extract HAK list from module.ifo
+            hak_list = []
+            mod_hak_list = module_ifo.get('Mod_HakList', [])
+            if isinstance(mod_hak_list, list):
+                for hak_entry in mod_hak_list:
+                    if isinstance(hak_entry, dict):
+                        hak_name = hak_entry.get('Mod_Hak', '')
+                        if isinstance(hak_name, bytes):
+                            hak_name = hak_name.decode('utf-8', errors='replace')
+                        if hak_name:
+                            hak_list.append(hak_name)
+
+            # Extract custom TLK reference
+            custom_tlk_raw = module_ifo.get('Mod_CustomTlk', '')
+            if isinstance(custom_tlk_raw, bytes):
+                custom_tlk = custom_tlk_raw.decode('utf-8', errors='replace')
+            else:
+                custom_tlk = str(custom_tlk_raw) if custom_tlk_raw else ''
+
             # Parse module description (localized string)
             mod_desc_data = module_ifo.get('Mod_Description', {})
             module_description = ''
@@ -767,7 +790,9 @@ class ContentManager(EventEmitter):
                     'entry_area': area_name,
                     'module_description': module_description,
                     'campaign_id': campaign_id,
-                    'current_module': module_id
+                    'current_module': module_id,
+                    'hak_list': hak_list,
+                    'custom_tlk': custom_tlk
                 },
                 'variables': module_variables
             }
@@ -922,61 +947,79 @@ class ContentManager(EventEmitter):
 
     def find_campaign_file(self) -> Optional[str]:
         """Find the campaign.cam file for the current save's campaign"""
+        # Return cached result if already searched
+        if self._campaign_file_searched:
+            return self._cached_campaign_file
+
         campaign_id = self.module_info.get('campaign_id', '')
         if not campaign_id:
             logger.warning("ContentManager: No Campaign_ID available to find campaign file")
+            self._campaign_file_searched = True
             return None
 
         logger.info(f"ContentManager: Searching for campaign with GUID: {campaign_id}")
 
         try:
             from config.nwn2_settings import nwn2_paths
-            campaigns_dir = nwn2_paths.campaigns
+            from pathlib import Path
 
-            if not os.path.exists(campaigns_dir):
-                logger.warning(f"ContentManager: Campaigns directory not found: {campaigns_dir}")
-                return None
+            # Search both install folder and user documents folder
+            campaigns_dirs = [
+                nwn2_paths.campaigns,
+                nwn2_paths.user_folder / 'campaigns',
+            ]
 
-            # Search all campaign directories for matching campaign.cam
-            for campaign_name in os.listdir(campaigns_dir):
-                campaign_path = os.path.join(campaigns_dir, campaign_name)
-
-                if not os.path.isdir(campaign_path):
+            for campaigns_dir in campaigns_dirs:
+                if not campaigns_dir or not campaigns_dir.exists():
                     continue
 
-                campaign_file = os.path.join(campaign_path, 'campaign.cam')
+                for campaign_name in os.listdir(campaigns_dir):
+                    campaign_path = campaigns_dir / campaign_name
 
-                if not os.path.exists(campaign_file):
-                    continue
+                    if not campaign_path.is_dir():
+                        continue
 
-                # Parse the campaign.cam to check GUID
-                try:
-                    from nwn2_rust import GffParser
-                    campaign_data = GffParser(campaign_file).to_dict()
+                    # Find campaign.cam (case-insensitive)
+                    campaign_file = None
+                    for f in campaign_path.iterdir():
+                        if f.is_file() and f.name.lower() == 'campaign.cam':
+                            campaign_file = str(f)
+                            break
+                    if not campaign_file:
+                        continue
 
-                    file_guid_raw = campaign_data.get('GUID', '')
+                    # Parse the campaign.cam to check GUID
+                    try:
+                        from nwn2_rust import GffParser
+                        campaign_data = GffParser(campaign_file).to_dict()
 
-                    # Normalize GUID to hex string for comparison
-                    if isinstance(file_guid_raw, bytes):
-                        file_guid = file_guid_raw.hex()
-                    else:
-                        file_guid = str(file_guid_raw) if file_guid_raw else ''
+                        file_guid_raw = campaign_data.get('GUID', '')
 
-                    logger.debug(f"ContentManager: Checking {campaign_name}: file_guid={file_guid}, looking_for={campaign_id}")
+                        # Normalize GUID to hex string for comparison
+                        if isinstance(file_guid_raw, bytes):
+                            file_guid = file_guid_raw.hex()
+                        else:
+                            file_guid = str(file_guid_raw) if file_guid_raw else ''
 
-                    if file_guid == campaign_id:
-                        logger.info(f"ContentManager: Found matching campaign: {campaign_name}")
-                        return campaign_file
+                        logger.debug(f"ContentManager: Checking {campaign_name}: file_guid={file_guid}, looking_for={campaign_id}")
 
-                except Exception as e:
-                    logger.warning(f"ContentManager: Failed to parse {campaign_file}: {e}")
-                    continue
+                        if file_guid == campaign_id:
+                            logger.info(f"ContentManager: Found matching campaign: {campaign_name}")
+                            self._cached_campaign_file = campaign_file
+                            self._campaign_file_searched = True
+                            return campaign_file
+
+                    except Exception as e:
+                        logger.warning(f"ContentManager: Failed to parse {campaign_file}: {e}")
+                        continue
 
             logger.warning(f"ContentManager: No campaign.cam found matching GUID {campaign_id}")
+            self._campaign_file_searched = True
             return None
 
         except Exception as e:
             logger.error(f"ContentManager: Error finding campaign file: {e}", exc_info=True)
+            self._campaign_file_searched = True
             return None
 
     def get_campaign_settings(self) -> Optional[Dict[str, Any]]:

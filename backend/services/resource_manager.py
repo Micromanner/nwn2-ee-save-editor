@@ -165,7 +165,13 @@ class ResourceManager:
         self._workshop_file_paths: Dict[str, Path] = {}
         self._custom_override_paths: Dict[str, Path] = {}
         self._custom_override_dirs: List[Path] = []
-        
+
+        # Campaign overrides
+        self._campaign_overrides: Dict[str, TDAParser] = {}
+        self._campaign_override_paths: Dict[str, Path] = {}
+        self._current_campaign_folder: Optional[Path] = None
+        self._current_campaign_id: Optional[str] = None
+
         # Module information
         self._current_module: Optional[str] = None
         self._module_parser: Optional[ErfParser] = None
@@ -293,10 +299,9 @@ class ResourceManager:
             # Still need ZIP locations for base game files (but this is much faster than heavy parsing)
             with profiler.profile("Scan ZIP Files"):
                 self._scan_zip_files()
-            
-            # Build module-to-HAK index (this is always fast)
-            with profiler.profile("Build Module HAK Index"):
-                self._build_module_hak_index()
+
+            # Module scanning removed - HAKs now extracted from save's module.ifo directly
+            # via load_haks_for_save() which is called when loading a save
         else:
             # Slow path: Cache invalid or missing, do full scanning
             logger.info("Fast cache validation failed - using full scanning path")
@@ -309,12 +314,10 @@ class ResourceManager:
             # This ensures custom mod content is available for DynamicGameDataLoader
             with profiler.profile("Scan Override Directories"):
                 self._scan_override_directories()
-            
-            # Build module-to-HAK index for save-context-aware loading
-            # This is fast (just reads module.ifo from .mod files) but enables precise loading
-            with profiler.profile("Build Module HAK Index"):
-                self._build_module_hak_index()
-            
+
+            # Module scanning removed - HAKs now extracted from save's module.ifo directly
+            # via load_haks_for_save() which is called when loading a save
+
             # Skip preloading if pre-compiled cache is valid
             if self._precompiled_cache.cache_enabled and self._precompiled_cache.cache_manager:
                 # Check if pre-compiled cache is valid
@@ -642,6 +645,10 @@ class ResourceManager:
                 self._module_overrides = cached_data['module_overrides']
                 self._hak_overrides = cached_data['hak_overrides']
                 self._custom_tlk_cache = cached_data.get('custom_tlk')
+                self._campaign_overrides = cached_data.get('campaign_overrides', {})
+                self._campaign_override_paths = cached_data.get('campaign_override_paths', {})
+                self._current_campaign_folder = cached_data.get('campaign_folder')
+                self._current_campaign_id = cached_data.get('campaign_id')
                 return True
             
             self._current_module = str(module_path)
@@ -677,8 +684,12 @@ class ResourceManager:
             # Clear previous overrides
             self._module_overrides.clear()
             self._hak_overrides.clear()
-            self._custom_tlk_cache = None  # Clear previous custom TLK
-            
+            self._campaign_overrides.clear()
+            self._campaign_override_paths.clear()
+            self._current_campaign_folder = None
+            self._current_campaign_id = None
+            self._custom_tlk_cache = None
+
             # Load module's own 2DA overrides
             self._load_module_2das()
             
@@ -691,10 +702,18 @@ class ResourceManager:
             for hak_name in hak_list:
                 if hak_name:
                     self._load_hakpak_to_override_chain(hak_name)
-            
+
+            # Load campaign overrides if Campaign_ID present
+            campaign_id = module_info.get('campaign_id', '')
+            if campaign_id:
+                self._current_campaign_id = campaign_id
+                campaign_folder = self._find_campaign_folder_by_guid(campaign_id)
+                if campaign_folder:
+                    self._load_campaign_2das(campaign_folder)
+
             # Scan override directories
             self._scan_override_directories()
-            
+
             # Cache the module data
             cache_data = {
                 'current_module': self._current_module,
@@ -703,7 +722,11 @@ class ResourceManager:
                 'module_info': self._module_info.copy() if self._module_info else None,
                 'module_overrides': self._module_overrides.copy(),
                 'hak_overrides': self._hak_overrides.copy(),
-                'custom_tlk': self._custom_tlk_cache
+                'custom_tlk': self._custom_tlk_cache,
+                'campaign_overrides': self._campaign_overrides.copy(),
+                'campaign_override_paths': self._campaign_override_paths.copy(),
+                'campaign_folder': self._current_campaign_folder,
+                'campaign_id': self._current_campaign_id,
             }
             self._module_cache.put(cache_key, cache_data)
             logger.info(f"Cached module data for: {cache_key}")
@@ -772,7 +795,183 @@ class ResourceManager:
         except Exception as e:
             logger.error(f"Error finding campaign in {campaign_path}: {e}")
             return None
-    
+
+    def _find_campaign_folder_by_guid(self, campaign_guid: str) -> Optional[Path]:
+        """
+        Find campaign folder by matching Campaign_ID GUID from module.ifo
+        to GUID in campaign.cam files.
+
+        Searches both install folder and user documents folder.
+
+        Args:
+            campaign_guid: The Campaign_ID GUID from module.ifo
+
+        Returns:
+            Path to campaign folder or None if not found
+        """
+        if not campaign_guid:
+            return None
+
+        # Search both install folder and user documents folder
+        campaigns_dirs = [
+            nwn2_paths.campaigns,                    # Install folder (vanilla campaigns)
+            nwn2_paths.user_folder / 'campaigns',    # User documents folder (custom campaigns)
+        ]
+
+        for campaigns_dir in campaigns_dirs:
+            if not campaigns_dir or not campaigns_dir.exists():
+                continue
+
+            for campaign_name in os.listdir(campaigns_dir):
+                campaign_path = campaigns_dir / campaign_name
+
+                if not campaign_path.is_dir():
+                    continue
+
+                # Find campaign.cam (case-insensitive)
+                campaign_file = None
+                for f in campaign_path.iterdir():
+                    if f.is_file() and f.name.lower() == 'campaign.cam':
+                        campaign_file = f
+                        break
+                if not campaign_file:
+                    continue
+
+                try:
+                    campaign_data = GffParser(str(campaign_file)).to_dict()
+
+                    file_guid_raw = campaign_data.get('GUID', '')
+                    if isinstance(file_guid_raw, bytes):
+                        file_guid = file_guid_raw.hex()
+                    else:
+                        file_guid = str(file_guid_raw) if file_guid_raw else ''
+
+                    if file_guid == campaign_guid:
+                        logger.info(f"Found campaign folder: {campaign_name} for GUID {campaign_guid[:16]}...")
+                        return campaign_path
+
+                except Exception as e:
+                    logger.debug(f"Failed to parse {campaign_file}: {e}")
+
+        logger.debug(f"No campaign found for GUID: {campaign_guid[:16] if campaign_guid else 'empty'}...")
+        return None
+
+    def _load_campaign_2das(self, campaign_folder: Path):
+        """
+        Load 2DA file paths from campaign folder for lazy loading.
+
+        NWN2 spec: Files in deeper subdirectories have higher priority.
+        So we scan recursively and let deeper files override shallower ones.
+
+        Args:
+            campaign_folder: Path to the campaign folder
+        """
+        self._campaign_overrides.clear()
+        self._campaign_override_paths.clear()
+        self._current_campaign_folder = campaign_folder
+
+        if not campaign_folder or not campaign_folder.exists():
+            return
+
+        files_by_depth: Dict[int, List[Tuple[str, Path]]] = {}
+
+        for tda_file in campaign_folder.rglob('*.2da'):
+            relative_path = tda_file.relative_to(campaign_folder)
+            depth = len(relative_path.parts) - 1
+            name = tda_file.name.lower()
+
+            if depth not in files_by_depth:
+                files_by_depth[depth] = []
+            files_by_depth[depth].append((name, tda_file))
+
+        for depth in sorted(files_by_depth.keys()):
+            for name, file_path in files_by_depth[depth]:
+                self._campaign_override_paths[name] = file_path
+                self._file_mod_times[str(file_path)] = file_path.stat().st_mtime
+
+        if self._campaign_override_paths:
+            logger.info(f"Indexed {len(self._campaign_override_paths)} 2DAs in campaign folder: {campaign_folder.name}")
+
+    def set_campaign_by_guid(self, campaign_guid: str) -> bool:
+        """
+        Set campaign context directly by GUID (for savegame loading).
+
+        This loads campaign 2DA overrides without needing a .mod file.
+        Used when loading saves where we have the Campaign_ID but not a module path.
+
+        Args:
+            campaign_guid: Campaign GUID hex string from save file
+
+        Returns:
+            True if campaign was found and loaded, False otherwise
+        """
+        if not campaign_guid:
+            return False
+
+        # Skip if already loaded
+        if self._current_campaign_id == campaign_guid:
+            logger.debug(f"Campaign {campaign_guid[:16]}... already loaded")
+            return True
+
+        # Clear previous campaign data
+        self._campaign_overrides.clear()
+        self._campaign_override_paths.clear()
+        self._current_campaign_folder = None
+        self._current_campaign_id = None
+
+        # Find and load campaign
+        campaign_folder = self._find_campaign_folder_by_guid(campaign_guid)
+        if campaign_folder:
+            self._current_campaign_id = campaign_guid
+            self._load_campaign_2das(campaign_folder)
+            return True
+        else:
+            logger.debug(f"Campaign not found for GUID: {campaign_guid[:16] if campaign_guid else 'empty'}...")
+            return False
+
+    def load_haks_for_save(self, hak_list: list, custom_tlk: str = '', campaign_guid: str = '') -> bool:
+        """
+        Load HAKs directly from a save's module.ifo data (no .mod file scanning needed).
+
+        This is the preferred method for save editors - get HAK list from the save's
+        module.ifo and pass it here directly, avoiding expensive module scanning.
+
+        Args:
+            hak_list: List of HAK names from Mod_HakList in module.ifo
+            custom_tlk: Custom TLK filename from Mod_CustomTlk (optional)
+            campaign_guid: Campaign GUID for loading campaign 2DAs (optional)
+
+        Returns:
+            True if HAKs loaded successfully
+        """
+        try:
+            # Clear previous HAK overrides
+            self._hak_overrides.clear()
+
+            # Load custom TLK if specified
+            if custom_tlk:
+                self._load_custom_tlk(custom_tlk)
+
+            # Load HAKs in order (first HAK = highest priority)
+            loaded_count = 0
+            for hak_name in hak_list:
+                if hak_name:
+                    if self._load_hakpak_to_override_chain(hak_name):
+                        loaded_count += 1
+
+            if loaded_count > 0:
+                logger.info(f"Loaded {loaded_count}/{len(hak_list)} HAKs from save module.ifo")
+
+            # Load campaign 2DAs if campaign_guid provided
+            if campaign_guid:
+                self.set_campaign_by_guid(campaign_guid)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error loading HAKs for save: {e}")
+            return False
+
     def _load_custom_tlk(self, tlk_filename: str):
         """Load custom TLK file for the module"""
         if not tlk_filename:
@@ -1252,6 +1451,12 @@ class ResourceManager:
             return gff_data
         return default
 
+    def _extract_campaign_id(self, campaign_id_raw) -> str:
+        """Extract Campaign_ID GUID, handling bytes or string format"""
+        if isinstance(campaign_id_raw, bytes):
+            return campaign_id_raw.hex()
+        return str(campaign_id_raw) if campaign_id_raw else ''
+
     def _extract_module_info(self, mod_file: Path) -> Optional[Dict[str, Any]]:
         """
         Extract module name and HAK list from a .mod file.
@@ -1302,7 +1507,8 @@ class ResourceManager:
                 'haks': hak_names,
                 'custom_tlk': custom_tlk,
                 'mod_id': module_data.get('Mod_ID', ''),
-                'entry_area': module_data.get('Mod_Entry_Area', '')
+                'entry_area': module_data.get('Mod_Entry_Area', ''),
+                'campaign_id': self._extract_campaign_id(module_data.get('Campaign_ID', ''))
             }
             
             return {'info': module_info, 'parser': parser}
@@ -2274,18 +2480,18 @@ class ResourceManager:
     @with_retry_limit(table_name_param="name")
     def get_2da_with_overrides(self, name: str) -> Optional[TDAParser]:
         """
-        Get a 2DA file, checking the full override chain with retry limits to prevent infinite loops:
-        1. Module overrides
-        2. HAK overrides (in reverse order - last HAK wins)
-        3. Campaign overrides (TODO)
-        4. Custom override directories (user-specified)
-        5. Steam Workshop overrides
-        6. Traditional override directory
+        Get a 2DA file, checking the full override chain with NWN2 engine priority:
+        1. HAK overrides (first HAK in module.ifo = highest priority)
+        2. Custom override directories (user-specified)
+        3. Steam Workshop overrides
+        4. Traditional override directory
+        5. Campaign folder overrides
+        6. Module content (2DAs inside .mod file)
         7. Base game files
-        
+
         Args:
             name: Name of 2DA file
-            
+
         Returns:
             Parsed TDAParser object or None
         """
@@ -2293,109 +2499,103 @@ class ResourceManager:
         if not name.lower().endswith('.2da'):
             name = name + '.2da'
         name = name.lower()
-        
+
         # Build cache key that includes module context
         cache_key = self._build_cache_key(name)
-        
+
         # Check memory cache first if enabled
         if self._memory_cache_enabled:
             if cache_key in self._2da_cache:
                 self._cache_hits += 1
-                # Move to end for LRU
                 self._2da_cache.move_to_end(cache_key)
-                
-                # Check if compressed
                 if cache_key in self._2da_compressed and self._2da_compressed[cache_key]:
                     return self._decompress_parser(self._2da_cache[cache_key])
                 return self._2da_cache[cache_key]
-        
+
         self._cache_misses += 1
-        
-        # 1. Check module overrides first
-        if name in self._module_overrides:
-            result = self._module_overrides[name]
-            # Cache the result
-            if self._memory_cache_enabled and result:
-                self._add_to_cache(cache_key, result)
-            return result
-        
-        # 2. Check HAK overrides (reverse order - last HAK wins)
-        for hak_overrides in reversed(self._hak_overrides):
+
+        # 1. Check HAK overrides (first HAK wins - no reverse!)
+        for hak_overrides in self._hak_overrides:
             if name in hak_overrides:
                 result = hak_overrides[name]
-                # Cache the result
                 if self._memory_cache_enabled and result:
                     self._add_to_cache(cache_key, result)
                 return result
-        
-        # 3. TODO: Campaign overrides would go here
-        
-        # 4. Check custom override directories (highest priority user overrides)
+
+        # 2. Check custom override directories
         if name in self._custom_override_paths:
-            # Parse on demand from custom directories
             parser = self._parse_2da_file(self._custom_override_paths[name])
             if parser:
-                # Cache the result
                 if self._memory_cache_enabled:
                     self._add_to_cache(cache_key, parser)
                 return parser
-        
-        # 5. Check Steam Workshop overrides
+
+        # 3. Check Steam Workshop overrides
         if name in self._workshop_overrides:
             result = self._workshop_overrides[name]
-            # Cache the result
             if self._memory_cache_enabled and result:
                 self._add_to_cache(cache_key, result)
             return result
         elif name in self._workshop_file_paths:
-            # Parse on demand
             parser = self._parse_2da_file(self._workshop_file_paths[name])
             if parser:
                 self._workshop_overrides[name] = parser
-                # Cache the result
                 if self._memory_cache_enabled:
                     self._add_to_cache(cache_key, parser)
                 return parser
-        
-        # 6. Check traditional override directory
+
+        # 4. Check traditional override directory
         if name in self._override_dir_overrides:
             result = self._override_dir_overrides[name]
-            # Cache the result
             if self._memory_cache_enabled and result:
                 self._add_to_cache(cache_key, result)
             return result
         elif name in self._override_file_paths:
-            # Parse on demand
             parser = self._parse_2da_file(self._override_file_paths[name])
             if parser:
                 self._override_dir_overrides[name] = parser
-                # Cache the result
                 if self._memory_cache_enabled:
                     self._add_to_cache(cache_key, parser)
                 return parser
-        
+
+        # 5. Check campaign folder overrides (lazy load)
+        if name in self._campaign_override_paths:
+            if name not in self._campaign_overrides:
+                parser = self._parse_2da_file(self._campaign_override_paths[name])
+                if parser:
+                    self._campaign_overrides[name] = parser
+            if name in self._campaign_overrides:
+                result = self._campaign_overrides[name]
+                if self._memory_cache_enabled and result:
+                    self._add_to_cache(cache_key, result)
+                return result
+
+        # 6. Check module overrides (2DAs inside .mod file)
+        if name in self._module_overrides:
+            result = self._module_overrides[name]
+            if self._memory_cache_enabled and result:
+                self._add_to_cache(cache_key, result)
+            return result
+
         # 7. Fall back to base game
         result = self.get_2da(name)
-        
+
         # 8. If still not found and it's a prerequisite table, create an empty one
         if not result and name.startswith('cls_pres_'):
             logger.info(f"Creating empty prerequisite table for missing file: {name}")
             result = self._create_empty_prerequisite_table(name)
-            
-            # Cache the created table
             if self._memory_cache_enabled and result:
                 cache_key = self._build_cache_key(name)
                 self._add_to_cache(cache_key, result)
-        
+
         # Cache the result if memory caching is enabled
         if self._memory_cache_enabled and result:
             cache_key = self._build_cache_key(name)
             self._add_to_cache(cache_key, result)
-            # Update memory usage
             self._update_cache_memory_usage()
             if self._cache_memory_bytes > self._cache_max_mb * 1024 * 1024:
                 self._evict_lru_items()
-        
+
         return result
     
     def _is_file_modified(self, filepath: Path) -> bool:
@@ -2550,11 +2750,11 @@ class ResourceManager:
         self._override_dir_overrides.clear()
         self._workshop_overrides.clear()
         self._module_overrides.clear()
+        self._campaign_overrides.clear()
         for hak_override in self._hak_overrides:
             hak_override.clear()
-        
+
         logger.info("Cleared all override caches")
-        logger.info("Module cache cleared")
     
     def get_workshop_mods(self, force_refresh: bool = False) -> List[Dict]:
         """

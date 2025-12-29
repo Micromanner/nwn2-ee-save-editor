@@ -312,8 +312,18 @@ class InMemoryCharacterSession:
                 game_data_loader=game_data_loader,
                 rules_service=rules_service
             )
-            
+
             if self.character_manager:
+                # Load HAKs and campaign 2DAs from save's module.ifo
+                content_manager = self.character_manager.get_manager('content')
+                if content_manager and content_manager.module_info and shared_rm:
+                    hak_list = content_manager.module_info.get('hak_list', [])
+                    custom_tlk = content_manager.module_info.get('custom_tlk', '')
+                    campaign_id = content_manager.module_info.get('campaign_id', '')
+
+                    if hak_list or campaign_id:
+                        shared_rm.load_haks_for_save(hak_list, custom_tlk, campaign_id)
+
                 logger.info("Character editing session ready with all managers")
                 return True
             else:
