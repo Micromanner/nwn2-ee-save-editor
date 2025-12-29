@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.result }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +36,7 @@ jobs:
               draft: true,
               prerelease: false
             })
+            core.setOutput('upload_url', data.upload_url);
             return data.id
 
   build-tauri:
@@ -68,7 +70,7 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
 
       - name: install frontend dependencies
         run: npm install
@@ -124,6 +126,31 @@ jobs:
           FAST_STARTUP=false
           EOF
 
+      - name: build fastapi sidecar
+        shell: bash
+        working-directory: ./backend
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source venv/Scripts/activate
+          else
+            source venv/bin/activate
+          fi
+          python build_fastapi_sidecar.py
+
+      - name: Strip Debug Symbols (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        run: |
+          echo "Original size of sidecar distribution:"
+          du -sh frontend/src-tauri/binaries/fastapi_server.dist || true
+          
+          echo "Stripping binaries..."
+          find frontend/src-tauri/binaries/fastapi_server.dist -name "*.so*" -exec strip --strip-unneeded {} \; || true
+          strip --strip-unneeded frontend/src-tauri/binaries/fastapi_server.dist/fastapi-server || true
+          
+          echo "Size after stripping:"
+          du -sh frontend/src-tauri/binaries/fastapi_server.dist || true
+
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -135,35 +162,31 @@ jobs:
           projectPath: "./frontend"
           args: ${{ matrix.args }}
 
-      - name: Rename Windows Portable Zip Asset
+      - name: Package Windows Portable
         if: matrix.platform == 'windows-latest'
-        uses: actions/github-script@v6
+        shell: bash
+        run: |
+          mkdir -p portable-staging/resources/binaries
+          
+          # Copy Main Executable
+          cp "frontend/src-tauri/target/release/NWN2EE Save Editor.exe" "portable-staging/"
+          
+          # Copy Sidecar (FastAPI Dist)
+          # Tauri resources are expected in 'resources/' relative to the binary
+          cp -r "frontend/src-tauri/binaries/fastapi_server.dist" "portable-staging/resources/binaries/"
+          
+          # Zip it up
+          7z a "frontend/src-tauri/target/release/bundle/nsis/NWN2EE-Save-Editor-Portable.zip" ./portable-staging/*
+          
+          echo "Portable zip created manually."
+
+      - name: Upload Windows Portable Asset
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const release_id = ${{ needs.create-release.outputs.release_id }};
-            // Get version from tag name (e.g. v0.1.0 -> 0.1.0)
-            const version = context.ref.replace('refs/tags/v', '');
-            const newName = `NWN2EE-Save-Editor-${version}-Portable.zip`;
-
-            const { data: assets } = await github.rest.repos.listReleaseAssets({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release_id,
-            });
-
-            const portableZipAsset = assets.find(asset => asset.name.endsWith('-setup.nsis.zip'));
-
-            if (portableZipAsset) {
-              console.log(`Found asset to rename: ${portableZipAsset.name} (ID: ${portableZipAsset.id})`);
-              console.log(`Renaming to: ${newName}`);
-              await github.rest.repos.updateReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                asset_id: portableZipAsset.id,
-                name: newName,
-              });
-              console.log('Asset renamed successfully.');
-            } else {
-              console.log('No Windows portable zip asset found to rename.');
-            }
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: frontend/src-tauri/target/release/bundle/nsis/NWN2EE-Save-Editor-Portable.zip
+          asset_name: NWN2EE-Save-Editor-Portable.zip
+          asset_content_type: application/zip

@@ -38,7 +38,7 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
 
       - name: install frontend dependencies
         run: npm install
@@ -129,6 +129,20 @@ jobs:
           fi
           python build_fastapi_sidecar.py
 
+      - name: Strip Debug Symbols (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        run: |
+          echo "Original size of sidecar distribution:"
+          du -sh frontend/src-tauri/binaries/fastapi_server.dist || true
+          
+          echo "Stripping binaries..."
+          find frontend/src-tauri/binaries/fastapi_server.dist -name "*.so*" -exec strip --strip-unneeded {} \; || true
+          strip --strip-unneeded frontend/src-tauri/binaries/fastapi_server.dist/fastapi-server || true
+          
+          echo "Size after stripping:"
+          du -sh frontend/src-tauri/binaries/fastapi_server.dist || true
+
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -139,24 +153,57 @@ jobs:
           # Don't upload release assets, just test the build
           includeUpdaterJson: false
 
-      - name: Rename Windows Portable Zip
+      - name: Package Windows Portable
         if: matrix.platform == 'windows-latest'
         shell: bash
-        working-directory: ./frontend/src-tauri/target/release/bundle/nsis
         run: |
-          # Find and rename the portable zip
-          for file in *-setup.nsis.zip; do
-            if [ -f "$file" ]; then
-              version=$(echo "$file" | grep -oP '\d+\.\d+\.\d+')
-              newname="NWN2EE-Save-Editor-${version}-Portable.zip"
-              mv "$file" "$newname"
-              echo "Renamed $file to $newname"
-            fi
-          done
+          mkdir -p portable-staging/resources/binaries
+          
+          # Copy Main Executable
+          cp "frontend/src-tauri/target/release/NWN2EE Save Editor.exe" "portable-staging/"
+          
+          # Copy Sidecar (FastAPI Dist)
+          # Tauri resources are expected in 'resources/' relative to the binary
+          cp -r "frontend/src-tauri/binaries/fastapi_server.dist" "portable-staging/resources/binaries/"
+          
+          # Zip it up
+          # Using 7z (standard on GitHub Actions Windows runners)
+          7z a "frontend/src-tauri/target/release/bundle/nsis/NWN2EE-Save-Editor-Portable.zip" ./portable-staging/*
+          
+          echo "Portable zip created manually."
 
-      - name: Upload Build Artifacts
+      - name: Upload AppImage
+        if: matrix.platform == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: nwn2ee-editor-build-${{ matrix.platform }}
-          path: frontend/src-tauri/target/release/bundle/
+          name: NWN2EE-Editor-AppImage
+          path: frontend/src-tauri/target/release/bundle/appimage/*.AppImage
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Deb
+        if: matrix.platform == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NWN2EE-Editor-Deb
+          path: frontend/src-tauri/target/release/bundle/deb/*.deb
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Windows Installer
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NWN2EE-Editor-Windows-Installer
+          path: frontend/src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Windows Portable
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NWN2EE-Editor-Windows-Portable
+          path: frontend/src-tauri/target/release/bundle/nsis/*.zip
+          retention-days: 7
+          if-no-files-found: ignore
