@@ -574,19 +574,18 @@ class SpellManager(EventEmitter):
         else:
             known_by_level = self.get_known_spells(class_id)
             for level, spell_ids in known_by_level.items():
-                if level <= max_level:
-                    for spell_id in spell_ids:
-                        spell_details = self.get_spell_details(spell_id)
-                        spells.append({
-                            'spell_id': spell_id,
-                            'level': level,
-                            'name': spell_details['name'],
-                            'icon': spell_details.get('icon', 'io_unknown'),
-                            'school_name': spell_details.get('school_name'),
-                            'description': spell_details.get('description'),
-                            'class_id': class_id,
-                            'is_domain_spell': False,
-                        })
+                for spell_id in spell_ids:
+                    spell_details = self.get_spell_details(spell_id)
+                    spells.append({
+                        'spell_id': spell_id,
+                        'level': level,
+                        'name': spell_details['name'],
+                        'icon': spell_details.get('icon', 'io_unknown'),
+                        'school_name': spell_details.get('school_name'),
+                        'description': spell_details.get('description'),
+                        'class_id': class_id,
+                        'is_domain_spell': False,
+                    })
 
         return spells
 

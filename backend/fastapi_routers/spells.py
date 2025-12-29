@@ -14,6 +14,7 @@ from fastapi_routers.dependencies import (
     CharacterSessionDep
 )
 # from fastapi_models import (...) - moved to lazy loading
+from fastapi_models import SpellManageRequest
 
 router = APIRouter()
 
@@ -406,7 +407,7 @@ def get_legitimate_spells(
 @router.post("/characters/{character_id}/spells/manage")
 def manage_spells(
     character_id: int,
-    spell_request,  # Type removed for lazy loading
+    spell_request: SpellManageRequest,
     char_session: CharacterSessionDep
 ):
     """Add or remove spells from character's spellbook"""

@@ -17,7 +17,7 @@ export interface SpellTabContentProps {
 
   ownedSpellIds: Set<number>;
 
-  onAddSpell: (spellId: number, classIndex: number) => void;
+  onAddSpell: (spellId: number, classIndex: number, spellLevel: number) => void;
   onRemoveSpell: (spellId: number, classIndex: number) => void;
   onLoadSpellDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
 
@@ -78,7 +78,7 @@ function AvailableSpellsTabComponent({
 }: {
   spells: SpellInfo[];
   ownedSpellIds: Set<number>;
-  onAdd: (spellId: number, classIndex: number) => void;
+  onAdd: (spellId: number, classIndex: number, spellLevel: number) => void;
   onLoadDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
   casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
 }) {

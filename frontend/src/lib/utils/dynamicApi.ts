@@ -71,7 +71,21 @@ class DynamicAPI {
     try {
       const baseUrl = await this.getApiBaseUrl();
       const url = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
-      return await tauriCompatibleFetch(url, options);
+
+      // Polyfill for cache: 'reload' which might not be supported by the underlying client
+      let finalOptions = options;
+      if (options?.cache === 'reload' || options?.cache === 'no-cache') {
+        const headers = new Headers(options.headers);
+        headers.append('Cache-Control', 'no-cache');
+        headers.append('Pragma', 'no-cache');
+        
+        finalOptions = {
+          ...options,
+          headers
+        };
+      }
+
+      return await tauriCompatibleFetch(url, finalOptions);
     } catch (error) {
       // If we get a connection error, the backend might have restarted on a new port
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {

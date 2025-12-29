@@ -242,11 +242,11 @@ export default function SpellsEditor() {
 
   const finalAvailableSpells = filteredAvailableSpells;
 
-  const handleAddSpell = useCallback(async (spellId: number, classIndex: number) => {
+  const handleAddSpell = useCallback(async (spellId: number, classIndex: number, spellLevel: number) => {
     if (!character?.id) return;
 
     try {
-      const response = await CharacterAPI.manageSpell(character.id, 'add', spellId, classIndex);
+      const response = await CharacterAPI.manageSpell(character.id, 'add', spellId, classIndex, spellLevel);
       await spells.load({ force: true });
       await invalidateSubsystems(['combat']);
 

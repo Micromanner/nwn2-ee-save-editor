@@ -352,7 +352,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await DynamicAPI.fetch(`/characters/${characterId}/${config.endpoint}`);
+      const response = await DynamicAPI.fetch(`/characters/${characterId}/${config.endpoint}`, {
+        cache: options.force ? 'reload' : 'default'
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to load ${subsystem}: ${response.statusText}`);

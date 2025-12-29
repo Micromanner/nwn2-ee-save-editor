@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 export interface SpellCardProps {
   spell: SpellInfo;
   isOwned: boolean;
-  onAdd?: (spellId: number, classIndex: number) => void;
+  onAdd?: (spellId: number, classIndex: number, spellLevel: number) => void;
   onRemove?: (spellId: number, classIndex: number) => void;
   onLoadDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
   casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
@@ -156,7 +156,7 @@ function SpellCardComponent({
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onAdd(spell.id, selectedClassIndex);
+                      onAdd(spell.id, selectedClassIndex, spell.level);
                     }}
                   >
                     Add
