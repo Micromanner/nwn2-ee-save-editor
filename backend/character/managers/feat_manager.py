@@ -1,4 +1,9 @@
-"""Data-Driven Feat Manager - handles feat additions, removals, and protection Uses CharacterManager and DynamicGameDataLoader for all feat data access"""
+"""Data-Driven Feat Manager - handles feat additions, removals, and protection Uses CharacterManager and DynamicGameDataLoader for all feat data access
+
+TODO: Modded feat bonus parsing limitations:
+  - Level-scaling bonuses show base value only (e.g., "+1 at level 1, +2 at level 4" just shows +1)
+  - Persistent spell effects (SPELLID) aren't analyzed - we rely on description text parsing
+"""
 
 from typing import Dict, List, Set, Tuple, Optional, Any
 from loguru import logger
@@ -2087,7 +2092,11 @@ class FeatManager(EventEmitter):
                 continue
 
             label = (getattr(feat_data, 'LABEL', '') or '').lower()
-            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+            desc_raw = getattr(feat_data, 'DESCRIPTION', '')
+            if isinstance(desc_raw, int) and desc_raw > 0:
+                description = self.game_rules_service._loader.get_string(desc_raw) or ''
+            else:
+                description = str(desc_raw) if desc_raw else ''
             description_lower = description.lower()
 
             if any(kw in description_lower for kw in _SAVE_CONDITIONAL_KEYWORDS):
@@ -2126,7 +2135,11 @@ class FeatManager(EventEmitter):
                 continue
 
             label = (getattr(feat_data, 'LABEL', '') or '').lower()
-            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+            desc_raw = getattr(feat_data, 'DESCRIPTION', '')
+            if isinstance(desc_raw, int) and desc_raw > 0:
+                description = self.game_rules_service._loader.get_string(desc_raw) or ''
+            else:
+                description = str(desc_raw) if desc_raw else ''
             description_lower = description.lower()
 
             if any(kw in description_lower for kw in _AC_CONDITIONAL_KEYWORDS):
@@ -2164,7 +2177,11 @@ class FeatManager(EventEmitter):
                 continue
 
             label = (getattr(feat_data, 'LABEL', '') or '').lower()
-            description = (getattr(feat_data, 'DESCRIPTION', '') or '')
+            desc_raw = getattr(feat_data, 'DESCRIPTION', '')
+            if isinstance(desc_raw, int) and desc_raw > 0:
+                description = self.game_rules_service._loader.get_string(desc_raw) or ''
+            else:
+                description = str(desc_raw) if desc_raw else ''
 
             if 'improvedinitiative' in label.replace('_', '').replace(' ', ''):
                 bonus += 4
