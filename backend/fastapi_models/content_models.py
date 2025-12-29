@@ -257,6 +257,26 @@ class UpdateCampaignSettingsRequest(BaseModel):
     use_personal_reputation: Optional[int] = Field(None, description="Use personal reputation", ge=0, le=1)
 
 
+class CampaignBackupInfo(BaseModel):
+    """Information about a campaign backup file"""
+    filename: str = Field(..., description="Backup filename")
+    path: str = Field(..., description="Full path to backup file")
+    size_bytes: int = Field(..., description="File size in bytes")
+    created: str = Field(..., description="Creation timestamp")
+
+
+class CampaignBackupsResponse(BaseModel):
+    """Response containing list of campaign backups"""
+    backups: List[CampaignBackupInfo] = Field(default_factory=list, description="Available backups")
+    campaign_name: Optional[str] = Field(None, description="Current campaign name")
+    campaign_guid: Optional[str] = Field(None, description="Current campaign GUID")
+
+
+class RestoreCampaignRequest(BaseModel):
+    """Request to restore campaign from backup"""
+    backup_path: str = Field(..., description="Full path to backup file to restore")
+
+
 class KnownQuestValue(BaseModel):
     """Known value for a quest variable with description"""
     value: int = Field(..., description="Variable value")

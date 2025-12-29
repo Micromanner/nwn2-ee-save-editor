@@ -440,6 +440,75 @@ def update_campaign_settings(
         )
 
 
+@router.get("/characters/{character_id}/campaign/backups")
+def list_campaign_backups(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """List all available campaign.cam backups for the current campaign"""
+    from fastapi_models.content_models import CampaignBackupsResponse, CampaignBackupInfo
+
+    try:
+        content_manager = manager.get_manager('content')
+        backups = content_manager.list_campaign_backups()
+
+        campaign_name = None
+        campaign_guid = None
+        settings = content_manager.get_campaign_settings()
+        if settings:
+            campaign_name = settings.get('campaign_name')
+            campaign_guid = settings.get('campaign_guid')
+
+        return CampaignBackupsResponse(
+            backups=[CampaignBackupInfo(**b) for b in backups],
+            campaign_name=campaign_name,
+            campaign_guid=campaign_guid
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to list campaign backups for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list campaign backups: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/campaign/restore")
+def restore_campaign_from_backup(
+    character_id: int,
+    manager: CharacterManagerDep,
+    request: Dict[str, Any]
+):
+    """Restore campaign.cam from a backup file"""
+    from fastapi_models.content_models import RestoreCampaignRequest
+
+    try:
+        restore_request = RestoreCampaignRequest(**request)
+        content_manager = manager.get_manager('content')
+
+        success = content_manager.restore_campaign_from_backup_file(restore_request.backup_path)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to restore campaign from backup"
+            )
+
+        return {
+            'success': True,
+            'restored_from': restore_request.backup_path
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to restore campaign for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to restore campaign: {str(e)}"
+        )
+
+
 @router.get("/characters/{character_id}/module/variables")
 def get_module_variables(
     character_id: int,

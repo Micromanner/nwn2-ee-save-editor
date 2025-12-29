@@ -386,3 +386,159 @@ class TestCampaignPerformance:
                 assert campaign_info is not None
                 assert campaign_info['name'] == 'First Campaign'
                 assert campaign_info['file'] == str(mock_paths[0])
+
+
+class TestCampaignBackup:
+    """Test campaign.cam backup functionality in ContentManager"""
+
+    def test_backup_campaign_file_creates_backup(self, tmp_path):
+        """Test that backup_campaign_file creates a backup in the correct location"""
+        from character.managers.content_manager import ContentManager
+
+        # Create mock save directory structure
+        saves_dir = tmp_path / "saves"
+        save_folder = saves_dir / "TestSave_001"
+        save_folder.mkdir(parents=True)
+
+        # Create mock campaign file
+        campaign_dir = tmp_path / "Campaigns" / "TestCampaign"
+        campaign_dir.mkdir(parents=True)
+        campaign_file = campaign_dir / "campaign.cam"
+        campaign_file.write_bytes(b'CAM V3.2\x00\x00\x00\x00TEST_DATA')
+
+        # Create mock character manager with save_path
+        mock_char_manager = MagicMock()
+        mock_char_manager.save_path = str(save_folder)
+        mock_char_manager.gff = MagicMock()
+        mock_char_manager.gff.get.return_value = []
+        mock_char_manager.rules_service = MagicMock()
+
+        # Initialize ContentManager with mocked extraction
+        with patch.object(ContentManager, '_extract_campaign_data'):
+            with patch.object(ContentManager, '_detect_custom_content_dynamic'):
+                cm = ContentManager(mock_char_manager)
+
+        # Call backup method
+        backup_path = cm._backup_campaign_file(str(campaign_file))
+
+        # Verify backup was created
+        assert backup_path is not None
+        assert os.path.exists(backup_path)
+        assert "backups" in backup_path
+        assert "campaign_backup" in backup_path
+        assert backup_path.endswith(".cam")
+
+        # Verify backup content matches original
+        with open(backup_path, 'rb') as f:
+            backup_content = f.read()
+        assert backup_content == b'CAM V3.2\x00\x00\x00\x00TEST_DATA'
+
+    def test_validate_campaign_file_with_valid_gff(self, tmp_path):
+        """Test that validation passes for valid GFF file"""
+        from character.managers.content_manager import ContentManager
+
+        # Create mock character manager
+        mock_char_manager = MagicMock()
+        mock_char_manager.gff = MagicMock()
+        mock_char_manager.gff.get.return_value = []
+        mock_char_manager.rules_service = MagicMock()
+
+        with patch.object(ContentManager, '_extract_campaign_data'):
+            with patch.object(ContentManager, '_detect_custom_content_dynamic'):
+                cm = ContentManager(mock_char_manager)
+
+        # Mock GffParser (imported from nwn2_rust inside the method)
+        with patch('nwn2_rust.GffParser') as mock_parser:
+            mock_parser.return_value.to_dict.return_value = {'LvlCap': 20}
+
+            result = cm._validate_campaign_file("/fake/path")
+            assert result is True
+
+    def test_validate_campaign_file_with_invalid_gff(self, tmp_path):
+        """Test that validation fails for invalid GFF file"""
+        from character.managers.content_manager import ContentManager
+
+        # Create mock character manager
+        mock_char_manager = MagicMock()
+        mock_char_manager.gff = MagicMock()
+        mock_char_manager.gff.get.return_value = []
+        mock_char_manager.rules_service = MagicMock()
+
+        with patch.object(ContentManager, '_extract_campaign_data'):
+            with patch.object(ContentManager, '_detect_custom_content_dynamic'):
+                cm = ContentManager(mock_char_manager)
+
+        # Mock GffParser to raise exception (imported from nwn2_rust inside method)
+        with patch('nwn2_rust.GffParser') as mock_parser:
+            mock_parser.return_value.to_dict.side_effect = ValueError("Invalid GFF")
+
+            result = cm._validate_campaign_file("/fake/path")
+            assert result is False
+
+    def test_restore_campaign_from_backup(self, tmp_path):
+        """Test that restore_campaign_from_backup restores the original file"""
+        from character.managers.content_manager import ContentManager
+
+        # Create backup and original files
+        backup_file = tmp_path / "backup.cam"
+        backup_file.write_bytes(b'ORIGINAL_CONTENT')
+
+        campaign_file = tmp_path / "campaign.cam"
+        campaign_file.write_bytes(b'CORRUPTED_CONTENT')
+
+        # Create mock character manager
+        mock_char_manager = MagicMock()
+        mock_char_manager.gff = MagicMock()
+        mock_char_manager.gff.get.return_value = []
+        mock_char_manager.rules_service = MagicMock()
+
+        with patch.object(ContentManager, '_extract_campaign_data'):
+            with patch.object(ContentManager, '_detect_custom_content_dynamic'):
+                cm = ContentManager(mock_char_manager)
+
+        # Set the backup path
+        cm._campaign_backup_path = str(backup_file)
+
+        # Call restore
+        result = cm._restore_campaign_from_backup(str(campaign_file))
+
+        assert result is True
+        assert campaign_file.read_bytes() == b'ORIGINAL_CONTENT'
+
+    def test_update_campaign_settings_creates_backup_once(self, tmp_path):
+        """Test that update_campaign_settings creates backup only on first call"""
+        from character.managers.content_manager import ContentManager
+
+        # Create mock save directory
+        saves_dir = tmp_path / "saves"
+        save_folder = saves_dir / "TestSave_001"
+        save_folder.mkdir(parents=True)
+
+        # Create mock character manager
+        mock_char_manager = MagicMock()
+        mock_char_manager.save_path = str(save_folder)
+        mock_char_manager.gff = MagicMock()
+        mock_char_manager.gff.get.return_value = []
+        mock_char_manager.rules_service = MagicMock()
+
+        with patch.object(ContentManager, '_extract_campaign_data'):
+            with patch.object(ContentManager, '_detect_custom_content_dynamic'):
+                cm = ContentManager(mock_char_manager)
+
+        # Mock find_campaign_file and GFF operations
+        with patch.object(cm, 'find_campaign_file', return_value='/fake/campaign.cam'):
+            with patch.object(cm, '_backup_campaign_file') as mock_backup:
+                mock_backup.return_value = '/fake/backup.cam'
+                with patch.object(cm, '_validate_campaign_file', return_value=True):
+                    with patch('nwn2_rust.GffParser') as mock_parser:
+                        mock_parser.return_value.to_dict.return_value = {'LvlCap': 20}
+                        with patch('nwn2_rust.GffWriter') as mock_writer:
+                            mock_writer.return_value.dump.return_value = b'test'
+                            with patch('builtins.open', MagicMock()):
+                                # First call should create backup
+                                cm.update_campaign_settings({'level_cap': 25})
+                                assert mock_backup.call_count == 1
+
+                                # Second call should NOT create another backup
+                                cm.update_campaign_settings({'level_cap': 30})
+                                assert mock_backup.call_count == 1  # Still 1

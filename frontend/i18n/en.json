@@ -572,7 +572,12 @@
       "usePersonalRepDesc": "Use personal reputation system (0=no, 1=yes)",
       "startModule": "Start Module",
       "moduleCount": "Module Count",
-      "campaignFile": "Campaign File"
+      "campaignFile": "Campaign File",
+      "restoreBackup": "Restore Backup",
+      "restoreBackupTitle": "Restore Campaign Backup",
+      "restoreBackupDesc": "Select a backup to restore the campaign.cam file to a previous state",
+      "noBackups": "No backups available. Backups are created automatically when you save changes.",
+      "restoreSuccess": "Campaign restored successfully"
     }
   },
   "common": {
@@ -590,7 +595,8 @@
     "expandAll": "Expand All",
     "collapseAll": "Collapse All",
     "none": "None",
-    "all": "All"
+    "all": "All",
+    "restore": "Restore"
   },
   "errors": {
     "loadingFailed": "Failed to load data"

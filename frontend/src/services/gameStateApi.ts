@@ -148,6 +148,24 @@ export interface UpdateCampaignSettingsResponse {
   warning: string;
 }
 
+export interface CampaignBackupInfo {
+  filename: string;
+  path: string;
+  size_bytes: number;
+  created: string;
+}
+
+export interface CampaignBackupsResponse {
+  backups: CampaignBackupInfo[];
+  campaign_name: string | null;
+  campaign_guid: string | null;
+}
+
+export interface RestoreCampaignResponse {
+  success: boolean;
+  restored_from: string;
+}
+
 export interface QuestProgressData {
   variable: string;
   category: string;
@@ -450,6 +468,43 @@ export class GameStateAPI {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(errorData.detail || `Failed to update campaign settings: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getCampaignBackups(characterId: number): Promise<CampaignBackupsResponse> {
+    const response = await DynamicAPI.fetch(
+      `/characters/${characterId}/campaign/backups`,
+      {
+        method: 'GET',
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `Failed to fetch campaign backups: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async restoreCampaignFromBackup(
+    characterId: number,
+    backupPath: string
+  ): Promise<RestoreCampaignResponse> {
+    const response = await DynamicAPI.fetch(
+      `/characters/${characterId}/campaign/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backup_path: backupPath }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `Failed to restore campaign: ${response.status}`);
     }
 
     return response.json();

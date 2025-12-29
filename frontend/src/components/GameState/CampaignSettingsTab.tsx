@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { gameStateAPI, CampaignSettingsResponse, CampaignVariablesResponse } from '@/services/gameStateApi';
-import { AlertTriangle, Undo2 } from 'lucide-react';
+import { gameStateAPI, CampaignSettingsResponse, CampaignVariablesResponse, CampaignBackupInfo } from '@/services/gameStateApi';
+import { AlertTriangle, Undo2, History, X } from 'lucide-react';
 
 import { VariableTable, VariableEdit } from '@/components/ui/VariableTable';
 
@@ -31,6 +31,11 @@ export default function CampaignSettingsTab() {
   const [campaignError, setCampaignError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [backups, setBackups] = useState<CampaignBackupInfo[]>([]);
+  const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   useEffect(() => {
     if (characterId) {
@@ -75,6 +80,64 @@ export default function CampaignSettingsTab() {
     } finally {
       setIsLoadingCampaign(false);
     }
+  };
+
+  const loadBackups = async () => {
+    if (!characterId) return;
+
+    setIsLoadingBackups(true);
+    setRestoreError(null);
+
+    try {
+      const data = await gameStateAPI.getCampaignBackups(characterId);
+      setBackups(data.backups);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load backups';
+      setRestoreError(errorMessage);
+      console.error('Failed to load campaign backups:', err);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  const handleOpenRestoreDialog = () => {
+    setIsRestoreDialogOpen(true);
+    loadBackups();
+  };
+
+  const handleRestoreFromBackup = async (backupPath: string) => {
+    if (!characterId) return;
+
+    setIsRestoring(true);
+    setRestoreError(null);
+
+    try {
+      await gameStateAPI.restoreCampaignFromBackup(characterId, backupPath);
+      setIsRestoreDialogOpen(false);
+      await loadCampaignSettings();
+      setSaveMessage(t('gameState.campaign.restoreSuccess'));
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to restore from backup';
+      setRestoreError(errorMessage);
+      console.error('Failed to restore campaign:', err);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const formatBackupDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString();
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleFieldChange = (field: string, value: number) => {
@@ -656,14 +719,87 @@ export default function CampaignSettingsTab() {
                 <span className="text-[rgb(var(--color-text-muted))]">{t('gameState.campaign.moduleCount')}:</span>
                 <span className="ml-2">{settings.module_names.length}</span>
               </div>
-              <div className="md:col-span-2">
-                <span className="text-[rgb(var(--color-text-muted))]">{t('gameState.campaign.campaignFile')}:</span>
-                <span className="ml-2 font-mono text-xs text-[rgb(var(--color-text-muted))]">{settings.campaign_file_path}</span>
+              <div className="md:col-span-2 flex items-center justify-between">
+                <div>
+                  <span className="text-[rgb(var(--color-text-muted))]">{t('gameState.campaign.campaignFile')}:</span>
+                  <span className="ml-2 font-mono text-xs text-[rgb(var(--color-text-muted))]">{settings.campaign_file_path}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenRestoreDialog}
+                  className="ml-4"
+                >
+                  <History className="h-4 w-4 mr-2" />
+                  {t('gameState.campaign.restoreBackup')}
+                </Button>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {isRestoreDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200">
+          <Card className="w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] shadow-2xl">
+            <div className="p-4 border-b border-[rgb(var(--color-border))] flex justify-between items-center">
+              <h2 className="text-lg font-semibold">{t('gameState.campaign.restoreBackupTitle')}</h2>
+              <Button variant="ghost" size="sm" onClick={() => setIsRestoreDialogOpen(false)} className="h-8 w-8 p-0">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="p-4">
+              <p className="text-sm text-[rgb(var(--color-text-muted))] mb-4">
+                {t('gameState.campaign.restoreBackupDesc')}
+              </p>
+
+              {restoreError && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                  {restoreError}
+                </div>
+              )}
+
+              {isLoadingBackups ? (
+                <div className="py-8 text-center text-[rgb(var(--color-text-muted))]">
+                  {t('common.loading')}
+                </div>
+              ) : backups.length === 0 ? (
+                <div className="py-8 text-center text-[rgb(var(--color-text-muted))]">
+                  {t('gameState.campaign.noBackups')}
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {backups.map((backup) => (
+                    <div
+                      key={backup.path}
+                      className="flex items-center justify-between p-3 rounded-lg bg-[rgb(var(--color-surface-secondary))] hover:bg-[rgb(var(--color-surface-tertiary))] transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-mono text-sm truncate" title={backup.filename}>
+                          {backup.filename}
+                        </div>
+                        <div className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
+                          {formatBackupDate(backup.created)} - {formatBytes(backup.size_bytes)}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRestoreFromBackup(backup.path)}
+                        disabled={isRestoring}
+                        className="ml-3"
+                      >
+                        {isRestoring ? t('common.loading') : t('common.restore')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Card className="flex flex-col min-h-[500px]">
         <CardHeader className="border-b border-[rgb(var(--color-border))]">

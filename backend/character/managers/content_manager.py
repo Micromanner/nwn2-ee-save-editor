@@ -7,6 +7,8 @@ Also extracts and manages campaign, module, and quest information from save file
 from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING
 from loguru import logger
 import os
+import shutil
+import datetime
 
 from ..events import EventEmitter
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: ignore
@@ -36,6 +38,9 @@ class ContentManager(EventEmitter):
 
         # Quest definition lookups
         self.quest_definitions: Dict[str, Dict[str, Any]] = {}
+
+        # Campaign.cam backup tracking
+        self._campaign_backup_path: Optional[str] = None
 
         # Extract campaign data if this is from a savegame
         self._extract_campaign_data()
@@ -1053,8 +1058,126 @@ class ContentManager(EventEmitter):
             logger.error(f"ContentManager: Failed to get campaign settings: {e}", exc_info=True)
             return None
 
+    def _get_campaign_backups_folder(self) -> Optional[str]:
+        """Get the centralized campaign backups folder path."""
+        if not hasattr(self.character_manager, 'save_path'):
+            return None
+
+        save_path = self.character_manager.save_path
+        if not save_path:
+            return None
+
+        # saves/backups/campaign_backups/
+        saves_root = os.path.dirname(save_path)
+        return os.path.join(saves_root, 'backups', 'campaign_backups')
+
+    def _backup_campaign_file(self, campaign_file: str) -> Optional[str]:
+        """
+        Backup campaign.cam to centralized campaign_backups folder.
+
+        Returns:
+            Path to backup file if successful, None otherwise
+        """
+        backups_folder = self._get_campaign_backups_folder()
+        if not backups_folder:
+            logger.warning("ContentManager: Cannot determine campaign backups folder")
+            return None
+
+        try:
+            os.makedirs(backups_folder, exist_ok=True)
+
+            # Use campaign GUID and name for the backup filename
+            campaign_id = self.module_info.get('campaign_id', 'unknown')
+            campaign_name = self.campaign_data.get('name', 'campaign')
+            # Sanitize campaign name for filename
+            safe_name = "".join(c for c in campaign_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_name = safe_name.replace(' ', '_')[:30]  # Limit length
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_filename = f"{safe_name}_{campaign_id[:8]}_{timestamp}.cam"
+            backup_path = os.path.join(backups_folder, backup_filename)
+
+            shutil.copy2(campaign_file, backup_path)
+            logger.info(f"ContentManager: Created campaign.cam backup at {backup_path}")
+            return backup_path
+
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to backup campaign.cam: {e}")
+            return None
+
+    def list_campaign_backups(self) -> List[Dict[str, Any]]:
+        """List all available campaign backups."""
+        backups_folder = self._get_campaign_backups_folder()
+        if not backups_folder or not os.path.exists(backups_folder):
+            return []
+
+        backups = []
+        try:
+            for filename in os.listdir(backups_folder):
+                if filename.endswith('.cam'):
+                    filepath = os.path.join(backups_folder, filename)
+                    stat = os.stat(filepath)
+                    backups.append({
+                        'filename': filename,
+                        'path': filepath,
+                        'size_bytes': stat.st_size,
+                        'created': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    })
+            # Sort by created date, newest first
+            backups.sort(key=lambda x: x['created'], reverse=True)
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to list campaign backups: {e}")
+
+        return backups
+
+    def restore_campaign_from_backup_file(self, backup_path: str) -> bool:
+        """Restore campaign.cam from a specific backup file."""
+        campaign_file = self.find_campaign_file()
+        if not campaign_file:
+            logger.error("ContentManager: Cannot restore - campaign file not found")
+            return False
+
+        if not os.path.exists(backup_path):
+            logger.error(f"ContentManager: Backup file not found: {backup_path}")
+            return False
+
+        try:
+            # Validate backup is valid GFF before restoring
+            if not self._validate_campaign_file(backup_path):
+                logger.error("ContentManager: Backup file is not valid GFF")
+                return False
+
+            shutil.copy2(backup_path, campaign_file)
+            logger.info(f"ContentManager: Restored campaign.cam from {backup_path}")
+            return True
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to restore campaign from backup: {e}")
+            return False
+
+    def _validate_campaign_file(self, campaign_file: str) -> bool:
+        """Verify campaign.cam is valid GFF after write"""
+        try:
+            from nwn2_rust import GffParser
+            GffParser(campaign_file).to_dict()
+            return True
+        except Exception as e:
+            logger.error(f"ContentManager: Campaign file validation failed: {e}")
+            return False
+
+    def _restore_campaign_from_backup(self, campaign_file: str) -> bool:
+        """Restore campaign.cam from backup if validation failed"""
+        if self._campaign_backup_path and os.path.exists(self._campaign_backup_path):
+            try:
+                shutil.copy2(self._campaign_backup_path, campaign_file)
+                logger.info(f"ContentManager: Restored campaign.cam from backup")
+                return True
+            except Exception as e:
+                logger.error(f"ContentManager: Failed to restore campaign.cam from backup: {e}")
+                return False
+        return False
+
     def update_campaign_settings(self, settings: Dict[str, Any]) -> bool:
-        """Update campaign settings in campaign.cam file"""
+        """Update campaign settings in campaign.cam file with backup protection"""
         campaign_file = self.find_campaign_file()
 
         if not campaign_file:
@@ -1063,6 +1186,12 @@ class ContentManager(EventEmitter):
 
         try:
             from nwn2_rust import GffParser, GffWriter
+
+            # Create backup before first modification
+            if self._campaign_backup_path is None:
+                self._campaign_backup_path = self._backup_campaign_file(campaign_file)
+                if self._campaign_backup_path:
+                    logger.info(f"ContentManager: Campaign backup created at {self._campaign_backup_path}")
 
             campaign_gff = GffParser(campaign_file).to_dict()
 
@@ -1100,11 +1229,21 @@ class ContentManager(EventEmitter):
             with open(campaign_file, 'wb') as f:
                 f.write(campaign_bytes)
 
+            # Validate the written file
+            if not self._validate_campaign_file(campaign_file):
+                logger.error("ContentManager: Campaign file validation failed after write, restoring from backup")
+                if self._restore_campaign_from_backup(campaign_file):
+                    logger.info("ContentManager: Successfully restored campaign.cam from backup")
+                return False
+
             logger.info(f"ContentManager: Successfully updated campaign settings in {campaign_file}")
             return True
 
         except Exception as e:
             logger.error(f"ContentManager: Failed to update campaign settings: {e}", exc_info=True)
+            # Try to restore from backup on any error
+            if self._campaign_backup_path:
+                self._restore_campaign_from_backup(campaign_file)
             return False
 
     def get_all_available_modules(self) -> List[Dict[str, Any]]:
