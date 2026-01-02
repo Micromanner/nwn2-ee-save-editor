@@ -77,33 +77,15 @@ def list_saves(
                 if entry.name.startswith('.'):
                     continue
 
+                # Store minimal info for now to allow sorting/filtering before expensive operations
                 stat_info = entry.stat()
-
-                # Calculate folder size if it's a directory
-                size = stat_info.st_size
-                save_name = None
-                if entry.is_dir():
-                    try:
-                        size = sum(f.stat().st_size for f in Path(entry.path).rglob('*') if f.is_file())
-                    except (OSError, PermissionError):
-                        size = 0
-
-                    # Read save name from savename.txt
-                    savename_txt = Path(entry.path) / 'savename.txt'
-                    if savename_txt.exists():
-                        try:
-                            save_name = savename_txt.read_text(encoding='utf-8').strip()
-                        except (OSError, UnicodeDecodeError):
-                            pass
-
-                file_info = FileInfo(
-                    name=entry.name,
-                    path=entry.path,
-                    size=size,
-                    modified=str(stat_info.st_mtime),
-                    is_directory=entry.is_dir(),
-                    save_name=save_name
-                )
+                file_info = {
+                    "name": entry.name,
+                    "path": entry.path,
+                    "modified": str(stat_info.st_mtime),
+                    "is_directory": entry.is_dir(),
+                    "stat": stat_info # Keep for later size calculation if needed
+                }
                 files_list.append(file_info)
             except (OSError, PermissionError) as e:
                 logger.warning(f"Failed to stat file {entry.name}: {e}")
@@ -111,12 +93,44 @@ def list_saves(
 
         total_count = len(files_list)
 
-        paginated_files = files_list[offset:offset + limit]
+        # Apply sorting here if needed (currently frontend sorts, but backend follows offset/limit)
+        # We'll just take the slice now
+        paginated_entries = files_list[offset:offset + limit]
+        
+        # Now perform expensive operations ONLY for the paginated slice
+        final_files = []
+        for item in paginated_entries:
+            size = item["stat"].st_size
+            save_name = None
+            
+            if item["is_directory"]:
+                # Calculate folder size (expensive)
+                try:
+                    size = sum(f.stat().st_size for f in Path(item["path"]).rglob('*') if f.is_file())
+                except (OSError, PermissionError):
+                    size = 0
 
-        logger.info(f"Listed saves: path={target_path}, count={len(paginated_files)}, total={total_count}")
+                # Read save name from savename.txt (expensive)
+                savename_txt = Path(item["path"]) / 'savename.txt'
+                if savename_txt.exists():
+                    try:
+                        save_name = savename_txt.read_text(encoding='utf-8').strip()
+                    except (OSError, UnicodeDecodeError):
+                        pass
+
+            final_files.append(FileInfo(
+                name=item["name"],
+                path=item["path"],
+                size=size,
+                modified=item["modified"],
+                is_directory=item["is_directory"],
+                save_name=save_name
+            ))
+
+        logger.info(f"Listed saves: path={target_path}, count={len(final_files)}, total={total_count}")
 
         return FileListResponse(
-            files=paginated_files,
+            files=final_files,
             total_count=total_count,
             path=target_path,
             current_path=target_path
@@ -135,7 +149,9 @@ def list_saves(
 @router.get("/backups/list")
 def list_backups_directory(
     save_name: Optional[str] = Query(None, description="Save name to list backups for"),
-    path: Optional[str] = Query(None, description="Save directory path")
+    path: Optional[str] = Query(None, description="Save directory path"),
+    limit: int = Query(50, ge=1, le=500, description="Maximum number of files to return"),
+    offset: int = Query(0, ge=0, description="Number of files to skip")
 ):
     """
     List backups for a specific save or all backups in the backups directory.
@@ -143,6 +159,8 @@ def list_backups_directory(
     Args:
         save_name: Name of the save to list backups for
         path: Full path to save directory
+        limit: Max files to return
+        offset: Files to skip for pagination
 
     Returns:
         List of backup files with metadata
@@ -193,62 +211,72 @@ def list_backups_directory(
                     continue
 
                 stat_info = entry.stat()
-
-                # Calculate folder size and read save name if it's a directory
-                size = stat_info.st_size
-                save_name = None
                 modified_time = stat_info.st_mtime
 
-                if entry.is_dir():
+                # Extract timestamp from backup folder name if it follows the pattern
+                # This helps with sorting before we do expensive folder scans
+                if entry.is_dir() and '_backup_' in entry.name:
                     try:
-                        size = sum(f.stat().st_size for f in Path(entry.path).rglob('*') if f.is_file())
-                    except (OSError, PermissionError):
-                        size = 0
+                        import re
+                        from datetime import datetime
+                        match = re.search(r'_backup_(\d{8})_(\d{6})', entry.name)
+                        if match:
+                            date_str = match.group(1)
+                            time_str = match.group(2)
+                            dt = datetime.strptime(f"{date_str}{time_str}", '%Y%m%d%H%M%S')
+                            modified_time = dt.timestamp()
+                    except Exception:
+                        pass
 
-                    # Read save name from savename.txt
-                    savename_txt = Path(entry.path) / 'savename.txt'
-                    if savename_txt.exists():
-                        try:
-                            save_name = savename_txt.read_text(encoding='utf-8').strip()
-                        except (OSError, UnicodeDecodeError):
-                            pass
-
-                    # Extract timestamp from backup folder name (format: *_backup_YYYYMMDD_HHMMSS)
-                    if '_backup_' in entry.name:
-                        try:
-                            import re
-                            from datetime import datetime
-                            match = re.search(r'_backup_(\d{8})_(\d{6})', entry.name)
-                            if match:
-                                date_str = match.group(1)
-                                time_str = match.group(2)
-                                timestamp_str = f"{date_str}{time_str}"
-                                dt = datetime.strptime(timestamp_str, '%Y%m%d%H%M%S')
-                                modified_time = dt.timestamp()
-                                logger.debug(f"Parsed backup timestamp from {entry.name}: {dt} -> {modified_time}")
-                        except Exception as e:
-                            logger.warning(f"Failed to parse backup timestamp from {entry.name}: {e}")
-
-                file_info = FileInfo(
-                    name=entry.name,
-                    path=entry.path,
-                    size=size,
-                    modified=str(modified_time),
-                    is_directory=entry.is_dir(),
-                    save_name=save_name
-                )
-                files_list.append(file_info)
+                files_list.append({
+                    "name": entry.name,
+                    "path": entry.path,
+                    "modified": str(modified_time),
+                    "is_directory": entry.is_dir(),
+                    "stat": stat_info
+                })
             except (OSError, PermissionError) as e:
                 logger.warning(f"Failed to stat backup {entry.name}: {e}")
                 continue
 
-        files_list.sort(key=lambda x: x.modified, reverse=True)
+        # Sort all backups by modified date (descending) before slicing
+        files_list.sort(key=lambda x: float(x["modified"]), reverse=True)
+        
+        total_count = len(files_list)
+        paginated_entries = files_list[offset:offset + limit]
+        
+        final_files = []
+        for item in paginated_entries:
+            size = item["stat"].st_size
+            save_name = None
+            
+            if item["is_directory"]:
+                try:
+                    size = sum(f.stat().st_size for f in Path(item["path"]).rglob('*') if f.is_file())
+                except (OSError, PermissionError):
+                    size = 0
 
-        logger.info(f"Listed backups: path={backups_dir}, count={len(files_list)}")
+                savename_txt = Path(item["path"]) / 'savename.txt'
+                if savename_txt.exists():
+                    try:
+                        save_name = savename_txt.read_text(encoding='utf-8').strip()
+                    except (OSError, UnicodeDecodeError):
+                        pass
+
+            final_files.append(FileInfo(
+                name=item["name"],
+                path=item["path"],
+                size=size,
+                modified=item["modified"],
+                is_directory=item["is_directory"],
+                save_name=save_name
+            ))
+
+        logger.info(f"Listed backups: path={backups_dir}, count={len(final_files)}, total={total_count}")
 
         return FileListResponse(
-            files=files_list,
-            total_count=len(files_list),
+            files=final_files,
+            total_count=total_count,
             path=backups_dir,
             current_path=backups_dir
         )

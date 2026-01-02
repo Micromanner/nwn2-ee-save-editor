@@ -2843,7 +2843,8 @@
 
 .file-browser-container {
   width: 100%;
-  max-width: 80rem;
+  max-width: 90rem;
+  height: 80vh;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
@@ -2917,8 +2918,7 @@
 
 .file-browser-list {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .file-browser-row {

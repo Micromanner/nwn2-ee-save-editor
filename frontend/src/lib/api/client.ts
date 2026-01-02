@@ -28,8 +28,8 @@ export class ApiClient {
     return data;
   }
 
-  async get<T>(endpoint: string): Promise<T> {
-    return this.fetchWithCache<T>(endpoint);
+  async get<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    return this.fetchWithCache<T>(endpoint, options);
   }
 
   async post<T>(endpoint: string, data?: unknown): Promise<T> {

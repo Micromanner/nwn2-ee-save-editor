@@ -1,7 +1,6 @@
-'use client';
-
-import { useState, useEffect, useRef } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { FixedSizeList as List, ListOnItemsRenderedProps } from 'react-window';
+import InfiniteLoader from 'react-window-infinite-loader';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -45,6 +44,13 @@ interface FileInfo {
   save_name?: string;
 }
 
+interface FileListResponse {
+  files: FileInfo[];
+  total_count: number;
+  path: string;
+  current_path: string;
+}
+
 interface FileBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -71,7 +77,9 @@ export default function FileBrowserModal({
   useTranslations();
 
   const [files, setFiles] = useState<FileInfo[]>([]);
+  const [totalFiles, setTotalFiles] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
@@ -81,24 +89,51 @@ export default function FileBrowserModal({
   const listRef = useRef<List>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const previousRefreshKey = useRef(refreshKey);
+  const lastPath = useRef(currentPath);
 
+  const [containerHeight, setContainerHeight] = useState(600);
+  const ITEMS_PER_PAGE = 50;
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRequestRef = useRef<string | null>(null);
+
+  // Track container height correctly
   useEffect(() => {
-    if (isOpen) {
-      loadFiles();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, currentPath, mode, refreshKey]);
+    if (!containerRef.current) return;
 
-  const loadFiles = async () => {
-    // Only show loading spinner on initial load or path change
-    // Don't show it on refresh (when only refreshKey changes)
-    const isRefresh = previousRefreshKey.current !== refreshKey && files.length > 0;
-    previousRefreshKey.current = refreshKey;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.height > 0) {
+          setContainerHeight(entry.contentRect.height);
+        }
+      }
+    });
 
-    if (!isRefresh) {
-      setLoading(true);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [isOpen]);
+
+  const loadFiles = useCallback(async (isInitial = true, forceRefresh = false) => {
+    // Unique ID for this specific request to prevent race conditions
+    const requestId = Math.random().toString(36).substring(7);
+    currentRequestRef.current = requestId;
+
+    // Cancel any pending requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
-    setError(null);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    if (isInitial) {
+      // Only show spinner if we're forced to or have no data
+      // This prevents the flicker when re-opening or normalized path updates
+      if (files.length === 0 || forceRefresh) {
+        setLoading(true);
+      }
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
 
     try {
       const endpoint = mode === 'load-saves'
@@ -107,31 +142,94 @@ export default function FileBrowserModal({
 
       const params = new URLSearchParams();
       if (currentPath) params.append('path', currentPath);
-      // Add timestamp to prevent caching
+      params.append('limit', ITEMS_PER_PAGE.toString());
+      
+      const offset = isInitial ? 0 : files.length;
+      params.append('offset', offset.toString());
       params.append('_t', Date.now().toString());
 
-      const data = await apiClient.get<{ files: FileInfo[]; current_path?: string }>(
-        `${endpoint}?${params.toString()}`
+      const data = await apiClient.get<FileListResponse>(
+        `${endpoint}?${params.toString()}`,
+        { signal: controller.signal }
       );
 
-      const newFiles = data.files || [];
-      setFiles(newFiles);
+      // Only proceed if this is still the latest request
+      if (currentRequestRef.current !== requestId) return;
 
-      // Clear selected file if it no longer exists in the list
-      if (selectedFile && !newFiles.find(f => f.path === selectedFile.path)) {
+      const newFiles = data.files || [];
+      
+      if (isInitial) {
+        setFiles(newFiles);
+        setTotalFiles(data.total_count);
+        if (forceRefresh || files.length === 0) {
+          listRef.current?.scrollTo(0);
+        }
+      } else {
+        setFiles(prev => [...prev, ...newFiles]);
+        setTotalFiles(data.total_count);
+      }
+
+      // Track that we've loaded this path
+      lastPath.current = currentPath;
+
+      if (isInitial && selectedFile && !newFiles.find(f => f.path === selectedFile.path)) {
         setSelectedFile(null);
       }
 
-      if (data.current_path && !currentPath) {
-        onPathChange?.(data.current_path);
+      // Manage path normalization from backend
+      if (data.current_path && currentPath !== data.current_path) {
+        // Update lastPath locally BEFORE informing parent to prevent normalization loop flickers
+        lastPath.current = data.current_path;
+        if (!currentPath) {
+          onPathChange?.(data.current_path);
+        }
       }
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      if (currentRequestRef.current !== requestId) return;
+
       console.error('Failed to load files:', err);
       setError(err instanceof Error ? err.message : 'Failed to load files');
-      setFiles([]);
+      if (isInitial) setFiles([]);
     } finally {
-      setLoading(false);
+      if (currentRequestRef.current === requestId) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
+  }, [mode, currentPath, files.length, onPathChange, selectedFile]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const pathChanged = lastPath.current !== currentPath;
+      const refreshRequested = previousRefreshKey.current !== refreshKey;
+      
+      if (pathChanged || refreshRequested || files.length === 0) {
+        if (pathChanged && currentPath !== '') {
+          setFiles([]);
+          setTotalFiles(0);
+        }
+        
+        previousRefreshKey.current = refreshKey;
+        loadFiles(true, pathChanged || refreshRequested);
+      } else {
+        // Re-opening same path, just reset scroll for UX
+        listRef.current?.scrollTo(0);
+      }
+    }
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, currentPath, mode, refreshKey]);
+
+  const isItemLoaded = (index: number) => index < files.length;
+  const loadMoreItems = (startIndex: number) => {
+    if (loadingMore || files.length >= totalFiles) return Promise.resolve();
+    return loadFiles(false);
   };
 
   const handleSort = (field: SortField) => {
@@ -143,27 +241,29 @@ export default function FileBrowserModal({
     }
   };
 
-  const sortedFiles = [...files].sort((a, b) => {
-    let comparison = 0;
+  const sortedFiles = useMemo(() => {
+    return [...files].sort((a, b) => {
+      let comparison = 0;
 
-    if (a.is_directory !== b.is_directory) {
-      return a.is_directory ? -1 : 1;
-    }
+      if (a.is_directory !== b.is_directory) {
+        return a.is_directory ? -1 : 1;
+      }
 
-    switch (sortField) {
-      case 'name':
-        comparison = a.name.localeCompare(b.name);
-        break;
-      case 'date':
-        comparison = parseFloat(a.modified) - parseFloat(b.modified);
-        break;
-      case 'size':
-        comparison = a.size - b.size;
-        break;
-    }
+      switch (sortField) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'date':
+          comparison = parseFloat(a.modified) - parseFloat(b.modified);
+          break;
+        case 'size':
+          comparison = a.size - b.size;
+          break;
+      }
 
-    return sortDirection === 'asc' ? comparison : -comparison;
-  });
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [files, sortField, sortDirection]);
 
   const formatDate = (dateString: string) => {
     const timestamp = parseFloat(dateString);
@@ -182,8 +282,6 @@ export default function FileBrowserModal({
   };
 
   const handleFileClick = (file: FileInfo) => {
-    // For load-saves mode, select directories (save folders)
-    // For manage-backups mode, select directories (backup folders)
     if (file.is_directory) {
       setSelectedFile(file);
     } else {
@@ -290,7 +388,7 @@ export default function FileBrowserModal({
           </div>
 
           {/* Success Message - Reserve space to prevent layout shift */}
-          <div className="mx-4 mt-3 h-10">
+          <div className="mx-4 mt-3 min-h-[2.5rem]">
             {successMessage && (
               <div className="p-2 bg-green-900/20 border border-green-700 text-green-400 rounded text-sm">
                 {successMessage}
@@ -300,48 +398,74 @@ export default function FileBrowserModal({
 
           {/* Content */}
           <div className="file-browser-content">
-            {loading ? (
-              <div className="flex items-center justify-center h-full">
-                <span className="text-[rgb(var(--color-text-muted))]">Loading...</span>
+            {/* Table Header - Always visible to prevent layout shift */}
+            <div className="file-browser-table-header">
+              <div className="flex-1">
+                {renderSortHeader('name', 'Folder Name')}
               </div>
-            ) : error ? (
-              <div className="flex items-center justify-center h-full">
-                <span className="text-red-400">{error}</span>
+              <div className="flex-1">
+                <span className="text-xs font-semibold text-[rgb(var(--color-text-muted))] uppercase">Save Name</span>
               </div>
-            ) : (
-              <>
-                {/* Table Header */}
-                <div className="file-browser-table-header">
-                  <div className="flex-1">
-                    {renderSortHeader('name', 'Folder Name')}
-                  </div>
-                  <div className="flex-1">
-                    <span className="text-xs font-semibold text-[rgb(var(--color-text-muted))] uppercase">Save Name</span>
-                  </div>
-                  <div className="w-48">
-                    {renderSortHeader('date', mode === 'manage-backups' ? 'Created' : 'Modified')}
-                  </div>
-                  <div className="w-24 text-right">
-                    {renderSortHeader('size', 'Size')}
-                  </div>
-                </div>
+              <div className="w-48">
+                {renderSortHeader('date', mode === 'manage-backups' ? 'Created' : 'Modified')}
+              </div>
+              <div className="w-24 text-right">
+                {renderSortHeader('size', 'Size')}
+              </div>
+            </div>
 
-                {/* File List */}
-                <div className="file-browser-list" ref={containerRef}>
-                  {sortedFiles.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-[rgb(var(--color-text-muted))]">
-                      No files found
-                    </div>
-                  ) : (
+            <div className="file-browser-list" ref={containerRef}>
+              {loading && files.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-4">
+                  <div className="w-8 h-8 rounded-full border-2 border-[rgb(var(--color-primary)/0.2)] border-t-[rgb(var(--color-primary))] animate-spin" />
+                  <span className="text-sm text-[rgb(var(--color-text-muted))]">Loading files...</span>
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center h-full">
+                  <span className="text-red-400">{error}</span>
+                </div>
+              ) : sortedFiles.length === 0 ? (
+                <div className="flex items-center justify-center h-32 text-[rgb(var(--color-text-muted))]">
+                  No files found
+                </div>
+              ) : (
+                <InfiniteLoader
+                  key={currentPath} // Force reset when path changes
+                  isItemLoaded={isItemLoaded}
+                  itemCount={totalFiles}
+                  loadMoreItems={loadMoreItems}
+                  threshold={5}
+                >
+                  {({ onItemsRendered, ref }: { onItemsRendered: (props: ListOnItemsRenderedProps) => any, ref: (ref: any) => void }) => (
                     <List
-                      ref={listRef}
-                      height={containerRef.current?.clientHeight || 400}
-                      itemCount={sortedFiles.length}
+                      key={`list-${currentPath}`} // Only reset on path change, not totalFiles change
+                      ref={(node) => {
+                        // @ts-ignore
+                        listRef.current = node;
+                        ref(node);
+                      }}
+                      height={containerHeight}
+                      itemCount={totalFiles}
                       itemSize={48}
+                      onItemsRendered={onItemsRendered}
                       width="100%"
                     >
                       {({ index, style }) => {
                         const file = sortedFiles[index];
+                        if (!file) {
+                          return (
+                            <div style={style} className="file-browser-row loading">
+                              <div className="flex-1 flex items-center gap-2">
+                                <div className="w-4 h-4 rounded-full bg-[rgb(var(--color-surface-2))] animate-pulse" />
+                                <div className="h-4 w-32 bg-[rgb(var(--color-surface-2))] rounded animate-pulse" />
+                              </div>
+                              <div className="flex-1 h-4 bg-[rgb(var(--color-surface-2))] rounded animate-pulse opacity-50 mx-4" />
+                              <div className="w-48 h-4 bg-[rgb(var(--color-surface-2))] rounded animate-pulse opacity-30" />
+                              <div className="w-24 h-4 bg-[rgb(var(--color-surface-2))] rounded animate-pulse opacity-20" />
+                            </div>
+                          );
+                        }
+
                         return (
                           <div
                             style={style}
@@ -373,16 +497,23 @@ export default function FileBrowserModal({
                       }}
                     </List>
                   )}
+                </InfiniteLoader>
+              )}
+
+              {loadingMore && files.length > 0 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-[rgb(var(--color-surface-1))] rounded-full border border-[rgb(var(--color-surface-border))] shadow-lg flex items-center gap-2 z-10">
+                  <div className="w-4 h-4 rounded-full border-2 border-[rgb(var(--color-primary)/0.2)] border-t-[rgb(var(--color-primary))] animate-spin" />
+                  <span className="text-xs font-medium">Loading more...</span>
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Footer */}
           <div className="file-browser-footer">
             <div className="file-browser-footer-content">
               <span className="text-sm text-[rgb(var(--color-text-muted))]">
-                {formatNumber(files.length)} {files.length === 1 ? 'file' : 'files'}
+                {formatNumber(files.length)} of {formatNumber(totalFiles)} items
               </span>
               <div className="flex gap-2">
                 {mode === 'manage-backups' && selectedFile && onDeleteBackup && (
