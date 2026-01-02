@@ -319,15 +319,11 @@ class PrecompiledCacheIntegration:
         """Collect all 2DA tables for caching."""
         tables_data = {}
         
-        # Get the filtered list of character-related tables
-        from gamedata.dynamic_loader.data_model_loader import DataModelLoader
-        loader = DataModelLoader(self.resource_manager)
+        # Get table lists using lightweight helper methods (no DataModelLoader instance needed)
+        base_tables = self._get_base_character_files()
+        custom_tables = self._get_custom_mod_files()
         
-        # Get base character files and custom mod files
-        base_tables = loader._get_base_character_files()
-        custom_tables = loader._discover_custom_mod_files()
-        
-        # Combine all tables
+        # Combine all tables (deduplicated)
         filtered_tables = list(set(base_tables + custom_tables))
         
         logger.info(f"Collecting {len(filtered_tables)} tables for caching...")
@@ -343,20 +339,16 @@ class PrecompiledCacheIntegration:
                 # Determine section (base_game, workshop, override)
                 section = self._determine_table_section(table_name)
                 
-                # Load the table (try different methods)
+                # Load table with overrides applied (handles all lookup paths internally)
                 parser = self.resource_manager.get_2da_with_overrides(table_name)
-                if not parser:
-                    # Try without overrides
-                    parser = self.resource_manager.get_2da(table_name)
                 
                 if parser:
-                    # Get raw 2DA data
                     raw_data = self._get_raw_table_data(parser)
                     if raw_data:
                         tables_data[table_name] = {
                             'section': section,
                             'data': raw_data,
-                            'row_count': parser.get_row_count() if hasattr(parser, 'get_row_count') else 100  # Default estimate
+                            'row_count': parser.get_row_count() if hasattr(parser, 'get_row_count') else 0
                         }
                         collected_count += 1
                     else:
@@ -387,6 +379,46 @@ class PrecompiledCacheIntegration:
         
         # Default to base game
         return 'base_game'
+    
+    def _get_base_character_files(self) -> List[str]:
+        """Get the base list of character-related 2DA files from config."""
+        from pathlib import Path
+        import json
+        
+        filter_file = Path(__file__).parent.parent / 'config' / 'nw2_data_filtered.json'
+        
+        if filter_file.exists():
+            with open(filter_file, 'r') as f:
+                filter_data = json.load(f)
+            
+            character_files = filter_data.get('character_files', [])
+            return [f.replace('.2da', '') for f in character_files]
+        
+        # Fallback minimal list
+        return ['classes', 'racialtypes', 'feat', 'skills', 'spells', 'baseitems', 'appearance']
+    
+    def _get_custom_mod_files(self) -> List[str]:
+        """Get custom mod 2DA files from ResourceManager's already-scanned paths."""
+        custom_files = set()
+        rm = self.resource_manager
+        
+        # Extract table names from already-scanned file paths (only .2da files)
+        if hasattr(rm, '_workshop_file_paths'):
+            for filename in rm._workshop_file_paths.keys():
+                if filename.lower().endswith('.2da'):
+                    custom_files.add(filename.replace('.2da', '').replace('.2DA', ''))
+        
+        if hasattr(rm, '_override_file_paths'):
+            for filename in rm._override_file_paths.keys():
+                if filename.lower().endswith('.2da'):
+                    custom_files.add(filename.replace('.2da', '').replace('.2DA', ''))
+        
+        if hasattr(rm, '_custom_override_paths'):
+            for filename in rm._custom_override_paths.keys():
+                if filename.lower().endswith('.2da'):
+                    custom_files.add(filename.replace('.2da', '').replace('.2DA', ''))
+        
+        return sorted(list(custom_files))
     
     def _get_raw_table_data(self, parser: TDAParser) -> Optional[bytes]:
         """Get raw 2DA data from parser."""

@@ -266,8 +266,9 @@ def initialize_background_services():
         update_initialization_status('icon_cache', 60, f'Icon cache loaded in {init_time:.1f}s')
         logger.info(f"Icon cache initialized in {init_time:.2f}s")
     except Exception as e:
-        logger.error(f"Failed to initialize icon cache: {e}")
-        update_initialization_status('icon_cache', 60, f'Icon cache failed: {e}', error=str(e))
+        # Icons are disabled for 0.1.0 release, so this is expected - don't log as error
+        logger.debug(f"Icon cache not available (expected for v0.1.0): {e}")
+        update_initialization_status('icon_cache', 60, 'Icon cache skipped (v0.1.0)')
     
     # Stage 3: Initialize DynamicGameDataLoader with shared ResourceManager
     try:
