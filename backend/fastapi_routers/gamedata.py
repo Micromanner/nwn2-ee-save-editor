@@ -17,45 +17,21 @@ def get_nwn2_paths():
     """Get NWN2 installation paths"""
     from fastapi_models import PathInfo, CustomFolderInfo, PathConfig, NWN2PathsResponse
     try:
-        # Helper to create PathInfo objects
-        def create_path_info(path, auto_detected=True) -> PathInfo:
-            if not path:
-                return PathInfo(path=None, exists=False, auto_detected=False)
-            path_obj = Path(path)
-            return PathInfo(
-                path=str(path_obj),
-                exists=path_obj.exists(),
-                auto_detected=auto_detected
-            )
+        # Get paths info from nwn2_paths singleton (already handles sources and detection)
+        info = nwn2_paths.get_all_paths_info()
         
-        # Helper to create CustomFolderInfo objects
-        def create_custom_folder_info(path) -> CustomFolderInfo:
-            path_obj = Path(path)
-            return CustomFolderInfo(
-                path=str(path_obj),
-                exists=path_obj.exists()
-            )
+        # Convert to Pydantic models
+        gf = info['game_folder']
+        df = info['documents_folder']
+        sf = info['steam_workshop_folder']
         
-        # Get custom folders
-        custom_override_folders = []
-        custom_hak_folders = []
-        
-        if hasattr(nwn2_paths, 'custom_override_folders'):
-            for folder in nwn2_paths.custom_override_folders:
-                custom_override_folders.append(create_custom_folder_info(folder))
-        
-        if hasattr(nwn2_paths, 'custom_hak_folders'):
-            for folder in nwn2_paths.custom_hak_folders:
-                custom_hak_folders.append(create_custom_folder_info(folder))
-        
-        # Create path config
         path_config = PathConfig(
-            game_folder=create_path_info(nwn2_paths.game_folder),
-            documents_folder=create_path_info(nwn2_paths.user_folder),
-            steam_workshop_folder=PathInfo(path=None, exists=False, auto_detected=False),  # Not available
-            custom_override_folders=custom_override_folders,
-            custom_module_folders=[],  # Not tracking custom module folders yet
-            custom_hak_folders=custom_hak_folders
+            game_folder=PathInfo(path=gf['path'], exists=gf['exists'], auto_detected=gf['auto_detected']),
+            documents_folder=PathInfo(path=df['path'], exists=df['exists'], auto_detected=df['auto_detected']),
+            steam_workshop_folder=PathInfo(path=sf['path'], exists=sf['exists'], auto_detected=sf['auto_detected']),
+            custom_override_folders=[CustomFolderInfo(path=f['path'], exists=f['exists']) for f in info['custom_override_folders']],
+            custom_module_folders=[CustomFolderInfo(path=f['path'], exists=f['exists']) for f in info['custom_module_folders']],
+            custom_hak_folders=[CustomFolderInfo(path=f['path'], exists=f['exists']) for f in info['custom_hak_folders']]
         )
         
         return NWN2PathsResponse(paths=path_config)
@@ -65,6 +41,195 @@ def get_nwn2_paths():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get NWN2 paths: {str(e)}"
+        )
+
+
+@router.post("/paths/set-game/")
+def set_game_folder(path: str):
+    """Set the NWN2 game installation folder"""
+    try:
+        success = nwn2_paths.set_game_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid path or directory does not exist"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set game folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set game folder: {str(e)}"
+        )
+
+
+@router.post("/paths/set-documents/")
+def set_documents_folder(path: str):
+    """Set the NWN2 documents folder"""
+    try:
+        success = nwn2_paths.set_documents_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid path or directory does not exist"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set documents folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set documents folder: {str(e)}"
+        )
+
+
+@router.post("/paths/set-steam-workshop/")
+def set_steam_workshop_folder(path: str):
+    """Set the Steam Workshop folder"""
+    try:
+        success = nwn2_paths.set_steam_workshop_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid path or directory does not exist"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set Steam Workshop folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set Steam Workshop folder: {str(e)}"
+        )
+
+
+@router.post("/paths/add-override/")
+def add_override_folder(path: str):
+    """Add a custom override folder"""
+    try:
+        success = nwn2_paths.add_custom_override_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid path or directory does not exist"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add override folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add override folder: {str(e)}"
+        )
+
+
+@router.post("/paths/add-hak/")
+def add_hak_folder(path: str):
+    """Add a custom HAK folder"""
+    try:
+        success = nwn2_paths.add_custom_hak_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid path or directory does not exist"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add HAK folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add HAK folder: {str(e)}"
+        )
+
+
+@router.post("/paths/remove-override/")
+def remove_override_folder(path: str):
+    """Remove a custom override folder"""
+    try:
+        success = nwn2_paths.remove_custom_override_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Folder not found in custom override folders"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remove override folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove override folder: {str(e)}"
+        )
+
+
+@router.post("/paths/remove-hak/")
+def remove_hak_folder(path: str):
+    """Remove a custom HAK folder"""
+    try:
+        success = nwn2_paths.remove_custom_hak_folder(path)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Folder not found in custom HAK folders"
+            )
+        return get_nwn2_paths()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to remove HAK folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove HAK folder: {str(e)}"
+        )
+
+
+@router.post("/paths/reset-game/")
+def reset_game_folder():
+    """Reset game folder to auto-discovery"""
+    try:
+        nwn2_paths.reset_game_folder()
+        return get_nwn2_paths()
+    except Exception as e:
+        logger.error(f"Failed to reset game folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset game folder: {str(e)}"
+        )
+
+
+@router.post("/paths/reset-documents/")
+def reset_documents_folder():
+    """Reset documents folder to auto-discovery"""
+    try:
+        nwn2_paths.reset_documents_folder()
+        return get_nwn2_paths()
+    except Exception as e:
+        logger.error(f"Failed to reset documents folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset documents folder: {str(e)}"
+        )
+
+
+@router.post("/paths/reset-steam-workshop/")
+def reset_steam_workshop_folder():
+    """Reset Steam Workshop folder to auto-discovery"""
+    try:
+        nwn2_paths.reset_steam_workshop_folder()
+        return get_nwn2_paths()
+    except Exception as e:
+        logger.error(f"Failed to reset Steam Workshop folder: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset Steam Workshop folder: {str(e)}"
         )
 
 

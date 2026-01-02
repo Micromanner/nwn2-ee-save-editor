@@ -32,12 +32,12 @@ export class ApiClient {
     return this.fetchWithCache<T>(endpoint);
   }
 
-  async post<T>(endpoint: string, data: unknown): Promise<T> {
+  async post<T>(endpoint: string, data?: unknown): Promise<T> {
     const baseUrl = await DynamicAPI.getApiBaseUrl();
     const response = await tauriCompatibleFetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: data ? JSON.stringify(data) : undefined,
     });
 
     if (!response.ok) {

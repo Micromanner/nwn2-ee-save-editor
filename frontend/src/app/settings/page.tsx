@@ -8,29 +8,24 @@ import { Label } from '@/components/ui/Label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { pathService, PathConfig } from '@/lib/api/paths';
 import { open } from '@tauri-apps/plugin-dialog';
-import { FolderIcon, CheckCircleIcon, XCircleIcon, PlusIcon, TrashIcon, ArrowPathIcon, CogIcon, SwatchIcon, LanguageIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
+import { FolderIcon, CheckCircleIcon, XCircleIcon, PlusIcon, TrashIcon, CogIcon, SwatchIcon, LanguageIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 import ThemeCustomizer from '@/components/Settings/ThemeCustomizer';
+import { useLocale } from '@/providers/LocaleProvider';
 
 interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
-  language: string;
+  theme: 'light' | 'dark';
   fontSize: 'small' | 'medium' | 'large';
-  autoSave: boolean;
 }
 
 export default function SettingsPage() {
+  const { locale, setLocale } = useLocale();
   const [paths, setPaths] = useState<PathConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [autoDetecting, setAutoDetecting] = useState(false);
-  const [detectedPaths, setDetectedPaths] = useState<string[]>([]);
-  const [detectedDocsFolder, setDetectedDocsFolder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>({
-    theme: 'system',
-    language: 'en',
-    fontSize: 'medium',
-    autoSave: true
+    theme: 'dark',
+    fontSize: 'medium'
   });
 
   useEffect(() => {
@@ -65,13 +60,9 @@ export default function SettingsPage() {
     }
   };
 
-  const applyTheme = (theme: 'light' | 'dark' | 'system') => {
+  const applyTheme = (theme: 'light' | 'dark') => {
     const root = document.documentElement;
-    
-    if (theme === 'system') {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.toggle('dark', isDark);
-    } else if (theme === 'dark') {
+    if (theme === 'dark') {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
@@ -149,6 +140,32 @@ export default function SettingsPage() {
     }
   };
 
+  const resetPath = async (
+    type: 'game' | 'documents' | 'workshop'
+  ) => {
+    try {
+      setSaving(true);
+      let response;
+      switch (type) {
+        case 'game':
+          response = await pathService.resetGameFolder();
+          break;
+        case 'documents':
+          response = await pathService.resetDocumentsFolder();
+          break;
+        case 'workshop':
+          response = await pathService.resetSteamWorkshopFolder();
+          break;
+      }
+      setPaths(response.paths);
+    } catch (err) {
+      setError(`Failed to reset ${type} folder`);
+      console.error('Error resetting path:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const addCustomFolder = async (type: 'override' | 'module' | 'hak') => {
     const title = `Select Custom ${type.charAt(0).toUpperCase() + type.slice(1)} Folder`;
     const selected = await selectFolder(title);
@@ -201,34 +218,6 @@ export default function SettingsPage() {
     }
   };
 
-  const autoDetectPaths = async () => {
-    try {
-      setAutoDetecting(true);
-      const response = await pathService.autoDetect();
-      setDetectedPaths(response.game_installations);
-      setDetectedDocsFolder(response.documents_folder);
-      setPaths(response.current_paths);
-      
-      // If documents folder was detected but not set, offer to set it
-      if (response.documents_folder && !response.current_paths.documents_folder.path) {
-        const confirmSet = window.confirm('Documents folder detected. Would you like to set it automatically?');
-        if (confirmSet) {
-          try {
-            const updateResponse = await pathService.setDocumentsFolder(response.documents_folder);
-            setPaths(updateResponse.paths);
-          } catch (err) {
-            console.error('Error setting documents folder:', err);
-          }
-        }
-      }
-    } catch (err) {
-      setError('Failed to auto-detect paths');
-      console.error('Error auto-detecting paths:', err);
-    } finally {
-      setAutoDetecting(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -258,21 +247,25 @@ export default function SettingsPage() {
     path, 
     exists, 
     autoDetected,
-    onEdit 
+    onEdit,
+    onReset
   }: { 
     label: string;
     path: string | null;
     exists: boolean;
     autoDetected: boolean;
     onEdit: () => void;
+    onReset: () => void;
   }) => (
     <div className="flex items-center justify-between py-3 border-b last:border-0">
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <FolderIcon className="w-5 h-5 text-muted-foreground" />
           <span className="font-medium">{label}</span>
-          {autoDetected && (
+          {autoDetected ? (
             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Auto-detected</span>
+          ) : (
+            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Manually Set</span>
           )}
         </div>
         <div className="mt-1 flex items-center gap-2">
@@ -286,14 +279,27 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
-      <Button 
-        onClick={onEdit} 
-        variant="outline" 
-        size="sm"
-        disabled={saving}
-      >
-        {path ? 'Change' : 'Set'}
-      </Button>
+      <div className="flex items-center gap-2">
+        {!autoDetected && (
+          <Button 
+            onClick={onReset} 
+            variant="ghost" 
+            size="sm"
+            disabled={saving}
+            className="text-muted-foreground hover:text-destructive transition-colors"
+          >
+            Reset
+          </Button>
+        )}
+        <Button 
+          onClick={onEdit} 
+          variant="outline" 
+          size="sm"
+          disabled={saving}
+        >
+          {path ? 'Change' : 'Set'}
+        </Button>
+      </div>
     </div>
   );
 
@@ -327,34 +333,42 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <SwatchIcon className="w-5 h-5" />
-                Appearance
+                <LanguageIcon className="w-5 h-5" />
+                Language & Region
               </CardTitle>
-              <CardDescription>Customize the look and feel of the application</CardDescription>
+              <CardDescription>Language and localization settings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="theme">Theme</Label>
+                <Label htmlFor="language">Language</Label>
                 <Select 
-                  value={appSettings.theme} 
-                  onValueChange={(value: 'light' | 'dark' | 'system') => 
-                    saveAppSettings({ theme: value })
-                  }
+                  value={locale} 
+                  onValueChange={(value: string) => setLocale(value)}
                 >
-                  <SelectTrigger id="theme">
+                  <SelectTrigger id="language">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CogIcon className="w-5 h-5" />
+                Display
+              </CardTitle>
+              <CardDescription>Adjust display settings</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="fontSize">Font Size</Label>
                 <Select 
@@ -376,64 +390,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <LanguageIcon className="w-5 h-5" />
-                Language & Region
-              </CardTitle>
-              <CardDescription>Language and localization settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="language">Language</Label>
-                <Select 
-                  value={appSettings.language} 
-                  onValueChange={(value: string) => 
-                    saveAppSettings({ language: value })
-                  }
-                >
-                  <SelectTrigger id="language">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="es">Español</SelectItem>
-                    <SelectItem value="fr">Français</SelectItem>
-                    <SelectItem value="de">Deutsch</SelectItem>
-                    <SelectItem value="it">Italiano</SelectItem>
-                    <SelectItem value="pt">Português</SelectItem>
-                    <SelectItem value="ru">Русский</SelectItem>
-                    <SelectItem value="zh">中文</SelectItem>
-                    <SelectItem value="ja">日本語</SelectItem>
-                    <SelectItem value="ko">한국어</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Editor Settings</CardTitle>
-              <CardDescription>Configure save editor behavior</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="autoSave">Auto-save changes</Label>
-                  <p className="text-sm text-muted-foreground">Automatically save changes as you edit</p>
-                </div>
-                <Button
-                  variant={appSettings.autoSave ? "primary" : "outline"}
-                  size="sm"
-                  onClick={() => saveAppSettings({ autoSave: !appSettings.autoSave })}
-                >
-                  {appSettings.autoSave ? "Enabled" : "Disabled"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="theme" className="space-y-6">
@@ -441,86 +398,12 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="paths" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Game Paths Configuration</h2>
-            <Button 
-              onClick={autoDetectPaths}
-              disabled={autoDetecting}
-              variant="outline"
-            >
-              <ArrowPathIcon className={`w-4 h-4 mr-2 ${autoDetecting ? 'animate-spin' : ''}`} />
-              Auto-detect Paths
-            </Button>
-          </div>
+          <h2 className="text-xl font-semibold">Game Paths Configuration</h2>
 
       {error && (
         <Card className="border-destructive">
           <CardContent className="pt-6">
             <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {(detectedPaths.length > 0 || detectedDocsFolder) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Detected Paths</CardTitle>
-            <CardDescription>Auto-detected NWN2 installation paths</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {detectedPaths.length > 0 && (
-              <div>
-                <h4 className="font-medium mb-2">Game Installations</h4>
-                <div className="space-y-2">
-                  {detectedPaths.map((path, i) => (
-                    <Button
-                      key={i}
-                      onClick={async () => {
-                        try {
-                          setSaving(true);
-                          const response = await pathService.setGameFolder(path);
-                          setPaths(response.paths);
-                          setDetectedPaths([]);
-                        } catch {
-                          setError('Failed to set game folder');
-                        } finally {
-                          setSaving(false);
-                        }
-                      }}
-                      variant="ghost"
-                      className="w-full text-left p-3 justify-start h-auto"
-                    >
-                      <span className="text-sm font-mono">{path}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {detectedDocsFolder && !paths?.documents_folder.path && (
-              <div>
-                <h4 className="font-medium mb-2">Documents Folder</h4>
-                <Button
-                  onClick={async () => {
-                    try {
-                      setSaving(true);
-                      const response = await pathService.setDocumentsFolder(detectedDocsFolder);
-                      setPaths(response.paths);
-                      setDetectedDocsFolder(null);
-                    } catch {
-                      setError('Failed to set documents folder');
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                  variant="ghost"
-                  className="w-full text-left p-3 justify-start h-auto"
-                >
-                  <span className="text-sm font-mono">{detectedDocsFolder}</span>
-                  <span className="text-xs text-muted-foreground block mt-1">Click to use this folder</span>
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
@@ -537,6 +420,7 @@ export default function SettingsPage() {
             exists={paths.game_folder.exists}
             autoDetected={paths.game_folder.auto_detected}
             onEdit={() => updatePath('game')}
+            onReset={() => resetPath('game')}
           />
           <PathRow
             label="Documents Folder"
@@ -544,6 +428,7 @@ export default function SettingsPage() {
             exists={paths.documents_folder.exists}
             autoDetected={paths.documents_folder.auto_detected}
             onEdit={() => updatePath('documents')}
+            onReset={() => resetPath('documents')}
           />
           <PathRow
             label="Steam Workshop Folder"
@@ -551,6 +436,7 @@ export default function SettingsPage() {
             exists={paths.steam_workshop_folder.exists}
             autoDetected={paths.steam_workshop_folder.auto_detected}
             onEdit={() => updatePath('workshop')}
+            onReset={() => resetPath('workshop')}
           />
         </CardContent>
       </Card>
@@ -596,46 +482,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Custom Module Folders</CardTitle>
-          <CardDescription>Additional directories to search for modules</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {paths.custom_module_folders.map((folder, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-muted rounded-md">
-                <div className="flex items-center gap-2">
-                  <FolderIcon className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm font-mono">{folder.path}</span>
-                  {folder.exists ? 
-                    <CheckCircleIcon className="w-4 h-4 text-green-600" /> :
-                    <XCircleIcon className="w-4 h-4 text-red-600" />
-                  }
-                </div>
-                <Button
-                  onClick={() => removeCustomFolder('module', folder.path)}
-                  variant="ghost"
-                  size="sm"
-                  disabled={saving}
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              onClick={() => addCustomFolder('module')}
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={saving}
-            >
-              <PlusIcon className="w-4 h-4 mr-2" />
-              Add Module Folder
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

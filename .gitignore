@@ -60,3 +60,4 @@ binaries
 out/
 test-build-local.bat
 nwn1/
+backend/settings.json

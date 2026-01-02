@@ -165,6 +165,9 @@ class NWN2Paths:
         self._game_folder: Optional[Path] = None
         self._documents_folder: Optional[Path] = None
         self._steam_workshop_folder: Optional[Path] = None
+        self._game_folder_source: str = 'discovery' # 'env', 'config', 'discovery'
+        self._documents_folder_source: str = 'discovery'
+        self._steam_workshop_folder_source: str = 'discovery'
         self._custom_override_folders: List[Path] = []
         self._custom_module_folders: List[Path] = []
         self._custom_hak_folders: List[Path] = []
@@ -172,18 +175,26 @@ class NWN2Paths:
 
     def _load_config(self):
         """Load configuration from various sources."""
+        # Reset custom folders before loading
+        self._custom_override_folders = []
+        self._custom_module_folders = []
+        self._custom_hak_folders = []
+
         # First check environment variables
         env_game = os.getenv('NWN2_GAME_FOLDER')
         if env_game and Path(env_game).exists():
             self._game_folder = Path(env_game)
+            self._game_folder_source = 'env'
         
         env_docs = os.getenv('NWN2_DOCUMENTS_FOLDER')
         if env_docs and Path(env_docs).exists():
             self._documents_folder = Path(env_docs)
+            self._documents_folder_source = 'env'
         
         env_steam = os.getenv('NWN2_STEAM_WORKSHOP_FOLDER')
         if env_steam and Path(env_steam).exists():
             self._steam_workshop_folder = Path(env_steam)
+            self._steam_workshop_folder_source = 'env'
         
         # Check user settings file
         user_settings_path = USER_SETTINGS_PATH
@@ -193,22 +204,31 @@ class NWN2Paths:
                     settings = json.load(f)
                     
                     # Load game folder
-                    if not self._game_folder and 'game_folder' in settings:
-                        path = Path(settings['game_folder'])
-                        if path.exists():
-                            self._game_folder = path
+                    if self._game_folder_source != 'env' and 'game_folder' in settings:
+                        path_str = settings['game_folder']
+                        if path_str:
+                            path = Path(path_str)
+                            if path.exists():
+                                self._game_folder = path
+                                self._game_folder_source = 'config'
                     
                     # Load documents folder
-                    if not self._documents_folder and 'documents_folder' in settings:
-                        path = Path(settings['documents_folder'])
-                        if path.exists():
-                            self._documents_folder = path
+                    if self._documents_folder_source != 'env' and 'documents_folder' in settings:
+                        path_str = settings['documents_folder']
+                        if path_str:
+                            path = Path(path_str)
+                            if path.exists():
+                                self._documents_folder = path
+                                self._documents_folder_source = 'config'
                     
                     # Load Steam workshop folder
-                    if not self._steam_workshop_folder and 'steam_workshop_folder' in settings:
-                        path = Path(settings['steam_workshop_folder'])
-                        if path.exists():
-                            self._steam_workshop_folder = path
+                    if self._steam_workshop_folder_source != 'env' and 'steam_workshop_folder' in settings:
+                        path_str = settings['steam_workshop_folder']
+                        if path_str:
+                            path = Path(path_str)
+                            if path.exists():
+                                self._steam_workshop_folder = path
+                                self._steam_workshop_folder_source = 'config'
                     
                     # Load custom folders
                     if 'custom_override_folders' in settings:
@@ -234,23 +254,27 @@ class NWN2Paths:
                 pass
         
         # Try Rust-powered auto-discovery for missing paths
-        if not self._game_folder:
+        if self._game_folder_source == 'discovery' or not self._game_folder:
             found = NWN2PathFinder.find_nwn2_installation()
             if found:
                 self._game_folder = found
+                self._game_folder_source = 'discovery'
             else:
                 # Default to local data folder if nothing else is found
                 self._game_folder = Path(__file__).parent.parent / 'nwn2_ee_data'
+                self._game_folder_source = 'discovery'
         
-        if not self._documents_folder:
+        if self._documents_folder_source == 'discovery' or not self._documents_folder:
             found = NWN2PathFinder.find_documents_folder()
             if found:
                 self._documents_folder = found
+                self._documents_folder_source = 'discovery'
         
-        if not self._steam_workshop_folder:
+        if self._steam_workshop_folder_source == 'discovery' or not self._steam_workshop_folder:
             found = NWN2PathFinder.find_steam_workshop()
             if found:
                 self._steam_workshop_folder = found
+                self._steam_workshop_folder_source = 'discovery'
     
     @property
     def game_folder(self) -> Path:
@@ -413,14 +437,35 @@ class NWN2Paths:
         user_settings_path = USER_SETTINGS_PATH
         user_settings_path.parent.mkdir(parents=True, exist_ok=True)
         
-        settings = {
-            'game_folder': str(self._game_folder.resolve()) if self._game_folder else None,
-            'documents_folder': str(self._documents_folder.resolve()) if self._documents_folder else None,
-            'steam_workshop_folder': str(self._steam_workshop_folder.resolve()) if self._steam_workshop_folder else None,
-            'custom_override_folders': [str(p.resolve()) for p in self._custom_override_folders],
-            'custom_module_folders': [str(p.resolve()) for p in self._custom_module_folders],
-            'custom_hak_folders': [str(p.resolve()) for p in self._custom_hak_folders],
-        }
+        # Only save paths that were manually configured
+        settings = {}
+        
+        # Load existing settings to preserve other values if any
+        if user_settings_path.exists():
+            try:
+                with open(user_settings_path, 'r') as f:
+                    settings = json.load(f)
+            except:
+                pass
+
+        if self._game_folder_source == 'config' and self._game_folder:
+            settings['game_folder'] = str(self._game_folder.resolve())
+        elif 'game_folder' in settings:
+            del settings['game_folder']
+            
+        if self._documents_folder_source == 'config' and self._documents_folder:
+            settings['documents_folder'] = str(self._documents_folder.resolve())
+        elif 'documents_folder' in settings:
+            del settings['documents_folder']
+            
+        if self._steam_workshop_folder_source == 'config' and self._steam_workshop_folder:
+            settings['steam_workshop_folder'] = str(self._steam_workshop_folder.resolve())
+        elif 'steam_workshop_folder' in settings:
+            del settings['steam_workshop_folder']
+            
+        settings['custom_override_folders'] = [str(p.resolve()) for p in self._custom_override_folders]
+        settings['custom_module_folders'] = [str(p.resolve()) for p in self._custom_module_folders]
+        settings['custom_hak_folders'] = [str(p.resolve()) for p in self._custom_hak_folders]
         
         try:
             with open(user_settings_path, 'w') as f:
@@ -436,6 +481,7 @@ class NWN2Paths:
             return False
         
         self._game_folder = path_obj
+        self._game_folder_source = 'config'
         return self._save_settings()
     
     def set_documents_folder(self, path: str) -> bool:
@@ -445,6 +491,7 @@ class NWN2Paths:
             return False
         
         self._documents_folder = path_obj
+        self._documents_folder_source = 'config'
         return self._save_settings()
     
     def set_steam_workshop_folder(self, path: str) -> bool:
@@ -454,7 +501,29 @@ class NWN2Paths:
             return False
         
         self._steam_workshop_folder = path_obj
+        self._steam_workshop_folder_source = 'config'
         return self._save_settings()
+
+    def reset_game_folder(self) -> bool:
+        """Reset game folder to auto-discovery"""
+        self._game_folder_source = 'discovery'
+        self._save_settings() # Remove from config file first
+        self._load_config()   # Then reload to trigger discovery
+        return True
+
+    def reset_documents_folder(self) -> bool:
+        """Reset documents folder to auto-discovery"""
+        self._documents_folder_source = 'discovery'
+        self._save_settings()
+        self._load_config()
+        return True
+
+    def reset_steam_workshop_folder(self) -> bool:
+        """Reset Steam Workshop folder to auto-discovery"""
+        self._steam_workshop_folder_source = 'discovery'
+        self._save_settings()
+        self._load_config()
+        return True
     
     def add_custom_override_folder(self, path: str) -> bool:
         """Add a custom override folder"""
@@ -519,7 +588,7 @@ class NWN2Paths:
             'game_folder': {
                 'path': str(self._game_folder) if self._game_folder else None,
                 'exists': self._game_folder.exists() if self._game_folder else False,
-                'auto_detected': not bool(os.getenv('NWN2_GAME_FOLDER')),
+                'auto_detected': self._game_folder_source == 'discovery',
                 'is_steam': self.is_steam_installation,
                 'is_gog': self.is_gog_installation,
                 'is_enhanced_edition': self.is_enhanced_edition,
@@ -527,12 +596,12 @@ class NWN2Paths:
             'documents_folder': {
                 'path': str(self._documents_folder) if self._documents_folder else None,
                 'exists': self._documents_folder.exists() if self._documents_folder else False,
-                'auto_detected': not bool(os.getenv('NWN2_DOCUMENTS_FOLDER')),
+                'auto_detected': self._documents_folder_source == 'discovery',
             },
             'steam_workshop_folder': {
                 'path': str(self._steam_workshop_folder) if self._steam_workshop_folder else None,
                 'exists': self._steam_workshop_folder.exists() if self._steam_workshop_folder else False,
-                'auto_detected': not bool(os.getenv('NWN2_STEAM_WORKSHOP_FOLDER')),
+                'auto_detected': self._steam_workshop_folder_source == 'discovery',
             },
             'custom_override_folders': [
                 {'path': str(p), 'exists': p.exists()} for p in self._custom_override_folders
