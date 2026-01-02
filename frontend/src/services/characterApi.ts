@@ -61,11 +61,18 @@ export interface FeatsStateResponse {
     class_feats: FeatResponse[];
     general_feats: FeatResponse[];
     custom_feats: FeatResponse[];
+    background_feats?: FeatResponse[];
+    domain_feats?: FeatResponse[];
   };
   all_feats: FeatResponse[];
   available_feats: FeatResponse[];
   legitimate_feats: FeatResponse[];
   recommended_feats: FeatResponse[];
+}
+
+export interface AvailableFeatsResponse {
+  available_feats: FeatResponse[];
+  total: number;
 }
 
 export interface LegitimateFeatsResponse {
@@ -214,6 +221,12 @@ export interface AbilitiesStateResponse {
     charisma: number;
   };
   available_points?: number;
+  point_summary?: {
+    total: number;
+    spent: number;
+    available: number;
+    overdrawn: number;
+  };
 }
 
 export interface AbilitiesUpdateResponse {
@@ -494,6 +507,15 @@ export class CharacterAPI {
     return response.json();
   }
 
+  static async getAvailableFeats(characterId: number, featType?: number): Promise<AvailableFeatsResponse> {
+    const typeParam = featType !== undefined ? `?feat_type=${featType}` : '';
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/available${typeParam}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch available feats: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
   static async getLegitimateFeats(
     characterId: number,
     options: {
@@ -572,6 +594,8 @@ export class CharacterAPI {
     }
     return response.json();
   }
+
+
 
   // Spells API methods
   static async getLegitimateSpells(
@@ -697,6 +721,21 @@ export class CharacterAPI {
     return response.json();
   }
 
+  static async setAttribute(characterId: number, attribute: string, value: number): Promise<any> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/abilities/${attribute}/set`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ attribute, value, should_validate: true }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to set attribute: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
   // Alignment API methods
   static async getAlignment(characterId: number): Promise<AlignmentResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/alignment`);
@@ -717,6 +756,26 @@ export class CharacterAPI {
     
     if (!response.ok) {
       throw new Error(`Failed to update alignment: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Hit Points API methods
+  static async updateHitPoints(characterId: number, currentHp?: number, maxHp?: number): Promise<any> {
+    const payload: any = {};
+    if (currentHp !== undefined) payload.current_hp = currentHp;
+    if (maxHp !== undefined) payload.max_hp = maxHp;
+
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/combat/update-hp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to update hit points: ${response.statusText}`);
     }
     return response.json();
   }

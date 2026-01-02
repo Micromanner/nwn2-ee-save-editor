@@ -21,8 +21,7 @@ export default function SkillsEditor() {
   const [updatingSkills, setUpdatingSkills] = useState<Set<number>>(new Set());
   const [localSkillOverrides, setLocalSkillOverrides] = useState<Record<number, number>>({})
   
-  const [cheatMode, setCheatMode] = useState(false);
-  const [showCheatModeConfirm, setShowCheatModeConfirm] = useState(false);
+
   const [hoveredSkillId, setHoveredSkillId] = useState<number | null>(null);
   const [clickedButton, setClickedButton] = useState<string | null>(null);
   const [showFixedHeader, setShowFixedHeader] = useState(false);
@@ -82,9 +81,12 @@ export default function SkillsEditor() {
   const skills = [...classSkills, ...crossClassSkills];
   
   // Use backend data for points (let backend handle calculations)
-  const availableSkillPoints = skillsSubsystem.data?.available_points || 0;
+  const totalAvailable = skillsSubsystem.data?.total_available ?? 0;
   const totalSpentPoints = skillsSubsystem.data?.spent_points || 0;
-  const _totalSkillPoints = skillsSubsystem.data?.total_available || availableSkillPoints + totalSpentPoints; // eslint-disable-line @typescript-eslint/no-unused-vars
+  const pointsBalance = totalAvailable - totalSpentPoints;  // Can be negative if overspent
+  const availableSkillPoints = Math.max(0, pointsBalance);  // Show 0, never negative
+  const overdrawnSkillPoints = pointsBalance < 0 ? Math.abs(pointsBalance) : 0;  // Shows how much overspent
+  const _totalSkillPoints = totalAvailable; // eslint-disable-line @typescript-eslint/no-unused-vars
   const isLoading = skillsSubsystem.isLoading;
   const error = skillsSubsystem.error;
 
@@ -138,11 +140,9 @@ export default function SkillsEditor() {
     const skill = skills.find(s => s.id === skillId);
     if (!skill) return;
 
-    // Basic validation (let backend handle detailed validation)
-    if (!cheatMode) {
-      if (newRank < 0) return;
-      if (newRank > skill.max_ranks) return;
-    }
+    // Validation: allow overspending (Overdrawn logic) - only block negative
+    if (newRank < 0) return;
+    // Note: We allow exceeding max_ranks - skill will be shown as "overdrawn"
     
     // 1. Optimistic update (like AbilityScores pattern)
     setLocalSkillOverrides(prev => ({
@@ -205,25 +205,6 @@ export default function SkillsEditor() {
       console.log('⬇️ Decreasing skill rank');
       handleUpdateSkillRank(skillId, skill.current_ranks - 1);
     }
-  };
-
-  const handleCheatModeToggle = () => {
-    console.log('🎮 Cheat mode toggle clicked, current state:', cheatMode);
-    if (cheatMode) {
-      console.log('🔒 Disabling cheat mode, showing confirmation');
-      setShowCheatModeConfirm(true);
-    } else {
-      console.log('🚀 Enabling cheat mode');
-      setCheatMode(true);
-    }
-  };
-
-  const confirmDisableCheatMode = async () => {
-    setCheatMode(false);
-    setShowCheatModeConfirm(false);
-    
-    // Reload data to ensure consistency
-    await skillsSubsystem.load();
   };
 
   const resetAllSkills = async () => {
@@ -401,7 +382,7 @@ export default function SkillsEditor() {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent padding="p-3" className="text-center">
             <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('skills.pointsSpent')}</div>
@@ -414,27 +395,19 @@ export default function SkillsEditor() {
           <CardContent padding="p-3" className="text-center">
             <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('skills.pointsAvailable')}</div>
             <div className="text-xl font-bold text-[rgb(var(--color-primary))]">
-              {cheatMode ? '∞' : display(availableSkillPoints)}
+              {display(availableSkillPoints)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent padding="p-3" className="text-center">
+            <div className="text-xs text-[rgb(var(--color-text-muted))]">Points Overdrawn</div>
+            <div className={`text-xl font-bold ${overdrawnSkillPoints > 0 ? 'text-error' : 'text-[rgb(var(--color-text-muted))]'}`}>
+              {display(overdrawnSkillPoints)}
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Cheat Mode Warning */}
-      {cheatMode && (
-        <Card className="bg-[rgb(var(--color-warning)/0.1)] border-[rgb(var(--color-warning)/0.5)]">
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <svg className="w-5 h-5 text-[rgb(var(--color-warning))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span className="text-[rgb(var(--color-warning))] font-medium">
-                {t('skills.cheatModeActive')}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Header Controls */}
       <div className="flex items-center justify-between">
@@ -455,13 +428,6 @@ export default function SkillsEditor() {
             disabled={isUpdating}
           >
             {t('skills.reset')}
-          </Button>
-          <Button
-            variant={cheatMode ? 'danger' : 'outline'}
-            size="sm"
-            onClick={handleCheatModeToggle}
-          >
-            {cheatMode ? t('skills.disableCheatMode') : t('skills.enableCheatMode')}
           </Button>
         </div>
       </div>
@@ -529,7 +495,9 @@ export default function SkillsEditor() {
                 </tr>
               </thead>
               <tbody>
-                {sortedAndFilteredSkills.map((skill) => (
+                {sortedAndFilteredSkills.map((skill) => {
+                  const isOverdrawn = skill.current_ranks > skill.max_ranks;
+                  return (
                   <tr 
                     key={skill.id} 
                     className="border-b border-[rgb(var(--color-surface-border)/0.3)] hover:bg-[rgb(var(--color-surface-1))] transition-colors"
@@ -550,6 +518,11 @@ export default function SkillsEditor() {
                             2pt
                           </span>
                         )}
+                        {isOverdrawn && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">
+                            +{skill.current_ranks - skill.max_ranks} Over Cap
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="p-3 text-center">
@@ -563,7 +536,7 @@ export default function SkillsEditor() {
                           onClick={() => handleButtonClick('decrease', skill.id)}
                           variant="outline"
                           size="sm"
-                          disabled={(!cheatMode && skill.current_ranks === 0) || updatingSkills.has(skill.id)}
+                          disabled={(skill.current_ranks === 0) || updatingSkills.has(skill.id)}
                           clicked={clickedButton === `decrease-${skill.id}`}
                           aria-label={`Decrease ${skill.name}`}
                           title={`Decrease ${skill.name} (min: 0)`}
@@ -575,17 +548,17 @@ export default function SkillsEditor() {
                           type="number"
                           value={skill.current_ranks}
                           onChange={(e) => handleUpdateSkillRank(skill.id, parseInt(e.target.value) || 0)}
-                          className="w-12 text-center h-6 text-sm bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border)/0.6)] rounded font-medium"
+                          className={`w-12 text-center h-6 text-sm border rounded font-medium ${isOverdrawn ? 'bg-purple-500/10 border-purple-500/40 text-purple-400' : 'bg-[rgb(var(--color-surface-2))] border-[rgb(var(--color-surface-border)/0.6)]'}`}
                           disabled={updatingSkills.has(skill.id)}
                         />
                         <Button
                           onClick={() => handleButtonClick('increase', skill.id)}
                           variant="outline"
                           size="sm"
-                          disabled={(!cheatMode && (availableSkillPoints < (skill.is_class_skill ? 1 : 2) || skill.current_ranks >= skill.max_ranks)) || updatingSkills.has(skill.id)}
+                          disabled={updatingSkills.has(skill.id)}
                           clicked={clickedButton === `increase-${skill.id}`}
                           aria-label={`Increase ${skill.name}`}
-                          title={`Increase ${skill.name} (cost: ${skill.is_class_skill ? '1' : '2'} points, max: ${cheatMode ? '∞' : skill.max_ranks})`}
+                          title={`Increase ${skill.name} (cost: ${skill.is_class_skill ? '1' : '2'} points, max: ${skill.max_ranks})`}
                           className="h-6 w-6 p-0 text-xs"
                         >
                           +
@@ -611,42 +584,13 @@ export default function SkillsEditor() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
-
-      {/* Confirmation Dialog */}
-      {showCheatModeConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="max-w-md shadow-elevation-4">
-            <CardHeader>
-              <CardTitle>{t('skills.disableCheatModeTitle')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-[rgb(var(--color-text-secondary))] mb-4">
-                {t('skills.disableCheatModeMessage')}
-              </p>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowCheatModeConfirm(false)}
-                >
-                  {t('skills.cancel')}
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={confirmDisableCheatMode}
-                >
-                  {t('skills.disableCheatMode')}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { apiClient } from '@/lib/api/client';
 
@@ -81,16 +81,36 @@ export interface ClassesData {
     id: number;
     level: number;
     name: string;
+    skill_points?: number;
+    bab?: number;
+    fort_save?: number;
+    ref_save?: number;
+    will_save?: number;
+    hit_die?: number;
   }>;
   total_level: number;
   multiclass: boolean;
   can_multiclass: boolean;
   combat_stats: CombatStats;
+  xp_progress?: XPProgress;
+}
+
+export interface XPProgress {
+  current_xp: number;
+  current_xp_level: number;
+  total_class_level: number;
+  next_level_xp: number | null;
+  xp_to_next: number | null;
+  current_level_min_xp: number;
+  next_level_min_xp: number;
+  progress_percent: number;
 }
 
 export function useClassesLevel(classesData?: ClassesData | null) {
   const { characterId, invalidateSubsystems, categorizedClasses, isMetadataLoading } = useCharacterContext();
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false); // No local state for XP - derive from classesData
+  // const [xpProgress, setXpProgress] = useState<XPProgress | null>(null);
+  const [isLoadingXP, setIsLoadingXP] = useState(false);
 
   // Helper function to find class info from categorized data
   const findClassInfoById = useCallback((classId: number): ClassInfo | undefined => {
@@ -112,16 +132,19 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     return classesData.classes.map(cls => {
       const classInfo = findClassInfoById(cls.id);
       
+      // Use backend calculated skill points directly (now typically available)
+      const skillPoints = cls.skill_points || 0;
+      
       return {
         id: cls.id,
         name: cls.name,
         level: cls.level,
-        hitDie: classInfo?.hit_die || 8,
-        baseAttackBonus: Math.floor(classesData.combat_stats.base_attack_bonus * (cls.level / classesData.total_level)),
-        fortitudeSave: Math.floor(classesData.combat_stats.base_fortitude * (cls.level / classesData.total_level)),
-        reflexSave: Math.floor(classesData.combat_stats.base_reflex * (cls.level / classesData.total_level)),
-        willSave: Math.floor(classesData.combat_stats.base_will * (cls.level / classesData.total_level)),
-        skillPoints: (classInfo?.skill_points || 2) * cls.level,
+        hitDie: cls.hit_die ?? classInfo?.hit_die ?? 8,
+        baseAttackBonus: cls.bab ?? 0,
+        fortitudeSave: cls.fort_save ?? 0,
+        reflexSave: cls.ref_save ?? 0,
+        willSave: cls.will_save ?? 0,
+        skillPoints: skillPoints,
         spellcaster: classInfo?.is_spellcaster || false,
         spellType: classInfo?.has_arcane ? 'arcane' : classInfo?.has_divine ? 'divine' : undefined,
         primaryAbility: classInfo?.primary_ability || 'STR',
@@ -152,13 +175,17 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
 
     try {
-      await apiClient.post(`/characters/${characterId}/classes/level-up`, {
+      const response = await apiClient.post(`/characters/${characterId}/classes/level-up`, {
         class_id: classId,
         level_change: delta,
       });
 
       // Silently refresh all dependent subsystems
       await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
+      
+      return response;
+      
+      return response;
     } catch (err) {
       console.error('Error adjusting class level:', err);
       throw err;
@@ -214,12 +241,16 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
 
     try {
-      await apiClient.post(`/characters/${characterId}/classes/add`, {
+      const response = await apiClient.post(`/characters/${characterId}/classes/add`, {
         class_id: classInfo.id,
       });
 
       // Silently refresh all dependent subsystems
       await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
+      
+      return response;
+      
+      return response;
     } catch (err) {
       console.error('Error adding class:', err);
       throw err;
@@ -276,9 +307,62 @@ export function useClassesLevel(classesData?: ClassesData | null) {
   const isAtMaxLevel = useCallback((classId: number): boolean => {
     const cls = classes.find(c => c.id === classId);
     if (!cls || !cls.max_level || cls.max_level <= 0) return false;
-    
+
     return cls.level >= cls.max_level;
   }, [classes]);
+
+  // Fetch XP progress
+  // Use XP progress from classes subsystem if available
+  const xpProgress = useMemo(() => {
+     if (classesData?.xp_progress) {
+       return classesData.xp_progress;
+     }
+     return null;
+  }, [classesData]);
+
+  // Fallback fetching - mainly for initial load if backend doesn't support combined yet
+  // or if we need to force update for some reason (though subsystem refresh covers it)
+  // We keep the fetch logic but don't auto-trigger it if we have data
+  const fetchXPProgress = useCallback(async () => {
+    if (!characterId) return;
+    try {
+      // If we have data from classes subsystem, we probably don't need this separate call
+      // But keeping it available for manual refresh if needed
+      const response = await apiClient.get<XPProgress>(`/characters/${characterId}/classes/experience`);
+      
+      // Only set if we really need to (but now we use derived state mostly)
+      // This is a bit tricky with derived vs separate state.
+      // Best approach: If subsystem provides it, use it. If not, separate.
+      // But we just removed the separate state 'xpProgress'.
+      // So this function is largely redundant unless we re-introduce state or rely solely on subsystem.
+      
+      // To properly support legacy/fallback, we should rely on subsystem refresh.
+      // So this function effectively just refreshes the classes subsystem now.
+      await invalidateSubsystems(['classes']);
+      
+    } catch (error) {
+      console.error('Failed to fetch XP progress:', error);
+    }
+  }, [characterId, invalidateSubsystems]); 
+
+  // Initial load handled by subsystem
+
+
+  // Set experience points
+  const setExperience = useCallback(async (xp: number) => {
+    if (!characterId) return;
+
+    setIsUpdating(true);
+    try {
+      await apiClient.post(`/characters/${characterId}/classes/experience`, { xp });
+      await fetchXPProgress();
+    } catch (err) {
+      console.error('Error setting experience:', err);
+      throw err;
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [characterId, fetchXPProgress]);
 
   return {
     // Data from subsystem
@@ -298,21 +382,27 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       base_reflex: 0,
       base_will: 0,
     },
-    
+
+    // XP data
+    xpProgress,
+    isLoadingXP,
+
     // Additional data
     categorizedClasses,
     findClassInfoById,
-    
+
     // State
     isUpdating,
     isMetadataLoading,
-    
+
     // Actions
     adjustClassLevel,
     changeClass,
     addClass,
     removeClass,
-    
+    fetchXPProgress,
+    setExperience,
+
     // Helper functions for prestige class limits
     canLevelUp,
     getRemainingLevels,

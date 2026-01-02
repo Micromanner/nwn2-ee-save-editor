@@ -226,11 +226,7 @@ function FeatCardComponent({ feat, isOwned, onAdd, onRemove, onLoadDetails, isPr
             </div>
           </div>
 
-          {feat.description && (
-            <p className="text-sm text-[rgb(var(--color-text-secondary))] line-clamp-2">
-              {display(stripHtmlTags(feat.description))}
-            </p>
-          )}
+
 
           {feat.can_take === false && feat.missing_requirements && feat.missing_requirements.length > 0 && !isExpanded && (
             <div className="mt-2 flex items-start gap-2 text-xs text-[rgb(var(--color-warning))]">

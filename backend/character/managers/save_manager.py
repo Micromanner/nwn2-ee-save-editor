@@ -88,20 +88,8 @@ class SaveManager(EventEmitter):
         if self._saves_cache is not None:
             return self._saves_cache.copy()
 
-        # Get base saves from ClassManager
-        class_manager = self.character_manager.get_manager('class')
-        if class_manager:
-            base_saves = class_manager.calculate_total_saves()
-        else:
-            # Fallback if no class manager
-            base_saves = {
-                'fortitude': self.gff.get('FortSave', 0),
-                'reflex': self.gff.get('RefSave', 0),
-                'will': self.gff.get('WillSave', 0),
-                'base_fortitude': 0,
-                'base_reflex': 0,
-                'base_will': 0
-            }
+        # Get base saves (Base Saves + Epic Bonuses, NOT including ability mods)
+        base_saves = self._calculate_base_saves()
         
         # Get ability modifiers from AbilityManager (includes base + racial + equipment + level-ups)
         ability_manager = self.character_manager.get_manager('ability')
@@ -217,6 +205,119 @@ class SaveManager(EventEmitter):
 
         self._saves_cache = result.copy()
         return result
+
+    def _calculate_base_saves(self) -> Dict[str, int]:
+        """
+        Calculate total base saving throws from all classes with Epic level support.
+        
+        Logic:
+        1. Try to use Level History (LvlStatList) for precise accounting.
+           - Levels 1-20: Class Table Lookup (delta from previous level).
+           - Levels 21+: Epic Progression (+1 to All Saves at Even Levels).
+        2. Fallback (if no history):
+           - Sum pre-epic Saves from all classes (capped at class level 20).
+           - Add estimated Epic Save bonus based on Total Character Level > 20.
+        """
+        total_fort = 0
+        total_ref = 0
+        total_will = 0
+        
+        lvl_stat_list = self.gff.get('LvlStatList', [])
+        
+        # Calculate expected total level from ClassList to validate history
+        class_list = self.gff.get('ClassList', [])
+        total_char_level = sum(c.get('ClassLevel', 0) for c in class_list)
+        
+        # Method 1: Precise calculation from History (Complete History only)
+        if lvl_stat_list and isinstance(lvl_stat_list, list) and len(lvl_stat_list) == total_char_level:
+            current_class_levels = {}
+            
+            for i, level_entry in enumerate(lvl_stat_list):
+                char_level = i + 1
+                class_id = level_entry.get('LvlStatClass', -1)
+                
+                if class_id == -1: 
+                    continue
+                    
+                current_class_levels[class_id] = current_class_levels.get(class_id, 0) + 1
+                class_lvl = current_class_levels[class_id]
+                
+                if char_level <= 20:
+                    # Heroic Levels (1-20): Use Class Tables
+                    class_data = self.rules_service.get_by_id('classes', class_id)
+                    if class_data:
+                        # Calculate deltas (tables are cumulative)
+                        current_saves = self._calculate_base_save_delta(class_data, class_lvl)
+                        prev_saves = self._calculate_base_save_delta(class_data, class_lvl - 1)
+                        
+                        total_fort += (current_saves['fortitude'] - prev_saves['fortitude'])
+                        total_ref += (current_saves['reflex'] - prev_saves['reflex'])
+                        total_will += (current_saves['will'] - prev_saves['will'])
+                else:
+                    # Epic Levels (21+): Fixed Progression
+                    # +1 to All Saves at every EVEN character level (22, 24, 26...)
+                    if char_level % 2 == 0:
+                        total_fort += 1
+                        total_ref += 1
+                        total_will += 1
+        else:
+            # Method 2: Fallback (No history or incomplete/edited history)
+            # Sum of Class Table Saves (clamped at 20) + Epic Formula
+            total_levels = 0
+            
+            for class_info in class_list:
+                class_id = class_info.get('Class', -1)
+                class_level = class_info.get('ClassLevel', 0)
+                total_levels += class_level
+                
+                if class_level > 0:
+                    class_data = self.rules_service.get_by_id('classes', class_id)
+                    if class_data:
+                        # Internal helper handles clamping and lookup
+                        saves = self._calculate_base_save_delta(class_data, class_level)
+                        total_fort += saves['fortitude']
+                        total_ref += saves['reflex']
+                        total_will += saves['will']
+            
+            # 2. Add Epic Bonus if Total Character Level > 20
+            if total_levels > 20:
+                epic_save_bonus = (total_levels - 20) // 2
+                total_fort += epic_save_bonus
+                total_ref += epic_save_bonus
+                total_will += epic_save_bonus
+
+        return {
+            'fortitude': total_fort,
+            'reflex': total_ref,
+            'will': total_will,
+            'base_fortitude': total_fort,
+            'base_reflex': total_ref,
+            'base_will': total_will
+        }
+
+    def _calculate_base_save_delta(self, class_data, level: int) -> Dict[str, int]:
+        """Calculate base saves (no modifiers) for a single class at a specific level (clamped at 20)"""
+        # (Cloned logic from ClassManager for architectural independence)
+        save_table_name = field_mapper.get_field_value(class_data, 'saving_throw_table', '')
+        if not save_table_name or level <= 0:
+            return {'fortitude': 0, 'reflex': 0, 'will': 0}
+            
+        save_table_name_lower = save_table_name.lower()
+        save_table = self.rules_service.get_table(save_table_name_lower)
+        if not save_table:
+            return {'fortitude': 0, 'reflex': 0, 'will': 0}
+        
+        # Get saves for level (level - 1 because tables are 0-indexed)
+        level_idx = min(level - 1, 19)  # Cap at class level 20
+        if level_idx < len(save_table):
+            save_row = save_table[level_idx]
+            return {
+                'fortitude': field_mapper._safe_int(field_mapper.get_field_value(save_row, 'fort_save_table', '0'), 0),
+                'reflex': field_mapper._safe_int(field_mapper.get_field_value(save_row, 'ref_save_table', '0'), 0),
+                'will': field_mapper._safe_int(field_mapper.get_field_value(save_row, 'will_save_table', '0'), 0)
+            }
+        
+        return {'fortitude': 0, 'reflex': 0, 'will': 0}
 
     def _invalidate_saves_cache(self):
         """Invalidate the saves cache when data changes"""

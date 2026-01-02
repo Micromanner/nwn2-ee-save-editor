@@ -32,6 +32,7 @@ class EventType(Enum):
     ATTRIBUTE_CHANGED = 'attribute_changed'
     ALIGNMENT_CHANGED = 'alignment_changed'
     STATE_CHANGED = 'state_changed'  # Generic state change event for cache invalidation
+    SKILL_POINTS_AWARDED = 'skill_points_awarded'
 
 
 @dataclass
@@ -53,6 +54,7 @@ class ClassChangedEvent(EventData):
     new_class_id: int
     level: int
     preserve_feats: List[int] = None  # Feats to keep
+    is_level_adjustment: bool = False  # True when this is just a level change (up/down), not a class swap
     
     def __post_init__(self):
         self.event_type = EventType.CLASS_CHANGED
@@ -95,9 +97,21 @@ class LevelGainedEvent(EventData):
     class_id: int
     new_level: int
     total_level: int
+    class_level_gained: int = 1
 
     def __post_init__(self):
         self.event_type = EventType.LEVEL_GAINED
+
+
+@dataclass
+class SkillPointsAwardedEvent(EventData):
+    """Data for skill points awarded events"""
+    class_id: int
+    level: int
+    points: int
+
+    def __post_init__(self):
+        self.event_type = EventType.SKILL_POINTS_AWARDED
 
 
 @dataclass

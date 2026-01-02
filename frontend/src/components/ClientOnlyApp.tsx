@@ -2,7 +2,7 @@
 
 console.log('📦 ClientOnlyApp: File loaded/parsed');
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTauri } from '@/providers/TauriProvider';
 import DynamicAPI from '@/lib/utils/dynamicApi';
@@ -29,6 +29,8 @@ import EditorHeader from '@/components/EditorHeader';
 import { CharacterAPI } from '@/services/characterApi';
 import { Button } from '@/components/ui/Button';
 
+import LevelHelperModal from '@/components/ClassesLevel/LevelHelperModal';
+
 // Inner component that uses the character context
 function AppContent() {
   const t = useTranslations();
@@ -45,6 +47,15 @@ function AppContent() {
     portrait?: string;
     isCompanion: boolean;
   } | null>(null);
+
+  // Level Helper State - just controls visibility, data is fetched dynamically by the modal
+  const [showLevelHelper, setShowLevelHelper] = useState(false);
+
+  // When a level is gained, show the helper modal
+  // The modal itself will query subsystems for current available points
+  const handleLevelGains = useCallback(() => {
+    setShowLevelHelper(true);
+  }, []);
   const [appReady, setAppReady] = useState(false);
   const [initProgress, setInitProgress] = useState({
     step: 'initializing',
@@ -408,7 +419,14 @@ function AppContent() {
                           {activeTab === 'classes' && (
                             <div className="space-y-6">
                               <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.classes')}</h2>
-                              <ClassAndLevelsEditor />
+                              <ClassAndLevelsEditor 
+                                onNavigate={(path) => {
+                                  // Simple mapping: remove leading slash
+                                  const tabId = path.replace(/^\//, '');
+                                  setActiveTab(tabId);
+                                }} 
+                                onLevelGains={handleLevelGains}
+                              />
                             </div>
                           )}
                           
@@ -517,6 +535,17 @@ function AppContent() {
           </div>
         </div>
       )}
+      
+      {/* Level Helper Modal - Global to persist navigation, now dynamically queries subsystems */}
+      <LevelHelperModal
+        isOpen={showLevelHelper}
+        onClose={() => setShowLevelHelper(false)}
+        className=""
+        onNavigate={(path) => {
+           const tabId = path.replace(/^\//, '');
+           setActiveTab(tabId);
+        }}
+      />
     </div>
   );
 }

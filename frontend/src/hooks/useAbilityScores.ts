@@ -63,6 +63,20 @@ export interface CharacterStats {
     racial?: number;
     feat?: number;
   };
+  will: {
+    base: number;
+    total: number;
+    abilityMod?: number;
+    classMod?: number;
+    racial?: number;
+    feat?: number;
+  };
+}
+
+export interface PointSummary {
+  total_available: number;
+  total_spent: number;
+  available: number;
 }
 
 export interface AbilityScoreState {
@@ -95,6 +109,7 @@ export interface AbilityScoreState {
     reflex: number;
     will: number;
   };
+  point_summary?: PointSummary;
 }
 
 export interface Alignment {
@@ -596,5 +611,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
 
     // Alignment functions
     updateAlignment,
+    
+    // Summary
+    pointSummary: dataToUse?.point_summary,
   };
 }

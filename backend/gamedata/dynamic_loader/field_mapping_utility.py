@@ -90,7 +90,8 @@ class FieldMappingUtility:
         'attack_bonus_table': ['AttackBonusTable', 'attack_bonus_table', 'AttackTable', 'BABTable'],
         'saving_throw_table': ['SavingThrowTable', 'saving_throw_table', 'SaveTable', 'SavTable'],
         'skills_table': ['SkillsTable', 'skills_table', 'SkillTable'],
-        'feats_table': ['FeatsTable', 'feats_table', 'FeatTable'],
+        'feats_table': ['FeatsTable', 'feats_table', 'FeatTable', 'featstable', 'FEATSTABLE'],
+        'bonus_feats_table': ['BonusFeatsTable', 'bonus_feats_table', 'BonusFeatTable', 'bonus_feat_table'],
         
         # Hit dice and other class properties (PascalCase is correct format)
         'hit_die': ['HitDie', 'hit_die', 'HD', 'HitDice'],
@@ -148,14 +149,15 @@ class FieldMappingUtility:
         'subrace_name': ['Name', 'name', 'Label', 'label'],  # Prioritize exact case matches
         'subrace_label': ['Label', 'label', 'Name', 'name'],  # Prioritize exact case matches
         'effective_character_level': ['ecl', 'ECL', 'effective_character_level', 'EffectiveCharacterLevel'],
-        'feats_table': ['feats_table', 'FeatsTable', 'featstable', 'FEATSTABLE'],
+        # NOTE: 'feats_table' is already defined in class table references above (line 93)
         'has_favored_class': ['has_favored_class', 'HasFavoredClass', 'hasfavoredclass', 'HASFAVOREDCLASS'],
         
         # Misc common fields
         'description': ['DESCRIPTION', 'description', 'Description', 'Desc', 'DescRef'],
         'category': ['category', 'Category', 'Cat', 'Type'],
         'type': ['CATEGORY', 'FeatCategory', 'Category', 'Type', 'category'],
-        'constant': ['constant', 'Constant', 'Const', 'ConstantValue']
+        'constant': ['constant', 'Constant', 'Const', 'ConstantValue'],
+        'bonus': ['Bonus', 'bonus', 'BONUS']
     }
     
     def get_field_value(self, data_object: Any, field_pattern: str, default: Any = None) -> Any:

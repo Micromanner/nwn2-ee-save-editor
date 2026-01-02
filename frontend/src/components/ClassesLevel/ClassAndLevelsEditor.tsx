@@ -1,22 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Pencil, Swords, X, History } from 'lucide-react';
+import { Pencil, Swords, X, History, AlertTriangle } from 'lucide-react';
 import { useTranslations } from '@/hooks/useTranslations';
 
 import { Card, CardContent } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { formatModifier, formatNumber } from '@/utils/dataHelpers';
 import { useClassesLevel, type ClassesData } from '@/hooks/useClassesLevel';
 import ClassSelectorModal from './ClassSelectorModal';
 import LevelHistoryModal from './LevelHistoryModal';
-
-
-// SVG Icon Components removed - using lucide-react instead
-
-
-// Removed unused ClassLevel interface - using ClassLevel from useClassesLevel hook instead
 
 interface ClassInfo {
   id: number;
@@ -37,12 +32,12 @@ interface ClassInfo {
   prerequisites?: Record<string, unknown>;
 }
 
-// Removed unused FocusInfo interface
+interface ClassAndLevelsEditorProps {
+  onNavigate?: (path: string) => void;
+  onLevelGains?: () => void;
+}
 
-// Removed unused interfaces - using types from hooks instead
-
-
-export default function ClassAndLevelsEditor() {
+export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: ClassAndLevelsEditorProps) {
   const t = useTranslations();
   const { character, isLoading, error } = useCharacterContext();
   
@@ -54,6 +49,7 @@ export default function ClassAndLevelsEditor() {
     classes,
     totalLevel,
     categorizedClasses,
+    findClassInfoById,
     isUpdating,
     adjustClassLevel,
     changeClass,
@@ -62,22 +58,26 @@ export default function ClassAndLevelsEditor() {
     canLevelUp,
     getRemainingLevels,
     isAtMaxLevel,
-    isMetadataLoading, // Get this from the hook
+    isMetadataLoading,
+    xpProgress,
+    fetchXPProgress,
+    setExperience,
   } = useClassesLevel(classesSubsystem.data as ClassesData | null);
 
   const [expandedClassDropdown, setExpandedClassDropdown] = useState<number | null>(null);
   const [showClassSelector, setShowClassSelector] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [xpInput, setXpInput] = useState<string>('');
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set());
 
   const maxLevel = 60;
-
   const maxClasses = 4;
 
   // Load subsystem data when character changes
   useEffect(() => {
     const loadCharacterClasses = async () => {
       if (!character?.id) return;
-      
+
       // Only load if data is missing and not already loading
       if (!classesSubsystem.data && !classesSubsystem.isLoading) {
         try {
@@ -91,29 +91,95 @@ export default function ClassAndLevelsEditor() {
     loadCharacterClasses();
   }, [character?.id, classesSubsystem.data, classesSubsystem.isLoading, classesSubsystem]);
 
+  // Fetch XP when character loads
+  useEffect(() => {
+    if (character?.id && !xpProgress) {
+      fetchXPProgress();
+    }
+  }, [character?.id, xpProgress, fetchXPProgress]);
+
+  // Update XP input when xpProgress changes
+  // Update XP input when xpProgress changes
+  useEffect(() => {
+    if (xpProgress) {
+      setXpInput(xpProgress.current_xp.toString());
+    }
+  }, [xpProgress]);
+
+  // Removed calculateGains - relying on backend response
 
   const handleAdjustClassLevel = async (index: number, delta: number) => {
     if (!classes[index]) return;
+    const actionId = `adjust-${classes[index].id}-${delta}`;
+    
+    setProcessingActions(prev => {
+      const next = new Set(prev);
+      next.add(actionId);
+      return next;
+    });
 
     try {
-      await adjustClassLevel(classes[index].id, delta);
+      // Cast response to any to access dynamic backend data
+      const response = await adjustClassLevel(classes[index].id, delta) as any;
+      console.log('Level up response:', response);
+      
+      // If we leveled up successfully, show the helper using backend data
+      // Structure is response.level_changes.gains
+      const gains = response?.level_changes?.gains;
+      
+      if (delta > 0 && gains) {
+        console.log('Level up gains found:', gains);
+        
+        if (onLevelGains) {
+          onLevelGains();
+        }
+      } else {
+        console.warn('Level up successful but no gains returned', response);
+      }
     } catch (err) {
       console.error('Failed to adjust class level:', err);
+    } finally {
+      setProcessingActions(prev => {
+        const next = new Set(prev);
+        next.delete(actionId);
+        return next;
+      });
     }
   };
 
   const handleChangeClass = async (index: number, newClassInfo: ClassInfo) => {
     if (!classes[index]) return;
+    const actionId = `change-${classes[index].id}`;
+    
+    setProcessingActions(prev => {
+      const next = new Set(prev);
+      next.add(actionId);
+      return next;
+    });
 
     try {
       await changeClass(classes[index].id, newClassInfo);
       setExpandedClassDropdown(null);
     } catch (err) {
       console.error('Failed to change class:', err);
+    } finally {
+      setProcessingActions(prev => {
+        const next = new Set(prev);
+        next.delete(actionId);
+        return next;
+      });
     }
   };
 
   const handleClassSelection = async (classInfo: ClassInfo) => {
+    const actionId = expandedClassDropdown !== null ? `change-${classes[expandedClassDropdown].id}` : 'add';
+    
+    setProcessingActions(prev => {
+      const next = new Set(prev);
+      next.add(actionId);
+      return next;
+    });
+
     try {
       // Check if we're changing an existing class (expandedClassDropdown is set)
       if (expandedClassDropdown !== null) {
@@ -123,33 +189,114 @@ export default function ClassAndLevelsEditor() {
       }
 
       // Adding a new class
-      await addClass(classInfo);
-      setShowClassSelector(false);
+      // Cast response to any to access dynamic backend data
+      const response = await addClass(classInfo) as any;
+      console.log('Add class response:', response);
+      
+      // Use backend gains - for add_class it's in response.changes.gains
+      const gains = response?.changes?.gains;
+      
+      if (gains) {
+        console.log('Add class gains found:', gains);
+        
+        if (onLevelGains) {
+          onLevelGains();
+        }
+      } else {
+        console.warn('Add class successful but no gains returned', response);
+      }
     } catch (err) {
       console.error('Failed to handle class selection:', err);
+    } finally {
+      setProcessingActions(prev => {
+        const next = new Set(prev);
+        next.delete(actionId);
+        return next;
+      });
     }
+    
+    setShowClassSelector(false);
   };
 
   const handleRemoveClass = async (index: number) => {
     if (!classes[index]) return;
+    const actionId = `remove-${classes[index].id}`;
+    
+    setProcessingActions(prev => {
+      const next = new Set(prev);
+      next.add(actionId);
+      return next;
+    });
 
     try {
       await removeClass(classes[index].id);
     } catch (err) {
       console.error('Failed to remove class:', err);
+    } finally {
+      setProcessingActions(prev => {
+        const next = new Set(prev);
+        next.delete(actionId);
+        return next;
+      });
     }
   };
 
+  const handleXPSubmit = async () => {
+    let newXP = parseInt(xpInput, 10);
+    if (isNaN(newXP) || newXP < 0) return;
+    
+    // Cap at Level 60 XP (1,770,000)
+    if (newXP > 1770000) {
+      newXP = 1770000;
+      setXpInput("1770000");
+    }
+    const actionId = 'xp';
+    
+    setProcessingActions(prev => {
+      const next = new Set(prev);
+      next.add(actionId);
+      return next;
+    });
 
+    try {
+      if (newXP !== xpProgress?.current_xp) {
+        await setExperience(newXP);
+        // fetchXPProgress called by hook automatically
+      }
+    } catch (err) {
+      console.error('Failed to set XP:', err);
+      // Revert on error
+      if (xpProgress) {
+        setXpInput(xpProgress.current_xp.toString());
+      }
+    } finally {
+      setProcessingActions(prev => {
+        const next = new Set(prev);
+        next.delete(actionId);
+        return next;
+      });
+    }
+  };
 
+  const handleXPKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleXPSubmit();
+    } else if (e.key === 'Escape') {
+      setIsEditingXP(false);
+      if (xpProgress) {
+        setXpInput(xpProgress.current_xp.toString());
+      }
+    }
+  };
 
-
+  // Check if XP level differs from class level
+  const hasLevelMismatch = xpProgress && xpProgress.current_xp_level !== totalLevel;
   const totalBAB = classes.reduce((sum, c) => sum + c.baseAttackBonus, 0);
   const totalFort = classes.reduce((sum, c) => sum + c.fortitudeSave, 0);
   const totalRef = classes.reduce((sum, c) => sum + c.reflexSave, 0);
   const totalWill = classes.reduce((sum, c) => sum + c.willSave, 0);
 
-  if (isLoading || classesSubsystem.isLoading || isUpdating || isMetadataLoading) {
+  if (isLoading || classesSubsystem.isLoading || isMetadataLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -251,37 +398,126 @@ export default function ClassAndLevelsEditor() {
 
   return (
     <div className="space-y-6">
-      {/* Compact Summary at Top */}
-      <div className="grid grid-cols-5 gap-3">
-        <Card>
-          <CardContent padding="p-3" className="text-center">
-            <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.totalLevel')}</div>
-            <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{totalLevel}/60</div>
-            <p className="text-xs text-[rgb(var(--color-text-muted))]">Levels above 30 may only be supported in custom modules.</p>
+      {/* XP Level Mismatch Warning */}
+
+
+      {/* XP and Level Summary */}
+      {/* XP and Level Summary */}
+      {/* XP and Level Summary */}
+      <div className="grid grid-cols-[220px_1fr] gap-4">
+        {/* XP Card */}
+        <Card className="overflow-hidden border-[rgb(var(--color-surface-border))] bg-[rgb(var(--color-surface-1))] max-w-[220px]">
+          <CardContent padding="p-4" className="flex flex-col gap-3">
+             <h4 className="text-xs font-semibold uppercase text-[rgb(var(--color-text-muted))] tracking-wider border-b border-[rgb(var(--color-surface-border)/0.4)] pb-2 text-center">
+                {t('classes.experience')}
+            </h4>
+
+            <div className="space-y-3 flex flex-col items-center">
+              <div className="flex items-center justify-center gap-2 w-full">
+                <Input
+                  type="text"
+                  value={xpInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || /^\d+$/.test(value)) {
+                      setXpInput(value);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleXPSubmit();
+                    if (e.key === 'Escape') {
+                      setXpInput(String(xpProgress?.current_xp || 0));
+                    }
+                  }}
+                  className="w-32 text-lg font-bold bg-[rgb(var(--color-surface-2))] border-[rgb(var(--color-surface-border))] h-9 px-2 text-center"
+                />
+                <div className="flex items-center gap-1">
+                   <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleXPSubmit}
+                      disabled={xpInput === String(xpProgress?.current_xp || 0)}
+                      className={`h-9 w-9 p-0 ${xpInput === String(xpProgress?.current_xp || 0) ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100 hover:bg-[rgb(var(--color-surface-3))]'}`}
+                      title={t('actions.save')}
+                    >
+                      <span className={xpInput !== String(xpProgress?.current_xp || 0) ? "text-[rgb(var(--color-success))]" : "text-[rgb(var(--color-text-muted))]"}>✓</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setXpInput(String(xpProgress?.current_xp || 0));
+                      }}
+                      disabled={xpInput === String(xpProgress?.current_xp || 0)}
+                      className={`h-9 w-9 p-0 ${xpInput === String(xpProgress?.current_xp || 0) ? 'opacity-30 grayscale pointer-events-none' : 'opacity-100 hover:bg-[rgb(var(--color-surface-3))]'}`}
+                       title={t('actions.cancel')}
+                    >
+                      <span className="text-[rgb(var(--color-text-muted))]">✕</span>
+                    </Button>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              {xpProgress && (
+                <div className="space-y-2 flex flex-col items-center w-full">
+                  <div className="h-1.5 w-[80%] bg-[rgb(var(--color-surface-2))] rounded-full overflow-hidden border border-[rgb(var(--color-surface-border)/0.3)] mx-auto">
+                    <div
+                      className="h-full bg-[rgb(var(--color-primary))] transition-all duration-500"
+                      style={{ 
+                        width: `${Math.max(0, Math.min(100, ( (xpProgress.current_xp - xpProgress.current_level_min_xp) / (xpProgress.next_level_min_xp - xpProgress.current_level_min_xp) ) * 100))}%` 
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col items-center gap-0.5 text-[10px] uppercase font-medium tracking-tight text-[rgb(var(--color-text-muted))] w-full">
+                     <div className="flex items-center justify-center gap-1.5 w-full">
+                        <span>{t('classes.xpLevel')} {xpProgress.current_xp_level}</span>
+                        {hasLevelMismatch && (
+                          <div className="relative group cursor-help">
+                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" />
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-gray-900 text-yellow-200 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-64 z-[100] border border-yellow-500/30 text-center">
+                              {t('classes.xpLevelMismatchWarning')
+                                .replace('{xpLevel}', String(xpProgress?.current_xp_level || 0))
+                                .replace('{classLevel}', String(totalLevel))}
+                              <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-gray-900 border-r border-b border-yellow-500/30 rotate-45 -mt-1"></div>
+                            </div>
+                          </div>
+                        )}
+                     </div>
+                     {xpProgress.xp_to_next !== null && xpProgress.xp_to_next > 0 && (
+                        <span className="opacity-70">{formatNumber(xpProgress.xp_to_next)} to next</span>
+                     )}
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
+
+        {/* Stats Summary Card */}
         <Card>
-          <CardContent padding="p-3" className="text-center">
-            <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.bab')}</div>
-            <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">+{totalBAB}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent padding="p-3" className="text-center">
-            <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.fortitude')}</div>
-            <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">+{totalFort}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent padding="p-3" className="text-center">
-            <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.reflex')}</div>
-            <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">+{totalRef}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent padding="p-3" className="text-center">
-            <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.will')}</div>
-            <div className="text-xl font-bold text-[rgb(var(--color-text-primary))]">+{totalWill}</div>
+          <CardContent padding="p-3">
+            <div className="grid grid-cols-5 gap-2 text-center">
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.totalLevel')}</div>
+                <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">{totalLevel}/60</div>
+              </div>
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.bab')}</div>
+                <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">+{totalBAB}</div>
+              </div>
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.fortitude')}</div>
+                <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">+{totalFort}</div>
+              </div>
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.reflex')}</div>
+                <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">+{totalRef}</div>
+              </div>
+              <div>
+                <div className="text-xs text-[rgb(var(--color-text-muted))]">{t('classes.will')}</div>
+                <div className="text-lg font-bold text-[rgb(var(--color-text-primary))]">+{totalWill}</div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -315,16 +551,17 @@ export default function ClassAndLevelsEditor() {
                   {/* Main class row - using grid for consistent alignment */}
                   <div className="grid grid-cols-10 gap-3 items-center">
                     <div className="col-span-3">
-                      <Button
-                        onClick={() => {
-                          setExpandedClassDropdown(index);
-                          setShowClassSelector(true);
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-between h-9 px-3 text-sm font-medium group"
-                        title={t('classes.changeClass')}
-                      >
+                        <Button
+                          onClick={() => {
+                            setExpandedClassDropdown(index);
+                            setShowClassSelector(true);
+                          }}
+                          variant="outline"
+                          size="sm"
+                          disabled={processingActions.has(`change-${cls.id}`)}
+                          className="w-full justify-between h-9 px-3 text-sm font-medium group"
+                          title={t('classes.changeClass')}
+                        >
                         <span className="truncate">
                           {cls.name}
                         </span>
@@ -339,7 +576,7 @@ export default function ClassAndLevelsEditor() {
                           onClick={() => handleAdjustClassLevel(index, -1)}
                           variant="outline"
                           size="sm"
-                          disabled={cls.level <= 1}
+                          disabled={processingActions.has(`adjust-${cls.id}--1`) || cls.level <= 1}
                           className="w-7 h-7 p-0"
                         >
                           <span className="text-sm">−</span>
@@ -351,7 +588,7 @@ export default function ClassAndLevelsEditor() {
                           onClick={() => handleAdjustClassLevel(index, 1)}
                           variant="outline"
                           size="sm"
-                          disabled={totalLevel >= maxLevel || !canLevelUp(cls.id)}
+                          disabled={processingActions.has(`adjust-${cls.id}-1`) || totalLevel >= maxLevel || !canLevelUp(cls.id)}
                           className="w-7 h-7 p-0"
                         >
                           <span className="text-sm">+</span>
@@ -398,12 +635,26 @@ export default function ClassAndLevelsEditor() {
                     </div>
 
                     {/* Action Buttons - Fixed width */}
-                    <div className="col-span-1 flex items-center justify-end">
+                    <div className="col-span-1 flex items-center justify-end gap-1">
+                      {/* Level Up Button - TODO: Re-enable for post-0.1.0 release */}
+                      {/* {canLevelUp(cls.id) && totalLevel < maxLevel && (
+                        <Button
+                          onClick={() => handleOpenLevelUp(cls.id, cls.name)}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs bg-[rgb(var(--color-primary))/10] border-[rgb(var(--color-primary))/30] hover:bg-[rgb(var(--color-primary))/20] text-[rgb(var(--color-primary))]"
+                          title={t('levelup.title')}
+                        >
+                          <ArrowUp className="w-3 h-3 mr-1" />
+                          {t('levelup.title')}
+                        </Button>
+                      )} */}
                       {classes.length > 1 && (
                         <Button
                           onClick={() => handleRemoveClass(index)}
                           variant="ghost"
                           size="sm"
+                          disabled={processingActions.has(`remove-${cls.id}`)}
                           className="p-1 hover:text-[rgb(var(--color-danger))]"
                           title="Remove class"
                         >
@@ -421,6 +672,7 @@ export default function ClassAndLevelsEditor() {
               <Button
                 onClick={() => setShowClassSelector(true)}
                 variant="outline"
+                disabled={processingActions.has('add')}
                 className="w-full p-3 border-2 border-dashed hover:bg-[rgb(var(--color-surface-2))]"
                 style={{ 
                   borderColor: 'rgba(255, 255, 255, 0.06)',
@@ -458,5 +710,4 @@ export default function ClassAndLevelsEditor() {
       />
     </div>
   );
-
 }

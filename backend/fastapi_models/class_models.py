@@ -47,6 +47,12 @@ class ClassLevel(BaseModel):
     id: int = Field(..., description="Class ID")
     name: str = Field(..., description="Class name")
     level: int = Field(..., description="Levels in this class")
+    skill_points: int = Field(0, description="Skill points granted by this class")
+    bab: int = Field(0, description="Base attack bonus from this class")
+    fort_save: int = Field(0, description="Fortitude save from this class")
+    ref_save: int = Field(0, description="Reflex save from this class")
+    will_save: int = Field(0, description="Will save from this class")
+    hit_die: int = Field(8, description="Hit die for this class")
     
     model_config = {"populate_by_name": True}
 
@@ -117,7 +123,6 @@ class ClassChangeRequest(BaseModel):
     levels: int = Field(1, ge=1, description="Number of levels to add/remove")
     
     # Options
-    cheat_mode: bool = Field(False, description="Bypass prerequisites and restrictions")
     preview: bool = Field(False, description="Only preview changes without applying them")
 
 
@@ -263,12 +268,14 @@ class ClassesState(BaseModel):
     
     # From get_attack_bonuses() and calculate_total_saves() - combined
     combat_stats: Dict[str, Any] = Field(default_factory=dict)
+    
+    # XP Progress (consolidated for silent updates)
+    xp_progress: Optional[Dict[str, Any]] = Field(None, description="Experience progress data")
 
 
 class LevelUpRequest(BaseModel):
     """Request to level up a character in a specific class"""
     class_id: int = Field(..., description="Class to level up in")
-    cheat_mode: bool = Field(False, description="Bypass level restrictions")
     preview: bool = Field(False, description="Only preview the changes")
 
 

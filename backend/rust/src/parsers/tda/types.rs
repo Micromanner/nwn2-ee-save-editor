@@ -351,14 +351,13 @@ impl Default for TDAParser {
 }
 
 /// Serializable representation of a cell value
+/// Note: Empty cells are serialized as String("") for compatibility with Python consumers
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SerializableCellValue {
-    /// Direct string value
+    /// Direct string value (includes empty strings)
     String(String),
-    /// Null value marker
+    /// Null value marker (****)
     Null,
-    /// Empty string value
-    Empty,
 }
 
 /// Serializable version of TDAParser for MessagePack storage
@@ -391,7 +390,7 @@ impl SerializableTDAParser {
                     }
                     CellValue::Raw(s) => SerializableCellValue::String(s.clone()),
                     CellValue::Null => SerializableCellValue::Null,
-                    CellValue::Empty => SerializableCellValue::Empty,
+                    CellValue::Empty => SerializableCellValue::String(String::new()),
                 }
             }).collect()
         }).collect();
@@ -428,7 +427,6 @@ impl SerializableTDAParser {
                         CellValue::new(&s, parser.interner_mut())
                     }
                     SerializableCellValue::Null => CellValue::Null,
-                    SerializableCellValue::Empty => CellValue::Empty,
                 };
                 row.push(cell_value);
             }

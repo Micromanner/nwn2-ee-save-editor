@@ -116,7 +116,11 @@ from .combat_models import (
     NaturalArmorUpdateRequest,
     NaturalArmorUpdateResponse,
     InitiativeBonusUpdateRequest,
-    InitiativeBonusUpdateResponse
+    NaturalArmorUpdateResponse,
+    InitiativeBonusUpdateRequest,
+    InitiativeBonusUpdateResponse,
+    HitPointsUpdateRequest,
+    HitPointsUpdateResponse
 )
 
 # Skill models
@@ -377,6 +381,7 @@ __all__ = [
     'CombatUpdateResponse', 'CombatModeToggleRequest', 'CombatModeToggleResponse',
     'DefensiveStats', 'NaturalArmorUpdateRequest', 'NaturalArmorUpdateResponse',
     'InitiativeBonusUpdateRequest', 'InitiativeBonusUpdateResponse',
+    'HitPointsUpdateRequest', 'HitPointsUpdateResponse',
     
     # Skill models
     'SkillInfo', 'SkillPoints', 'SkillSynergy', 'SkillSummary', 'SkillState',

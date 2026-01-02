@@ -49,7 +49,8 @@ def get_classes_state(
             'combat_stats': {
                 **attack_bonuses,
                 **total_saves
-            }
+            },
+            'xp_progress': class_manager.get_xp_progress()
         }
         
         return ClassesState(**response_data)
@@ -103,10 +104,8 @@ def change_class(
                 changes = class_manager.change_specific_class(
                     old_class_id, class_id, request.get('preserve_level', True)
                 )
-            else:
-                # Single class character - change primary class
                 changes = class_manager.change_class(
-                    class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
+                    class_id, request.get('preserve_level', True)
                 )
             
             preview_data = {
@@ -125,7 +124,7 @@ def change_class(
         else:
             # Single class character - change primary class
             changes = class_manager.change_class(
-                class_id, request.get('preserve_level', True), request.get('cheat_mode', False)
+                class_id, request.get('preserve_level', True)
             )
 
         # Get updated character state after all event handlers have executed
@@ -193,7 +192,7 @@ def level_up(
             return LevelUpPreview(**preview_data)
         
         # Use class manager method - no duplicated logic
-        changes = class_manager.adjust_class_level(class_id, level_change, request.get('cheat_mode', False))
+        changes = class_manager.adjust_class_level(class_id, level_change)
         
         # Get updated character state after all event handlers have executed
         updated_state = _get_updated_character_state(manager)
@@ -446,7 +445,7 @@ def add_class(
             )
 
         # Use class manager method to add class level (handles new classes too)
-        changes = class_manager.add_class_level(class_id, request.get('cheat_mode', False))
+        changes = class_manager.add_class_level(class_id)
 
         # Get updated character state after all event handlers have executed
         updated_state = _get_updated_character_state(manager)
@@ -675,15 +674,82 @@ def get_level_history(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Class manager not available"
             )
-        
+
         history = class_manager.get_level_history()
         return {'history': history}
-        
+
     except Exception as e:
         logger.error(f"Failed to get level history for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get level history: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/classes/experience")
+def get_experience(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get character experience points and level progress"""
+    try:
+        class_manager = manager.get_manager('class')
+        if not class_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Class manager not available"
+            )
+
+        return class_manager.get_xp_progress()
+
+    except Exception as e:
+        logger.error(f"Failed to get experience for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get experience: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/classes/experience")
+def set_experience(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request: dict
+):
+    """Set character experience points"""
+    session = char_session
+    manager = session.character_manager
+
+    try:
+        class_manager = manager.get_manager('class')
+        if not class_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Class manager not available"
+            )
+
+        xp = request.get('xp')
+        if xp is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing 'xp' in request body"
+            )
+
+        result = class_manager.set_experience(xp)
+        result['has_unsaved_changes'] = session.has_unsaved_changes()
+
+        return result
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Failed to set experience for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set experience: {str(e)}"
         )
 
 

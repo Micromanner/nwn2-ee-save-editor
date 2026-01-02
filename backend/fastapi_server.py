@@ -722,14 +722,13 @@ try:
     routers_loaded.append("session")
     
     app.include_router(gamedata.router, prefix="/api/gamedata", tags=["gamedata"])
+    app.include_router(gamedata.router, prefix="/api", tags=["gamedata"])
     routers_loaded.append("gamedata")
     
     app.include_router(content.router, prefix="/api", tags=["content"])
     routers_loaded.append("content")
 
-    from fastapi_routers import file_browser
-    app.include_router(file_browser.router, prefix="/api", tags=["file_browser"])
-    routers_loaded.append("file_browser")
+
 
     app.include_router(savegame.router, prefix="/api", tags=["savegame"])
     routers_loaded.append("savegame")
@@ -806,20 +805,29 @@ try:
             start = time.time()
             from fastapi_routers import saves
             logger.info(f"saves router import: {time.time() - start:.3f}s")
-        
+
+            start = time.time()
+            from fastapi_routers import file_browser
+            logger.info(f"file_browser router import: {time.time() - start:.3f}s")
+
+
         app.include_router(inventory.router, prefix="/api", tags=["inventory"])
         routers_loaded.append("inventory")
-        
+
         app.include_router(classes.router, prefix="/api", tags=["classes"])
         routers_loaded.append("classes")
-        
+
         app.include_router(race.router, prefix="/api", tags=["race"])
         routers_loaded.append("race")
-        
+
         app.include_router(saves.router, prefix="/api", tags=["saves"])
         routers_loaded.append("saves")
-        
-        logger.info(f"✓ Additional routers loaded: inventory, classes, race, saves")
+
+        app.include_router(file_browser.router, prefix="/api", tags=["file_browser"])
+        routers_loaded.append("file_browser")
+
+
+        logger.info(f"✓ Additional routers loaded: inventory, classes, race, saves, file_browser")
         
     except Exception as e:
         logger.warning(f"Failed to load additional routers: {e}")

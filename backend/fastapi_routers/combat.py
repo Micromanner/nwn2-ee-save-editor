@@ -281,3 +281,42 @@ def get_equipped_weapons(
 
 
 
+
+@router.post("/characters/{character_id}/combat/update-hp")
+def update_hit_points(
+    character_id: int,
+    char_session: CharacterSessionDep,
+    request_data: Dict[str, Any]
+):
+    """Update hit points"""
+    from fastapi_models import HitPointsUpdateRequest, HitPointsUpdateResponse
+    
+    try:
+        session = char_session
+        manager = session.character_manager
+        combat_manager = manager.get_manager('combat')
+        
+        # Parse request
+        hp_data = HitPointsUpdateRequest(**request_data)
+        
+        # Update HP
+        result = combat_manager.update_hit_points(
+            current=hp_data.current_hp,
+            max_hp=hp_data.max_hp
+        )
+        
+        return HitPointsUpdateResponse(
+            success=True,
+            current=result['current'],
+            max=result['max'],
+            temp=result['temp'],
+            message="Hit points updated",
+            has_unsaved_changes=session.has_unsaved_changes()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to update hit points for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update hit points: {str(e)}"
+        )

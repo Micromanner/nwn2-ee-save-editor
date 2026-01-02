@@ -141,7 +141,10 @@ function FeatTabContentComponent({
               onAdd={onAddFeat}
               onLoadDetails={onLoadFeatDetails}
             />
+
           </div>
+
+
         </div>
       </ScrollArea>
 

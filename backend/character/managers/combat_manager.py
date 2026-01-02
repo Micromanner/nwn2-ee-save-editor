@@ -695,26 +695,92 @@ class CombatManager(EventEmitter):
     
     def calculate_base_attack_bonus(self) -> int:
         """
-        Calculate base attack bonus from all classes with caching to prevent redundant calculations.
-        This is the authoritative BAB calculation method - moved from ClassManager.
+        Calculate base attack bonus from all classes with caching.
+        
+        Logic:
+        1. Try to use Level History (LvlStatList) for precise accounting (Heroic vs Epic).
+           - Levels 1-20: Class Table Lookup (delta from previous level).
+           - Levels 21+: Epic Progression (+1 at Odd Levels, regardless of class).
+        2. Fallback (if no history):
+           - Sum pre-epic BAB from all classes (capped at class level 20).
+           - Add estimated Epic BAB bonus based on Total Character Level > 20.
         """
         # Use cache if available and not dirty
         if not self._bab_cache_dirty and self._bab_cache is not None:
             return self._bab_cache
         
-        # Calculate BAB from all classes
-        class_list = self.gff.get('ClassList', [])
         total_bab = 0
+        lvl_stat_list = self.gff.get('LvlStatList', [])
         
-        for class_info in class_list:
-            class_id = class_info.get('Class', 0)
-            class_level = class_info.get('ClassLevel', 0)
+        # Calculate expected total level from ClassList to validate history
+        class_list = self.gff.get('ClassList', [])
+        total_char_level = sum(c.get('ClassLevel', 0) for c in class_list)
+        
+        # Method 1: Precise calculation from History
+        # Only use history if it matches the character's level (Complete History)
+        if lvl_stat_list and isinstance(lvl_stat_list, list) and len(lvl_stat_list) == total_char_level:
+            current_class_levels = {} # Track level of each class to calculate deltas
             
-            if class_level > 0:
-                class_data = self.rules_service.get_by_id('classes', class_id)
-                if class_data:
-                    class_bab = self._calculate_class_bab(class_data, class_level)
-                    total_bab += class_bab
+            for i, level_entry in enumerate(lvl_stat_list):
+                char_level = i + 1
+                class_id = level_entry.get('LvlStatClass', -1)
+                
+                # Validation: If class_id is invalid, we can't trust history fully? 
+                # Proceed with best effort.
+                if class_id == -1: 
+                    continue
+                    
+                # Increment class level tracker
+                current_class_levels[class_id] = current_class_levels.get(class_id, 0) + 1
+                class_lvl = current_class_levels[class_id]
+                
+                if char_level <= 20:
+                    # Heroic Levels (1-20): Use Class Tables
+                    class_data = self.rules_service.get_by_id('classes', class_id)
+                    if class_data:
+                        # Get BAB for current level and previous level to find delta
+                        # Note: Table values are cumulative.
+                        current_bab = self._calculate_class_bab(class_data, class_lvl)
+                        prev_bab = self._calculate_class_bab(class_data, class_lvl - 1)
+                        total_bab += (current_bab - prev_bab)
+                else:
+                    # Epic Levels (21+): Fixed Progression
+                    # +1 BAB at every ODD character level (21, 23, 25...)
+                    if char_level % 2 != 0:
+                        total_bab += 1
+                        
+        else:
+            # Method 2: Fallback (No history or empty history)
+            # Sum of Class Table BAB (clamped at 20) + Epic Formula
+            
+            # 1. Sum Pre-Epic BAB
+            class_list = self.gff.get('ClassList', [])
+            total_levels = 0
+            
+            for class_info in class_list:
+                class_id = class_info.get('Class', 0)
+                class_level = class_info.get('ClassLevel', 0)
+                total_levels += class_level
+                
+                if class_level > 0:
+                    class_data = self.rules_service.get_by_id('classes', class_id)
+                    if class_data:
+                        # _calculate_class_bab is already clamped to max level 20
+                        # This correctly simulates "Pre-Epic" portion
+                        class_bab = self._calculate_class_bab(class_data, class_level)
+                        total_bab += class_bab
+            
+            # 2. Add Epic Bonus if Total Character Level > 20
+            if total_levels > 20:
+                # Formula: +1 at 21, 23, 25...
+                # Count odd levels between 21 and TotalLevel
+                epic_levels = total_levels - 20
+                # Examples:
+                # Lvl 21 (1 epic): 1 odd level (21) -> +1
+                # Lvl 22 (2 epic): 1 odd level (21) -> +1
+                # Lvl 23 (3 epic): 2 odd levels (21, 23) -> +2
+                epic_bab_bonus = (epic_levels + 1) // 2
+                total_bab += epic_bab_bonus
         
         # Cache the result and mark as clean
         self._bab_cache = total_bab
@@ -732,6 +798,10 @@ class CombatManager(EventEmitter):
         
     def _calculate_class_bab(self, class_data, level: int) -> int:
         """Calculate BAB for a single class and level (moved from ClassManager)"""
+        # Return 0 for invalid levels
+        if level <= 0:
+            return 0
+            
         # Use FieldMappingUtility for proper field access
         bab_table_name = self.field_mapper.get_field_value(class_data, 'attack_bonus_table', '')
         if not bab_table_name:
@@ -753,7 +823,7 @@ class CombatManager(EventEmitter):
         
         # Get BAB for level (level - 1 because tables are 0-indexed)
         level_idx = min(level - 1, 19)  # Cap at 20
-        if level_idx < len(bab_table):
+        if level_idx >= 0 and level_idx < len(bab_table):
             bab_row = bab_table[level_idx]
             # Use FieldMappingUtility to get BAB value with proper field mapping
             bab_value = self.field_mapper.get_field_value(bab_row, 'bab', '0')
@@ -1127,3 +1197,38 @@ class CombatManager(EventEmitter):
     
     def get_miss_chance(self) -> int:
         return 0
+
+    def update_hit_points(self, current: Optional[int] = None, max_hp: Optional[int] = None) -> Dict[str, int]:
+        """
+        Update current and max hit points
+        
+        Args:
+            current: New current HP (optional)
+            max_hp: New max HP (optional)
+            
+        Returns:
+            Dict containing updated HP values
+        """
+        updates = {}
+        
+        if current is not None:
+            # Ensure within bounds (0 to MaxHitPoints) ??? 
+            # Actually, standard NWN2 allows negative (dying/dead) and maybe over Max?
+            # Let's trust the input for now, but usually Current <= Max
+            self.gff['CurrentHitPoints'] = current
+            updates['current'] = current
+            
+        if max_hp is not None:
+            if max_hp < 1:
+                max_hp = 1 # Prevent 0 max HP
+            self.gff['MaxHitPoints'] = max_hp
+            updates['max'] = max_hp
+            
+        # Emit generic change event? Stats update?
+        # self.character_manager.emit(EventType.STATS_CHANGED, ...)
+            
+        return {
+            'current': self.gff.get('CurrentHitPoints', 0),
+            'max': self.gff.get('MaxHitPoints', 0),
+            'temp': self.gff.get('TempHitPoints', 0)
+        }

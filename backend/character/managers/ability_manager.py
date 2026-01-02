@@ -242,6 +242,20 @@ class AbilityManager(EventEmitter):
         # Update the attribute
         self.gff.set(attribute, value)
 
+        # Record ability increase in history if value increased
+        # User Rule: Only save the first change to the lvlstatlist and ignore the rest
+        if value > old_value:
+             attr_to_index = {'Str': 0, 'Dex': 1, 'Con': 2, 'Int': 3, 'Wis': 4, 'Cha': 5}
+             idx = attr_to_index.get(attribute)
+             if idx is not None:
+                 try:
+                     class_manager = self.character_manager.get_manager('class')
+                     if class_manager:
+                         class_manager.record_ability_change(idx)
+                 except Exception as e:
+                     logger.warning(f"Failed to record ability change history: {e}")
+
+
         # Invalidate cache
         self._invalidate_attributes_cache()
 
@@ -412,6 +426,38 @@ class AbilityManager(EventEmitter):
         """
         attributes = self.get_attributes(include_equipment=False)
         return sum(attributes.values())
+
+    def get_ability_points_summary(self) -> Dict[str, int]:
+        """
+        Summarize ability points - TOTAL across all levels.
+        Points are granted at levels 4, 8, 12, 16, 20, etc. (floor(level/4))
+        """
+        lvl_stat_list = self.gff.get('LvlStatList', [])
+        if not lvl_stat_list or not isinstance(lvl_stat_list, list):
+            return {'total_available': 0, 'total_spent': 0, 'available': 0}
+
+        total_char_level = len(lvl_stat_list)
+        
+        # Total ability points earned: floor(level / 4)
+        # Level 4 = 1 point, Level 8 = 2 points, Level 12 = 3 points, etc.
+        total_available = total_char_level // 4
+        
+        # Count spent in GFF (LvlStatAbility entries)
+        total_spent = 0
+        for level_entry in lvl_stat_list:
+            if isinstance(level_entry, dict):
+                # LvlStatAbility is present when an ability point was spent at that level
+                if level_entry.get('LvlStatAbility') is not None:
+                    total_spent += 1
+        
+        # Calculate remaining available
+        available = max(0, total_available - total_spent)
+        
+        return {
+            'total_available': total_available,
+            'total_spent': total_spent,
+            'available': available
+        }
     
     def apply_ability_increase(self, attribute: str) -> Dict[str, Any]:
         """
@@ -436,14 +482,20 @@ class AbilityManager(EventEmitter):
     
     def _on_class_changed(self, event: ClassChangedEvent):
         """Handle class change events"""
-        logger.info(f"🔥 AbilityManager handling class change to {event.new_class_id}, level {event.level}")
-        logger.info(f"🔥 Event details: old_class={event.old_class_id}, new_class={event.new_class_id}, level={event.level}")
+        logger.info(f"AbilityManager handling class change to {event.new_class_id}, level {event.level}")
+        logger.info(f"Event details: old_class={event.old_class_id}, new_class={event.new_class_id}, level={event.level}")
 
         # Invalidate cache
         self._invalidate_attributes_cache()
 
+        # Skip adjusting level-up bonuses for simple level adjustments (up/down in same class)
+        # The LvlStatList cleanup already handles removed entries properly
+        if event.is_level_adjustment:
+            logger.info("Skipping ability bonus adjustment - this is a level adjustment, not a class swap")
+            return
+
         # When level changes (especially reductions), adjust level-up bonuses
-        logger.info(f"🔥 Calling _adjust_level_up_bonuses_for_level({event.level})")
+        logger.info(f"Calling _adjust_level_up_bonuses_for_level({event.level})")
         self._adjust_level_up_bonuses_for_level(event.level)
     
     def _on_level_gained(self, event: LevelGainedEvent):

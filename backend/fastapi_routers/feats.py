@@ -94,13 +94,15 @@ def get_feats_state(
         
         feat_summary = feat_manager.get_feat_summary_fast()
         all_feats = feat_manager.get_all_feats()
+        point_summary = feat_manager.get_feat_points_summary()
 
         feat_state = {
             'summary': feat_summary,
             'all_feats': all_feats,
             'available_feats': [],
             'legitimate_feats': [],
-            'recommended_feats': []
+            'recommended_feats': [],
+            'point_summary': point_summary
         }
         
         return FeatState(**feat_state)

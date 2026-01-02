@@ -26,7 +26,8 @@ export default function AbilityScoresEditor() {
     alignment,
     updateAbilityScore,
     updateStats,
-    updateAlignment
+    updateAlignment,
+    pointSummary
   } = useAbilityScores(attributesData.data as AbilityScoreState | null);
   
   // Wrap updateAbilityScore - no data refresh needed due to backend cache
@@ -61,6 +62,25 @@ export default function AbilityScoresEditor() {
 
   return (
     <div className="space-y-6">
+       <div className="grid grid-cols-2 gap-3">
+         <Card variant="default" padding="sm" className="bg-[rgb(var(--color-surface-1))]">
+           <div className="text-center">
+             <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase tracking-wider mb-1">Points Spent</div>
+             <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))]">
+               {pointSummary?.total_spent ?? 0}
+             </div>
+           </div>
+         </Card>
+         <Card variant="default" padding="sm" className="bg-[rgb(var(--color-surface-1))]">
+           <div className="text-center">
+             <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase tracking-wider mb-1">Available Points</div>
+             <div className="text-2xl font-bold text-[rgb(var(--color-primary))]">
+               {pointSummary?.available ?? 0}
+             </div>
+           </div>
+         </Card>
+       </div>
+
       <CoreAbilityScoresSection 
         abilityScores={abilityScores}
         onAbilityScoreChange={handleAbilityScoreUpdate}

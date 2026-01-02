@@ -132,7 +132,8 @@ def get_abilities_state(
                 'age': ability_manager.get_character_age(),
                 'background': ability_manager.get_character_background(),
                 'experience_points': ability_manager.get_experience_points()
-            }
+            },
+            'point_summary': ability_manager.get_ability_points_summary()
         }
         
         logger.info(f"About to create AttributeState with keys: {list(state_data.keys())}")

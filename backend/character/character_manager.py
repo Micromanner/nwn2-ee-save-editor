@@ -247,7 +247,7 @@ class CharacterManager(EventEmitter):
     Uses DynamicGameDataLoader for all character data structure understanding
     """
     
-    def __init__(self, character_data: Dict[str, Any], game_data_loader: Optional['DynamicGameDataLoader'] = None, rules_service: Optional[GameRulesService] = None, **kwargs):
+    def __init__(self, character_data: Dict[str, Any], game_data_loader: Optional['DynamicGameDataLoader'] = None, rules_service: Optional[GameRulesService] = None, save_path: Optional[str] = None, **kwargs):
         """
         Initialize the data-driven character manager
 
@@ -255,10 +255,12 @@ class CharacterManager(EventEmitter):
             character_data: Raw GFF character data (plain dict with __struct_id__ metadata)
             game_data_loader: DynamicGameDataLoader instance (creates new one if not provided)
             rules_service: Optional GameRulesService instance
+            save_path: Optional path to the save directory/file (for sidecar data)
             **kwargs: Ignored for backward compatibility (e.g., gff_element)
         """
         super().__init__()
         self.character_data = character_data
+        self.save_path = save_path
 
         # Validate character data
         if not isinstance(character_data, dict):

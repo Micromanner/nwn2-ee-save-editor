@@ -491,7 +491,7 @@ class TestMulticlassHandling:
             {'Class': 0, 'ClassLevel': 5}
         ])
         
-        result = class_manager.add_class_level(0, cheat_mode=True)
+        result = class_manager.add_class_level(0)
         
         class_list = class_manager.gff.get('ClassList')
         assert class_list[0]['ClassLevel'] == 6
@@ -623,7 +623,7 @@ class TestMulticlassHandling:
         
         # Original change_class should reject multiclass characters
         with pytest.raises(ValueError, match="Cannot use _update_class_list for multiclass characters"):
-            class_manager.change_class(6, cheat_mode=True)  # Try to change to Barbarian
+            class_manager.change_class(6)  # Try to change to Barbarian
     
     def test_add_class_level_new_class(self, class_manager):
         """Test adding level in new class (multiclassing)"""
@@ -631,7 +631,7 @@ class TestMulticlassHandling:
             {'Class': 0, 'ClassLevel': 5}
         ])
         
-        result = class_manager.add_class_level(1, cheat_mode=True)
+        result = class_manager.add_class_level(1)
         
         class_list = class_manager.gff.get('ClassList')
         assert len(class_list) == 2
@@ -712,7 +712,7 @@ class TestMulticlassHandling:
         ])
         
         with patch.object(class_manager, 'emit') as mock_emit:
-            class_manager.add_class_level(1, cheat_mode=True)
+            class_manager.add_class_level(1)
             
             mock_emit.assert_called_once()
             event = mock_emit.call_args[0][0]
@@ -765,16 +765,6 @@ class TestClassPrerequisites:
         assert isinstance(is_valid, bool)
         assert isinstance(errors, list)
     
-    def test_class_change_validation_cheat_mode_bypass(self, class_manager):
-        """Test that cheat mode bypasses validation"""
-        # Set invalid alignment for Paladin
-        class_manager.gff.set('LawfulChaotic', 80)  # Chaotic
-        class_manager.gff.set('GoodEvil', 20)       # Evil
-        
-        # Should succeed with cheat mode
-        result = class_manager.change_class(5, cheat_mode=True)
-        
-        assert result['class_change']['new_class'] == 5
     
     def test_validate_class_change_invalid_class_id(self, class_manager):
         """Test validation with invalid class ID"""
@@ -858,7 +848,7 @@ class TestPrestigeClassLogic:
             {'Class': 0, 'ClassLevel': 10}  # Fighter 10
         ])
         
-        result = class_manager.add_class_level(100, cheat_mode=True)  # Weapon Master
+        result = class_manager.add_class_level(100)  # Weapon Master
         
         assert result['multiclass'] == True
         assert result['class_id'] == 100
@@ -897,7 +887,7 @@ class TestClassChangeService:
             {'Class': 0, 'ClassLevel': 5}  # Fighter 5
         ])
         
-        result = class_manager.change_class(1, cheat_mode=True)  # Change to Wizard
+        result = class_manager.change_class(1)  # Change to Wizard
         
         assert result['class_change']['old_class'] == 0
         assert result['class_change']['new_class'] == 1
@@ -916,7 +906,7 @@ class TestClassChangeService:
             {'Class': 0, 'ClassLevel': 8}
         ])
         
-        result = class_manager.change_class(2, preserve_level=True, cheat_mode=True)
+        result = class_manager.change_class(2, preserve_level=True)
         
         assert result['class_change']['level'] == 8
         class_list = class_manager.gff.get('ClassList')
@@ -929,7 +919,7 @@ class TestClassChangeService:
         ])
         class_manager.gff.set('Con', 14)  # +2 modifier
         
-        result = class_manager.change_class(1, cheat_mode=True)  # Change to Wizard
+        result = class_manager.change_class(1)  # Change to Wizard
         
         assert 'stats_updated' in result
         assert 'hit_points' in result['stats_updated']
@@ -938,9 +928,7 @@ class TestClassChangeService:
     
     def test_change_class_transaction_management(self, class_manager):
         """Test transaction management during class change"""
-        class_manager.character_manager._current_transaction = None
-        
-        class_manager.change_class(1, cheat_mode=True)
+        class_manager.change_class(1)
         
         class_manager.character_manager.begin_transaction.assert_called_once()
         class_manager.character_manager.commit_transaction.assert_called_once()
@@ -952,7 +940,7 @@ class TestClassChangeService:
         # Mock an error during stat update
         with patch.object(class_manager, '_update_class_stats', side_effect=Exception("Test error")):
             with pytest.raises(Exception, match="Test error"):
-                class_manager.change_class(1, cheat_mode=True)
+                class_manager.change_class(1)
         
         class_manager.character_manager.begin_transaction.assert_called_once()
         class_manager.character_manager.rollback_transaction.assert_called_once()
@@ -964,7 +952,7 @@ class TestClassChangeService:
         ])
         
         with patch.object(class_manager.character_manager, 'emit') as mock_emit:
-            class_manager.change_class(1, cheat_mode=True)
+            class_manager.change_class(1)
             
             mock_emit.assert_called_once()
             event = mock_emit.call_args[0][0]
@@ -973,16 +961,6 @@ class TestClassChangeService:
             assert event.new_class_id == 1
             assert event.level == 5
     
-    def test_change_class_without_cheat_mode_validation(self, class_manager):
-        """Test class change validation without cheat mode"""
-        # Set up invalid alignment for Paladin
-        class_manager.gff.set('LawfulChaotic', 80)  # Chaotic
-        class_manager.gff.set('GoodEvil', 20)       # Evil
-        
-        # Mock validation to return False
-        with patch.object(class_manager, '_validate_class_change', return_value=(False, ["Invalid alignment"])):
-            with pytest.raises(ValueError, match="Class change not allowed"):
-                class_manager.change_class(5)  # Paladin without cheat mode
 
 
 class TestLevelProgression:
@@ -1216,7 +1194,7 @@ class TestEventSystemIntegration:
         ])
         
         with patch.object(class_manager.character_manager, 'emit') as mock_emit:
-            class_manager.change_class(1, cheat_mode=True)
+            class_manager.change_class(1)
             
             mock_emit.assert_called_once()
             event = mock_emit.call_args[0][0]
@@ -1235,7 +1213,7 @@ class TestEventSystemIntegration:
         ])
         
         with patch.object(class_manager, 'emit') as mock_emit:
-            class_manager.add_class_level(1, cheat_mode=True)
+            class_manager.add_class_level(1)
             
             mock_emit.assert_called_once()
             event = mock_emit.call_args[0][0]
@@ -1254,7 +1232,7 @@ class TestEventSystemIntegration:
         
         with patch.object(class_manager.character_manager, 'emit') as mock_emit:
             start_time = time.time()
-            class_manager.change_class(1, cheat_mode=True)
+            class_manager.change_class(1)
             end_time = time.time()
             
             event = mock_emit.call_args[0][0]
@@ -1272,7 +1250,7 @@ class TestEventSystemIntegration:
         }
         
         with patch.object(class_manager.character_manager, 'emit') as mock_emit:
-            class_manager.change_class(1, cheat_mode=True)
+            class_manager.change_class(1)
             
             event = mock_emit.call_args[0][0]
             assert 10001 in event.preserve_feats
@@ -1284,7 +1262,7 @@ class TestEventSystemIntegration:
         ])
         
         with patch.object(class_manager.character_manager, 'emit') as mock_emit:
-            class_manager.change_class(1, cheat_mode=True)
+            class_manager.change_class(1)
             
             event = mock_emit.call_args[0][0]
             assert event.validate() == True
@@ -1473,26 +1451,16 @@ class TestValidationComprehensive:
         assert is_valid == True
         assert len(errors) == 0
     
-    def test_prestige_class_level_limits_validation(self, class_manager):
-        """Test that prestige class level limits are enforced"""
-        # Set up character with prestige class at max level
-        class_manager.gff.set('ClassList', [
-            {'Class': 100, 'ClassLevel': 7}  # Weapon Master at max level
-        ])
-        
-        # Try to add another level - should fail
-        with pytest.raises(ValueError, match="maximum level is 7"):
-            class_manager.add_class_level(100, cheat_mode=False)
     
-    def test_prestige_class_level_limits_cheat_mode(self, class_manager):
-        """Test that cheat mode bypasses prestige class level limits"""
+    def test_prestige_class_level_limits_bypass(self, class_manager):
+        """Test that prestige class level limits are bypassed"""
         # Set up character with prestige class at max level
         class_manager.gff.set('ClassList', [
             {'Class': 100, 'ClassLevel': 7}  # Weapon Master at max level
         ])
         
-        # Should succeed in cheat mode
-        result = class_manager.add_class_level(100, cheat_mode=True)
+        # Should succeed
+        result = class_manager.add_class_level(100)
         assert result['class_id'] == 100
         
         # Verify level was actually increased
@@ -1507,7 +1475,7 @@ class TestValidationComprehensive:
         ])
         
         # Should be able to add more levels (up to character cap)
-        result = class_manager.add_class_level(0, cheat_mode=False)
+        result = class_manager.add_class_level(0)
         assert result['class_id'] == 0
         
         # Verify level was increased
@@ -1623,3 +1591,172 @@ class TestValidationComprehensive:
         
         assert shadow_thief_entry is not None
         assert shadow_thief_entry['ClassLevel'] == 5  # Capped at max level
+
+
+class TestLevelHistorySync:
+    """Test LvlStatList synchronization when levels are added, removed, or classes changed"""
+
+    def test_remove_level_removes_history_entry(self, class_manager):
+        """When removing a level, the corresponding LvlStatList entry should be removed"""
+        class_manager.gff.set('ClassList', [{'Class': 0, 'ClassLevel': 3}])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 9},
+        ])
+
+        class_manager.adjust_class_level(0, -1)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 2
+        assert lvl_stat_list[0]['LvlStatHitDie'] == 10
+        assert lvl_stat_list[1]['LvlStatHitDie'] == 8
+
+    def test_remove_multiple_levels_removes_multiple_history_entries(self, class_manager):
+        """Removing multiple levels should remove the corresponding number of history entries"""
+        class_manager.gff.set('ClassList', [{'Class': 0, 'ClassLevel': 5}])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 9},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 7},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 6},
+        ])
+
+        class_manager.adjust_class_level(0, -3)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 2
+        assert lvl_stat_list[0]['LvlStatHitDie'] == 10
+        assert lvl_stat_list[1]['LvlStatHitDie'] == 8
+
+    def test_remove_level_multiclass_removes_correct_class_entries(self, class_manager):
+        """For multiclass, removing levels should only remove entries for that specific class"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 2},
+            {'Class': 6, 'ClassLevel': 2},
+        ])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 6, 'LvlStatHitDie': 12},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+            {'LvlStatClass': 6, 'LvlStatHitDie': 11},
+        ])
+
+        class_manager.adjust_class_level(0, -1)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 3
+        class_ids = [entry['LvlStatClass'] for entry in lvl_stat_list]
+        assert class_ids.count(0) == 1
+        assert class_ids.count(6) == 2
+
+    def test_change_specific_class_updates_history(self, class_manager):
+        """Changing a class should update all LvlStatList entries for that class"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 2},
+            {'Class': 3, 'ClassLevel': 2},
+        ])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 3, 'LvlStatHitDie': 8},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 9},
+            {'LvlStatClass': 3, 'LvlStatHitDie': 7},
+        ])
+
+        class_manager.change_specific_class(3, 6)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 4
+        class_ids = [entry['LvlStatClass'] for entry in lvl_stat_list]
+        assert 3 not in class_ids
+        assert class_ids.count(6) == 2
+        assert class_ids.count(0) == 2
+
+    def test_remove_class_removes_all_history_entries(self, class_manager):
+        """Removing a class entirely should remove all its LvlStatList entries"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 2},
+            {'Class': 3, 'ClassLevel': 3},
+        ])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 3, 'LvlStatHitDie': 8},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 9},
+            {'LvlStatClass': 3, 'LvlStatHitDie': 7},
+            {'LvlStatClass': 3, 'LvlStatHitDie': 6},
+        ])
+
+        class_manager.remove_class(3)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 2
+        for entry in lvl_stat_list:
+            assert entry['LvlStatClass'] == 0
+
+    def test_remove_level_history_for_class_handles_empty_list(self, class_manager):
+        """_remove_level_history_for_class should handle empty LvlStatList gracefully"""
+        class_manager.gff.set('LvlStatList', [])
+
+        class_manager._remove_level_history_for_class(0, 5)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert lvl_stat_list == []
+
+    def test_remove_class_from_history_handles_no_matching_class(self, class_manager):
+        """_remove_class_from_history should handle when class doesn't exist in history"""
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+        ])
+
+        removed_count = class_manager._remove_class_from_history(99)
+
+        assert removed_count == 0
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 2
+
+    def test_update_class_in_history_handles_no_matching_class(self, class_manager):
+        """_update_class_in_history should handle when old class doesn't exist in history"""
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+        ])
+
+        updated_count = class_manager._update_class_in_history(99, 6)
+
+        assert updated_count == 0
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert all(entry['LvlStatClass'] == 0 for entry in lvl_stat_list)
+
+    def test_add_level_creates_history_entry(self, class_manager):
+        """Adding a level should create a new LvlStatList entry"""
+        class_manager.gff.set('ClassList', [{'Class': 0, 'ClassLevel': 2}])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+        ])
+
+        class_manager.add_class_level(0)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 3
+        assert lvl_stat_list[2]['LvlStatClass'] == 0
+
+    def test_multiclass_add_level_creates_correct_history_entry(self, class_manager):
+        """Adding a multiclass level should create history entry with correct class ID"""
+        class_manager.gff.set('ClassList', [
+            {'Class': 0, 'ClassLevel': 2},
+            {'Class': 6, 'ClassLevel': 1},
+        ])
+        class_manager.gff.set('LvlStatList', [
+            {'LvlStatClass': 0, 'LvlStatHitDie': 10},
+            {'LvlStatClass': 0, 'LvlStatHitDie': 8},
+            {'LvlStatClass': 6, 'LvlStatHitDie': 12},
+        ])
+
+        class_manager.add_class_level(6)
+
+        lvl_stat_list = class_manager.gff.get('LvlStatList', [])
+        assert len(lvl_stat_list) == 4
+        assert lvl_stat_list[3]['LvlStatClass'] == 6

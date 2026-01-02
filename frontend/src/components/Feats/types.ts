@@ -48,6 +48,15 @@ export interface FeatsState {
   available_feats: FeatInfo[];
   legitimate_feats: FeatInfo[];
   recommended_feats: FeatInfo[];
+  point_summary?: {
+    total_general_slots: number;
+    total_bonus_slots: number;
+    total_slots: number;
+    total_feats: number;
+    open_slots: number;
+    filled_slots: number;
+    available: number;
+  };
 }
 
 export interface FilterState {

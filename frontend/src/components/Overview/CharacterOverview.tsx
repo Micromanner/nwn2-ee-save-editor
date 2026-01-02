@@ -49,7 +49,7 @@ function CollapsibleSection({ title, children, defaultOpen = false, badge }: Col
           </svg>
         </Button>
         <div className={`transition-all duration-300 ease-out ${isOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-          <div className="px-6 md:px-8 pb-6 md:pb-8 border-t border-[rgb(var(--color-surface-border)/0.3)]">
+          <div className={`px-6 md:px-8 pb-6 md:pb-8 ${isOpen ? 'border-t border-[rgb(var(--color-surface-border)/0.3)]' : 'border-t-0 border-transparent'}`}>
             <div className="pt-6 md:pt-8 grid-flow-row">
               {children}
             </div>

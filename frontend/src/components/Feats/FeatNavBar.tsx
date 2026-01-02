@@ -32,6 +32,9 @@ export interface FeatNavBarProps {
   hasNext: boolean;
   hasPrevious: boolean;
   onPageChange: (page: number) => void;
+
+  showAvailableOnly: boolean;
+  onAvailableOnlyChange: (value: boolean) => void;
 }
 
 const SORT_OPTIONS = [
@@ -74,6 +77,8 @@ function FeatNavBarComponent({
   hasNext,
   hasPrevious,
   onPageChange,
+  showAvailableOnly,
+  onAvailableOnlyChange,
 }: FeatNavBarProps) {
 
   const handleTypeToggle = (type: number) => {
@@ -118,6 +123,8 @@ function FeatNavBarComponent({
               {availableFeatsCount}
             </Badge>
           </Button>
+
+
         </div>
 
         <div className="flex items-center gap-4">
@@ -184,6 +191,18 @@ function FeatNavBarComponent({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="flex items-center gap-2">
+           <label className="flex items-center gap-2 text-sm text-[rgb(var(--color-text-secondary))] cursor-pointer select-none px-3 py-2 rounded hover:bg-[rgb(var(--color-surface-2))] border border-transparent hover:border-[rgb(var(--color-border))] transition-all">
+             <input 
+               type="checkbox"
+               checked={showAvailableOnly}
+               onChange={(e) => onAvailableOnlyChange(e.target.checked)}
+               className="w-4 h-4 rounded border-[rgb(var(--color-text-muted))] bg-transparent text-[rgb(var(--color-primary))] focus:ring-[rgb(var(--color-primary))]"
+             />
+             <span>Show Available Only</span>
+           </label>
         </div>
 
         {hasActiveFilters && (

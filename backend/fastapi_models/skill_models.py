@@ -36,6 +36,12 @@ class SkillSummary(BaseModel):
     spent_points: int
     overspent: int = 0
     
+    # Current Level Logic
+    current_level_gained: int = 0
+    current_level_spent: int = 0
+    current_level_available: int = 0
+    current_level_overdrawn: int = 0
+
     # Rank statistics
     total_ranks: int
     skills_with_ranks: int

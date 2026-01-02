@@ -2951,4 +2951,922 @@
   align-items: center;
 }
 
+/* ============================================================================
+   LEVEL-UP MODAL COMPONENTS
+   ============================================================================ */
+
+.levelup-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.levelup-modal-container {
+  width: 100%;
+  max-width: 56rem;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.levelup-modal-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border));
+  flex-shrink: 0;
+}
+
+.levelup-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.5rem;
+}
+
+.levelup-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgb(var(--color-surface-border));
+  background: rgb(var(--color-surface-1));
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Step Indicator */
+.levelup-step-indicator {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.levelup-step-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.levelup-step-bar {
+  height: 4px;
+  background: rgb(var(--color-surface-3));
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.levelup-step-bar.active {
+  background: rgb(var(--color-primary));
+}
+
+.levelup-step-label {
+  font-size: 0.625rem;
+  color: rgb(var(--color-text-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.levelup-step-label.current {
+  color: rgb(var(--color-primary));
+  font-weight: 600;
+}
+
+/* Section Title */
+.levelup-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+  margin-bottom: 1rem;
+}
+
+/* Summary Step */
+.levelup-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.levelup-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .levelup-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.levelup-summary-card {
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border) / 0.5);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.levelup-summary-card-label {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-bottom: 0.5rem;
+}
+
+.levelup-summary-card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgb(var(--color-primary));
+}
+
+.levelup-summary-card-value.hp {
+  color: rgb(248, 113, 113);
+}
+
+.levelup-summary-card-value.skills {
+  color: rgb(var(--color-success));
+}
+
+.levelup-summary-card-value.feats {
+  color: rgb(var(--color-secondary));
+}
+
+.levelup-summary-card-value.ability {
+  color: rgb(250, 204, 21);
+}
+
+.levelup-summary-spells {
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border) / 0.5);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.levelup-summary-spells-title {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-bottom: 0.75rem;
+}
+
+.levelup-summary-spells-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.levelup-summary-spells-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.levelup-summary-spells-level {
+  font-size: 0.625rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.levelup-summary-spells-count {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgb(var(--color-primary));
+}
+
+/* Ability Step */
+.levelup-ability {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.levelup-ability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .levelup-ability-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.levelup-ability-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 1rem;
+  background: rgb(var(--color-surface-2));
+  border: 2px solid rgb(var(--color-surface-border));
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.levelup-ability-btn:hover {
+  background: rgb(var(--color-surface-3));
+  border-color: rgb(var(--color-primary) / 0.5);
+}
+
+.levelup-ability-btn.selected {
+  background: rgb(var(--color-primary) / 0.15);
+  border-color: rgb(var(--color-primary));
+}
+
+.levelup-ability-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+  text-transform: uppercase;
+}
+
+.levelup-ability-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgb(var(--color-text-secondary));
+  margin-top: 0.25rem;
+}
+
+.levelup-ability-btn.selected .levelup-ability-value {
+  color: rgb(var(--color-primary));
+}
+
+.levelup-ability-preview {
+  font-size: 0.75rem;
+  color: rgb(var(--color-success));
+  margin-top: 0.25rem;
+}
+
+/* Feats Step */
+.levelup-feats {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.levelup-feats-slots {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: rgb(var(--color-surface-2));
+  border-radius: 0.5rem;
+}
+
+.levelup-feats-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.levelup-feats-slot-label {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.levelup-feats-slot-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--color-primary));
+}
+
+.levelup-feats-slot-value.complete {
+  color: rgb(var(--color-success));
+}
+
+.levelup-feats-search {
+  position: relative;
+}
+
+.levelup-feats-search-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.5rem;
+  color: rgb(var(--color-text-primary));
+  font-size: 0.875rem;
+}
+
+.levelup-feats-search-input:focus {
+  outline: none;
+  border-color: rgb(var(--color-primary));
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.2);
+}
+
+.levelup-feats-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.levelup-feats-selected-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background: rgb(var(--color-primary) / 0.15);
+  border: 1px solid rgb(var(--color-primary) / 0.3);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-feats-selected-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  background: transparent;
+  border: none;
+  color: rgb(var(--color-text-muted));
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.levelup-feats-selected-remove:hover {
+  color: rgb(var(--color-error));
+}
+
+.levelup-feats-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.5rem;
+}
+
+.levelup-feats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border) / 0.5);
+  transition: background 0.15s ease;
+}
+
+.levelup-feats-row:last-child {
+  border-bottom: none;
+}
+
+.levelup-feats-row:hover {
+  background: rgb(var(--color-surface-2) / 0.5);
+}
+
+.levelup-feats-row.selected {
+  background: rgb(var(--color-primary) / 0.1);
+}
+
+.levelup-feats-row.unavailable {
+  opacity: 0.5;
+}
+
+.levelup-feats-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.levelup-feats-row-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-feats-row-desc {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+  margin-top: 0.125rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.levelup-feats-row-type {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  color: rgb(var(--color-text-muted));
+  background: rgb(var(--color-surface-3));
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  margin-top: 0.25rem;
+  display: inline-block;
+}
+
+.levelup-feats-row-type.bonus {
+  color: rgb(var(--color-secondary));
+  background: rgb(var(--color-secondary) / 0.15);
+}
+
+.levelup-feats-row-btn {
+  flex-shrink: 0;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  background: rgb(var(--color-primary));
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.levelup-feats-row-btn:hover:not(:disabled) {
+  background: rgb(var(--color-primary-600));
+}
+
+.levelup-feats-row-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.levelup-feats-row-btn.remove {
+  background: rgb(var(--color-error));
+}
+
+.levelup-feats-row-btn.remove:hover:not(:disabled) {
+  background: rgb(var(--color-error-dark));
+}
+
+.levelup-feats-empty {
+  padding: 2rem;
+  text-align: center;
+  color: rgb(var(--color-text-muted));
+}
+
+/* Feats item styles (button-based list) */
+.levelup-feats-item {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgb(var(--color-surface-border) / 0.5);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.levelup-feats-item:last-child {
+  border-bottom: none;
+}
+
+.levelup-feats-item:hover:not(:disabled) {
+  background: rgb(var(--color-surface-2) / 0.5);
+}
+
+.levelup-feats-item.selected {
+  background: rgb(var(--color-primary) / 0.1);
+}
+
+.levelup-feats-item.unavailable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.levelup-feats-item:disabled {
+  cursor: not-allowed;
+}
+
+.levelup-feats-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.levelup-feats-item-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-feats-item-description {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+.levelup-feats-item-prereq {
+  font-size: 0.6875rem;
+  color: rgb(var(--color-error));
+  font-weight: 500;
+}
+
+/* Skills Step */
+.levelup-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.levelup-skills-points {
+  display: flex;
+  gap: 2rem;
+  padding: 0.75rem;
+  background: rgb(var(--color-surface-2));
+  border-radius: 0.5rem;
+}
+
+.levelup-skills-points-remaining,
+.levelup-skills-points-spent {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.levelup-skills-points-label {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+}
+
+.levelup-skills-points-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgb(var(--color-primary));
+}
+
+.levelup-skills-points-value.complete {
+  color: rgb(var(--color-success));
+}
+
+.levelup-skills-legend {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.75rem;
+}
+
+.levelup-skills-legend-class {
+  color: rgb(var(--color-success));
+}
+
+.levelup-skills-legend-cross {
+  color: rgb(var(--color-warning));
+}
+
+.levelup-skills-search {
+  position: relative;
+}
+
+.levelup-skills-search-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.5rem;
+  color: rgb(var(--color-text-primary));
+  font-size: 0.875rem;
+}
+
+.levelup-skills-search-input:focus {
+  outline: none;
+  border-color: rgb(var(--color-primary));
+  box-shadow: 0 0 0 2px rgb(var(--color-primary) / 0.2);
+}
+
+.levelup-skills-list {
+  max-height: 350px;
+  overflow-y: auto;
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.5rem;
+}
+
+.levelup-skills-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border) / 0.5);
+  transition: background 0.15s ease;
+}
+
+.levelup-skills-row:last-child {
+  border-bottom: none;
+}
+
+.levelup-skills-row:hover {
+  background: rgb(var(--color-surface-2) / 0.5);
+}
+
+.levelup-skills-row.allocated {
+  background: rgb(var(--color-primary) / 0.05);
+}
+
+.levelup-skills-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.levelup-skills-row-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-skills-row-type {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+}
+
+.levelup-skills-row-type.class {
+  color: rgb(var(--color-success));
+}
+
+.levelup-skills-row-type.cross {
+  color: rgb(var(--color-warning));
+}
+
+.levelup-skills-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.levelup-skills-row-ranks {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(var(--color-success));
+  min-width: 4rem;
+  text-align: right;
+}
+
+.levelup-skills-row-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  background: rgb(var(--color-surface-3));
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.25rem;
+  color: rgb(var(--color-text-primary));
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.levelup-skills-row-btn:hover:not(:disabled) {
+  background: rgb(var(--color-surface-4));
+  border-color: rgb(var(--color-primary) / 0.5);
+}
+
+.levelup-skills-row-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.levelup-skills-row-btn.plus:not(:disabled):hover {
+  background: rgb(var(--color-primary) / 0.2);
+  border-color: rgb(var(--color-primary));
+}
+
+.levelup-skills-row-btn.minus:not(:disabled):hover {
+  background: rgb(var(--color-error) / 0.2);
+  border-color: rgb(var(--color-error));
+}
+
+.levelup-skills-row-points {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+/* Spells Step */
+.levelup-spells {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.levelup-spells-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: rgb(var(--color-surface-2));
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.levelup-spells-tab {
+  flex: 1;
+  min-width: 4rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(var(--color-text-muted));
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.levelup-spells-tab:hover {
+  background: rgb(var(--color-surface-3));
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-spells-tab.active {
+  background: rgb(var(--color-primary));
+  color: white;
+}
+
+.levelup-spells-tab-count {
+  font-size: 0.625rem;
+  opacity: 0.8;
+}
+
+.levelup-spells-list {
+  max-height: 350px;
+  overflow-y: auto;
+  border: 1px solid rgb(var(--color-surface-border));
+  border-radius: 0.5rem;
+}
+
+.levelup-spells-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(var(--color-surface-border) / 0.5);
+  transition: background 0.15s ease;
+}
+
+.levelup-spells-row:last-child {
+  border-bottom: none;
+}
+
+.levelup-spells-row:hover {
+  background: rgb(var(--color-surface-2) / 0.5);
+}
+
+.levelup-spells-row.selected {
+  background: rgb(var(--color-primary) / 0.1);
+}
+
+.levelup-spells-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.levelup-spells-row-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-spells-row-school {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+  margin-top: 0.125rem;
+}
+
+.levelup-spells-row-btn {
+  flex-shrink: 0;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  background: rgb(var(--color-primary));
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.levelup-spells-row-btn:hover:not(:disabled) {
+  background: rgb(var(--color-primary-600));
+}
+
+.levelup-spells-row-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.levelup-spells-row-btn.remove {
+  background: rgb(var(--color-error));
+}
+
+.levelup-spells-row-btn.remove:hover:not(:disabled) {
+  background: rgb(var(--color-error-dark));
+}
+
+.levelup-spells-empty {
+  padding: 2rem;
+  text-align: center;
+  color: rgb(var(--color-text-muted));
+}
+
+/* Confirm Step */
+.levelup-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.levelup-confirm-section {
+  background: rgb(var(--color-surface-2));
+  border: 1px solid rgb(var(--color-surface-border) / 0.5);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.levelup-confirm-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: rgb(var(--color-text-muted));
+  margin-bottom: 0.75rem;
+}
+
+.levelup-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgb(var(--color-surface-border) / 0.3);
+}
+
+.levelup-confirm-row:last-child {
+  border-bottom: none;
+}
+
+.levelup-confirm-label {
+  font-size: 0.875rem;
+  color: rgb(var(--color-text-secondary));
+}
+
+.levelup-confirm-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-confirm-value.hp {
+  color: rgb(248, 113, 113);
+}
+
+.levelup-confirm-value.ability {
+  color: rgb(250, 204, 21);
+}
+
+.levelup-confirm-value.skill {
+  color: rgb(var(--color-success));
+}
+
+.levelup-confirm-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.levelup-confirm-list-item {
+  padding: 0.25rem 0.625rem;
+  background: rgb(var(--color-surface-3));
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-primary));
+}
+
+.levelup-confirm-list-item.feat {
+  background: rgb(var(--color-secondary) / 0.15);
+  color: rgb(var(--color-secondary));
+}
+
+.levelup-confirm-list-item.spell {
+  background: rgb(var(--color-primary) / 0.15);
+  color: rgb(var(--color-primary));
+}
+
+.levelup-confirm-empty {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-muted));
+  font-style: italic;
+}
+
 } /* Close @layer components */

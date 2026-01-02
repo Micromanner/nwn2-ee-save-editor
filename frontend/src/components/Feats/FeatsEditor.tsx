@@ -27,10 +27,12 @@ export default function FeatsEditor() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [selectedTypes, setSelectedTypes] = useState<Set<number>>(new Set());
+  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const [availableFeats, setAvailableFeats] = useState<FeatInfo[]>([]);
   const [availableFeatsLoading, setAvailableFeatsLoading] = useState(false);
   const [availableFeatsError, setAvailableFeatsError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [availableTotal, setAvailableTotal] = useState(0); 
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
   const FEATS_PER_PAGE = 50;
@@ -47,7 +49,7 @@ export default function FeatsEditor() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm, selectedTypes]);
+  }, [activeTab, searchTerm, selectedTypes, showAvailableOnly]);
 
   useEffect(() => {
     const loadAvailableFeats = async () => {
@@ -63,17 +65,32 @@ export default function FeatsEditor() {
           ? Array.from(selectedTypes).reduce((acc, type) => acc | type, 0)
           : undefined;
 
-        const response = await CharacterAPI.getLegitimateFeats(character.id, {
-          page: currentPage,
-          limit: FEATS_PER_PAGE,
-          featType: featTypeBitmask,
-          search: (searchTerm && searchTerm.length >= 3) ? searchTerm : undefined,
-        });
+        if (showAvailableOnly) {
+           // Fetch all available feats (can take = true)
+           const response = await CharacterAPI.getAvailableFeats(character.id, featTypeBitmask);
+           setAvailableFeats(response.available_feats);
+           setAvailableTotal(response.total);
+           // Available feats endpoint returns all, no pagination meta. 
+           // We will handle pagination/filtering client-side for available feats or simply show all.
+           setTotalFeats(response.total);
+           setHasNext(false); 
+           setHasPrevious(false);
+        } else {
+           // Fetch all legitimate feats (paginated)
+           const response = await CharacterAPI.getLegitimateFeats(character.id, {
+             page: currentPage,
+             limit: FEATS_PER_PAGE,
+             featType: featTypeBitmask,
+             search: (searchTerm && searchTerm.length >= 3) ? searchTerm : undefined,
+           });
 
-        setAvailableFeats(response.feats);
-        setTotalFeats(response.pagination.total);
-        setHasNext(response.pagination.has_next);
-        setHasPrevious(response.pagination.has_previous);
+           setAvailableFeats(response.feats);
+           setTotalFeats(response.pagination.total);
+           setAvailableTotal(response.pagination.total);
+           setHasNext(response.pagination.has_next);
+           setHasPrevious(response.pagination.has_previous);
+        }
+
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to load available feats';
         setAvailableFeatsError(errorMessage);
@@ -83,7 +100,8 @@ export default function FeatsEditor() {
     };
 
     loadAvailableFeats();
-  }, [character?.id, activeTab, currentPage, FEATS_PER_PAGE, selectedTypes, searchTerm]);
+  }, [character?.id, activeTab, currentPage, FEATS_PER_PAGE, selectedTypes, searchTerm, showAvailableOnly]);
+
 
   const allMyFeats = useMemo(() => {
     if (!featsData?.summary) return [];
@@ -143,21 +161,36 @@ export default function FeatsEditor() {
   const filteredMyFeats = useMemo(() => filterAndSortFeats(searchedMyFeats), [searchedMyFeats, filterAndSortFeats]);
 
   const filteredAvailableFeats = useMemo(() => {
-    const notOwned = availableFeats.filter(feat => !ownedFeatIds.has(feat.id));
+    // If showAvailableOnly is true, we have the full list in availableFeats (non-paginated from backend in this implementation context, or at least a big list)
+    // We need to filter it by search term and sort it client-side.
+    // If showAvailableOnly is false, availableFeats is already paginated/searched by the backend.
 
-    return notOwned.sort((a, b) => {
+    let listToFilter = availableFeats;
+    
+    // Filter out owned feats
+    listToFilter = listToFilter.filter(feat => !ownedFeatIds.has(feat.id));
+
+    if (showAvailableOnly && searchTerm) {
+       const lowerSearch = searchTerm.toLowerCase();
+       listToFilter = listToFilter.filter(feat => 
+          feat.name.toLowerCase().includes(lowerSearch) || 
+          feat.label?.toLowerCase().includes(lowerSearch)
+       );
+    }
+
+    return listToFilter.sort((a, b) => {
       switch (sortBy) {
         case 'name':
           return a.name.localeCompare(b.name);
         case 'type':
           return a.type - b.type;
         case 'level':
-          return 0;
+          return 0; // Level info might not be available on basic feat info yet
         default:
           return 0;
       }
     });
-  }, [availableFeats, ownedFeatIds, sortBy]);
+  }, [availableFeats, ownedFeatIds, sortBy, showAvailableOnly, searchTerm]);
 
   const finalAvailableFeats = filteredAvailableFeats;
 
@@ -243,6 +276,8 @@ export default function FeatsEditor() {
           hasNext={false}
           hasPrevious={false}
           onPageChange={() => {}}
+          showAvailableOnly={showAvailableOnly}
+          onAvailableOnlyChange={setShowAvailableOnly}
         />
         <div className="flex items-center justify-center h-64 bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-lg">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
@@ -290,6 +325,8 @@ export default function FeatsEditor() {
           hasNext={hasNext}
           hasPrevious={hasPrevious}
           onPageChange={handlePageChange}
+          showAvailableOnly={showAvailableOnly}
+          onAvailableOnlyChange={setShowAvailableOnly}
         />
       </div>
 

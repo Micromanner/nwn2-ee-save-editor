@@ -165,12 +165,15 @@ class SpellManager(EventEmitter):
         
         new_class = self.rules_service.get_by_id('classes', event.new_class_id)
         if not self.is_spellcaster(class_data=new_class):
-            self._clear_all_spell_lists()
             return
         
         # Update spell slots and known spells
         self._update_spell_slots()
         self._update_known_spells(event.new_class_id, event.level)
+        
+        # If level 1, grant initial spellbook (e.g. Wizard Cantrips)
+        if event.level == 1:
+            self._grant_initial_spellbook(event.new_class_id)
         
         # Emit spell change event
         self.emit(EventType.SPELLS_CHANGED, {
@@ -189,8 +192,8 @@ class SpellManager(EventEmitter):
         # Update spell slots
         self._update_spell_slots()
         
-        # Handle new spells for the level
-        self._handle_level_up_spells(event.class_id, event.new_level)
+        # Handle spell progression
+        self._handle_level_up_spells(event.class_id, event.class_level_gained)
         
         # Emit spell change event
         self.emit(EventType.SPELLS_CHANGED, {
@@ -329,7 +332,8 @@ class SpellManager(EventEmitter):
     
     def _calculate_class_spell_slots(self, class_data: Any, level: int, class_entry: Dict) -> Dict[int, int]:
         """
-        Calculate spell slots for a specific class and level
+        Calculate spell slots for a specific class and level.
+        Respects 'SpellCasterLevel' override in class_entry for Prestige Class progression.
 
         Args:
             class_data: Class data from 2DA
@@ -350,10 +354,25 @@ class SpellManager(EventEmitter):
 
         if not spell_table:
             return slots
+            
+        # Determine effective caster level
+        # Check for SpellCasterLevel override (Standard NWN2 PrC mechanics)
+        eff_level = level
+        if class_entry and isinstance(class_entry, dict):
+             scl = class_entry.get('SpellCasterLevel')
+             if scl is not None:
+                 try:
+                     scl_int = int(scl)
+                     # Only use if greater than class level (advancement)
+                     # or just use it if present? Typically it overrides.
+                     if scl_int > 0:
+                         eff_level = scl_int
+                 except (ValueError, TypeError):
+                     pass
         
         # Get base slots from table
-        if 0 <= level - 1 < len(spell_table):
-            table_row = spell_table[level - 1]
+        if 0 <= eff_level - 1 < len(spell_table):
+            table_row = spell_table[eff_level - 1]
             
             # Extract spell slots for each level (0-9)
             for spell_level in range(10):
@@ -1161,6 +1180,10 @@ class SpellManager(EventEmitter):
         # Update known spells for spontaneous casters
         self._update_known_spells(class_id, new_level)
         
+        # If level 1, grant initial spellbook (Cantrips) for prepared casters
+        if new_level == 1:
+            self._grant_initial_spellbook(class_id)
+        
         class_data = self.rules_service.get_by_id('classes', class_id)
         if class_data and self.is_prepared_caster(class_data=class_data):
             logger.info("Clearing memorized spells for prepared caster level up")
@@ -1170,6 +1193,36 @@ class SpellManager(EventEmitter):
                 'class_id': class_id
             })
     
+    def _grant_initial_spellbook(self, class_id: int):
+        """
+        Grant initial spellbook spells (Cantrips) for a new prepared caster (e.g. Wizard).
+        Does NOT apply to classes that know all spells (Cleric/Druid) or spontaneous casters (Sorcerer).
+        """
+        class_data = self.rules_service.get_by_id('classes', class_id)
+        if not class_data:
+            return
+
+        # Filter for "Book" casters: Prepared=True AND AllSpellsKnown=False
+        if self.uses_all_spells_known(class_id):
+            return
+        
+        if not self.is_prepared_caster(class_data=class_data):
+            return
+            
+        if not self.is_spellcaster(class_data=class_data):
+            return
+
+        logger.info(f"Granting initial spellbook (Cantrips) for class {class_id}")
+        
+        # Grant ALL Level 0 spells (Cantrips) available to this class
+        cantrips = self.get_available_spells(spell_level=0, class_id=class_id)
+        count = 0
+        for spell in cantrips:
+            if self.add_known_spell(class_id, 0, spell['id']):
+                count += 1
+        
+        logger.info(f"Added {count} cantrips to spellbook")
+
     def _safe_int(self, value: Any, default: int = 0) -> int:
         """Safely convert value to int"""
         if value is None or value == '****':

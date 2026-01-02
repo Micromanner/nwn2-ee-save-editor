@@ -26,6 +26,7 @@ class FeatState(BaseModel):
     available_feats: List[Dict[str, Any]] = Field(..., description="Feats that can be taken")
     legitimate_feats: List[Dict[str, Any]] = Field(..., description="Feats meeting prerequisites")
     recommended_feats: List[Dict[str, Any]] = Field(default_factory=list)
+    point_summary: Dict[str, int] = Field(default_factory=dict, description="Feat slot summary: total_slots, total_feats, available")
 
     model_config = ConfigDict(extra='allow')
 

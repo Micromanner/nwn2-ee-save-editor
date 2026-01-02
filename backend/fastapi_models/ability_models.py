@@ -105,8 +105,10 @@ class AttributeState(BaseModel):
     # Dependencies
     attribute_dependencies: AttributeDependencies
     
+    
     # Biography
     biography: CharacterBiography
+    point_summary: Optional[Dict[str, int]] = Field(None, description="Detailed point summary")
 
 
 class AttributeChangeRequest(BaseModel):

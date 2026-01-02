@@ -7,7 +7,7 @@ from typing import Dict, List, Set, Tuple, Optional, Any
 from loguru import logger
 import time
 
-from ..events import EventEmitter, EventType, ClassChangedEvent, LevelGainedEvent
+from ..events import EventEmitter, EventType, ClassChangedEvent, LevelGainedEvent, SkillPointsAwardedEvent
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 # Using global loguru logger
@@ -47,6 +47,13 @@ class SkillManager(EventEmitter):
         """Handle class change event"""
         logger.info(f"SkillManager handling class change: {event.old_class_id} -> {event.new_class_id}")
         
+        # Skip destructive operations for simple level adjustments (up/down in same class)
+        if event.is_level_adjustment:
+            logger.info("Skipping skill reset - this is a level adjustment, not a class swap")
+            # Still update class skills cache in case level affects skill maximums
+            self._update_class_skills_cache(event.new_class_id)
+            return
+        
         # Recalculate total skill points
         total_skill_points = self.calculate_total_skill_points(event.new_class_id, event.level)
         
@@ -70,14 +77,26 @@ class SkillManager(EventEmitter):
         if class_data:
             modifiers = self._calculate_ability_modifiers()
             skill_points_gained = self.calculate_skill_points_for_level(
-                class_data, modifiers['INT']
+                class_data, modifiers['INT'], is_first_level=(event.new_level == 1)
             )
             
             # Add to available points
             current_points = self.gff.get('SkillPoints', 0)
             self.gff.set('SkillPoints', current_points + skill_points_gained)
             
+            # Emit skill points awarded event
+            skill_event = SkillPointsAwardedEvent(
+                event_type=EventType.SKILL_POINTS_AWARDED,
+                source_manager='skill',
+                timestamp=time.time(),
+                class_id=event.class_id,
+                level=event.new_level,
+                points=skill_points_gained
+            )
+            self.character_manager.emit(skill_event)
+            
             logger.info(f"Gained {skill_points_gained} skill points")
+    
     
     def calculate_total_skill_points(self, class_id: int, total_level: int) -> int:
         """
@@ -97,44 +116,57 @@ class SkillManager(EventEmitter):
         modifiers = self._calculate_ability_modifiers()
         int_modifier = modifiers['INT']
         
-        # Get base skill points per level from class using FieldMappingUtility
+        # Determine points per level
         base_skill_points = field_mapper._safe_int(
             field_mapper.get_field_value(class_data, 'skill_point_base', 2), 2
         )
         
-        # First level gets 4x skill points
-        first_level_points = (base_skill_points + int_modifier) * 4
-        first_level_points = max(4, first_level_points)  # Minimum 4 at level 1
+        # Calculate racial bonus base (per level)
+        racial_bonus_base = self._get_racial_skill_point_bonus_base()
         
-        # Other levels get normal skill points
-        if total_level > 1:
-            per_level_points = base_skill_points + int_modifier
-            per_level_points = max(1, per_level_points)  # Minimum 1 per level
+        # Base points per level (Class + Int + Race)
+        # Note: In NWN2 adjustments apply before multiplication
+        points_per_level = base_skill_points + int_modifier + racial_bonus_base
+        points_per_level = max(1, points_per_level) # Minimum 1 point per level
+        
+        # Level 1 calculation (x4)
+        level_1_points = max(4, points_per_level * 4)
+        
+        if total_level <= 1:
+            return level_1_points
             
-            other_levels_points = per_level_points * (total_level - 1)
-            total_points = first_level_points + other_levels_points
-        else:
-            total_points = first_level_points
-        
-        # Add racial skill point bonuses
-        racial_bonus = self._get_racial_skill_point_bonus(total_level)
-        total_points += racial_bonus
+        # Subsequent levels
+        subsequent_levels = total_level - 1
+        total_points = level_1_points + (points_per_level * subsequent_levels)
         
         return total_points
     
-    def calculate_skill_points_for_level(self, class_data, int_modifier: int) -> int:
-        """Calculate skill points gained for a single level"""
+    def calculate_skill_points_for_level(self, class_data, int_modifier: int, is_first_level: bool = False) -> int:
+        """
+        Calculate skill points gained for a single level
+        
+        Args:
+            class_data: Class data object
+            int_modifier: Intelligence modifier
+            is_first_level: Whether this is the character's first level (x4 multiplier)
+        """
         base_skill_points = field_mapper._safe_int(
             field_mapper.get_field_value(class_data, 'skill_point_base', 2), 2
         )
-        base_points = base_skill_points + int_modifier
-        base_points = max(1, base_points)  # Minimum 1
         
-        # Add racial skill point bonus for this level
-        racial_bonus = self._get_racial_skill_point_bonus(1)  # Bonus for single level
-        base_points += racial_bonus
+        # Get racial bonus
+        racial_bonus_base = self._get_racial_skill_point_bonus_base()
         
-        return base_points
+        # Calculate base points
+        points = base_skill_points + int_modifier + racial_bonus_base
+        points = max(1, points) # Minimum 1
+        
+        # Apply multiplier
+        if is_first_level:
+            points *= 4
+            points = max(4, points) # Minimum 4 at first level
+            
+        return points
     
     def set_skill_rank(self, skill_id: int, ranks: int) -> bool:
         """
@@ -287,13 +319,32 @@ class SkillManager(EventEmitter):
         return False
     
     def calculate_skill_cost(self, skill_id: int, ranks: int) -> int:
-        """Calculate skill point cost for ranks - removed cross-class penalties for user freedom"""
+        """
+        Calculate skill point cost for ranks.
+        Rules:
+        - Class Skills (for any class possessed): Cost 1 per rank.
+        - Cross-Class Skills: Cost 2 per rank.
+        - Able Learner Feat (ID 406): Cross-Class Skills cost 1 per rank.
+        """
         if ranks == 0:
             return 0
+            
+        # Check if it's a class skill (Permanent Memory rule maintained by global check)
+        if self.is_class_skill(skill_id):
+            return ranks
+            
+        # Check for Able Learner feat (ID 406)
+        # We need to access FeatManager securely
+        feat_manager = self.character_manager.get_manager('feat')
+        if feat_manager:
+            # Check if character has Able Learner
+            # Use raw GFF check or feat manager method if available
+            # Doing raw check here for speed/independence or using feat manager
+            if feat_manager.has_feat(406):
+                return ranks
         
-        # All skills cost 1 point per rank - no cross-class penalties
-        # This allows users to freely allocate skill points without restrictions
-        return ranks
+        # If neither Class Skill nor Able Learner, it's a Cross-Class skill
+        return ranks * 2
     
     def calculate_skill_modifier(self, skill_id: int) -> int:
         """Calculate total skill modifier including ranks and ability bonus"""
@@ -416,8 +467,8 @@ class SkillManager(EventEmitter):
             class_id = class_entry.get('Class')
             self._get_class_skills(class_id)
     
-    def _get_racial_skill_point_bonus(self, level: int) -> int:
-        """Get racial skill point bonus from RaceManager"""
+    def _get_racial_skill_point_bonus_base(self) -> int:
+        """Get base racial skill point bonus per level"""
         race_manager = self.character_manager.get_manager('race')
         if race_manager:
             # Get racial properties which includes skill point bonuses
@@ -425,14 +476,11 @@ class SkillManager(EventEmitter):
             race_name = racial_props.get('race_name', '').lower()
             
             # In D&D/NWN2, humans get +1 skill point per level
-            # Use race name instead of hardcoded ID for better compatibility
             if 'human' in race_name:
-                return level
+                return 1
             
             # TODO: Add other racial skill bonuses when race data includes them
-            # Example: Some subraces might get different bonuses
         
-        # No racial skill point bonus for other races
         return 0
 
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
@@ -525,6 +573,45 @@ class SkillManager(EventEmitter):
             else:
                 skills_with_ranks = len([s for s in skill_list if isinstance(s, dict) and s.get('Skill') is not None and s.get('Rank', 0) > 0])
             
+            # Current Level Logic
+            current_level_gained = 0
+            current_level_spent = 0
+            
+            lvl_stat_list = self.gff.get('LvlStatList', [])
+            if lvl_stat_list and isinstance(lvl_stat_list, list):
+                last_entry = lvl_stat_list[-1]
+                
+                # Points gained (stored in history) - failover to calculation if 0
+                recorded_gained = last_entry.get('SkillPoints', 0)
+                
+                # Calculate expected points for this level
+                class_id = last_entry.get('LvlStatClass', -1)
+                class_data = self.game_rules_service.get_by_id('classes', class_id)
+                modifiers = self._calculate_ability_modifiers()
+                int_mod = modifiers.get('INT', 0)
+                is_first_level = len(lvl_stat_list) == 1
+                
+                expected_gained = self.calculate_skill_points_for_level(class_data, int_mod, is_first_level)
+                
+                # Use expected if recorded is 0 (fix for "Overdrawn" issue on saves with missing history data)
+                # Otherwise trust the GFF (in case of manual edits/bonuses not covered by rules)
+                current_level_gained = max(recorded_gained, expected_gained)
+                
+                # Points spent (calculate from history SkillList)
+                history_skill_list = last_entry.get('SkillList', [])
+                
+                # record_skill_change creates a LIST of dicts: [{'Rank': 0}, {'Rank': 1}...]
+                # So index is skill ID.
+                for skill_id, skill_entry in enumerate(history_skill_list):
+                    ranks_added = skill_entry.get('Rank', 0)
+                    if ranks_added > 0:
+                        cost = self.calculate_skill_cost(skill_id, ranks_added)
+                        current_level_spent += cost
+
+            current_level_balance = current_level_gained - current_level_spent
+            current_level_available = max(0, current_level_balance)
+            current_level_overdrawn = max(0, -current_level_balance)
+
             summary = {
                 'available_points': available_points,
                 'total_available': total_available,
@@ -532,6 +619,10 @@ class SkillManager(EventEmitter):
                 'overspent': overspent,
                 'total_ranks': sum(s.get('Rank', 0) for s in skill_list if isinstance(s, dict)),
                 'skills_with_ranks': skills_with_ranks,
+                'current_level_gained': current_level_gained,
+                'current_level_spent': current_level_spent,
+                'current_level_available': current_level_available,
+                'current_level_overdrawn': current_level_overdrawn,
                 'class_skills': [],
                 'cross_class_skills': []
             }

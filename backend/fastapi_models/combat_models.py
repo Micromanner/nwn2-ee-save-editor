@@ -313,3 +313,19 @@ class InitiativeBonusUpdateResponse(BaseModel):
     new_value: int
     new_initiative: Dict[str, Any] = Field(default_factory=dict, description="New initiative calculation from manager")
     has_unsaved_changes: bool = True
+
+
+class HitPointsUpdateRequest(BaseModel):
+    """Request to update hit points"""
+    current_hp: Optional[int] = Field(None, description="New current hit points")
+    max_hp: Optional[int] = Field(None, description="New max hit points")
+
+
+class HitPointsUpdateResponse(BaseModel):
+    """Response after updating hit points"""
+    success: bool
+    current: int
+    max: int
+    temp: int
+    message: str
+    has_unsaved_changes: bool

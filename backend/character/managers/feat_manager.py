@@ -128,6 +128,12 @@ class FeatManager(EventEmitter):
         """Handle class change event"""
         logger.info(f"FeatManager handling class change: {event.old_class_id} -> {event.new_class_id}")
 
+        # Skip destructive operations for simple level adjustments (up/down in same class)
+        if event.is_level_adjustment:
+            logger.info("Skipping feat removal - this is a level adjustment, not a class swap")
+            self.invalidate_validation_cache()
+            return
+
         if event.old_class_id is not None:
             self._remove_class_feats(event.old_class_id, event.level, event.preserve_feats)
 
@@ -143,21 +149,22 @@ class FeatManager(EventEmitter):
             class_manager = self.character_manager.get_manager('class')
             if class_manager:
                 feats_at_level = class_manager.get_class_feats_for_level(
-                    class_data, event.new_level
+                    class_data, event.class_level_gained
                 )
             else:
                 feats_at_level = []
 
             for feat_info in feats_at_level:
-                if feat_info['list_type'] == 0:
-                    feat_id = feat_info['feat_id']
+                # Iterate all feats associated with this level (get_class_feats_for_level filters by GrantedOnLevel)
+                # We ignore list_type because if it has a GrantedOnLevel, it is automatic.
+                feat_id = feat_info['feat_id']
 
-                    old_feat_id = self._check_feat_progression(feat_id, event.class_id)
-                    if old_feat_id:
-                        logger.info(f"Progressing feat: {old_feat_id} -> {feat_id}")
-                        self.remove_feat(old_feat_id, force=True)
+                old_feat_id = self._check_feat_progression(feat_id, event.class_id)
+                if old_feat_id:
+                    logger.info(f"Progressing feat: {old_feat_id} -> {feat_id}")
+                    self.remove_feat(old_feat_id, force=True)
 
-                    self.add_feat(feat_id, source='level')
+                self.add_feat(feat_id, source='level')
 
         self.invalidate_validation_cache()
     
@@ -601,6 +608,213 @@ class FeatManager(EventEmitter):
                 categorized['class_feats'].append(feat_info)
         
         return categorized
+
+    def get_feat_points_summary(self) -> Dict[str, Any]:
+        """
+        Calculate open feat slots using the Blueprint Method.
+        
+        This approach:
+        1. Creates "buckets" for each level that should grant a feat slot
+        2. Checks only those specific levels in LvlStatList
+        3. Filters out auto-granted feats (List=3 in class tables, background, history, domain)
+        4. Open slots = buckets with no valid selectable feat
+        
+        This is robust against modded characters - ignores feats added at non-slot levels.
+        """
+        lvl_stat_list = self.gff.get('LvlStatList', [])
+        feat_list = self.gff.get('FeatList', [])
+        
+        if not lvl_stat_list:
+            return {
+                'total_general_slots': 0,
+                'total_bonus_slots': 0,
+                'total_slots': 0,
+                'total_feats': len(feat_list),
+                'open_slots': 0,
+                'filled_slots': 0,
+                'available': 0
+            }
+        
+        # Auto-granted feat types (these are "free" and don't fill slots)
+        auto_granted_types = {8192, 128, 512}  # Domain, Background, History
+        
+        # Build slot buckets and check if they're filled
+        open_general_slots = 0
+        open_bonus_slots = 0
+        filled_general_slots = 0
+        filled_bonus_slots = 0
+        
+        # Track class levels as we iterate
+        class_level_tracker: Dict[int, int] = {}
+        
+        # Cache for class feat tables - maps class_id -> {feat_id: list_type}
+        class_feat_table_cache: Dict[int, Dict[int, int]] = {}
+        
+        for total_level_idx, level_entry in enumerate(lvl_stat_list):
+            total_level = total_level_idx + 1  # 1-indexed
+            class_id = level_entry.get('LvlStatClass', 0)
+            
+            # Update class level tracker
+            if class_id not in class_level_tracker:
+                class_level_tracker[class_id] = 0
+            class_level_tracker[class_id] += 1
+            class_level = class_level_tracker[class_id]
+            
+            # Get feats selected at this level
+            level_feats = level_entry.get('FeatList', [])
+            level_feat_ids = [f.get('Feat', -1) for f in level_feats if f.get('Feat', -1) >= 0]
+            
+            # Load class feat table if not cached
+            if class_id not in class_feat_table_cache:
+                class_feat_table_cache[class_id] = self._load_class_feat_table(class_id)
+            class_feat_table = class_feat_table_cache[class_id]
+            
+            # Filter to get only SELECTABLE feats at this level (not auto-granted)
+            selectable_feats = []
+            for feat_id in level_feat_ids:
+                # Check if auto-granted by class table (List = 3)
+                if feat_id in class_feat_table and class_feat_table[feat_id] == 3:
+                    continue
+                
+                # Check if auto-granted by type
+                feat_info = self.get_feat_info_display(feat_id)
+                if feat_info and feat_info.get('type', 0) in auto_granted_types:
+                    continue
+                
+                selectable_feats.append(feat_id)
+            
+            # Check GENERAL FEAT SLOT for this level
+            has_general_slot = False
+            if total_level <= 20:
+                # Heroic: 1, 3, 6, 9, 12, 15, 18
+                has_general_slot = (total_level == 1 or total_level % 3 == 0)
+            else:
+                # Epic: Every Odd Level (21, 23, 25...)
+                has_general_slot = (total_level % 2 != 0)
+            
+            if has_general_slot:
+                if selectable_feats:
+                    filled_general_slots += 1
+                    # Remove one feat from selectable (it filled the general slot)
+                    selectable_feats = selectable_feats[1:]
+                else:
+                    open_general_slots += 1
+            
+            # Check BONUS FEAT SLOT for this level
+            has_bonus_slot = self._check_bonus_feat_slot(class_id, class_level)
+            
+            if has_bonus_slot:
+                if selectable_feats:
+                    filled_bonus_slots += 1
+                    selectable_feats = selectable_feats[1:]
+                else:
+                    open_bonus_slots += 1
+        
+        # Check for racial bonus feat (Human = race ID 6, Strongheart Halfling needs check)
+        race_id = self.gff.get('Race', -1)
+        racial_bonus = self._get_racial_bonus_feats(race_id)
+        
+        # Racial bonus is at level 1, already counted in general if filled
+        # For simplicity, add racial bonus to general slots
+        total_general_slots = filled_general_slots + open_general_slots + racial_bonus
+        total_bonus_slots = filled_bonus_slots + open_bonus_slots
+        total_slots = total_general_slots + total_bonus_slots
+        
+        # Recalculate with racial bonus
+        # The racial slot is also at level 1, check if it's filled
+        # For now, assume racial bonus adds to available if level 1 has fewer selectable feats than slots
+        open_slots = open_general_slots + open_bonus_slots
+        filled_slots = filled_general_slots + filled_bonus_slots
+        
+        return {
+            'total_general_slots': total_general_slots,
+            'total_bonus_slots': total_bonus_slots,
+            'total_slots': total_slots,
+            'total_feats': len(feat_list),
+            'open_slots': open_slots,
+            'filled_slots': filled_slots,
+            'available': open_slots
+        }
+    
+    def _load_class_feat_table(self, class_id: int) -> Dict[int, int]:
+        """
+        Load cls_feat_<class>.2da and return mapping of feat_id -> List value.
+        List values: 0=Selectable, 1=General/Bonus, 2=Bonus Only, 3=Auto-Granted
+        """
+        feat_table: Dict[int, int] = {}
+        
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
+        if not class_data:
+            return feat_table
+        
+        feats_table_name = field_mapper.get_field_value(class_data, 'feats_table', '')
+        if not feats_table_name or feats_table_name == '****':
+            return feat_table
+        
+        table = self.game_rules_service.get_table(feats_table_name.lower())
+        if not table:
+            return feat_table
+        
+        for row in table:
+            feat_id = field_mapper._safe_int(field_mapper.get_field_value(row, 'feat_index', -1))
+            list_type = field_mapper._safe_int(getattr(row, 'List', 0))
+            if feat_id >= 0:
+                feat_table[feat_id] = list_type
+        
+        return feat_table
+    
+    def _check_bonus_feat_slot(self, class_id: int, class_level: int) -> bool:
+        """Check if this class level grants a bonus feat slot."""
+        class_data = self.game_rules_service.get_by_id('classes', class_id)
+        if not class_data:
+            return False
+        
+        # Check bonus feat table
+        bonus_table_name = field_mapper.get_field_value(class_data, 'bonus_feats_table', '')
+        if bonus_table_name and bonus_table_name != '****':
+            b_table = self.game_rules_service.get_table(bonus_table_name.lower())
+            if b_table:
+                level_idx = max(0, class_level - 1)
+                if level_idx < len(b_table):
+                    row = b_table[level_idx]
+                    has_bonus = field_mapper._safe_int(
+                        field_mapper.get_field_value(row, 'bonus', '0'), 0
+                    )
+                    if has_bonus > 0:
+                        return True
+        
+        # Epic bonus feats (class level > 20)
+        if class_level > 20:
+            interval = 0
+            if class_id == 4:  # Fighter
+                interval = 2
+            elif class_id == 10:  # Wizard
+                interval = 3
+            elif class_id in (7, 3):  # Rogue, Druid
+                interval = 4
+            
+            if interval > 0 and (class_level - 20) % interval == 0:
+                return True
+        
+        return False
+    
+    def _get_racial_bonus_feats(self, race_id: int) -> int:
+        """
+        Get number of bonus feat slots from race.
+        
+        Humans and Strongheart Halflings get +1 feat at level 1.
+        This is indicated by having feat 258 (QuickMaster / FEAT_QUICK_TO_MASTER).
+        """
+        # Check if character has the Quick to Master feat (ID 258)
+        # This feat grants +1 selectable feat at level 1 for Humans/Strongheart Halflings
+        QUICK_TO_MASTER_FEAT_ID = 258
+        
+        feat_list = self.gff.get('FeatList', [])
+        for feat_entry in feat_list:
+            if feat_entry.get('Feat', -1) == QUICK_TO_MASTER_FEAT_ID:
+                return 1
+        
+        return 0
     
     def invalidate_validation_cache(self):
         """Clear validation cache when character state changes."""
@@ -1080,10 +1294,7 @@ class FeatManager(EventEmitter):
         limit: int = 50
     ) -> Dict[str, Any]:
         """Get list of all legitimate feats with complete filtering and pagination."""
-        import time
-        time_filtering = 0
-        time_search = 0
-        time_get_feat_info = 0
+        t_start = time.perf_counter()
 
         all_feats = self.game_rules_service.get_table('feat')
         if not all_feats:
@@ -1093,127 +1304,50 @@ class FeatManager(EventEmitter):
         logger.debug(f"get_legitimate_feats: Processing {len(all_feats)} feats (feat_type={feat_type}, search={search}, page={page}, limit={limit})")
         filtered_count = 0
 
-        # Phase 1: Fast filtering to get feat IDs only (no display cache building)
         legitimate_feat_ids = []
         for row_index, feat_data in enumerate(all_feats):
-            t0 = time.perf_counter()
-
-            # Filter out illegitimate feats
             if not self.is_legitimate_feat(feat_data):
                 filtered_count += 1
-                time_filtering += time.perf_counter() - t0
                 continue
 
-            # Use proper row index as feat ID
             feat_id = getattr(feat_data, 'id', getattr(feat_data, 'row_index', row_index))
 
-            # Filter by feat type (bitwise AND for multiple type flags)
             if feat_type is not None:
-                data_type = field_mapper.get_field_value(feat_data, 'type', 0)
+                data_type_int = self._parse_feat_type(feat_data)
 
-                data_type_int = 0
-                if isinstance(data_type, str):
-                    data_type_upper = data_type.upper()
-                    if 'GENERAL' in data_type_upper:
-                        data_type_int = 1
-                    elif 'PROFICIENCY' in data_type_upper:
-                        data_type_int = 2
-                    elif 'SKILLNSAVE' in data_type_upper or 'SKILL' in data_type_upper:
-                        data_type_int = 4
-                    elif 'METAMAGIC' in data_type_upper:
-                        data_type_int = 8
-                    elif 'DIVINE' in data_type_upper:
-                        data_type_int = 16
-                    elif 'EPIC' in data_type_upper:
-                        data_type_int = 32
-                    elif 'CLASSABILITY' in data_type_upper:
-                        data_type_int = 64
-                    elif 'BACKGROUND' in data_type_upper:
-                        data_type_int = 128
-                    elif 'SPELLCASTING' in data_type_upper:
-                        data_type_int = 256
-                    elif 'HISTORY' in data_type_upper:
-                        data_type_int = 512
-                    elif 'HERITAGE' in data_type_upper:
-                        data_type_int = 1024
-                    elif 'ITEMCREATION' in data_type_upper or 'ITEM' in data_type_upper:
-                        data_type_int = 2048
-                    elif 'RACIALABILITY' in data_type_upper or 'RACIAL' in data_type_upper:
-                        data_type_int = 4096
-                    else:
-                        data_type_int = 1
-                else:
-                    try:
-                        data_type_int = int(data_type) if data_type else 0
-                        if data_type_int not in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
-                            data_type_int = 1
-                    except (ValueError, TypeError):
-                        data_type_int = 1
-
-                # Override type for domains and backgrounds
                 if self.is_domain_epithet_feat(feat_id):
                     data_type_int = 8192
-                else:
-                    label = field_mapper.get_field_value(feat_data, 'label', '')
-                    if 'BACKGROUND' in str(label).upper():
-                        data_type_int = 128
 
                 if not (data_type_int & feat_type):
-                    time_filtering += time.perf_counter() - t0
                     continue
 
-            time_filtering += time.perf_counter() - t0
             legitimate_feat_ids.append((feat_id, feat_data))
 
-        # Phase 2: Apply search BEFORE pagination (critical for correct results)
         if search:
-            t_search = time.perf_counter()
             search_lower = search.lower()
             filtered_feat_ids = []
-
             for feat_id, feat_data in legitimate_feat_ids:
-                # Get name from label reference
-                label_ref = field_mapper.get_field_value(feat_data, 'feat')
-                if isinstance(label_ref, int):
-                    name = self.game_rules_service._loader.get_string(label_ref) if label_ref else ''
-                else:
-                    name = str(label_ref) if label_ref else ''
-
-                # Get description
-                desc_ref = field_mapper.get_field_value(feat_data, 'description')
-                if isinstance(desc_ref, int):
-                    description = self.game_rules_service._loader.get_string(desc_ref) if desc_ref else ''
-                else:
-                    description = str(desc_ref) if desc_ref else ''
-
-                # Search in name or description
+                name, description = self._get_feat_name_and_description(feat_data)
                 if search_lower in name.lower() or search_lower in description.lower():
                     filtered_feat_ids.append((feat_id, feat_data))
-
             legitimate_feat_ids = filtered_feat_ids
-            time_search = time.perf_counter() - t_search
             logger.debug(f"Search '{search}' filtered to {len(legitimate_feat_ids)} feats")
 
         total_count = len(legitimate_feat_ids)
 
-        # Phase 3: Apply pagination BEFORE building display cache
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
         feats_to_load = legitimate_feat_ids[start_idx:end_idx]
         logger.info(f"Pagination: loading {len(feats_to_load)} of {total_count} feats (page {page})")
 
-        # Phase 4: Build display cache ONLY for requested feats
         legitimate = []
         for feat_id, feat_data in feats_to_load:
-            t1 = time.perf_counter()
             feat_info = self.get_feat_info(feat_id, feat_data, skip_validation=True)
-            time_get_feat_info += time.perf_counter() - t1
             if feat_info:
                 legitimate.append(feat_info)
 
-        logger.info(f"get_legitimate_feats: Returned {len(legitimate)} legitimate feats (filtered out {filtered_count}, total valid: {total_count})")
-        logger.info(f"get_legitimate_feats TIMING: filtering={time_filtering:.3f}s, search={time_search:.3f}s, get_feat_info={time_get_feat_info:.3f}s")
-        logger.info(f"get_legitimate_feats: Display cache size: {len(self._display_cache)} entries")
+        t_total = time.perf_counter() - t_start
+        logger.info(f"get_legitimate_feats: Returned {len(legitimate)} legitimate feats (filtered out {filtered_count}, total valid: {total_count}) in {t_total:.3f}s")
 
         return self._build_pagination_response(legitimate, page, limit, total_count)
 
@@ -1233,54 +1367,139 @@ class FeatManager(EventEmitter):
             }
         }
 
-    def get_available_feats(self, feat_type: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get list of feats available for selection with prerequisite validation."""
-        available = []
-        
-        # Get all feats from dynamic game data
+    def get_available_feats(
+        self,
+        feat_type: Optional[int] = None,
+        class_id: Optional[int] = None,
+        search: Optional[str] = None,
+        allowed_feat_ids: Optional[List[int]] = None
+    ) -> List[Dict[str, Any]]:
+        """Get feats the character can take, filtered by prerequisites, class, and level requirements."""
+        t_start = time.perf_counter()
+
         all_feats = self.game_rules_service.get_table('feat')
         if not all_feats:
-            return available
-        
-        # Get character's current feats once to avoid repeated has_feat() calls
-        current_feat_ids = set()
-        feat_list = self.gff.get('FeatList', [])
-        for feat in feat_list:
-            current_feat_ids.add(feat.get('Feat', -1))
-        
-        # Count for logging
-        total_checked = 0
-        prereq_checked = 0
-        
+            return []
+
+        # Optimization: If allowed_feat_ids is provided, use it to narrow down all_feats
+        # This significantly improves performance when filtering for bonus slots
+        allowed_ids_set = set(allowed_feat_ids) if allowed_feat_ids is not None else None
+
+        current_feat_ids = {f.get('Feat', -1) for f in self.gff.get('FeatList', [])}
+        class_list = self.gff.get('ClassList', [])
+        total_level = sum(c.get('ClassLevel', 0) for c in class_list)
+        character_class_ids = {c.get('Class', -1) for c in class_list}
+        domain_feat_ids = self.get_all_domain_feat_ids()
+
+        character_class_names = set()
+        character_class_levels = {}
+        classes_table = self.game_rules_service.get_table('classes')
+        if classes_table:
+            for class_entry in class_list:
+                char_class_id = class_entry.get('Class', -1)
+                char_class_level = class_entry.get('ClassLevel', 0)
+                if 0 <= char_class_id < len(classes_table):
+                    class_data = classes_table[char_class_id]
+                    label = field_mapper.get_field_value(class_data, 'label', '')
+                    if label:
+                        label_upper = str(label).upper()
+                        character_class_names.add(label_upper)
+                        character_class_levels[label_upper] = char_class_level
+
+        stats = {
+            'illegitimate': 0, 'owned': 0, 'type': 0,
+            'class_req': 0, 'level_req': 0, 'special': 0,
+            'search': 0, 'prereq': 0
+        }
+
+        candidate_feats = []
         for row_index, feat_data in enumerate(all_feats):
-            # Filter out illegitimate feats first (fast check)
             if not self.is_legitimate_feat(feat_data):
+                stats['illegitimate'] += 1
                 continue
-                
-            # Use proper row index as feat ID
+
             feat_id = getattr(feat_data, 'id', getattr(feat_data, 'row_index', row_index))
-            
-            # Skip if already has feat (now O(1) lookup)
-            if feat_id in current_feat_ids:
+
+            # Filter by allowed IDs if provided (Step 2: Restricted List)
+            if allowed_ids_set is not None and feat_id not in allowed_ids_set:
+                stats['special'] += 1
                 continue
-            
-            # Skip if wrong type (fast check)
+
+            if feat_id in current_feat_ids:
+                stats['owned'] += 1
+                continue
+
+            if feat_id in domain_feat_ids:
+                stats['special'] += 1
+                continue
+
+            if self._is_non_selectable_feat(feat_data):
+                stats['special'] += 1
+                continue
+
+            if self._is_epic_feat(feat_data) and total_level < 21:
+                stats['special'] += 1
+                continue
+
             if feat_type is not None:
-                data_type_int = self._parse_feat_type(feat_data)
-                if not (data_type_int & feat_type):
+                if not (self._parse_feat_type(feat_data) & feat_type):
+                    stats['type'] += 1
                     continue
-            
-            total_checked += 1
-            
-            # Check prerequisites - this is the expensive part, do it last
+
+            if not self._is_feat_available_for_classes(feat_data, character_class_ids):
+                stats['class_req'] += 1
+                continue
+
+            if self._is_class_specific_feat_by_label(feat_data, character_class_names, character_class_levels):
+                stats['class_req'] += 1
+                continue
+
+            if self._is_ability_requiring_feat(feat_data, character_class_names):
+                stats['class_req'] += 1
+                continue
+
+            if self._is_first_level_only_feat(feat_data, total_level):
+                stats['level_req'] += 1
+                continue
+
+            min_level = field_mapper._safe_int(
+                field_mapper.get_field_value(feat_data, 'min_level', 0)
+            )
+            if min_level > 0 and total_level < min_level:
+                stats['level_req'] += 1
+                continue
+
+            candidate_feats.append((feat_id, feat_data))
+
+        if search:
+            search_lower = search.lower()
+            filtered_candidates = []
+            for feat_id, feat_data in candidate_feats:
+                name, description = self._get_feat_name_and_description(feat_data)
+                if search_lower in name.lower() or search_lower in description.lower():
+                    filtered_candidates.append((feat_id, feat_data))
+                else:
+                    stats['search'] += 1
+            candidate_feats = filtered_candidates
+
+        available = []
+        for feat_id, feat_data in candidate_feats:
             is_valid, _ = self.get_feat_prerequisites_info(feat_id, feat_data)
-            prereq_checked += 1
-            
             if is_valid:
-                available.append(self.get_feat_info(feat_id, feat_data))
-        
-        logger.debug(f"get_available_feats: Checked {prereq_checked} prerequisites out of {total_checked} candidates from {len(all_feats)} total feats")
-        
+                feat_info = self.get_feat_info(feat_id, feat_data, skip_validation=True)
+                if feat_info:
+                    available.append(feat_info)
+            else:
+                stats['prereq'] += 1
+
+        t_total = time.perf_counter() - t_start
+        logger.info(
+            f"get_available_feats: {len(available)} available from {len(all_feats)} total "
+            f"(illegitimate={stats['illegitimate']}, owned={stats['owned']}, special={stats['special']}, "
+            f"type={stats['type']}, class={stats['class_req']}, level={stats['level_req']}, "
+            f"search={stats['search']}, prereq={stats['prereq']}) in {t_total:.3f}s"
+        )
+
         return available
     
     def get_feat_summary(self) -> Dict[str, Any]:
@@ -1547,69 +1766,226 @@ class FeatManager(EventEmitter):
         return text.strip()
 
     def _parse_feat_type(self, feat_data) -> int:
-        """Parse numeric feat type from feat data by checking DESCRIPTION and FeatCategory fields."""
-        import re
-
-        description = field_mapper.get_field_value(feat_data, 'description', '')
+        """Parse numeric feat type from feat data by checking type field and description."""
         feat_category = field_mapper.get_field_value(feat_data, 'type', '')
 
-        if isinstance(feat_category, str):
-            feat_category_upper = feat_category.upper()
-
-            if 'GENERAL' in feat_category_upper:
-                return 1
-            elif 'PROFICIENCY' in feat_category_upper:
-                return 2
-            elif 'SKILLNSAVE' in feat_category_upper or 'SKILL' in feat_category_upper:
-                return 4
-            elif 'METAMAGIC' in feat_category_upper:
-                return 8
-            elif 'DIVINE' in feat_category_upper:
-                return 16
-            elif 'EPIC' in feat_category_upper:
-                return 32
-            elif 'CLASSABILITY' in feat_category_upper:
-                return 64
-            elif 'BACKGROUND' in feat_category_upper:
-                return 128
-            elif 'SPELLCASTING' in feat_category_upper:
-                return 256
-            elif 'HISTORY' in feat_category_upper:
-                return 512
-            elif 'HERITAGE' in feat_category_upper:
-                return 1024
-            elif 'ITEMCREATION' in feat_category_upper or 'ITEM' in feat_category_upper:
-                return 2048
-            elif 'RACIALABILITY' in feat_category_upper or 'RACIAL' in feat_category_upper:
-                return 4096
+        if isinstance(feat_category, str) and feat_category:
+            result = self._parse_feat_type_from_string(feat_category)
+            if result != 1:
+                return result
 
         try:
             feat_type_int = int(feat_category) if feat_category else 0
-            if feat_type_int in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]:
+            if feat_type_int in self._VALID_FEAT_TYPE_INTS:
                 return feat_type_int
         except (ValueError, TypeError):
             pass
 
+        description = field_mapper.get_field_value(feat_data, 'description', '')
         if description:
             match = re.search(r'Type of Feat:\s*(\w+)', description, re.IGNORECASE)
             if match:
-                feat_type_str = match.group(1).lower()
-
-                if feat_type_str == 'combat':
-                    return 2
-                elif feat_type_str == 'metamagic':
-                    return 8
-                elif feat_type_str == 'epic':
-                    return 32
-                elif feat_type_str == 'class':
-                    return 64
-                elif feat_type_str == 'background':
-                    return 128
-                elif feat_type_str == 'special':
-                    return 16
+                return self._parse_feat_type_from_string(match.group(1))
 
         return 1
-    
+
+    # Type name to bitmask mapping
+    _FEAT_TYPE_MAP = {
+        'GENERAL': 1,
+        'PROFICIENCY': 2,
+        'COMBAT': 2,
+        'SKILLNSAVE': 4,
+        'SKILL': 4,
+        'METAMAGIC': 8,
+        'DIVINE': 16,
+        'SPECIAL': 16,
+        'EPIC': 32,
+        'CLASSABILITY': 64,
+        'CLASS': 64,
+        'BACKGROUND': 128,
+        'SPELLCASTING': 256,
+        'HISTORY': 512,
+        'HERITAGE': 1024,
+        'ITEMCREATION': 2048,
+        'ITEM': 2048,
+        'RACIALABILITY': 4096,
+        'RACIAL': 4096,
+    }
+    _VALID_FEAT_TYPE_INTS = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096}
+
+    def _parse_feat_type_from_string(self, type_str: str) -> int:
+        """Parse feat type string to bitmask integer. Returns 1 (GENERAL) if unknown."""
+        if not type_str:
+            return 1
+        type_upper = type_str.upper()
+        for key, value in self._FEAT_TYPE_MAP.items():
+            if key in type_upper:
+                return value
+        return 1
+
+    def _get_feat_name_and_description(self, feat_data) -> Tuple[str, str]:
+        """Get resolved name and description strings for a feat."""
+        label_ref = field_mapper.get_field_value(feat_data, 'feat')
+        if isinstance(label_ref, int) and label_ref:
+            name = self.game_rules_service._loader.get_string(label_ref)
+        else:
+            name = str(label_ref) if label_ref else ''
+
+        desc_ref = field_mapper.get_field_value(feat_data, 'description')
+        if isinstance(desc_ref, int) and desc_ref:
+            description = self.game_rules_service._loader.get_string(desc_ref)
+        else:
+            description = str(desc_ref) if desc_ref else ''
+
+        return name or '', description or ''
+
+    _NON_SELECTABLE_KEYWORDS = (
+        'BACKGROUND', 'HISTORY', 'STORY', 'QUEST', 'HERITAGE',
+        'CLASSABILITY', 'RACIALABILITY'
+    )
+
+    def _is_non_selectable_feat(self, feat_data) -> bool:
+        """Check if feat is non-selectable (auto-granted class abilities, backgrounds, heritage, etc)."""
+        label = field_mapper.get_field_value(feat_data, 'label', '')
+        label_upper = str(label).upper() if label else ''
+        feat_category = field_mapper.get_field_value(feat_data, 'feat_category', '')
+        feat_category_upper = str(feat_category).upper() if feat_category else ''
+        feat_type = field_mapper.get_field_value(feat_data, 'type', '')
+        feat_type_upper = str(feat_type).upper() if feat_type else ''
+
+        for keyword in self._NON_SELECTABLE_KEYWORDS:
+            if keyword in label_upper or keyword in feat_category_upper or keyword in feat_type_upper:
+                return True
+        return False
+
+    def _is_epic_feat(self, feat_data) -> bool:
+        """Check if feat is an epic feat (requires level 21+)."""
+        label = field_mapper.get_field_value(feat_data, 'label', '')
+        label_upper = str(label).upper() if label else ''
+        feat_category = field_mapper.get_field_value(feat_data, 'feat_category', '')
+        feat_category_upper = str(feat_category).upper() if feat_category else ''
+        feat_type = field_mapper.get_field_value(feat_data, 'type', '')
+        feat_type_upper = str(feat_type).upper() if feat_type else ''
+        return 'EPIC' in label_upper or 'EPIC' in feat_category_upper or 'EPIC' in feat_type_upper
+
+    def _is_feat_available_for_classes(self, feat_data, character_class_ids: Set[int]) -> bool:
+        """Check if feat is available for any of the character's classes."""
+        all_classes_can_use = field_mapper._safe_int(
+            field_mapper.get_field_value(feat_data, 'allclassescanuse', 1)
+        )
+        if all_classes_can_use != 0:
+            return True
+
+        for i in range(1, 5):
+            min_level_class = field_mapper._safe_int(
+                field_mapper.get_field_value(feat_data, f'minlevelclass{i}', -1)
+            )
+            if min_level_class >= 0 and min_level_class in character_class_ids:
+                return True
+        return False
+
+    _CLASS_NAMES_IN_LABELS = (
+        'BARD', 'CLERIC', 'DRUID', 'PALADIN', 'RANGER', 'SORCERER', 'WIZARD',
+        'WARLOCK', 'BARBARIAN', 'MONK', 'ROGUE', 'FIGHTER',
+        'SPIRIT_SHAMAN', 'FAVORED_SOUL', 'ASSASSIN', 'BLACKGUARD', 'AVENGER',
+        'HEXBLADE', 'ELDRITCH'
+    )
+
+    def _is_class_specific_feat_by_label(self, feat_data, character_class_names: Set[str],
+                                          character_class_levels: Dict[str, int] = None) -> bool:
+        """
+        Check if feat label contains a class name that character doesn't have or lacks sufficient level.
+        Filters feats like FEAT_EXTRA_SLOT_BARD_LEVEL0 for non-Bards or low-level Bards.
+        Returns True if feat should be FILTERED OUT.
+        """
+        label = field_mapper.get_field_value(feat_data, 'label', '')
+        label_upper = str(label).upper() if label else ''
+        feat_type = field_mapper.get_field_value(feat_data, 'type', '')
+        feat_type_upper = str(feat_type).upper() if feat_type else ''
+
+        if 'SPELLCASTING' not in feat_type_upper and 'DIVINE' not in feat_type_upper:
+            return False
+
+        for class_name in self._CLASS_NAMES_IN_LABELS:
+            if class_name in label_upper:
+                if class_name not in character_class_names:
+                    return True
+                if character_class_levels and 'EXTRA_SLOT' in label_upper:
+                    class_level = character_class_levels.get(class_name, 0)
+                    if class_level < 4:
+                        return True
+        return False
+
+    _ABILITY_REQUIRING_FEATS = {
+        'SMITING': {'PALADIN', 'BLACKGUARD'},
+        'DIVINE_MIGHT': {'PALADIN', 'CLERIC', 'BLACKGUARD'},
+        'DIVINE_SHIELD': {'PALADIN', 'CLERIC', 'BLACKGUARD'},
+        'TURNING': {'PALADIN', 'CLERIC', 'BLACKGUARD'},
+        'RAGE': {'BARBARIAN', 'FRENZIED_BERSERKER'},
+        'GREATER_RESILIENCY': {'BARBARIAN', 'FRENZIED_BERSERKER'},
+        'CURSE_SONG': {'BARD'},
+        'EXTRA_MUSIC': {'BARD'},
+        'LINGERING_SONG': {'BARD'},
+        'SONG_OF_THE_HEART': {'BARD'},
+        'BARDSONG': {'BARD'},
+        'DRAGONSONG': {'BARD'},
+        'BATTLE_DANCER': {'BARD', 'SWASHBUCKLER'},
+        'SKILL_FOCUS_PERFORM': {'BARD'},
+        'NATURAL_BOND': {'DRUID', 'RANGER'},
+        'TELTHOR_COMPANION': {'DRUID', 'RANGER'},
+        'DINOSAUR_COMPANION': {'DRUID', 'RANGER'},
+        'EXALTED_COMPANION': {'DRUID', 'RANGER'},
+        'ANIMAL_COMPANION': {'DRUID', 'RANGER'},
+        'DRAGON_COMPANION': {'DRUID', 'RANGER'},
+        'WILD_SHAPE': {'DRUID'},
+        'SWIFT_HUNTER': set(),
+        'BATTLE_CASTER': {'BARD', 'WARLOCK'},
+        'ABILITY_FOCUS_ELDRITCH_BLAST': {'WARLOCK'},
+        'ABILITY_FOCUS_INVOCATIONS': {'WARLOCK'},
+        'GUTTURAL_INVOCATIONS': {'WARLOCK'},
+        'EMPOWER_ELDBLAST': {'WARLOCK'},
+        'MAXIMIZE_ELDBLAST': {'WARLOCK'},
+        'DARK_TRANSIENT': {'WARLOCK'},
+        'PRACTICED_INVOKER': {'WARLOCK'},
+        'SNEAK_ATTACK': {'ROGUE', 'ASSASSIN', 'BLACKGUARD', 'ARCANE_TRICKSTER'},
+        'STUNNING_FIST': {'MONK', 'SACRED_FIST'},
+        'KI_': {'MONK', 'SACRED_FIST'},
+        'QUIVERING_PALM': {'MONK'},
+        'WHOLENESS_OF_BODY': {'MONK'},
+        'MULTIATTACK': set(),
+    }
+
+    _FIRST_LEVEL_ONLY_FEATS = (
+        'SNAKEBLOOD', 'ABLELEARNER', 'ARTIST', 'BLOODED', 'BULLHEADED',
+        'COURTEOUSMAGOCRACY', 'LUCKOFHEROES', 'SILVERPALM', 'STRONGSOUL',
+        'THUG', 'STORMHEART', 'SPELLWISE'
+    )
+
+    def _is_first_level_only_feat(self, feat_data, total_level: int) -> bool:
+        """Check if feat can only be taken at 1st level."""
+        if total_level <= 1:
+            return False
+        label = field_mapper.get_field_value(feat_data, 'label', '')
+        label_upper = str(label).upper().replace('_', '') if label else ''
+        for pattern in self._FIRST_LEVEL_ONLY_FEATS:
+            if pattern in label_upper:
+                return True
+        return False
+
+    def _is_ability_requiring_feat(self, feat_data, character_class_names: Set[str]) -> bool:
+        """
+        Check if feat requires a class ability the character doesn't have.
+        Returns True if feat should be FILTERED OUT.
+        """
+        label = field_mapper.get_field_value(feat_data, 'label', '')
+        label_upper = str(label).upper() if label else ''
+
+        for feat_pattern, required_classes in self._ABILITY_REQUIRING_FEATS.items():
+            if feat_pattern in label_upper:
+                if not required_classes.intersection(character_class_names):
+                    return True
+        return False
+
     def detect_epithet_feats(self) -> Set[int]:
         """Detect epithet feats like special story or custom feats that should be protected."""
         epithet_feats = set()

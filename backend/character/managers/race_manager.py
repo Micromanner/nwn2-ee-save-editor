@@ -482,9 +482,102 @@ class RaceManager(EventEmitter):
     def _get_racial_feats(self, race_id: int) -> List[int]:
         """Get list of feats granted by a race using field mapping utility"""
         race_data = self._get_race_data(race_id)
-        if race_data:
-            return field_mapper.get_racial_feats(race_data)
-        return []
+        if not race_data:
+            logger.debug(f"_get_racial_feats: No race data for race_id={race_id}")
+            return []
+            
+        feats = []
+        
+        # 1. Get direct feats from columns (usually FeatIndex)
+        direct_feats = field_mapper.get_racial_feats(race_data)
+        feats.extend(direct_feats)
+        logger.debug(f"_get_racial_feats: Race {race_id} direct feats from columns: {direct_feats}")
+        
+        # 2. Get feats from referenced FeatsTable
+        feats_table_name = field_mapper.get_field_value(race_data, 'feats_table')
+        logger.debug(f"_get_racial_feats: Race {race_id} feats_table_name='{feats_table_name}'")
+        
+        if feats_table_name and feats_table_name != '****':
+            try:
+                table_data = self.game_rules_service.get_table(feats_table_name.lower())
+                if table_data:
+                    logger.debug(f"_get_racial_feats: Loaded table '{feats_table_name.lower()}' with {len(table_data)} rows")
+                    for row_idx, row in enumerate(table_data):
+                        feat_id = field_mapper.get_field_value(row, 'feat_index', -1)
+                        logger.debug(f"_get_racial_feats: Table row {row_idx}: feat_id={feat_id} (type={type(feat_id).__name__})")
+                        if feat_id is not None:
+                            try:
+                                val = int(feat_id)
+                                if val >= 0:
+                                    feats.append(val)
+                                    logger.debug(f"_get_racial_feats: Added feat {val} to list")
+                            except (ValueError, TypeError) as e:
+                                logger.debug(f"_get_racial_feats: Failed to convert feat_id={feat_id}: {e}")
+                else:
+                    logger.warning(f"_get_racial_feats: Table '{feats_table_name.lower()}' returned None/empty")
+            except Exception as e:
+                logger.warning(f"Error loading racial feat table {feats_table_name}: {e}")
+        else:
+            logger.debug(f"_get_racial_feats: No valid feats_table for race {race_id}")
+        
+        logger.info(f"_get_racial_feats: Race {race_id} returning feats: {feats}")
+        return feats
+
+    def get_all_racial_feats(self) -> List[int]:
+        """
+        Get all feats currently granted by race and subrace
+        
+        Returns:
+            List of feat IDs
+        """
+        race_id = self.gff.get('Race', 0)
+        logger.debug(f"get_all_racial_feats: Getting feats for race_id={race_id}")
+        
+        # Base racial feats (now includes table lookup)
+        feats = set(self._get_racial_feats(race_id))
+        logger.debug(f"get_all_racial_feats: Base racial feats: {feats}")
+        
+        subrace_raw = self.gff.get('Subrace', '')
+        subrace_name = self._get_subrace_name(subrace_raw)
+        logger.debug(f"get_all_racial_feats: Subrace='{subrace_name}'")
+        
+        if subrace_name:
+            subrace_data = self._get_subrace_data(subrace_name)
+            if subrace_data:
+                # Get subrace feats
+                direct_feats = field_mapper.get_racial_feats(subrace_data)
+                feats.update(direct_feats)
+                logger.debug(f"get_all_racial_feats: Subrace direct feats: {direct_feats}")
+                
+                # Check for feats table too
+                feats_table_name = field_mapper.get_field_value(subrace_data, 'feats_table', '')
+                if feats_table_name and feats_table_name != '****':
+                    logger.debug(f"get_all_racial_feats: Subrace loading feats from table: {feats_table_name}")
+                    try:
+                        table_name_lower = feats_table_name.lower()
+                        table_data = self.game_rules_service.get_table(table_name_lower)
+                        logger.debug(f"get_all_racial_feats: get_table('{table_name_lower}') returned: {type(table_data).__name__}, len={len(table_data) if table_data else 'None'}")
+                        if table_data:
+                            logger.debug(f"get_all_racial_feats: Subrace feat table loaded with {len(table_data)} rows")
+                            for row_idx, row in enumerate(table_data):
+                                feat_id = field_mapper.get_field_value(row, 'feat_index', -1)
+                                logger.debug(f"get_all_racial_feats: Subrace table row {row_idx}: feat_id={feat_id} (type={type(feat_id).__name__})")
+                                if feat_id is not None:
+                                    try:
+                                        val = int(feat_id)
+                                        if val >= 0:
+                                            feats.update([val])
+                                            logger.debug(f"get_all_racial_feats: Added subrace feat {val}")
+                                    except (ValueError, TypeError) as e:
+                                        logger.debug(f"get_all_racial_feats: Failed to convert subrace feat_id={feat_id}: {e}")
+                        else:
+                            logger.warning(f"get_all_racial_feats: Subrace feat table '{feats_table_name.lower()}' returned None/empty")
+                    except Exception as e:
+                        logger.warning(f"Error loading subrace feat table {feats_table_name}: {e}")
+
+        result = list(feats)
+        
+        return result
     
     def _get_base_speed(self, race_id: int) -> int:
         """Get base movement speed from dynamic data using field mapping utility"""
