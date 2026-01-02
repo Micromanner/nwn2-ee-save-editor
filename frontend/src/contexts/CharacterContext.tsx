@@ -449,14 +449,27 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await Promise.all(refreshPromises);
   }, [characterId, loadSubsystem]);
 
-  // Clear character data
-  const clearCharacter = useCallback(() => {
+  // Clear character data and close backend session
+  const clearCharacter = useCallback(async () => {
+    // Close backend session if one exists
+    if (characterId) {
+      try {
+        await DynamicAPI.fetch(`/session/characters/${characterId}/session/stop`, {
+          method: 'DELETE'
+        });
+        console.log(`Backend session closed for character ${characterId}`);
+      } catch (err) {
+        // Log but don't throw - we still want to clear frontend state
+        console.warn('Failed to close backend session:', err);
+      }
+    }
+    
     setCharacterId(null);
     setCharacter(null);
     setError(null);
     setSubsystems(initializeSubsystems());
     setCategorizedClasses(null);
-  }, []);
+  }, [characterId]);
 
   const loadMetadataInternal = useCallback(async (id: number) => {
     setIsMetadataLoading(true);
@@ -511,26 +524,38 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
+      // Close any existing backend session first
+      if (characterId) {
+        try {
+          await DynamicAPI.fetch(`/session/characters/${characterId}/session/stop`, {
+            method: 'DELETE'
+          });
+          console.log(`Closed previous session for character ${characterId} before importing new save`);
+        } catch (err) {
+          console.warn('Failed to close previous backend session:', err);
+        }
+      }
+      
       // Step 1: Import the save game (creates backend session)
       const importResponse = await CharacterAPI.importCharacter(savePath);
-      const characterId = importResponse.id;
+      const newCharacterId = importResponse.id;
       
-      if (!characterId) {
+      if (!newCharacterId) {
         throw new Error('Import successful but no character ID returned');
       }
       
       // Step 2: Fetch complete character state from backend session
-      const characterData = await CharacterAPI.getCharacterState(characterId);
+      const characterData = await CharacterAPI.getCharacterState(newCharacterId);
       
       // Step 3: Populate frontend context with complete data
       setCharacter(characterData);
-      setCharacterId(characterId);
+      setCharacterId(newCharacterId);
       
       // Reset subsystems
       setSubsystems(initializeSubsystems());
       
       // Load metadata immediately after import
-      await loadMetadataInternal(characterId);
+      await loadMetadataInternal(newCharacterId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';
       setError(errorMessage);
@@ -539,7 +564,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
 
-  }, []);
+  }, [characterId, loadMetadataInternal]);
 
 
 
