@@ -772,3 +772,142 @@ def get_enriched_quests(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get enriched quests: {str(e)}"
         )
+
+
+# ============================================================================
+# DEITY AND BIOGRAPHY ENDPOINTS
+# ============================================================================
+
+@router.get("/characters/{character_id}/available-deities")
+def get_available_deities(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get list of available deities from game data"""
+    try:
+        content_manager = manager.get_manager('content')
+        deities = content_manager.get_available_deities()
+        
+        return {
+            'deities': deities,
+            'total': len(deities)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get available deities for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available deities: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/deity")
+def get_deity(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get character's current deity"""
+    try:
+        content_manager = manager.get_manager('content')
+        deity = content_manager.get_deity()
+        
+        return {
+            'deity': deity
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get deity for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get deity: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/deity")
+def set_deity(
+    character_id: int,
+    manager: CharacterManagerDep,
+    request: Dict[str, Any]
+):
+    """Set character's deity (in-memory, not saved to file until save is triggered)"""
+    try:
+        deity_name = request.get('deity', '')
+        
+        content_manager = manager.get_manager('content')
+        success = content_manager.set_deity(deity_name)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to set deity"
+            )
+        
+        return {
+            'success': True,
+            'deity': deity_name
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set deity for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set deity: {str(e)}"
+        )
+
+
+@router.get("/characters/{character_id}/biography")
+def get_biography(
+    character_id: int,
+    manager: CharacterManagerDep
+):
+    """Get character's biography/description"""
+    try:
+        content_manager = manager.get_manager('content')
+        biography = content_manager.get_biography()
+        
+        return {
+            'biography': biography
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get biography for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get biography: {str(e)}"
+        )
+
+
+@router.post("/characters/{character_id}/biography")
+def set_biography(
+    character_id: int,
+    manager: CharacterManagerDep,
+    request: Dict[str, Any]
+):
+    """Set character's biography (in-memory, not saved to file until save is triggered)"""
+    try:
+        biography_text = request.get('biography', '')
+        
+        content_manager = manager.get_manager('content')
+        success = content_manager.set_biography(biography_text)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to set biography"
+            )
+        
+        return {
+            'success': True,
+            'biography_length': len(biography_text)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set biography for character {character_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to set biography: {str(e)}"
+        )

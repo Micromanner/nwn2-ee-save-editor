@@ -256,6 +256,7 @@ interface CharacterContextState {
 
   refreshAll: () => Promise<void>;
   loadMetadata: () => Promise<void>;
+  updateCharacterPartial: (data: Partial<CharacterData>) => void;
 }
 
 // Create context
@@ -585,6 +586,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await Promise.all(loadPromises);
   }, [characterId, loadCharacter, loadSubsystem]);
 
+  // partial update without reload
+  const updateCharacterPartial = useCallback((data: Partial<CharacterData>) => {
+      setCharacter(prev => prev ? { ...prev, ...data } : null);
+  }, []);
+
   const value: CharacterContextState = {
     character,
     characterId,
@@ -606,6 +612,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     totalSpells,
     setTotalFeats,
     setTotalSpells,
+    updateCharacterPartial,
   };
 
   return (

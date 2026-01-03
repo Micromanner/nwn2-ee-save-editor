@@ -8,6 +8,7 @@ import { CharacterAPI } from '@/services/characterApi';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import CampaignOverview from './CampaignOverview';
+import DeitySelectionModal, { Deity } from './DeitySelectionModal';
 
 interface CharacterOverviewProps {
   onNavigate?: (tab: string) => void;
@@ -62,7 +63,7 @@ function CollapsibleSection({ title, children, defaultOpen = false, badge }: Col
 
 export default function CharacterOverview({ onNavigate: _onNavigate }: CharacterOverviewProps) { // eslint-disable-line @typescript-eslint/no-unused-vars
   const t = useTranslations();
-  const { character, isLoading, error, refreshAll } = useCharacterContext();
+  const { character, isLoading, error, refreshAll, updateCharacterPartial } = useCharacterContext();
   const combat = useSubsystem('combat');
   const skills = useSubsystem('skills');
   const feats = useSubsystem('feats');
@@ -111,12 +112,50 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
   const [lastName, setLastName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   
+  // Deity editing state
+  const [isDeityModalOpen, setIsDeityModalOpen] = useState(false);
+  const [deity, setDeity] = useState('');
+  const [availableDeities, setAvailableDeities] = useState<Deity[]>([]);
+  
+  // Biography editing state
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [biography, setBiography] = useState('');
+  
+  // Fetch available deities on mount
+  useEffect(() => {
+    const fetchDeities = async () => {
+      if (!character?.id) return;
+      try {
+        const deities = await CharacterAPI.getAvailableDeities(character.id);
+        // Map API Deity to local Deity interface if needed, or trust structural compatibility
+        setAvailableDeities(deities);
+      } catch (error) {
+        console.error('Failed to fetch deities:', error);
+      }
+    };
+    fetchDeities();
+  }, [character?.id]);
+  
   // Initialize name fields when character changes
   useEffect(() => {
     if (character && character.name) {
       const parts = character.name.split(' ');
       setFirstName(parts[0] || '');
       setLastName(parts.slice(1).join(' ') || '');
+    }
+  }, [character]);
+  
+  // Initialize deity when character changes
+  useEffect(() => {
+    if (character) {
+      setDeity(character.deity || '');
+    }
+  }, [character]);
+  
+  // Initialize biography when character changes
+  useEffect(() => {
+    if (character) {
+      setBiography(character.biography || '');
     }
   }, [character]);
   
@@ -131,9 +170,15 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
         last_name: lastName.trim()
       });
       
-      // Reload character to reflect changes
-      if (refreshAll) {
-        await refreshAll();
+      // Update local state smoothly
+      if (updateCharacterPartial) {
+        // Construct the new name properly based on input
+        const newFullName = lastName.trim() ? `${firstName.trim()} ${lastName.trim()}` : firstName.trim();
+        updateCharacterPartial({ 
+            name: newFullName,
+            first_name: firstName.trim(),
+            last_name: lastName.trim()
+        });
       }
       
       setIsEditingName(false);
@@ -153,6 +198,47 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
       setLastName(parts.slice(1).join(' ') || '');
     }
     setIsEditingName(false);
+  };
+  
+  const handleSelectDeity = async (selectedDeityName: string) => {
+    if (!character?.id || isSaving) return;
+    
+    setIsSaving(true);
+    try {
+      await CharacterAPI.setDeity(character.id, selectedDeityName.trim());
+      
+      // Update local state immediately
+      setDeity(selectedDeityName.trim());
+      
+      // Update context smoothly
+      if (updateCharacterPartial) {
+        updateCharacterPartial({ deity: selectedDeityName.trim() });
+      }
+      setIsDeityModalOpen(false);
+    } catch (error) {
+      console.error('Failed to save deity:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const handleSaveBiography = async () => {
+    if (!character?.id || isSaving) return;
+    
+    setIsSaving(true);
+    try {
+      await CharacterAPI.setBiography(character.id, biography.trim());
+      
+      // Update context smoothly
+      if (updateCharacterPartial) {
+        updateCharacterPartial({ biography: biography.trim() });
+      }
+      setIsEditingBio(false);
+    } catch (error) {
+      console.error('Failed to save biography:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   // Load subsystems data only if missing - don't force refresh on every tab switch
@@ -250,6 +336,7 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
                       disabled={isSaving}
                     />
                     <Button
+                      type="button"
                       onClick={handleSaveName}
                       disabled={isSaving}
                       variant="primary"
@@ -267,6 +354,7 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
                       )}
                     </Button>
                     <Button
+                      type="button"
                       onClick={handleCancelEdit}
                       disabled={isSaving}
                       variant="outline"
@@ -282,9 +370,11 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
                     <div className="flex items-center gap-2">
                         <h1 className="text-4xl font-bold text-[rgb(var(--color-text-primary))]">{display(character.name, 'Unknown Character')}</h1>
                         <Button
+                        type="button"
                         onClick={() => setIsEditingName(true)}
                         variant="ghost"
                         size="icon"
+                        className="text-[rgb(var(--color-text-muted))] hover:text-[rgb(var(--color-primary))] transition-colors"
                         title="Edit character name"
                         >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -310,13 +400,15 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
                     <div className="col-span-1 md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4 pb-4 border-b border-[rgb(var(--color-surface-border)/0.2)]">
                          <div>
                             <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Race & Origin</div>
-                            <div className="font-medium text-[rgb(var(--color-text-primary))]">
-                                {character.subrace ? `${character.subrace}` : display(character.race)}
+                            <div className="font-medium text-[rgb(var(--color-text-primary))] truncate" title={character.subrace ? `${character.race} (${character.subrace})` : character.race}>
+                                {character.race}{character.subrace ? <span className="text-[rgb(var(--color-text-secondary))] text-sm ml-1">({character.subrace})</span> : null}
                             </div>
                          </div>
                          <div>
-                            <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Gender</div>
-                            <div className="font-medium text-[rgb(var(--color-text-primary))]">{display(character.gender)}</div>
+                            <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Gender & Age</div>
+                            <div className="font-medium text-[rgb(var(--color-text-primary))]">
+                                {display(character.gender)} <span className="text-[rgb(var(--color-text-muted))] text-sm">/ {character.age || '?'} yrs</span>
+                            </div>
                          </div>
                          <div>
                             <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Alignment</div>
@@ -324,7 +416,22 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
                          </div>
                          <div>
                              <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Deity</div>
-                             <div className="font-medium text-[rgb(var(--color-text-primary))] text-accent">{character.deity && character.deity !== "None" ? character.deity : "-"}</div>
+                               <div className="flex items-center gap-2">
+                                 <span className="font-medium text-[rgb(var(--color-text-primary))] truncate max-w-[120px]" title={character.deity || 'None'}>{character.deity || '-'}</span>
+                                 <Button 
+                                    type="button"
+                                    onClick={() => setIsDeityModalOpen(true)} 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-6 w-6 text-[rgb(var(--color-text-muted))] hover:text-[rgb(var(--color-primary))] p-0 transition-colors"
+                                    disabled={isSaving}
+                                    title="Change Deity"
+                                 >
+                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                   </svg>
+                                 </Button>
+                               </div>
                          </div>
 
                          {/* Row 2: Core Stats (HP, AC, XP, Gold) */}
@@ -389,14 +496,57 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
                             )}
                         </div>
                     </div>
+                    
+                    {/* Biography */}
+                    <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase font-semibold">Biography</div>
+                          {!isEditingBio && (
+
+                            <Button 
+                                type="button"
+                                onClick={() => setIsEditingBio(true)} 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-6 w-6 text-[rgb(var(--color-text-muted))] hover:text-[rgb(var(--color-primary))] p-0 transition-colors"
+                                title="Edit Biography"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </Button>
+                          )}
+                        </div>
+                        {isEditingBio ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={biography}
+                              onChange={(e) => setBiography(e.target.value)}
+                              placeholder="Enter character biography..."
+                              className="w-full px-3 py-2 text-sm bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] rounded-lg text-[rgb(var(--color-text-primary))] focus:outline-none focus:border-[rgb(var(--color-primary))] min-h-[100px] resize-y"
+                              disabled={isSaving}
+                            />
+                            <div className="flex gap-2">
+                              <Button type="button" onClick={handleSaveBiography} disabled={isSaving} variant="primary" size="sm">
+                                {isSaving ? 'Saving...' : 'Save'}
+                              </Button>
+                              <Button type="button" onClick={() => { setBiography(character.biography || ''); setIsEditingBio(false); }} disabled={isSaving} variant="outline" size="sm">
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-[rgb(var(--color-text-secondary))]">
+                            {character.biography ? (
+                              <p className="whitespace-pre-wrap">{character.biography}</p>
+                            ) : (
+                              <span className="text-[rgb(var(--color-text-muted))] italic">No biography written</span>
+                            )}
+                          </div>
+                        )}
+                    </div>
                 </div>
               </div>
-
-
-
-
-
-
       </div>
       </div>
 
@@ -607,6 +757,15 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
         {/* Enhanced Campaign Overview */}
         <CampaignOverview character={character} />
       </div>
+
+      {/* Deity Selection Modal */}
+      <DeitySelectionModal
+        isOpen={isDeityModalOpen}
+        onClose={() => setIsDeityModalOpen(false)}
+        onSelectDeity={handleSelectDeity}
+        availableDeities={availableDeities}
+        currentDeity={character.deity}
+      />
     </div>
   );
 }

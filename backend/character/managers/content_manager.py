@@ -1529,3 +1529,206 @@ class ContentManager(EventEmitter):
             variables['floats'][var_name] = float(value)
         elif var_type == 'string':
             variables['strings'][var_name] = str(value)
+
+    # =========================================================================
+    # DEITY AND BIOGRAPHY MANAGEMENT - NOT SURE IF THIS IS THE BEST PLACE
+    # =========================================================================
+    
+    def get_available_deities(self) -> List[Dict[str, Any]]:
+            """Get list of available deities from game data."""
+            try:
+                deities = []
+                deity_data = self.rules_service.get_table('nwn2_deities')
+                
+                # Helper for Description Resolution
+                from services.resource_manager import ResourceManager
+                try:
+                    resource_manager = ResourceManager()
+                except Exception:
+                    resource_manager = None
+                    logger.warning("ContentManager: ResourceManager unavailable for descriptions")
+
+                if not deity_data:
+                    return []
+
+                for row_id, row in enumerate(deity_data):
+                    try:
+                        # 1. Safe Attribute Extraction
+                        if isinstance(row, dict):
+                            removed = row.get('Removed', '0')
+                            first = row.get('FirstName')
+                            last = row.get('LastName')
+                            icon = row.get('IconID', '')
+                            desc_ref = row.get('DescID')
+                        else:
+                            removed = getattr(row, 'Removed', '0')
+                            first = getattr(row, 'FirstName', None)
+                            last = getattr(row, 'LastName', None)
+                            icon = getattr(row, 'IconID', '')
+                            desc_ref = getattr(row, 'DescID', None)
+
+                        # 2. Validation
+                        # Handle "None" explicitly so it doesn't become the string "None"
+                        first_str = str(first).strip() if first is not None else ""
+                        last_str = str(last).strip() if last is not None else ""
+                        
+                        if str(removed) == '1' or first_str.lower() == 'padding':
+                            continue
+
+                        name = ' '.join(filter(None, [first_str, last_str]))
+                        if not name:
+                            continue
+
+                        # 3. Description Resolution
+                        description = ''
+                        if desc_ref is not None and resource_manager:
+                            try:
+                                val_ref = int(desc_ref) if str(desc_ref).isdigit() else 0
+                                if val_ref > 0:
+                                    description = resource_manager.get_string(val_ref) or ''
+                            except Exception:
+                                pass # Fail silently on desc lookup
+
+                        # 4. Parse Details
+                        parsed = self._parse_deity_description(description, name)
+
+                        deities.append({
+                            'id': row_id,
+                            'name': name,
+                            'description': parsed['description'],
+                            'aliases': parsed['aliases'],
+                            'alignment': parsed['alignment'],
+                            'portfolio': parsed['portfolio'],
+                            'favored_weapon': parsed['favored_weapon'],
+                            'icon': str(icon),
+                        })
+                        
+                    except Exception as row_error:
+                        # Log specific row failure but continue loading others
+                        logger.error(f"Failed to load deity row {row_id}: {row_error}")
+                        continue
+
+                deities.sort(key=lambda d: d['name'])
+                logger.info(f"ContentManager: Loaded {len(deities)} available deities")
+                return deities
+
+            except Exception as e:
+                logger.error(f"ContentManager: Fatal error getting deities: {e}", exc_info=True)
+                return []
+
+    def get_deity(self) -> str:
+        """Get current deity from character GFF data."""
+        return self._get_locstring_value('Deity', '')
+
+    def set_deity(self, deity_name: str) -> bool:
+        """Set character deity in-memory."""
+        try:
+            self.gff.set('Deity', deity_name)
+            logger.info(f"ContentManager: Set deity to '{deity_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to set deity: {e}")
+            return False
+
+    def get_biography(self) -> str:
+        """Get character biography from GFF data."""
+        return self._get_locstring_value('Description', '')
+
+    def set_biography(self, biography_text: str) -> bool:
+        """Set character biography in-memory."""
+        try:
+            biography_text = biography_text or ""
+            
+            # Initialize structure if missing
+            desc_struct = self.gff.get('Description')
+            if not isinstance(desc_struct, dict) or 'substrings' not in desc_struct:
+                desc_struct = {'string_ref': 4294967295, 'substrings': []}
+            
+            if not isinstance(desc_struct.get('substrings'), list):
+                desc_struct['substrings'] = []
+
+            # Update existing English entry or insert new one
+            for substr in desc_struct['substrings']:
+                if isinstance(substr, dict) and substr.get('language') == 0:
+                    substr['string'] = biography_text
+                    break
+            else:
+                desc_struct['substrings'].insert(0, {'string': biography_text, 'language': 0, 'gender': 0})
+
+            self.gff.set('Description', desc_struct)
+            logger.info(f"ContentManager: Set biography ({len(biography_text)} chars)")
+            return True
+        except Exception as e:
+            logger.error(f"ContentManager: Failed to set biography: {e}", exc_info=True)
+            return False
+
+    def _get_locstring_value(self, field_name: str, default: str = '') -> str:
+        """Extract text value from a GFF field handling CExoLocString complexities."""
+        value = self.gff.get(field_name, default)
+        
+        if isinstance(value, str):
+            return value if value else default
+        
+        if isinstance(value, dict):
+            substrings = value.get('substrings', [])
+            if isinstance(substrings, list) and substrings and isinstance(substrings[0], dict):
+                return substrings[0].get('string', default)
+            if 'value' in value:
+                return str(value['value']) if value['value'] else default
+                
+        return default
+
+    def _parse_deity_description(self, raw_desc: str, deity_name: str) -> Dict[str, str]:
+            """Parses raw NWN2 deity description string to extract structured data."""
+            import re
+            
+            # Default empty structure
+            data = {k: '' for k in ['description', 'aliases', 'alignment', 'portfolio', 'favored_weapon']}
+            
+            if not raw_desc:
+                return data
+
+            try:
+                cleaned = raw_desc
+
+                # 1. Clean Header (Case insensitive, handles color tags and simple names)
+                # Escaping deity_name prevents regex errors if name has special chars
+                safe_name = re.escape(deity_name)
+                cleaned = re.sub(r'(?:<color=[^>]+>\s*)?<b>\s*' + safe_name + r'\s*</b>(?:</color>)?', '', cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r'^\s*' + safe_name + r'\s*:\s*', '', cleaned, flags=re.IGNORECASE)
+
+                # 2. Extract Fields Helper
+                def extract(label, key):
+                    nonlocal cleaned
+                    # Find "<b>Label:</b>"
+                    pattern = re.compile(r'<b>\s*' + re.escape(label) + r'\s*:?\s*</b>', re.IGNORECASE)
+                    match = pattern.search(cleaned)
+                    if match:
+                        start = match.end()
+                        # Find end of content (next <b> tag or end of string)
+                        next_tag = re.search(r'<b>', cleaned[start:])
+                        end = start + next_tag.start() if next_tag else len(cleaned)
+                        
+                        # Extract, strip tags/whitespace
+                        val = cleaned[start:end]
+                        val = re.sub(r'<[^>]+>', '', val).strip(' :-,.\n')
+                        data[key] = val
+                        
+                        # Remove from main text
+                        cleaned = cleaned[:match.start()] + cleaned[end:]
+
+                extract('Aliases', 'aliases')
+                extract('Alignment', 'alignment')
+                extract('Portfolio', 'portfolio')
+                extract('Favored Weapon', 'favored_weapon')
+
+                # 3. Final Description Clean
+                desc = re.sub(r'<[^>]+>', '', cleaned).strip()
+                data['description'] = re.sub(r'\n\s*\n', '\n\n', desc)
+                
+            except Exception as e:
+                logger.warning(f"Error parsing description for {deity_name}: {e}")
+                # Fallback: return whole text as description if parsing fails
+                data['description'] = re.sub(r'<[^>]+>', '', raw_desc).strip()
+
+            return data

@@ -46,7 +46,9 @@ class CharacterSummary(BaseModel):
     classes: Dict[str, Any]  # Changed to match actual return from get_class_summary()
     abilities: Optional[Dict[str, int]] = None  # Made optional since not always populated
     gold: int = 0
+    age: int = 0
     gender: int = 0  # Added gender field (raw int)
+    subrace: Optional[str] = None
 
     # Additional info from content manager
     campaign_name: Optional[str] = None
@@ -60,6 +62,8 @@ class CharacterSummary(BaseModel):
     # New fields
     background: Optional[Dict[str, Any]] = None
     domains: List[Dict[str, Any]] = Field(default_factory=list)
+    deity: Optional[str] = None
+    biography: Optional[str] = None
 
 
 class ManagerStatus(BaseModel):

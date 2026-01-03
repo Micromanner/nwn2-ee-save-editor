@@ -18,6 +18,7 @@ from fastapi_routers.dependencies import (
     CharacterManagerDep,
     check_system_ready
 )
+from fastapi_models.savegame_models import SavegameUpdateRequest # Explicit import for router signature
 # from fastapi_models import (...) - moved to lazy loading
 router = APIRouter(tags=["savegame"])
 
@@ -244,7 +245,7 @@ def get_savegame_info(character_id: int):
 @router.post("/{character_id}/update")
 def update_savegame_character(
     character_id: int,
-    update_request,  # Type removed for lazy loading
+    update_request: SavegameUpdateRequest,
     manager: CharacterManagerDep
 ):
     """Update character data in save game using existing session save"""
@@ -256,6 +257,53 @@ def update_savegame_character(
         file_path = _validate_savegame_character(character_id)
         
         if update_request.sync_current_state:
+            # Handle specific field updates before syncing
+            if update_request.updates:
+                updates = update_request.updates
+                
+                # Update raw GFF fields for deity and biography
+                if 'deity' in updates:
+                    manager.gff.set('Deity', updates['deity'])
+                    logger.info(f"Updated deity to: {updates['deity']}")
+                    
+                if 'biography' in updates:
+                    # Description is a CExoLocString with substrings array
+                    desc_struct = manager.gff.get('Description', {})
+                    if isinstance(desc_struct, dict) and 'substrings' in desc_struct:
+                        # Update existing structure
+                        if desc_struct['substrings']:
+                            desc_struct['substrings'][0]['string'] = updates['biography']
+                        else:
+                            desc_struct['substrings'] = [{'string': updates['biography'], 'language': 0, 'gender': 0}]
+                        manager.gff.set('Description', desc_struct)
+                    else:
+                        # Create new structure
+                        manager.gff.set('Description', {
+                            'string_ref': 4294967295,
+                            'substrings': [{'string': updates['biography'], 'language': 0, 'gender': 0}]
+                        })
+                    logger.info(f"Updated biography")
+                    
+                if 'first_name' in updates:
+                    # FirstName is a localized string with 'value' key
+                    first_name_struct = manager.gff.get('FirstName', {})
+                    if isinstance(first_name_struct, dict):
+                        first_name_struct['value'] = updates['first_name']
+                        manager.gff.set('FirstName', first_name_struct)
+                    else:
+                        manager.gff.set('FirstName', {'value': updates['first_name']})
+                    logger.info(f"Updated first_name to: {updates['first_name']}")
+                    
+                if 'last_name' in updates:
+                    # LastName is a localized string with 'value' key
+                    last_name_struct = manager.gff.get('LastName', {})
+                    if isinstance(last_name_struct, dict):
+                        last_name_struct['value'] = updates['last_name']
+                        manager.gff.set('LastName', last_name_struct)
+                    else:
+                        manager.gff.set('LastName', {'value': updates['last_name']})
+                    logger.info(f"Updated last_name to: {updates['last_name']}")
+            
             # Simple relay to existing session save functionality
             success = save_character_session(character_id, create_backup=update_request.create_backup)
             

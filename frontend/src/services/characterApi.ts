@@ -26,6 +26,36 @@ export interface CharacterClass {
   level: number;
 }
 
+export interface Deity {
+  id: number;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface AvailableDeitiesResponse {
+  deities: Deity[];
+  total: number;
+}
+
+export interface DeityResponse {
+  deity: string;
+}
+
+export interface SetDeityResponse {
+  success: boolean;
+  deity: string;
+}
+
+export interface BiographyResponse {
+  biography: string;
+}
+
+export interface SetBiographyResponse {
+  success: boolean;
+  biography_length: number;
+}
+
 export interface DamageResistance {
   type: string;
   amount: number;
@@ -280,9 +310,10 @@ export interface CharacterData {
   race: string;
   subrace?: string;
   gender: string;
-  classes: CharacterClass[];
+  age: number;
   alignment: string;
   deity: string;
+  biography?: string;
   level: number;
   experience: number;
   hitPoints: number;
@@ -397,6 +428,9 @@ export interface CharacterData {
     spent_points?: number;
     total_feats?: number;
   };
+  classes?: CharacterClass[];
+  first_name?: string;
+  last_name?: string;
   skill_points_available?: number;
 }
 
@@ -760,6 +794,65 @@ export class CharacterAPI {
     return response.json();
   }
 
+  // Biography API methods
+  static async getBiography(characterId: number): Promise<string> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/biography`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch biography: ${response.statusText}`);
+    }
+    const data: BiographyResponse = await response.json();
+    return data.biography;
+  }
+
+  static async setBiography(characterId: number, biography: string): Promise<SetBiographyResponse> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/biography`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ biography }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to set biography: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Deity API methods
+  static async getAvailableDeities(characterId: number): Promise<Deity[]> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/available-deities`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch available deities: ${response.statusText}`);
+    }
+    const data: AvailableDeitiesResponse = await response.json();
+    return data.deities;
+  }
+
+  static async getDeity(characterId: number): Promise<string> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/deity`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch deity: ${response.statusText}`);
+    }
+    const data: DeityResponse = await response.json();
+    return data.deity;
+  }
+
+  static async setDeity(characterId: number, deityName: string): Promise<SetDeityResponse> {
+    const response = await DynamicAPI.fetch(`/characters/${characterId}/deity`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deity: deityName }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to set deity: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
   // Hit Points API methods
   static async updateHitPoints(characterId: number, currentHp?: number, maxHp?: number): Promise<any> {
     const payload: any = {};
@@ -889,12 +982,14 @@ export class CharacterAPI {
       race: String(summary.race || info.race_name || 'Unknown'),
       subrace: summary.subrace ? String(summary.subrace) : undefined,
       gender: info.gender === 0 ? 'Male' : info.gender === 1 ? 'Female' : 'Other',
+      age: Number(summary.age || 0),
       classes: classesArray.map((cls) => ({
         name: String(cls.name || 'Unknown Class'),
         level: Number(cls.level || 1)
       })),
       alignment: String(alignmentString),
-      deity: String(summary.deity || 'None'),
+      deity: String(summary.deity || ''),
+      biography: String(summary.biography || ''),
       level: Number(summary.level || (classesData as { total_level?: number }).total_level || info.level || 1),
       experience: Number(summary.experience || info.experience || 0),
       hitPoints: Number(summary.current_hit_points || summary.hit_points || 10),

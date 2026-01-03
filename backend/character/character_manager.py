@@ -502,11 +502,20 @@ class CharacterManager(EventEmitter):
             },
             'gender': self.gff.get('Gender', 0),  # Raw gender INT
             'gold': self.gff.get('Gold', 0),
+            'age': self.gff.get('Age', 0),
+            'subrace': race_manager._get_subrace_name(self.gff.get('Subrace', '')) if race_manager else '',
             'custom_content_count': len(self.custom_content),
-            # New fields for Overview
             'background': {}, 
-            'domains': []
+            'domains': [],
+            'deity': '',
+            'biography': ''
         }
+        
+        # Get deity and biography from content manager
+        content_manager = self.get_manager('content')
+        if content_manager:
+            summary['deity'] = content_manager.get_deity()
+            summary['biography'] = content_manager.get_biography()
         
         # Populate Background and Domains
         feat_manager = self.get_manager('feat')
@@ -534,13 +543,10 @@ class CharacterManager(EventEmitter):
                 if isinstance(c, dict)
             ]
         
-        # Aggregate ability scores from AbilityManager (using correct NWN2 terminology)
         ability_manager = self.get_manager('ability')
         if ability_manager and hasattr(ability_manager, 'get_ability_scores'):
-            # Use the standardized ability scores method that returns proper format
             summary['abilities'] = ability_manager.get_ability_scores()
         elif ability_manager and hasattr(ability_manager, 'get_attributes'):
-            # Fallback: convert attribute manager format to expected format
             attributes = ability_manager.get_attributes()
             summary['abilities'] = {
                 'strength': attributes.get('Str', 10),
@@ -551,7 +557,6 @@ class CharacterManager(EventEmitter):
                 'charisma': attributes.get('Cha', 10)
             }
         else:
-            # Last resort - direct GFF access
             summary['abilities'] = {
                 'strength': self.gff.get('Str', 10),
                 'dexterity': self.gff.get('Dex', 10),
