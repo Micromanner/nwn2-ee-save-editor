@@ -432,9 +432,8 @@ export interface CharacterData {
   first_name?: string;
   last_name?: string;
   skill_points_available?: number;
+  has_unsaved_changes?: boolean;
 }
-
-// Base API URL is now dynamically obtained from Tauri
 
 export class CharacterAPI {
   // Get character state (comprehensive data)

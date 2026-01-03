@@ -137,7 +137,8 @@ class InMemorySaveManager:
         Save in-memory changes back to disk using SaveGameHandler
 
         Args:
-            create_backup: Whether to create backup before saving
+            create_backup: Reserved for future use. Backups are currently created
+                          on load (see SaveGameHandler.__init__ create_load_backup parameter)
 
         Returns:
             True if saved successfully, False otherwise
@@ -184,21 +185,37 @@ class InMemorySaveManager:
                         ifo_writer = GffWriter('IFO ', 'V3.2')
                         playerlist_bytes = ifo_writer.dump(player_list_dict)
 
-                        # Update both files
+                        # Get base stats and summary from managers for playerinfo.bin sync
+                        base_stats = None
+                        char_summary = None
+                        
+                        ability_manager = self._character_manager.get_manager('ability')
+                        if ability_manager:
+                            attrs = ability_manager.get_attributes(include_equipment=False)
+                            base_stats = {
+                                'str': attrs.get('Str', 10),
+                                'dex': attrs.get('Dex', 10),
+                                'con': attrs.get('Con', 10),
+                                'int': attrs.get('Int', 10),
+                                'wis': attrs.get('Wis', 10),
+                                'cha': attrs.get('Cha', 10)
+                            }
+                        
+                        char_summary = self._character_manager.get_character_summary()
+
                         self.save_handler.update_player_complete(
                             playerlist_bytes,
                             playerbic_bytes,
-                            backup=create_backup
+                            base_stats=base_stats,
+                            char_summary=char_summary
                         )
                     else:
                         self.save_handler.update_player_bic(
-                            playerbic_bytes,
-                            backup=create_backup
+                            playerbic_bytes
                         )
                 else:
                     self.save_handler.update_player_bic(
-                        playerbic_bytes,
-                        backup=create_backup
+                        playerbic_bytes
                     )
 
                 self.is_dirty = False

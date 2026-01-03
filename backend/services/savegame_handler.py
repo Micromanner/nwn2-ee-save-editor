@@ -13,6 +13,13 @@ from contextlib import contextmanager
 from pathlib import Path
 import datetime
 
+try:
+    from nwn2_rust import GffParser
+except ImportError:
+    GffParser = None
+
+from services.playerinfo_service import PlayerInfo
+
 logger = logging.getLogger(__name__)
 
 
@@ -526,7 +533,8 @@ class SaveGameHandler:
         """Update the player.bic file"""
         self.update_file('player.bic', content)
     
-    def update_player_complete(self, playerlist_content: bytes, playerbic_content: bytes):
+    def update_player_complete(self, playerlist_content: bytes, playerbic_content: bytes, 
+                              base_stats: dict = None, char_summary: dict = None):
         """Update both playerlist.ifo and player.bic together (required for save games)"""
         # TODO: Sync Module Data fields between IFO and globals.xml
         # The following fields in playerlist.ifo need to be synchronized with globals.xml:
@@ -553,13 +561,75 @@ class SaveGameHandler:
         # - ActionList: Queued actions (2 fields)
         # - Mod_LastName: Character's last name (1 field)
         
-        # Update both files
+        # Update both files in resgff.zip
         self.update_file('playerlist.ifo', playerlist_content)
         self.update_file('player.bic', playerbic_content)
+        
+        # Sync playerinfo.bin (game engine requirement for save loading)
+        self._sync_playerinfo_bin(base_stats=base_stats, char_summary=char_summary)
     
     def update_companion(self, companion_name: str, content: bytes):
         """Update a companion's .ros file"""
         self.update_file(f'{companion_name}.ros', content)
+    
+    def _sync_playerinfo_bin(self, base_stats: dict = None, char_summary: dict = None):
+        """Synchronize playerinfo.bin with character data from managers."""
+        playerinfo_path = os.path.join(self.save_dir, 'playerinfo.bin')
+        
+        try:
+            if os.path.exists(playerinfo_path):
+                try:
+                    player_info = PlayerInfo(playerinfo_path)
+                    logger.debug("Loaded existing playerinfo.bin for update")
+                except Exception as e:
+                    logger.warning(f"Existing playerinfo.bin is corrupted ({e}), creating fresh file")
+                    player_info = PlayerInfo()
+            else:
+                player_info = PlayerInfo()
+                logger.debug("Creating new playerinfo.bin")
+            
+            if char_summary:
+                player_info.data.first_name = char_summary.get('first_name', '')
+                player_info.data.last_name = char_summary.get('last_name', '')
+                player_info.data.name = char_summary.get('name', '')
+                player_info.data.subrace = char_summary.get('subrace', '')
+                # specific handling for alignment to ensure string
+                align_val = char_summary.get('alignment_string', '')
+                
+                if not align_val:
+                    align_raw = char_summary.get('alignment')
+                    if isinstance(align_raw, str):
+                        align_val = align_raw
+                    else: 
+                        align_val = ""
+                
+                player_info.data.alignment = align_val
+                player_info.data.deity = char_summary.get('deity', '')
+                
+                player_info.data.classes = []
+                for cls in char_summary.get('classes', []):
+                    from services.playerinfo_service import PlayerClassEntry
+                    if isinstance(cls, dict):
+                        player_info.data.classes.append(PlayerClassEntry(cls.get('name', ''), cls.get('level', 1)))
+                    elif hasattr(cls, 'get'): # Duck typing for other dict-likes
+                        player_info.data.classes.append(PlayerClassEntry(cls.get('name', ''), cls.get('level', 1)))
+                    else:
+                         # Fallback for strings or other types
+                        player_info.data.classes.append(PlayerClassEntry(str(cls), 1))
+            
+            if base_stats:
+                player_info.data.str = base_stats.get('str', 10)
+                player_info.data.dex = base_stats.get('dex', 10)
+                player_info.data.con = base_stats.get('con', 10)
+                player_info.data.int = base_stats.get('int', 10)
+                player_info.data.wis = base_stats.get('wis', 10)
+                player_info.data.cha = base_stats.get('cha', 10)
+            
+            player_info.save(playerinfo_path)
+            logger.info("Successfully synced playerinfo.bin")
+            
+        except Exception as e:
+            logger.error(f"Failed to sync playerinfo.bin: {e}")
     
     def _create_backup(self) -> str:
         """

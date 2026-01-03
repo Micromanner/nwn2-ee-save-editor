@@ -707,13 +707,34 @@ class RaceManager(EventEmitter):
         race_data = self._get_race_data(race_id)
         if race_data:
             return field_mapper.get_ability_modifiers(race_data)
-        
-        # Return default values if no race data
-        return {
-            'Str': 0, 'Dex': 0, 'Con': 0, 
-            'Int': 0, 'Wis': 0, 'Cha': 0
-        }
-    
+        return {}
+
+    def get_racial_modifier_deltas(self) -> Dict[str, int]:
+        """Get the difference between Subrace and Base Race modifiers to determine effective bonuses to get the correct effective value: GFF Value + (Subrace Mod - Base Race Mod)"""
+        attributes = ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']
+        deltas = {attr: 0 for attr in attributes}
+
+        # 1. Get Base Race modifiers (Baked)
+        race_id = self.gff.get('Race', 0)
+        base_mods = self._get_racial_ability_modifiers(race_id)
+
+        # 2. Get Subrace modifiers (Target/Dynamic)
+        subrace_raw = self.gff.get('Subrace', '')
+        if not subrace_raw:
+            return deltas # No subrace, no delta needed
+            
+        subrace_name = self._get_subrace_name(subrace_raw)
+        subrace_data = self._get_subrace_data(subrace_name)
+        sub_mods = field_mapper.get_ability_modifiers(subrace_data) if subrace_data else {}
+
+        # 3. Calculate Delta (Subrace - Base)
+        for attr in attributes:
+            base = base_mods.get(attr, 0)
+            sub = sub_mods.get(attr, 0)
+            deltas[attr] = sub - base
+            
+        return deltas
+
     def _get_favored_class(self, race_id: int) -> Optional[int]:
         """Get favored class from dynamic data using field mapping utility"""
         race_data = self._get_race_data(race_id)

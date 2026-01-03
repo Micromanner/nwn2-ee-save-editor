@@ -8,6 +8,8 @@ import { useTauri } from '@/providers/TauriProvider';
 import DynamicAPI from '@/lib/utils/dynamicApi';
 import CustomTitleBar from '@/components/ui/CustomTitleBar';
 import Sidebar from '@/components/ui/Sidebar';
+import { GameLaunchDialog } from '@/components/GameLaunchDialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import AbilityScoresEditor from '@/components/AbilityScores/AbilityScoresEditor';
 import AppearanceEditor from '@/components/Appearance/AppearanceEditor';
 import ClassAndLevelsEditor from '@/components/ClassesLevel/ClassAndLevelsEditor';
@@ -36,7 +38,7 @@ function AppContent() {
   const t = useTranslations();
   const { isAvailable, isLoading, api } = useTauri();
   const { character, isLoading: characterLoading, loadSubsystem } = useCharacterContext();
-  const { clearCharacter, characterId, importCharacter } = useCharacterContext();
+  const { clearCharacter, characterId, importCharacter, loadCharacter } = useCharacterContext();
 
   const [activeTab, setActiveTab] = useState('overview');
   // New viewMode state to decouple character presence from UI view
@@ -66,6 +68,7 @@ function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
 
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [showLaunchDialog, setShowLaunchDialog] = useState(false);
 
   // Sync viewMode when character ID changes (new load)
   useEffect(() => {
@@ -73,6 +76,8 @@ function AppContent() {
        setViewMode('editor');
     }
   }, [character?.id]);
+
+  const [feedback, setFeedback] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
   useEffect(() => {
     setShowLoadingOverlay(characterLoading);
@@ -123,10 +128,31 @@ function AppContent() {
     if (!characterId) return;
     try {
       await CharacterAPI.saveCharacter(characterId);
-      // Optional: Add toast success
-      console.log('Character saved successfully');
+      // Refresh to clear dirty state
+      await loadCharacter(characterId);
+      
+      setShowLaunchDialog(true);
     } catch (error) {
        console.error('Failed to save character', error);
+       setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'Failed to save character' });
+       setTimeout(() => setFeedback(null), 5000);
+    }
+  };
+
+  const handleLaunchGame = async (closeEditor: boolean) => {
+    try {
+      await api?.launchNWN2Game();
+      if (closeEditor) {
+        try {
+           await getCurrentWindow().close();
+        } catch (e) {
+           console.error("Failed to close window", e);
+        }
+      }
+      setShowLaunchDialog(false);
+    } catch (error) {
+      console.error("Failed to launch game", error);
+      setFeedback({ type: 'error', message: "Failed to launch game" });
     }
   };
 
@@ -371,6 +397,7 @@ function AppContent() {
                     onImport={() => console.log('Import clicked')}
                     onExport={() => console.log('Export clicked')}
                     onSave={handleSaveCharacter}
+                    isModified={character.has_unsaved_changes}
                   />
                   
                  {/* Content Area - Sidebar + Main */}
@@ -536,6 +563,32 @@ function AppContent() {
         </div>
       )}
       
+      {/* Feedback Toast/Modal */}
+      {feedback && (
+        <div className="fixed top-20 right-8 z-[10000] animate-in fade-in slide-in-from-right-8 duration-300">
+          <div className={`rounded-lg shadow-lg border p-4 flex items-center gap-3 ${
+            feedback.type === 'success' 
+              ? 'bg-green-900/90 border-green-500 text-green-100' 
+              : 'bg-red-900/90 border-red-500 text-red-100'
+          }`}>
+             <div className={`p-1 rounded-full ${feedback.type === 'success' ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                {feedback.type === 'success' ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                )}
+             </div>
+             <div>
+               <h4 className="font-semibold">{feedback.type === 'success' ? 'Success' : 'Error'}</h4>
+               <p className="text-sm opacity-90">{feedback.message}</p>
+             </div>
+             <button onClick={() => setFeedback(null)} className="ml-4 hover:opacity-75">
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+             </button>
+          </div>
+        </div>
+      )}
+
       {/* Level Helper Modal - Global to persist navigation, now dynamically queries subsystems */}
       <LevelHelperModal
         isOpen={showLevelHelper}
@@ -545,6 +598,14 @@ function AppContent() {
            const tabId = path.replace(/^\//, '');
            setActiveTab(tabId);
         }}
+      />
+
+      {/* Game Launch Dialog */}
+      <GameLaunchDialog
+        isOpen={showLaunchDialog}
+        onClose={() => setShowLaunchDialog(false)}
+        onLaunch={handleLaunchGame}
+        saveName={character?.name}
       />
     </div>
   );

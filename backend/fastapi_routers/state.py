@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 from fastapi_routers.dependencies import (
     get_character_manager,
-    CharacterManagerDep
+    CharacterManagerDep,
+    CharacterSessionDep
 )
 # from fastapi_models.character_models import (...) - moved to lazy loading
 router = APIRouter(tags=["state"])
@@ -17,7 +18,7 @@ router = APIRouter(tags=["state"])
 @router.get("/characters/{character_id}/state")
 def get_character_state(
     character_id: int,
-    manager: CharacterManagerDep
+    session: CharacterSessionDep
 ):  # Return type removed for lazy loading
     """
     Get comprehensive character state with all subsystem information
@@ -37,12 +38,17 @@ def get_character_state(
     """
     
     try:
+        manager = session.character_manager
+        
         # Use character manager method - no duplicated logic
         state_data = manager.get_character_state()
         
         # Ensure correct character ID is set (override manager default)
         if 'info' in state_data:
             state_data['info']['id'] = character_id
+            
+        # Add session dirty state
+        state_data['has_unsaved_changes'] = session.has_unsaved_changes()
         
         # Lazy import to avoid circular dependencies
         from fastapi_models import CharacterState

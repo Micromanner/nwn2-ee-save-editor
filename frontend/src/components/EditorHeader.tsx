@@ -50,10 +50,11 @@ export default function EditorHeader({
         </Button>
         <div className="w-px h-6 bg-[rgb(var(--color-surface-border))] mx-2"></div>
         <Button 
-            variant="primary" 
+            variant={isModified ? "primary" : "outline"} 
             size="sm" 
             onClick={onSave} 
-            className="h-9 px-6 font-semibold shadow-sm text-sm"
+            className={`h-9 px-6 font-semibold shadow-sm text-sm ${isModified ? 'animate-pulse' : 'text-muted-foreground'}`}
+            title={isModified ? "You have unsaved changes" : "No changes to save"}
         >
           Save Changes
         </Button>

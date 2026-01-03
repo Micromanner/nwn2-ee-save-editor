@@ -305,7 +305,7 @@ def update_savegame_character(
                     logger.info(f"Updated last_name to: {updates['last_name']}")
             
             # Simple relay to existing session save functionality
-            success = save_character_session(character_id, create_backup=update_request.create_backup)
+            success = save_character_session(file_path, create_backup=update_request.create_backup)
             
             return SavegameUpdateResponse(
                 success=success,

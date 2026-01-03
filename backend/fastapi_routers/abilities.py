@@ -40,7 +40,7 @@ def get_abilities_state(
         ability_manager = manager.get_manager('ability')
         
         # Get all data from the ability manager - no duplicated logic
-        gff_abilities = ability_manager.get_attributes(include_equipment=False)
+        gff_abilities = ability_manager.get_attributes(include_equipment=False, include_racial=False)
         level_up_mods = ability_manager.get_level_up_modifiers()
 
         # Base attributes = GFF value - level_up bonuses (so user edits the starting value)

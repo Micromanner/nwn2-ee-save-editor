@@ -52,36 +52,51 @@ class AbilityManager(EventEmitter):
         self.character_manager.on(EventType.CLASS_CHANGED, self._on_class_changed)
         self.character_manager.on(EventType.LEVEL_GAINED, self._on_level_gained)
     
-    def get_attributes(self, include_equipment: bool = True) -> Dict[str, int]:
+    def get_attributes(self, include_equipment: bool = True, include_racial: bool = True) -> Dict[str, int]:
         """
-        Get all character attributes with request-level caching
-
+        Get all attribute scores
+        
         Args:
-            include_equipment: Include equipment bonuses in the result
-
+            include_equipment: Whether to include bonuses from equipped items
+            include_racial: Whether to include bonuses from racial/subrace traits
+            
         Returns:
-            Dict mapping attribute names to values
+            Dict mapping attribute names (Str, Dex, etc.) to values
         """
-        cache_key = 'with_equipment' if include_equipment else 'without_equipment'
-
-        if self._attributes_cache[cache_key] is not None:
+        # Cache key needs to account for both flags
+        cache_key = f"{'eq' if include_equipment else 'no_eq'}_{'race' if include_racial else 'no_race'}"
+        
+        if self._attributes_cache.get(cache_key) is not None:
             return self._attributes_cache[cache_key].copy()
-
+            
         attributes = {}
+        
+        # Get base values from GFF (Raw values)
         for attr in self.ATTRIBUTES:
             default_value = self._get_default_attribute_value(attr)
             base_value = self.gff.get(attr, default_value)
             attributes[attr] = base_value
             logger.debug(f"AbilityManager.get_attributes: {attr} base = {base_value}")
 
+        # Add racial modifiers if requested
+        if include_racial:
+            race_manager = self.character_manager.get_manager('race')
+            if race_manager:
+                deltas = race_manager.get_racial_modifier_deltas()
+                for attr, delta in deltas.items():
+                    if delta != 0:
+                        attributes[attr] += delta
+                        logger.debug(f"AbilityManager.get_attributes: {attr} applied racial delta {delta} = {attributes[attr]}")
+
+        # Add equipment modifiers if requested
         if include_equipment:
             inventory_manager = self.character_manager.get_manager('inventory')
             if inventory_manager:
                 equipment_bonuses = inventory_manager.get_equipment_bonuses()
                 attributes_bonuses = equipment_bonuses.get('attributes', {}) or {}
                 for attr in self.ATTRIBUTES:
-                    equipment_bonus = attributes_bonuses.get(attr, 0) if attributes_bonuses else 0
-                    if equipment_bonus > 0:
+                    equipment_bonus = attributes_bonuses.get(attr, 0)
+                    if equipment_bonus != 0:
                         attributes[attr] += equipment_bonus
                         logger.debug(f"AbilityManager.get_attributes: {attr} with equipment = {attributes[attr]} (+{equipment_bonus})")
 
@@ -90,10 +105,7 @@ class AbilityManager(EventEmitter):
 
     def _invalidate_attributes_cache(self):
         """Invalidate the attributes cache when data changes"""
-        self._attributes_cache = {
-            'with_equipment': None,
-            'without_equipment': None
-        }
+        self._attributes_cache = {}
 
     def _get_default_attribute_value(self, attribute: str) -> int:
         """Get default attribute value from game rules or fallback to 10"""
@@ -1315,36 +1327,12 @@ class AbilityManager(EventEmitter):
         }
 
     def get_racial_modifiers(self) -> Dict[str, int]:
-        """Get combined racial + subrace attribute modifiers"""
-        race_id = self.gff.get('Race', 0)
-        subrace = self.gff.get('Subrace', '')
-        
-        race = self.game_rules_service.get_by_id('racialtypes', race_id)
-        if not race:
-            logger.warning(f"Unknown race ID: {race_id}")
-            return {attr: 0 for attr in self.ATTRIBUTES}
-        
-        # Get base racial modifiers using field mapping utility for safe access
-        from gamedata.dynamic_loader.field_mapping_utility import field_mapper
-        racial_mods = field_mapper.get_ability_modifiers(race)
-        
-        # Get subrace modifiers if subrace is specified
-        subrace_mods = {attr: 0 for attr in self.ATTRIBUTES}
-        if subrace:
-            race_manager = self.character_manager.get_manager('race')
-            if race_manager:
-                subrace_data = race_manager._get_subrace_data(subrace)
-                if subrace_data:
-                    subrace_mods = field_mapper.get_ability_modifiers(subrace_data)
-                    logger.debug(f"Subrace {subrace} modifiers: {subrace_mods}")
-        
-        # Combine base race and subrace modifiers
-        result = {attr: 0 for attr in self.ATTRIBUTES}
-        for attr in self.ATTRIBUTES:
-            result[attr] = racial_mods.get(attr, 0) + subrace_mods.get(attr, 0)
-        
-        logger.debug(f"Combined racial modifiers (race {race_id} + subrace '{subrace}'): {result}")
-        return result
+        """Get combined racial + subrace attribute modifiers (Delta)"""
+        race_manager = self.character_manager.get_manager('race')
+        if race_manager:
+            return race_manager.get_racial_modifier_deltas()
+        return {attr: 0 for attr in self.ATTRIBUTES}
+
     
     def get_item_modifiers(self) -> Dict[str, int]:
         """Get attribute modifiers from equipped items"""
@@ -1640,24 +1628,8 @@ class AbilityManager(EventEmitter):
     
     def get_effective_attributes(self) -> Dict[str, int]:
         """Get effective attribute scores (what the game actually uses)"""
-        base_attrs = self.get_attributes(include_equipment=False)
-        racial_mods = self.get_racial_modifiers()
-        item_mods = self.get_item_modifiers()
-        enhancement_mods = self.get_enhancement_modifiers()
-        temp_mods = self.get_temporary_modifiers()
-        # Note: Level-up bonuses are already included in base_attrs from GFF
-
-        effective_attrs = {}
-        for attr in self.ATTRIBUTES:
-            effective_attrs[attr] = (
-                base_attrs[attr] +
-                racial_mods[attr] +
-                item_mods[attr] +
-                enhancement_mods[attr] +
-                temp_mods[attr]
-            )
-
-        return effective_attrs
+        # Simply delegate to the main calculation method which handles all flags correctly
+        return self.get_attributes(include_equipment=True, include_racial=True)
     
     def calculate_point_buy_total(self) -> int:
         """Calculate total point buy cost for current attributes (informational only)"""
