@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, AlertCircle, AlertTriangle, ArrowRight, Zap, Award } from 'lucide-react';
+import { X, AlertCircle, AlertTriangle, ArrowRight, Zap, Award, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { useSubsystem } from '@/contexts/CharacterContext';
+import { useTranslations } from '@/hooks/useTranslations';
 import { cn } from '@/lib/utils';
 
 interface LevelHelperModalProps {
@@ -14,11 +15,14 @@ interface LevelHelperModalProps {
 export default function LevelHelperModal({ isOpen, onClose, className, onNavigate }: LevelHelperModalProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [spellsExpanded, setSpellsExpanded] = useState(false);
+  const t = useTranslations();
 
   // Get live data from subsystems
   const skillsSubsystem = useSubsystem('skills');
   const abilityScoresSubsystem = useSubsystem('abilityScores');
   const featsSubsystem = useSubsystem('feats');
+  const spellsSubsystem = useSubsystem('spells');
 
   // Calculate available points from subsystem data
   const skillPoints = (() => {
@@ -30,7 +34,7 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
   })();
 
   const abilityPoints = (() => {
-    const data = abilityScoresSubsystem.data;
+    const data = abilityScoresSubsystem.data as any;
     if (!data?.point_summary) return 0;
     return data.point_summary.available ?? 0;
   })();
@@ -40,6 +44,27 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
     const data = featsSubsystem.data as any;
     if (!data?.point_summary) return 0;
     return data.point_summary.available ?? 0;
+  })();
+
+  // Get spell slots data
+  const spellData = (() => {
+    const data = spellsSubsystem.data as any;
+    if (!data?.spell_summary?.caster_classes?.length) return null;
+
+    const allSlots: Record<number, number> = {};
+    let totalSlots = 0;
+
+    data.spell_summary.caster_classes.forEach((cls: any) => {
+      if (cls.slots_by_level) {
+        Object.entries(cls.slots_by_level).forEach(([level, count]) => {
+          const lvl = parseInt(level);
+          allSlots[lvl] = (allSlots[lvl] || 0) + (count as number);
+          totalSlots += count as number;
+        });
+      }
+    });
+
+    return { slotsByLevel: allSlots, total: totalSlots };
   })();
 
   const hasPendingGains = skillPoints > 0 || abilityPoints > 0 || featSlots > 0;
@@ -68,25 +93,25 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
       "fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3",
       className
     )}>
-      
+
       {/* Expanded Content Card */}
       <div className={cn(
         "bg-[rgb(var(--color-surface-1))] rounded-lg overflow-hidden transition-[height,opacity,transform,margin] duration-300 origin-bottom-right",
-        isExpanded 
-          ? "opacity-100 scale-100 translate-y-0 w-80 mb-2 border border-[rgb(var(--color-border))] shadow-2xl" 
+        isExpanded
+          ? "opacity-100 scale-100 translate-y-0 w-80 mb-2 border border-[rgb(var(--color-border))] shadow-2xl"
           : "opacity-0 scale-95 translate-y-4 w-80 h-0 p-0 overflow-hidden pointer-events-none border-0 shadow-none"
       )}>
          {/* Internal Card Header */}
          <div className="bg-[rgb(var(--color-surface-2))] p-3 border-b border-[rgb(var(--color-border))] flex items-center justify-between">
            <div className="flex items-center gap-2">
              <span className="font-bold text-sm text-[rgb(var(--color-text-primary))]">
-               Pending Allocations
+               {t('levelHelper.pendingAllocations')}
              </span>
            </div>
-           <button 
+           <button
              onClick={onClose}
              className="text-[rgb(var(--color-text-muted))] hover:text-[rgb(var(--color-text-primary))]"
-             title="Dismiss"
+             title={t('common.dismiss')}
            >
              <X className="w-4 h-4" />
            </button>
@@ -96,11 +121,11 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
          <div className="p-4 space-y-3">
             {hasPendingGains ? (
               <p className="text-xs text-[rgb(var(--color-text-muted))]">
-                You have pending gains to allocate:
+                {t('levelHelper.pendingGainsMessage')}
               </p>
             ) : (
               <p className="text-xs text-[rgb(var(--color-text-muted))]">
-                No pending allocations. All points have been spent!
+                {t('levelHelper.noPendingAllocations')}
               </p>
             )}
 
@@ -111,10 +136,10 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
                    <div className="p-1.5 bg-green-500/20 text-green-500 rounded-md">
                      <Zap className="w-4 h-4" />
                    </div>
-                   <span className="text-sm font-medium">Skill Points</span>
+                   <span className="text-sm font-medium">{t('levelHelper.skillPoints')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-green-500">{skillPoints} Available</span>
+                  <span className="text-xs font-bold text-green-500">{skillPoints} {t('levelHelper.available')}</span>
                   <ArrowRight className="w-3 h-3 text-[rgb(var(--color-text-muted))] group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
@@ -127,10 +152,10 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
                    <div className="p-1.5 bg-purple-500/20 text-purple-500 rounded-md">
                      <Award className="w-4 h-4" />
                    </div>
-                   <span className="text-sm font-medium">Feat Slots</span>
+                   <span className="text-sm font-medium">{t('levelHelper.featSlots')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-purple-500">{featSlots} Available</span>
+                  <span className="text-xs font-bold text-purple-500">{featSlots} {t('levelHelper.available')}</span>
                   <ArrowRight className="w-3 h-3 text-[rgb(var(--color-text-muted))] group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
@@ -143,16 +168,62 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
                     <div className="p-1.5 bg-yellow-500/20 text-yellow-500 rounded-md">
                       <AlertCircle className="w-4 h-4" />
                     </div>
-                    <span className="text-sm font-medium">Ability Score Increase</span>
+                    <span className="text-sm font-medium">{t('levelHelper.abilityScoreIncrease')}</span>
                  </div>
                  <div className="flex items-center gap-2">
-                   <span className="text-xs font-bold text-yellow-500">{abilityPoints} Available</span>
+                   <span className="text-xs font-bold text-yellow-500">{abilityPoints} {t('levelHelper.available')}</span>
                    <ArrowRight className="w-3 h-3 text-[rgb(var(--color-text-muted))] group-hover:translate-x-0.5 transition-transform" />
                  </div>
               </div>
             )}
 
-            {/* TODO: Add Spells row when we have spell slot tracking */}
+            {/* Spell Slots Row */}
+            {spellData && spellData.total > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2 bg-[rgb(var(--color-surface-2))] rounded hover:bg-[rgb(var(--color-surface-3))] transition-colors cursor-pointer group">
+                  <div className="flex items-center gap-2 flex-1" onClick={() => handleNavigate('/spells')}>
+                     <div className="p-1.5 bg-blue-500/20 text-blue-500 rounded-md">
+                       <Sparkles className="w-4 h-4" />
+                     </div>
+                     <span className="text-sm font-medium">{t('levelHelper.spellSlots')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-blue-500">{spellData.total} {t('levelHelper.total')}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSpellsExpanded(!spellsExpanded);
+                      }}
+                      className="p-0.5 hover:bg-[rgb(var(--color-surface-3))] rounded transition-colors"
+                    >
+                      {spellsExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-[rgb(var(--color-text-muted))]" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-[rgb(var(--color-text-muted))]" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expandable Spell Level Breakdown */}
+                {spellsExpanded && (
+                  <div className="ml-4 pl-4 border-l-2 border-[rgb(var(--color-border))] space-y-1">
+                    {Object.entries(spellData.slotsByLevel)
+                      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                      .map(([level, count]) => (
+                        <div key={level} className="flex items-center justify-between text-xs text-[rgb(var(--color-text-muted))]">
+                          <span>
+                            {parseInt(level) === 0
+                              ? t('levelHelper.cantrips')
+                              : t('levelHelper.spellLevel', { level })}
+                          </span>
+                          <span className="font-medium text-blue-400">{count}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
          </div>
       </div>
 
@@ -162,11 +233,11 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
           onClick={() => setIsExpanded(!isExpanded)}
           className={cn(
             "relative flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 group z-50",
-            isExpanded 
-               ? "bg-[rgb(var(--color-surface-3))] text-[rgb(var(--color-text-primary))]" 
+            isExpanded
+               ? "bg-[rgb(var(--color-surface-3))] text-[rgb(var(--color-text-primary))]"
                : "bg-blue-600 text-white animate-bounce-subtle"
           )}
-          title={isExpanded ? "Close Helper" : "Pending Allocations"}
+          title={isExpanded ? t('levelHelper.closeHelper') : t('levelHelper.pendingAllocations')}
         >
            {isExpanded ? (
              <X className="w-6 h-6" />

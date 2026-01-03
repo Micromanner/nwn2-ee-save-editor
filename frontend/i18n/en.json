@@ -593,6 +593,7 @@
     "revert": "Revert",
     "revertAll": "Revert All",
     "close": "Close",
+    "dismiss": "Dismiss",
     "error": "Error",
     "expandAll": "Expand All",
     "collapseAll": "Collapse All",
@@ -649,6 +650,20 @@
     "unusedSkillPoints": "You have {remaining} unused skill points",
     "confirmNote": "Click 'Apply Level Up' to apply these changes. This will update your character's stats and cannot be undone.",
     "applyLevelUp": "Apply Level Up"
+  },
+  "levelHelper": {
+    "pendingAllocations": "Pending Allocations",
+    "pendingGainsMessage": "You have pending gains to allocate:",
+    "noPendingAllocations": "No pending allocations. All points have been spent!",
+    "skillPoints": "Skill Points",
+    "featSlots": "Feat Slots",
+    "abilityScoreIncrease": "Ability Score Increase",
+    "spellSlots": "Spell Slots",
+    "available": "Available",
+    "total": "Total",
+    "cantrips": "Cantrips",
+    "spellLevel": "Level {level}",
+    "closeHelper": "Close Helper"
   },
   "errors": {
     "loadingFailed": "Failed to load data"

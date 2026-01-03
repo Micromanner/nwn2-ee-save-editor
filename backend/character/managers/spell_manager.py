@@ -422,24 +422,42 @@ class SpellManager(EventEmitter):
         return 0
     
     def _get_casting_ability(self, class_data: Any) -> Optional[str]:
-        """Get the primary casting ability for a class"""
+        """Get the primary casting ability for a class, normalized to GFF field name."""
+        # Mapping from 2DA values to GFF field names
+        ability_to_gff = {
+            'str': 'Str', 'strength': 'Str',
+            'dex': 'Dex', 'dexterity': 'Dex',
+            'con': 'Con', 'constitution': 'Con',
+            'int': 'Int', 'intelligence': 'Int',
+            'wis': 'Wis', 'wisdom': 'Wis',
+            'cha': 'Cha', 'charisma': 'Cha',
+        }
+
+        ability = None
+
         # Try to get from class data using proper field names
         ability = field_mapper.get_field_value(class_data, 'PrimaryAbil', '')
-        if ability and ability != '****':
+        if not ability or ability == '****':
+            ability = field_mapper.get_field_value(class_data, 'SpellAbility', '')
+        if not ability or ability == '****':
+            ability = field_mapper.get_field_value(class_data, 'SpellcastingAbil', '')
+
+        if not ability or ability == '****':
+            logger.warning(f"No casting ability found in class data for {field_mapper.get_field_value(class_data, 'Label', 'Unknown Class')}")
+            return None
+
+        # Normalize to GFF field name (handle 'int' -> 'Int', etc.)
+        ability_lower = ability.lower().strip()
+        gff_field = ability_to_gff.get(ability_lower)
+
+        if gff_field:
+            return gff_field
+
+        # If already in correct format (Str, Int, etc.), return as-is
+        if ability in ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']:
             return ability
-        
-        # Try SpellAbility field
-        ability = field_mapper.get_field_value(class_data, 'SpellAbility', '')
-        if ability and ability != '****':
-            return ability
-        
-        # Try SpellcastingAbil field
-        ability = field_mapper.get_field_value(class_data, 'SpellcastingAbil', '')
-        if ability and ability != '****':
-            return ability
-        
-        # No hardcoded fallback - all data should come from 2DA files
-        logger.warning(f"No casting ability found in class data for {field_mapper.get_field_value(class_data, 'Label', 'Unknown Class')}")
+
+        logger.warning(f"Unknown casting ability '{ability}' for class {field_mapper.get_field_value(class_data, 'Label', 'Unknown Class')}")
         return None
     
     def _is_divine_caster(self, class_data: Any) -> bool:

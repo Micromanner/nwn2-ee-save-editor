@@ -733,7 +733,9 @@ class FeatManager(EventEmitter):
             'total_feats': len(feat_list),
             'open_slots': open_slots,
             'filled_slots': filled_slots,
-            'available': open_slots
+            'available': open_slots,
+            'open_general_slots': open_general_slots,
+            'open_bonus_slots': open_bonus_slots,
         }
     
     def _load_class_feat_table(self, class_id: int) -> Dict[int, int]:
