@@ -323,12 +323,13 @@ class ContentManager(EventEmitter):
             from nwn2_rust import GffParser
             jrl_data = GffParser.from_bytes(module_jrl_data).to_dict()
 
-            # Initialize ResourceManager for TLK string lookups
+            # Use shared ResourceManager singleton for TLK string lookups
             resource_manager = None
             try:
-                resource_manager = ResourceManager()
+                from fastapi_core.shared_services import get_shared_resource_manager
+                resource_manager = get_shared_resource_manager()
             except Exception as e:
-                logger.warning(f"ContentManager: Could not initialize ResourceManager for TLK lookups: {e}")
+                logger.warning(f"ContentManager: Could not get shared ResourceManager for TLK lookups: {e}")
 
             categories = jrl_data.get('Categories', [])
             quest_count = 0

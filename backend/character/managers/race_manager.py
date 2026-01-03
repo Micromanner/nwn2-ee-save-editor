@@ -501,24 +501,17 @@ class RaceManager(EventEmitter):
             try:
                 table_data = self.game_rules_service.get_table(feats_table_name.lower())
                 if table_data:
-                    logger.debug(f"_get_racial_feats: Loaded table '{feats_table_name.lower()}' with {len(table_data)} rows")
-                    for row_idx, row in enumerate(table_data):
+                    for row in table_data:
                         feat_id = field_mapper.get_field_value(row, 'feat_index', -1)
-                        logger.debug(f"_get_racial_feats: Table row {row_idx}: feat_id={feat_id} (type={type(feat_id).__name__})")
                         if feat_id is not None:
                             try:
                                 val = int(feat_id)
                                 if val >= 0:
                                     feats.append(val)
-                                    logger.debug(f"_get_racial_feats: Added feat {val} to list")
-                            except (ValueError, TypeError) as e:
-                                logger.debug(f"_get_racial_feats: Failed to convert feat_id={feat_id}: {e}")
-                else:
-                    logger.warning(f"_get_racial_feats: Table '{feats_table_name.lower()}' returned None/empty")
+                            except (ValueError, TypeError):
+                                pass
             except Exception as e:
                 logger.warning(f"Error loading racial feat table {feats_table_name}: {e}")
-        else:
-            logger.debug(f"_get_racial_feats: No valid feats_table for race {race_id}")
         
         logger.info(f"_get_racial_feats: Race {race_id} returning feats: {feats}")
         return feats

@@ -41,11 +41,11 @@ def configure_logging():
         )
 
     logger.add(
-        LOG_DIR / "app.log",
-        rotation="10 MB",
-        retention="7 days",
+        LOG_DIR / f"app_{SESSION_ID}.log",
+        rotation="5 MB",
+        retention=5,
         level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss} | [" + SESSION_ID + "] | {level: <8} | {name}:{line} - {message}"
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{line} - {message}"
     )
 
     logger.add(
