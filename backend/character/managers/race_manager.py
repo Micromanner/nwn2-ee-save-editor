@@ -595,12 +595,28 @@ class RaceManager(EventEmitter):
         return 30
     
     def _get_race_name(self, race_id: int) -> str:
-        """Get race name from dynamic data using field mapping utility"""
+        """Get race name from dynamic data, resolving TLK strref for proper localized name"""
         race_data = self._get_race_data(race_id)
         if race_data:
-            name = field_mapper.get_field_value(race_data, 'label')
-            if name and str(name).strip():
-                return str(name)
+            # First get the Name field value
+            name_value = field_mapper.get_field_value(race_data, 'name')
+            
+            if name_value is not None:
+                # Check if it's already a usable string (not a number/strref)
+                if isinstance(name_value, str) and name_value.strip() and not name_value.isdigit():
+                    return name_value
+                
+                # Try to resolve as strref
+                strref = field_mapper._safe_int(name_value, 0)
+                if strref > 0:
+                    resolved_name = self.game_rules_service._loader.get_string(strref)
+                    if resolved_name and not resolved_name.startswith('{StrRef:'):
+                        return resolved_name
+            
+            # Fallback to label if name resolution fails
+            label = field_mapper.get_field_value(race_data, 'label')
+            if label and str(label).strip():
+                return str(label)
         return f'Race_{race_id}'
     
     def get_race_name(self, race_id: int = None) -> str:

@@ -52,6 +52,32 @@ class ClassManager(EventEmitter):
         """Register handlers for relevant events"""
         self.character_manager.on(EventType.SKILL_POINTS_AWARDED, self.on_skill_points_awarded)
     
+    def _get_class_name(self, class_id: int, class_data=None) -> str:
+        """Get class name, resolving TLK strref for proper localized name"""
+        if class_data is None:
+            class_data = self.rules_service.get_by_id('classes', class_id)
+        if class_data:
+            # First get the Name field value
+            name_value = self.field_mapper.get_field_value(class_data, 'name')
+            
+            if name_value is not None:
+                # Check if it's already a usable string (not a number/strref)
+                if isinstance(name_value, str) and name_value.strip() and not name_value.isdigit():
+                    return name_value
+                
+                # Try to resolve as strref
+                strref = self.field_mapper._safe_int(name_value, 0)
+                if strref > 0:
+                    resolved_name = self.rules_service._loader.get_string(strref)
+                    if resolved_name and not resolved_name.startswith('{StrRef:'):
+                        return resolved_name
+            
+            # Fallback to label if name resolution fails
+            label = self.field_mapper.get_field_value(class_data, 'label')
+            if label and str(label).strip():
+                return str(label)
+        return f'Class_{class_id}'
+    
     def change_class(self, new_class_id: int, preserve_level: bool = True) -> Dict[str, Any]:
         """
         Change character's primary class
@@ -820,12 +846,8 @@ class ClassManager(EventEmitter):
             class_id = c.get('Class', 0)
             class_data = self.rules_service.get_by_id('classes', class_id)
             
-            # Safely get class name
-            if class_data:
-                class_name = self.field_mapper.get_field_value(class_data, 'label', 
-                    self.field_mapper.get_field_value(class_data, 'name', f"Unknown Class {class_id}"))
-            else:
-                class_name = f"Unknown Class {class_id}"
+            # Get class name using helper method for TLK resolution
+            class_name = self._get_class_name(class_id, class_data)
             
             # Determine skill points
             # Priority 1: Historical Calculation (accurate for level-by-level stats)
@@ -1718,7 +1740,7 @@ class ClassManager(EventEmitter):
                 return {
                     'id': class_id,
                     'level': class_entry.get('ClassLevel', 0),
-                    'name': self.field_mapper.get_field_value(class_data, 'label', 'Unknown') if class_data else 'Unknown',
+                    'name': self._get_class_name(class_id, class_data),
                     'data': class_data
                 }
         
@@ -2422,10 +2444,6 @@ class ClassManager(EventEmitter):
         
         return 0
     
-    def _get_class_name(self, class_id: int) -> str:
-        """Get class name from dynamic data"""
-        return self._get_content_name('classes', class_id)
-    
     def get_class_name(self, class_id: int) -> str:
         """Public method to get class name (for character summary)"""
         return self._get_class_name(class_id)
@@ -2471,7 +2489,7 @@ class ClassManager(EventEmitter):
                     class_level
                 )
                 if progression:
-                    class_name = self.character_manager._get_class_name(class_id)
+                    class_name = self._get_class_name(class_id)
                     progressions[class_name] = progression
         
         return progressions
@@ -2669,7 +2687,7 @@ class ClassManager(EventEmitter):
             'current_level': total_level,
             'new_level': new_level,
             'class_id': class_id,
-            'class_name': self.field_mapper.get_field_value(class_data, 'label', f'Class {class_id}'),
+            'class_name': self._get_class_name(class_id, class_data),
             'new_class_level': new_class_level,
             'hp_gain': hp_gain,
             'skill_points': skill_points,
