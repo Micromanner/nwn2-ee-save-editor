@@ -20,8 +20,12 @@ export function SaveFileSelector() {
   
   console.log('🔧 SaveFileSelector: Tauri context state:', { isAvailable, isLoading, hasApi: !!api });
   
+  interface ExtendedSaveFile extends SaveFile {
+    character?: string;
+  }
+
   const [selectedFile, setSelectedFile] = useState<SaveFile | null>(null);
-  const [saves, setSaves] = useState<SaveFile[]>([]);
+  const [saves, setSaves] = useState<ExtendedSaveFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -48,13 +52,29 @@ export function SaveFileSelector() {
     setLoading(true);
     setError(null);
     try {
-      console.log('🔧 SaveFileSelector: Calling api.findNWN2Saves()...');
+      console.log('🔧 SaveFileSelector: Calling backend /saves/list...');
       const apiStart = performance.now();
-      const foundSaves = await api.findNWN2Saves();
+      
+      // Call backend API instead of Tauri API
+      const response = await apiClient.get<any>('/saves/list?limit=10'); // limit 10 for "Last 3" + buffer
+      
       const apiEnd = performance.now();
       console.log(`✅ SaveFileSelector: API call took ${apiEnd - apiStart}ms`);
-      console.log('✅ SaveFileSelector: Found saves:', foundSaves);
-      setSaves(foundSaves);
+      
+      if (response && response.files) {
+        const mappedSaves: ExtendedSaveFile[] = response.files
+            .filter((f: any) => f.is_directory) 
+            .map((f: any) => ({
+                name: f.name,
+                path: f.path,
+                thumbnail: f.thumbnail || '', 
+                character: f.character_name,
+                modified: f.modified ? parseFloat(f.modified) * 1000 : undefined
+            }));
+            
+        console.log('✅ SaveFileSelector: Found saves:', mappedSaves);
+        setSaves(mappedSaves);
+      }
     } catch (err) {
       console.error('❌ SaveFileSelector: Failed to find saves:', err);
       const errorMessage = typeof err === 'string' ? err : 'An unknown error occurred while finding save files.';
@@ -166,17 +186,10 @@ export function SaveFileSelector() {
   }, [selectedFile]);
 
   const handleBackupSelect = useCallback(async (file: { path: string; name: string }) => {
-    // Restore backup functionality
-    if (!selectedFile) {
-      setError('Please select a save file first to restore a backup');
-      setShowBackupBrowser(false);
-      return;
-    }
-
     try {
       await apiClient.post('/backups/restore', {
         backup_path: file.path,
-        save_path: selectedFile.path,
+        save_path: selectedFile?.path || null,
         create_pre_restore_backup: true,
         confirm_restore: true
       });
@@ -184,8 +197,12 @@ export function SaveFileSelector() {
       console.log('Backup restored successfully');
       setShowBackupBrowser(false);
 
-      // Reload the character after successful restore
-      await importSaveFile(selectedFile);
+      if (selectedFile) {
+         await importSaveFile(selectedFile);
+      } else {
+         setSuccessMessage('Backup restored successfully. Please load the save file.');
+         setTimeout(() => setSuccessMessage(null), 5000);
+      }
     } catch (err) {
       console.error('Failed to restore backup:', err);
       setError(err instanceof Error ? err.message : 'Failed to restore backup');
@@ -337,7 +354,7 @@ export function SaveFileSelector() {
             Last 3 Saved Games
           </div>
           <div className="space-y-2 max-h-[600px] overflow-y-auto">
-            {saves.slice(0, 5).map((save, index) => (
+            {saves.slice(0, 3).map((save, index) => (
               <Card
                 key={index}
                 variant="interactive"
@@ -351,7 +368,14 @@ export function SaveFileSelector() {
                   className="shrink-0"
                 />
                 <div className="flex flex-col flex-1 min-w-0">
-                  <div className="recent-save-name truncate">{save.name}</div>
+                  <div className="recent-save-name truncate">
+                    {save.character ? (
+                        <div className="flex flex-col">
+                            <span className="font-semibold text-[rgb(var(--color-primary))]">{save.character}</span>
+                            <span className="text-xs text-[rgb(var(--color-text-muted))] opacity-75">{save.name}</span>
+                        </div>
+                    ) : save.name}
+                  </div>
                   {save.modified && (
                     <div className="text-xs text-[rgb(var(--color-text-muted))] mt-0.5">
                        {new Date(save.modified).toLocaleString()}
@@ -364,11 +388,6 @@ export function SaveFileSelector() {
               </Card>
             ))}
           </div>
-          {saves.length > 5 && (
-            <div className="text-xs text-text-muted mt-2 text-center">
-              Showing 5 of {saves.length} saves
-            </div>
-          )}
         </Card>
       ) : autoScanComplete ? (
         <Card variant="container">
@@ -400,12 +419,12 @@ export function SaveFileSelector() {
         isOpen={showBackupBrowser}
         onClose={() => setShowBackupBrowser(false)}
         mode="manage-backups"
-        onSelectFile={handleBackupSelect}
         currentPath={backupPath}
         onPathChange={setBackupPath}
         onDeleteBackup={handleDeleteBackup}
-        canRestore={!!selectedFile}
+        canRestore={true}
         refreshKey={backupRefreshKey}
+        onSelectFile={handleBackupSelect}
       />
     </div>
   );

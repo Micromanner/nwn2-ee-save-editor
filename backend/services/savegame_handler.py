@@ -656,7 +656,14 @@ class SaveGameHandler:
         # Create backup directory name with save name and timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = os.path.join(backups_root, f"{save_folder_name}_backup_{timestamp}")
-        
+
+        # Handle collision - add counter if directory already exists
+        base_backup_dir = backup_dir
+        counter = 1
+        while os.path.exists(backup_dir):
+            backup_dir = f"{base_backup_dir}_{counter}"
+            counter += 1
+
         logger.info(f"Creating backup at: {backup_dir}")
         
         try:

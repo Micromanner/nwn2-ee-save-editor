@@ -32,7 +32,7 @@ const ChevronDown = ({ className }: { className?: string }) => (
   </svg>
 );
 
-type SortField = 'name' | 'date' | 'size';
+type SortField = 'name' | 'date' | 'size' | 'character_name';
 type SortDirection = 'asc' | 'desc';
 
 interface FileInfo {
@@ -42,6 +42,8 @@ interface FileInfo {
   modified: string;
   is_directory: boolean;
   save_name?: string;
+  character_name?: string;
+  display_name?: string;
 }
 
 interface FileListResponse {
@@ -83,8 +85,8 @@ export default function FileBrowserModal({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortField, setSortField] = useState<SortField>('character_name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const listRef = useRef<List>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -242,7 +244,12 @@ export default function FileBrowserModal({
   };
 
   const sortedFiles = useMemo(() => {
-    return [...files].sort((a, b) => {
+    // Filter out campaign_backups folder in backup mode
+    const filteredFiles = mode === 'manage-backups'
+      ? files.filter(f => f.name.toLowerCase() !== 'campaign_backups')
+      : files;
+
+    return [...filteredFiles].sort((a, b) => {
       let comparison = 0;
 
       if (a.is_directory !== b.is_directory) {
@@ -259,11 +266,17 @@ export default function FileBrowserModal({
         case 'size':
           comparison = a.size - b.size;
           break;
+        case 'character_name':
+             comparison = (a.character_name || '').localeCompare(b.character_name || '');
+             if (comparison === 0) {
+                 return parseFloat(b.modified) - parseFloat(a.modified);
+             }
+             break;
       }
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [files, sortField, sortDirection]);
+  }, [files, sortField, sortDirection, mode]);
 
   const formatDate = (dateString: string) => {
     const timestamp = parseFloat(dateString);
@@ -388,7 +401,7 @@ export default function FileBrowserModal({
           </div>
 
           {/* Success Message - Reserve space to prevent layout shift */}
-          <div className="mx-4 mt-3 min-h-[2.5rem]">
+          <div className="mx-4 mt-3">
             {successMessage && (
               <div className="p-2 bg-green-900/20 border border-green-700 text-green-400 rounded text-sm">
                 {successMessage}
@@ -400,8 +413,11 @@ export default function FileBrowserModal({
           <div className="file-browser-content">
             {/* Table Header - Always visible to prevent layout shift */}
             <div className="file-browser-table-header">
-              <div className="flex-1">
+              <div className="flex-[2]">
                 {renderSortHeader('name', 'Folder Name')}
+              </div>
+              <div className="flex-1">
+                {renderSortHeader('character_name', 'Character')}
               </div>
               <div className="flex-1">
                 <span className="text-xs font-semibold text-[rgb(var(--color-text-muted))] uppercase">Save Name</span>
@@ -409,7 +425,7 @@ export default function FileBrowserModal({
               <div className="w-48">
                 {renderSortHeader('date', mode === 'manage-backups' ? 'Created' : 'Modified')}
               </div>
-              <div className="w-24 text-right">
+              <div className="w-24 text-left">
                 {renderSortHeader('size', 'Size')}
               </div>
             </div>
@@ -475,21 +491,24 @@ export default function FileBrowserModal({
                             }`}
                             onClick={() => handleFileClick(file)}
                           >
-                            <div className="flex-1 flex items-center gap-2">
+                            <div className="flex-[2] flex items-center gap-2">
                               {file.is_directory && (
                                 <FolderIcon className="w-4 h-4 text-[rgb(var(--color-text-muted))]" />
                               )}
-                              <span className="text-sm text-[rgb(var(--color-text-primary))]">
+                              <span className="text-sm text-[rgb(var(--color-text-primary))] font-medium">
                                 {display(file.name)}
                               </span>
                             </div>
-                            <div className="flex-1 text-sm text-[rgb(var(--color-text-secondary))]">
-                              {display(file.save_name)}
-                            </div>
+                              <div className="flex-1 text-sm text-[rgb(var(--color-text-secondary))]">
+                                {display(file.character_name)}
+                              </div>
+                              <div className="flex-1 text-sm text-[rgb(var(--color-text-secondary))]">
+                                {display(file.save_name)}
+                              </div>
                             <div className="w-48 text-sm text-[rgb(var(--color-text-muted))]">
                               {formatDate(file.modified)}
                             </div>
-                            <div className="w-24 text-sm text-[rgb(var(--color-text-muted))] text-right">
+                            <div className="w-24 text-sm text-[rgb(var(--color-text-muted))] text-left">
                               {formatSize(file.size)}
                             </div>
                           </div>
