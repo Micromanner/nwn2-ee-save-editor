@@ -63,14 +63,6 @@ export interface CharacterStats {
     racial?: number;
     feat?: number;
   };
-  will: {
-    base: number;
-    total: number;
-    abilityMod?: number;
-    classMod?: number;
-    racial?: number;
-    feat?: number;
-  };
 }
 
 export interface PointSummary {

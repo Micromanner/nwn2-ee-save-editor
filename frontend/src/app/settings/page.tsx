@@ -166,7 +166,7 @@ export default function SettingsPage() {
     }
   };
 
-  const addCustomFolder = async (type: 'override' | 'module' | 'hak') => {
+  const addCustomFolder = async (type: 'override' | 'hak') => {
     const title = `Select Custom ${type.charAt(0).toUpperCase() + type.slice(1)} Folder`;
     const selected = await selectFolder(title);
     if (!selected) return;
@@ -177,9 +177,6 @@ export default function SettingsPage() {
       switch (type) {
         case 'override':
           response = await pathService.addOverrideFolder(selected);
-          break;
-        case 'module':
-          response = await pathService.addModuleFolder(selected);
           break;
         case 'hak':
           response = await pathService.addHakFolder(selected);
@@ -194,16 +191,13 @@ export default function SettingsPage() {
     }
   };
 
-  const removeCustomFolder = async (type: 'override' | 'module' | 'hak', path: string) => {
+  const removeCustomFolder = async (type: 'override' | 'hak', path: string) => {
     try {
       setSaving(true);
       let response;
       switch (type) {
         case 'override':
           response = await pathService.removeOverrideFolder(path);
-          break;
-        case 'module':
-          response = await pathService.removeModuleFolder(path);
           break;
         case 'hak':
           response = await pathService.removeHakFolder(path);

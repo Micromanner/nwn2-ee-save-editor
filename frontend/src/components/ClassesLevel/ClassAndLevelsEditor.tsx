@@ -278,17 +278,6 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
     }
   };
 
-  const handleXPKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleXPSubmit();
-    } else if (e.key === 'Escape') {
-      setIsEditingXP(false);
-      if (xpProgress) {
-        setXpInput(xpProgress.current_xp.toString());
-      }
-    }
-  };
-
   // Check if XP level differs from class level
   const hasLevelMismatch = xpProgress && xpProgress.current_xp_level !== totalLevel;
   const totalBAB = classes.reduce((sum, c) => sum + c.baseAttackBonus, 0);
