@@ -7,7 +7,6 @@ import os
 import sys
 import shutil
 import subprocess
-import platform
 import time
 from pathlib import Path
 
@@ -48,9 +47,6 @@ def build_with_nuitka():
     # Build with generic directory name first
     output_name = exe_name
 
-    # Skip the large icon cache directory since icons are not used anymore
-    include_cache = False
-    
     # Set up caching directory via environment variable
     cache_dir = DIST_DIR / ".nuitka-cache"
     cache_dir.mkdir(exist_ok=True)

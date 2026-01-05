@@ -36,7 +36,7 @@ class GameStateManager(EventEmitter):
                 return None
 
             try:
-                from services.savegame_handler import SaveGameHandler
+                from services.core.savegame_handler import SaveGameHandler
                 from nwn2_rust import XmlParser
 
                 handler = SaveGameHandler(save_path)
@@ -458,7 +458,7 @@ class GameStateManager(EventEmitter):
                 logger.warning("GameStateManager: No content manager available")
                 return self._get_fallback_quests(parser)
 
-            from services.dialogue_mapping_service import get_dialogue_mapping_service
+            from services.gamedata.dialogue_mapping_service import get_dialogue_mapping_service
             mapping_service = get_dialogue_mapping_service(content_manager)
 
             all_integers = parser.get_all_integers()

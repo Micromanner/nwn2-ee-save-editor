@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 from dataclasses import dataclass
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from config.nwn2_settings import nwn2_paths
 
 

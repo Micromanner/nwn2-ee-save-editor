@@ -26,11 +26,11 @@ from datetime import datetime
 from collections import OrderedDict
 import zlib
 
-from services.resource_manager import ResourceManager, ModuleLRUCache
+from services.core.resource_manager import ResourceManager, ModuleLRUCache
 from nwn2_rust import TDAParser, ErfParser, GffParser
 from nwn2_rust import TLKParser
-from services.resource_manager import ERFResourceType
-from gamedata.services.workshop_service import SteamWorkshopService
+from services.core.resource_manager import ERFResourceType
+from services.gamedata.workshop_service import SteamWorkshopService
 
 # Import real fixtures paths
 TEST_FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"

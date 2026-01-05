@@ -1,13 +1,9 @@
-"""
-FastAPI router for race-related operations.
-Handles race changes and subraces.
-"""
+"""FastAPI router for race-related operations."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
 from loguru import logger
 
-# from fastapi_models import (...) - moved to lazy loading
 from .dependencies import get_character_manager, get_character_session, CharacterManagerDep, CharacterSessionDep
 
 router = APIRouter(tags=["Race"])
@@ -17,25 +13,16 @@ router = APIRouter(tags=["Race"])
 @router.post("/characters/{character_id}/race/change")
 def change_character_race(
     character_id: int,
-    request,  # Type removed for lazy loading
+    request,  
     char_session: CharacterSessionDep
 ):
-    """
-    Change character race with all associated effects.
-    
-    - **race_id**: New race ID from racialtypes.2da
-    - **subrace**: Optional subrace string
-    - **preserve_feats**: Whether to preserve existing feats (default: True)
-    
-    Returns cascading changes to attributes, feats, and other systems.
-    """
+    """Change character race with all associated effects."""
     from fastapi_models import RaceChangeRequest, RaceChangeResponse
     try:
         session = char_session
         manager = session.character_manager
         race_manager = manager.get_manager('race')
         
-        # Use race manager method - fix parameter names to match manager signature
         result = race_manager.change_race(
             request.race_id, 
             request.subrace or '', 
@@ -67,24 +54,12 @@ def get_current_race(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get current race information.
-    
-    Returns racial properties and summary including:
-    - Race ID and name
-    - Subrace (if any)
-    - Size category
-    - Favored class
-    - Ability modifiers
-    - Racial feats
-    """
+    """Get current race information."""
     try:
-        # Lazy imports for performance
         from fastapi_models import CurrentRace
         
         race_manager = manager.get_manager('race')
         
-        # Use existing race manager method - get_racial_properties()
         racial_properties = race_manager.get_racial_properties()
         
         return CurrentRace(**racial_properties)
@@ -104,24 +79,12 @@ def validate_race_change(
     manager: CharacterManagerDep,
     subrace: Optional[str] = None
 ):
-    """
-    Validate if race change is allowed.
-    
-    Checks:
-    - Race exists in racialtypes.2da
-    - Subrace is valid for the race (if provided)
-    - Character meets any special requirements
-    - Compatibility with current classes
-    
-    Returns validation status and any errors.
-    """
+    """Validate if race change is allowed."""
     try:
-        # Lazy imports for performance
         from fastapi_models import RaceValidationResponse
         
         race_manager = manager.get_manager('race')
         
-        # Use enhanced race manager validation method with subrace support
         valid, errors = race_manager.validate_race_change(race_id, subrace or '')
         
         return RaceValidationResponse(
@@ -148,21 +111,12 @@ def get_available_subraces_for_character(
     race_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get available subraces for a specific race for this character.
-    
-    Returns subraces that are:
-    - Compatible with the specified race
-    - Available to players
-    - Meet any character-specific requirements
-    """
+    """Get available subraces for a specific race for this character."""
     try:
-        # Lazy imports for performance
         from fastapi_models import AvailableSubracesResponse
         
         race_manager = manager.get_manager('race')
         
-        # Use race manager method to get available subraces
         available_subraces = race_manager.get_available_subraces(race_id)
         
         return AvailableSubracesResponse(
@@ -185,21 +139,12 @@ def validate_subrace(
     subrace: str,
     manager: CharacterManagerDep
 ):
-    """
-    Validate if a specific subrace is compatible with a race.
-    
-    Checks:
-    - Subrace exists in racialsubtypes.2da
-    - Subrace belongs to the specified base race
-    - Subrace is available to players
-    """
+    """Validate if a specific subrace is compatible with a race."""
     try:
-        # Lazy imports for performance
         from fastapi_models import SubraceValidationResponse
         
         race_manager = manager.get_manager('race')
         
-        # Use race manager method to validate subrace
         valid, errors = race_manager.validate_subrace(race_id, subrace)
         
         return SubraceValidationResponse(
@@ -222,15 +167,8 @@ def get_race_summary(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get race summary with formatted ability modifier strings.
-    
-    Returns racial properties with user-friendly formatting like:
-    - "STR +2, DEX -1" for ability modifiers
-    - Complete racial property details
-    """
+    """Get race summary with formatted ability modifier strings."""
     try:
-        # Lazy imports for performance
         from fastapi_models import RaceSummary
         
         race_manager = manager.get_manager('race')
@@ -252,13 +190,8 @@ def revert_to_original_race(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """
-    Revert character to their original race.
-    
-    Restores the race that was set when the character was first loaded.
-    """
+    """Revert character to their original race."""
     try:
-        # Lazy imports for performance
         from fastapi_models import RaceChangeResponse
         
         session = char_session

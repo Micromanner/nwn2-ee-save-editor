@@ -1,18 +1,14 @@
-"""
-Event system for character management
-Provides pub/sub pattern for communication between managers
-"""
+"""Event system for character management with pub/sub pattern."""
 
 from typing import Dict, List, Callable, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class EventType(Enum):
-    """Standard event types for character management"""
+    """Standard event types for character management."""
     CLASS_CHANGED = 'class_changed'
     CLASS_ADDED = 'class_added'  # For multiclassing
     LEVEL_GAINED = 'level_gained'
@@ -37,24 +33,26 @@ class EventType(Enum):
 
 @dataclass
 class EventData:
-    """Base class for event data"""
+    """Base class for event data."""
+
     event_type: EventType
     source_manager: str
     timestamp: float
-    
+
     def validate(self) -> bool:
-        """Validate event data"""
+        """Validate event data."""
         return True
 
 
 @dataclass
 class ClassChangedEvent(EventData):
-    """Data for class change events"""
+    """Data for class change events."""
+
     old_class_id: Optional[int]
     new_class_id: int
     level: int
-    preserve_feats: List[int] = None  # Feats to keep
-    is_level_adjustment: bool = False  # True when this is just a level change (up/down), not a class swap
+    preserve_feats: List[int] = None
+    is_level_adjustment: bool = False
     
     def __post_init__(self):
         self.event_type = EventType.CLASS_CHANGED
@@ -64,10 +62,11 @@ class ClassChangedEvent(EventData):
 
 @dataclass
 class FeatChangedEvent(EventData):
-    """Data for feat add/remove events"""
+    """Data for feat add/remove events."""
+
     feat_id: int
-    action: str  # 'added' or 'removed'
-    source: str  # 'class', 'level', 'manual'
+    action: str
+    source: str
     
     def __post_init__(self):
         if self.action == 'added':
@@ -78,11 +77,12 @@ class FeatChangedEvent(EventData):
 
 @dataclass
 class SpellChangedEvent(EventData):
-    """Data for spell learning/forgetting events"""
+    """Data for spell learning/forgetting events."""
+
     spell_id: int
     spell_level: int
-    action: str  # 'learned' or 'forgotten'
-    source: str  # 'class', 'feat', 'manual'
+    action: str
+    source: str
     
     def __post_init__(self):
         if self.action == 'learned':
@@ -93,7 +93,8 @@ class SpellChangedEvent(EventData):
 
 @dataclass
 class LevelGainedEvent(EventData):
-    """Data for level up events"""
+    """Data for level up events."""
+
     class_id: int
     new_level: int
     total_level: int
@@ -105,7 +106,8 @@ class LevelGainedEvent(EventData):
 
 @dataclass
 class SkillPointsAwardedEvent(EventData):
-    """Data for skill points awarded events"""
+    """Data for skill points awarded events."""
+
     class_id: int
     level: int
     points: int
@@ -116,10 +118,11 @@ class SkillPointsAwardedEvent(EventData):
 
 @dataclass
 class DomainChangedEvent(EventData):
-    """Data for domain add/remove events"""
+    """Data for domain add/remove events."""
+
     domain_id: int
     domain_name: str
-    action: str  # 'added' or 'removed'
+    action: str
     feats_affected: List[Dict[str, Any]] = None
 
     def __post_init__(self):
@@ -132,33 +135,21 @@ class DomainChangedEvent(EventData):
 
 
 class EventEmitter:
-    """Base class for objects that can emit and listen to events"""
-    
+    """Base class for objects that can emit and listen to events."""
+
     def __init__(self):
         self._observers: Dict[EventType, List[Callable]] = {}
         self._event_history: List[EventData] = []
-    
+
     def on(self, event_type: EventType, callback: Callable[[EventData], None]):
-        """
-        Register a callback for an event type
-        
-        Args:
-            event_type: The type of event to listen for
-            callback: Function to call when event is emitted
-        """
+        """Register a callback for an event type."""
         if event_type not in self._observers:
             self._observers[event_type] = []
         self._observers[event_type].append(callback)
         logger.debug(f"Registered callback for {event_type.value}")
     
     def off(self, event_type: EventType, callback: Callable[[EventData], None]):
-        """
-        Unregister a callback for an event type
-        
-        Args:
-            event_type: The type of event
-            callback: The callback to remove
-        """
+        """Unregister a callback for an event type."""
         if event_type in self._observers:
             try:
                 self._observers[event_type].remove(callback)
@@ -167,13 +158,7 @@ class EventEmitter:
                 pass  # Callback not in list
     
     def emit(self, event_type, data=None):
-        """
-        Emit an event to all registered observers
-        
-        Args:
-            event_type: EventType or EventData. If EventType, data should be provided
-            data: Optional dict of event data if event_type is EventType
-        """
+        """Emit an event to all registered observers."""
         # Handle two different call styles for compatibility
         if isinstance(event_type, EventData):
             event_data = event_type
@@ -206,25 +191,12 @@ class EventEmitter:
                     logger.error(f"Error in event callback: {e}")
     
     def emit_batch(self, events: List[EventData]):
-        """
-        Emit multiple events in order
-        
-        Args:
-            events: List of events to emit
-        """
+        """Emit multiple events in order."""
         for event in events:
             self.emit(event)
     
     def get_event_history(self, event_type: Optional[EventType] = None) -> List[EventData]:
-        """
-        Get history of emitted events
-        
-        Args:
-            event_type: Optional filter by event type
-            
-        Returns:
-            List of event data
-        """
+        """Get history of emitted events, optionally filtered by type."""
         if event_type:
             return [e for e in self._event_history if e.event_type == event_type]
         return self._event_history.copy()

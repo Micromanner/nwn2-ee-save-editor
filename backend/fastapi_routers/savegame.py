@@ -1,33 +1,23 @@
-"""
-Savegame router - Save game import, export, backup, and management operations
-Handles operations on NWN2 save game directories and files
-All operations use SaveGameHandler to ensure NWN2 save file integrity
-"""
+"""Savegame router - Save game import, export, backup, and management operations."""
 
 import os
-import glob
-import shutil
-import datetime
-from typing import Dict, Any, List, Optional
+import io
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
-from fastapi_core.session_registry import get_character_session, save_character_session, get_path_from_id
+from services.fastapi.session_registry import get_character_session, save_character_session, get_path_from_id, register_character_path
 from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep,
     check_system_ready
 )
-from fastapi_models.savegame_models import SavegameUpdateRequest # Explicit import for router signature
-# from fastapi_models import (...) - moved to lazy loading
+from fastapi_models.savegame_models import SavegameUpdateRequest
+
 router = APIRouter(tags=["savegame"])
 
 
-
-
 def _validate_savegame_character(character_id: int) -> str:
-    """Helper function to validate savegame character - no duplicate session creation"""
-    # Get file path from character ID (no temporary session creation)
+    """Validate that character belongs to a save game."""
     file_path = get_path_from_id(character_id)
     if not file_path:
         raise HTTPException(
@@ -35,7 +25,6 @@ def _validate_savegame_character(character_id: int) -> str:
             detail=f"Character with ID {character_id} not found"
         )
     
-    # Check if path is a directory (savegame) or individual file
     if not os.path.isdir(file_path):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -52,7 +41,7 @@ def _validate_savegame_character(character_id: int) -> str:
 
 
 def _validate_save_directory(save_path: str) -> str:
-    """Helper function to validate save directory - no duplicated logic"""
+    """Validate that path is a valid save directory."""
     if not save_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -75,65 +64,38 @@ def _validate_save_directory(save_path: str) -> str:
     return save_path
 
 
-
-
 @router.post("/savegames/import")
 def import_savegame(
-    import_request: dict,  # Use dict instead of forward reference
+    import_request: dict,
     system_ready: bool = Depends(check_system_ready)
 ):
-    """Import a character from a save game directory"""
+    """Import a character from a save game directory."""
     try:
-        # Lazy imports for performance
-        import io
-        from fastapi_models import SavegameImportRequest, SavegameImportResponse
-        from services.savegame_handler import SaveGameHandler
-        from nwn2_rust import GffParser
+        from fastapi_models import SavegameImportResponse
+        from services.core.savegame_handler import SaveGameHandler
 
-        # Type validation at runtime
         if 'save_path' not in import_request:
             raise HTTPException(status_code=400, detail="Invalid import request")
 
-        # Use helper function - no duplicated logic
         save_path = _validate_save_directory(import_request['save_path'])
 
         savegame_handler = SaveGameHandler(save_path)
-
-        # Read and parse playerlist.ifo directly with Rust parser
-        raw_files = savegame_handler.batch_read_character_files()
-        if 'playerlist.ifo' not in raw_files:
-            raise HTTPException(status_code=500, detail="Failed to read playerlist.ifo from save")
-
-        from nwn2_rust import GffParser
-        player_data = GffParser.from_bytes(raw_files['playerlist.ifo']).to_dict()
-        mod_player_list = player_data.get('Mod_PlayerList', [])
-        if not mod_player_list:
-            raise HTTPException(status_code=500, detail="No player data found in save game")
-
-        character_data = mod_player_list[0]  # First player in the list
         
-        # Register character path and create session properly
-        from fastapi_core.session_registry import register_character_path
+        char_summary = savegame_handler.read_character_summary()
         
-        # Get integer ID for the character path
         character_id = register_character_path(save_path)
         
-        # Create/get session (this handles the heavy lifting)
         session = get_character_session(save_path)
         
-        # Extract character name for response
-        first_name = character_data.get('FirstName', {}).get('value', '')
-        last_name = character_data.get('LastName', {}).get('value', '')
-        character_name = f"{first_name} {last_name}".strip() or "Unknown"
+        character_name = char_summary.get('name', "Unknown")
         
-        # Create import result in expected format
         import_result = {
             'success': True,
             'message': f'Successfully imported character {character_name}',
-            'character_id': str(character_id),  # Use the registered integer ID
+            'character_id': str(character_id),
             'character_name': character_name,
             'save_path': save_path,
-            'files_imported': len(raw_files),
+            'files_imported': 2, # Approximation, mainly playerlist + bic
             'backup_created': False
         }
         
@@ -156,26 +118,23 @@ def import_savegame(
 
 @router.get("/{character_id}/companions")
 def list_savegame_companions(character_id: int):
-    """List all companions available in a save game"""
+    """List all companions available in a save game."""
     try:
-        # Lazy imports for performance
-        from services.savegame_handler import SaveGameHandler, SaveGameError
+        from services.core.savegame_handler import SaveGameHandler, SaveGameError
         from fastapi_models import SavegameCompanionsResponse, CompanionInfo
         
-        # Use helper function - no duplicated logic
         file_path = _validate_savegame_character(character_id)
         
         handler = SaveGameHandler(file_path)
         companion_names = handler.list_companions()
         
-        # Build companion info list
         companions = []
         for comp_name in companion_names:
             companion_info = CompanionInfo(
                 name=comp_name,
                 file_name=f"{comp_name}.ros",
                 tag=comp_name,
-                level=None,  # Would need to parse ROS file for details
+                level=None,
                 class_name=None,
                 is_active=False,
                 influence=None
@@ -190,7 +149,7 @@ def list_savegame_companions(character_id: int):
         return SavegameCompanionsResponse(
             companions=companions,
             count=len(companions),
-            active_companions=0  # Would need parsing to determine active companions
+            active_companions=0
         )
         
     except SaveGameError as e:
@@ -209,27 +168,25 @@ def list_savegame_companions(character_id: int):
 
 @router.get("/{character_id}/info")
 def get_savegame_info(character_id: int):
-    """Get basic save game information using SaveGameHandler"""
+    """Get basic save game information."""
     try:
-        # Lazy imports for performance
-        from services.savegame_handler import SaveGameHandler
+        from services.core.savegame_handler import SaveGameHandler
         from fastapi_models import SavegameInfoResponse
         
         file_path = _validate_savegame_character(character_id)
         handler = SaveGameHandler(file_path)
         
-        # Simple relay to SaveGameHandler methods
         files_in_save = handler.list_files()
         companion_names = handler.list_companions()
         module_name = handler.extract_current_module()
         
         info_result = {
             'save_directory': file_path,
-            'character_name': "Character",  # Would need session data for actual name
+            'character_name': "Character",
             'files_in_save': files_in_save,
             'module_name': module_name,
             'companions': [{'name': name, 'file_name': f'{name}.ros'} for name in companion_names],
-            'backups': [],  # SaveGameHandler doesn't list backups - would need to be added there
+            'backups': [],
         }
         
         return SavegameInfoResponse(**info_result)
@@ -248,63 +205,29 @@ def update_savegame_character(
     update_request: SavegameUpdateRequest,
     manager: CharacterManagerDep
 ):
-    """Update character data in save game using existing session save"""
+    """Update character data in save game."""
     try:
-        # Lazy imports for performance
-        from services.savegame_handler import SaveGameHandler
+        from services.core.savegame_handler import SaveGameHandler
         from fastapi_models import SavegameUpdateResponse
         
         file_path = _validate_savegame_character(character_id)
         
         if update_request.sync_current_state:
-            # Handle specific field updates before syncing
             if update_request.updates:
                 updates = update_request.updates
                 
-                # Update raw GFF fields for deity and biography
+                # Use manager methods instead of direct GFF access
                 if 'deity' in updates:
-                    manager.gff.set('Deity', updates['deity'])
-                    logger.info(f"Updated deity to: {updates['deity']}")
+                    manager.update_deity(updates['deity'])
                     
                 if 'biography' in updates:
-                    # Description is a CExoLocString with substrings array
-                    desc_struct = manager.gff.get('Description', {})
-                    if isinstance(desc_struct, dict) and 'substrings' in desc_struct:
-                        # Update existing structure
-                        if desc_struct['substrings']:
-                            desc_struct['substrings'][0]['string'] = updates['biography']
-                        else:
-                            desc_struct['substrings'] = [{'string': updates['biography'], 'language': 0, 'gender': 0}]
-                        manager.gff.set('Description', desc_struct)
-                    else:
-                        # Create new structure
-                        manager.gff.set('Description', {
-                            'string_ref': 4294967295,
-                            'substrings': [{'string': updates['biography'], 'language': 0, 'gender': 0}]
-                        })
-                    logger.info(f"Updated biography")
+                    manager.update_biography(updates['biography'])
                     
-                if 'first_name' in updates:
-                    # FirstName is a localized string with 'value' key
-                    first_name_struct = manager.gff.get('FirstName', {})
-                    if isinstance(first_name_struct, dict):
-                        first_name_struct['value'] = updates['first_name']
-                        manager.gff.set('FirstName', first_name_struct)
-                    else:
-                        manager.gff.set('FirstName', {'value': updates['first_name']})
-                    logger.info(f"Updated first_name to: {updates['first_name']}")
-                    
-                if 'last_name' in updates:
-                    # LastName is a localized string with 'value' key
-                    last_name_struct = manager.gff.get('LastName', {})
-                    if isinstance(last_name_struct, dict):
-                        last_name_struct['value'] = updates['last_name']
-                        manager.gff.set('LastName', last_name_struct)
-                    else:
-                        manager.gff.set('LastName', {'value': updates['last_name']})
-                    logger.info(f"Updated last_name to: {updates['last_name']}")
+                first_name = updates.get('first_name')
+                last_name = updates.get('last_name')
+                if first_name is not None or last_name is not None:
+                    manager.update_name(first_name=first_name, last_name=last_name)
             
-            # Simple relay to existing session save functionality
             success = save_character_session(file_path, create_backup=update_request.create_backup)
             
             return SavegameUpdateResponse(
@@ -315,7 +238,6 @@ def update_savegame_character(
                 backup_created=update_request.create_backup
             )
         
-        # For direct file updates, use SaveGameHandler
         if update_request.updates:
             handler = SaveGameHandler(file_path)
             for filename, content in update_request.updates.items():
@@ -346,19 +268,16 @@ def update_savegame_character(
 
 @router.get("/{character_id}/backups")
 def list_savegame_backups(character_id: int):
-    """List all available backups for a save game"""
+    """List all available backups for a save game."""
     try:
-        # Lazy imports for performance
-        from services.savegame_handler import SaveGameHandler, SaveGameError
+        from services.core.savegame_handler import SaveGameHandler
         from fastapi_models import SavegameBackupsResponse, BackupInfo
         
-        # Use helper function - no duplicated logic
         file_path = _validate_savegame_character(character_id)
         
         handler = SaveGameHandler(file_path)
         backups_data = handler.list_backups()
         
-        # Convert to response model
         backups = []
         for backup in backups_data:
             backup_info = BackupInfo(
@@ -391,18 +310,15 @@ def list_savegame_backups(character_id: int):
 @router.post("/{character_id}/restore")
 def restore_savegame_backup(
     character_id: int,
-    restore_request  # Type removed for lazy loading
+    restore_request: dict
 ):
-    """Restore a save game from backup"""
+    """Restore a save game from backup."""
     try:
-        # Lazy imports for performance
-        from services.savegame_handler import SaveGameHandler, SaveGameError
+        from services.core.savegame_handler import SaveGameHandler
         from fastapi_models import SavegameRestoreRequest, SavegameRestoreResponse
         
-        # Use helper function - no duplicated logic
         file_path = _validate_savegame_character(character_id)
         
-        # Parse request
         if not isinstance(restore_request, SavegameRestoreRequest):
             request_data = SavegameRestoreRequest.model_validate(restore_request)
         else:
@@ -420,7 +336,6 @@ def restore_savegame_backup(
             create_pre_restore_backup=request_data.create_pre_restore_backup
         )
         
-        # Clean up old backups after successful restore
         cleanup_result = handler.cleanup_old_backups(keep_count=10)
         
         logger.info(f"Restored backup: character_id={character_id}, backup_path={request_data.backup_path}")
@@ -449,12 +364,10 @@ def cleanup_savegame_backups(
     character_id: int,
     keep_count: int = 10
 ):
-    """Clean up old backups, keeping only the most recent ones"""
+    """Clean up old backups."""
     try:
-        # Lazy imports for performance
-        from services.savegame_handler import SaveGameHandler, SaveGameError
+        from services.core.savegame_handler import SaveGameHandler
         
-        # Use helper function - no duplicated logic
         file_path = _validate_savegame_character(character_id)
         
         handler = SaveGameHandler(file_path)

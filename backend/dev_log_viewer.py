@@ -15,45 +15,75 @@ if os.getenv("ENABLE_LOG_VIEWER", "false").lower() != "true":
     sys.exit(0)
 
 LOG_DIR = Path(__file__).parent / "logs"
-LOG_FILE = LOG_DIR / "app.log"
 
 app = FastAPI(title="NWN2 Editor Dev Log Viewer")
 
+def get_session_file(session_id: str) -> Optional[Path]:
+    """Get path to log file for a specific session"""
+    if not session_id:
+        sessions = get_available_sessions()
+        if not sessions:
+            return None
+        session_id = sessions[0]
+    
+    # Try exact match first
+    f = LOG_DIR / f"app_{session_id}.log"
+    if f.exists():
+        return f
+    
+    # Fallback for legacy app.log if formatted appropriately (unlikely now)
+    if session_id == "legacy":
+        return LOG_DIR / "app.log"
+        
+    return None
+
 def get_available_sessions() -> List[str]:
-    """Extract unique session IDs from logs"""
-    if not LOG_FILE.exists():
+    """Extract unique session IDs from log filenames"""
+    if not LOG_DIR.exists():
         return []
 
-    sessions = set()
-    try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                if " | [" in line and "] | " in line:
-                    # Extract session ID between [ and ]
-                    start = line.find("[") + 1
-                    end = line.find("]", start)
-                    if end > start:
-                        session_id = line[start:end].strip()
-                        sessions.add(session_id)
-    except Exception:
-        pass
+    sessions = []
+    # Scan for app_YYYYMMDD_HHMMSS.log pattern
+    for log_file in LOG_DIR.glob("app_*.log"):
+        name = log_file.stem  # e.g., app_20260105_123456
+        if len(name) > 4:
+            session_id = name[4:]  # 20260105_123456
+            sessions.append(session_id)
 
-    return sorted(list(sessions), reverse=True)  # Newest first
+    return sorted(sessions, reverse=True)  # Newest first
 
-def get_available_modules() -> List[str]:
-    """Extract unique module names from logs"""
-    if not LOG_FILE.exists():
+def get_available_modules(session_id: Optional[str] = None) -> List[str]:
+    """Extract unique module names from the specified (or latest) session"""
+    log_file = get_session_file(session_id)
+    if not log_file or not log_file.exists():
         return []
 
     modules = set()
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
+        with open(log_file, "r", encoding="utf-8") as f:
             for line in f:
                 if " | " in line:
                     parts = line.split(" | ")
-                    if len(parts) >= 4:  # Now has session ID
-                        module_part = parts[3].split(":")[0].strip()
-                        # Skip __main__ and generic modules, keep application modules
+                    # Format: Time | Level | Module:Line - Msg
+                    if len(parts) >= 3:
+                        # Index 2 is usually "module:line - msg"
+                        # Or Index 3 if session ID is present (legacy)
+                        
+                        # Heuristic: Check if part 1 is level (DEBUG/INFO/etc)
+                        p1 = parts[1].strip()
+                        if p1 in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+                            module_col = parts[2]
+                        elif len(parts) >= 4:
+                            # Try legacy format: Time | [Session] | Level | Module
+                            p2 = parts[2].strip()
+                            if p2 in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+                                module_col = parts[3]
+                            else:
+                                continue
+                        else:
+                            continue
+
+                        module_part = module_col.split(":")[0].strip()
                         if module_part and module_part != "__main__" and "." in module_part:
                             modules.add(module_part)
     except Exception:
@@ -68,20 +98,25 @@ def read_logs(
     session_filter: Optional[str] = None,
     tail: int = 500
 ) -> List[str]:
-    """Read and filter logs"""
-    if not LOG_FILE.exists():
+    """Read and filter logs from the appropriate session file"""
+    log_file = get_session_file(session_filter)
+    
+    if not log_file:
         return ["No logs available yet"]
+        
+    if not log_file.exists():
+        return [f"Log file not found: {log_file.name}"]
 
     try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
+        with open(log_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         lines = lines[-tail:]
 
         filtered = []
         for line in lines:
-            if session_filter and f"[{session_filter}]" not in line:
-                continue
+            # Note: session_filter is implicit by file selection, so we don't filter line-by-line for it
+            
             if module_filter and module_filter not in line:
                 continue
             if level_filter and f"| {level_filter: <8} |" not in line:
@@ -101,9 +136,9 @@ async def get_sessions():
     return JSONResponse({"sessions": sessions})
 
 @app.get("/api/modules")
-async def get_modules():
+async def get_modules(session: Optional[str] = Query(None)):
     """API endpoint for fetching available modules"""
-    modules = get_available_modules()
+    modules = get_available_modules(session)
     return JSONResponse({"modules": modules})
 
 @app.get("/", response_class=HTMLResponse)
@@ -192,7 +227,7 @@ async def log_viewer():
             <div>
                 <label>Session:</label>
                 <select id="sessionFilter">
-                    <option value="">All Sessions</option>
+                    <option value="">Loading...</option>
                 </select>
             </div>
 
@@ -240,13 +275,21 @@ async def log_viewer():
                     const data = await response.json();
 
                     const select = document.getElementById('sessionFilter');
-                    select.innerHTML = '<option value="">All Sessions</option>';
+                    select.innerHTML = ''; // Clear loading state
+
+                    if (data.sessions.length === 0) {{
+                        const option = document.createElement('option');
+                        option.text = "No sessions found";
+                        select.add(option);
+                        return;
+                    }}
 
                     data.sessions.forEach((session, index) => {{
                         const option = document.createElement('option');
                         option.value = session;
-                        option.textContent = index === 0 ? `${{session}} (current)` : session;
-                        if (index === 0) option.selected = true;  // Auto-select current session
+                        // Format nicer timestamp if possible, but raw ID is fine
+                        option.textContent = index === 0 ? `${{session}} (Current)` : session;
+                        if (index === 0) option.selected = true;
                         select.appendChild(option);
                     }});
                 }} catch (error) {{
@@ -255,17 +298,22 @@ async def log_viewer():
             }}
 
             async function loadModules() {{
+                const session = document.getElementById('sessionFilter').value;
                 try {{
-                    const response = await fetch('./api/modules');
+                    // Update modules based on selected session
+                    const response = await fetch(`./api/modules?session=${{session}}`);
                     const data = await response.json();
 
                     const select = document.getElementById('moduleFilter');
+                    const currentVal = select.value;
+                    
                     select.innerHTML = '<option value="">All Modules</option>';
 
                     data.modules.forEach(module => {{
                         const option = document.createElement('option');
                         option.value = module;
                         option.textContent = module;
+                        if (module === currentVal) option.selected = true;
                         select.appendChild(option);
                     }});
                 }} catch (error) {{
@@ -319,7 +367,12 @@ async def log_viewer():
             }}
 
             function clearFilters() {{
-                document.getElementById('sessionFilter').value = '';
+                // Default to first session (current)
+                const sessionSelect = document.getElementById('sessionFilter');
+                if (sessionSelect.options.length > 0) {{
+                    sessionSelect.selectedIndex = 0;
+                }}
+                
                 document.getElementById('moduleFilter').value = '';
                 document.getElementById('levelFilter').value = '';
                 document.getElementById('searchInput').value = '';
@@ -377,7 +430,10 @@ async def log_viewer():
                 }}
             }}
 
-            document.getElementById('sessionFilter').addEventListener('change', loadLogs);
+            document.getElementById('sessionFilter').addEventListener('change', () => {{
+                loadModules(); // Reload modules when session changes
+                loadLogs();
+            }});
             document.getElementById('moduleFilter').addEventListener('change', loadLogs);
             document.getElementById('levelFilter').addEventListener('change', loadLogs);
             document.getElementById('searchInput').addEventListener('input', loadLogs);
@@ -385,9 +441,9 @@ async def log_viewer():
             // Load sessions, modules, port and logs on page load (in sequence)
             async function initializePage() {{
                 await loadSessions();  // Load sessions first
-                await loadModules();   // Then modules
+                await loadModules();   // Then modules (for current session)
                 loadPort();            // Load port (synchronous now)
-                loadLogs();            // Then logs with current session selected
+                loadLogs();            // Then logs 
             }}
 
             initializePage();
@@ -414,6 +470,6 @@ async def get_logs(
 
 if __name__ == "__main__":
     print(f"🔍 Starting Dev Log Viewer on http://localhost:9999")
-    print(f"   Log file: {LOG_FILE}")
+    print(f"   Log directory: {LOG_DIR}")
     print(f"   Press Ctrl+C to stop")
     uvicorn.run(app, host="127.0.0.1", port=9999, log_level="warning")

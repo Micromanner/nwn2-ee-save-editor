@@ -1,45 +1,15 @@
-"""
-Dialogue Mapping Service - Extracts quest variable mappings from dialogue files
-
-FEATURE ON HOLD
-===============
-This service is currently disabled in the frontend. The quest mapping feature produces
-duplicate and incorrect mappings due to fundamental limitations in NWN2's architecture:
-
-1. Many quest variables (e.g., "CallumState") are set via area scripts or creature
-   death scripts, NOT dialogue files - so they never co-occur with journal updates.
-
-2. The same variable can map to multiple journal entries, causing duplicate quests
-   in the UI (e.g., "Getting Back in the Fight" appearing 6 times).
-
-3. Only ~7% of NWN2 scripts contain AddJournalQuestEntry() calls - the rest use
-   generic ga_journal which receives parameters from dialogue, not the script itself.
-
-The dialogue parsing approach IS the correct one (vs parsing .nss scripts), but it
-cannot achieve complete coverage. See QUEST_MAPPING_UX_PROBLEM.md for full analysis.
-
-TO RE-ENABLE: Uncomment the QuestsEditor in GameStateEditor.tsx
-
----
-
-This service parses .dlg dialogue files from NWN2 campaigns to find co-occurrences
-of variable-setting scripts (ga_global_int, etc.) and journal-updating scripts
-(ga_journal) on the same dialogue nodes, providing high-confidence variable-to-quest
-mappings.
-"""
+"""Extracts quest variable mappings from dialogue files (FEATURE ON HOLD: see QUEST_MAPPING_UX_PROBLEM.md)."""
 
 import os
-import hashlib
-import tempfile
-import lzma
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Set
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
-from io import BytesIO
 import msgpack
+from loguru import logger
 from nwn2_rust import GffParser, ErfParser
 
+from config.nwn2_settings import nwn2_paths
 from utils.paths import get_writable_dir
 
 
@@ -67,7 +37,7 @@ class DialogueMappingCache:
 
 
 class DialogueMappingService:
-    """Service for extracting quest variable mappings from dialogue files"""
+    """Extracts quest variable mappings from NWN2 dialogue files."""
 
     CACHE_VERSION = "2.2"
     CACHE_DIR = get_writable_dir("cache/quest_mappings")
@@ -104,13 +74,7 @@ class DialogueMappingService:
     ]
 
     def __init__(self, campaign_guid: str, campaign_name: str = ""):
-        """
-        Initialize the dialogue mapping service for a specific campaign
-
-        Args:
-            campaign_guid: The Campaign_ID GUID from module.ifo
-            campaign_name: Optional campaign name for logging
-        """
+        """Initialize for a specific campaign GUID."""
         self.campaign_guid = campaign_guid
         self.campaign_name = campaign_name
         self._mappings: Dict[str, List[QuestVariableMapping]] = {}
@@ -120,21 +84,12 @@ class DialogueMappingService:
 
     @property
     def cache_path(self) -> Path:
-        """Get cache file path for this campaign"""
+        """Get cache file path for this campaign."""
         safe_guid = self.campaign_guid.replace('-', '').replace(' ', '_')[:32]
         return self.CACHE_DIR / f"{safe_guid}.msgpack"
 
     def get_mapping(self, variable_name: str, value: Optional[int] = None) -> Optional[QuestVariableMapping]:
-        """
-        Get quest mapping for a variable
-
-        Args:
-            variable_name: Variable name (e.g., "SimmyState")
-            value: Optional specific value to match
-
-        Returns:
-            QuestVariableMapping if found, None otherwise
-        """
+        """Get quest mapping for a variable, optionally filtering by value."""
         self._ensure_mappings_loaded()
 
         mappings = self._mappings.get(variable_name, [])
@@ -149,17 +104,17 @@ class DialogueMappingService:
         return mappings[0] if mappings else None
 
     def get_all_mappings_for_variable(self, variable_name: str) -> List[QuestVariableMapping]:
-        """Get all known value mappings for a variable"""
+        """Get all known value mappings for a variable."""
         self._ensure_mappings_loaded()
         return self._mappings.get(variable_name, [])
 
     def get_all_mappings(self) -> Dict[str, List[QuestVariableMapping]]:
-        """Get all quest variable mappings"""
+        """Get all quest variable mappings."""
         self._ensure_mappings_loaded()
         return self._mappings.copy()
 
     def get_cache_info(self) -> Dict[str, Any]:
-        """Get information about the current cache"""
+        """Get information about the current cache."""
         if self.cache_path.exists():
             try:
                 with open(self.cache_path, 'rb') as f:
@@ -184,7 +139,7 @@ class DialogueMappingService:
         }
 
     def _ensure_mappings_loaded(self) -> None:
-        """Ensure mappings are loaded from cache or generated"""
+        """Ensure mappings are loaded from cache or generated."""
         if self._cache_loaded:
             return
 
@@ -198,7 +153,7 @@ class DialogueMappingService:
         self._cache_loaded = True
 
     def _try_load_cache(self) -> bool:
-        """Try to load mappings from cache file"""
+        """Try to load mappings from cache file."""
         if not self.cache_path.exists():
             return False
 
@@ -237,7 +192,7 @@ class DialogueMappingService:
             return False
 
     def _save_cache(self) -> None:
-        """Save mappings to cache file"""
+        """Save mappings to cache file."""
         try:
             from datetime import datetime
 
@@ -266,7 +221,7 @@ class DialogueMappingService:
             logger.error(f"Failed to save cache: {e}")
 
     def _build_mappings(self) -> None:
-        """Build quest variable mappings by parsing dialogue files with expanded correlation"""
+        """Build quest variable mappings by parsing dialogue files."""
         self._mappings = {}
 
         campaign_folder = self._find_campaign_folder()
@@ -379,8 +334,7 @@ class DialogueMappingService:
             best_tag = max(jrl_counts, key=jrl_counts.get)
             count = jrl_counts[best_tag]
 
-            # NWN2 naming convention: variables ending in "State" or starting with "q_"/"Q_"
-            # are almost always quest state trackers - trust singleton matches for these
+            # Variables ending in 'State' or starting with 'q_'/'Q_' are usually quest trackers
             is_likely_quest_state = (
                 var_name.endswith('State') or
                 var_name.startswith('q_') or
@@ -425,7 +379,7 @@ class DialogueMappingService:
         logger.info(f"Built {total_mappings} mappings from {dialogue_count} dialogue files")
 
     def _find_campaign_folder(self) -> Optional[Path]:
-        """Find the campaign folder by GUID"""
+        """Find the campaign folder by GUID."""
         campaigns_dir = nwn2_paths.campaigns
 
         if not campaigns_dir.exists():
@@ -456,7 +410,7 @@ class DialogueMappingService:
         return None
 
     def _get_campaign_module_files(self, campaign_folder: Path) -> List[Path]:
-        """Get list of .mod files for the campaign"""
+        """Get list of .mod files for the campaign."""
         modules = []
 
         campaign_file = campaign_folder / 'campaign.cam'
@@ -491,7 +445,7 @@ class DialogueMappingService:
         return modules
 
     def _load_journal_tags(self, campaign_folder: Path) -> Set[str]:
-        """Load all journal tags from module.jrl"""
+        """Load all journal tags from module.jrl."""
         journal_tags = set()
 
         jrl_path = campaign_folder / 'module.jrl'
@@ -520,7 +474,7 @@ class DialogueMappingService:
         journal_tags: Set[str],
         already_mapped: Set[str]
     ) -> Dict[str, QuestVariableMapping]:
-        """Match variables to journal tags by shared prefix (e.g., 11_)"""
+        """Match variables to journal tags by shared numeric prefix."""
         import re
 
         mappings = {}
@@ -605,7 +559,7 @@ class DialogueMappingService:
         return mappings
 
     def _extract_dialogues_from_module(self, module_path: Path) -> List[Tuple[str, bytes]]:
-        """Extract all .dlg files from a module"""
+        """Extract all .dlg files from a module."""
         dialogues = []
 
         try:
@@ -630,15 +584,13 @@ class DialogueMappingService:
         return dialogues
 
     def _parse_dialogue_scripts(self, dlg_data: bytes) -> Dict[int, List[Dict[str, Any]]]:
-        """Parse dialogue GFF and extract script actions from each node"""
+        """Parse dialogue GFF and extract script actions from each node."""
         node_scripts = {}
 
         try:
             dlg_dict = GffParser.from_bytes(dlg_data).to_dict()
 
             node_id = 0
-
-            # Process StartingList (dialogue entry points with conditions)
             for starting in dlg_dict.get('StartingList', []):
                 if isinstance(starting, dict):
                     scripts = self._extract_scripts_from_node(starting)
@@ -666,7 +618,7 @@ class DialogueMappingService:
         return node_scripts
 
     def _extract_scripts_from_node(self, node: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract both action scripts and conditional scripts from a dialogue node"""
+        """Extract action and conditional scripts from a dialogue node."""
         scripts = []
 
         script_list = node.get('ScriptList', [])
@@ -694,7 +646,6 @@ class DialogueMappingService:
                 'type': 'action',
             })
 
-        # Check multiple condition list keys (NWN2 uses different keys in different contexts)
         for cond_key in ['ConditionList', 'ActiveConditiona', 'ActiveCondition']:
             condition_list = node.get(cond_key, [])
             if not isinstance(condition_list, list):
@@ -729,7 +680,6 @@ class DialogueMappingService:
                 'type': 'condition',
             })
 
-        # Extract direct Quest/QuestEntry references (NWN2 native quest tracking)
         quest_tag = node.get('Quest', '')
         quest_entry = node.get('QuestEntry', 0)
         if quest_tag and isinstance(quest_tag, str) and quest_tag.strip():
@@ -742,7 +692,7 @@ class DialogueMappingService:
         return scripts
 
     def invalidate_cache(self) -> bool:
-        """Delete the cache file to force rebuild on next access"""
+        """Delete the cache file to force rebuild on next access."""
         try:
             if self.cache_path.exists():
                 self.cache_path.unlink()
@@ -756,15 +706,7 @@ class DialogueMappingService:
 
 
 def get_dialogue_mapping_service(content_manager) -> Optional[DialogueMappingService]:
-    """
-    Factory function to create DialogueMappingService from ContentManager
-
-    Args:
-        content_manager: ContentManager instance with campaign info
-
-    Returns:
-        DialogueMappingService instance or None if no campaign info available
-    """
+    """Create DialogueMappingService from ContentManager, returns None if no campaign info."""
     campaign_id = content_manager.module_info.get('campaign_id', '')
     if not campaign_id:
         logger.warning("No campaign_id available for dialogue mapping")

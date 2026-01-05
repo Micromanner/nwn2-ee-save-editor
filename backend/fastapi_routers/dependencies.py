@@ -1,43 +1,26 @@
-"""
-Lightweight FastAPI dependencies using existing session registry
-Eliminates redundant code and reduces startup time by using lazy imports
-"""
+"""Lightweight FastAPI dependencies using existing session registry."""
 from __future__ import annotations
 
 from typing import Annotated, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
 from loguru import logger
 
-# Type-only imports for better performance
 if TYPE_CHECKING:
     from character.character_manager import CharacterManager
     from character.in_memory_save_manager import InMemoryCharacterSession
 
 
 def get_character_manager(character_id: int) -> "CharacterManager":
-    """
-    Get character manager using existing session registry (lazy imports)
-    
-    Args:
-        character_id: Character ID (integer)
-        
-    Returns:
-        CharacterManager: Character manager instance
-        
-    Raises:
-        HTTPException: If character not found or system not ready
-    """
-    # Lazy imports - only import when called, not at module level
+    """Get character manager using existing session registry (lazy imports)."""
     from gamedata.dynamic_loader.singleton import is_loader_ready
-    from fastapi_core.session_registry import get_character_session, get_path_from_id
-    from fastapi_core.exceptions import SystemNotReadyException
+    from services.fastapi.session_registry import get_character_session, get_path_from_id
+    from services.fastapi.exceptions import SystemNotReadyException
     
-    # System readiness check
     if not is_loader_ready():
         logger.info(f"Request for character {character_id} but system not ready")
         raise SystemNotReadyException(50)
     
-    # Get file path using existing session registry
+    
     file_path = get_path_from_id(character_id)
     if not file_path:
         logger.warning(f"Character {character_id} not found in session registry")
@@ -46,7 +29,7 @@ def get_character_manager(character_id: int) -> "CharacterManager":
             detail=f"Character {character_id} not found"
         )
     
-    # Get session using existing session registry (no duplication)
+    
     try:
         session = get_character_session(file_path)
         return session.character_manager
@@ -59,29 +42,17 @@ def get_character_manager(character_id: int) -> "CharacterManager":
 
 
 def get_character_session(character_id: int) -> "InMemoryCharacterSession":
-    """
-    Get character session using existing session registry (lazy imports)
-    
-    Args:
-        character_id: Character ID (integer)
-        
-    Returns:
-        InMemoryCharacterSession: Character session instance
-        
-    Raises:
-        HTTPException: If character not found or system not ready
-    """
-    # Lazy imports - only import when called
+    """Get character session using existing session registry (lazy imports)."""
     from gamedata.dynamic_loader.singleton import is_loader_ready
-    from fastapi_core.session_registry import get_character_session, get_path_from_id
-    from fastapi_core.exceptions import SystemNotReadyException
+    from services.fastapi.session_registry import get_character_session, get_path_from_id
+    from services.fastapi.exceptions import SystemNotReadyException
     
     # System readiness check
     if not is_loader_ready():
         logger.info(f"Request for character {character_id} but system not ready")
         raise SystemNotReadyException(50)
     
-    # Get file path using existing session registry
+    
     file_path = get_path_from_id(character_id)
     if not file_path:
         logger.warning(f"Character {character_id} not found in session registry")
@@ -90,7 +61,7 @@ def get_character_session(character_id: int) -> "InMemoryCharacterSession":
             detail=f"Character {character_id} not found"
         )
     
-    # Get session using existing session registry (no duplication)
+    
     try:
         return get_character_session(file_path)
     except Exception as e:
@@ -102,25 +73,18 @@ def get_character_session(character_id: int) -> "InMemoryCharacterSession":
 
 
 def check_system_ready() -> None:
-    """
-    Check if system is ready to handle requests (lazy import)
-    
-    Raises:
-        SystemNotReadyException: If system is not ready
-    """
+    """Check if system is ready to handle requests (lazy import)."""
     from gamedata.dynamic_loader.singleton import is_loader_ready
-    from fastapi_core.exceptions import SystemNotReadyException
+    from services.fastapi.exceptions import SystemNotReadyException
     
     if not is_loader_ready():
         logger.info("Request received but system not ready")
         raise SystemNotReadyException(50)
 
 
-# FastAPI dependency annotations using lazy loading
 CharacterManagerDep = Annotated["CharacterManager", Depends(get_character_manager)]
 CharacterSessionDep = Annotated["InMemoryCharacterSession", Depends(get_character_session)]
 SystemReadyDep = Annotated[None, Depends(check_system_ready)]
 
-# Backward compatibility aliases
 get_character_session_dep = get_character_session
 get_character_manager_dep = get_character_manager

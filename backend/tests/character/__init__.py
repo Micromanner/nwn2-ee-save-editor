@@ -1,1 +1,0 @@
-"""Character test package"""

@@ -1,15 +1,22 @@
-"""
-Content router - Campaign, module, quest, and custom content information
-"""
+"""Content router - Campaign, module, quest, and custom content information."""
 
-from typing import Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, HTTPException, status, Body
 from loguru import logger
-from fastapi_routers.dependencies import (
-    get_character_manager,
-    CharacterManagerDep
+
+from fastapi_routers.dependencies import CharacterManagerDep
+from fastapi_models import (
+    CustomContentSummary, CampaignInfoResponse, CustomContentItem,
+    CompanionInfluenceResponse, CompanionInfluenceData, UpdateCompanionInfluenceRequest,
+    QuestDetailsResponse, UpdateQuestVariableRequest, BatchUpdateQuestRequest,
+    CampaignVariablesResponse, CampaignVariableUpdate, CampaignSettingsResponse, UpdateCampaignSettingsRequest,
+    CampaignBackupsResponse, CampaignBackupInfo, RestoreCampaignRequest,
+    ModuleVariablesResponse, ModuleVariableUpdate,
+    QuestProgressResponse, QuestProgressData, PlotVariablesResponse, PlotVariableData,
+    EnrichedQuestsResponse, EnrichedQuestData, UnmappedVariableData, QuestStats,
+    DialogueCacheInfo, QuestInfoData, KnownQuestValue
 )
-# from fastapi_models import (...) - moved to lazy loading
+
 router = APIRouter(tags=["content"])
 
 
@@ -18,16 +25,13 @@ def get_campaign_info(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get campaign, module, and quest information for a character"""
-    from fastapi_models import CustomContentSummary, CampaignInfoResponse
-    
+    """Get campaign, module, and quest information."""
     try:
         content_manager = manager.get_manager('content')
 
         campaign_info = content_manager.get_campaign_info()
         custom_content = content_manager.get_custom_content_summary()
         
-        # Build response using manager data
         result = campaign_info.copy()
         result['custom_content'] = CustomContentSummary(**custom_content)
         
@@ -46,12 +50,9 @@ def get_custom_content(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed custom content information for a character"""
-    from fastapi_models import CustomContentSummary
-    
+    """Get detailed custom content information."""
     try:
         content_manager = manager.get_manager('content')
-
         custom_content_data = content_manager.get_custom_content_summary()
         return CustomContentSummary(**custom_content_data)
         
@@ -69,22 +70,16 @@ def get_custom_content_by_type(
     content_type: str,
     manager: CharacterManagerDep
 ):
-    """Get custom content filtered by type (feat, spell, class)"""
-    from fastapi_models import CustomContentItem
-    
+    """Get custom content filtered by type."""
     try:
         content_manager = manager.get_manager('content')
-
         content_items = content_manager.get_custom_content_by_type(content_type)
         return [CustomContentItem(**item) for item in content_items]
         
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        logger.error(f"Failed to get custom {content_type} content for character {character_id}: {e}")
+        logger.error(f"Failed to get custom {content_type} content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get custom content: {str(e)}"
@@ -96,12 +91,9 @@ def refresh_custom_content(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Refresh custom content detection for a character"""
-    from fastapi_models import CustomContentSummary
-
+    """Refresh custom content detection for a character."""
     try:
         content_manager = manager.get_manager('content')
-
         content_manager.refresh_custom_content()
 
         custom_content_data = content_manager.get_custom_content_summary()
@@ -111,7 +103,7 @@ def refresh_custom_content(
         }
 
     except Exception as e:
-        logger.error(f"Failed to refresh custom content for character {character_id}: {e}")
+        logger.error(f"Failed to refresh custom content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to refresh custom content: {str(e)}"
@@ -123,9 +115,7 @@ def get_companion_influence(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get companion influence data from globals.xml"""
-    from fastapi_models.content_models import CompanionInfluenceResponse, CompanionInfluenceData
-
+    """Get companion influence data from globals.xml."""
     try:
         game_state_manager = manager.get_manager('game_state')
         influence_data = game_state_manager.get_companion_influence()
@@ -138,7 +128,7 @@ def get_companion_influence(
         return CompanionInfluenceResponse(companions=companions)
 
     except Exception as e:
-        logger.error(f"Failed to get companion influence for character {character_id}: {e}")
+        logger.error(f"Failed to get companion influence: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get companion influence: {str(e)}"
@@ -149,36 +139,33 @@ def get_companion_influence(
 def update_companion_influence(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: UpdateCompanionInfluenceRequest = Body(...)
 ):
-    """Update companion influence value"""
-    from fastapi_models.content_models import UpdateCompanionInfluenceRequest
-
+    """Update companion influence value."""
     try:
-        update_request = UpdateCompanionInfluenceRequest(**request)
         game_state_manager = manager.get_manager('game_state')
 
         success = game_state_manager.update_companion_influence(
-            update_request.companion_id,
-            update_request.new_influence
+            request.companion_id,
+            request.new_influence
         )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Companion not found: {update_request.companion_id}"
+                detail=f"Companion not found: {request.companion_id}"
             )
 
         return {
             'success': True,
-            'companion_id': update_request.companion_id,
-            'new_influence': update_request.new_influence
+            'companion_id': request.companion_id,
+            'new_influence': request.new_influence
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update companion influence for character {character_id}: {e}")
+        logger.error(f"Failed to update companion influence: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update companion influence: {str(e)}"
@@ -190,9 +177,7 @@ def get_quest_details(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed quest information from globals.xml"""
-    from fastapi_models.content_models import QuestDetailsResponse
-
+    """Get detailed quest information from globals.xml."""
     try:
         game_state_manager = manager.get_manager('game_state')
         quest_details = game_state_manager.get_quest_details()
@@ -200,7 +185,7 @@ def get_quest_details(
         return QuestDetailsResponse(**quest_details)
 
     except Exception as e:
-        logger.error(f"Failed to get quest details for character {character_id}: {e}")
+        logger.error(f"Failed to get quest details: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get quest details: {str(e)}"
@@ -211,38 +196,35 @@ def get_quest_details(
 def update_quest_variable(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: UpdateQuestVariableRequest = Body(...)
 ):
-    """Update a single quest variable"""
-    from fastapi_models.content_models import UpdateQuestVariableRequest
-
+    """Update a single quest variable."""
     try:
-        update_request = UpdateQuestVariableRequest(**request)
         game_state_manager = manager.get_manager('game_state')
 
         success = game_state_manager.update_quest_variable(
-            update_request.variable_name,
-            update_request.value,
-            update_request.variable_type
+            request.variable_name,
+            request.value,
+            request.variable_type
         )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to update variable: {update_request.variable_name}"
+                detail=f"Failed to update variable: {request.variable_name}"
             )
 
         return {
             'success': True,
-            'variable_name': update_request.variable_name,
-            'value': update_request.value,
-            'variable_type': update_request.variable_type
+            'variable_name': request.variable_name,
+            'value': request.value,
+            'variable_type': request.variable_type
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update quest variable for character {character_id}: {e}")
+        logger.error(f"Failed to update quest variable: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update quest variable: {str(e)}"
@@ -253,23 +235,19 @@ def update_quest_variable(
 def batch_update_quests(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: BatchUpdateQuestRequest = Body(...)
 ):
-    """Update multiple quest variables at once"""
-    from fastapi_models.content_models import BatchUpdateQuestRequest
-
+    """Update multiple quest variables at once."""
     try:
-        batch_request = BatchUpdateQuestRequest(**request)
         game_state_manager = manager.get_manager('game_state')
 
-        # Convert Pydantic models to dicts for manager
         updates_list = [
             {
                 'variable_name': update.variable_name,
                 'value': update.value,
                 'variable_type': update.variable_type
             }
-            for update in batch_request.updates
+            for update in request.updates
         ]
 
         success = game_state_manager.batch_update_quests(updates_list)
@@ -282,13 +260,13 @@ def batch_update_quests(
 
         return {
             'success': True,
-            'total_updates': len(batch_request.updates)
+            'total_updates': len(request.updates)
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to batch update quests for character {character_id}: {e}")
+        logger.error(f"Failed to batch update quests: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to batch update quests: {str(e)}"
@@ -300,9 +278,7 @@ def get_campaign_variables(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get all campaign variables from globals.xml"""
-    from fastapi_models.content_models import CampaignVariablesResponse
-
+    """Get all campaign variables from globals.xml."""
     try:
         game_state_manager = manager.get_manager('game_state')
         variables = game_state_manager.get_all_campaign_variables()
@@ -310,7 +286,7 @@ def get_campaign_variables(
         return CampaignVariablesResponse(**variables)
 
     except Exception as e:
-        logger.error(f"Failed to get campaign variables for character {character_id}: {e}")
+        logger.error(f"Failed to get campaign variables: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get campaign variables: {str(e)}"
@@ -321,38 +297,35 @@ def get_campaign_variables(
 def update_campaign_variable(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: CampaignVariableUpdate = Body(...)
 ):
-    """Update a single campaign variable"""
-    from fastapi_models.content_models import CampaignVariableUpdate
-
+    """Update a single campaign variable."""
     try:
-        update_request = CampaignVariableUpdate(**request)
         game_state_manager = manager.get_manager('game_state')
 
         success = game_state_manager.update_campaign_variable(
-            update_request.variable_name,
-            update_request.value,
-            update_request.variable_type
+            request.variable_name,
+            request.value,
+            request.variable_type
         )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to update variable: {update_request.variable_name}"
+                detail=f"Failed to update variable: {request.variable_name}"
             )
 
         return {
             'success': True,
-            'variable_name': update_request.variable_name,
-            'value': update_request.value,
-            'variable_type': update_request.variable_type
+            'variable_name': request.variable_name,
+            'value': request.value,
+            'variable_type': request.variable_type
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update campaign variable for character {character_id}: {e}")
+        logger.error(f"Failed to update campaign variable: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update campaign variable: {str(e)}"
@@ -364,9 +337,7 @@ def get_campaign_settings(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get campaign settings from campaign.cam file"""
-    from fastapi_models.content_models import CampaignSettingsResponse
-
+    """Get campaign settings from campaign.cam file."""
     try:
         content_manager = manager.get_manager('content')
         settings = content_manager.get_campaign_settings()
@@ -382,7 +353,7 @@ def get_campaign_settings(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get campaign settings for character {character_id}: {e}")
+        logger.error(f"Failed to get campaign settings: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get campaign settings: {str(e)}"
@@ -393,22 +364,12 @@ def get_campaign_settings(
 def update_campaign_settings(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: UpdateCampaignSettingsRequest = Body(...)
 ):
-    """
-    Update campaign settings in campaign.cam file
-
-    WARNING: This affects ALL saves using this campaign!
-    Changes are written to the game installation directory.
-    """
-    from fastapi_models.content_models import UpdateCampaignSettingsRequest
-
+    """Update campaign settings in campaign.cam file (affects ALL saves)."""
     try:
-        update_request = UpdateCampaignSettingsRequest(**request)
         content_manager = manager.get_manager('content')
-
-        # Convert Pydantic model to dict, excluding None values
-        settings_dict = update_request.model_dump(exclude_none=True)
+        settings_dict = request.model_dump(exclude_none=True)
 
         if not settings_dict:
             raise HTTPException(
@@ -433,7 +394,7 @@ def update_campaign_settings(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update campaign settings for character {character_id}: {e}")
+        logger.error(f"Failed to update campaign settings: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update campaign settings: {str(e)}"
@@ -445,9 +406,7 @@ def list_campaign_backups(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """List all available campaign.cam backups for the current campaign"""
-    from fastapi_models.content_models import CampaignBackupsResponse, CampaignBackupInfo
-
+    """List all available campaign.cam backups."""
     try:
         content_manager = manager.get_manager('content')
         backups = content_manager.list_campaign_backups()
@@ -466,7 +425,7 @@ def list_campaign_backups(
         )
 
     except Exception as e:
-        logger.error(f"Failed to list campaign backups for character {character_id}: {e}")
+        logger.error(f"Failed to list campaign backups: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list campaign backups: {str(e)}"
@@ -477,16 +436,12 @@ def list_campaign_backups(
 def restore_campaign_from_backup(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: RestoreCampaignRequest = Body(...)
 ):
-    """Restore campaign.cam from a backup file"""
-    from fastapi_models.content_models import RestoreCampaignRequest
-
+    """Restore campaign.cam from a backup file."""
     try:
-        restore_request = RestoreCampaignRequest(**request)
         content_manager = manager.get_manager('content')
-
-        success = content_manager.restore_campaign_from_backup_file(restore_request.backup_path)
+        success = content_manager.restore_campaign_from_backup_file(request.backup_path)
 
         if not success:
             raise HTTPException(
@@ -496,13 +451,13 @@ def restore_campaign_from_backup(
 
         return {
             'success': True,
-            'restored_from': restore_request.backup_path
+            'restored_from': request.backup_path
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to restore campaign for character {character_id}: {e}")
+        logger.error(f"Failed to restore campaign: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to restore campaign: {str(e)}"
@@ -514,9 +469,7 @@ def get_module_variables(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get all module variables from VarTable in module.ifo"""
-    from fastapi_models.content_models import ModuleVariablesResponse
-
+    """Get all module variables."""
     try:
         content_manager = manager.get_manager('content')
         variables = content_manager.get_module_variables()
@@ -524,7 +477,7 @@ def get_module_variables(
         return ModuleVariablesResponse(**variables)
 
     except Exception as e:
-        logger.error(f"Failed to get module variables for character {character_id}: {e}")
+        logger.error(f"Failed to get module variables: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get module variables: {str(e)}"
@@ -535,45 +488,37 @@ def get_module_variables(
 def update_module_variable(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: ModuleVariableUpdate = Body(...)
 ):
-    """
-    Update a single module variable in VarTable.
-
-    If module_id is provided, updates the variable in that module's .z file.
-    Otherwise, updates the current module's standalone module.ifo file.
-    """
-    from fastapi_models.content_models import ModuleVariableUpdate
-
+    """Update a single module variable in VarTable."""
     try:
-        update_request = ModuleVariableUpdate(**request)
         content_manager = manager.get_manager('content')
 
         success = content_manager.update_module_variable(
-            update_request.variable_name,
-            update_request.value,
-            update_request.variable_type,
-            update_request.module_id
+            request.variable_name,
+            request.value,
+            request.variable_type,
+            request.module_id
         )
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to update variable: {update_request.variable_name}"
+                detail=f"Failed to update variable: {request.variable_name}"
             )
 
         return {
             'success': True,
-            'variable_name': update_request.variable_name,
-            'value': update_request.value,
-            'variable_type': update_request.variable_type,
-            'module_id': update_request.module_id
+            'variable_name': request.variable_name,
+            'value': request.value,
+            'variable_type': request.variable_type,
+            'module_id': request.module_id
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update module variable for character {character_id}: {e}")
+        logger.error(f"Failed to update module variable: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update module variable: {str(e)}"
@@ -585,7 +530,7 @@ def get_all_modules(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get list of all available modules from save"""
+    """Get list of all available modules from save."""
     try:
         content_manager = manager.get_manager('content')
         modules = content_manager.get_all_available_modules()
@@ -596,7 +541,7 @@ def get_all_modules(
         }
 
     except Exception as e:
-        logger.error(f"Failed to get modules for character {character_id}: {e}")
+        logger.error(f"Failed to get modules: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get modules: {str(e)}"
@@ -609,7 +554,7 @@ def get_module_by_id(
     module_id: str,
     manager: CharacterManagerDep
 ):
-    """Get specific module info and variables"""
+    """Get specific module info and variables."""
     try:
         content_manager = manager.get_manager('content')
         module_data = content_manager.get_module_by_id(module_id)
@@ -625,10 +570,10 @@ def get_module_by_id(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get module {module_id} for character {character_id}: {e}", exc_info=True)
+        logger.error(f"Failed to get module {module_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get module '{module_id}': {str(e)}"
+            detail=f"Failed to get module: {str(e)}"
         )
 
 
@@ -637,9 +582,7 @@ def get_quest_progress(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get quest progress with enriched data from module.jrl"""
-    from fastapi_models.content_models import QuestProgressResponse, QuestProgressData
-
+    """Get quest progress with enriched data from module.jrl."""
     try:
         game_state_manager = manager.get_manager('game_state')
         quest_progress = game_state_manager.get_quest_progress()
@@ -652,7 +595,7 @@ def get_quest_progress(
         )
 
     except Exception as e:
-        logger.error(f"Failed to get quest progress for character {character_id}: {e}")
+        logger.error(f"Failed to get quest progress: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get quest progress: {str(e)}"
@@ -664,9 +607,7 @@ def get_plot_variables(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get all plot variables categorized by quest definition status"""
-    from fastapi_models.content_models import PlotVariablesResponse, PlotVariableData
-
+    """Get all plot variables categorized by quest definition status."""
     try:
         game_state_manager = manager.get_manager('game_state')
         plot_vars = game_state_manager.get_all_plot_variables()
@@ -681,7 +622,7 @@ def get_plot_variables(
         )
 
     except Exception as e:
-        logger.error(f"Failed to get plot variables for character {character_id}: {e}")
+        logger.error(f"Failed to get plot variables: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get plot variables: {str(e)}"
@@ -693,22 +634,7 @@ def get_enriched_quests(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get enriched quest data with dialogue-based variable mappings
-
-    Returns quests with high-confidence variable-to-quest mappings
-    from dialogue file analysis, plus unmapped quest-like variables.
-    """
-    from fastapi_models.content_models import (
-        EnrichedQuestsResponse,
-        EnrichedQuestData,
-        UnmappedVariableData,
-        QuestStats,
-        DialogueCacheInfo,
-        QuestInfoData,
-        KnownQuestValue,
-    )
-
+    """Get enriched quest data with dialogue-based variable mappings."""
     try:
         game_state_manager = manager.get_manager('game_state')
         enriched_data = game_state_manager.get_enriched_quests()
@@ -767,23 +693,19 @@ def get_enriched_quests(
         )
 
     except Exception as e:
-        logger.error(f"Failed to get enriched quests for character {character_id}: {e}")
+        logger.error(f"Failed to get enriched quests: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get enriched quests: {str(e)}"
         )
 
 
-# ============================================================================
-# DEITY AND BIOGRAPHY ENDPOINTS
-# ============================================================================
-
 @router.get("/characters/{character_id}/available-deities")
 def get_available_deities(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get list of available deities from game data"""
+    """Get list of available deities from game data."""
     try:
         content_manager = manager.get_manager('content')
         deities = content_manager.get_available_deities()
@@ -794,7 +716,7 @@ def get_available_deities(
         }
         
     except Exception as e:
-        logger.error(f"Failed to get available deities for character {character_id}: {e}")
+        logger.error(f"Failed to get available deities: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get available deities: {str(e)}"
@@ -806,13 +728,11 @@ def get_deity(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get character's current deity"""
+    """Get character's current deity."""
     try:
         content_manager = manager.get_manager('content')
-        deity = content_manager.get_deity()
-        
         return {
-            'deity': deity
+            'deity': content_manager.get_deity()
         }
         
     except Exception as e:
@@ -827,9 +747,9 @@ def get_deity(
 def set_deity(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: Dict[str, Any] = Body(...)
 ):
-    """Set character's deity (in-memory, not saved to file until save is triggered)"""
+    """Set character's deity."""
     try:
         deity_name = request.get('deity', '')
         
@@ -850,7 +770,7 @@ def set_deity(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to set deity for character {character_id}: {e}")
+        logger.error(f"Failed to set deity: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to set deity: {str(e)}"
@@ -862,17 +782,15 @@ def get_biography(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get character's biography/description"""
+    """Get character's biography."""
     try:
         content_manager = manager.get_manager('content')
-        biography = content_manager.get_biography()
-        
         return {
-            'biography': biography
+            'biography': content_manager.get_biography()
         }
         
     except Exception as e:
-        logger.error(f"Failed to get biography for character {character_id}: {e}")
+        logger.error(f"Failed to get biography: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get biography: {str(e)}"
@@ -883,9 +801,9 @@ def get_biography(
 def set_biography(
     character_id: int,
     manager: CharacterManagerDep,
-    request: Dict[str, Any]
+    request: Dict[str, Any] = Body(...)
 ):
-    """Set character's biography (in-memory, not saved to file until save is triggered)"""
+    """Set character's biography."""
     try:
         biography_text = request.get('biography', '')
         
@@ -906,7 +824,7 @@ def set_biography(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to set biography for character {character_id}: {e}")
+        logger.error(f"Failed to set biography: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to set biography: {str(e)}"

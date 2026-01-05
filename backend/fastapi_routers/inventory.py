@@ -1,9 +1,7 @@
-"""
-Inventory router - Complete inventory management endpoints
-"""
+"""Inventory router - Complete inventory management endpoints."""
 
-from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from loguru import logger
 
 from fastapi_routers.dependencies import (
@@ -12,7 +10,18 @@ from fastapi_routers.dependencies import (
     CharacterManagerDep,
     CharacterSessionDep
 )
-# from fastapi_models.inventory_models import (...) - moved to lazy loading
+
+from fastapi_models.inventory_models import (
+    InventorySummaryResponse, EquipmentInfoResponse, EncumbranceResponse,
+    EquipmentBonusesResponse, ACBonusResponse, SaveBonusesResponse,
+    AttributeBonusesResponse, SkillBonusesResponse, EquipItemRequest,
+    EquipItemResponse, UnequipItemRequest, UnequipItemResponse,
+    AddToInventoryRequest, AddToInventoryResponse, RemoveFromInventoryResponse,
+    AllWeaponsResponse, AllArmorResponse, CustomItemsResponse,
+    FilterItemsResponse, EquipmentSummaryResponse, ItemEditorMetadataResponse,
+    AddItemByBaseTypeRequest, UpdateItemRequest, UpdateItemResponse,
+    UpdateGoldRequest, UpdateGoldResponse
+)
 
 router = APIRouter()
 
@@ -22,34 +31,21 @@ def get_inventory(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get complete inventory data including items and equipment"""
+    """Get complete inventory data including items and equipment."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import InventorySummaryResponse
-        
         session = char_session
         manager = session.character_manager
         
-        if manager is None:
-            logger.error("System error: character_manager is None in session")
-            raise HTTPException(status_code=500, detail="Character manager not initialized")
-
         inventory_manager = manager.get_manager('inventory')
-        
-        if inventory_manager is None:
-            logger.error("System error: inventory_manager is None")
+        if not inventory_manager:
             raise HTTPException(status_code=500, detail="Inventory manager not registered")
 
         summary = inventory_manager.get_inventory_summary()
         
-        if summary is None:
-            logger.error("inventory_manager.get_inventory_summary() returned None")
-            raise HTTPException(status_code=500, detail="Failed to generate inventory summary")
-        
         return InventorySummaryResponse(summary=summary)
         
     except Exception as e:
-        logger.error(f"Failed to get inventory for character {character_id}: {e}", exc_info=True)
+        logger.error(f"Failed to get inventory for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get inventory: {str(e)}"
@@ -61,12 +57,9 @@ def get_equipment_info(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get information about all equipped items"""
-    from fastapi_models.inventory_models import EquipmentInfoResponse
-    session = char_session
-    manager = session.character_manager
-    
+    """Get information about all equipped items."""
     try:
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         equipment = inventory_manager.get_equipment_info()
         
@@ -80,19 +73,14 @@ def get_equipment_info(
         )
 
 
-
 @router.get("/characters/{character_id}/inventory/encumbrance")
 def get_encumbrance(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Calculate character's encumbrance"""
+    """Calculate character's encumbrance."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import EncumbranceResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         encumbrance = inventory_manager.calculate_encumbrance()
         
@@ -111,13 +99,9 @@ def get_equipment_bonuses(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get all equipment bonuses"""
+    """Get all equipment bonuses."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import EquipmentBonusesResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         bonuses = inventory_manager.get_equipment_bonuses()
         
@@ -136,13 +120,9 @@ def get_ac_bonus(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get AC bonus from equipment"""
+    """Get AC bonus from equipment."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import ACBonusResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         ac_bonus = inventory_manager.get_ac_bonus()
         
@@ -161,13 +141,9 @@ def get_save_bonuses(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get saving throw bonuses from equipment"""
+    """Get saving throw bonuses from equipment."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import SaveBonusesResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         save_bonuses = inventory_manager.get_save_bonuses()
         
@@ -186,13 +162,9 @@ def get_attribute_bonuses(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get attribute bonuses from equipment"""
+    """Get attribute bonuses from equipment."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import AttributeBonusesResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         attribute_bonuses = inventory_manager.get_attribute_bonuses()
         
@@ -211,13 +183,9 @@ def get_skill_bonuses(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get skill bonuses from equipment"""
+    """Get skill bonuses from equipment."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import SkillBonusesResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         skill_bonuses = inventory_manager.get_skill_bonuses()
         
@@ -235,26 +203,21 @@ def get_skill_bonuses(
 def equip_item(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict = Body(...)
+    request: EquipItemRequest = Body(...)
 ):
-    """Equip an item in a slot"""
+    """Equip an item in a slot."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import EquipItemRequest, EquipItemResponse
-
-        req = EquipItemRequest(**request)
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        success, warnings = inventory_manager.equip_item(req.item_data, req.slot, req.inventory_index)
+        success, warnings = inventory_manager.equip_item(request.item_data, request.slot, request.inventory_index)
 
-        message = f"Item equipped in {req.slot}" if success else "Failed to equip item"
+        message = f"Item equipped in {request.slot}" if success else "Failed to equip item"
 
         return EquipItemResponse(
             success=success,
             warnings=warnings,
             message=message,
-            has_unsaved_changes=session.has_unsaved_changes()
+            has_unsaved_changes=char_session.has_unsaved_changes()
         )
         
     except Exception as e:
@@ -269,27 +232,22 @@ def equip_item(
 def unequip_item(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict = Body(...)
+    request: UnequipItemRequest = Body(...)
 ):
-    """Unequip an item from a slot"""
+    """Unequip an item from a slot."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import UnequipItemRequest, UnequipItemResponse
-
-        req = UnequipItemRequest(**request)
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        item_data = inventory_manager.unequip_item(req.slot)
+        item_data = inventory_manager.unequip_item(request.slot)
 
         success = item_data is not None
-        message = f"Item unequipped from {req.slot}" if success else f"No item in {req.slot}"
+        message = f"Item unequipped from {request.slot}" if success else f"No item in {request.slot}"
 
         return UnequipItemResponse(
             success=success,
             item_data=item_data,
             message=message,
-            has_unsaved_changes=session.has_unsaved_changes()
+            has_unsaved_changes=char_session.has_unsaved_changes()
         )
         
     except Exception as e:
@@ -303,16 +261,12 @@ def unequip_item(
 @router.post("/characters/{character_id}/inventory/add")
 def add_to_inventory(
     character_id: int,
-    request,  # Type removed for lazy loading
-    char_session: CharacterSessionDep
+    char_session: CharacterSessionDep,
+    request: AddToInventoryRequest = Body(...)
 ):
-    """Add an item to inventory"""
+    """Add an item to inventory."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import AddToInventoryRequest, AddToInventoryResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         success = inventory_manager.add_to_inventory(request.item_data)
         
@@ -321,7 +275,7 @@ def add_to_inventory(
         return AddToInventoryResponse(
             success=success,
             message=message,
-            has_unsaved_changes=session.has_unsaved_changes()
+            has_unsaved_changes=char_session.has_unsaved_changes()
         )
         
     except Exception as e:
@@ -338,13 +292,9 @@ def remove_from_inventory(
     item_index: int,
     char_session: CharacterSessionDep
 ):
-    """Remove an item from inventory by index"""
+    """Remove an item from inventory by index."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import RemoveFromInventoryResponse
-
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         success, item_data, message = inventory_manager.remove_from_inventory(item_index)
         
@@ -352,7 +302,7 @@ def remove_from_inventory(
             success=success,
             item_data=item_data,
             message=message,
-            has_unsaved_changes=session.has_unsaved_changes()
+            has_unsaved_changes=char_session.has_unsaved_changes()
         )
         
     except Exception as e:
@@ -368,13 +318,9 @@ def get_all_weapons(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get all available weapons"""
+    """Get all available weapons."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import AllWeaponsResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         weapons = inventory_manager.get_all_weapons()
         
@@ -393,13 +339,9 @@ def get_all_armor(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get all available armor and shields"""
+    """Get all available armor and shields."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import AllArmorResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         armor = inventory_manager.get_all_armor()
         
@@ -418,10 +360,9 @@ def get_all_base_items(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get all available base items for creation"""
+    """Get all available base items for creation."""
     try:
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         base_items = inventory_manager.get_all_base_items()
         
@@ -440,13 +381,9 @@ def get_custom_items(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get all custom/mod items in character's possession"""
+    """Get all custom/mod items in character's possession."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import CustomItemsResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         custom_items = inventory_manager.get_custom_items()
         
@@ -466,13 +403,9 @@ def filter_items_by_type(
     item_type: int,
     char_session: CharacterSessionDep
 ):
-    """Filter base items by type"""
+    """Filter base items by type."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import FilterItemsResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         items = inventory_manager.filter_items_by_type(item_type)
         
@@ -491,13 +424,9 @@ def get_equipment_summary_by_slot(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get detailed summary of equipped items by slot"""
+    """Get detailed summary of equipped items by slot."""
     try:
-        # Lazy imports for performance
-        from fastapi_models.inventory_models import EquipmentSummaryResponse
-        
-        session = char_session
-        manager = session.character_manager
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         equipment_summary = inventory_manager.get_equipment_summary_by_slot()
         
@@ -517,11 +446,9 @@ def get_equipped_item(
     slot: str,
     char_session: CharacterSessionDep
 ):
-    """Get item equipped in a specific slot"""
-    session = char_session
-    manager = session.character_manager
-
+    """Get item equipped in a specific slot."""
     try:
+        manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         item = inventory_manager.get_equipped_item(slot)
 
@@ -533,15 +460,15 @@ def get_equipped_item(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get equipped item: {str(e)}"
         )
+
+
 @router.get("/characters/{character_id}/inventory/editor-metadata")
 def get_item_editor_metadata(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get metadata for the item editor UI"""
+    """Get metadata for the item editor UI."""
     try:
-        from fastapi_models.inventory_models import ItemEditorMetadataResponse
-        
         manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         metadata = inventory_manager.get_item_editor_metadata()
@@ -556,22 +483,17 @@ def get_item_editor_metadata(
         )
 
 
-
-        
 @router.post("/characters/{character_id}/inventory/create-new-item")
 def create_new_item(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict = Body(...)
+    request: AddItemByBaseTypeRequest = Body(...)
 ):
-    """Create a new item (blank/template) from base item type ID"""
+    """Create a new item (blank/template) from base item type ID."""
     try:
-        from fastapi_models.inventory_models import AddItemByBaseTypeRequest, AddToInventoryResponse
-        validated_request = AddItemByBaseTypeRequest(**request)
-
         manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
-        success, new_item, message, item_index = inventory_manager.add_item_by_base_type(validated_request.base_item_id)
+        success, new_item, message, item_index = inventory_manager.add_item_by_base_type(request.base_item_id)
 
         if not success:
             raise HTTPException(
@@ -590,12 +512,13 @@ def create_new_item(
             detail=str(e)
         )
 
+
 @router.get("/characters/{character_id}/inventory/templates")
 def get_available_item_templates(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """Get all available item templates (from game files & mods)"""
+    """Get all available item templates (from game files & mods)."""
     try:
         manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
@@ -608,13 +531,14 @@ def get_available_item_templates(
             detail=str(e)
         )
 
+
 @router.post("/characters/{character_id}/inventory/add-from-template")
 def add_item_from_template(
     character_id: int,
     char_session: CharacterSessionDep,
     request: dict = Body(...)
 ):
-    """Add an existing item (from template) to inventory"""
+    """Add an existing item (from template) to inventory."""
     try:
         template_resref = request.get('template_resref')
         if not template_resref:
@@ -642,24 +566,20 @@ def add_item_from_template(
         )
 
 
-
 @router.put("/characters/{character_id}/inventory/item")
 def update_item(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict = Body(...)
+    request: UpdateItemRequest = Body(...)
 ):
-    """Update an item in inventory or equipment"""
+    """Update an item in inventory or equipment."""
     try:
-        from fastapi_models.inventory_models import UpdateItemRequest, UpdateItemResponse
-        validated_request = UpdateItemRequest(**request)
-        
         manager = char_session.character_manager
         inventory_manager = manager.get_manager('inventory')
         success, message = inventory_manager.update_item(
-            validated_request.item_index,
-            validated_request.slot,
-            validated_request.item_data
+            request.item_index,
+            request.slot,
+            request.item_data
         )
         
         if not success:
@@ -684,24 +604,23 @@ def update_item(
 def update_gold(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict = Body(...)
+    request: UpdateGoldRequest = Body(...)
 ):
-    """Update character's gold amount"""
+    """Update character's gold amount."""
     try:
-        from fastapi_models.inventory_models import UpdateGoldRequest, UpdateGoldResponse
-
-        req = UpdateGoldRequest(**request)
         session = char_session
         manager = session.character_manager
+        inventory_manager = manager.get_manager('inventory')
 
-        manager.gff.set('Gold', req.gold)
-
-        logger.info(f"Updated gold for character {character_id} to {req.gold}")
+        if inventory_manager:
+            inventory_manager.update_gold(request.gold)
+        else:
+             raise HTTPException(status_code=500, detail="Inventory manager not registered")
 
         return UpdateGoldResponse(
             success=True,
-            gold=req.gold,
-            message=f"Gold updated to {req.gold}",
+            gold=request.gold,
+            message=f"Gold updated to {request.gold}",
             has_unsaved_changes=session.has_unsaved_changes()
         )
 

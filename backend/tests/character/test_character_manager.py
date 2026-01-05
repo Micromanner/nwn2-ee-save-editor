@@ -19,7 +19,7 @@ from character.character_manager import (
 )
 from character.events import EventEmitter, EventData, EventType
 from nwn2_rust import GffParser
-from gamedata.services.game_rules_service import GameRulesService
+from services.gamedata.game_rules_service import GameRulesService
 
 
 @pytest.fixture
@@ -559,7 +559,7 @@ class TestSavegameSessionIntegration:
     
     def test_character_session_creation(self, mock_savegame_handler, temp_save_dir):
         """Test creating character session from savegame"""
-        from fastapi_core.session_registry import get_character_session
+        from services.fastapi.session_registry import get_character_session
         
         # Mock the session creation process
         with patch('fastapi_core.session_registry.InMemoryCharacterSession') as mock_session_class:
@@ -576,7 +576,7 @@ class TestSavegameSessionIntegration:
     
     def test_savegame_module_detection(self, temp_save_dir):
         """Test module detection from currentmodule.txt in savegame"""
-        from services.resource_manager import ResourceManager
+        from services.core.resource_manager import ResourceManager
         
         # Mock resource manager
         mock_rm = Mock(spec=ResourceManager)

@@ -1,7 +1,4 @@
-"""
-Pydantic models for CharacterManager
-Top-level character management, transactions, and orchestration
-"""
+"""Pydantic models for CharacterManager."""
 
 from typing import Dict, Any, Optional, List, Union
 from datetime import datetime
@@ -9,7 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class CharacterInfo(BaseModel):
-    """Basic character information"""
+    """Basic character information."""
     id: Union[int, str] = Field(..., description="Character ID (file path or numeric)")
     file_path: str
     file_name: str
@@ -37,7 +34,7 @@ class CharacterInfo(BaseModel):
 
 
 class CharacterSummary(BaseModel):
-    """High-level character summary from get_character_summary()"""
+    """High-level character summary from get_character_summary()."""
     id: Optional[Union[int, str]] = None  # Character ID for frontend compatibility
     name: str
     level: int
@@ -67,7 +64,7 @@ class CharacterSummary(BaseModel):
 
 
 class ManagerStatus(BaseModel):
-    """Status of an individual manager"""
+    """Status of an individual manager."""
     name: str
     loaded: bool
     initialized: bool
@@ -78,7 +75,7 @@ class ManagerStatus(BaseModel):
 
 
 class ManagersStatus(BaseModel):
-    """Status of all registered managers from get_manager_status()"""
+    """Status of all registered managers from get_manager_status()."""
     total_managers: int
     loaded_managers: int
     managers: Dict[str, ManagerStatus]
@@ -86,7 +83,7 @@ class ManagersStatus(BaseModel):
 
 
 class Transaction(BaseModel):
-    """Character modification transaction"""
+    """Character modification transaction."""
     id: str
     timestamp: float
     changes: List[Dict[str, Any]]
@@ -96,7 +93,7 @@ class Transaction(BaseModel):
 
 
 class TransactionHistory(BaseModel):
-    """Transaction history from get_transaction_history()"""
+    """Transaction history from get_transaction_history()."""
     transactions: List[Transaction]
     active_transaction: Optional[Transaction] = None
     total_transactions: int
@@ -105,7 +102,7 @@ class TransactionHistory(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    """Character validation result"""
+    """Character validation result."""
     valid: bool
     errors: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
@@ -116,14 +113,14 @@ class ValidationResult(BaseModel):
 
 
 class BatchUpdateRequest(BaseModel):
-    """Request for batch character updates"""
+    """Request for batch character updates."""
     updates: List[Dict[str, Any]] = Field(..., description="List of update operations")
     should_validate: bool = Field(True, description="Validate before applying")
     use_transaction: bool = Field(True, description="Wrap in transaction")
 
 
 class BatchUpdateResult(BaseModel):
-    """Result of batch update operation"""
+    """Result of batch update operation."""
     total: int
     successful: int
     failed: int
@@ -134,7 +131,7 @@ class BatchUpdateResult(BaseModel):
 
 
 class CharacterState(BaseModel):
-    """Complete character state aggregation"""
+    """Complete character state aggregation."""
     # Core info
     info: CharacterInfo
     summary: CharacterSummary
@@ -158,7 +155,7 @@ class CharacterState(BaseModel):
 
 
 class CharacterExport(BaseModel):
-    """Complete character export data"""
+    """Complete character export data."""
     version: str = "1.0"
     export_date: datetime
     
@@ -177,14 +174,14 @@ class CharacterExport(BaseModel):
 
 
 class CharacterImportRequest(BaseModel):
-    """Request to import character data"""
+    """Request to import character data."""
     file_path: str = Field(..., description="Path to character file")
     import_options: Dict[str, bool] = Field(default_factory=dict)
     should_validate: bool = Field(True, description="Validate on import")
 
 
 class CharacterImportResponse(BaseModel):
-    """Response after importing character"""
+    """Response after importing character."""
     success: bool
     character_id: Union[int, str]
     character_info: CharacterInfo
@@ -193,14 +190,14 @@ class CharacterImportResponse(BaseModel):
 
 
 class CharacterSaveRequest(BaseModel):
-    """Request to save character changes"""
+    """Request to save character changes."""
     sync_current_state: bool = Field(False, description="Sync in-memory state first")
     create_backup: bool = Field(True, description="Create backup before saving")
     should_validate: bool = Field(True, description="Validate before saving")
 
 
 class CharacterSaveResponse(BaseModel):
-    """Response after saving character"""
+    """Response after saving character."""
     success: bool
     save_path: str
     backup_path: Optional[str] = None
@@ -210,7 +207,7 @@ class CharacterSaveResponse(BaseModel):
 
 
 class CharacterBackup(BaseModel):
-    """Character backup information"""
+    """Character backup information."""
     backup_path: str
     original_path: str
     created_at: datetime
@@ -219,21 +216,21 @@ class CharacterBackup(BaseModel):
 
 
 class CharacterBackupList(BaseModel):
-    """List of character backups"""
+    """List of character backups."""
     backups: List[CharacterBackup]
     total: int
     total_size: int
 
 
 class CharacterComparisonRequest(BaseModel):
-    """Request to compare two characters"""
+    """Request to compare two characters."""
     character_id_1: Union[int, str]
     character_id_2: Union[int, str]
     compare_sections: List[str] = Field(default_factory=list, description="Specific sections to compare")
 
 
 class CharacterComparisonResult(BaseModel):
-    """Character comparison result"""
+    """Character comparison result."""
     character_1: CharacterInfo
     character_2: CharacterInfo
     differences: Dict[str, Dict[str, Any]] = Field(..., description="Section -> differences")
@@ -241,7 +238,7 @@ class CharacterComparisonResult(BaseModel):
 
 
 class CharacterCloneRequest(BaseModel):
-    """Request to clone a character"""
+    """Request to clone a character."""
     source_character_id: Union[int, str]
     new_name: str
     new_file_path: Optional[str] = None
@@ -254,7 +251,7 @@ class CharacterCloneRequest(BaseModel):
 
 
 class CharacterCloneResponse(BaseModel):
-    """Response after cloning character"""
+    """Response after cloning character."""
     success: bool
     new_character_id: Union[int, str]
     new_character_info: CharacterInfo
@@ -262,7 +259,7 @@ class CharacterCloneResponse(BaseModel):
 
 
 class CharacterEventData(BaseModel):
-    """Event data for character changes"""
+    """Event data for character changes."""
     event_type: str
     timestamp: float
     manager: str
@@ -271,14 +268,14 @@ class CharacterEventData(BaseModel):
 
 
 class CharacterEvents(BaseModel):
-    """Character event history"""
+    """Character event history."""
     events: List[CharacterEventData]
     total_events: int
     managers_involved: List[str]
 
 
 class CharacterDebugInfo(BaseModel):
-    """Debug information for troubleshooting"""
+    """Debug information for troubleshooting."""
     character_id: Union[int, str]
     file_path: str
     file_size: int

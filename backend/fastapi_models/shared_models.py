@@ -1,7 +1,4 @@
-"""
-Shared Pydantic models used across multiple managers
-Base models, common responses, and cross-cutting concerns
-"""
+"""Shared Pydantic models used across multiple managers."""
 
 from typing import Dict, Any, Optional, List, Union, Literal
 from datetime import datetime
@@ -13,14 +10,14 @@ from pydantic import BaseModel, Field, ConfigDict
 # ============================================================
 
 class BaseResponse(BaseModel):
-    """Base response model for all API responses"""
+    """Base response model for all API responses."""
     success: bool = True
     message: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class ErrorResponse(BaseModel):
-    """Standard error response"""
+    """Standard error response."""
     error: str
     error_code: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
@@ -29,7 +26,7 @@ class ErrorResponse(BaseModel):
 
 
 class ValidationError(BaseModel):
-    """Validation error detail"""
+    """Validation error detail."""
     field: str
     message: str
     value: Optional[Any] = None
@@ -37,7 +34,7 @@ class ValidationError(BaseModel):
 
 
 class ValidationResponse(BaseModel):
-    """Validation response with errors and warnings"""
+    """Validation response with errors and warnings."""
     valid: bool
     errors: List[ValidationError] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
@@ -49,14 +46,14 @@ class ValidationResponse(BaseModel):
 # ============================================================
 
 class HealthResponse(BaseModel):
-    """Service health check response"""
+    """Service health check response."""
     status: Literal['healthy', 'degraded', 'unhealthy']
     service: str
     uptime: Optional[int] = None
     checks: Dict[str, bool] = Field(default_factory=dict)
 
 class SystemInfo(BaseModel):
-    """System information"""
+    """System information."""
     version: str
     backend: str = "FastAPI"
     python_version: str
@@ -66,7 +63,7 @@ class SystemInfo(BaseModel):
 
 
 class CacheStatus(BaseModel):
-    """Cache status response"""
+    """Cache status response."""
     status: str = Field(..., description="Cache status (ready, loading, error)")
     cache_size: int = Field(0, description="Number of cached items")
     last_updated: Optional[datetime] = Field(None, description="Last cache update time")
@@ -76,7 +73,7 @@ class CacheStatus(BaseModel):
 
 
 class ConfigResponse(BaseModel):
-    """Configuration response"""
+    """Configuration response."""
     nwn2_install_dir: Optional[str] = Field(None, description="NWN2 installation directory")
     cache_enabled: bool = Field(True, description="Whether caching is enabled")
     debug_mode: bool = Field(False, description="Whether debug mode is active")
@@ -85,7 +82,7 @@ class ConfigResponse(BaseModel):
 
 
 class CacheRebuildResponse(BaseModel):
-    """Cache rebuild response"""
+    """Cache rebuild response."""
     success: bool
     message: str
     rebuild_time: Optional[float] = Field(None, description="Rebuild time in seconds")
@@ -94,13 +91,13 @@ class CacheRebuildResponse(BaseModel):
 
 
 class ConfigUpdateRequest(BaseModel):
-    """Configuration update request"""
+    """Configuration update request."""
     config_updates: Dict[str, Any] = Field(..., description="Configuration updates")
     validate_changes: bool = Field(True, description="Validate configuration changes")
 
 
 class ConfigUpdateResponse(BaseModel):
-    """Configuration update response"""
+    """Configuration update response."""
     success: bool
     message: str
     updated_fields: List[str] = Field(default_factory=list)
@@ -109,7 +106,7 @@ class ConfigUpdateResponse(BaseModel):
 
 
 class NWN2PathResponse(BaseModel):
-    """NWN2 path configuration response"""
+    """NWN2 path configuration response."""
     nwn2_install_dir: Optional[str] = None
     nwn2_data_dir: Optional[str] = None
     nwn2_docs_dir: Optional[str] = None
@@ -119,7 +116,7 @@ class NWN2PathResponse(BaseModel):
 
 
 class AutoDiscoverResponse(BaseModel):
-    """Auto-discovery response"""
+    """Auto-discovery response."""
     success: bool
     message: str
     paths_found: NWN2PathResponse
@@ -127,7 +124,7 @@ class AutoDiscoverResponse(BaseModel):
 
 
 class BackgroundLoadingTriggerResponse(BaseModel):
-    """Background loading trigger response"""
+    """Background loading trigger response."""
     success: bool
     message: str
     loading_started: bool = False
@@ -135,7 +132,7 @@ class BackgroundLoadingTriggerResponse(BaseModel):
 
 
 class BackgroundLoadingStatusResponse(BaseModel):
-    """Background loading status response"""
+    """Background loading status response."""
     status: Literal['idle', 'loading', 'completed', 'error']
     progress: int = Field(0, ge=0, le=100)
     current_task: Optional[str] = None
@@ -144,7 +141,7 @@ class BackgroundLoadingStatusResponse(BaseModel):
 
 
 class InitializationStatusResponse(BaseModel):
-    """System initialization status response"""
+    """System initialization status response."""
     status: Literal['initializing', 'ready', 'error']
     progress: int = Field(0, ge=0, le=100)
     components: Dict[str, bool] = Field(default_factory=dict)
@@ -157,7 +154,7 @@ class InitializationStatusResponse(BaseModel):
 # ============================================================
 
 class SessionInfo(BaseModel):
-    """Session information"""
+    """Session information."""
     session_id: str
     character_id: Union[int, str]
     character_name: Optional[str] = None
@@ -169,14 +166,14 @@ class SessionInfo(BaseModel):
 
 
 class SessionStatus(BaseModel):
-    """Session status response"""
+    """Session status response."""
     active: bool
     session: Optional[SessionInfo] = None
     total_sessions: int = 0
 
 
 class ActiveSessionsList(BaseModel):
-    """List of active character sessions"""
+    """List of active character sessions."""
     sessions: List[SessionInfo]
     count: int
 
@@ -186,7 +183,7 @@ class ActiveSessionsList(BaseModel):
 # ============================================================
 
 class ChangeRecord(BaseModel):
-    """Individual change record"""
+    """Individual change record."""
     field: str
     old_value: Any
     new_value: Any
@@ -196,7 +193,7 @@ class ChangeRecord(BaseModel):
 
 
 class CascadingEffect(BaseModel):
-    """Cascading effect from a change"""
+    """Cascading effect from a change."""
     type: str
     description: str
     affected_field: str
@@ -206,7 +203,7 @@ class CascadingEffect(BaseModel):
 
 
 class ChangeResult(BaseModel):
-    """Result of a change operation"""
+    """Result of a change operation."""
     success: bool = True
     changes: List[ChangeRecord] = Field(default_factory=list)
     cascading_effects: List[CascadingEffect] = Field(default_factory=list)
@@ -219,7 +216,7 @@ class ChangeResult(BaseModel):
 # ============================================================
 
 class PaginationParams(BaseModel):
-    """Pagination request parameters"""
+    """Pagination request parameters."""
     page: int = Field(1, ge=1, description="Page number")
     limit: int = Field(50, ge=1, le=500, description="Items per page")
     sort_by: Optional[str] = None
@@ -227,7 +224,7 @@ class PaginationParams(BaseModel):
 
 
 class PaginationInfo(BaseModel):
-    """Pagination metadata"""
+    """Pagination metadata."""
     page: int
     limit: int
     total: int
@@ -239,7 +236,7 @@ class PaginationInfo(BaseModel):
 
 
 class PaginatedResponse(BaseModel):
-    """Base paginated response"""
+    """Base paginated response."""
     items: List[Any]
     pagination: PaginationInfo
 
@@ -249,7 +246,7 @@ class PaginatedResponse(BaseModel):
 # ============================================================
 
 class FileInfo(BaseModel):
-    """File information"""
+    """File information."""
     path: str
     name: str
     size: int
@@ -260,7 +257,7 @@ class FileInfo(BaseModel):
 
 
 class ResourceInfo(BaseModel):
-    """Game resource information"""
+    """Game resource information."""
     resource_type: str
     resource_name: str
     source: str  # "base", "expansion", "override", "hak", etc.
@@ -273,7 +270,7 @@ class ResourceInfo(BaseModel):
 # ============================================================
 
 class CustomContentItem(BaseModel):
-    """Individual custom content item"""
+    """Individual custom content item."""
     type: str  # "feat", "spell", "item", "class", etc.
     id: int
     name: Optional[str] = None
@@ -283,7 +280,7 @@ class CustomContentItem(BaseModel):
 
 
 class CustomContentSummary(BaseModel):
-    """Summary of custom content"""
+    """Summary of custom content."""
     total: int
     by_type: Dict[str, int] = Field(default_factory=dict)
     by_source: Dict[str, int] = Field(default_factory=dict)
@@ -296,7 +293,7 @@ class CustomContentSummary(BaseModel):
 # ============================================================
 
 class GFFFieldInfo(BaseModel):
-    """GFF field structure information"""
+    """GFF field structure information."""
     path: str
     label: str
     type: str
@@ -311,14 +308,14 @@ class GFFFieldInfo(BaseModel):
 
 
 class RawDataRequest(BaseModel):
-    """Request for raw GFF data"""
+    """Request for raw GFF data."""
     path: Optional[str] = Field(None, description="Specific path in GFF structure")
     include_metadata: bool = Field(False, description="Include field metadata")
     max_depth: int = Field(10, ge=1, le=20, description="Maximum nesting depth")
 
 
 class RawDataResponse(BaseModel):
-    """Raw GFF data response"""
+    """Raw GFF data response."""
     path: str = Field(..., description="GFF path that was accessed")
     value: Any = Field(..., description="Value at the specified path")
     field_type: str = Field(..., description="GFF field type")
@@ -326,7 +323,7 @@ class RawDataResponse(BaseModel):
 
 
 class FieldStructureResponse(BaseModel):
-    """GFF field structure analysis response"""
+    """GFF field structure analysis response."""
     path: str = Field(..., description="Path that was analyzed")
     structure: Dict[str, Any] = Field(..., description="Analyzed structure")
     total_fields: int = Field(..., description="Total number of fields found")
@@ -334,13 +331,13 @@ class FieldStructureResponse(BaseModel):
 
 
 class RawFieldUpdateRequest(BaseModel):
-    """Request to update a raw GFF field"""
+    """Request to update a raw GFF field."""
     path: str = Field(..., description="GFF path to the field")
     value: Any = Field(..., description="New value for the field")
 
 
 class RawFieldUpdateResponse(BaseModel):
-    """Response after updating a raw field"""
+    """Response after updating a raw field."""
     success: bool = True
     path: str = Field(..., description="Path that was updated")
     old_value: Any = Field(..., description="Previous value")
@@ -353,7 +350,7 @@ class RawFieldUpdateResponse(BaseModel):
 # ============================================================
 
 class BatchOperation(BaseModel):
-    """Single operation in a batch"""
+    """Single operation in a batch."""
     operation_id: str
     operation_type: str
     target: str
@@ -362,7 +359,7 @@ class BatchOperation(BaseModel):
 
 
 class BatchOperationResult(BaseModel):
-    """Result of a single batch operation"""
+    """Result of a single batch operation."""
     operation_id: str
     success: bool
     result: Optional[Any] = None
@@ -371,14 +368,14 @@ class BatchOperationResult(BaseModel):
 
 
 class BatchRequest(BaseModel):
-    """Batch operation request"""
+    """Batch operation request."""
     operations: List[BatchOperation]
     stop_on_error: bool = Field(False, description="Stop if any operation fails")
     use_transaction: bool = Field(True, description="Wrap in transaction")
 
 
 class BatchResponse(BaseModel):
-    """Batch operation response"""
+    """Batch operation response."""
     total: int
     successful: int
     failed: int
@@ -392,7 +389,7 @@ class BatchResponse(BaseModel):
 # ============================================================
 
 class ExportOptions(BaseModel):
-    """Options for data export"""
+    """Options for data export."""
     format: Literal['json', 'gff', 'xml'] = 'json'
     include_metadata: bool = True
     include_custom_content: bool = True
@@ -404,7 +401,7 @@ class ExportOptions(BaseModel):
 
 
 class ImportOptions(BaseModel):
-    """Options for data import"""
+    """Options for data import."""
     should_validate: bool = True
     merge: bool = Field(False, description="Merge with existing data")
     overwrite: bool = Field(True, description="Overwrite existing data")
@@ -420,7 +417,7 @@ class ImportOptions(BaseModel):
 # ============================================================
 
 class AlignmentResponse(BaseModel):
-    """Character alignment response"""
+    """Character alignment response."""
     lawChaos: int = Field(..., ge=0, le=100, description="Law-Chaos axis (0=Chaotic, 50=Neutral, 100=Lawful)")
     goodEvil: int = Field(..., ge=0, le=100, description="Good-Evil axis (0=Evil, 50=Neutral, 100=Good)")
     alignment_string: str = Field(..., description="Human readable alignment (e.g., 'Lawful Good')")
@@ -428,19 +425,19 @@ class AlignmentResponse(BaseModel):
 
 
 class AlignmentUpdateRequest(BaseModel):
-    """Request to update character alignment"""
+    """Request to update character alignment."""
     lawChaos: Optional[int] = Field(None, ge=0, le=100, description="Law-Chaos axis value")
     goodEvil: Optional[int] = Field(None, ge=0, le=100, description="Good-Evil axis value")
 
 
 class AlignmentShiftRequest(BaseModel):
-    """Request to shift alignment by relative amounts"""
+    """Request to shift alignment by relative amounts."""
     lawChaosShift: int = Field(0, description="Shift toward Law(+) or Chaos(-)")
     goodEvilShift: int = Field(0, description="Shift toward Good(+) or Evil(-)")
 
 
 class AlignmentShiftResponse(AlignmentResponse):
-    """Response after shifting alignment"""
+    """Response after shifting alignment."""
     shifted: Dict[str, int] = Field(..., description="Applied shift amounts")
 
 

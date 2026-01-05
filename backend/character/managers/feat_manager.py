@@ -67,7 +67,7 @@ class FeatManager(EventEmitter):
         self._class_cache = {}
         self._protected_feats: Set[int] = set()
 
-        logger.warning(f"FeatManager CREATED - instance id: {id(self)}")
+        logger.debug(f"FeatManager CREATED - instance id: {id(self)}")
 
         self._domain_feats_cache: Optional[Set[int]] = None
         self._domain_feat_map_cache: Optional[Dict[int, List[Dict]]] = None
@@ -83,14 +83,11 @@ class FeatManager(EventEmitter):
         self._prerequisite_graph = None
         if USE_PREREQUISITE_GRAPH:
             try:
-                from .prerequisite_graph import get_prerequisite_graph
-                self._prerequisite_graph = get_prerequisite_graph(rules_service=self.game_rules_service)
-                if self._prerequisite_graph:
-                    logger.info("FeatManager using PrerequisiteGraph for fast validation")
-                else:
-                    logger.info("PrerequisiteGraph not available yet, using standard validation")
+                from services.gamedata.prerequisite_graph import get_prerequisite_graph
+                self._prerequisite_graph = get_prerequisite_graph(self.game_rules_service)
+                logger.info("FeatManager using PrerequisiteGraph for fast validation")
             except Exception as e:
-                logger.warning(f"Failed to get PrerequisiteGraph: {e}")
+                logger.error(f"Failed to initialize PrerequisiteGraph: {e}")
                 self._prerequisite_graph = None
     
     def _register_event_handlers(self):
@@ -373,8 +370,6 @@ class FeatManager(EventEmitter):
             return None
 
         new_label = field_mapper.get_field_value(new_feat, 'label', '')
-
-        import re
         match = re.search(r'^(.*?)[\s_]?(\d+)$', new_label)
         if not match:
             return None
@@ -610,17 +605,7 @@ class FeatManager(EventEmitter):
         return categorized
 
     def get_feat_points_summary(self) -> Dict[str, Any]:
-        """
-        Calculate open feat slots using the Blueprint Method.
-        
-        This approach:
-        1. Creates "buckets" for each level that should grant a feat slot
-        2. Checks only those specific levels in LvlStatList
-        3. Filters out auto-granted feats (List=3 in class tables, background, history, domain)
-        4. Open slots = buckets with no valid selectable feat
-        
-        This is robust against modded characters - ignores feats added at non-slot levels.
-        """
+        """Calculate open feat slots using the Blueprint Method."""
         lvl_stat_list = self.gff.get('LvlStatList', [])
         feat_list = self.gff.get('FeatList', [])
         
@@ -635,72 +620,56 @@ class FeatManager(EventEmitter):
                 'available': 0
             }
         
-        # Auto-granted feat types (these are "free" and don't fill slots)
-        auto_granted_types = {8192, 128, 512}  # Domain, Background, History
+        auto_granted_types = {8192, 128, 512}
         
-        # Build slot buckets and check if they're filled
         open_general_slots = 0
         open_bonus_slots = 0
         filled_general_slots = 0
         filled_bonus_slots = 0
         
-        # Track class levels as we iterate
         class_level_tracker: Dict[int, int] = {}
-        
-        # Cache for class feat tables - maps class_id -> {feat_id: list_type}
         class_feat_table_cache: Dict[int, Dict[int, int]] = {}
         
         for total_level_idx, level_entry in enumerate(lvl_stat_list):
-            total_level = total_level_idx + 1  # 1-indexed
+            total_level = total_level_idx + 1
             class_id = level_entry.get('LvlStatClass', 0)
             
-            # Update class level tracker
             if class_id not in class_level_tracker:
                 class_level_tracker[class_id] = 0
             class_level_tracker[class_id] += 1
             class_level = class_level_tracker[class_id]
             
-            # Get feats selected at this level
             level_feats = level_entry.get('FeatList', [])
             level_feat_ids = [f.get('Feat', -1) for f in level_feats if f.get('Feat', -1) >= 0]
             
-            # Load class feat table if not cached
             if class_id not in class_feat_table_cache:
                 class_feat_table_cache[class_id] = self._load_class_feat_table(class_id)
             class_feat_table = class_feat_table_cache[class_id]
             
-            # Filter to get only SELECTABLE feats at this level (not auto-granted)
             selectable_feats = []
             for feat_id in level_feat_ids:
-                # Check if auto-granted by class table (List = 3)
                 if feat_id in class_feat_table and class_feat_table[feat_id] == 3:
                     continue
                 
-                # Check if auto-granted by type
                 feat_info = self.get_feat_info_display(feat_id)
                 if feat_info and feat_info.get('type', 0) in auto_granted_types:
                     continue
                 
                 selectable_feats.append(feat_id)
             
-            # Check GENERAL FEAT SLOT for this level
             has_general_slot = False
             if total_level <= 20:
-                # Heroic: 1, 3, 6, 9, 12, 15, 18
                 has_general_slot = (total_level == 1 or total_level % 3 == 0)
             else:
-                # Epic: Every Odd Level (21, 23, 25...)
                 has_general_slot = (total_level % 2 != 0)
             
             if has_general_slot:
                 if selectable_feats:
                     filled_general_slots += 1
-                    # Remove one feat from selectable (it filled the general slot)
                     selectable_feats = selectable_feats[1:]
                 else:
                     open_general_slots += 1
             
-            # Check BONUS FEAT SLOT for this level
             has_bonus_slot = self._check_bonus_feat_slot(class_id, class_level)
             
             if has_bonus_slot:
@@ -710,19 +679,13 @@ class FeatManager(EventEmitter):
                 else:
                     open_bonus_slots += 1
         
-        # Check for racial bonus feat (Human = race ID 6, Strongheart Halfling needs check)
         race_id = self.gff.get('Race', -1)
         racial_bonus = self._get_racial_bonus_feats(race_id)
         
-        # Racial bonus is at level 1, already counted in general if filled
-        # For simplicity, add racial bonus to general slots
         total_general_slots = filled_general_slots + open_general_slots + racial_bonus
         total_bonus_slots = filled_bonus_slots + open_bonus_slots
         total_slots = total_general_slots + total_bonus_slots
         
-        # Recalculate with racial bonus
-        # The racial slot is also at level 1, check if it's filled
-        # For now, assume racial bonus adds to available if level 1 has fewer selectable feats than slots
         open_slots = open_general_slots + open_bonus_slots
         filled_slots = filled_general_slots + filled_bonus_slots
         
@@ -739,10 +702,7 @@ class FeatManager(EventEmitter):
         }
     
     def _load_class_feat_table(self, class_id: int) -> Dict[int, int]:
-        """
-        Load cls_feat_<class>.2da and return mapping of feat_id -> List value.
-        List values: 0=Selectable, 1=General/Bonus, 2=Bonus Only, 3=Auto-Granted
-        """
+        """Load class feat table and return feat_id to list_type mapping."""
         feat_table: Dict[int, int] = {}
         
         class_data = self.game_rules_service.get_by_id('classes', class_id)
@@ -766,49 +726,52 @@ class FeatManager(EventEmitter):
         return feat_table
     
     def _check_bonus_feat_slot(self, class_id: int, class_level: int) -> bool:
-        """Check if this class level grants a bonus feat slot."""
+        """Check if this class level grants a bonus feat slot from cls_bfeat_*.2da."""
         class_data = self.game_rules_service.get_by_id('classes', class_id)
         if not class_data:
             return False
-        
-        # Check bonus feat table
+
         bonus_table_name = field_mapper.get_field_value(class_data, 'bonus_feats_table', '')
-        if bonus_table_name and bonus_table_name != '****':
-            b_table = self.game_rules_service.get_table(bonus_table_name.lower())
-            if b_table:
-                level_idx = max(0, class_level - 1)
-                if level_idx < len(b_table):
-                    row = b_table[level_idx]
-                    has_bonus = field_mapper._safe_int(
-                        field_mapper.get_field_value(row, 'bonus', '0'), 0
-                    )
-                    if has_bonus > 0:
-                        return True
-        
-        # Epic bonus feats (class level > 20)
-        if class_level > 20:
-            interval = 0
-            if class_id == 4:  # Fighter
-                interval = 2
-            elif class_id == 10:  # Wizard
-                interval = 3
-            elif class_id in (7, 3):  # Rogue, Druid
-                interval = 4
-            
-            if interval > 0 and (class_level - 20) % interval == 0:
-                return True
-        
-        return False
+        if not bonus_table_name or bonus_table_name == '****':
+            return False
+
+        b_table = self.game_rules_service.get_table(bonus_table_name.lower())
+        if not b_table:
+            return False
+
+        level_idx = class_level - 1  # 0-indexed: level 1 = row 0, level 21 = row 20
+        if level_idx < 0 or level_idx >= len(b_table):
+            return False
+
+        row = b_table[level_idx]
+        has_bonus = field_mapper._safe_int(
+            field_mapper.get_field_value(row, 'bonus', '0'), 0
+        )
+        return has_bonus > 0
+
+    def get_feat_slots_for_level(self, total_level: int, class_id: int, class_level: int) -> Dict[str, int]:
+        """Calculate feat slots available at a specific level."""
+        general = 0
+        bonus = 0
+
+        # General feat slots (same for all classes)
+        if total_level <= 20:
+            # Heroic: 1, 3, 6, 9, 12, 15, 18
+            if total_level == 1 or total_level % 3 == 0:
+                general = 1
+        else:
+            # Epic: every odd level (21, 23, 25...)
+            if total_level % 2 != 0:
+                general = 1
+
+        # Bonus feat slots (from class bonus feat table)
+        if self._check_bonus_feat_slot(class_id, class_level):
+            bonus = 1
+
+        return {'general': general, 'bonus': bonus}
     
     def _get_racial_bonus_feats(self, race_id: int) -> int:
-        """
-        Get number of bonus feat slots from race.
-        
-        Humans and Strongheart Halflings get +1 feat at level 1.
-        This is indicated by having feat 258 (QuickMaster / FEAT_QUICK_TO_MASTER).
-        """
-        # Check if character has the Quick to Master feat (ID 258)
-        # This feat grants +1 selectable feat at level 1 for Humans/Strongheart Halflings
+        """Get number of bonus feat slots from race."""
         QUICK_TO_MASTER_FEAT_ID = 258
         
         feat_list = self.gff.get('FeatList', [])
@@ -869,8 +832,7 @@ class FeatManager(EventEmitter):
     def get_feat_prerequisites_info_batch(self, feat_ids: List[int]) -> Dict[int, Tuple[bool, List[str]]]:
         """Get prerequisite information for multiple feats at once for UI display only."""
         if not self._prerequisite_graph or not self._prerequisite_graph.is_built:
-            logger.error("PrerequisiteGraph not available for batch validation")
-            return {feat_id: (False, ["Validation unavailable"]) for feat_id in feat_ids}
+            raise RuntimeError("PrerequisiteGraph not available for batch validation")
 
         character_feats = set()
         feat_list = self.gff.get('FeatList', [])
@@ -893,8 +855,7 @@ class FeatManager(EventEmitter):
     def get_feat_prerequisites_info(self, feat_id: int, feat_data=None) -> Tuple[bool, List[str]]:
         """Get prerequisite information for a feat using Rust PrerequisiteGraph for UI display only."""
         if not self._prerequisite_graph or not self._prerequisite_graph.is_built:
-            logger.critical("PrerequisiteGraph not available! Cannot validate feat prerequisites.")
-            return True, []
+            raise RuntimeError("PrerequisiteGraph not available for feat prerequisite validation")
 
         character_feats = set()
         feat_list = self.gff.get('FeatList', [])
@@ -1683,13 +1644,6 @@ class FeatManager(EventEmitter):
         
         return False
     
-    def get_bonus_feats_available(self) -> int:
-        """Get number of unallocated bonus feats available to select."""
-        # This is complex as it depends on class levels and feat selections
-        # For now, return a placeholder
-        # TODO: Implement proper bonus feat tracking
-        return 0
-    
     def get_feat_categories(self) -> Dict[str, List[int]]:
         """Get feats organized by category."""
         from collections import defaultdict
@@ -1760,8 +1714,7 @@ class FeatManager(EventEmitter):
             return 'General'
 
     def _strip_nwn2_tags(self, text: str) -> str:
-        """Strip NWN2 markup tags like <i>, <color=Gold>, etc. from text."""
-        import re
+        """Strip NWN2 markup tags from text."""
         if not text:
             return text
         text = re.sub(r'</?[a-zA-Z][^>]*>', '', text)
@@ -1895,11 +1848,7 @@ class FeatManager(EventEmitter):
 
     def _is_class_specific_feat_by_label(self, feat_data, character_class_names: Set[str],
                                           character_class_levels: Dict[str, int] = None) -> bool:
-        """
-        Check if feat label contains a class name that character doesn't have or lacks sufficient level.
-        Filters feats like FEAT_EXTRA_SLOT_BARD_LEVEL0 for non-Bards or low-level Bards.
-        Returns True if feat should be FILTERED OUT.
-        """
+        """Check if feat label contains a class name the character doesn't have."""
         label = field_mapper.get_field_value(feat_data, 'label', '')
         label_upper = str(label).upper() if label else ''
         feat_type = field_mapper.get_field_value(feat_data, 'type', '')
@@ -1975,10 +1924,7 @@ class FeatManager(EventEmitter):
         return False
 
     def _is_ability_requiring_feat(self, feat_data, character_class_names: Set[str]) -> bool:
-        """
-        Check if feat requires a class ability the character doesn't have.
-        Returns True if feat should be FILTERED OUT.
-        """
+        """Check if feat requires a class ability the character doesn't have."""
         label = field_mapper.get_field_value(feat_data, 'label', '')
         label_upper = str(label).upper() if label else ''
 
@@ -2439,13 +2385,22 @@ class FeatManager(EventEmitter):
                 if not domain_name or domain_name.strip() in ['', '****']:
                     continue
                 
+                epithet_feat_id = field_mapper.get_field_value(domain_data, 'EpithetFeat', None)
+                has_domain = False
+                if epithet_feat_id:
+                    try:
+                        has_domain = self.has_feat(int(epithet_feat_id))
+                    except (ValueError, TypeError):
+                        pass
+
                 available_domains.append({
                     'id': domain_id,
                     'name': domain_name,
                     'description': domain_desc,
                     'granted_feat': field_mapper.get_field_value(domain_data, 'GrantedFeat', None),
                     'castable_feat': field_mapper.get_field_value(domain_data, 'CastableFeat', None),
-                    'epithet_feat': field_mapper.get_field_value(domain_data, 'EpithetFeat', None)
+                    'epithet_feat_id': epithet_feat_id,
+                    'has_domain': has_domain
                 })
                 
             except Exception as e:

@@ -8,7 +8,7 @@ from pathlib import Path
 from gamedata.dynamic_loader.relationship_validator import (
     RelationshipValidator, RelationshipDefinition, RelationshipType, ValidationReport
 )
-from gamedata.services.rule_detector import RuleDetector
+from services.gamedata.rule_detector import RuleDetector
 
 
 class TestRelationshipDefinition:

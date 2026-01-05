@@ -9,7 +9,7 @@ from unittest.mock import Mock, MagicMock, patch, PropertyMock
 
 from character.managers.combat_manager import CombatManager
 from character.events import EventEmitter, EventData, EventType
-from gamedata.services.game_rules_service import GameRulesService
+from services.gamedata.game_rules_service import GameRulesService
 
 
 @pytest.fixture

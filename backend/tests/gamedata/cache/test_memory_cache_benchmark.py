@@ -14,7 +14,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 import pytest
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from django.conf import settings
 
 

@@ -1,14 +1,11 @@
-"""
-Pydantic models for AbilityManager
-Handles ability scores (attributes), modifiers, and derived statistics
-"""
+"""Pydantic models for AbilityManager."""
 
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 
 
 class AbilityScore(BaseModel):
-    """Individual ability score with all modifiers"""
+    """Individual ability score with all modifiers."""
     base: int = Field(..., ge=1, le=50, description="Base ability score")
     racial_modifier: int = 0
     item_modifier: int = 0
@@ -20,7 +17,7 @@ class AbilityScore(BaseModel):
 
 
 class AbilityScores(BaseModel):
-    """All six ability scores"""
+    """All six ability scores."""
     strength: AbilityScore
     dexterity: AbilityScore
     constitution: AbilityScore
@@ -30,7 +27,7 @@ class AbilityScores(BaseModel):
 
 
 class AbilityModifiers(BaseModel):
-    """Ability modifiers in NWN2 format"""
+    """Ability modifiers in NWN2 format."""
     Str: int = 0
     Dex: int = 0
     Con: int = 0
@@ -40,7 +37,7 @@ class AbilityModifiers(BaseModel):
 
 
 class DetailedModifiers(BaseModel):
-    """Detailed breakdown of all modifier sources"""
+    """Detailed breakdown of all modifier sources."""
     base_modifiers: Dict[str, int]
     racial_modifiers: Dict[str, int]
     item_modifiers: Dict[str, int]
@@ -51,7 +48,7 @@ class DetailedModifiers(BaseModel):
 
 
 class AttributeDependencies(BaseModel):
-    """What game systems depend on each attribute"""
+    """What game systems depend on each attribute."""
     Str: List[str] = Field(default_factory=list, description="Systems affected by STR")
     Dex: List[str] = Field(default_factory=list, description="Systems affected by DEX")
     Con: List[str] = Field(default_factory=list, description="Systems affected by CON")
@@ -61,7 +58,7 @@ class AttributeDependencies(BaseModel):
 
 
 class EncumbranceLimits(BaseModel):
-    """Weight carrying capacity based on strength"""
+    """Weight carrying capacity based on strength."""
     strength: int = Field(..., description="Character's strength score")
     normal_capacity: int = Field(..., description="Normal carrying capacity (light load)")
     medium_load: int = Field(..., description="Medium load threshold")
@@ -70,13 +67,13 @@ class EncumbranceLimits(BaseModel):
 
 
 class HitPoints(BaseModel):
-    """Character hit points"""
+    """Character hit points."""
     current: int = Field(..., description="Current hit points")
     max: int = Field(..., description="Maximum hit points")
 
 
 class CharacterBiography(BaseModel):
-    """Character background and biographical information"""
+    """Character background and biographical information."""
     name: str = ""
     age: int = 0
     background: str = ""
@@ -84,7 +81,7 @@ class CharacterBiography(BaseModel):
 
 
 class AttributeState(BaseModel):
-    """Complete attribute/ability state from AbilityManager"""
+    """Complete attribute/ability state from AbilityManager."""
     # Core ability scores
     base_attributes: Dict[str, int] = Field(..., description="Base ability scores without modifiers")
     effective_attributes: Dict[str, int] = Field(..., description="Final ability scores with all modifiers")
@@ -112,20 +109,20 @@ class AttributeState(BaseModel):
 
 
 class AttributeChangeRequest(BaseModel):
-    """Request to change ability scores"""
+    """Request to change ability scores."""
     attributes: Dict[str, int] = Field(..., description="Ability name -> new value")
     should_validate: bool = Field(True, description="Whether to validate changes")
 
 
 class AttributeSetRequest(BaseModel):
-    """Request to set a single ability score"""
+    """Request to set a single ability score."""
     attribute: str = Field(..., description="Ability name (Str, Dex, Con, Int, Wis, Cha)")
     value: int = Field(..., ge=1, le=50, description="New ability score value")
     should_validate: bool = Field(True, description="Whether to validate the change")
 
 
 class AttributeChangeResponse(BaseModel):
-    """Response after changing ability scores"""
+    """Response after changing ability scores."""
     success: bool = True
     attribute_changes: List[Dict[str, Any]] = Field(..., description="List of applied attribute changes")
     cascading_effects: List[Dict[str, Any]] = Field(default_factory=list, description="Secondary effects from changes")  
@@ -136,14 +133,14 @@ class AttributeChangeResponse(BaseModel):
 
 
 class PointBuyRequest(BaseModel):
-    """Point buy character creation request"""
+    """Point buy character creation request."""
     attributes: Dict[str, int] = Field(..., description="Target ability scores")
     total_points: int = Field(32, description="Total points available")
     racial_modifiers: Optional[Dict[str, int]] = None
 
 
 class PointBuyResponse(BaseModel):
-    """Point buy validation response"""
+    """Point buy validation response."""
     valid: bool
     points_used: int
     points_remaining: int
@@ -152,14 +149,14 @@ class PointBuyResponse(BaseModel):
 
 
 class AttributeRollRequest(BaseModel):
-    """Request for rolling ability scores"""
+    """Request for rolling ability scores."""
     method: str = Field("4d6_drop_lowest", description="Rolling method")
     allow_reroll: bool = Field(True, description="Allow rerolling scores below minimum")
     minimum_total: int = Field(70, description="Minimum total of all scores")
 
 
 class AttributeRollResponse(BaseModel):
-    """Response with rolled ability scores"""
+    """Response with rolled ability scores."""
     rolls: Dict[str, List[int]] = Field(..., description="Individual die rolls per ability")
     final_scores: Dict[str, int] = Field(..., description="Final rolled scores")
     total: int = Field(..., description="Sum of all scores")
@@ -167,7 +164,7 @@ class AttributeRollResponse(BaseModel):
 
 
 class AttributeSummary(BaseModel):
-    """Summary of ability scores for display"""
+    """Summary of ability scores for display."""
     base_attributes: Dict[str, int]
     effective_attributes: Dict[str, int]
     modifiers: Dict[str, int]
@@ -185,7 +182,7 @@ class AttributeSummary(BaseModel):
 
 
 class AttributeValidation(BaseModel):
-    """Validation result for ability scores"""
+    """Validation result for ability scores."""
     valid: bool
     errors: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
@@ -193,7 +190,7 @@ class AttributeValidation(BaseModel):
 
 
 class AttributeModifiersResponse(BaseModel):
-    """Response with detailed breakdown of all attribute modifiers"""
+    """Response with detailed breakdown of all attribute modifiers."""
     base_modifiers: Dict[str, int] = Field(..., description="Base ability modifiers from scores")
     racial_modifiers: Dict[str, int] = Field(..., description="Racial attribute modifiers")
     enhancement_modifiers: Dict[str, int] = Field(..., description="Enhancement bonuses to abilities")

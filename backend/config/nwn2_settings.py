@@ -1,10 +1,4 @@
-"""
-NWN2 Installation and Path Configuration (Rust-Powered)
-
-High-performance path discovery using Rust extensions for faster
-NWN2 installation detection with Steam/GOG categorization and
-detailed performance profiling.
-"""
+"""NWN2 installation and path configuration."""
 import os
 import json
 from pathlib import Path
@@ -12,16 +6,16 @@ from typing import Optional, List, Dict, Any
 import platform
 from dotenv import load_dotenv
 
-# Load environment variables
+
 load_dotenv()
 
 from utils.paths import get_writable_dir
 
-# Centralized writable paths
+
 BASE_WRITABLE_DIR = get_writable_dir("") # Base AppData folder
 USER_SETTINGS_PATH = BASE_WRITABLE_DIR / "settings.json"
 
-# Import Rust path discovery
+
 try:
     from nwn2_rust import (
         discover_nwn2_paths_rust as discover_nwn2_paths,
@@ -34,25 +28,17 @@ except ImportError as e:
 
 
 class NWN2PathFinder:
-    """High-performance NWN2 path detection using Rust implementation"""
+    """NWN2 path detection using Rust implementation."""
 
     @classmethod
     def auto_discover_nwn2_paths(cls, search_paths: Optional[List[Path]] = None) -> List[Path]:
-        """
-        Auto-discover NWN2 installations using Rust implementation.
-
-        Args:
-            search_paths: Optional list of paths to search. If None, searches common locations.
-
-        Returns:
-            List of potential NWN2 installation paths.
-        """
+        """Auto-discover NWN2 installations using Rust."""
         result = discover_nwn2_paths(search_paths)
         return [Path(path) for path in result.nwn2_paths]
 
     @classmethod
     def find_nwn2_installation(cls) -> Optional[Path]:
-        """Try to auto-detect NWN2 installation using Rust-powered search"""
+        """Try to auto-detect NWN2 installation."""
         discovered = cls.auto_discover_nwn2_paths()
         # Prioritize non-Documents folders (actual game installations)
         for path in discovered:
@@ -63,19 +49,19 @@ class NWN2PathFinder:
     
     @classmethod
     def find_steam_installation(cls) -> Optional[Path]:
-        """Find Steam-based NWN2 installation"""
+        """Find Steam-based NWN2 installation."""
         result = discover_nwn2_paths()
         return Path(result.steam_paths[0]) if result.steam_paths else None
     
     @classmethod
     def find_gog_installation(cls) -> Optional[Path]:
-        """Find GOG-based NWN2 installation"""
+        """Find GOG-based NWN2 installation."""
         result = discover_nwn2_paths()
         return Path(result.gog_paths[0]) if result.gog_paths else None
     
     @classmethod
     def get_discovery_timing(cls) -> Dict[str, Any]:
-        """Get detailed timing information about path discovery"""
+        """Get detailed timing information about path discovery."""
         result = discover_nwn2_paths()
         return {
             'total_time_ms': result.total_time_ms,
@@ -93,7 +79,7 @@ class NWN2PathFinder:
     
     @classmethod
     def find_documents_folder(cls) -> Optional[Path]:
-        """Try to auto-detect NWN2 documents folder using standard locations"""
+        """Try to auto-detect NWN2 documents folder."""
         # Windows native
         if platform.system() == 'Windows':
             docs_path = Path(os.environ.get('USERPROFILE', '')) / 'Documents' / 'Neverwinter Nights 2'
@@ -118,7 +104,7 @@ class NWN2PathFinder:
     
     @classmethod
     def find_steam_workshop(cls) -> Optional[Path]:
-        """Try to auto-detect Steam workshop folder for NWN2"""
+        """Try to auto-detect Steam workshop folder for NWN2."""
         system = platform.system()
         search_paths = []
         
@@ -141,25 +127,9 @@ class NWN2PathFinder:
         
         return None
 
-# Path management class for centralized access
-class NWN2Paths:
-    """
-    Rust-Powered Centralized Path Management for NWN2 Directories.
 
-    This class provides high-performance access to all critical NWN2 file paths
-    using Rust extensions for fast path discovery. It automatically finds the 
-    game installation by checking (in order):
-    1. 'NWN2_GAME_FOLDER' environment variable.
-    2. A 'settings.json' configuration file.
-    3. Rust-powered auto-discovery of common installation locations.
-    4. A fallback default directory.
-    
-    Features:
-    - Steam/GOG installation detection and categorization
-    - Performance timing and profiling
-    - Enhanced Edition detection
-    - Multi-platform support (Windows, Linux, macOS)
-    """
+class NWN2Paths:
+    """Centralized path management for NWN2 directories."""
     
     def __init__(self):
         self._game_folder: Optional[Path] = None
@@ -174,7 +144,7 @@ class NWN2Paths:
         self._load_config()
 
     def _load_config(self):
-        """Load configuration from various sources."""
+        """Load configuration."""
         # Reset custom folders before loading
         self._custom_override_folders = []
         self._custom_module_folders = []
@@ -278,72 +248,72 @@ class NWN2Paths:
     
     @property
     def game_folder(self) -> Path:
-        """Get the main game installation folder"""
+        """Get game installation folder."""
         return self._game_folder
     
     @property
     def data(self) -> Path:
-        """Get the data folder containing ZIP files"""
+        """Get data folder."""
         return self.game_folder / 'data'
     
     @property
     def enhanced(self) -> Path:
-        """Get the enhanced folder (Enhanced Edition specific data)"""
+        """Get enhanced folder."""
         return self.game_folder / 'enhanced'
     
     @property
     def enhanced_data(self) -> Path:
-        """Get the enhanced data folder containing Enhanced Edition ZIP files"""
+        """Get enhanced data folder."""
         return self.enhanced / 'data'
     
     @property
     def dialog_tlk(self) -> Path:
-        """Get the dialog.tlk file path"""
+        """Get dialog.tlk path."""
         return self.game_folder / 'dialog.tlk'
     
     @property
     def campaigns(self) -> Path:
-        """Get the campaigns folder"""
+        """Get campaigns folder."""
         return self.game_folder / 'Campaigns'
     
     @property
     def modules(self) -> Path:
-        """Get the modules folder"""
+        """Get modules folder."""
         return self.game_folder / 'Modules'
     
     @property
     def override(self) -> Path:
-        """Get the override folder"""
+        """Get override folder."""
         return self.game_folder / 'override'
     
     @property
     def hak(self) -> Path:
-        """Get the hak folder"""
+        """Get hak folder."""
         return self.game_folder / 'hak'
     
     @property
     def steam_workshop_folder(self) -> Optional[Path]:
-        """Get the Steam workshop folder"""
+        """Get Steam workshop folder."""
         return self._steam_workshop_folder
     
     @property
     def custom_override_folders(self) -> List[Path]:
-        """Get custom override folders"""
+        """Get custom override folders."""
         return self._custom_override_folders.copy()
     
     @property
     def custom_module_folders(self) -> List[Path]:
-        """Get custom module folders"""
+        """Get custom module folders."""
         return self._custom_module_folders.copy()
     
     @property
     def custom_hak_folders(self) -> List[Path]:
-        """Get custom HAK folders"""
+        """Get custom HAK folders."""
         return self._custom_hak_folders.copy()
     
     @property
     def user_folder(self) -> Path:
-        """Get the user documents folder (saves, modules, etc)"""
+        """Get user documents folder."""
         # Use configured documents folder if available
         if self._documents_folder:
             return self._documents_folder
@@ -363,53 +333,53 @@ class NWN2Paths:
     
     @property
     def saves(self) -> Path:
-        """Get the saves folder"""
+        """Get saves folder."""
         return self.user_folder / 'saves'
     
     @property
     def localvault(self) -> Path:
-        """Get the localvault folder (character files)"""
+        """Get localvault folder."""
         return self.user_folder / 'localvault'
     
     @property
     def servervault(self) -> Path:
-        """Get the servervault folder"""
+        """Get servervault folder."""
         return self.user_folder / 'servervault'
     
     @property
     def user_modules(self) -> Path:
-        """Get the user modules folder"""
+        """Get user modules folder."""
         return self.user_folder / 'modules'
     
     @property
     def user_override(self) -> Path:
-        """Get the user override folder"""
+        """Get user override folder."""
         return self.user_folder / 'override'
     
     @property
     def user_hak(self) -> Path:
-        """Get the user hak folder"""
+        """Get user hak folder."""
         return self.user_folder / 'hak'
     
     @property
     def is_enhanced_edition(self) -> bool:
-        """Check if this is the Enhanced Edition"""
+        """Check if this is the Enhanced Edition."""
         return self.enhanced.exists()
     
     @property
     def is_steam_installation(self) -> bool:
-        """Check if this is a Steam installation"""
+        """Check if this is a Steam installation."""
         game_path_str = str(self._game_folder)
         return 'Steam' in game_path_str or 'steamapps' in game_path_str
     
     @property
     def is_gog_installation(self) -> bool:
-        """Check if this is a GOG installation"""
+        """Check if this is a GOG installation."""
         game_path_str = str(self._game_folder)
         return 'GOG' in game_path_str
     
     def get_all_data_folders(self) -> List[Path]:
-        """Get all data folders (regular and enhanced if available)"""
+        """Get all data folders."""
         folders = []
         if self.data.exists():
             folders.append(self.data)
@@ -418,11 +388,11 @@ class NWN2Paths:
         return folders
     
     def get_path_discovery_performance(self) -> Dict[str, Any]:
-        """Get performance metrics for path discovery"""
+        """Get performance metrics for path discovery."""
         return NWN2PathFinder.get_discovery_timing()
     
     def discover_all_nwn2_installations(self) -> Dict[str, List[Path]]:
-        """Discover all NWN2 installations with categorization"""
+        """Discover all NWN2 installations with categorization."""
         result = discover_nwn2_paths()
         return {
             'all_installations': [Path(path) for path in result.nwn2_paths],
@@ -433,7 +403,7 @@ class NWN2Paths:
         }
 
     def _save_settings(self) -> bool:
-        """Save current settings to file"""
+        """Save current settings to file."""
         user_settings_path = USER_SETTINGS_PATH
         user_settings_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -505,28 +475,28 @@ class NWN2Paths:
         return self._save_settings()
 
     def reset_game_folder(self) -> bool:
-        """Reset game folder to auto-discovery"""
+        """Reset game folder to auto-discovery."""
         self._game_folder_source = 'discovery'
         self._save_settings() # Remove from config file first
         self._load_config()   # Then reload to trigger discovery
         return True
 
     def reset_documents_folder(self) -> bool:
-        """Reset documents folder to auto-discovery"""
+        """Reset documents folder to auto-discovery."""
         self._documents_folder_source = 'discovery'
         self._save_settings()
         self._load_config()
         return True
 
     def reset_steam_workshop_folder(self) -> bool:
-        """Reset Steam Workshop folder to auto-discovery"""
+        """Reset Steam Workshop folder to auto-discovery."""
         self._steam_workshop_folder_source = 'discovery'
         self._save_settings()
         self._load_config()
         return True
     
     def add_custom_override_folder(self, path: str) -> bool:
-        """Add a custom override folder"""
+        """Add a custom override folder."""
         path_obj = Path(path)
         if not path_obj.is_dir():
             return False
@@ -537,7 +507,7 @@ class NWN2Paths:
         return True
     
     def add_custom_module_folder(self, path: str) -> bool:
-        """Add a custom module folder"""
+        """Add a custom module folder."""
         path_obj = Path(path)
         if not path_obj.is_dir():
             return False
@@ -548,7 +518,7 @@ class NWN2Paths:
         return True
     
     def add_custom_hak_folder(self, path: str) -> bool:
-        """Add a custom HAK folder"""
+        """Add a custom HAK folder."""
         path_obj = Path(path)
         if not path_obj.is_dir():
             return False
@@ -559,7 +529,7 @@ class NWN2Paths:
         return True
     
     def remove_custom_override_folder(self, path: str) -> bool:
-        """Remove a custom override folder"""
+        """Remove a custom override folder."""
         path_obj = Path(path)
         if path_obj in self._custom_override_folders:
             self._custom_override_folders.remove(path_obj)
@@ -567,7 +537,7 @@ class NWN2Paths:
         return False
     
     def remove_custom_module_folder(self, path: str) -> bool:
-        """Remove a custom module folder"""
+        """Remove a custom module folder."""
         path_obj = Path(path)
         if path_obj in self._custom_module_folders:
             self._custom_module_folders.remove(path_obj)
@@ -575,7 +545,7 @@ class NWN2Paths:
         return False
     
     def remove_custom_hak_folder(self, path: str) -> bool:
-        """Remove a custom HAK folder"""
+        """Remove a custom HAK folder."""
         path_obj = Path(path)
         if path_obj in self._custom_hak_folders:
             self._custom_hak_folders.remove(path_obj)
@@ -583,7 +553,7 @@ class NWN2Paths:
         return False
     
     def get_all_paths_info(self) -> Dict[str, Any]:
-        """Get information about all configured paths with Rust-enhanced details"""
+        """Get information about all configured paths."""
         info = {
             'game_folder': {
                 'path': str(self._game_folder) if self._game_folder else None,
@@ -614,7 +584,6 @@ class NWN2Paths:
             ],
         }
         
-        # Add Rust path discovery performance info
         try:
             info['path_discovery_performance'] = self.get_path_discovery_performance()
         except Exception as e:
@@ -623,39 +592,10 @@ class NWN2Paths:
         return info
         
         
-# Create global instance
+
 nwn2_paths = NWN2Paths()
 
-# Legacy compatibility functions
-def get_nwn2_data_path():
-    """Legacy function - returns game folder"""
-    return nwn2_paths.game_folder
-
-def get_data_zip_path():
-    """Legacy function - returns data folder"""
-    return nwn2_paths.data
-
-def get_dialog_tlk_path():
-    """Legacy function - returns dialog.tlk path"""
-    return nwn2_paths.dialog_tlk
-
-def update_nwn2_data_path(new_path: str) -> bool:
-    """Legacy function - updates game folder"""
-    return nwn2_paths.set_game_folder(new_path)
-
-# Legacy global variables
-NWN2_DATA_PATH = nwn2_paths.game_folder
-
-# Performance utilities
 def profile_path_discovery_performance(iterations: int = 100) -> Dict[str, float]:
-    """Profile path discovery performance using Rust implementation"""
+    """Profile path discovery performance."""
     return profile_path_discovery(iterations)
 
-# Global configuration
-NWN2_SETTINGS = {
-    'installation_path': nwn2_paths.game_folder,
-    'enable_custom_content': True,
-    'cache_module_data': True,
-    'module_cache_dir': get_writable_dir(os.path.join('cache', 'modules')),
-    'rust_path_discovery': True,  # New flag indicating Rust-powered path discovery
-}

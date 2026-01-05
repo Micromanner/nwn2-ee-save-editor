@@ -24,7 +24,7 @@ import shutil
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from nwn2_rust import TDAParser
 from django.conf import settings
 

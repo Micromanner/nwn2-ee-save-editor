@@ -1,19 +1,15 @@
-"""
-Class Categorization Service - provides data-driven categorization of NWN2 classes
-Simplified data-driven approach using existing infrastructure
-"""
+"""Data-driven categorization for NWN2 classes."""
 
 from typing import Dict, List, Any, Optional
-import logging
 from dataclasses import dataclass
 from enum import Enum
+from loguru import logger
 from gamedata.dynamic_loader.field_mapping_utility import FieldMappingUtility
-
-logger = logging.getLogger(__name__)
 
 
 class ClassFocus(Enum):
-    """Class focus categories based on gameplay role"""
+    """Class focus categories based on gameplay role."""
+
     COMBAT = "combat"
     ARCANE_CASTER = "arcane_caster"
     DIVINE_CASTER = "divine_caster"
@@ -23,7 +19,8 @@ class ClassFocus(Enum):
 
 
 class ClassType(Enum):
-    """Primary class type categories"""
+    """Primary class type categories."""
+
     BASE = "base"
     PRESTIGE = "prestige"
     NPC = "npc"
@@ -31,7 +28,8 @@ class ClassType(Enum):
 
 @dataclass
 class ClassInfo:
-    """Class information with frontend compatibility"""
+    """Class information with frontend compatibility."""
+
     id: int
     name: str
     label: str
@@ -50,34 +48,55 @@ class ClassInfo:
     parsed_description: Optional[Any] = None
     prerequisites: Optional[Dict[str, Any]] = None
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        data = {
+            'id': self.id,
+            'name': self.name,
+            'label': self.label,
+            'type': self.class_type.value,
+            'focus': self.focus.value,
+            'max_level': self.max_level,
+            'hit_die': self.hit_die,
+            'skill_points': self.skill_points,
+            'is_spellcaster': self.is_spellcaster,
+            'has_arcane': self.has_arcane,
+            'has_divine': self.has_divine,
+            'primary_ability': self.primary_ability,
+            'bab_progression': self.bab_progression,
+            'alignment_restricted': self.alignment_restricted,
+            'description': self.description,
+            'parsed_description': None,
+            'prerequisites': self.prerequisites
+        }
+        if self.parsed_description:
+            data['parsed_description'] = {
+                'title': getattr(self.parsed_description, 'title', ''),
+                'class_type': getattr(self.parsed_description, 'class_type', ''),
+                'summary': getattr(self.parsed_description, 'summary', ''),
+                'restrictions': getattr(self.parsed_description, 'restrictions', ''),
+                'requirements': getattr(self.parsed_description, 'requirements', ''),
+                'features': getattr(self.parsed_description, 'features', '')
+            }
+        return data
+
 
 class ClassCategorizer:
-    """
-    Simplified data-driven class categorization service
-    Uses existing game data loader infrastructure
-    """
-    
+    """Data-driven class categorization service using existing game data loader infrastructure."""
+
     def __init__(self, game_data_loader):
-        """
-        Initialize the categorizer
-        
-        Args:
-            game_data_loader: GameDataLoader instance for accessing class data
-        """
+        """Initialize with game data loader."""
         self.game_data_loader = game_data_loader
         self.field_mapper = FieldMappingUtility()
         self._cache = {}
         self._categories_cache = None
-    
+
     def _get_field_value(self, class_data, field_name: str, default=None):
-        """Get field value using field mapping utility with fallback"""
+        """Get field value using field mapping utility."""
         return self.field_mapper.get_field_value(class_data, field_name, default)
-    
+
     def _determine_class_focus(self, class_data) -> ClassFocus:
-        """
-        Determine class focus using simple data-driven rules
-        """
-        # Use field mapping utility like other managers
+        """Determine class focus using data-driven rules."""
         has_arcane = self._get_field_value(class_data, 'has_arcane', '0') == '1'
         has_divine = self._get_field_value(class_data, 'has_divine', '0') == '1'
         skill_points = int(self._get_field_value(class_data, 'skill_point_base', '2'))
@@ -94,12 +113,9 @@ class ClassCategorizer:
             return ClassFocus.COMBAT
         else:
             return ClassFocus.HYBRID
-    
+
     def _determine_class_type(self, class_data) -> ClassType:
-        """
-        Determine if class is base, prestige, or NPC
-        """
-        # Get both playerclass and max_level for proper classification
+        """Determine if class is base, prestige, or NPC."""
         player_class = getattr(class_data, 'playerclass', 1)
         max_level_raw = self._get_field_value(class_data, 'max_level', '0')
         
@@ -107,28 +123,20 @@ class ClassCategorizer:
             max_level = int(max_level_raw) if max_level_raw not in ['****', ''] else 0
         except (ValueError, TypeError):
             max_level = 0
-        
-        # True NPC/Creature classes: playerclass=0 AND MaxLevel=0
-        # These are creature types like Beast, Dragon, Undead, etc.
-        player_class_is_zero = (str(player_class) == '0' or player_class == 0)
+        # NPC/Creature classes: playerclass=0 AND MaxLevel=0 (Beast, Dragon, Undead, etc.)
+        player_class_is_zero = str(player_class) == '0' or player_class == 0
         if player_class_is_zero and max_level == 0:
             return ClassType.NPC
-        
-        # Player classes (including prestige classes with playerclass=0 but MaxLevel > 0)
+
         # Prestige classes have level limits, base classes don't
         return ClassType.PRESTIGE if max_level > 0 else ClassType.BASE
-        
+
     def get_categorized_classes(self, include_unplayable: bool = False) -> Dict[str, Dict[str, List[ClassInfo]]]:
-        """
-        Get all classes organized by type and focus
-        Simplified version using existing data patterns
-        """
+        """Get all classes organized by type and focus."""
         if self._categories_cache is not None:
             return self._categories_cache
             
         logger.info("Categorizing classes from game data")
-        
-        # Get classes table using existing loader
         classes_table = self.game_data_loader.get_table('classes')
         if not classes_table:
             logger.error("Could not load classes table")
@@ -144,62 +152,44 @@ class ClassCategorizer:
         for class_type in categories.keys():
             for focus in ClassFocus:
                 categories[class_type][focus.value] = []
-        
-        # Process each class
         processed_count = 0
         for i, class_data in enumerate(classes_table):
             try:
-                # Simple class info extraction like ClassManager does
                 class_info = self._create_simple_class_info(class_data, i)
-                
                 if class_info is None:
                     continue
-                
-                # Simple filtering for junk entries
                 if self._is_placeholder_class(class_data):
                     continue
-                
-                # Skip unplayable classes only if explicitly requested
-                # (but NPC classes are now their own category, so we include them by default)
                 if not include_unplayable and class_info.class_type == ClassType.NPC:
                     continue
-                
-                # Add to appropriate category
                 categories[class_info.class_type.value][class_info.focus.value].append(class_info)
                 processed_count += 1
                 
             except Exception as e:
                 logger.warning(f"Error categorizing class {i}: {e}")
                 continue
-        
+
         logger.info(f"Successfully categorized {processed_count} classes")
-        
-        # Sort by name
         for class_type in categories.values():
             for focus_classes in class_type.values():
                 focus_classes.sort(key=lambda c: c.name.lower())
         
         self._categories_cache = categories
         return categories
-    
+
     def _create_simple_class_info(self, class_data, class_id: int) -> Optional[ClassInfo]:
-        """
-        Create ClassInfo using simple field mapping like other managers
-        """
+        """Create ClassInfo using field mapping."""
         try:
-            # Get name safely like ClassManager does
             name = getattr(class_data, 'name', None)
             label = getattr(class_data, 'label', None) or f'Class{class_id}'
-            
-            # Use field mapping utility for all attribute access
+
             hit_die = int(self._get_field_value(class_data, 'hit_die', '8'))
             skill_points = int(self._get_field_value(class_data, 'skill_point_base', '2'))
             has_arcane = self._get_field_value(class_data, 'has_arcane', '0') == '1'
             has_divine = self._get_field_value(class_data, 'has_divine', '0') == '1'
             primary_ability = self._get_field_value(class_data, 'primary_ability', 'STR')
             bab_progression = self._get_field_value(class_data, 'attack_bonus_table', 'CLS_ATK_2')
-            
-            # Alignment restrictions
+
             align_restrict_raw = self._get_field_value(class_data, 'align_restrict', '0x00')
             try:
                 if isinstance(align_restrict_raw, str) and align_restrict_raw.startswith('0x'):
@@ -208,23 +198,19 @@ class ClassCategorizer:
                     align_restrict = int(align_restrict_raw) if align_restrict_raw else 0
             except (ValueError, TypeError):
                 align_restrict = 0
-            
-            # Determine type and focus
+
             class_type = self._determine_class_type(class_data)
             focus = self._determine_class_focus(class_data)
-            
-            # Max level
+
             max_level_raw = self._get_field_value(class_data, 'max_level', '0')
             try:
                 max_level = int(max_level_raw) if max_level_raw not in ['****', ''] else 0
             except (ValueError, TypeError):
                 max_level = 0
-            
-            # Get description if available
+
             description = self._get_field_value(class_data, 'description', None)
             if description and isinstance(description, (int, str)) and str(description).isdigit():
                 try:
-                    # Try to resolve string reference
                     str_ref = int(description)
                     if hasattr(self.game_data_loader, 'get_string'):
                         resolved_desc = self.game_data_loader.get_string(str_ref)
@@ -236,8 +222,7 @@ class ClassCategorizer:
                         description = None
                 except (ValueError, TypeError):
                     description = None
-            
-            # Use label as fallback if name is 0 or invalid
+
             display_name = str(name or label)
             if str(name) == '0' or name == 0:
                 display_name = str(label)
@@ -267,7 +252,7 @@ class ClassCategorizer:
             return None
     
     def _is_placeholder_class(self, class_data) -> bool:
-        """Check if class is a placeholder/padding entry"""
+        """Check if class is a placeholder/padding entry."""
         name = str(getattr(class_data, 'name', '')).lower()
         label = str(getattr(class_data, 'label', '')).lower()
         
@@ -276,17 +261,17 @@ class ClassCategorizer:
                 (name.isdigit() and label == 'padding'))
     
     def get_base_classes_by_focus(self, focus: ClassFocus) -> List[ClassInfo]:
-        """Get base classes for a specific focus"""
+        """Get base classes for a specific focus."""
         categories = self.get_categorized_classes()
         return categories[ClassType.BASE.value].get(focus.value, [])
     
     def get_prestige_classes_by_focus(self, focus: ClassFocus) -> List[ClassInfo]:
-        """Get prestige classes for a specific focus"""
+        """Get prestige classes for a specific focus."""
         categories = self.get_categorized_classes()
         return categories[ClassType.PRESTIGE.value].get(focus.value, [])
     
     def get_class_info(self, class_id: int) -> Optional[ClassInfo]:
-        """Get detailed info for a specific class"""
+        """Get detailed info for a specific class."""
         if class_id in self._cache:
             return self._cache[class_id]
         
@@ -304,15 +289,13 @@ class ClassCategorizer:
             return None
     
     def search_classes(self, query: str, class_type: Optional[ClassType] = None) -> List[ClassInfo]:
-        """Search classes by name/label"""
+        """Search classes by name/label."""
         query = query.lower().strip()
         if not query:
             return []
         
         categories = self.get_categorized_classes()
         results = []
-        
-        # Search in specified type or all types
         types_to_search = [class_type.value] if class_type else [ClassType.BASE.value, ClassType.PRESTIGE.value]
         
         for type_name in types_to_search:
@@ -325,7 +308,7 @@ class ClassCategorizer:
         return sorted(results, key=lambda c: c.name.lower())
     
     def get_focus_display_info(self) -> Dict[str, Dict[str, str]]:
-        """Get display information for focus categories"""
+        """Get display information for focus categories."""
         return {
             ClassFocus.COMBAT.value: {
                 'name': 'Combat',
@@ -354,7 +337,7 @@ class ClassCategorizer:
         }
     
     def clear_cache(self):
-        """Clear categorization cache"""
+        """Clear categorization cache."""
         self._cache.clear()
         self._categories_cache = None
         logger.info("Class categorization cache cleared")

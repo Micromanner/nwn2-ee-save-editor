@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 
 
 class TestContextAwareResourceManager:
@@ -154,7 +154,7 @@ class TestFastAPISessionContextIntegration:
             mock_instance.character_manager = Mock()
             mock_session.return_value = mock_instance
             
-            from fastapi_core.session_registry import get_character_session
+            from services.fastapi.session_registry import get_character_session
             
             # This would normally create a session and handle module context
             session = get_character_session(str(save_dir))

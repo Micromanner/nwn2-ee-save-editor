@@ -5,7 +5,7 @@ Tests for data fetching rules to prevent infinite retry loops
 import pytest
 import time
 from unittest.mock import Mock, patch
-from gamedata.services.data_fetching_rules import (
+from services.gamedata.data_fetching_rules import (
     DataFetchingRules, 
     get_data_fetching_rules,
     with_retry_limit,

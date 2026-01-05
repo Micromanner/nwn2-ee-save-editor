@@ -1,40 +1,20 @@
-"""
-In-Memory Save File Manager
+"""In-memory save file manager for loading, editing, and saving NWN2 save files."""
 
-Simple approach: Load entire save files (.ifo and .bic) into memory,
-allow real-time editing, then save back to disk when user clicks save.
-
-This is just a thin wrapper around SaveGameHandler to provide the
-in-memory editing concept - SaveGameHandler already has all the loading/saving logic.
-"""
-
-import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-from io import BytesIO
 
+from loguru import logger
 from nwn2_rust import GffParser
-from services.savegame_handler import SaveGameHandler
-from .character_manager import CharacterManager
 
-logger = logging.getLogger(__name__)
+from services.core.savegame_handler import SaveGameHandler
+from .character_manager import CharacterManager
 
 
 class InMemorySaveManager:
-    """
-    Thin wrapper around SaveGameHandler for in-memory editing concept
-    
-    Simply loads save files into memory and tracks if changes were made.
-    SaveGameHandler handles all the actual file operations.
-    """
-    
+    """Wrapper around SaveGameHandler for in-memory editing with change tracking."""
+
     def __init__(self, save_path: str):
-        """
-        Initialize with save game directory path
-        
-        Args:
-            save_path: Path to save game directory containing resgff.zip
-        """
+        """Initialize with save game directory path."""
         self.save_path = save_path  # Store the save path
         self.save_handler = SaveGameHandler(save_path)
 
@@ -51,12 +31,7 @@ class InMemorySaveManager:
         logger.info(f"Initialized InMemorySaveManager for {save_path}")
     
     def load_save_files(self) -> bool:
-        """
-        Load player.bic into memory for editing
-
-        Returns:
-            True if successfully loaded, False otherwise
-        """
+        """Load player.bic into memory for editing."""
         try:
             logger.info("Loading save files into memory")
 
@@ -81,16 +56,7 @@ class InMemorySaveManager:
             return False
     
     def get_character_manager(self, game_data_loader=None, rules_service=None) -> Optional[CharacterManager]:
-        """
-        Get CharacterManager instance working with in-memory data using factory
-
-        Args:
-            game_data_loader: Optional DynamicGameDataLoader instance
-            rules_service: Optional GameRulesService instance
-
-        Returns:
-            CharacterManager instance or None if not loaded
-        """
+        """Get CharacterManager instance working with in-memory data."""
         if not self.is_loaded():
             logger.error("Save files not loaded - call load_save_files() first")
             return None
@@ -125,24 +91,15 @@ class InMemorySaveManager:
         return self._character_manager
     
     def is_loaded(self) -> bool:
-        """Check if save files are loaded in memory"""
+        """Check if save files are loaded in memory."""
         return self.character_data is not None
     
     def has_unsaved_changes(self) -> bool:
-        """Check if there are unsaved changes"""
+        """Check if there are unsaved changes."""
         return self.is_dirty
     
     def save_to_disk(self, create_backup: bool = True) -> bool:
-        """
-        Save in-memory changes back to disk using SaveGameHandler
-
-        Args:
-            create_backup: Reserved for future use. Backups are currently created
-                          on load (see SaveGameHandler.__init__ create_load_backup parameter)
-
-        Returns:
-            True if saved successfully, False otherwise
-        """
+        """Save in-memory changes back to disk."""
         if not self.is_loaded():
             logger.error("No save files loaded")
             return False
@@ -227,12 +184,7 @@ class InMemorySaveManager:
             return False
     
     def reload_from_disk(self) -> bool:
-        """
-        Reload save files from disk, discarding in-memory changes
-        
-        Returns:
-            True if reloaded successfully, False otherwise
-        """
+        """Reload save files from disk, discarding in-memory changes."""
         logger.warning("Reloading from disk - discarding unsaved changes")
         
         # Reset state
@@ -244,12 +196,7 @@ class InMemorySaveManager:
         return self.load_save_files()
     
     def get_character_summary(self) -> Dict[str, Any]:
-        """
-        Get character summary from in-memory data
-        
-        Returns:
-            Character summary dict or empty dict if not loaded
-        """
+        """Get character summary from in-memory data."""
         if not self.is_loaded() or not self._character_manager:
             return {}
         
@@ -260,7 +207,7 @@ class InMemorySaveManager:
             return {}
     
     def close(self):
-        """Clean up resources"""
+        """Clean up resources."""
         if self.has_unsaved_changes():
             logger.warning("Closing InMemorySaveManager with unsaved changes")
         
@@ -270,33 +217,19 @@ class InMemorySaveManager:
         logger.info("Closed InMemorySaveManager")
     
     def __enter__(self):
-        """Context manager entry"""
+        """Context manager entry."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit"""
+        """Context manager exit."""
         self.close()
 
 
 class InMemoryCharacterSession:
-    """
-    High-level session manager for character editing
-    
-    Handles the complete workflow:
-    1. Load save files
-    2. Create managers
-    3. Handle editing session
-    4. Save changes
-    """
-    
+    """High-level session manager for character editing workflow."""
+
     def __init__(self, save_path: str, auto_load: bool = True):
-        """
-        Initialize character editing session
-        
-        Args:
-            save_path: Path to save game directory
-            auto_load: Whether to automatically load save files
-        """
+        """Initialize character editing session."""
         self.save_manager = InMemorySaveManager(save_path)
         self.character_manager: Optional[CharacterManager] = None
         
@@ -304,34 +237,31 @@ class InMemoryCharacterSession:
             self.load()
     
     def load(self) -> bool:
-        """Load save files and initialize character manager"""
+        """Load save files and initialize character manager."""
         if not self.save_manager.load_save_files():
             return False
-        
-        # Initialize game dependencies
+
         from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
-        from gamedata.services.game_rules_service import GameRulesService
-        
+        from services.gamedata.game_rules_service import GameRulesService
+
         try:
-            # Get shared ResourceManager from FastAPI singleton without triggering router imports
-            from fastapi_core.shared_services import get_shared_resource_manager
-            
+            from services.fastapi.shared_services import get_shared_resource_manager
+
             shared_rm = get_shared_resource_manager()
             if shared_rm is not None:
                 logger.info("Using shared ResourceManager from FastAPI (via independent registry)")
             else:
                 logger.warning("No shared ResourceManager available, DynamicGameDataLoader will create one")
-            
+
             game_data_loader = get_dynamic_game_data_loader(resource_manager=shared_rm)
             rules_service = GameRulesService(resource_manager=shared_rm)
-            
+
             self.character_manager = self.save_manager.get_character_manager(
                 game_data_loader=game_data_loader,
                 rules_service=rules_service
             )
 
             if self.character_manager:
-                # Load HAKs and campaign 2DAs from save's module.ifo
                 content_manager = self.character_manager.get_manager('content')
                 if content_manager and content_manager.module_info and shared_rm:
                     hak_list = content_manager.module_info.get('hak_list', [])
@@ -343,36 +273,30 @@ class InMemoryCharacterSession:
 
                 logger.info("Character editing session ready with all managers")
                 return True
-            else:
-                logger.error("Character manager is None after creation")
-                return False
+
+            logger.error("Character manager is None after creation")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize character session: {e}", exc_info=True)
             return False
-        
-        return False
     
     def save(self, create_backup: bool = True) -> bool:
-        """Save changes to disk"""
+        """Save changes to disk."""
         return self.save_manager.save_to_disk(create_backup=create_backup)
-    
+
     def has_unsaved_changes(self) -> bool:
-        """Check for unsaved changes"""
+        """Check for unsaved changes."""
         return self.save_manager.has_unsaved_changes()
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Get session information"""
-        info = self.save_manager.get_save_info()
-        info['character_summary'] = self.save_manager.get_character_summary()
-        return info
-    
+
     def close(self):
-        """Close the session"""
+        """Close the session."""
         self.save_manager.close()
         self.character_manager = None
-    
+
     def __enter__(self):
+        """Context manager entry."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
         self.close()

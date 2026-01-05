@@ -1,27 +1,8 @@
-"""
-Feats router - Complete feat management endpoints
-Handles feat selection, prerequisites, and feat management
-"""
+"""Feats router - Complete feat management endpoints."""
 
-import time
 from typing import List, Optional
-from functools import wraps
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from loguru import logger
-
-# Simplified caching - can be replaced with proper caching later
-class SimpleCache:
-    def __init__(self):
-        self._cache = {}
-
-    def get(self, key, default=None):
-        return self._cache.get(key, default)
-
-    def set(self, key, value, timeout=None):
-        self._cache[key] = value
-
-# Simple in-memory cache replacement for Django cache
-cache = SimpleCache()
 
 from fastapi_routers.dependencies import (
     get_character_manager,
@@ -29,13 +10,13 @@ from fastapi_routers.dependencies import (
     CharacterManagerDep,
     CharacterSessionDep
 )
-# from fastapi_models import (...) - moved to lazy loading
+from fastapi_routers.utils import cache, log_performance
 
 router = APIRouter()
 
 
 def _invalidate_feat_cache(character_id: int):
-    """Helper function to invalidate feat cache - no duplicated logic"""
+    """Invalidate feat cache for a specific character."""
     cache_version_key = f"feat_cache_version:char_{character_id}"
     current_version = cache.get(cache_version_key, 0)
     cache.set(cache_version_key, current_version + 1, timeout=3600)
@@ -43,7 +24,7 @@ def _invalidate_feat_cache(character_id: int):
 
 
 def _get_feat_cache_key(character_id: int, operation: str, **params):
-    """Helper function to generate feat cache keys - no duplicated logic"""
+    """Generate a unique cache key for feat operations."""
     cache_version_key = f"feat_cache_version:char_{character_id}"
     cache_version = cache.get(cache_version_key, 0)
     
@@ -53,32 +34,11 @@ def _get_feat_cache_key(character_id: int, operation: str, **params):
         f"v_{cache_version}"
     ]
     
-    # Add parameters to cache key
     for key, value in params.items():
         if value is not None:
             cache_key_parts.append(f"{key}_{value}")
     
     return ":".join(cache_key_parts)
-
-
-def log_performance(func):
-    """Decorator to log performance metrics for FastAPI endpoints"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        result = None
-        try:
-            result = func(*args, **kwargs)  # Remove await since functions are sync
-            return result
-        finally:
-            end_time = time.time()
-            duration_ms = (end_time - start_time) * 1000
-            
-            # Log performance data
-            endpoint_name = func.__name__
-            status_code = getattr(result, 'status_code', 'success') if result else 'error'
-            logger.info(f"{endpoint_name}: {duration_ms:.2f}ms (status: {status_code})")
-    return wrapper
 
 
 @router.get("/characters/{character_id}/feats/state")
@@ -87,7 +47,7 @@ def get_feats_state(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get current feats state (no expensive available_feats calculation)"""
+    """Get current feats state."""
     from fastapi_models import FeatState
     try:
         feat_manager = manager.get_manager('feat')
@@ -121,12 +81,10 @@ def get_available_feats(
     manager: CharacterManagerDep,
     feat_type: Optional[int] = Query(None, description="Filter by feat type")
 ):
-    """Get feats available for selection based on current state"""
+    """Get feats available for selection based on current state."""
     from fastapi_models import AvailableFeatsResponse
     try:
         feat_manager = manager.get_manager('feat')
-        
-        # Use feat manager method - no duplicated logic
         available = feat_manager.get_available_feats(feat_type=feat_type)
         
         return AvailableFeatsResponse(
@@ -152,7 +110,7 @@ def get_legitimate_feats(
     limit: int = Query(50, ge=1, le=200, description="Items per page"),
     search: str = Query("", description="Search term")
 ):
-    """Get legitimate feats with pagination and smart filtering (no validation for performance)"""
+    """Get legitimate feats with pagination and smart filtering."""
     from fastapi_models import LegitimateFeatsResponse
 
     try:
@@ -209,7 +167,7 @@ def add_feat(
     char_session: CharacterSessionDep,
     feat_request: dict = Body(...)
 ):
-    """Add a feat to character"""
+    """Add a feat to character."""
     from fastapi_models import FeatAddRequest, FeatAddResponse
 
     feat_request = FeatAddRequest(**feat_request)
@@ -218,7 +176,6 @@ def add_feat(
         manager = session.character_manager
         feat_manager = manager.get_manager('feat')
 
-        # Use manager method to handle feat addition with auto-prerequisites
         auto_add_prereqs = not feat_request.ignore_prerequisites
         success, auto_added_feats = feat_manager.add_feat_with_prerequisites(
             feat_request.feat_id,
@@ -231,7 +188,6 @@ def add_feat(
                 detail='Failed to add feat'
             )
 
-        # Get feat info and updated summary
         feat_info = feat_manager.get_feat_info(feat_request.feat_id)
         if not feat_info:
             feat_info = {'id': feat_request.feat_id, 'name': f'Feat {feat_request.feat_id}', 'label': f'Feat {feat_request.feat_id}'}
@@ -241,7 +197,6 @@ def add_feat(
 
         message = 'Feat added successfully'
         if auto_added_feats:
-            # Separate feats and abilities
             added_feats = [f for f in auto_added_feats if f.get('type') == 'feat']
             increased_abilities = [f for f in auto_added_feats if f.get('type') == 'ability']
 
@@ -280,7 +235,7 @@ def remove_feat(
     char_session: CharacterSessionDep,
     feat_request: dict = Body(...)
 ):
-    """Remove a feat from character"""
+    """Remove a feat from character."""
     from fastapi_models import FeatRemoveRequest, FeatRemoveResponse
 
     feat_request = FeatRemoveRequest(**feat_request)
@@ -289,14 +244,12 @@ def remove_feat(
         manager = session.character_manager
         feat_manager = manager.get_manager('feat')
         
-        # Check if feat is protected (unless force removal)
         if not feat_request.force and feat_manager.is_feat_protected(feat_request.feat_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail='Cannot remove this feat (granted by class/race or required by other feats)'
             )
         
-        # Get feat info before removal
         removed_feat = feat_manager.get_feat_info(feat_request.feat_id)
         if not removed_feat:
             removed_feat = {'id': feat_request.feat_id, 'name': f'Feat {feat_request.feat_id}', 'label': f'Feat {feat_request.feat_id}'}
@@ -308,10 +261,8 @@ def remove_feat(
                 detail='Failed to remove feat'
             )
         
-        # Get updated feat summary
         feat_summary = feat_manager.get_feat_summary_fast() or {}
         
-        # Use helper function to invalidate cache - no duplicated logic
         _invalidate_feat_cache(character_id)
         
         return FeatRemoveResponse(
@@ -337,7 +288,7 @@ def get_feat_prerequisites(
     feat_id: int,
     manager: CharacterManagerDep
 ):
-    """Get prerequisites for a specific feat"""
+    """Get prerequisites for a specific feat."""
     from fastapi_models import FeatPrerequisites
     try:
         feat_manager = manager.get_manager('feat')
@@ -345,7 +296,6 @@ def get_feat_prerequisites(
         can_take, missing_reqs = feat_manager.get_feat_prerequisites_info(feat_id)
         feat_info = feat_manager.get_feat_info(feat_id)
         
-        # Get actual prerequisites from feat info
         prereqs = feat_info.get('prerequisites', {}) if feat_info else {}
         if not feat_info:
             raise HTTPException(
@@ -376,8 +326,8 @@ def check_feat_prerequisites(
     feat_id: int,
     manager: CharacterManagerDep
 ):
-    """Check if character meets prerequisites for a feat"""
-    from fastapi_models import FeatValidationResponse
+    """Check if character meets prerequisites for a feat."""
+    from fastapi_models import FeatValidationResponse, FeatPrerequisites
     try:
         feat_manager = manager.get_manager('feat')
         
@@ -386,7 +336,6 @@ def check_feat_prerequisites(
         feat_info = feat_manager.get_feat_info(feat_id) or {}
         feat_name = feat_info.get('name', f'Feat {feat_id}')
         
-        # Get prerequisites structure
         prereqs = feat_info.get('prerequisites', {})
         
         return FeatValidationResponse(
@@ -419,11 +368,10 @@ def get_feat_details(
     feat_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed information about a specific feat including description and prerequisites"""
+    """Get detailed information about a specific feat."""
     try:
         feat_manager = manager.get_manager('feat')
         
-        # Get detailed feat information
         feat_info = feat_manager.get_feat_info(feat_id)
         if not feat_info:
             raise HTTPException(
@@ -431,10 +379,8 @@ def get_feat_details(
                 detail=f'Feat {feat_id} not found'
             )
         
-        # Get detailed prerequisites
         detailed_prereqs = feat_manager.get_detailed_prerequisites(feat_id) or {}
 
-        # Flatten feat_info fields to top level and add detailed_prerequisites
         detailed_feat = {
             **feat_info,
             'detailed_prerequisites': detailed_prereqs
@@ -458,7 +404,7 @@ def add_domain(
     char_session: CharacterSessionDep,
     domain_request: dict = Body(...)
 ):
-    """Add a domain to character (grants all associated feats)"""
+    """Add a domain to character."""
     try:
         domain_id = domain_request.get('domain_id')
         if domain_id is None:
@@ -502,7 +448,7 @@ def remove_domain(
     domain_id: int,
     char_session: CharacterSessionDep
 ):
-    """Remove a domain from character (removes all associated feats)"""
+    """Remove a domain from character."""
     try:
         session = char_session
         manager = session.character_manager
@@ -538,36 +484,11 @@ def get_available_domains(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get list of available domains"""
+    """Get list of available domains."""
     try:
         feat_manager = manager.get_manager('feat')
-        game_rules = feat_manager.game_rules_service
-
-        domains_table = game_rules.get_table('domains')
-        if not domains_table:
-            return {'domains': []}
-
-        from gamedata.field_mapper import field_mapper
-
-        domains = []
-        for domain_id, domain_data in enumerate(domains_table):
-            domain_name = field_mapper.get_field_value(domain_data, 'label', f'Domain_{domain_id}')
-            epithet_feat_id = field_mapper.get_field_value(domain_data, 'EpithetFeat', None)
-
-            has_domain = False
-            if epithet_feat_id:
-                try:
-                    has_domain = feat_manager.has_feat(int(epithet_feat_id))
-                except (ValueError, TypeError):
-                    pass
-
-            domains.append({
-                'id': domain_id,
-                'name': domain_name,
-                'has_domain': has_domain,
-                'epithet_feat_id': epithet_feat_id
-            })
-
+        domains = feat_manager.get_available_domains()
+        
         return {'domains': domains}
 
     except Exception as e:
@@ -585,44 +506,34 @@ def validate_feat(
     feat_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Validate if character can take a specific feat (on-demand validation).
-    This is the performance-optimized replacement for checking prerequisites
-    during list loading. Call this when user hovers/clicks on a feat.
-    """
+    """Validate if character can take a specific feat."""
     from fastapi_models import FeatValidationResponse, FeatPrerequisites
     try:
         feat_manager = manager.get_manager('feat')
         
-        # Check if character already has the feat
         if feat_manager.has_feat(feat_id):
             return FeatValidationResponse(
                 feat_id=feat_id,
-                feat_name="",  # Will be filled by manager
+                feat_name="",
                 can_take=False,
                 has_feat=True,
                 prerequisites=FeatPrerequisites(),
                 missing_requirements=['Already has this feat']
             )
         
-        # Use helper function to generate cache key - no duplicated logic
         cache_key = _get_feat_cache_key(character_id, "validate", feat_id=feat_id)
         
-        # Try to get cached validation result
         cached_result = cache.get(cache_key)
         if cached_result is not None:
             logger.debug(f"Returning cached validation for feat {feat_id}")
             return FeatValidationResponse(**cached_result)
         
-        # Perform validation
         can_take, reason = feat_manager.can_take_feat(feat_id)
         
-        # Get feat info for name and prerequisites
         feat_info = feat_manager.get_feat_info(feat_id) or {}
         feat_name = feat_info.get('name', f'Feat {feat_id}')
         prereqs = feat_info.get('prerequisites', {})
         
-        # Build response
         validation_result = {
             'feat_id': feat_id,
             'feat_name': feat_name,
@@ -639,7 +550,6 @@ def validate_feat(
             'missing_requirements': [reason] if not can_take else []
         }
         
-        # Cache the result for 5 minutes
         cache.set(cache_key, validation_result, timeout=300)
         
         return FeatValidationResponse(**validation_result)
@@ -658,16 +568,14 @@ def get_feats_by_category(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get feats organized by category (fast display version, no validation)"""
+    """Get feats organized by category."""
     from fastapi_models import FeatsByCategoryResponse
     try:
         feat_manager = manager.get_manager('feat')
         
-        # Use existing manager method to get categories
         categories = feat_manager.get_feat_categories_fast() or {}
         total_feats = sum(len(feats) for feats in categories.values() if feats)
         
-        # Get character level for context
         class_list = manager.gff.get('ClassList', [])
         character_level = sum(c.get('ClassLevel', 0) for c in class_list)
         

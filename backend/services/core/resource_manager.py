@@ -1,61 +1,31 @@
-"""
-Resource Manager for efficient loading of NWN2 game data
-"""
-
+"""Resource Manager for loading NWN2 game data with override chain support."""
 import os
 import re
-from loguru import logger
-from typing import Dict, Optional, List, Tuple, Any, Union
-from pathlib import Path
-from datetime import datetime
-from collections import OrderedDict
+import sys
 import time
 import zlib
-import sys
+import zipfile
+from collections import OrderedDict
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional, List, Tuple, Any, Union
 
-# Django settings import - optional for standalone mode
-# Get base directory for the project
-BASE_DIR = Path(__file__).parent.parent
+from loguru import logger
+from nwn2_rust import TDAParser, TLKParser, ErfParser, GffParser, ResourceScanner as RustResourceScanner, ZipContentReader
 
-# Import Rust parsers - optional for standalone mode
-try:
-    from nwn2_rust import TDAParser, TLKParser, ErfParser, GffParser
-    logger.info("Using high-performance Rust parsers (TDA, TLK, ERF, GFF)")
-except ImportError:
-    TDAParser = None
-    TLKParser = None
-    ErfParser = None
-    GffParser = None
+from config.nwn2_settings import nwn2_paths
+from services.gamedata.data_fetching_rules import with_retry_limit
+from services.gamedata.workshop_service import SteamWorkshopService
+from utils.performance_profiler import get_profiler
+from .cache_helper import TDACacheHelper
+from .safe_cache import SafeCache
+
 
 class ERFResourceType:
-    TDA = 2017  # 2DA files
-    TLK = 2018  # Talk table files
-    GFF = 2037  # Generic file format
-    IFO = 2014  # Module info files
-from nwn2_rust import GffParser
-from .cache_helper import TDACacheHelper
-import zipfile
-
-# Rust extensions (optional for standalone mode)
-try:
-    from nwn2_rust import ResourceScanner as RustResourceScanner, ZipContentReader
-except ImportError:
-    RustResourceScanner = None
-    ZipContentReader = None
-
-
-        
-
-# Config and services
-from config.nwn2_settings import nwn2_paths
-# Optional workshop service for standalone mode
-try:
-    from gamedata.services.workshop_service import SteamWorkshopService
-except ImportError:
-    SteamWorkshopService = None
-from gamedata.cache.safe_cache import SafeCache
-from gamedata.services.data_fetching_rules import with_retry_limit
-from utils.performance_profiler import get_profiler
+    TDA = 2017
+    TLK = 2018
+    GFF = 2037
+    IFO = 2014
 
 
 class ModuleLRUCache:
@@ -106,12 +76,7 @@ class ModuleLRUCache:
 
 
 class ResourceManager:
-    """
-    Centralized manager for NWN2 game resources.
-    
-    Coordinates all NWN2 file parsers (GFF, 2DA, TLK, ERF/HAK) with caching,
-    mod detection, and resource scanning capabilities.
-    """
+    """Coordinates NWN2 file parsers with caching, mod detection, and resource scanning."""
     
     # ============================================================================
     # INITIALIZATION & CONFIGURATION
@@ -138,9 +103,6 @@ class ResourceManager:
         # No longer kept open to make ResourceManager pickle-safe
         self._zip_files: Dict[str, zipfile.ZipFile] = {}
         
-        # In-memory cache - using OrderedDict for proper LRU
-        # self._2da_cache: OrderedDict[str, Union[TDAParser, bytes]] = OrderedDict()
-        # self._2da_compressed: Dict[str, bool] = {}  # Track compressed entries
         self._tlk_cache: Optional[TLKParser] = None
         self._custom_tlk_cache: Optional[TLKParser] = None
         
@@ -241,10 +203,8 @@ class ResourceManager:
             'westgate_ar1800.mod'
         }
         
-        # Use Rust extensions for high-performance resource scanning
         logger.info("Using Rust extensions for high-performance resource scanning")
-        # Direct usage of Rust scanner - no wrapper needed
-        # Note: Rust methods expect string paths, so we convert Paths to strings at call sites
+        # Rust methods expect string paths, so we convert Paths to strings at call sites
         rust_scanner = RustResourceScanner()
         self._python_scanner = rust_scanner
         self._zip_indexer = rust_scanner
@@ -253,25 +213,12 @@ class ResourceManager:
         # Initialize Rust ZIP content reader for efficient file access
         self._zip_reader = ZipContentReader()
         
-        # In-memory cache settings
-        # TODO: Remove memory cache settings - not needed with manager pattern
-        # Setting to False to disable while keeping compatibility
-        self._memory_cache_enabled = False  # getattr(settings, 'NWN2_MEMORY_CACHE', False)
-        self._preload_on_init = False      # getattr(settings, 'NWN2_PRELOAD_2DA', True)
-        # self._cache_max_mb = getattr(settings, 'NWN2_CACHE_MAX_MB', 50)
-        # self._compression_enabled = getattr(settings, 'NWN2_COMPRESS_CACHE', True)
-        # self._compression_threshold = getattr(settings, 'NWN2_COMPRESS_THRESHOLD_KB', 100)  # Compress if > 100KB
-        
         # Initialize pre-compiled cache integration
         from .cache_integration import PrecompiledCacheIntegration
         self._precompiled_cache = PrecompiledCacheIntegration(self)
         
-        # Track memory usage and cache statistics
-        # self._cache_memory_bytes = 0
         self._cache_hits = 0
         self._cache_misses = 0
-        # self._compression_ratio_sum = 0.0
-        # self._compression_count = 0
         
         # Try fast cache validation first to avoid heavy scanning
         cache_valid_fast = False
@@ -315,25 +262,6 @@ class ResourceManager:
             with profiler.profile("Scan Override Directories"):
                 self._scan_override_directories()
 
-            # Module scanning removed - HAKs now extracted from save's module.ifo directly
-            # via load_haks_for_save() which is called when loading a save
-
-            # Skip preloading if pre-compiled cache is valid
-            if self._precompiled_cache.cache_enabled and self._precompiled_cache.cache_manager:
-                # Check if pre-compiled cache is valid
-                cache_stats = self._precompiled_cache.get_cache_stats()
-                if cache_stats.get('valid', False):
-                    logger.info("Pre-compiled cache is valid, skipping preload")
-                else:
-                    # Preload if cache not valid
-                    # Preloading disabled - not needed with manager pattern
-                    pass
-            else:
-                # Preload if no precompiled cache
-                # Preloading disabled - not needed with manager pattern
-                pass
-            
-            # Now that ResourceManager is fully initialized, ensure cache is built
             with profiler.profile("Ensure Precompiled Cache"):
                 self._precompiled_cache.ensure_cache_built()
         
@@ -417,50 +345,27 @@ class ResourceManager:
             return
             
         logger.info(f"Invalidating cache for {source_type} files: {override_files}")
-        invalidated_count = 0
-        
-        for filename in override_files:
-            # Remove from memory cache
-            # if filename in self._2da_cache:
-            #     del self._2da_cache[filename]
-            #     logger.debug(f"Removed {filename} from memory cache")
-            #     invalidated_count += 1
-            # 
-            # if filename in self._2da_compressed:
-            #     del self._2da_compressed[filename]
-            
-            # Disk cache removed - precompiled cache handles invalidation
-            invalidated_count += 1
-        
-        logger.info(f"Cache invalidation complete: {invalidated_count} {source_type} files processed")
+        logger.info(f"Cache invalidation: {len(override_files)} {source_type} files processed")
     
     def _fast_cache_validation(self) -> bool:
-        """
-        Fast cache validation - checks if cache is valid without heavy scanning.
-        
-        Returns:
-            True if cache appears valid and can be used, False if full scanning is needed
-        """
+        """Check if compiled cache is valid without heavy scanning."""
         if not self._precompiled_cache or not self._precompiled_cache.cache_enabled:
             return False
-        
+
         try:
-            # First check if cache files actually exist
             from utils.paths import get_writable_dir
             cache_dir = get_writable_dir("cache/compiled_cache")
             metadata_file = cache_dir / "cache_metadata.json"
-            
+
             if not metadata_file.exists():
                 logger.debug("Fast cache validation: No cache files found")
                 return False
-            
-            # Generate lightweight cache key based on file listings only
+
             fast_mod_state = self._generate_fast_mod_state()
             if not fast_mod_state:
                 logger.debug("Fast cache validation: Could not generate mod state")
                 return False
-            
-            # Use the cache integration's method for consistency
+
             cache_key = self._precompiled_cache.cache_builder.generate_cache_key(fast_mod_state)
             is_valid = self._precompiled_cache.cache_manager.validate_cache_key(cache_key)
             
@@ -477,13 +382,7 @@ class ResourceManager:
             return False
     
     def _generate_fast_mod_state(self) -> Optional[Dict[str, Any]]:
-        """
-        Generate mod state for cache validation using only lightweight directory listings.
-        This avoids heavy ZIP scanning and 2DA parsing.
-        
-        Returns:
-            Mod state dict or None if generation failed
-        """
+        """Generate mod state for cache validation using lightweight directory listings."""
         try:
             from config.nwn2_settings import nwn2_paths
             
@@ -530,13 +429,7 @@ class ResourceManager:
             return None
     
     def _load_cached_data_fast(self) -> bool:
-        """
-        Load cached data when skipping heavy scanning.
-        Populates the file path mappings from cached information.
-        
-        Returns:
-            True if cached data was loaded successfully
-        """
+        """Load cached file path mappings when skipping heavy scanning."""
         try:
             from config.nwn2_settings import nwn2_paths
             
@@ -585,14 +478,7 @@ class ResourceManager:
             return False
     
     def _detect_workshop_overrides_fast(self) -> None:
-        """
-        Detect workshop override conflicts and invalidate cache in fast validation path.
-        
-        This method runs the same override precedence logic as _scan_override_directories()
-        but without heavy directory scanning (since file mappings are already cached).
-        
-        Critical for ensuring workshop > expansion > base precedence is maintained.
-        """
+        """Detect workshop override conflicts and invalidate cache in fast validation path."""
         # Check for workshop mod overrides that need cache invalidation
         # This is the same logic from _scan_override_directories() lines 966-982
         workshop_overrides = []
@@ -620,15 +506,7 @@ class ResourceManager:
     # Module Loading & Management
     
     def set_module(self, module_path: str) -> bool:
-        """
-        Load a module and set up its override chain
-        
-        Args:
-            module_path: Path to the .mod file or campaign module directory
-            
-        Returns:
-            True if module loaded successfully
-        """
+        """Load a module and set up its override chain."""
         try:
             module_path = Path(module_path)
             cache_key = str(module_path)
@@ -738,15 +616,7 @@ class ResourceManager:
             return False
     
     def find_campaign(self, campaign_path: str) -> dict:
-        """
-        Find campaign information by searching for .cam files
-        
-        Args:
-            campaign_path: Path to the campaign directory
-            
-        Returns:
-            Dict with campaign info or None if not found
-        """
+        """Find campaign information by searching for .cam files."""
         try:
             campaign_path = Path(campaign_path)
             
@@ -797,18 +667,7 @@ class ResourceManager:
             return None
 
     def _find_campaign_folder_by_guid(self, campaign_guid: str) -> Optional[Path]:
-        """
-        Find campaign folder by matching Campaign_ID GUID from module.ifo
-        to GUID in campaign.cam files.
-
-        Searches both install folder and user documents folder.
-
-        Args:
-            campaign_guid: The Campaign_ID GUID from module.ifo
-
-        Returns:
-            Path to campaign folder or None if not found
-        """
+        """Find campaign folder by matching Campaign_ID GUID to campaign.cam files."""
         if not campaign_guid:
             return None
 
@@ -857,15 +716,7 @@ class ResourceManager:
         return None
 
     def _load_campaign_2das(self, campaign_folder: Path):
-        """
-        Load 2DA file paths from campaign folder for lazy loading.
-
-        NWN2 spec: Files in deeper subdirectories have higher priority.
-        So we scan recursively and let deeper files override shallower ones.
-
-        Args:
-            campaign_folder: Path to the campaign folder
-        """
+        """Load 2DA file paths from campaign folder for lazy loading."""
         self._campaign_overrides.clear()
         self._campaign_override_paths.clear()
         self._current_campaign_folder = campaign_folder
@@ -893,18 +744,7 @@ class ResourceManager:
             logger.info(f"Indexed {len(self._campaign_override_paths)} 2DAs in campaign folder: {campaign_folder.name}")
 
     def set_campaign_by_guid(self, campaign_guid: str) -> bool:
-        """
-        Set campaign context directly by GUID (for savegame loading).
-
-        This loads campaign 2DA overrides without needing a .mod file.
-        Used when loading saves where we have the Campaign_ID but not a module path.
-
-        Args:
-            campaign_guid: Campaign GUID hex string from save file
-
-        Returns:
-            True if campaign was found and loaded, False otherwise
-        """
+        """Set campaign context directly by GUID for savegame loading."""
         if not campaign_guid:
             return False
 
@@ -930,20 +770,7 @@ class ResourceManager:
             return False
 
     def load_haks_for_save(self, hak_list: list, custom_tlk: str = '', campaign_guid: str = '') -> bool:
-        """
-        Load HAKs directly from a save's module.ifo data (no .mod file scanning needed).
-
-        This is the preferred method for save editors - get HAK list from the save's
-        module.ifo and pass it here directly, avoiding expensive module scanning.
-
-        Args:
-            hak_list: List of HAK names from Mod_HakList in module.ifo
-            custom_tlk: Custom TLK filename from Mod_CustomTlk (optional)
-            campaign_guid: Campaign GUID for loading campaign 2DAs (optional)
-
-        Returns:
-            True if HAKs loaded successfully
-        """
+        """Load HAKs directly from a save's module.ifo data."""
         try:
             # Clear previous HAK overrides
             self._hak_overrides.clear()
@@ -1113,14 +940,7 @@ class ResourceManager:
             logger.error(f"Error loading hakpak {hakpak_name}: {e}")
     
     def _scan_override_directories(self, module_context: Optional[Dict[str, Any]] = None):
-        """
-        Scan traditional override and Steam Workshop directories
-        
-        Args:
-            module_context: Optional dict containing module information with keys:
-                - 'module_name': Name of the module
-                - 'module_path': Path to the .mod file
-        """
+        """Scan traditional override and Steam Workshop directories."""
         # Clear previous scans
         self._override_dir_overrides.clear()
         self._workshop_overrides.clear()
@@ -1234,55 +1054,7 @@ class ResourceManager:
             target_dict[resource_name.lower()] = file_path
             
         logger.debug(f"Directory indexing: {len(resource_locations)} 2DA files in {directory}")
-    
-    def _preload_all_base_2das(self):
-        """Preload all base game 2DAs into memory"""
-        logger.info("Preloading base game 2DAs into memory...")
-        logger.info(f"Cache directory: {self.cache_dir}")
-        start_time = time.time()
-        
-        # Check if we should use smart preloading
-        smart_preload = getattr(settings, 'NWN2_SMART_PRELOAD', True)
-        if smart_preload:
-            return self._smart_preload_2das()
-        
-        # Load all .msgpack files directly into memory cache
-        loaded = 0
-        failed = 0
-        
-        if self.cache_dir.exists():
-            for msgpack_file in self.cache_dir.glob('*.msgpack'):
-                if msgpack_file.stem == 'tlk_cache':
-                    continue  # Skip TLK cache
-                
-                name = msgpack_file.stem.lower()
-                if not name.endswith('.2da'):
-                    name = name + '.2da'
-                
-                try:
-                    # Load from cache directly
-                    parser = TDACacheHelper.load_tda(msgpack_file.with_suffix(''))
-                    if parser is None:
-                        failed += 1
-                        continue
-                    
-                    # Store in memory cache with base game key (no module context)
-                    self._2da_cache[name] = parser
-                    self._2da_compressed[name] = False
-                    loaded += 1
-                    logger.debug(f"Preloaded {name} from cache")
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to load cached {name}: {e}")
-                    failed += 1
-        
-        elapsed = time.time() - start_time
-        logger.info(f"Preloaded {loaded} 2DAs in {elapsed:.2f}s ({failed} failed)")
-        
-        # Update memory usage
-        self._update_cache_memory_usage()
-        logger.info(f"Current 2DA cache memory usage: {self._cache_memory_bytes / 1024 / 1024:.1f} MB")
-    
+
     # HAK Discovery & Loading
     
     def _find_hakpak(self, hakpak_name: str) -> Optional[Path]:
@@ -1306,16 +1078,7 @@ class ResourceManager:
         return None
 
     def find_module(self, module_name: str) -> Optional[str]:
-        """
-        Find a module file or campaign module in standard locations
-        
-        Args:
-            module_name: Name of module (with or without .mod extension)
-                        Can also be a campaign module directory name
-            
-        Returns:
-            Full path to module file or campaign module directory, or None
-        """
+        """Find a module file or campaign module in standard locations."""
         # First check if it's a .mod file
         if not module_name.endswith('.mod'):
             mod_file_name = module_name + '.mod'
@@ -1366,41 +1129,29 @@ class ResourceManager:
         return None
 
     def _build_module_hak_index(self):
-        """
-        Build an index mapping module names to their required HAKs.
-        This enables save-context-aware loading without performance overhead.
-        """
+        """Build index mapping module names to required HAKs."""
         if self._modules_indexed:
             return
-        
+
         start_time = time.time()
-        
         self._module_to_haks.clear()
-        
-        # Search all module directories
+
         module_dirs = [
-            nwn2_paths.modules,           # Installation modules
-            nwn2_paths.user_modules,      # User modules  
-            nwn2_paths.campaigns,         # Campaign modules
+            nwn2_paths.modules,
+            nwn2_paths.user_modules,
+            nwn2_paths.campaigns,
         ]
-        
-        # Add custom module folders
         for custom_dir in nwn2_paths.custom_module_folders:
             module_dirs.append(custom_dir)
-        
+
         modules_found = 0
-        modules_skipped = 0
         total_haks = 0
         for module_dir in module_dirs:
             if not module_dir.exists():
                 continue
-                
-            # Scan for .mod files
+
             for mod_file in module_dir.glob('*.mod'):
-                # Skip vanilla modules - we already have their content
                 if mod_file.name in self._vanilla_modules:
-                    logger.debug(f"Skipping vanilla module: {mod_file.name}")
-                    modules_skipped += 1
                     continue
                 
                 try:
@@ -1432,16 +1183,7 @@ class ResourceManager:
     # Module Information Extraction
     
     def _extract_gff_string(self, gff_data: Any, default: str = '') -> str:
-        """
-        Extract a string from a potentially localized GFF data structure.
-        
-        Args:
-            gff_data: The GFF field data which might be a string or localized dict
-            default: Default value if extraction fails
-            
-        Returns:
-            Extracted string value
-        """
+        """Extract a string from a potentially localized GFF data structure."""
         if isinstance(gff_data, dict) and 'substrings' in gff_data:
             substrings = gff_data.get('substrings', [])
             if substrings and len(substrings) > 0:
@@ -1458,16 +1200,7 @@ class ResourceManager:
         return str(campaign_id_raw) if campaign_id_raw else ''
 
     def _extract_module_info(self, mod_file: Path) -> Optional[Dict[str, Any]]:
-        """
-        Extract module name and HAK list from a .mod file.
-        
-        Args:
-            mod_file: Path to .mod file
-            
-        Returns:
-            Dict with 'info' containing module info and 'parser' containing the ErfParser instance,
-            or None if extraction fails
-        """
+        """Extract module name and HAK list from a .mod file."""
         try:
             # Parse .mod file as ERF archive
             parser = ErfParser()
@@ -1518,18 +1251,7 @@ class ResourceManager:
             return None
 
     def load_save_context(self, save_folder_path: Union[str, Path]) -> bool:
-        """
-        Load module context from a save folder for accurate content loading.
-        
-        This method reads CURRENTMODULE.TXT from a save folder and loads
-        the appropriate module and its HAKs for save compatibility.
-        
-        Args:
-            save_folder_path: Path to save folder containing CURRENTMODULE.TXT
-            
-        Returns:
-            True if context was loaded successfully
-        """
+        """Load module context from a save folder for accurate content loading."""
         save_path = Path(save_folder_path)
         
         if not save_path.exists() or not save_path.is_dir():
@@ -1604,125 +1326,18 @@ class ResourceManager:
     # ============================================================================
     
     def _compress_parser(self, parser: TDAParser) -> Tuple[bytes, int, int]:
-        """Compress a TDAParser object using zlib.
-        
-        Returns:
-            Tuple of (compressed_data, original_size, compressed_size)
-        """
-        # Use Rust parser's built-in compressed msgpack serialization
+        """Compress TDAParser to msgpack bytes, returning (data, original_size, compressed_size)."""
         try:
-            # For Rust parser, use its own compressed serialization
             compressed = parser.to_msgpack_bytes()
-            original_size = len(compressed) * 3  # Approximate uncompressed size
             compressed_size = len(compressed)
-            return compressed, original_size, compressed_size
+            return compressed, compressed_size, compressed_size
         except AttributeError:
-            # Fallback for Python parser compatibility
             import msgpack
             serializable = SafeCache._make_serializable(parser)
             packed = msgpack.packb(serializable, use_bin_type=True)
             original_size = len(packed)
             compressed = zlib.compress(packed, level=6)
-            compressed_size = len(compressed)
-            return compressed, original_size, compressed_size
-    
-    def _decompress_parser(self, compressed_data: bytes) -> TDAParser:
-        """Decompress and unpack a TDAParser object."""
-        try:
-            # For Rust parser, use its own deserialization
-            return TDAParser.from_msgpack_bytes(compressed_data)
-        except AttributeError:
-            # Fallback for Python parser compatibility
-            import msgpack
-            decompressed = zlib.decompress(compressed_data)
-            data = msgpack.unpackb(decompressed, raw=False)
-            restored = SafeCache._restore_objects(data)
-            
-            # Reconstruct TDAParser from dict
-            if isinstance(restored, dict):
-                parser = TDAParser()
-                for key, value in restored.items():
-                    setattr(parser, key, value)
-                return parser
-            elif isinstance(restored, TDAParser):
-                return restored
-            else:
-                raise ValueError(f"Unexpected type after decompression: {type(restored)}")
-    
-    def _should_compress(self, parser: TDAParser) -> bool:
-        """Determine if a parser should be compressed based on size."""
-        if not self._compression_enabled:
-            return False
-        
-        # Estimate size
-        try:
-            # For Rust parser, estimate based on row/column count
-            if hasattr(parser, 'get_resource_count'):
-                # Rust parser - estimate size based on content
-                rows = parser.get_resource_count()
-                cols = parser.get_column_count() if hasattr(parser, 'get_column_count') else 10
-                estimated_size_kb = (rows * cols * 20) / 1024  # Rough estimate: 20 bytes per cell
-                return estimated_size_kb > self._compression_threshold
-            else:
-                # Python parser fallback
-                import msgpack
-                serializable = SafeCache._make_serializable(parser)
-                packed = msgpack.packb(serializable, use_bin_type=True)
-                size_kb = len(packed) / 1024
-                return size_kb > self._compression_threshold
-        except:
-            return False
-    
-    def _update_cache_memory_usage(self):
-        """Estimate memory usage of cached 2DAs"""
-        self._cache_memory_bytes = 0
-        for name, data in self._2da_cache.items():
-            try:
-                if name in self._2da_compressed and self._2da_compressed[name]:
-                    # Compressed entry - just use the byte size
-                    size = len(data) if isinstance(data, bytes) else sys.getsizeof(data)
-                else:
-                    # Uncompressed parser - estimate size more accurately
-                    # Use msgpack to get a better size estimate
-                    import msgpack
-                    serialized = msgpack.packb(SafeCache._make_serializable(data), use_bin_type=True)
-                    size = len(serialized)
-                self._cache_memory_bytes += int(size)
-            except Exception as e:
-                logger.debug(f"Could not estimate size of {name}: {e}")
-    
-    def _build_cache_key(self, name: str) -> str:
-        """Build a cache key that includes module context"""
-        # Include module path in cache key to handle different override chains
-        if self._current_module:
-            return f"{self._current_module}:{name}"
-        return name
-    
-    def _evict_lru_items(self):
-        """Evict least recently used items when cache is too large"""
-        logger.info(f"Cache size exceeded {self._cache_max_mb} MB, evicting LRU items...")
-        
-        # Since we're using OrderedDict, the first items are the least recently used
-        to_remove = int(len(self._2da_cache) * 0.2)
-        if to_remove < 1:
-            to_remove = 1
-            
-        # Remove oldest items
-        removed = 0
-        keys_to_remove = []
-        for key in self._2da_cache:
-            keys_to_remove.append(key)
-            removed += 1
-            if removed >= to_remove:
-                break
-        
-        for key in keys_to_remove:
-            del self._2da_cache[key]
-            if key in self._2da_compressed:
-                del self._2da_compressed[key]
-            
-        logger.info(f"Evicted {len(keys_to_remove)} items from cache")
-        self._update_cache_memory_usage()
+            return compressed, original_size, len(compressed)
 
     def _is_file_modified(self, filepath: Path) -> bool:
         """Check if a file has been modified since it was cached"""
@@ -1753,46 +1368,15 @@ class ResourceManager:
         
         return False
 
-    def _invalidate_cache_for_file(self, filepath: Path):
-        """Invalidate caches related to a modified file"""
-        filename = filepath.name.lower()
-        
-        # Remove from override caches
-        if filename in self._override_dir_overrides:
-            del self._override_dir_overrides[filename]
-            logger.info(f"Invalidated override cache for {filename}")
-        
-        if filename in self._workshop_overrides:
-            del self._workshop_overrides[filename]
-            logger.info(f"Invalidated workshop cache for {filename}")
-        
-        # Also remove from main 2DA cache if present
-        if filename.endswith('.2da'):
-            # Need to check all cache keys that might contain this file
-            keys_to_remove = []
-            for cache_key in list(self._2da_cache.keys()):
-                if cache_key.endswith(filename) or cache_key.endswith(filename[:-4]):
-                    keys_to_remove.append(cache_key)
-            
-            for key in keys_to_remove:
-                del self._2da_cache[key]
-                if key in self._2da_compressed:
-                    del self._2da_compressed[key]
-                logger.info(f"Invalidated cache for {key}")
-    
     # ============================================================================
     # 2DA OPERATIONS
     # ============================================================================
     
-    def _parse_2da_file(self, file_path: Path) -> Optional[TDAParser]:
-        """Parse a single 2DA file from disk"""
-        try:
-            parser = TDAParser()
-            parser.read(str(file_path))
-            return parser
-        except Exception as e:
-            logger.error(f"Error parsing 2DA file {file_path}: {e}")
-            return None
+    def _parse_2da_file(self, file_path: Path) -> TDAParser:
+        """Parse a single 2DA file from disk."""
+        parser = TDAParser()
+        parser.read(str(file_path))
+        return parser
     
     def _parse_2da_from_bytes(self, data: bytes) -> Optional[TDAParser]:
         """Parse 2DA data from bytes - let Rust parser handle all validation"""
@@ -1820,112 +1404,38 @@ class ResourceManager:
             return None
     
     @with_retry_limit(table_name_param="name")
-    def get_2da(self, name: str) -> Optional[TDAParser]:
-        """
-        Get a parsed 2DA file by name (base game files only) with retry limits to prevent infinite loops.
-        
-        Args:
-            name: Name of 2DA file (e.g., "classes" or "classes.2da")
-            
-        Returns:
-            Parsed TDAParser object or None if not found
-        """
-        # Normalize name
+    def get_2da(self, name: str) -> TDAParser:
+        """Get parsed 2DA file by name from base game with retry limits."""
         if not name.lower().endswith('.2da'):
             name = name + '.2da'
         name = name.lower()
-        
-        # Check pre-compiled cache first (fastest)
-        cached_parser = self._precompiled_cache.get_cached_table(name)
-        if cached_parser:
+
+        try:
+            cached_parser = self._precompiled_cache.get_cached_table(name)
             self._cache_hits += 1
             return cached_parser
-        
-        # Check memory cache next
-        # if self._memory_cache_enabled and name in self._2da_cache:
-        #     self._cache_hits += 1
-        #         self._2da_compressed[name] = False
-        #         return decompressed
-        #     return self._2da_cache[name]
-        
-        if self._memory_cache_enabled:
+        except Exception:
             self._cache_misses += 1
-        
-        # Old disk cache removed - precompiled cache handles persistence now
-        
-        # Load from ZIP if not in cache
+
         if name not in self._2da_locations:
-            logger.debug(f"2DA file '{name}' not found in base game")
-            return None
-            
+            raise FileNotFoundError(f"2DA file '{name}' not found in base game")
+
         zip_path_str, file_path = self._2da_locations[name]
-        
-        # Track expansion loading for summary
         zip_name = Path(zip_path_str).name
+
         if 'x1' in zip_name.lower() or 'x2' in zip_name.lower():
             expansion_key = 'x1' if 'x1' in zip_name.lower() else 'x2'
             self._expansion_files_loaded[expansion_key] = self._expansion_files_loaded.get(expansion_key, 0) + 1
-        
+
         parser = TDAParser()
-        try:
-            # Read file using Rust reader
-            data = self._zip_reader.read_file_from_zip(zip_path_str, file_path)
-            
-            self._last_successful_content = (name, data.decode('utf-8', errors='ignore')[:200])
-            
-            parser.parse_from_bytes(data)
-        except ValueError as e:
-            logger.error(f"ERROR parsing {name} from {zip_path_str}/{file_path}: {e}")
-            # Get text content for debugging
-            try:
-                text = data.decode('utf-8', errors='ignore')
-                logger.error(f"First 200 chars of content: {repr(text[:200])}")
-                logger.error(f"First 5 lines:")
-                lines = text.split('\n')[:5]
-                for i, line in enumerate(lines):
-                    logger.error(f"  Line {i}: {repr(line)}")
-            except:
-                logger.error("Could not decode content for debugging")
-            
-            # Print previous successful file
-            if hasattr(self, '_last_successful_content'):
-                prev_name, prev_content = self._last_successful_content
-                logger.error(f"\nPrevious successful file was: {prev_name}")
-                logger.error(f"Its first 200 chars: {repr(prev_content)}")
-            raise
-            
-        self._add_to_cache(name, parser)
-        
-        # Log expansion summary if this was an expansion file
-        zip_name = Path(zip_path_str).name
+        data = self._zip_reader.read_file_from_zip(zip_path_str, file_path)
+        self._last_successful_content = (name, data.decode('utf-8', errors='ignore')[:200])
+        parser.parse_from_bytes(data)
+
         if ('x1' in zip_name.lower() or 'x2' in zip_name.lower()) and not self._expansion_summary_logged:
             self._log_expansion_summary()
-        
+
         return parser
-    
-    def _add_to_cache(self, name: str, parser: TDAParser):
-        """Add a parser to the cache with optional compression."""
-        if not self._memory_cache_enabled:
-            return
-            
-        if self._should_compress(parser):
-            compressed, original_size, compressed_size = self._compress_parser(parser)
-            self._2da_cache[name] = compressed
-            self._2da_compressed[name] = True
-            
-            compression_ratio = 1.0 - (compressed_size / original_size)
-            self._compression_ratio_sum += compression_ratio
-            self._compression_count += 1
-            
-            logger.debug(f"Compressed {name}: {original_size/1024:.1f}KB -> {compressed_size/1024:.1f}KB (ratio: {compression_ratio:.1%})")
-        else:
-            self._2da_cache[name] = parser
-            self._2da_compressed[name] = False
-            
-        self._update_cache_memory_usage()
-        if self._cache_memory_bytes > self._cache_max_mb * 1024 * 1024:
-            self._evict_lru_items()
-    
 
     def _log_expansion_summary(self):
         """Log a summary of loaded expansion files, called only once"""
@@ -1988,18 +1498,7 @@ class ResourceManager:
         return tlk.get_string(str_ref) or f"{{StrRef:{str_ref}}}"
     
     def get_strings_batch(self, str_refs: List[int]) -> Dict[int, str]:
-        """
-        Get multiple localized strings from TLK in one batch operation for performance.
-        
-        This method leverages the Rust TLK parser's high-performance batch retrieval
-        to resolve thousands of string references quickly during data loading.
-        
-        Args:
-            str_refs: List of string reference IDs to resolve
-            
-        Returns:
-            Dictionary mapping str_ref -> resolved string
-        """
+        """Get multiple localized strings from TLK in one batch operation."""
         result = {}
         
         if not str_refs:
@@ -2054,45 +1553,8 @@ class ResourceManager:
                         result[str_ref] = f"{{StrRef:{str_ref}}}"
         
         return result
-    
-    
-    # Old disk cache methods removed - using precompiled cache instead
-    
-    def _smart_preload_2das(self):
-        """Smart preload based on ignore list from nw2_data_filtered.json"""
-        logger.info("Using smart preload strategy...")
-        start_time = time.time()
-        
-        # Load ignore prefixes from nw2_data_filtered.json
-        ignore_prefixes = self._load_ignore_prefixes()
-        if not ignore_prefixes:
-            # Fallback to hardcoded list if file not found
-            logger.warning("Failed to load ignore prefixes, using fallback")
-            ignore_prefixes = [
-                'ambientmusic', 'ambientsound', 'appearancesndset', 'bodybag',
-                'container_preference', 'crafting', 'crft_', 'cursors',
-                'des_', 'environ', 'footstepsounds', 'grass', 'hen_',
-                'inventorysnds', 'itm_rand_', 'light', 'nwn2_', 'placeable',
-                'sound', 'tcn01', 'tdc01', 'tde01', 'tdm01', 'tdr01', 'tds01',
-                'texture', 'tile', 'time', 'treas_', 'trees', 'ttr01', 'tts01',
-                'vfx_', 'video', 'visualeffects', 'water', 'waypoint'
-            ]
-        
-        loaded = 0
-        ignored = 0
-        
-        # Load all msgpack files from cache directory and module overrides
-    
-    def get_all_base_items(self) -> List[Dict[str, Any]]:
-        """Get all available base items for creation"""
-        # ... (implemented in inventory_manager, this seems like a placeholder or utility if present)
-        pass
-
     def get_all_item_templates(self) -> Dict[str, Any]:
-        """
-        Get all available item templates from all sources (Zips, Overrides, Module).
-        Returns a dict mapping ResRef (lowercased) to location info.
-        """
+        """Get all item templates from all sources, prioritized by override chain."""
         all_templates = {}
         
         # 1. Base Game & Expansions (Templates.zip) - Lowest Priority
@@ -2143,6 +1605,7 @@ class ResourceManager:
         return all_templates
 
     def build_item_template_index(self) -> List[Dict[str, Any]]:
+        """Build searchable index of item templates with names and categories."""
         all_templates = self.get_all_item_templates()
 
         baseitems_parser = self.get_2da('baseitems')
@@ -2253,46 +1716,7 @@ class ResourceManager:
         except Exception as e:
             logger.error(f"Error loading template {template_info}: {e}")
             return None
-        if self.cache_dir.exists():
-            # First load from base cache
-            for msgpack_file in self.cache_dir.glob('*.msgpack'):
-                if msgpack_file.stem == 'tlk_cache':
-                    continue
-                
-                # Check if should ignore based on prefix
-                stem = msgpack_file.stem.lower()
-                if any(stem.startswith(prefix) for prefix in ignore_prefixes):
-                    ignored += 1
-                    continue
-                
-                name = stem if stem.endswith('.2da') else stem + '.2da'
-                
-                if name not in self._2da_cache:
-                    try:
-                        parser = TDACacheHelper.load_tda(msgpack_file.with_suffix(''))
-                        if parser is not None:
-                            self._2da_cache[name] = parser
-                            self._2da_compressed[name] = False
-                            loaded += 1
-                    except Exception as e:
-                        logger.debug(f"Failed to preload {name}: {e}")
-                
-                # Check memory limit periodically
-                if loaded % 50 == 0:
-                    self._update_cache_memory_usage()
-                    if self._cache_memory_bytes > self._cache_max_mb * 1024 * 1024 * 0.8:
-                        logger.info(f"Stopping preload at {loaded} files - approaching memory limit")
-                        break
-        
-        # Always update memory usage at the end
-        self._update_cache_memory_usage()
-        
-        elapsed = time.time() - start_time
-        logger.info(f"Smart preloaded {loaded} 2DAs ({ignored} ignored) in {elapsed:.2f}s")
-        logger.info(f"Current cache size: {self._cache_memory_bytes / 1024 / 1024:.1f} MB")
-        
-        return loaded
-    
+
     def _load_ignore_prefixes(self) -> List[str]:
         """Load ignore prefixes from nw2_data_filtered.json"""
         try:
@@ -2479,83 +1903,38 @@ class ResourceManager:
     
     @with_retry_limit(table_name_param="name")
     def get_2da_with_overrides(self, name: str) -> Optional[TDAParser]:
-        """
-        Get a 2DA file, checking the full override chain with NWN2 engine priority:
-        1. HAK overrides (first HAK in module.ifo = highest priority)
-        2. Custom override directories (user-specified)
-        3. Steam Workshop overrides
-        4. Traditional override directory
-        5. Campaign folder overrides
-        6. Module content (2DAs inside .mod file)
-        7. Base game files
-
-        Args:
-            name: Name of 2DA file
-
-        Returns:
-            Parsed TDAParser object or None
-        """
-        # Normalize name
+        """Get a 2DA file checking HAK > custom > workshop > override > campaign > module > base game."""
         if not name.lower().endswith('.2da'):
             name = name + '.2da'
         name = name.lower()
 
-        # Build cache key that includes module context
-        cache_key = self._build_cache_key(name)
-
-        # Check memory cache first if enabled
-        if self._memory_cache_enabled:
-            if cache_key in self._2da_cache:
-                self._cache_hits += 1
-                self._2da_cache.move_to_end(cache_key)
-                if cache_key in self._2da_compressed and self._2da_compressed[cache_key]:
-                    return self._decompress_parser(self._2da_cache[cache_key])
-                return self._2da_cache[cache_key]
-
-        self._cache_misses += 1
-
-        # 1. Check HAK overrides (first HAK wins - no reverse!)
+        # 1. Check HAK overrides (first HAK wins)
         for hak_overrides in self._hak_overrides:
             if name in hak_overrides:
-                result = hak_overrides[name]
-                if self._memory_cache_enabled and result:
-                    self._add_to_cache(cache_key, result)
-                return result
+                return hak_overrides[name]
 
         # 2. Check custom override directories
         if name in self._custom_override_paths:
             parser = self._parse_2da_file(self._custom_override_paths[name])
             if parser:
-                if self._memory_cache_enabled:
-                    self._add_to_cache(cache_key, parser)
                 return parser
 
         # 3. Check Steam Workshop overrides
         if name in self._workshop_overrides:
-            result = self._workshop_overrides[name]
-            if self._memory_cache_enabled and result:
-                self._add_to_cache(cache_key, result)
-            return result
+            return self._workshop_overrides[name]
         elif name in self._workshop_file_paths:
             parser = self._parse_2da_file(self._workshop_file_paths[name])
             if parser:
                 self._workshop_overrides[name] = parser
-                if self._memory_cache_enabled:
-                    self._add_to_cache(cache_key, parser)
                 return parser
 
         # 4. Check traditional override directory
         if name in self._override_dir_overrides:
-            result = self._override_dir_overrides[name]
-            if self._memory_cache_enabled and result:
-                self._add_to_cache(cache_key, result)
-            return result
+            return self._override_dir_overrides[name]
         elif name in self._override_file_paths:
             parser = self._parse_2da_file(self._override_file_paths[name])
             if parser:
                 self._override_dir_overrides[name] = parser
-                if self._memory_cache_enabled:
-                    self._add_to_cache(cache_key, parser)
                 return parser
 
         # 5. Check campaign folder overrides (lazy load)
@@ -2565,94 +1944,26 @@ class ResourceManager:
                 if parser:
                     self._campaign_overrides[name] = parser
             if name in self._campaign_overrides:
-                result = self._campaign_overrides[name]
-                if self._memory_cache_enabled and result:
-                    self._add_to_cache(cache_key, result)
-                return result
+                return self._campaign_overrides[name]
 
         # 6. Check module overrides (2DAs inside .mod file)
         if name in self._module_overrides:
-            result = self._module_overrides[name]
-            if self._memory_cache_enabled and result:
-                self._add_to_cache(cache_key, result)
-            return result
+            return self._module_overrides[name]
 
         # 7. Fall back to base game
-        result = self.get_2da(name)
+        return self.get_2da(name)
 
-        # 8. If still not found and it's a prerequisite table, create an empty one
-        if not result and name.startswith('cls_pres_'):
-            logger.info(f"Creating empty prerequisite table for missing file: {name}")
-            result = self._create_empty_prerequisite_table(name)
-            if self._memory_cache_enabled and result:
-                cache_key = self._build_cache_key(name)
-                self._add_to_cache(cache_key, result)
-
-        # Cache the result if memory caching is enabled
-        if self._memory_cache_enabled and result:
-            cache_key = self._build_cache_key(name)
-            self._add_to_cache(cache_key, result)
-            self._update_cache_memory_usage()
-            if self._cache_memory_bytes > self._cache_max_mb * 1024 * 1024:
-                self._evict_lru_items()
-
-        return result
-    
-    def _is_file_modified(self, filepath: Path) -> bool:
-        """Check if a file has been modified since it was cached"""
-        str_path = str(filepath)
-        
-        # Get current modification time
-        try:
-            current_mtime = filepath.stat().st_mtime
-        except (OSError, IOError):
-            # File might have been deleted
-            return True
-        
-        # Check if we have a recorded modification time
-        if str_path not in self._file_mod_times:
-            # First time seeing this file
-            self._file_mod_times[str_path] = current_mtime
-            return False
-        
-        # Compare modification times with small tolerance for file system precision
-        cached_mtime = self._file_mod_times[str_path]
-        if abs(current_mtime - cached_mtime) < 0.001:  # Less than 1ms difference
-            # File hasn't changed (within tolerance)
-            return False
-        elif current_mtime > cached_mtime:
-            # File has been modified
-            self._file_mod_times[str_path] = current_mtime
-            return True
-        
-        return False
-    
     def _invalidate_cache_for_file(self, filepath: Path):
-        """Invalidate caches related to a modified file"""
+        """Invalidate caches related to a modified file."""
         filename = filepath.name.lower()
-        
-        # Remove from override caches
+
         if filename in self._override_dir_overrides:
             del self._override_dir_overrides[filename]
             logger.info(f"Invalidated override cache for {filename}")
-        
+
         if filename in self._workshop_overrides:
             del self._workshop_overrides[filename]
             logger.info(f"Invalidated workshop cache for {filename}")
-        
-        # Also remove from main 2DA cache if present
-        if filename.endswith('.2da'):
-            # Need to check all cache keys that might contain this file
-            keys_to_remove = []
-            for cache_key in list(self._2da_cache.keys()):
-                if cache_key.endswith(filename) or cache_key.endswith(filename[:-4]):
-                    keys_to_remove.append(cache_key)
-            
-            for key in keys_to_remove:
-                del self._2da_cache[key]
-                if key in self._2da_compressed:
-                    del self._2da_compressed[key]
-                logger.info(f"Invalidated cache for {key}")
     
     def check_for_modifications(self):
         """Check all tracked files for modifications and invalidate caches as needed"""
@@ -2757,40 +2068,15 @@ class ResourceManager:
         logger.info("Cleared all override caches")
     
     def get_workshop_mods(self, force_refresh: bool = False) -> List[Dict]:
-        """
-        Get metadata for all installed Steam Workshop mods
-        
-        Args:
-            force_refresh: Force re-scraping of all mod data
-            
-        Returns:
-            List of mod metadata dictionaries
-        """
+        """Get metadata for all installed Steam Workshop mods."""
         return self._workshop_service.get_installed_mods(force_refresh=force_refresh)
-    
+
     def get_workshop_mod(self, mod_id: str, force_refresh: bool = False) -> Optional[Dict]:
-        """
-        Get metadata for a specific workshop mod
-        
-        Args:
-            mod_id: Steam Workshop item ID
-            force_refresh: Force re-scraping even if cached
-            
-        Returns:
-            Mod metadata dictionary or None
-        """
+        """Get metadata for a specific workshop mod."""
         return self._workshop_service.get_mod_metadata(mod_id, force_refresh=force_refresh)
-    
+
     def search_workshop_mods(self, search_term: str) -> List[Dict]:
-        """
-        Search installed workshop mods by name
-        
-        Args:
-            search_term: Text to search for in mod titles
-            
-        Returns:
-            List of matching mod metadata
-        """
+        """Search installed workshop mods by name."""
         return self._workshop_service.find_mod_by_name(search_term)
     
     def get_workshop_cache_stats(self) -> Dict:
@@ -2808,79 +2094,22 @@ class ResourceManager:
     # ============================================================================
     # UTILITY & STATS METHODS
     # ============================================================================
-    
-    
-    def get_cache_size_mb(self) -> float:
-        """Get current cache size in MB"""
-        return self._cache_memory_bytes / 1024 / 1024
-    
-    def get_cached_count(self) -> int:
-        """Get number of cached 2DAs"""
-        return len(self._2da_cache)
-    
+
     def get_available_2da_files(self) -> List[str]:
-        """
-        Get list of all available 2DA files.
-        
-        Returns:
-            List of 2DA filenames (without path, with .2da extension)
-        """
+        """Get list of all available 2DA files."""
         return list(self._2da_locations.keys())
-    
-    def get_cache_stats(self) -> Dict[str, Any]:
-        """Get detailed cache statistics"""
-        self._update_cache_memory_usage()
-        
-        # Calculate hit rate
-        total_accesses = self._cache_hits + self._cache_misses
-        hit_rate = (self._cache_hits / total_accesses * 100) if total_accesses > 0 else 0.0
-        
-        # Calculate average compression ratio
-        avg_compression_ratio = (self._compression_ratio_sum / self._compression_count * 100) if self._compression_count > 0 else 0.0
-        
-        # Count compressed vs uncompressed
-        compressed_count = sum(1 for v in self._2da_compressed.values() if v)
-        
-        return {
-            'enabled': self._memory_cache_enabled,
-            'preload_enabled': self._preload_on_init,
-            'compression_enabled': self._compression_enabled,
-            'max_size_mb': self._cache_max_mb,
-            'current_size_mb': self.get_cache_size_mb(),
-            'cached_items': self.get_cached_count(),
-            'compressed_items': compressed_count,
-            'compression_ratio': f"{avg_compression_ratio:.1f}%",
-            'cache_hits': self._cache_hits,
-            'cache_misses': self._cache_misses,
-            'hit_rate': f"{hit_rate:.1f}%",
-            '2da_cache_keys': list(self._2da_cache.keys())[:20],  # First 20 keys
-            'module_cache_stats': self._module_cache.get_stats() if hasattr(self, '_module_cache') else {}
-        }
-    
-    def clear_memory_cache(self):
-        """Clear all in-memory caches"""
-        self._2da_cache.clear()
-        self._2da_compressed.clear()
-        if hasattr(self, '_decompressed_cache'):
-            self._decompressed_cache.clear()
+
+    def clear_override_caches(self):
+        """Clear override caches to force re-parsing on next access."""
         self._module_overrides.clear()
         self._hak_overrides.clear()
         self._override_dir_overrides.clear()
         self._workshop_overrides.clear()
-        self._cache_memory_bytes = 0
-        self._cache_hits = 0
-        self._cache_misses = 0
-        self._compression_ratio_sum = 0.0
-        self._compression_count = 0
-        logger.info("Cleared all in-memory caches")
-    
+        self._campaign_overrides.clear()
+        logger.info("Cleared override caches")
+
     def set_context(self, module_info: Dict[str, Any]):
-        """
-        Set up resource manager context based on save file module information
-        
-        Args:
-            module_info: Dictionary containing module information from _detect_module_info()
-        """
+        """Set up resource manager context based on save file module information."""
         logger.info(f"Setting ResourceManager context for module: {module_info.get('module_name', 'None')}")
         
         # Extract module context
@@ -2922,17 +2151,7 @@ class ResourceManager:
         custom_override_dirs: Optional[List[str]] = None,
         enhanced_data_dir: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Perform a comprehensive resource scan using the optimized Python scanner
-        
-        Args:
-            workshop_dirs: Optional list of workshop directories to scan
-            custom_override_dirs: Optional list of custom override directories
-            enhanced_data_dir: Optional enhanced edition data directory
-            
-        Returns:
-            Dictionary with scan results and performance statistics
-        """
+        """Perform a comprehensive resource scan using the optimized scanner."""
         try:
             # Use nwn2_paths for default values
             if workshop_dirs is None:
@@ -2983,53 +2202,7 @@ class ResourceManager:
         self._zip_indexer.reset_stats()
         self._directory_walker.reset_stats()
         logger.info("All scanner statistics reset")
-    
-    def _create_empty_prerequisite_table(self, table_name: str) -> Optional[TDAParser]:
-        """
-        Create an empty prerequisite table to prevent errors when referenced tables are missing.
-        
-        Args:
-            table_name: Name of the prerequisite table to create (e.g., 'cls_pres_fershift.2da')
-            
-        Returns:
-            Empty TDAParser with basic prerequisite table structure
-        """
-        try:
-            # Create a minimal empty prerequisite table structure
-            # Standard prerequisite tables typically have these columns
-            empty_2da_content = """2DA V2.0
 
-   ReqType ReqParam1 ReqParam2 Label       
-0  ****    ****      ****      ****        
-"""
-            
-            # Create a temporary file to parse
-            import tempfile
-            import os
-            
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.2da', delete=False) as f:
-                f.write(empty_2da_content.strip())
-                temp_path = f.name
-            
-            try:
-                # Parse the temporary file
-                parser = TDAParser()
-                parser.read(temp_path)
-                
-                logger.info(f"Created empty prerequisite table: {table_name}")
-                return parser
-                
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_path)
-                except OSError:
-                    pass
-                    
-        except Exception as e:
-            logger.error(f"Failed to create empty prerequisite table {table_name}: {e}")
-            return None
-    
     def __enter__(self):
         return self
     

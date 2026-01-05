@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from nwn2_rust import TDAParser
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
 

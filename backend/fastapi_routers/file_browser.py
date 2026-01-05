@@ -1,7 +1,4 @@
-"""
-File browser router - List and browse save files and backups
-Handles file system operations for the unified file browser modal
-"""
+"""File browser router - List and browse save files and backups."""
 
 import datetime
 import os
@@ -37,20 +34,10 @@ def list_saves(
     limit: int = Query(50, ge=1, le=500, description="Maximum number of files to return"),
     offset: int = Query(0, ge=0, description="Number of files to skip")
 ):
-    """
-    List save files in a directory for the file browser modal.
-
-    Args:
-        path: Directory path (defaults to NWN2 saves directory)
-        limit: Max files to return
-        offset: Files to skip for pagination
-
-    Returns:
-        List of files with metadata
-    """
+    """List save files in a directory for the file browser modal."""
     try:
         from config.nwn2_settings import nwn2_paths
-        from services.playerinfo_service import PlayerInfo
+        from services.core.playerinfo_service import PlayerInfo
 
         target_path = path if path else str(nwn2_paths.saves)
 
@@ -81,14 +68,13 @@ def list_saves(
                 if entry.name.startswith('.') or entry.name.lower() == 'backups':
                     continue
 
-                # Store minimal info for now to allow sorting/filtering before expensive operations
                 stat_info = entry.stat()
                 file_info = {
                     "name": entry.name,
                     "path": entry.path,
                     "modified": str(stat_info.st_mtime),
                     "is_directory": entry.is_dir(),
-                    "stat": stat_info # Keep for later size calculation if needed
+                    "stat": stat_info
                 }
                 files_list.append(file_info)
             except (OSError, PermissionError) as e:
@@ -106,13 +92,11 @@ def list_saves(
             thumbnail = None
             
             if item["is_directory"]:
-                # Calculate folder size (expensive)
                 try:
                     size = sum(f.stat().st_size for f in Path(item["path"]).rglob('*') if f.is_file())
                 except (OSError, PermissionError):
                     size = 0
 
-                # Read save name from savename.txt (expensive)
                 savename_txt = Path(item["path"]) / 'savename.txt'
                 if savename_txt.exists():
                     try:
@@ -120,12 +104,10 @@ def list_saves(
                     except (OSError, UnicodeDecodeError):
                         pass
                 
-                # Check for thumbnail (screen.tga)
                 screen_tga = Path(item["path"]) / 'screen.tga'
                 if screen_tga.exists():
                     thumbnail = str(screen_tga)
 
-                # Read character name from playerinfo.bin (fast)
                 playerinfo_bin = Path(item["path"]) / 'playerinfo.bin'
                 character_name = PlayerInfo.get_player_name(str(playerinfo_bin))
 
@@ -166,31 +148,17 @@ def list_backups_directory(
     limit: int = Query(50, ge=1, le=500, description="Maximum number of files to return"),
     offset: int = Query(0, ge=0, description="Number of files to skip")
 ):
-    """
-    List backups for a specific save or all backups in the backups directory.
-
-    Args:
-        save_name: Name of the save to list backups for
-        path: Full path to save directory
-        limit: Max files to return
-        offset: Files to skip for pagination
-
-    Returns:
-        List of backup files with metadata
-    """
+    """List backups for a specific save or all backups in the backups directory."""
     try:
         from config.nwn2_settings import nwn2_paths
-        from services.playerinfo_service import PlayerInfo
+        from services.core.playerinfo_service import PlayerInfo
 
         if not path and not save_name:
-            # No path or save name: list all backups in main backups directory
             saves_dir = str(nwn2_paths.saves)
             backups_dir = os.path.join(saves_dir, 'backups')
         elif path:
-            # Path provided: use it directly (already points to backups directory)
             backups_dir = path
         else:
-            # Save name provided: list backups for that specific save
             saves_dir = str(nwn2_paths.saves)
             backups_dir = os.path.join(saves_dir, 'backups', save_name)
 
@@ -227,8 +195,6 @@ def list_backups_directory(
                 stat_info = entry.stat()
                 modified_time = stat_info.st_mtime
 
-                # Extract timestamp from backup folder name if it follows the pattern
-                # This helps with sorting before we do expensive folder scans
                 if entry.is_dir() and '_backup_' in entry.name:
                     try:
                         import re
@@ -253,7 +219,6 @@ def list_backups_directory(
                 logger.warning(f"Failed to stat backup {entry.name}: {e}")
                 continue
 
-        # Sort all backups by modified date (descending) before slicing
         files_list.sort(key=lambda x: float(x["modified"]), reverse=True)
         
         total_count = len(files_list)
@@ -279,7 +244,6 @@ def list_backups_directory(
                     except (OSError, UnicodeDecodeError):
                         pass
 
-                # Read character name from playerinfo.bin (fast)
                 playerinfo_bin = Path(item["path"]) / 'playerinfo.bin'
                 character_name = PlayerInfo.get_player_name(str(playerinfo_bin))
 
@@ -329,17 +293,9 @@ class RestoreBackupResponse(BaseModel):
 
 @router.post("/backups/restore")
 def restore_backup(restore_request: RestoreBackupRequest):
-    """
-    Restore a save from a backup directory.
-
-    Args:
-        restore_request: Restore parameters
-
-    Returns:
-        Restore result with details
-    """
+    """Restore a save from a backup directory."""
     try:
-        from services.savegame_handler import SaveGameHandler, SaveGameError
+        from services.core.savegame_handler import SaveGameHandler, SaveGameError
         import shutil
         import os
         from pathlib import Path
@@ -358,8 +314,6 @@ def restore_backup(restore_request: RestoreBackupRequest):
                 detail=f"Backup not found: {restore_request.backup_path}"
             )
 
-        # Campaign files (.cam) must be restored through the content router endpoint
-        # which has access to the loaded save's ContentManager
         backup_path_lower = restore_request.backup_path.lower()
         if backup_path_lower.endswith('.cam') and 'campaign_backups' in backup_path_lower:
             raise HTTPException(
@@ -367,72 +321,18 @@ def restore_backup(restore_request: RestoreBackupRequest):
                 detail="Campaign backups must be restored through /api/characters/{id}/campaign/restore endpoint"
             )
 
-        # Infer save_path if not provided
         save_path = restore_request.save_path
         
         try:
             backup_path = Path(restore_request.backup_path)
             
             if not save_path:
-                # Logic: The backup folder/file name contains the original save name.
-                # Standard Format: SaveName_backup_YYYYMMDD_HHMMSS
-                # Campaign Format: campaign_GUID.cam (maybe?) -> We need to determine where it goes.
-                
-                # Check if we are inside a 'backups' folder (or subdirectory of it)
-                if 'backups' not in str(backup_path):
-                     raise ValueError("Backup path does not appear to be in a valid backups directory")
+                try:
+                    save_path = SaveGameHandler.infer_save_path_from_backup(str(restore_request.backup_path))
+                    logger.info(f"Inferred save path: {save_path} (from backup: {restore_request.backup_path})")
+                except SaveGameError as e:
+                     raise HTTPException(status_code=400, detail=str(e))
 
-                backup_name = backup_path.name
-                
-                # 1. Determine Save Name from Backup Name
-                if '_backup_' in backup_name:
-                    # Standard directory backup: "SaveName_backup_timestamp"
-                    save_name = backup_name.split('_backup_')[0]
-                elif backup_path.is_file() and backup_name.endswith('.cam'):
-                    # Campaign file: "campaign_xyz.cam" -> Restore as "campaign_xyz.cam"
-                    save_name = backup_name
-                else:
-                    # Fallback: Use the whole name (assuming manual backup or exact copy)
-                    # Use stem if it's a file but not a cam file? defaulting to name is safer for directories
-                    save_name = backup_name
-                
-                logger.debug(f"Parsed save_name '{save_name}' from backup '{backup_name}'")
-
-                # 2. Determine Saves Directory
-                # Traverse up until we find 'backups' folder, then go one level up to 'saves'
-                current = backup_path
-                while current.parent and current.name != 'backups' and 'backups' in str(current.parent):
-                    current = current.parent
-                
-                # At this point, current.parent should be 'backups' or current is 'backups'?
-                # Wait, if backup_path is .../backups/Save_backup_123
-                # current starts at that folder.
-                # Loop condition: current.name != 'backups' -> True.
-                # current becomes .../backups.
-                # Loop condition: current.name == 'backups' -> False (Loop ends).
-                
-                if current.name == 'backups':
-                    saves_dir = current.parent
-                elif current.parent.name == 'backups':
-                    saves_dir = current.parent.parent
-                else:
-                    # Fallback: assume .../saves/backups/... structure
-                    # Find 'backups' in parts
-                    parts = list(backup_path.parts)
-                    try:
-                        idx = len(parts) - 1 - parts[::-1].index('backups')
-                        # saves_dir is everything before 'backups'
-                        saves_dir = Path(*parts[:idx])
-                    except ValueError:
-                         # Should be caught by initial check, but just in case
-                         saves_dir = backup_path.parent.parent
-                
-                inferred_path = saves_dir / save_name
-                save_path = str(inferred_path)
-                logger.info(f"Inferred save path: {save_path} (from backup: {backup_path})")
-
-            # SAFETY CHECK: CRITICAL
-            # Ensure we are not targeting the backups directory itself or any system directory
             target_path = Path(save_path).resolve()
             backup_source = Path(restore_request.backup_path).resolve()
             
@@ -443,11 +343,9 @@ def restore_backup(restore_request: RestoreBackupRequest):
                  if target_path.parent.name == 'backups':
                      raise ValueError(f"Dangerous restore: Target '{target_path}' is inside backups directory. Aborting.")
 
-            # Verify we are not deleting the source
             if target_path == backup_source:
                  raise ValueError("Source and destination are the same.")
                  
-            # Verify we are not deleting a parent of the source
             if target_path in backup_source.parents:
                  raise ValueError(f"Dangerous restore: Target {target_path} is a parent of source {backup_source}")
 
@@ -458,27 +356,22 @@ def restore_backup(restore_request: RestoreBackupRequest):
                 detail=f"Invalid restore target: {e}"
             )
 
-        # Restore Logic
         pre_restore_backup = None
         temp_original_path = None
 
-        # 1. Back up existing target if requested (MANDATORY - abort on failure)
         if os.path.exists(save_path) and restore_request.create_pre_restore_backup:
             if os.path.isdir(save_path):
                 temp_handler = SaveGameHandler(save_path)
                 pre_restore_backup = temp_handler._create_backup()
                 logger.info(f"Created pre-restore backup: {pre_restore_backup}")
 
-        # 2. Safe restore using rename-copy-delete pattern
         try:
-            # Step A: Rename original to temp location (preserves data until copy succeeds)
             if os.path.exists(save_path):
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                 temp_original_path = f"{save_path}_restoring_{timestamp}"
                 os.rename(save_path, temp_original_path)
                 logger.info(f"Renamed original to temp: {temp_original_path}")
 
-            # Step B: Copy backup to target location
             if os.path.isdir(restore_request.backup_path):
                 shutil.copytree(restore_request.backup_path, save_path)
                 files_count = sum(len(files) for _, _, files in os.walk(save_path))
@@ -488,7 +381,6 @@ def restore_backup(restore_request: RestoreBackupRequest):
             else:
                 raise FileNotFoundError(f"Source not found: {restore_request.backup_path}")
 
-            # Step C: Copy succeeded - now safe to delete temp original
             if temp_original_path and os.path.exists(temp_original_path):
                 if os.path.isdir(temp_original_path):
                     shutil.rmtree(temp_original_path)
@@ -496,7 +388,6 @@ def restore_backup(restore_request: RestoreBackupRequest):
                     os.remove(temp_original_path)
                 logger.info(f"Deleted temp original: {temp_original_path}")
 
-            # 3. Cleanup savename.txt (remove "Backup of " prefix)
             if os.path.isdir(save_path):
                 savename_path = os.path.join(save_path, 'savename.txt')
                 if os.path.exists(savename_path):
@@ -520,7 +411,6 @@ def restore_backup(restore_request: RestoreBackupRequest):
             }
 
         except Exception as e:
-            # ROLLBACK: Restore original from temp if copy failed
             if temp_original_path and os.path.exists(temp_original_path):
                 logger.warning(f"Restore failed, rolling back from {temp_original_path}")
                 if os.path.exists(save_path):
@@ -575,17 +465,9 @@ class CreateBackupResponse(BaseModel):
 
 @router.post("/backups/create")
 def create_manual_backup(backup_request: CreateBackupRequest):
-    """
-    Create a manual backup of a save directory.
-
-    Args:
-        backup_request: Backup creation parameters
-
-    Returns:
-        Backup creation result
-    """
+    """Create a manual backup of a save directory."""
     try:
-        from services.savegame_handler import SaveGameHandler, SaveGameError
+        from services.core.savegame_handler import SaveGameHandler, SaveGameError
         import datetime
 
         if not os.path.exists(backup_request.save_path):
@@ -637,15 +519,7 @@ class DeleteBackupRequest(BaseModel):
 
 @router.delete("/backups/delete")
 def delete_backup(delete_request: DeleteBackupRequest):
-    """
-    Delete a backup directory.
-
-    Args:
-        delete_request: Delete parameters
-
-    Returns:
-        Deletion result
-    """
+    """Delete a backup directory."""
     try:
         import shutil
 

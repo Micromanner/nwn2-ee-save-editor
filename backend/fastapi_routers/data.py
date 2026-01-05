@@ -1,7 +1,4 @@
-"""
-Data router - Raw GFF data access and field structure exploration
-Provides low-level access to character data for debugging and advanced editing
-"""
+"""Data router - Raw GFF data access and field structure exploration."""
 
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -10,7 +7,7 @@ from fastapi_routers.dependencies import (
     get_character_manager,
     CharacterManagerDep
 )
-# from fastapi_models import (...) - moved to lazy loading
+
 router = APIRouter(prefix="/data", tags=["data"])
 
 
@@ -20,21 +17,11 @@ def get_raw_character_data(
     manager: CharacterManagerDep,
     path: Optional[str] = Query(None, description="GFF path to specific data (e.g., 'ClassList.0.Class')")
 ):
-    """
-    Get raw GFF data for a character
-    
-    Optionally specify a path to get specific nested data.
-    Examples:
-    - 'Str' - Get strength value
-    - 'ClassList' - Get all classes
-    - 'ClassList.0' - Get first class
-    - 'ClassList.0.Class' - Get class ID of first class
-    """
+    """Get raw GFF data for a character, optionally specifying a path."""
     from fastapi_models import RawDataResponse
     
     try:
         if path:
-            # Get specific field using path
             value = manager.gff.get(path)
             if value is None:
                 raise HTTPException(
@@ -42,7 +29,6 @@ def get_raw_character_data(
                     detail=f"Field not found at path: {path}"
                 )
             
-            # Use helper function - no duplicated logic
             field_type = _determine_gff_type(value)
             
             return RawDataResponse(
@@ -52,7 +38,6 @@ def get_raw_character_data(
                 raw_data={path: value}
             )
         else:
-            # Return full character data
             return RawDataResponse(
                 path="/",
                 value=manager.character_data,
@@ -77,16 +62,10 @@ def get_field_structure(
     path: Optional[str] = Query(None, description="GFF path to analyze structure"),
     max_depth: int = Query(2, description="Maximum depth to explore", ge=1, le=5)
 ):
-    """
-    Get the field structure of character data
-    
-    Returns information about field types, sizes, and nested structures.
-    Useful for understanding the GFF data organization.
-    """
+    """Get the field structure of character data."""
     from fastapi_models import FieldStructureResponse
     
     try:
-        # Get the data at the specified path
         if path:
             data = manager.gff.get(path)
             if data is None:
@@ -98,7 +77,6 @@ def get_field_structure(
             data = manager.character_data
             path = "/"
         
-        # Analyze structure
         structure = analyze_structure(data, max_depth=max_depth)
         
         return FieldStructureResponse(
@@ -119,7 +97,7 @@ def get_field_structure(
 
 
 def _determine_gff_type(value: Any) -> str:
-    """Determine GFF field type from Python value"""
+    """Determine GFF field type from Python value."""
     if isinstance(value, bool):
         return "BYTE"
     elif isinstance(value, int):
@@ -137,17 +115,7 @@ def _determine_gff_type(value: Any) -> str:
 
 
 def analyze_structure(data: Any, current_depth: int = 0, max_depth: int = 2) -> Dict[str, Any]:
-    """
-    Recursively analyze the structure of GFF data
-    
-    Args:
-        data: The data to analyze
-        current_depth: Current recursion depth
-        max_depth: Maximum depth to explore
-        
-    Returns:
-        Dictionary describing the structure
-    """
+    """Recursively analyze the structure of GFF data."""
     if current_depth >= max_depth:
         return {
             "type": type(data).__name__,
@@ -188,8 +156,7 @@ def analyze_structure(data: Any, current_depth: int = 0, max_depth: int = 2) -> 
             "items": []
         }
         
-        # Analyze first few items
-        for i, item in enumerate(data[:5]):  # Limit to first 5 items
+        for i, item in enumerate(data[:5]):
             result["items"].append({
                 "index": i,
                 "structure": analyze_structure(item, current_depth + 1, max_depth)
@@ -208,14 +175,12 @@ def analyze_structure(data: Any, current_depth: int = 0, max_depth: int = 2) -> 
             "fields": {}
         }
         
-        # Analyze all fields (but respect max_depth)
         for key, value in data.items():
             result["fields"][key] = analyze_structure(value, current_depth + 1, max_depth)
         
         return result
     
     else:
-        # Unknown type
         return {
             "type": type(data).__name__,
             "value": str(data)[:100] if hasattr(data, '__str__') else "unknown"
@@ -223,19 +188,11 @@ def analyze_structure(data: Any, current_depth: int = 0, max_depth: int = 2) -> 
 
 
 def count_fields(structure: Dict[str, Any]) -> int:
-    """
-    Count total number of fields in a structure
-    
-    Args:
-        structure: The structure dictionary from analyze_structure
-        
-    Returns:
-        Total field count
-    """
+    """Count total number of fields in a structure."""
     if not isinstance(structure, dict):
         return 0
     
-    count = 1  # Count this field
+    count = 1
     
     if structure.get("type") == "struct" and "fields" in structure:
         for field_structure in structure["fields"].values():
@@ -252,19 +209,13 @@ def count_fields(structure: Dict[str, Any]) -> int:
 @router.post("/characters/{character_id}/raw")
 def update_raw_field(
     character_id: int,
-    request,  # Type removed for lazy loading
+    request,
     manager: CharacterManagerDep
 ):
-    """
-    Update a raw GFF field value
-    
-    WARNING: This is a low-level operation that bypasses validation.
-    Use with caution as it can corrupt save files if used incorrectly.
-    """
+    """Update a raw GFF field value."""
     from fastapi_models import RawFieldUpdateRequest, RawFieldUpdateResponse
     
     try:
-        # Check if field exists
         current_value = manager.gff.get(request.path)
         if current_value is None:
             raise HTTPException(
@@ -272,7 +223,6 @@ def update_raw_field(
                 detail=f"Field not found at path: {request.path}"
             )
         
-        # Set the new value
         manager.gff.set(request.path, request.value)
         
         logger.info(

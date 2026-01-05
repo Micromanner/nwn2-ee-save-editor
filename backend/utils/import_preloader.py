@@ -1,25 +1,11 @@
-"""
-Background import preloader for FastAPI startup optimization
-Loads heavy modules in background threads to improve apparent startup time
-"""
+"""Background import preloader for FastAPI startup optimization."""
 
 import asyncio
-import logging
 import time
 from typing import List, Dict, Any
 import sys
+from loguru import logger
 
-logger = logging.getLogger(__name__)
-
-# Track preloading status
-_preload_status = {
-    'started': False,
-    'completed': False,
-    'progress': {},
-    'errors': {}
-}
-
-# Heavy imports to preload (in order of priority)
 HEAVY_IMPORTS = [
     # FastAPI models (highest priority - used by all routers)
     {
@@ -30,7 +16,7 @@ HEAVY_IMPORTS = [
     
     # Parser modules (used by savegame and other heavy operations)
     {
-        'module': 'services.savegame_handler',
+        'module': 'services.core.savegame_handler',
         'description': 'Save game handler',
         'estimated_time': 0.42
     },
@@ -56,9 +42,16 @@ HEAVY_IMPORTS = [
     }
 ]
 
+_preload_status = {
+    'started': False,
+    'completed': False,
+    'progress': {},
+    'errors': {}
+}
+
 
 def _import_module_safely(module_info: Dict[str, Any]) -> Dict[str, Any]:
-    """Safely import a module and return status"""
+    """Safely import a module and return status."""
     module_name = module_info['module']
     start_time = time.time()
     
@@ -67,7 +60,7 @@ def _import_module_safely(module_info: Dict[str, Any]) -> Dict[str, Any]:
         __import__(module_name)
         load_time = time.time() - start_time
         
-        logger.info(f"✓ Preloaded {module_name} in {load_time:.3f}s")
+        logger.info(f"Preloaded {module_name} in {load_time:.3f}s")
         
         return {
             'module': module_name,
@@ -78,7 +71,7 @@ def _import_module_safely(module_info: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         load_time = time.time() - start_time
-        logger.warning(f"✗ Failed to preload {module_name}: {e}")
+        logger.warning(f"Failed to preload {module_name}: {e}")
         
         return {
             'module': module_name,
@@ -90,12 +83,7 @@ def _import_module_safely(module_info: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def preload_heavy_imports() -> Dict[str, Any]:
-    """
-    Preload heavy imports in background thread pool
-    
-    Returns:
-        Dict with preloading results and statistics
-    """
+    """Preload heavy imports in background thread pool."""
     global _preload_status
     
     if _preload_status['started']:
@@ -150,7 +138,7 @@ async def preload_heavy_imports() -> Dict[str, Any]:
     }
     
     logger.info(
-        f"✓ Preloading completed in {total_time:.3f}s: "
+        f"Preloading completed in {total_time:.3f}s: "
         f"{successful}/{len(HEAVY_IMPORTS)} modules loaded "
         f"({final_status['success_rate']:.1f}% success rate)"
     )
@@ -158,33 +146,6 @@ async def preload_heavy_imports() -> Dict[str, Any]:
     return final_status
 
 
-def is_module_preloaded(module_name: str) -> bool:
-    """Check if a specific module has been preloaded"""
-    return module_name in sys.modules or module_name in _preload_status['progress']
-
-
 def get_preload_status() -> Dict[str, Any]:
-    """Get current preloading status"""
+    """Get current preloading status."""
     return _preload_status.copy()
-
-
-async def wait_for_module(module_name: str, timeout: float = 5.0) -> bool:
-    """
-    Wait for a specific module to be preloaded (with timeout)
-    
-    Args:
-        module_name: Name of module to wait for
-        timeout: Maximum time to wait in seconds
-        
-    Returns:
-        True if module is available, False if timeout
-    """
-    start_time = time.time()
-    
-    while time.time() - start_time < timeout:
-        if is_module_preloaded(module_name):
-            return True
-        await asyncio.sleep(0.01)  # Check every 10ms
-    
-    logger.warning(f"Timeout waiting for {module_name} to preload")
-    return False

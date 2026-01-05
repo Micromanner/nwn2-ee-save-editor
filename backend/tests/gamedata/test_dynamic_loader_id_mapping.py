@@ -13,7 +13,7 @@ from pathlib import Path
 
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
 from gamedata.dynamic_loader.data_model_loader import DataModelLoader
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 
 
 logger = logging.getLogger(__name__)

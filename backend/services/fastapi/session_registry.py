@@ -1,57 +1,29 @@
-"""
-FastAPI Character Session Registry
+"""FastAPI Character Session Registry managing long-lived editing sessions."""
 
-Manages long-lived character editing sessions across multiple requests.
-Each character gets ONE session that persists until explicitly closed.
-
-This is the Django-free version for standalone FastAPI use.
-"""
-
-import logging
 import threading
 from typing import Dict, Optional, Tuple, TYPE_CHECKING
+from loguru import logger
 
 # Type hints only - no runtime imports to avoid heavy loading
 if TYPE_CHECKING:
     from character.in_memory_save_manager import InMemoryCharacterSession
     from .character_info import CharacterInfo
 
-logger = logging.getLogger(__name__)
 
-# Global registry of active character sessions  
-_character_sessions: Dict[str, object] = {}  # Type as object to avoid import
+_character_sessions: Dict[str, object] = {}
 _registry_lock = threading.Lock()
 
-# Integer ID management for cleaner URLs
 _next_session_id = 1
-_id_to_path: Dict[int, str] = {}  # Maps integer IDs to file paths
-_path_to_id: Dict[str, int] = {}  # Reverse mapping for lookups
+_id_to_path: Dict[int, str] = {}
+_path_to_id: Dict[str, int] = {}
 
 
 def get_character_session(character_id: str) -> "InMemoryCharacterSession":
-    """
-    Get or create a character editing session.
-    
-    This creates ONE session per character that persists across multiple requests
-    until explicitly closed. All API calls for the same character will reuse
-    the same session and managers.
-    
-    Args:
-        character_id: Character ID (file path in standalone mode)
-        
-    Returns:
-        InMemoryCharacterSession instance
-        
-    Raises:
-        HTTPException: If character not found
-        ValueError: If session creation fails
-    """
-    # Lazy imports - only import when creating sessions
+    """Get or create a character editing session, persisting across requests."""
     from character.in_memory_save_manager import InMemoryCharacterSession
     
     with _registry_lock:
         
-        # Check if session already exists
         if character_id in _character_sessions:
             session = _character_sessions[character_id]
             if hasattr(session, 'character_manager') and session.character_manager:  # Verify session is still valid
@@ -70,27 +42,18 @@ def get_character_session(character_id: str) -> "InMemoryCharacterSession":
             if not session.character_manager:
                 raise ValueError("Failed to load character data into memory")
             
-            # Store in global registry
             _character_sessions[character_id] = session
             logger.info(f"Created and registered character session for character {character_id}")
             
             return session
             
         except Exception as e:
-            logger.error(f"Failed to create character session: {e}", exc_info=True)
+            logger.error(f"Failed to create character session: {e}")
             raise ValueError(f"Unable to load character: {str(e)}")
 
 
 def close_character_session(character_id: str) -> bool:
-    """
-    Close and cleanup a character editing session.
-    
-    Args:
-        character_id: Character ID (file path in standalone mode)
-        
-    Returns:
-        True if session was closed, False if no session existed
-    """
+    """Close and cleanup a character editing session."""
     with _registry_lock:
         session = _character_sessions.pop(character_id, None)
         if session:
@@ -107,26 +70,13 @@ def close_character_session(character_id: str) -> bool:
 
 
 def has_active_session(character_id: str) -> bool:
-    """
-    Check if character has an active session.
-    
-    Args:
-        character_id: Character ID (file path in standalone mode)
-        
-    Returns:
-        True if active session exists
-    """
+    """Check if character has an active session."""
     with _registry_lock:
         return character_id in _character_sessions
 
 
 def get_active_sessions() -> Dict[str, dict]:
-    """
-    Get information about all active sessions.
-    
-    Returns:
-        Dict mapping character_id to session info
-    """
+    """Get information about all active sessions."""
     with _registry_lock:
         info = {}
         for character_id, session in _character_sessions.items():
@@ -142,16 +92,7 @@ def get_active_sessions() -> Dict[str, dict]:
 
 
 def save_character_session(character_id: str, create_backup: bool = True) -> bool:
-    """
-    Save changes in a character session to disk.
-    
-    Args:
-        character_id: Character ID (file path in standalone mode)
-        create_backup: Whether to create backup before saving
-        
-    Returns:
-        True if saved successfully, False otherwise
-    """
+    """Save changes in a character session to disk."""
     with _registry_lock:
         session = _character_sessions.get(character_id)
         if not session:
@@ -166,9 +107,7 @@ def save_character_session(character_id: str, create_backup: bool = True) -> boo
 
 
 def cleanup_all_sessions():
-    """
-    Close all active sessions. Used for testing or shutdown.
-    """
+    """Close all active sessions. Used for testing or shutdown."""
     with _registry_lock:
         session_ids = list(_character_sessions.keys())
         for character_id in session_ids:
@@ -181,12 +120,7 @@ def cleanup_all_sessions():
 
 
 def get_session_stats() -> dict:
-    """
-    Get statistics about the session registry.
-    
-    Returns:
-        Dict with session statistics
-    """
+    """Get statistics about the session registry."""
     with _registry_lock:
         total_sessions = len(_character_sessions)
         sessions_with_changes = 0
@@ -206,15 +140,7 @@ def get_session_stats() -> dict:
 
 
 def register_character_path(file_path: str) -> int:
-    """
-    Register a file path and get an integer ID for it.
-    
-    Args:
-        file_path: The full file path to the character/save
-        
-    Returns:
-        Integer ID for this character
-    """
+    """Register a file path and get an integer ID for it."""
     global _next_session_id
     
     with _registry_lock:
@@ -235,26 +161,10 @@ def register_character_path(file_path: str) -> int:
 
 
 def get_path_from_id(session_id: int) -> Optional[str]:
-    """
-    Get the file path for a given integer ID.
-    
-    Args:
-        session_id: Integer session ID
-        
-    Returns:
-        File path or None if not found
-    """
+    """Get the file path for a given integer ID."""
     return _id_to_path.get(session_id)
 
 
 def get_id_from_path(file_path: str) -> Optional[int]:
-    """
-    Get the integer ID for a given file path.
-    
-    Args:
-        file_path: Full file path
-        
-    Returns:
-        Integer ID or None if not registered
-    """
+    """Get the integer ID for a given file path."""
     return _path_to_id.get(file_path)

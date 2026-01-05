@@ -1,37 +1,18 @@
-"""
-Code Cache - Secure caching for generated Python code
-
-This module provides secure caching of generated Python code strings (not compiled objects)
-to speed up application startup. Uses file hashing for cache invalidation.
-"""
+"""Code Cache - Secure caching for generated Python code."""
 import hashlib
-import logging
 from pathlib import Path
 from typing import Optional, Dict, Callable, Any
 import json
 from datetime import datetime
 import threading
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class SecureCodeCache:
-    """
-    Cache generated code strings between sessions - NEVER cache compiled objects.
-    
-    Security principles:
-    - Only cache source code strings, never compiled code or pickled objects
-    - Use content + mtime hashing for cache invalidation
-    - Clean up old cache entries automatically
-    """
+    """Cache generated code strings between sessions - NEVER cache compiled objects."""
     
     def __init__(self, cache_dir: Path):
-        """
-        Initialize code cache.
-        
-        Args:
-            cache_dir: Directory to store cached code files
-        """
+        """Initialize code cache."""
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -53,26 +34,16 @@ class SecureCodeCache:
     def _save_metadata(self):
         """Save cache metadata to disk."""
         try:
-            # Create a copy of metadata while holding the lock to avoid iteration issues
             with self._metadata_lock:
                 metadata_copy = self.metadata.copy()
             
-            # Write the copy without holding the lock
             with open(self.metadata_file, 'w') as f:
                 json.dump(metadata_copy, f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save cache metadata: {e}")
     
     def get_file_hash(self, file_path: Path) -> str:
-        """
-        Generate hash of file content + modification time.
-        
-        Args:
-            file_path: Path to the file to hash
-            
-        Returns:
-            SHA256 hash hex string
-        """
+        """Generate hash of file content + modification time."""
         try:
             content = file_path.read_bytes()
             mtime = str(file_path.stat().st_mtime)
@@ -83,18 +54,8 @@ class SecureCodeCache:
             return ""
     
     def get_table_hash(self, table_name: str, table_data: Any) -> str:
-        """
-        Generate hash for a table's structure.
-        
-        Args:
-            table_name: Name of the 2DA table
-            table_data: Table data object (TDAParser or similar)
-            
-        Returns:
-            SHA256 hash hex string
-        """
+        """Generate hash for a table's structure."""
         try:
-            # Extract column headers
             if hasattr(table_data, 'get_column_headers'):
                 columns = table_data.get_column_headers()
             elif hasattr(table_data, 'columns'):
@@ -102,10 +63,9 @@ class SecureCodeCache:
             else:
                 columns = []
             
-            # Include table name and column structure in hash
             hash_data = {
                 'table_name': table_name,
-                'columns': sorted(columns),  # Sort for consistency
+                'columns': sorted(columns),
                 'column_count': len(columns)
             }
             
@@ -117,45 +77,28 @@ class SecureCodeCache:
     
     def load_or_generate(self, table_name: str, file_path: Optional[Path], 
                         code_generator_func: Callable[[], str]) -> str:
-        """
-        Load code string from cache if valid, otherwise generate.
-        
-        Args:
-            table_name: Name of the 2DA table
-            file_path: Optional path to source file (for hash validation)
-            code_generator_func: Function to generate code if not cached
-            
-        Returns:
-            Generated Python code string
-        """
-        # Generate cache key
+        """Load code string from cache if valid, otherwise generate."""
         if file_path and file_path.exists():
             file_hash = self.get_file_hash(file_path)
             cache_key = f"{table_name}_{file_hash}"
         else:
-            # No file path, use table name only
             cache_key = table_name
         
         cache_file = self.cache_dir / f"{cache_key}.py"
         
-        # Check if cached version exists and is valid
         if cache_file.exists():
             try:
-                # Verify metadata (thread-safe access)
                 with self._metadata_lock:
                     cached_info = self.metadata.get(cache_key)
                 
                 if cached_info:
-                    # If we have a file path, verify it hasn't changed
                     if file_path and file_path.exists():
                         current_hash = self.get_file_hash(file_path)
                         if cached_info.get('file_hash') == current_hash:
-                            # Cache is valid, load it
                             code = cache_file.read_text(encoding='utf-8')
                             logger.debug(f"Loaded cached code for {table_name}")
                             return code
                     elif not file_path:
-                        # No file to validate against, trust the cache
                         code = cache_file.read_text(encoding='utf-8')
                         logger.debug(f"Loaded cached code for {table_name} (no file validation)")
                         return code
@@ -166,11 +109,9 @@ class SecureCodeCache:
         logger.debug(f"Generating new code for {table_name}")
         code_string = code_generator_func()
         
-        # Save to cache
         try:
             cache_file.write_text(code_string, encoding='utf-8')
             
-            # Update metadata (thread-safe)
             with self._metadata_lock:
                 self.metadata[cache_key] = {
                     'table_name': table_name,
@@ -180,7 +121,6 @@ class SecureCodeCache:
                 }
             self._save_metadata()
             
-            # Clean old cache files for this table
             self._clean_old_cache(table_name, cache_key)
             
         except Exception as e:
@@ -189,13 +129,7 @@ class SecureCodeCache:
         return code_string
     
     def _clean_old_cache(self, table_name: str, current_key: str):
-        """
-        Remove outdated cache files for this table.
-        
-        Args:
-            table_name: Name of the table
-            current_key: Current cache key to keep
-        """
+        """Remove outdated cache files for this table."""
         pattern = f"{table_name}_*.py"
         removed_count = 0
         keys_to_remove = []
@@ -285,13 +219,7 @@ class SecureCodeCache:
             logger.info(f"Cleaned up {orphaned_count} orphaned cache files")
     
     def save_relationships(self, relationships: Any, validation_report: Any):
-        """
-        Save detected relationships and validation report to cache.
-        
-        Args:
-            relationships: Set of RelationshipDefinition objects
-            validation_report: ValidationReport object
-        """
+        """Save detected relationships and validation report to cache."""
         relationships_file = self.cache_dir / "relationships.json"
         
         try:
@@ -331,12 +259,7 @@ class SecureCodeCache:
             logger.error(f"Failed to save relationships to cache: {e}")
     
     def load_relationships(self) -> Optional[Dict[str, Any]]:
-        """
-        Load cached relationships if available.
-        
-        Returns:
-            Dict with 'relationships' and 'validation_report' or None
-        """
+        """Load cached relationships if available."""
         relationships_file = self.cache_dir / "relationships.json"
         
         if not relationships_file.exists():
@@ -354,15 +277,7 @@ class SecureCodeCache:
             return None
     
     def get_relationships_hash(self, table_data: Dict[str, Any]) -> str:
-        """
-        Generate hash for current table structure to validate cached relationships.
-        
-        Args:
-            table_data: Dict of table_name -> table instances
-            
-        Returns:
-            SHA256 hash of table structures
-        """
+        """Generate hash for current table structure to validate cached relationships."""
         try:
             # Build hash data from table names and column counts
             hash_data = {}

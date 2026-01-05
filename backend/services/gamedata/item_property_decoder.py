@@ -1,10 +1,4 @@
-"""
-Item Property Decoder Service
-
-Decodes NWN2 item properties using the full itempropdef.2da table data.
-Maps PropertyName IDs to human-readable descriptions and bonus calculations.
-"""
-
+"""Decode NWN2 item properties using itempropdef.2da table data."""
 
 from typing import Dict, List, Any, Optional, Tuple
 from loguru import logger
@@ -12,23 +6,15 @@ from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 
 class ItemPropertyDecoder:
-    """Service for decoding NWN2 item properties using game data tables"""
+    """Decode item properties to human-readable descriptions and bonuses."""
     
     def __init__(self, rules_service):
-        """
-        Initialize decoder with rules service access
-        
-        Args:
-            rules_service: GameRulesService instance for accessing tables
-        """
+        """Initialize decoder with rules service access."""
         self.rules_service = rules_service
         self._property_cache = {}
         self._subtype_caches = {}
         self._ability_map = {0: 'Str', 1: 'Dex', 2: 'Con', 3: 'Int', 4: 'Wis', 5: 'Cha'}
         self._save_map = {0: 'fortitude', 1: 'reflex', 2: 'will'}
-        
-        # Unified context lists for data-driven subtype resolution
-        # Keys correspond to the mapped values in subtype_map
         self._context_lists = {
             'abilities': self._ability_map,
             'saving_throws': {0: 'Fortitude', 1: 'Reflex', 2: 'Will'},
@@ -48,9 +34,6 @@ class ItemPropertyDecoder:
         }
         
         self._init_property_mappings()
-        
-        # Property-specific overrides to fix known 2DA discrepancies or suppress noise
-        # format: prop_id: { 'subtype_table': str, 'cost_table': str, 'param1_table': str, 'suppress_p1': bool, 'suppress_cost': bool }
         self.property_overrides = {
             # Base Game Overrides - Correcting Table Mappings
             0: {'cost_table': 'iprp_bonuscost', 'force_cost_idx': 1, 'suppress_p1': True},      # Ability Bonus: Value is in Cost
@@ -104,7 +87,7 @@ class ItemPropertyDecoder:
         }
     
     def _init_property_mappings(self):
-        """Initialize property type mappings and caches"""
+        """Initialize property type mappings and caches."""
         try:
             itempropdef_table = self.rules_service.get_table('itempropdef')
             if itempropdef_table:
@@ -124,15 +107,7 @@ class ItemPropertyDecoder:
             logger.error(f"Failed to load itempropdef table: {e}")
     
     def decode_property(self, property_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Decode a single item property into human-readable information
-        
-        Args:
-            property_data: Raw property data from GFF
-            
-        Returns:
-            Decoded property information or None if property is invalid
-        """
+        """Decode a single item property into human-readable information."""
         if property_data is None:
             return None
         property_name = property_data.get('PropertyName', 0)
@@ -144,19 +119,8 @@ class ItemPropertyDecoder:
         
         prop_def = self._property_cache.get(property_name)
         if not prop_def:
-            return {
-                'property_id': property_name,
-                'label': f'Unknown Property {property_name}',
-                'description': 'Unknown property type',
-                'subtype': subtype,
-                'cost_value': cost_value,
-                'param1': param1,
-                'param1_value': param1_value,
-                'raw_data': property_data,
-                'decoded': False
-            }
+            raise ValueError(f"Unknown property ID {property_name} - not found in itempropdef.2da")
         
-        # Decode based on property types
         decoded_info = self._decode_specific_property(
             property_name, prop_def, subtype, cost_value, param1, param1_value
         )
@@ -175,7 +139,7 @@ class ItemPropertyDecoder:
     def _decode_specific_property(self, prop_id: int, prop_def: Dict[str, Any],
                                  subtype: int, cost_value: int, param1: int,
                                  param1_value: int) -> Dict[str, Any]:
-        """Decode specific property types based on ID and definition"""
+        """Decode property types based on ID and definition."""
 
         label = prop_def['label'].lower()
         base_description = prop_def['description']
@@ -433,7 +397,7 @@ class ItemPropertyDecoder:
             return self._generic_decode(prop_def, subtype, cost_value, param1)
     
     def _get_spell_name(self, spell_id: int) -> str:
-        """Get spell name from spell ID"""
+        """Get spell name from spell ID."""
         try:
             spell_data = self.rules_service.get_by_id('spells', spell_id)
             if spell_data:
@@ -443,7 +407,7 @@ class ItemPropertyDecoder:
         return f'Spell {spell_id}'
     
     def _get_skill_name(self, skill_id: int) -> str:
-        """Get skill name from skill ID"""
+        """Get skill name from skill ID."""
         try:
             skill_data = self.rules_service.get_by_id('skills', skill_id)
             if skill_data:
@@ -453,7 +417,7 @@ class ItemPropertyDecoder:
         return f'Skill {skill_id}'
 
     def _get_class_name(self, class_id: int) -> str:
-        """Get class name from class ID"""
+        """Get class name from class ID."""
         try:
             class_data = self.rules_service.get_by_id('classes', class_id)
             if class_data and hasattr(class_data, 'label'):
@@ -463,7 +427,7 @@ class ItemPropertyDecoder:
         return f'Class {class_id}'
 
     def _get_ordinal(self, num: int) -> str:
-        """Convert number to ordinal string (0 -> 1st, 1 -> 2nd, etc.)"""
+        """Convert number to ordinal string."""
         num = num + 1
         if 10 <= num % 100 <= 20:
             suffix = 'th'
@@ -472,23 +436,22 @@ class ItemPropertyDecoder:
         return f'{num}{suffix}'
 
     def _get_immunity_type_name(self, immunity_id: int) -> str:
-        """Get immunity type name from iprp_immunity.2da"""
+        """Get immunity type name from iprp_immunity.2da."""
         options = self._get_iprp_table_options('iprp_immunity')
         if options and immunity_id in options:
             return options[immunity_id]
         return f'Immunity {immunity_id}'
 
     def _get_save_element_name(self, element_id: int) -> str:
-        """Get save element name from iprp_saveelement ID"""
+        """Get save element name from iprp_saveelement ID."""
         options = self._get_iprp_table_options('iprp_saveelement')
         if options and element_id in options:
             label = options[element_id]
-            # Clean up the label which often includes "Saving Throw: " prefix in 2DA
             return label.replace('Saving Throw: ', '').replace('Save:', '').strip()
         return f'Element {element_id}'
     
     def _decode_target_type(self, prop_id: int, subtype: int) -> str:
-        """Decode target type for conditional bonuses"""
+        """Decode target type for conditional bonuses."""
         if prop_id == 57:
             alignment_groups = {0: 'Good', 1: 'Evil', 2: 'Lawful', 3: 'Chaotic'}
             return alignment_groups.get(subtype, f'Alignment {subtype}')
@@ -503,32 +466,31 @@ class ItemPropertyDecoder:
         return f'Target {subtype}'
     
     def _get_damage_type_name(self, damage_type_id: int) -> str:
-        """Get damage type name from ID using iprp_damagetype.2da"""
+        """Get damage type name from iprp_damagetype.2da."""
         options = self._get_iprp_table_options('iprp_damagetype')
         if options and damage_type_id in options:
             return options[damage_type_id].lower()
         return f'type_{damage_type_id}'
         
     def _get_all_save_elements(self) -> Dict[int, str]:
-        """Return all save element types mapped by ID"""
+        """Return all save element types mapped by ID."""
         return self._get_iprp_table_options('iprp_saveelement') or {}
 
     def _get_all_damage_types(self) -> Dict[int, str]:
-        """Return all damage types mapped by ID"""
+        """Return all damage types mapped by ID."""
         return self._get_iprp_table_options('iprp_damagetype') or {}
 
     def _get_all_immunity_types(self) -> Dict[int, str]:
-        """Return all immunity types mapped by ID"""
+        """Return all immunity types mapped by ID."""
         return self._get_iprp_table_options('iprp_immunity') or {}
 
     def _get_spell_data(self, spell_row_id: int) -> Dict[str, Any]:
-        """Look up spell data from iprp_spells.2da"""
+        """Look up spell data from iprp_spells.2da."""
         try:
             spell_table = self.rules_service.get_table('iprp_spells')
             if spell_table and spell_row_id < len(spell_table):
                 spell_row = spell_table[spell_row_id]
                 if spell_row:
-                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
                     return {
                         'name': field_mapper.get_field_value(spell_row, 'Label', f'Spell_{spell_row_id}'),
                         'caster_level': int(field_mapper.get_field_value(spell_row, 'CasterLvl', 1))
@@ -538,13 +500,12 @@ class ItemPropertyDecoder:
         return {'name': f'Spell_{spell_row_id}', 'caster_level': 1}
 
     def _get_charge_uses(self, cost_value: int) -> Dict[str, str]:
-        """Look up charge/uses data from iprp_chargecost.2da"""
+        """Look up charge/uses data from iprp_chargecost.2da."""
         try:
             charge_table = self.rules_service.get_table('iprp_chargecost')
             if charge_table and cost_value < len(charge_table):
                 charge_row = charge_table[cost_value]
                 if charge_row:
-                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
                     label = field_mapper.get_field_value(charge_row, 'Label', 'Unknown')
                     return {'label': label.replace('_', ' ')}
         except Exception as e:
@@ -552,13 +513,12 @@ class ItemPropertyDecoder:
         return {'label': 'Unknown'}
 
     def _get_resistance_value(self, cost_value: int) -> int:
-        """Look up resistance amount from iprp_resistcost.2da"""
+        """Look up resistance amount from iprp_resistcost.2da."""
         try:
             resist_table = self.rules_service.get_table('iprp_resistcost')
             if resist_table and cost_value < len(resist_table):
                 resist_row = resist_table[cost_value]
                 if resist_row:
-                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
                     amount = field_mapper.get_field_value(resist_row, 'Amount', cost_value)
                     return int(amount)
         except Exception as e:
@@ -566,13 +526,12 @@ class ItemPropertyDecoder:
         return cost_value
 
     def _get_vulnerability_value(self, cost_value: int) -> int:
-        """Look up vulnerability percentage from iprp_damvulcost.2da"""
+        """Look up vulnerability percentage from iprp_damvulcost.2da."""
         try:
             vuln_table = self.rules_service.get_table('iprp_damvulcost')
             if vuln_table and cost_value < len(vuln_table):
                 vuln_row = vuln_table[cost_value]
                 if vuln_row:
-                    from gamedata.dynamic_loader.field_mapping_utility import field_mapper
                     value = field_mapper.get_field_value(vuln_row, 'Value', cost_value)
                     return int(value)
         except Exception as e:
@@ -580,11 +539,10 @@ class ItemPropertyDecoder:
         return cost_value
 
     def _get_light_data(self, cost_value: int, param1: int) -> Dict[str, str]:
-        """Look up light brightness and color from iprp_lightcost.2da and lightcolor.2da"""
+        """Look up light brightness and color from 2DA tables."""
         try:
             light_table = self.rules_service.get_table('iprp_lightcost')
             color_table = self.rules_service.get_table('lightcolor')
-            from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
             brightness = 'Normal'
             if light_table and cost_value < len(light_table):
@@ -605,7 +563,7 @@ class ItemPropertyDecoder:
         return {'brightness': 'Normal', 'color': ''}
 
     def _decode_dr_bypass(self, param1: int) -> str:
-        """Decode damage reduction bypass type"""
+        """Decode damage reduction bypass type."""
         bypass_types = {
             0: 'None',
             1: 'Magic', 
@@ -621,11 +579,9 @@ class ItemPropertyDecoder:
     
     def _generic_decode(self, prop_def: Dict[str, Any], subtype: int, 
                        cost_value: int, param1: int) -> Dict[str, Any]:
-        """Generic decode for unknown property types"""
+        """Generic decode for unknown property types."""
         label = prop_def['label']
         description = prop_def['description']
-        
-        # Try to extract meaningful info from label/description
         if cost_value > 0:
             if any(word in label.lower() for word in ['bonus', '+']):
                 label = f'{label} +{cost_value}'
@@ -641,12 +597,12 @@ class ItemPropertyDecoder:
         }
     
     def decode_all_properties(self, properties_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Decode all properties in a list"""
+        """Decode all properties in a list."""
         decoded = [self.decode_property(prop) for prop in properties_list]
         return [p for p in decoded if p is not None]
 
     def _resolve_indexed_column(self, prop_def: Dict[str, Any], column_name: str, preferred_table: str) -> Optional[int]:
-        """Extract an integer index from a 2DA column, resolving names back to indices if needed"""
+        """Extract an integer index from a 2DA column."""
         val = field_mapper.get_field_value(prop_def, column_name)
         if val is None or str(val) == '****':
             return None
@@ -677,7 +633,7 @@ class ItemPropertyDecoder:
         return None
 
     def get_editor_property_metadata(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate metadata for the item editor UI based on itempropdef.2da"""
+        """Generate metadata for the item editor UI based on itempropdef.2da."""
         metadata = []
         prop_defs = self.rules_service.get_table('itempropdef')
         
@@ -798,7 +754,6 @@ class ItemPropertyDecoder:
             # Subtype logic
             subtype_ref = field_mapper.get_field_value(prop_def, 'SubTypeResRef', '').lower()
             mapping_val = self.subtype_map.get(subtype_ref, subtype_ref)
-            
             if prop_id in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 17, 18, 19, 20, 21, 23, 24, 27, 28, 29, 39, 40, 41, 44, 45, 48, 49, 50, 52, 53, 56, 57, 58, 59, 60, 66, 67, 70, 73, 74, 76, 77, 78, 80, 81, 82, 84, 85, 91, 92]:
                 cost_table_idx = self._resolve_indexed_column(prop_def, 'Param1ResRef', 'iprp_costtable')
                 param1_idx = None
@@ -808,7 +763,6 @@ class ItemPropertyDecoder:
 
             # 2. Secondary table index (Param1)
 
-            # FINAL OVERRIDE APPLICATION
             if 'force_cost_idx' in overrides:
                 cost_table_idx = overrides['force_cost_idx']
             if 'force_p1_idx' in overrides:
@@ -840,7 +794,6 @@ class ItemPropertyDecoder:
                                 has_subtype = True
                 except (ValueError, TypeError): pass
 
-            # Resolve cost table options
             has_cost_table = False
             cost_table_options = {}
             if cost_table_idx is not None and not overrides.get('suppress_cost'):
@@ -854,7 +807,6 @@ class ItemPropertyDecoder:
                         has_cost_table = len(cost_table_options) > 0
                 except (ValueError, TypeError): pass
 
-            # Resolve param1 options
             has_param1 = False
             param1_options = {}
             if param1_idx is not None and not overrides.get('suppress_p1'):
@@ -874,7 +826,6 @@ class ItemPropertyDecoder:
                         has_param1 = len(param1_options) > 0
                 except (ValueError, TypeError): pass
 
-            # Result
             metadata.append({
                 'id': prop_id,
                 'label': clean_label,
@@ -895,7 +846,7 @@ class ItemPropertyDecoder:
         return sorted(metadata, key=lambda x: x['label'])
 
     def _get_mapping_table_resref(self, mapping_table_name: str, index: int, prop_id: Optional[int] = None) -> Optional[str]:
-        """Get the ResRef of a lookup table from a mapping table"""
+        """Get the ResRef of a lookup table from a mapping table."""
         if not hasattr(self, '_mapping_cache'):
             self._mapping_cache = {}
             
@@ -931,7 +882,7 @@ class ItemPropertyDecoder:
         return resref
 
     def _get_iprp_table_options(self, table_name: str) -> Optional[Dict[int, str]]:
-        """Resolve a 2DA table into a Dict[int, str] options map"""
+        """Resolve a 2DA table into an options map."""
         if not table_name: return None
         
         if not hasattr(self, '_table_options_cache'):
@@ -1017,7 +968,7 @@ class ItemPropertyDecoder:
         }
     
     def get_item_bonuses(self, properties_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Extract quantified bonuses from raw property data for combat calculations"""
+        """Extract quantified bonuses from raw property data for combat calculations."""
         bonuses = {
             'abilities': {},
             'saves': {},

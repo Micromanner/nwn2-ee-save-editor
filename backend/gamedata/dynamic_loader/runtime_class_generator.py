@@ -1,27 +1,11 @@
-"""
-Runtime Data Class Generator - Creates Python classes dynamically from 2DA structures
-
-This module generates optimized Python classes at runtime based on the actual
-2DA files and mod content loaded by the user, enabling full mod compatibility
-while maintaining performance.
-"""
-import logging
+"""Runtime Data Class Generator - Creates Python classes dynamically from 2DA structures."""
+from loguru import logger
 from typing import Dict, List, Any, Optional, Type
 from gamedata.dynamic_loader.column_sanitizer import ColumnNameSanitizer
 
-logger = logging.getLogger(__name__)
-
 
 class RuntimeDataClassGenerator:
-    """
-    Generates Python classes at runtime from 2DA table structures.
-    
-    Features:
-    - Uses __slots__ for memory efficiency
-    - Maintains mapping from original to safe column names
-    - Supports efficient batch initialization
-    - Provides useful __repr__ for debugging
-    """
+    """Generates Python classes at runtime from 2DA table structures."""
     
     def __init__(self):
         self.sanitizer = ColumnNameSanitizer()
@@ -30,39 +14,23 @@ class RuntimeDataClassGenerator:
     
     def generate_class_from_2da(self, table_name: str, columns: List[str], 
                                sample_data: Optional[List[Dict]] = None) -> Type:
-        """
-        Generate a Python class at runtime from 2DA structure.
-        
-        Args:
-            table_name: Name of the 2DA table
-            columns: List of column names from the 2DA
-            sample_data: Optional sample data for type inference
-            
-        Returns:
-            Generated Python class
-        """
-        # Generate unique class name
+        """Generate a Python class at runtime from 2DA structure."""
         class_name = self._generate_class_name(table_name)
         
-        # Check if already generated
         if class_name in self._generated_classes:
             return self._generated_classes[class_name]
         
-        # Sanitize column names ensuring uniqueness
         column_mapping = self.sanitizer.sanitize_unique_columns(columns)
         safe_columns = list(column_mapping.values())
         
-        # Generate class code
         class_code = self._generate_class_code(
             class_name, safe_columns, column_mapping, table_name
         )
         
-        # Compile and return the class
-        namespace = {}  # Use default builtins which includes __build_class__
+        namespace = {}
         exec(class_code, namespace)
         generated_class = namespace[class_name]
         
-        # Cache the generated class
         self._generated_classes[class_name] = generated_class
         
         logger.debug(f"Generated class {class_name} for table {table_name} with {len(safe_columns)} columns")
@@ -91,34 +59,23 @@ class RuntimeDataClassGenerator:
     def _generate_class_code(self, class_name: str, safe_columns: List[str],
                            column_mapping: Dict[str, str], table_name: str) -> str:
         """Generate the actual Python code for the class."""
-        # Build slots tuple (include _resource_manager)
         slots = ['_resource_manager'] + ['_' + col for col in safe_columns]
         slots_str = repr(tuple(slots))
         
-        # Build column mapping
         mapping_str = repr(column_mapping)
         
-        # Determine primary key column (first column or 'id' if exists)
         pk_column = None
         if safe_columns:
-            # Check for common ID patterns
             for col in safe_columns:
                 if col.lower() in ('id', 'index', 'idx', 'row'):
                     pk_column = col
                     break
-            # Default to first column
             if not pk_column:
                 pk_column = safe_columns[0]
         
-        # Generate code
         code = f'''
 class {class_name}:
-    """
-    Auto-generated data class for {table_name}.2da
-    
-    This class provides efficient attribute access to 2DA row data
-    with automatic column name mapping for mod compatibility.
-    """
+    """Auto-generated data class for {table_name}.2da."""
     __slots__ = {slots_str}
     _column_mapping = {mapping_str}
     _table_name = {repr(table_name)}
@@ -126,52 +83,38 @@ class {class_name}:
     
     def __init__(self, _resource_manager=None, _string_cache=None, **row_data):
         """Initialize from 2DA row data with optimized string resolution."""
-        # Store resource manager for string resolution
         self._resource_manager = _resource_manager
         
-        # Optimized: Only initialize slots that will be used
         if row_data:
-            # Map from original to safe column names with cached string resolution
             column_mapping = self._column_mapping
             for orig_col, value in row_data.items():
                 if orig_col in column_mapping:
                     safe_col = column_mapping[orig_col]
-                    
-                    # Use cached string resolution if available
                     resolved_value = self._resolve_string_reference_cached(orig_col, value, _string_cache)
-                    
-                    # Direct assignment (faster than setattr)
                     object.__setattr__(self, '_' + safe_col, resolved_value)
         
-        # Initialize remaining slots to None only if needed
         for slot in self.__slots__:
             if not hasattr(self, slot):
                 object.__setattr__(self, slot, None)
     
     def _resolve_string_reference_cached(self, column_name, value, string_cache=None):
         """Resolve string references using cache when available."""
-        # Common string reference field patterns
         string_ref_fields = {{
             'name', 'description', 'plural', 'lower', 'label',
             'displaynametext', 'desc', 'tooltip', 'help'
         }}
         
-        # Check if this field should be resolved as a string reference
         if (column_name.lower() in string_ref_fields and 
             isinstance(value, (str, int))):
             try:
                 int_val = int(value)
-                # Only resolve if it's a reasonable string reference ID (NWN2 uses larger ranges)
-                # Special case: 0 is usually an invalid/null string reference
                 if int_val == 0:
-                    return value  # Don't try to resolve 0, return original value
+                    return value
                 
-                if 1 <= int_val <= 16777215:  # Expanded range for NWN2 string references
-                    # Use cache first if available
+                if 1 <= int_val <= 16777215:
                     if string_cache and int_val in string_cache:
                         return string_cache[int_val]
                     
-                    # Fallback to resource manager
                     if self._resource_manager:
                         resolved = self._resource_manager.get_string(int_val)
                         if resolved and resolved != str(int_val):
@@ -182,7 +125,7 @@ class {class_name}:
         return value
     
     def _resolve_string_reference(self, column_name, value):
-        """Resolve string references for known string fields (legacy method)."""
+        """Resolve string references for known string fields."""
         return self._resolve_string_reference_cached(column_name, value, None)
     
     def __getattr__(self, name):
@@ -190,31 +133,25 @@ class {class_name}:
         if name.startswith('_'):
             raise AttributeError(f"'{{self.__class__.__name__}}' object has no attribute '{{name}}'")
         
-        # First try exact match
         slot_name = '_' + name
         if slot_name in self.__slots__:
             return getattr(self, slot_name)
         
-        # Try case-insensitive match
         lower_name = name.lower()
         for slot in self.__slots__:
             if slot == '_resource_manager':
                 continue
-            if slot[1:].lower() == lower_name:  # Skip underscore prefix
+            if slot[1:].lower() == lower_name:
                 return getattr(self, slot)
         
-        # Check original column names too (case-insensitive)
         for orig_col, safe_col in self._column_mapping.items():
             if orig_col.lower() == lower_name:
                 slot_name = '_' + safe_col
                 if slot_name in self.__slots__:
                     return getattr(self, slot_name)
         
-        # Helpful error message
         available_attrs = []
-        # Add safe column names
         available_attrs.extend(col[1:] for col in self.__slots__ if col != '_resource_manager')
-        # Add original column names
         available_attrs.extend(self._column_mapping.keys())
         
         raise AttributeError(
@@ -245,13 +182,12 @@ class {class_name}:
     def to_dict(self, use_original_names=False):
         """Convert to dictionary."""
         if use_original_names:
-            # Reverse mapping
             safe_to_orig = {{v: k for k, v in self._column_mapping.items()}}
             result = {{}}
             for slot in self.__slots__:
                 if slot == '_resource_manager':
-                    continue  # Skip resource manager
-                safe_col = slot[1:]  # Remove underscore
+                    continue
+                safe_col = slot[1:]
                 if safe_col in safe_to_orig:
                     orig_col = safe_to_orig[safe_col]
                     value = getattr(self, slot)
@@ -259,7 +195,6 @@ class {class_name}:
                         result[orig_col] = value
             return result
         else:
-            # Use safe names
             return {{
                 slot[1:]: getattr(self, slot)
                 for slot in self.__slots__
@@ -283,47 +218,26 @@ class {class_name}:
     
     @classmethod
     def create_batch(cls, row_data_list, resource_manager=None, string_cache=None):
-        """
-        Optimized batch creation using __new__ to bypass __init__ overhead.
-        
-        This method creates multiple instances 25-40% faster by:
-        1. Using __new__ to allocate objects without calling __init__
-        2. Directly setting attributes via object.__setattr__
-        3. Reusing column mapping and string cache
-        
-        Args:
-            row_data_list: List of dictionaries containing row data
-            resource_manager: ResourceManager for string resolution
-            string_cache: Pre-populated string cache for batch lookups
-            
-        Returns:
-            List of initialized instances
-        """
+        """Optimized batch creation using __new__ to bypass __init__ overhead."""
         instances = []
         column_mapping = cls._column_mapping
         
-        # Pre-compute slot names to avoid repeated string concatenation
         slot_names = {{orig: '_' + safe for orig, safe in column_mapping.items()}}
         
-        # Common string reference fields for optimization
         string_ref_fields = {{
             'name', 'description', 'plural', 'lower', 'label',
             'displaynametext', 'desc', 'tooltip', 'help'
         }}
         
         for row_data in row_data_list:
-            # Allocate object without calling __init__
             instance = object.__new__(cls)
             
-            # Directly set resource manager
             object.__setattr__(instance, '_resource_manager', resource_manager)
             
-            # Fast path: set attributes directly
             for orig_col, value in row_data.items():
                 if orig_col in slot_names:
                     slot_name = slot_names[orig_col]
                     
-                    # Inline string resolution for performance
                     if string_cache and orig_col.lower() in string_ref_fields and isinstance(value, (str, int)):
                         try:
                             int_val = int(value)
@@ -336,10 +250,8 @@ class {class_name}:
                         except (ValueError, TypeError):
                             pass
                     
-                    # Direct assignment
                     object.__setattr__(instance, slot_name, value)
             
-            # Initialize remaining slots to None (optimized)
             for slot in cls.__slots__:
                 if not hasattr(instance, slot):
                     object.__setattr__(instance, slot, None)
@@ -348,20 +260,10 @@ class {class_name}:
         
         return instances
 '''
-        
         return code
     
     def generate_code_for_table(self, table_name: str, table_data: Any) -> str:
-        """
-        Generate class code for a table using actual 2DA data.
-        
-        Args:
-            table_name: Name of the 2DA table
-            table_data: TDAParser or similar object with column data
-            
-        Returns:
-            Generated Python code as string
-        """
+        """Generate class code for a table using actual 2DA data."""
         # Extract columns from table data
         if hasattr(table_data, 'get_column_headers'):
             columns = table_data.get_column_headers()

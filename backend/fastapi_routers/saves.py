@@ -1,14 +1,11 @@
-"""
-FastAPI router for saving throw operations.
-Handles fortitude, reflex, will saves and resistances.
-"""
+"""FastAPI router for saving throw operations."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, Any
 from loguru import logger
 
 from .dependencies import get_character_manager, get_character_session, CharacterManagerDep, CharacterSessionDep
-# from fastapi_models import (...) - moved to lazy loading
+
 
 router = APIRouter(tags=["Saves"])
 
@@ -18,13 +15,7 @@ def get_save_summary(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get saving throw summary using existing SaveManager method.
-    
-    Returns:
-    - Fortitude, reflex, will save totals and breakdowns
-    - Save conditions and immunities
-    """
+    """Get saving throw summary."""
     try:
         save_manager = manager.get_manager('save')
         
@@ -34,7 +25,6 @@ def get_save_summary(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         save_summary = save_manager.get_save_summary()
         
         return save_summary
@@ -52,12 +42,7 @@ def get_save_breakdown(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get detailed saving throw breakdown using SaveManager method.
-    
-    Returns:
-    - Complete breakdown of all saves with components
-    """
+    """Get detailed saving throw breakdown."""
     try:
         save_manager = manager.get_manager('save')
         
@@ -67,7 +52,6 @@ def get_save_breakdown(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         save_breakdown = save_manager.calculate_saving_throws()
         
         return save_breakdown
@@ -85,12 +69,7 @@ def get_save_totals(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get individual save totals using SaveManager methods.
-    
-    Returns:
-    - Individual fortitude, reflex, will totals
-    """
+    """Get individual save totals."""
     try:
         save_manager = manager.get_manager('save')
         
@@ -100,7 +79,6 @@ def get_save_totals(
                 detail="Save manager not available"
             )
         
-        # Use individual SaveManager methods
         totals = {
             'fortitude': save_manager.calculate_fortitude_save(),
             'reflex': save_manager.calculate_reflex_save(),
@@ -123,18 +101,9 @@ def check_save(
     manager: CharacterManagerDep,
     request_data: Dict[str, Any]
 ):
-    """
-    Check if a saving throw would succeed using SaveManager method.
-    
-    Args:
-        request: Save check parameters
-    
-    Returns:
-        Save check result with success probability and details
-    """
+    """Check if a saving throw would succeed."""
     from fastapi_models.save_models import SaveCheckRequest
     
-    # Create SaveCheckRequest from raw data
     save_check_data = SaveCheckRequest(**request_data)
     
     try:
@@ -146,7 +115,6 @@ def check_save(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         check_result = save_manager.check_save(
             save_check_data.save_type, 
             save_check_data.dc, 
@@ -154,7 +122,6 @@ def check_save(
             save_check_data.take_20
         )
         
-        # Ensure success_chance is present for non-take_20 checks
         if not save_check_data.take_20 and 'success_chance' not in check_result:
             check_result['success_chance'] = None
         
@@ -179,15 +146,9 @@ def add_temporary_modifier(
     char_session: CharacterSessionDep,
     request_data: Dict[str, Any]
 ):
-    """
-    Add temporary save modifier using SaveManager method.
-    
-    Args:
-        request: Temporary modifier parameters
-    """
+    """Add temporary save modifier."""
     from fastapi_models.save_models import TemporaryModifierRequest
     
-    # Create TemporaryModifierRequest from raw data
     temp_modifier_data = TemporaryModifierRequest(**request_data)
     
     try:
@@ -205,7 +166,6 @@ def add_temporary_modifier(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         save_manager.add_temporary_modifier(temp_modifier_data.save_type, temp_modifier_data.modifier, temp_modifier_data.duration)
         
         return {
@@ -230,15 +190,9 @@ def remove_temporary_modifier(
     char_session: CharacterSessionDep,
     request_data: Dict[str, Any]
 ):
-    """
-    Remove temporary save modifier using SaveManager method.
-    
-    Args:
-        request: Temporary modifier parameters (duration ignored for removal)
-    """
+    """Remove temporary save modifier."""
     from fastapi_models.save_models import TemporaryModifierRequest
     
-    # Create TemporaryModifierRequest from raw data
     temp_modifier_data = TemporaryModifierRequest(**request_data)
     
     try:
@@ -256,7 +210,6 @@ def remove_temporary_modifier(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         save_manager.remove_temporary_modifier(temp_modifier_data.save_type, temp_modifier_data.modifier)
         
         return {
@@ -279,9 +232,7 @@ def clear_temporary_modifiers(
     character_id: int,
     char_session: CharacterSessionDep
 ):
-    """
-    Clear all temporary save modifiers using SaveManager method.
-    """
+    """Clear all temporary save modifiers."""
     try:
         session = char_session
         if not session or not session.character_manager:
@@ -297,7 +248,6 @@ def clear_temporary_modifiers(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         save_manager.clear_temporary_modifiers()
         
         return {
@@ -319,15 +269,9 @@ def set_misc_save_bonus(
     char_session: CharacterSessionDep,
     request_data: Dict[str, Any]
 ):
-    """
-    Set miscellaneous saving throw bonus using SaveManager method.
-    
-    Args:
-        request: Misc save bonus parameters
-    """
+    """Set miscellaneous saving throw bonus."""
     from fastapi_models.save_models import MiscSaveBonusRequest
     
-    # Create MiscSaveBonusRequest from raw data
     misc_bonus_data = MiscSaveBonusRequest(**request_data)
     
     try:
@@ -345,7 +289,6 @@ def set_misc_save_bonus(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         result = save_manager.set_misc_save_bonus(misc_bonus_data.save_type, misc_bonus_data.value)
         
         return result
@@ -369,15 +312,7 @@ def get_racial_saves(
     race_id: int,
     manager: CharacterManagerDep
 ):
-    """
-    Get racial save bonuses using SaveManager method.
-    
-    Args:
-        race_id: The race ID to get saves for
-    
-    Returns:
-        Dict with fortitude, reflex, will save bonuses
-    """
+    """Get racial save bonuses."""
     try:
         save_manager = manager.get_manager('save')
         
@@ -387,7 +322,6 @@ def get_racial_saves(
                 detail="Save manager not available"
             )
         
-        # Use existing SaveManager method
         racial_saves = save_manager.get_racial_saves(race_id)
         
         return racial_saves

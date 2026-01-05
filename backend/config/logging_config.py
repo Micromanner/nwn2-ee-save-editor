@@ -1,7 +1,4 @@
-"""
-Logging Configuration for NWN2 Editor
-Provides structured logging with Loguru and optional web-based log viewer.
-"""
+"""Logging configuration for NWN2 Editor."""
 import os
 import sys
 from pathlib import Path
@@ -10,17 +7,17 @@ from loguru import logger
 
 from utils.paths import get_writable_dir
 
-# Resolve log directory using centralized utility
+
 LOG_DIR = get_writable_dir("logs")
 
 ENABLE_LOG_VIEWER = os.getenv("ENABLE_LOG_VIEWER", "false").lower() == "true"
 LOG_VIEWER_PORT = int(os.getenv("LOG_VIEWER_PORT", "9999"))
 
-# Session ID for filtering logs by restart
+
 SESSION_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def configure_logging():
-    """Configure Loguru logging with file rotation and optional filtering"""
+    """Configure Loguru logging."""
     logger.remove()
 
     log_filter = os.getenv("LOG_FILTER", "")

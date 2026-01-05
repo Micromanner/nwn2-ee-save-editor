@@ -12,7 +12,7 @@ import concurrent.futures
 import threading
 import time
 
-from services.savegame_handler import SaveGameHandler
+from services.core.savegame_handler import SaveGameHandler
 from nwn2_rust import GffParser, GffWriter
 
 
@@ -227,7 +227,7 @@ class TestSaveGameHandlerBasicOperations:
         
     def test_extract_nonexistent_file(self, minimal_save_zip):
         """Test extracting a file that doesn't exist."""
-        from services.savegame_handler import SaveGameError
+        from services.core.savegame_handler import SaveGameError
         handler = SaveGameHandler(minimal_save_zip)
         
         with pytest.raises(SaveGameError):
@@ -368,7 +368,7 @@ class TestSaveGameHandlerErrorHandling:
     
     def test_corrupted_zip_handling(self, corrupted_save_zip):
         """Test handling of corrupted zip files."""
-        from services.savegame_handler import SaveGameError
+        from services.core.savegame_handler import SaveGameError
         handler = SaveGameHandler(corrupted_save_zip)
         
         with pytest.raises(SaveGameError):
@@ -376,7 +376,7 @@ class TestSaveGameHandlerErrorHandling:
     
     def test_missing_file_extraction(self, minimal_save_zip):
         """Test extracting non-existent files."""
-        from services.savegame_handler import SaveGameError
+        from services.core.savegame_handler import SaveGameError
         handler = SaveGameHandler(minimal_save_zip)
         
         with pytest.raises(SaveGameError):
@@ -398,7 +398,7 @@ class TestSaveGameHandlerErrorHandling:
     @patch('os.unlink')
     def test_update_cleanup_on_error(self, mock_unlink, mock_exists, minimal_save_zip):
         """Test that temp files are cleaned up on error."""
-        from services.savegame_handler import SaveGameError
+        from services.core.savegame_handler import SaveGameError
         handler = SaveGameHandler(minimal_save_zip)
         mock_exists.return_value = True
         
@@ -429,7 +429,7 @@ class TestSaveGameHandlerErrorHandling:
     @patch('zipfile.ZipFile')
     def test_permission_error_handling(self, mock_zipfile, minimal_save_zip):
         """Test handling of permission errors."""
-        from services.savegame_handler import SaveGameError
+        from services.core.savegame_handler import SaveGameError
         mock_zipfile.side_effect = PermissionError("No permission")
         
         handler = SaveGameHandler(minimal_save_zip)

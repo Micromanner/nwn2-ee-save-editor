@@ -1,35 +1,22 @@
-"""
-Rule Detector - Auto-detects game rules and requirements from 2DA files
-Based on pattern analysis of 442 2DA files, enables dynamic rule detection
-without hardcoding for full mod compatibility
-"""
+"""Auto-detect game rules and requirements from 2DA files for mod compatibility."""
 from loguru import logger
 import re
 from typing import Dict, List, Optional, Any, Set, Tuple, Protocol
 
-
-# Medium-Severity Fix: Use Protocols to define explicit interfaces for dependencies.
 class TwoDA(Protocol):
-    """Defines the expected interface for a 2DA file object."""
+    """Expected interface for a 2DA file object."""
     def get_resource_count(self) -> int: ...
     def get_row_dict(self, row_id: int) -> Dict[str, Any]: ...
     def get_cell(self, row_id: int, column_name: str) -> Any: ...
     def get_rows_as_dicts(self) -> List[Dict[str, Any]]: ...
     def get_column_headers(self) -> List[str]: ...
 
-
 class ResourceManager(Protocol):
-    """Defines the expected interface for the resource manager dependency."""
+    """Expected interface for the resource manager dependency."""
     def get_2da_with_overrides(self, name: str) -> Optional[TwoDA]: ...
 
-
 class RuleDetector:
-    """
-    Automatically detects column purposes and relationships in 2DA files without
-    hardcoding, enabling compatibility with mods that follow standard NWN2
-    naming conventions. This version is optimized for performance by caching
-    column analysis results and relies on explicit data definitions where possible.
-    """
+    """Detect column purposes and relationships in 2DA files without hardcoding."""
 
     NULL_VALUE = '****'
     MAX_LEVEL = 40
@@ -87,16 +74,12 @@ class RuleDetector:
         self._cache: Dict[str, Dict[str, Any]] = {}
 
     def get_requirements(self, table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Auto-detects and extracts requirements from a 2DA row, using context-aware
-        parsers for different requirement formats (e.g., feat.2da vs cls_pres_*.2da).
-        """
+        """Extract requirements from a 2DA row using context-aware parsers."""
         self._analyze_and_cache_columns(table_name)
         column_map = self._cache[table_name]['map']
         requirements: Dict[str, Any] = {}
         feats: Dict[str, List[int]] = {}
 
-        # Context-aware parsing for cls_pres_*.2da requirement format
         if 'ReqType' in row_data and str(row_data['ReqType']) != self.NULL_VALUE:
             req_type = str(row_data['ReqType']).upper()
             try:
@@ -110,7 +93,6 @@ class RuleDetector:
             except (ValueError, TypeError, KeyError):
                  logger.warning(f"Could not parse complex requirement in table '{table_name}'. Row: {row_data}")
 
-        # General pattern-based parsing for simple requirements
         for col, value in row_data.items():
             if not col or value is None or str(value) == self.NULL_VALUE: continue
             purpose = column_map.get(col)
@@ -122,7 +104,6 @@ class RuleDetector:
                 except (ValueError, TypeError):
                     logger.warning(f"Could not parse value '{value}' for column '{col}' in table '{table_name}'.")
 
-        # High-Severity Fix: Context-aware parsing for feat.2da's paired skill requirement columns.
         if table_name == 'feat':
             skill_pairs = [('REQSKILL', 'ReqSkillMinRanks'), ('REQSKILL2', 'ReqSkillMinRanks2')]
             for skill_col, rank_col in skill_pairs:
@@ -141,7 +122,7 @@ class RuleDetector:
         return requirements
 
     def _analyze_and_cache_columns(self, table_name: str) -> None:
-        """Analyzes and caches the purpose of each column in a 2DA table."""
+        """Analyze and cache the purpose of each column in a 2DA table."""
         if table_name in self._cache: return
         table_2da = self.rm.get_2da_with_overrides(table_name)
         if not table_2da:
@@ -158,21 +139,13 @@ class RuleDetector:
         self._cache[table_name] = {'map': column_map, 'type': table_type}
 
     def _get_table_type_no_cache(self, table_name: str) -> Optional[str]:
-        """Internal method to identify table type without checking cache."""
+        """Identify table type without checking cache."""
         for table_type, pattern in self.TABLE_TYPE_PATTERNS.items():
             if pattern.match(table_name.lower()): return table_type
         return None
     
     def get_available_feats(self, character_data: Dict[str, Any]) -> List[int]:
-        """
-        Get all feats available to a character based on their current state.
-        
-        Args:
-            character_data: Character information including level, attributes, feats, etc.
-            
-        Returns:
-            List of available feat IDs
-        """
+        """Return all feats available to a character based on their current state."""
         available_feats = []
         feat_2da = self.rm.get_2da_with_overrides('feat')
         
@@ -183,8 +156,7 @@ class RuleDetector:
         char_feats = set(character_data.get('feats', []))
         char_skills = character_data.get('skills', {})
         char_classes = character_data.get('classes', {})
-        
-        # Get character attributes
+
         abilities = {
             'STR': character_data.get('strength', 10),
             'DEX': character_data.get('dexterity', 10),
@@ -198,22 +170,16 @@ class RuleDetector:
             row = feat_2da.get_row_dict(i)
             if not row or row.get('LABEL') == self.NULL_VALUE:
                 continue
-            
-            # Check if character already has this feat
             if i in char_feats:
                 continue
-            
-            # Get requirements for this feat
+
             reqs = self.get_requirements('feat', row)
-            
-            # Check all requirements
+
             meets_requirements = True
-            
-            # Check level requirements
+
             if 'min_level' in reqs and char_level < reqs['min_level']:
                 meets_requirements = False
-            
-            # Check attribute requirements
+
             for attr in ['min_str', 'min_dex', 'min_con', 'min_int', 'min_wis', 'min_cha']:
                 if attr in reqs:
                     attr_key = attr[-3:].upper()
@@ -221,20 +187,17 @@ class RuleDetector:
                         meets_requirements = False
                         break
             
-            # Check prerequisite feats
+
             if 'prereq_feats' in reqs:
-                # Check "all of" requirements
                 for feat_id in reqs['prereq_feats'].get('all_of', []):
                     if feat_id not in char_feats:
                         meets_requirements = False
                         break
-                
-                # Check "one of" requirements
+
                 one_of = reqs['prereq_feats'].get('one_of', [])
                 if one_of and not any(f in char_feats for f in one_of):
                     meets_requirements = False
-            
-            # Check skill requirements
+
             if 'required_skills' in reqs:
                 for skill_req in reqs['required_skills']:
                     skill_id = skill_req['id']
@@ -242,11 +205,8 @@ class RuleDetector:
                     if char_skills.get(skill_id, 0) < required_ranks:
                         meets_requirements = False
                         break
-            
-            # Check class-specific requirements
+
             if 'min_level_class' in reqs:
-                # This would need the specific class ID from somewhere
-                # For now, just check if they have any levels in any class
                 if not char_classes:
                     meets_requirements = False
             
@@ -256,26 +216,14 @@ class RuleDetector:
         return available_feats
     
     def detect_relationships(self, table_name: str, columns: List[str]) -> Dict[str, Tuple[str, str]]:
-        """
-        Detect foreign key relationships from column names.
-        
-        Args:
-            table_name: Name of the table being analyzed
-            columns: List of column names
-            
-        Returns:
-            Dict mapping column names to (target_table, relationship_type) tuples
-        """
+        """Detect foreign key relationships from column names."""
         relationships = {}
         
         for column in columns:
             if not column:
                 continue
-            
-            # Check against reference patterns
             for ref_type, pattern in self.REFERENCE_PATTERNS.items():
                 if pattern.match(column):
-                    # Map reference type to target table
                     if ref_type == 'spell_id':
                         relationships[column] = ('spells', 'lookup')
                     elif ref_type == 'feat_index':
@@ -296,19 +244,14 @@ class RuleDetector:
                         relationships[column] = ('spellschools', 'lookup')
                     elif ref_type in ('feats_table', 'skills_table', 'saving_throw_table',
                                      'spell_gain_table', 'spell_known_table'):
-                        # These contain table names
                         relationships[column] = ('dynamic', 'table_reference')
                     break
-            
-            # Additional pattern checks for columns not caught by REFERENCE_PATTERNS
+
             column_lower = column.lower()
-            
-            # Check for ID suffixes
+
             if column_lower.endswith('_id') or column_lower.endswith('id'):
                 if column not in relationships:
-                    # Try to infer table name
                     potential_table = column_lower.replace('_id', '').replace('id', '')
-                    # Common mappings
                     table_mappings = {
                         'spell': 'spells',
                         'feat': 'feat',
@@ -320,13 +263,9 @@ class RuleDetector:
                     }
                     if potential_table in table_mappings:
                         relationships[column] = (table_mappings[potential_table], 'lookup')
-            
-            # Check for table suffixes
             elif column_lower.endswith('table'):
                 if column not in relationships:
                     relationships[column] = ('dynamic', 'table_reference')
-            
-            # Check for PREREQFEAT patterns
             elif self.REQUIREMENT_PATTERNS['prereq_feat'].match(column):
                 relationships[column] = ('feat', 'lookup')
             elif self.REQUIREMENT_PATTERNS['or_prereq_feat'].match(column):
@@ -335,16 +274,7 @@ class RuleDetector:
         return relationships
     
     def get_column_purpose(self, table_name: str, column_name: str) -> Optional[str]:
-        """
-        Get the detected purpose of a column.
-        
-        Args:
-            table_name: Table containing the column
-            column_name: Column to analyze
-            
-        Returns:
-            Purpose string if detected, None otherwise
-        """
+        """Return the detected purpose of a column."""
         self._analyze_and_cache_columns(table_name)
         column_map = self._cache.get(table_name, {}).get('map', {})
         return column_map.get(column_name)

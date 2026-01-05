@@ -7,22 +7,21 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
 
-from fastapi_core.session_registry import (
+from services.fastapi.session_registry import (
     get_character_session,
     close_character_session,
     get_active_sessions,
     has_active_session,
     get_path_from_id
 )
-# Removed character_info dependency - use actual session instead
+
 from fastapi_routers.dependencies import check_system_ready
-# Lazy import for startup performance - models loaded in background
 
 router = APIRouter()
 
 
 def _get_file_path(character_id: int) -> str:
-    """Helper function to get file path from character ID - no duplicated logic"""
+    """Helper function to get file path from character ID."""
     file_path = get_path_from_id(character_id)
     if not file_path:
         raise HTTPException(
@@ -33,7 +32,7 @@ def _get_file_path(character_id: int) -> str:
 
 
 def _get_character_name_from_session(session, character_id: int) -> str:
-    """Helper function to get character name from existing session - no duplicate session creation"""
+    """Helper function to get character name from existing session."""
     try:
         if session and session.character_manager:
             summary = session.character_manager.get_character_summary()
@@ -51,18 +50,14 @@ def start_session(
     character_id: int,
     ready_check: None = Depends(check_system_ready)
 ):
-    """Start or get existing character session"""
+    """Start or get existing character session."""
     try:
-        # Lazy imports for performance
         from fastapi_models import SessionInfo, SessionStatus
         
-        # Use helper functions - no duplicated logic
         file_path = _get_file_path(character_id)
         
-        # Get or create session (session registry handles duplicates)
         session = get_character_session(file_path)
         
-        # Get character name from the actual session (no duplicate session creation)
         character_name = _get_character_name_from_session(session, character_id)
         
         session_info = SessionInfo(
@@ -94,9 +89,8 @@ def start_session(
 
 @router.delete("/characters/{character_id}/session/stop")
 def stop_session(character_id: int):
-    """Stop character session"""
+    """Stop character session."""
     try:
-        # Use helper function - no duplicated logic
         file_path = _get_file_path(character_id)
         
         if not has_active_session(file_path):
@@ -124,12 +118,10 @@ def stop_session(character_id: int):
 
 @router.get("/characters/{character_id}/session/status")
 def get_session_status(character_id: int):
-    """Get session status for a character"""
+    """Get session status for a character."""
     try:
-        # Lazy imports for performance
         from fastapi_models import SessionInfo, SessionStatus
         
-        # Use helper function - no duplicated logic
         try:
             file_path = _get_file_path(character_id)
         except HTTPException:
@@ -168,9 +160,8 @@ def get_session_status(character_id: int):
 
 @router.post("/characters/{character_id}/session/save")
 def save_session(character_id: int):
-    """Save character session to disk"""
+    """Save character session to disk."""
     try:
-        # Use helper function - no duplicated logic
         file_path = _get_file_path(character_id)
         
         if not has_active_session(file_path):
@@ -181,7 +172,6 @@ def save_session(character_id: int):
         
         session = get_character_session(file_path)
         
-        # Save the session (this should write to GFF files)
         save_result = session.save(create_backup=True)
         
         return {
@@ -203,12 +193,11 @@ def save_session(character_id: int):
 
 @router.get("/characters/session/list")
 def list_character_sessions():
-    """List all active character sessions"""
+    """List all active character sessions."""
     try:
         from fastapi_models import ActiveSessionsList, SessionInfo
         active_sessions = get_active_sessions()
         
-        # Convert to SessionInfo objects - character name already extracted by get_active_sessions()
         session_infos = []
         for character_id, session_data in active_sessions.items():
             character_name = session_data.get('character_name', f'Character {character_id}')
@@ -217,7 +206,7 @@ def list_character_sessions():
                 session_id=str(character_id),
                 character_id=character_id,
                 character_name=character_name,
-                character_file=character_id,  # This should be the file path
+                character_file=character_id,  
                 started_at=datetime.now(),  # TODO: Add actual session start time tracking
                 last_activity=datetime.now(),  # TODO: Add actual last activity tracking
                 has_unsaved_changes=session_data.get('has_unsaved_changes', False),

@@ -1,16 +1,11 @@
-"""
-Performance profiler for tracking hierarchical timing of operations.
-Provides detailed breakdown of where time is spent during application startup.
-"""
+"""Hierarchical performance profiler for tracking application startup times."""
 import time
-import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 import json
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 @dataclass
@@ -45,33 +40,10 @@ class TimingEntry:
 
 
 class PerformanceProfiler:
-    """
-    Hierarchical performance profiler for tracking application startup times.
-    
-    Usage:
-        profiler = PerformanceProfiler()
-        
-        with profiler.profile("Total Startup"):
-            with profiler.profile("Load 2DA Files"):
-                with profiler.profile("Parse Base 2DAs"):
-                    # ... parse base files
-                with profiler.profile("Parse Override 2DAs"):
-                    # ... parse overrides
-            
-            with profiler.profile("Generate Classes"):
-                # ... generate runtime classes
-        
-        profiler.print_report()
-    """
+    """Hierarchical performance profiler for tracking application startup times."""
     
     def __init__(self, name: str = "Application", log_to_file: bool = True):
-        """
-        Initialize the profiler.
-        
-        Args:
-            name: Root name for the profiling session
-            log_to_file: Whether to save detailed logs to file
-        """
+        """Initialize the profiler."""
         self.root = TimingEntry(name, time.time())
         self.current_stack: List[TimingEntry] = [self.root]
         self.log_to_file = log_to_file
@@ -85,13 +57,7 @@ class PerformanceProfiler:
     
     @contextmanager
     def profile(self, name: str, **metadata):
-        """
-        Context manager for profiling a code block.
-        
-        Args:
-            name: Name of the operation being profiled
-            **metadata: Additional metadata to store with the timing
-        """
+        """Context manager for profiling a code block."""
         entry = TimingEntry(name, time.time(), metadata=metadata)
         parent = self.current_stack[-1]
         parent.children.append(entry)
@@ -106,14 +72,7 @@ class PerformanceProfiler:
             logger.debug(f"{'  ' * (len(self.current_stack) - 1)}← Completed: {name} ({entry.duration_ms:.2f}ms)")
     
     def mark(self, name: str, **metadata):
-        """
-        Mark a point in time without creating a context.
-        Useful for tracking when specific events occur.
-        
-        Args:
-            name: Name of the event
-            **metadata: Additional metadata
-        """
+        """Mark a point in time without creating a context."""
         entry = TimingEntry(name, time.time(), end_time=time.time(), metadata=metadata)
         parent = self.current_stack[-1]
         parent.children.append(entry)
@@ -130,15 +89,7 @@ class PerformanceProfiler:
             self.root.end_time = time.time()
     
     def get_report(self, max_depth: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Generate a timing report.
-        
-        Args:
-            max_depth: Maximum depth to include in report (None for all)
-        
-        Returns:
-            Dictionary containing timing breakdown
-        """
+        """Generate a timing report."""
         self.finalize()
         
         def build_report(entry: TimingEntry, depth: int = 0) -> Dict[str, Any]:
@@ -174,14 +125,7 @@ class PerformanceProfiler:
         
         return build_report(self.root)
     
-    def print_report(self, max_depth: Optional[int] = None, min_duration_ms: float = 0.0):
-        """
-        Print a formatted timing report to console and optionally to file.
-        
-        Args:
-            max_depth: Maximum depth to display
-            min_duration_ms: Minimum duration to display (filters out fast operations)
-        """
+        """Print a formatted timing report to console and optionally to file."""
         self.finalize()
         
         print("\n" + "="*80)
@@ -260,7 +204,6 @@ class PerformanceProfiler:
         print(f"Total Time: {self.root.duration_ms/1000:.2f}s")
         print("="*80)
         
-        # Save to file if configured
         if self.log_to_file and self.log_file:
             report_data = {
                 'timestamp': time.time(),
@@ -274,12 +217,7 @@ class PerformanceProfiler:
             print(f"\nDetailed report saved to: {self.log_file}")
     
     def get_category_summary(self) -> Dict[str, float]:
-        """
-        Get a summary of time spent in major categories.
-        
-        Returns:
-            Dictionary mapping category names to total time in ms
-        """
+        """Get a summary of time spent in major categories."""
         categories = {}
         
         def summarize(entry: TimingEntry, parent_name: str = ""):
@@ -296,7 +234,6 @@ class PerformanceProfiler:
         return categories
 
 
-# Global profiler instance for easy access
 _global_profiler: Optional[PerformanceProfiler] = None
 
 

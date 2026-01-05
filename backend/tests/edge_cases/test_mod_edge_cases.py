@@ -2,7 +2,7 @@ import pytest
 import os
 from pathlib import Path
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from gamedata.game_rules_service import GameRulesService
 
 

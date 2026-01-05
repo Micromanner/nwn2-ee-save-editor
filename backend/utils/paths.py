@@ -3,10 +3,7 @@ import sys
 from pathlib import Path
 
 def get_writable_dir(sub_dir: str = "logs") -> Path:
-    """
-    Get a writable directory path.
-    Standardizes on AppData for production and local files for development.
-    """
+    """Get a writable directory path, standardizing on AppData or local files."""
     # Robust check for Nuitka/Frozen environment
     is_frozen = (
         getattr(sys, "frozen", False) 
@@ -19,12 +16,10 @@ def get_writable_dir(sub_dir: str = "logs") -> Path:
         base_dir = Path(app_data) / "NWN2EE Save Editor"
     else:
         # Resolve relative to the backend root (parent of 'utils')
-        # __file__ is backend/utils/paths.py
         base_dir = Path(__file__).parent.parent
         
     target_dir = base_dir / sub_dir
     
-    # Check if we can write to the target directory
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
         # Test write access

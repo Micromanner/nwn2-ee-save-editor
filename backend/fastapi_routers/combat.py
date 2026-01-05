@@ -1,19 +1,19 @@
-"""
-Combat router - Combat statistics endpoints
-Handles BAB, AC, attack bonuses, damage, and combat statistics
-"""
+"""Combat router - Combat statistics endpoints."""
 
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Body
 from loguru import logger
 
 from fastapi_routers.dependencies import (
-    get_character_manager,
-    get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
 )
-# from fastapi_models import (...) - moved to lazy loading
+from fastapi_models import (
+    CombatState, BaseAttackBonusInfo, ArmorClassBreakdown,
+    NaturalArmorUpdateRequest, NaturalArmorUpdateResponse,
+    InitiativeBonusUpdateRequest, InitiativeBonusUpdateResponse,
+    EquippedWeapons, HitPointsUpdateRequest, HitPointsUpdateResponse
+)
 
 router = APIRouter()
 
@@ -23,46 +23,37 @@ def get_combat_state(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get current combat statistics for the combat editor"""
-    from fastapi_models import CombatState
-    
+    """Get current combat statistics."""
     try:
         combat_manager = manager.get_manager('combat')
+        if not combat_manager:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Combat manager not available"
+            )
 
-        # Get data from combat manager methods
         combat_summary = combat_manager.get_combat_summary()
         armor_class = combat_manager.calculate_armor_class()
 
-        # Validate data before proceeding
-        if combat_summary is None:
-            logger.error("combat_summary is None")
-            raise ValueError("Combat summary returned None")
-        if armor_class is None:
-            logger.error("armor_class is None")
-            raise ValueError("Armor class calculation returned None")
-
-        # Extract nested data properly
         bab_info = combat_summary.get('bab_info', {})
         weapons_info = combat_summary.get('weapons', {})
         initiative_info = combat_summary.get('initiative', {})
         
-        # Update combat_summary to match CombatSummary model
-        if 'initiative' in combat_summary and isinstance(combat_summary['initiative'], dict):
+        if isinstance(combat_summary.get('initiative'), dict):
             combat_summary['initiative_breakdown'] = combat_summary['initiative']
-            # Keep the initiative int value if it exists in the dict
             if 'total' in combat_summary['initiative']:
                 combat_summary['initiative'] = combat_summary['initiative']['total']
         
         return CombatState(
             summary=combat_summary,
-            armor_class=armor_class,  # Pass dict directly, model handles it
-            base_attack_bonus=bab_info,  # Pass dict directly
+            armor_class=armor_class,
+            base_attack_bonus=bab_info,
             attack_bonuses=combat_summary.get('attack_bonuses', {}),
             damage_bonuses=combat_summary.get('damage_bonuses', {}),
-            equipped_weapons=weapons_info,  # Pass dict directly
+            equipped_weapons=weapons_info,
             defensive_abilities=combat_summary.get('defensive_abilities', {}),
             combat_maneuvers=combat_summary.get('combat_maneuvers', {}),
-            initiative=initiative_info  # Pass dict directly
+            initiative=initiative_info
         )
         
     except Exception as e:
@@ -78,18 +69,14 @@ def get_base_attack_bonus(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed base attack bonus breakdown"""
-    from fastapi_models import BaseAttackBonusInfo
-    
+    """Get detailed base attack bonus breakdown."""
     try:
         combat_manager = manager.get_manager('combat')
         
-        # Get attack bonuses and BAB info from combat summary
         attack_bonuses = combat_manager.get_attack_bonuses()
         combat_summary = combat_manager.get_combat_summary()
         
-        # Combine data for the response
-        bab_data = {
+        return {
             'base_attack_bonus': attack_bonuses.get('base_attack_bonus', 0),
             'melee_attack_bonus': attack_bonuses.get('melee_attack_bonus', 0),
             'ranged_attack_bonus': attack_bonuses.get('ranged_attack_bonus', 0),
@@ -99,8 +86,6 @@ def get_base_attack_bonus(
             'ranged': attack_bonuses.get('ranged'),
             **combat_summary.get('bab_info', {})
         }
-        
-        return bab_data
         
     except Exception as e:
         logger.error(f"Failed to get base attack bonus for character {character_id}: {e}")
@@ -115,17 +100,10 @@ def get_armor_class(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed armor class breakdown"""
-    from fastapi_models import ArmorClassBreakdown
-    
+    """Get detailed armor class breakdown."""
     try:
         combat_manager = manager.get_manager('combat')
-        
-        # Get AC data from combat manager
-        ac_result = combat_manager.calculate_armor_class()
-        
-        # Pass dict directly, model will handle the structure
-        return ac_result
+        return combat_manager.calculate_armor_class()
         
     except Exception as e:
         logger.error(f"Failed to get armor class for character {character_id}: {e}")
@@ -140,15 +118,10 @@ def get_attack_bonuses(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed attack bonus breakdown"""
-    
+    """Get detailed attack bonus breakdown."""
     try:
         combat_manager = manager.get_manager('combat')
-        
-        # Use combat manager method - no duplicated logic
-        attack_bonuses = combat_manager.get_attack_bonuses()
-        
-        return attack_bonuses
+        return combat_manager.get_attack_bonuses()
         
     except Exception as e:
         logger.error(f"Failed to get attack bonuses for character {character_id}: {e}")
@@ -162,20 +135,16 @@ def get_attack_bonuses(
 def update_natural_armor(
     character_id: int,
     char_session: CharacterSessionDep,
-    request_data: Dict[str, Any]
+    request: NaturalArmorUpdateRequest = Body(...)
 ):
-    """Update character's natural armor bonus"""
-    from fastapi_models import NaturalArmorUpdateRequest, NaturalArmorUpdateResponse
+    """Update character's natural armor bonus."""
     session = char_session
-    
-    # Create NaturalArmorUpdateRequest from raw data
-    natural_armor_data = NaturalArmorUpdateRequest(**request_data)
+    natural_armor_data = request
     
     try:
         manager = session.character_manager
         combat_manager = manager.get_manager('combat')
         
-        # Use combat manager method - no duplicated logic
         old_value = manager.gff.get('NaturalAC', 0)
         result = combat_manager.update_natural_armor(natural_armor_data.natural_ac)
         
@@ -199,20 +168,16 @@ def update_natural_armor(
 def update_initiative_bonus(
     character_id: int,
     char_session: CharacterSessionDep,
-    request_data: Dict[str, Any]
+    request: InitiativeBonusUpdateRequest = Body(...)
 ):
-    """Update character's initiative misc bonus"""
-    from fastapi_models import InitiativeBonusUpdateRequest, InitiativeBonusUpdateResponse
+    """Update character's initiative misc bonus."""
     session = char_session
-    
-    # Create InitiativeBonusUpdateRequest from raw data
-    initiative_data = InitiativeBonusUpdateRequest(**request_data)
+    initiative_data = request
     
     try:
         manager = session.character_manager
         combat_manager = manager.get_manager('combat')
         
-        # Use combat manager method - no duplicated logic
         old_value = manager.gff.get('initbonus', 0)
         result = combat_manager.update_initiative_bonus(initiative_data.initiative_bonus)
         
@@ -237,15 +202,10 @@ def get_damage_bonuses(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get detailed damage bonus breakdown"""
-    
+    """Get detailed damage bonus breakdown."""
     try:
         combat_manager = manager.get_manager('combat')
-        
-        # Use combat manager method - no duplicated logic
-        damage_bonuses = combat_manager.get_damage_bonuses()
-        
-        return damage_bonuses
+        return combat_manager.get_damage_bonuses()
         
     except Exception as e:
         logger.error(f"Failed to get damage bonuses for character {character_id}: {e}")
@@ -260,17 +220,10 @@ def get_equipped_weapons(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get information about equipped weapons"""
-    from fastapi_models import EquippedWeapons
-    
+    """Get information about equipped weapons."""
     try:
         combat_manager = manager.get_manager('combat')
-        
-        # Get weapons info from combat manager
-        weapons_info = combat_manager.get_equipped_weapons()
-        
-        # Pass dict directly, model will handle the structure
-        return weapons_info
+        return combat_manager.get_equipped_weapons()
         
     except Exception as e:
         logger.error(f"Failed to get equipped weapons for character {character_id}: {e}")
@@ -280,26 +233,18 @@ def get_equipped_weapons(
         )
 
 
-
-
 @router.post("/characters/{character_id}/combat/update-hp")
 def update_hit_points(
     character_id: int,
     char_session: CharacterSessionDep,
-    request_data: Dict[str, Any]
+    hp_data: HitPointsUpdateRequest = Body(...)
 ):
-    """Update hit points"""
-    from fastapi_models import HitPointsUpdateRequest, HitPointsUpdateResponse
-    
+    """Update hit points."""
     try:
         session = char_session
         manager = session.character_manager
         combat_manager = manager.get_manager('combat')
         
-        # Parse request
-        hp_data = HitPointsUpdateRequest(**request_data)
-        
-        # Update HP
         result = combat_manager.update_hit_points(
             current=hp_data.current_hp,
             max_hp=hp_data.max_hp

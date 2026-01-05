@@ -1,7 +1,4 @@
-"""
-Pydantic models for ContentManager
-Handles campaigns, modules, areas, quests, and custom content detection
-"""
+"""Pydantic models for ContentManager."""
 
 from __future__ import annotations
 from typing import Dict, Any, Optional, List, Union
@@ -11,7 +8,7 @@ from pydantic import BaseModel, Field
 
 # Simplified module info matching ContentManager output
 class ModuleInfo(BaseModel):
-    """Basic module information from ContentManager"""
+    """Basic module information from ContentManager."""
     module_name: str = Field("", description="Module display name")
     area_name: str = Field("", description="Current area name")
     campaign: str = Field("", description="Campaign name")
@@ -21,7 +18,7 @@ class ModuleInfo(BaseModel):
 
 # Simplified campaign info matching ContentManager quest data
 class CampaignInfo(BaseModel):
-    """Basic campaign information from ContentManager"""
+    """Basic campaign information from ContentManager."""
     total_quests: int = Field(0, description="Total quest count")
     completed_quests: int = Field(0, description="Completed quest count")
     active_quests: int = Field(0, description="Active quest count")
@@ -29,7 +26,7 @@ class CampaignInfo(BaseModel):
 
 
 class CampaignInfoResponse(BaseModel):
-    """Combined campaign and module info response matching ContentManager.get_campaign_info()"""
+    """Combined campaign and module info response matching ContentManager.get_campaign_info()."""
     # Module info fields
     module_name: str = Field("", description="Module display name")
     area_name: str = Field("", description="Current area name")
@@ -56,7 +53,7 @@ class CampaignInfoResponse(BaseModel):
 
 
 class CustomContentItem(BaseModel):
-    """Individual custom content item matching ContentManager output"""
+    """Individual custom content item matching ContentManager output."""
     type: str = Field(..., description="Type of custom content")
     id: int = Field(..., description="Content identifier")
     name: str = Field(..., description="Content name")
@@ -69,7 +66,7 @@ class CustomContentItem(BaseModel):
 
 
 class CustomContentSummary(BaseModel):
-    """Summary of all custom content matching ContentManager output"""
+    """Summary of all custom content matching ContentManager output."""
     total_count: int = Field(0, description="Total custom content items")
     by_type: Dict[str, int] = Field(default_factory=dict, description="Count by content type")
     items: List[Dict[str, Any]] = Field(default_factory=list, description="Individual item details")
@@ -80,7 +77,7 @@ class CustomContentSummary(BaseModel):
 
 
 class CompanionInfluenceData(BaseModel):
-    """Companion influence information from globals.xml"""
+    """Companion influence information from globals.xml."""
     name: str = Field(..., description="Companion display name")
     influence: Optional[int] = Field(None, description="Current influence value")
     recruitment: str = Field(..., description="Recruitment status: not_recruited, met, recruited")
@@ -88,7 +85,7 @@ class CompanionInfluenceData(BaseModel):
 
 
 class CompanionInfluenceResponse(BaseModel):
-    """Response containing all companion influence data"""
+    """Response containing all companion influence data."""
     companions: Dict[str, CompanionInfluenceData] = Field(
         default_factory=dict,
         description="Map of companion_id to influence data"
@@ -96,13 +93,13 @@ class CompanionInfluenceResponse(BaseModel):
 
 
 class UpdateCompanionInfluenceRequest(BaseModel):
-    """Request to update companion influence"""
+    """Request to update companion influence."""
     companion_id: str = Field(..., description="Companion identifier (e.g., 'neeshka', 'khelgar')")
     new_influence: int = Field(..., description="New influence value")
 
 
 class QuestVariable(BaseModel):
-    """Individual quest variable from globals.xml"""
+    """Individual quest variable from globals.xml."""
     name: str = Field(..., description="Variable name in globals.xml")
     value: Union[int, str, float] = Field(..., description="Variable value")
     type: str = Field(..., description="Variable type: int, string, float")
@@ -110,7 +107,7 @@ class QuestVariable(BaseModel):
 
 
 class QuestGroup(BaseModel):
-    """Group of related quest variables with common prefix"""
+    """Group of related quest variables with common prefix."""
     prefix: str = Field(..., description="Common quest prefix (e.g., 'n2_a1_')")
     name: str = Field(..., description="Quest group display name")
     variables: List[QuestVariable] = Field(default_factory=list, description="Quest variables in group")
@@ -120,7 +117,7 @@ class QuestGroup(BaseModel):
 
 
 class QuestDetailsResponse(BaseModel):
-    """Detailed quest information from globals.xml"""
+    """Detailed quest information from globals.xml."""
     groups: List[QuestGroup] = Field(default_factory=list, description="Quest groups by prefix")
     total_quests: int = Field(0, description="Total quest variables")
     completed_quests: int = Field(0, description="Completed quest variables")
@@ -130,19 +127,19 @@ class QuestDetailsResponse(BaseModel):
 
 
 class UpdateQuestVariableRequest(BaseModel):
-    """Request to update a single quest variable"""
+    """Request to update a single quest variable."""
     variable_name: str = Field(..., description="Quest variable name in globals.xml")
     value: Union[int, str, float] = Field(..., description="New value for quest variable")
     variable_type: str = Field("int", description="Variable type: int, string, float")
 
 
 class BatchUpdateQuestRequest(BaseModel):
-    """Request to update multiple quest variables at once"""
+    """Request to update multiple quest variables at once."""
     updates: List[UpdateQuestVariableRequest] = Field(..., description="List of quest variable updates")
 
 
 class ModulePropertyUpdate(BaseModel):
-    """Request to update module properties in module.ifo"""
+    """Request to update module properties in module.ifo."""
     module_name: Optional[str] = Field(None, description="Module display name")
     module_description: Optional[str] = Field(None, description="Module description")
     entry_area: Optional[str] = Field(None, description="Entry area name")
@@ -150,14 +147,14 @@ class ModulePropertyUpdate(BaseModel):
 
 
 class CampaignVariableUpdate(BaseModel):
-    """Request to update campaign-specific variables in globals.xml"""
+    """Request to update campaign-specific variables in globals.xml."""
     variable_name: str = Field(..., description="Campaign variable name")
     value: Union[int, str, float] = Field(..., description="New value")
     variable_type: str = Field("int", description="Variable type: int, string, float")
 
 
 class CampaignVariablesResponse(BaseModel):
-    """Response containing campaign variables from globals.xml"""
+    """Response containing campaign variables from globals.xml."""
     integers: Dict[str, int] = Field(default_factory=dict, description="Integer variables")
     strings: Dict[str, str] = Field(default_factory=dict, description="String variables")
     floats: Dict[str, float] = Field(default_factory=dict, description="Float variables")
@@ -165,7 +162,7 @@ class CampaignVariablesResponse(BaseModel):
 
 
 class ModuleVariablesResponse(BaseModel):
-    """Response containing module variables from VarTable in module.ifo"""
+    """Response containing module variables from VarTable in module.ifo."""
     integers: Dict[str, int] = Field(default_factory=dict, description="Integer variables")
     strings: Dict[str, str] = Field(default_factory=dict, description="String variables")
     floats: Dict[str, float] = Field(default_factory=dict, description="Float variables")
@@ -173,7 +170,7 @@ class ModuleVariablesResponse(BaseModel):
 
 
 class ModuleVariableUpdate(BaseModel):
-    """Request to update module-specific variables in VarTable"""
+    """Request to update module-specific variables in VarTable."""
     variable_name: str = Field(..., description="Module variable name")
     value: Union[int, str, float] = Field(..., description="New value")
     variable_type: str = Field("int", description="Variable type: int, string, float")
@@ -181,7 +178,7 @@ class ModuleVariableUpdate(BaseModel):
 
 
 class CampaignSettingsResponse(BaseModel):
-    """Campaign settings from campaign.cam file"""
+    """Campaign settings from campaign.cam file."""
     campaign_file_path: str = Field(..., description="Path to campaign.cam file")
     guid: str = Field(..., description="Campaign GUID")
     display_name: str = Field("", description="Campaign display name")
@@ -200,7 +197,7 @@ class CampaignSettingsResponse(BaseModel):
 
 
 class QuestProgressData(BaseModel):
-    """Quest progress information with enriched definitions from module.jrl"""
+    """Quest progress information with enriched definitions from module.jrl."""
     variable: str = Field(..., description="Quest variable name in globals.xml")
     category: str = Field(..., description="Quest category from module.jrl")
     name: str = Field(..., description="Quest name/description from module.jrl")
@@ -213,13 +210,13 @@ class QuestProgressData(BaseModel):
 
 
 class QuestProgressResponse(BaseModel):
-    """Response containing all quest progress data"""
+    """Response containing all quest progress data."""
     quests: List[QuestProgressData] = Field(default_factory=list, description="List of quests with progress")
     total_count: int = Field(0, description="Total number of quests")
 
 
 class PlotVariableData(BaseModel):
-    """Plot variable from globals.xml with quest definition status"""
+    """Plot variable from globals.xml with quest definition status."""
     name: str = Field(..., description="Variable name")
     display_name: Optional[str] = Field(None, description="Human-readable display name from parsing")
     description: Optional[str] = Field(None, description="Human-readable description for parsed variables")
@@ -232,7 +229,7 @@ class PlotVariableData(BaseModel):
 
 
 class PlotVariablesResponse(BaseModel):
-    """Response containing all plot variables categorized by quest definition status"""
+    """Response containing all plot variables categorized by quest definition status."""
     quest_variables: List[PlotVariableData] = Field(
         default_factory=list,
         description="Variables with quest definitions"
@@ -245,7 +242,7 @@ class PlotVariablesResponse(BaseModel):
 
 
 class UpdateCampaignSettingsRequest(BaseModel):
-    """Request to update campaign settings"""
+    """Request to update campaign settings."""
     level_cap: Optional[int] = Field(None, description="Maximum character level", ge=1, le=40)
     xp_cap: Optional[int] = Field(None, description="Maximum experience points", ge=0)
     companion_xp_weight: Optional[float] = Field(None, description="Companion XP weight", ge=0.0, le=1.0)
@@ -258,7 +255,7 @@ class UpdateCampaignSettingsRequest(BaseModel):
 
 
 class CampaignBackupInfo(BaseModel):
-    """Information about a campaign backup file"""
+    """Information about a campaign backup file."""
     filename: str = Field(..., description="Backup filename")
     path: str = Field(..., description="Full path to backup file")
     size_bytes: int = Field(..., description="File size in bytes")
@@ -266,26 +263,26 @@ class CampaignBackupInfo(BaseModel):
 
 
 class CampaignBackupsResponse(BaseModel):
-    """Response containing list of campaign backups"""
+    """Response containing list of campaign backups."""
     backups: List[CampaignBackupInfo] = Field(default_factory=list, description="Available backups")
     campaign_name: Optional[str] = Field(None, description="Current campaign name")
     campaign_guid: Optional[str] = Field(None, description="Current campaign GUID")
 
 
 class RestoreCampaignRequest(BaseModel):
-    """Request to restore campaign from backup"""
+    """Request to restore campaign from backup."""
     backup_path: str = Field(..., description="Full path to backup file to restore")
 
 
 class KnownQuestValue(BaseModel):
-    """Known value for a quest variable with description"""
+    """Known value for a quest variable with description."""
     value: int = Field(..., description="Variable value")
     description: str = Field(..., description="Description of what this value means")
     is_completed: bool = Field(False, description="Whether this value represents quest completion")
 
 
 class QuestInfoData(BaseModel):
-    """Quest definition information from module.jrl or dialogue mapping"""
+    """Quest definition information from module.jrl or dialogue mapping."""
     category: str = Field(..., description="Quest category tag")
     category_name: str = Field(..., description="Human-readable category name")
     entry_id: int = Field(0, description="Journal entry ID")
@@ -295,7 +292,7 @@ class QuestInfoData(BaseModel):
 
 
 class EnrichedQuestData(BaseModel):
-    """Enriched quest data with dialogue mapping information"""
+    """Enriched quest data with dialogue mapping information."""
     variable_name: str = Field(..., description="Variable name in globals.xml")
     current_value: int = Field(..., description="Current variable value")
     variable_type: str = Field("int", description="Variable type")
@@ -308,7 +305,7 @@ class EnrichedQuestData(BaseModel):
 
 
 class UnmappedVariableData(BaseModel):
-    """Quest-like variable without quest mapping"""
+    """Quest-like variable without quest mapping."""
     variable_name: str = Field(..., description="Variable name")
     display_name: str = Field(..., description="Human-readable display name")
     current_value: Union[int, str, float] = Field(..., description="Current value")
@@ -317,7 +314,7 @@ class UnmappedVariableData(BaseModel):
 
 
 class QuestStats(BaseModel):
-    """Quest statistics summary"""
+    """Quest statistics summary."""
     total: int = Field(0, description="Total mapped quests")
     completed: int = Field(0, description="Completed quests")
     active: int = Field(0, description="Active quests")
@@ -325,7 +322,7 @@ class QuestStats(BaseModel):
 
 
 class DialogueCacheInfo(BaseModel):
-    """Dialogue mapping cache information"""
+    """Dialogue mapping cache information."""
     cached: bool = Field(False, description="Whether cache exists")
     version: Optional[str] = Field(None, description="Cache version")
     generated_at: Optional[str] = Field(None, description="Cache generation timestamp")
@@ -335,7 +332,7 @@ class DialogueCacheInfo(BaseModel):
 
 
 class EnrichedQuestsResponse(BaseModel):
-    """Response containing enriched quest data with dialogue mappings"""
+    """Response containing enriched quest data with dialogue mappings."""
     quests: List[EnrichedQuestData] = Field(default_factory=list, description="Enriched quest data")
     unmapped_variables: List[UnmappedVariableData] = Field(default_factory=list, description="Variables without mappings")
     stats: QuestStats = Field(default_factory=QuestStats, description="Quest statistics")

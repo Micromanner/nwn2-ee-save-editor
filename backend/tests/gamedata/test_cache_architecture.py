@@ -8,10 +8,10 @@ from unittest.mock import Mock, patch, MagicMock
 import zipfile
 import io
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from nwn2_rust import TDAParser
 from gamedata.enhanced_icon_cache import EnhancedIconCache
-from gamedata.safe_cache import SafeCache
+from services.core.safe_cache import SafeCache
 
 
 class TestCacheArchitecture:

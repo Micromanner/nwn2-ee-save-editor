@@ -1,14 +1,11 @@
-"""
-Pydantic models for SpellManager
-Handles spellcasting, spell books, metamagic, and spell preparation
-"""
+"""Pydantic models for SpellManager."""
 
 from typing import Dict, Any, Optional, List, Literal, Union
 from pydantic import BaseModel, Field
 
 
 class SpellInfo(BaseModel):
-    """Complete spell information from SpellManager.get_available_spells()"""
+    """Complete spell information from SpellManager.get_available_spells()."""
     id: int = Field(..., description="Spell ID from spells.2da")
     name: str = Field(..., description="Spell name")
     description: Optional[str] = None
@@ -34,7 +31,7 @@ class SpellInfo(BaseModel):
 
 
 class SpellSchool(BaseModel):
-    """School of magic information"""
+    """School of magic information."""
     id: int
     name: str
     description: Optional[str] = None
@@ -43,7 +40,7 @@ class SpellSchool(BaseModel):
 
 
 class SpellcastingClass(BaseModel):
-    """Spellcasting class information from manager iteration"""
+    """Spellcasting class information from manager iteration."""
     index: int = Field(..., description="Class list index")
     class_id: int = Field(..., description="Class ID")
     class_name: str = Field(..., description="Class name")
@@ -54,7 +51,7 @@ class SpellcastingClass(BaseModel):
 
 
 class MetamagicFeat(BaseModel):
-    """Metamagic feat information"""
+    """Metamagic feat information."""
     id: int = Field(..., description="Feat ID")
     name: str = Field(..., description="Feat name")
     level_cost: int = Field(..., description="Spell level increase")
@@ -67,7 +64,7 @@ class MetamagicFeat(BaseModel):
 
 
 class MemorizedSpell(BaseModel):
-    """Individual memorized spell entry (basic info - frontend enriches from legitimate spells)"""
+    """Individual memorized spell entry (basic info - frontend enriches from legitimate spells)."""
     level: int = Field(..., ge=0, le=9, description="Spell level")
     spell_id: int = Field(..., description="Memorized spell ID")
     name: str = Field("Unknown Spell", description="Spell name")
@@ -80,7 +77,7 @@ class MemorizedSpell(BaseModel):
 
 
 class KnownSpell(BaseModel):
-    """Known spell entry (from spells.2da for AllSpellsKnown classes, or KnownList for others)"""
+    """Known spell entry (from spells.2da for AllSpellsKnown classes, or KnownList for others)."""
     level: int = Field(..., ge=0, le=9, description="Spell level")
     spell_id: int = Field(..., description="Spell ID")
     name: str = Field("Unknown Spell", description="Spell name")
@@ -94,7 +91,7 @@ class KnownSpell(BaseModel):
 
 
 class SpellSummaryClass(BaseModel):
-    """Simplified spellcasting class for summary"""
+    """Simplified spellcasting class for summary."""
     id: int
     name: str
     total_slots: int
@@ -103,7 +100,7 @@ class SpellSummaryClass(BaseModel):
 
 
 class SpellSummary(BaseModel):
-    """High-level spellcasting summary from get_spell_summary()"""
+    """High-level spellcasting summary from get_spell_summary()."""
     # Data provided by manager
     caster_classes: List[SpellSummaryClass] = Field(default_factory=list)
     total_spell_levels: int = Field(0, description="Total spell levels")
@@ -111,23 +108,8 @@ class SpellSummary(BaseModel):
     spell_resistance: int = Field(0, description="Spell resistance")
 
 
-
-
-# Removed complex spell functionality models not implemented in spell_manager:
-# - SpellLearnRequest/Response (replaced by simple add/remove)
-# - SpellForgetRequest/Response (replaced by simple add/remove)  
-# - SpellMemorizeRequest/Response (manager has prepare_spell but different interface)
-# - SpellUnmemorizeRequest/Response (manager has clear_memorized_spells)
-# - SpellSearchRequest/Response (manager only has get_available_spells)
-# - SpellBookExport/Import (not implemented in manager)
-# - SpellCastSimulation/Result (not implemented in manager)
-# - SpellValidation (manager has basic validate() method)
-# - SpellUpdateRequest/Response (complex batch operations not implemented)
-
-
-# Router-specific models
 class SpellsState(BaseModel):
-    """Complete spell state for spells editor"""
+    """Complete spell state for spells editor."""
     spellcasting_classes: List[SpellcastingClass] = Field(default_factory=list)
     spell_summary: SpellSummary
     memorized_spells: List[MemorizedSpell] = Field(default_factory=list)
@@ -136,7 +118,7 @@ class SpellsState(BaseModel):
 
 
 class AvailableSpellsResponse(BaseModel):
-    """Response for available spells endpoint"""
+    """Response for available spells endpoint."""
     spell_level: int
     class_id: Optional[int]
     available_spells: List[SpellInfo]
@@ -144,14 +126,14 @@ class AvailableSpellsResponse(BaseModel):
 
 
 class AllSpellsResponse(BaseModel):
-    """Response for all spells endpoint"""
+    """Response for all spells endpoint."""
     spells: List[SpellInfo]
     count: int
     total_by_level: Dict[int, int]
 
 
 class SpellPaginationInfo(BaseModel):
-    """Pagination metadata for spell lists"""
+    """Pagination metadata for spell lists."""
     page: int = Field(..., description="Current page number")
     limit: int = Field(..., description="Results per page")
     total: int = Field(..., description="Total number of spells")
@@ -161,13 +143,13 @@ class SpellPaginationInfo(BaseModel):
 
 
 class LegitimateSpellsResponse(BaseModel):
-    """Response for legitimate spells endpoint with pagination"""
+    """Response for legitimate spells endpoint with pagination."""
     spells: List[SpellInfo]
     pagination: SpellPaginationInfo
 
 
 class SpellManageRequest(BaseModel):
-    """Request to manage spells (add/remove)"""
+    """Request to manage spells (add/remove)."""
     action: Literal['add', 'remove'] = Field(..., description="Action to perform")
     spell_id: int = Field(..., description="Spell ID")
     class_index: int = Field(..., description="Spellcasting class index")
@@ -175,7 +157,7 @@ class SpellManageRequest(BaseModel):
 
 
 class SpellManageResponse(BaseModel):
-    """Response after managing spells"""
+    """Response after managing spells."""
     message: str
     spell_summary: SpellSummary
     has_unsaved_changes: bool = True

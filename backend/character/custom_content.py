@@ -1,42 +1,31 @@
-"""
-Custom content detection and protection for NWN2 characters
-Identifies and protects non-vanilla content to prevent data loss
-"""
+"""Custom content detection and protection for NWN2 characters."""
 
-from typing import Dict, List, Set, Tuple, Any, Optional
+from typing import Dict, List, Set, Any, Optional
 import json
 import os
-import logging
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class CustomContentDetector:
-    """Detects and manages custom content in character files"""
-    
-    # Standard vanilla ID ranges
+    """Detects and manages custom content in character files."""
+
     VANILLA_FEAT_MAX = 10000
     VANILLA_SPELL_MAX = 10000
     VANILLA_ITEM_MAX = 10000
-    
-    # Known epithet feat ranges (these are special and should be protected)
+
     EPITHET_FEAT_RANGES = [
-        (3785, 3834),  # OC epithet feats
-        (11509, 11994),  # MotB epithet feats
+        (3785, 3834),
+        (11509, 11994),
     ]
-    
+
     def __init__(self, vanilla_rules=None):
-        """
-        Initialize the detector
-        
-        Args:
-            vanilla_rules: Game rules service with vanilla data
-        """
+        """Initialize with optional game rules service for vanilla data lookups."""
         self.vanilla_rules = vanilla_rules
         self._load_epithet_feats()
-        
+
     def _load_epithet_feats(self):
-        """Load known epithet feats from JSON file"""
+        """Load known epithet feats from JSON file and fallback ranges."""
         self.epithet_feats: Set[int] = set()
         
         # Try to load from the analysis scripts directory
@@ -59,15 +48,7 @@ class CustomContentDetector:
             self.epithet_feats.update(range(start, end + 1))
     
     def detect_custom_content(self, character_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        """
-        Detect all custom content in a character
-        
-        Args:
-            character_data: Raw GFF character data
-            
-        Returns:
-            Dict mapping content IDs to protection info
-        """
+        """Detect all custom content in a character, returning protection info per content ID."""
         custom_content = {}
         
         # Check feats
@@ -82,7 +63,7 @@ class CustomContentDetector:
         return custom_content
     
     def _detect_custom_feats(self, character_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        """Detect custom or special feats that need protection"""
+        """Detect custom or special feats that need protection."""
         custom_feats = {}
         feat_list = character_data.get('FeatList', [])
         
@@ -104,12 +85,7 @@ class CustomContentDetector:
         return custom_feats
     
     def _check_feat_protection(self, feat_id: int) -> Dict[str, Any]:
-        """
-        Check if a feat should be protected
-        
-        Returns:
-            Dict with protection info
-        """
+        """Check if a feat should be protected and return protection info."""
         # Epithet feats - always protected
         if feat_id in self.epithet_feats:
             return {
@@ -151,7 +127,7 @@ class CustomContentDetector:
         return {'protected': False}
     
     def _detect_custom_spells(self, character_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        """Detect custom spells"""
+        """Detect custom spells in character's known spell lists."""
         custom_spells = {}
         
         # Check all spell lists (0-9 for spell levels)
@@ -183,7 +159,7 @@ class CustomContentDetector:
         return custom_spells
     
     def _detect_custom_items(self, character_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        """Detect custom items in inventory"""
+        """Detect custom items in equipped slots and inventory."""
         custom_items = {}
         
         # Check equipped items
@@ -210,7 +186,7 @@ class CustomContentDetector:
         return custom_items
     
     def _check_item_custom(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Check if an item is custom"""
+        """Check if an item is custom and return info or None."""
         base_item = item.get('BaseItem', 0)
         
         if base_item > self.VANILLA_ITEM_MAX or (
@@ -229,7 +205,7 @@ class CustomContentDetector:
         return None
     
     def get_protection_summary(self, custom_content: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-        """Get a summary of protected content"""
+        """Get a summary of protected content categorized by type and reason."""
         summary = {
             'total': len(custom_content),
             'by_type': {},
@@ -270,16 +246,7 @@ class CustomContentDetector:
         return summary
     
     def should_protect_content(self, content_type: str, content_id: int) -> bool:
-        """
-        Quick check if specific content should be protected
-        
-        Args:
-            content_type: 'feat', 'spell', or 'item'
-            content_id: The content ID
-            
-        Returns:
-            True if content should be protected
-        """
+        """Quick check if specific content (feat/spell/item) should be protected."""
         if content_type == 'feat':
             return self._check_feat_protection(content_id)['protected']
         elif content_type == 'spell':

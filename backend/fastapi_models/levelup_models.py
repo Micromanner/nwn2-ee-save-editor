@@ -1,6 +1,4 @@
-"""
-Level-Up Models - Pydantic models for level-up workflow
-"""
+"""Level-Up Models - Pydantic models for level-up workflow."""
 
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field

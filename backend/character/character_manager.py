@@ -1,24 +1,17 @@
-"""
-Data-Driven CharacterManager using DynamicGameDataLoader
-All character data access is driven by 2DA files, not hardcoded mappings
-"""
+"""Data-driven CharacterManager using DynamicGameDataLoader for game data."""
 
-from typing import Dict, List, Any, Optional, Type, TypeVar, Union, overload, Callable, Set, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Type, TypeVar, Union, overload, Callable, TYPE_CHECKING
 import copy
 import time
-import logging
 from dataclasses import dataclass
-from collections import defaultdict
+from loguru import logger
 
 from .events import EventEmitter, EventData
 from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
-from gamedata.services.game_rules_service import GameRulesService
-from gamedata.services.rule_detector import RuleDetector
+from services.gamedata.game_rules_service import GameRulesService
 
 if TYPE_CHECKING:
     from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,10 +39,9 @@ class Transaction:
         })
     
     def rollback(self):
-        """Restore character to state before transaction"""
+        """Restore character to state before transaction."""
         logger.info(f"Rolling back transaction {self.id}")
         self.manager.character_data = self.original_state
-        # Also update the GFF wrapper to point to the restored data
         self.manager.gff = GFFDataWrapper(self.manager.character_data)
         self.manager._notify_managers('transaction_rollback', {'transaction_id': self.id})
     
@@ -80,16 +72,13 @@ class LazyManagerProxy:
         self._instance = None
     
     def _initialize(self):
-        """Initialize the actual manager instance"""
+        """Initialize the actual manager instance."""
         if not self._initialized:
             logger.debug(f"Lazy-initializing {self._name} manager")
             self._instance = self._manager_class(self._character_manager)
             self._initialized = True
-            
-            # Replace proxy with real instance in parent's registry
             self._character_manager._managers[self._name] = self._instance
-            
-            # Call any pending lifecycle hooks
+
             if hasattr(self._character_manager, '_manager_hooks'):
                 hooks = self._character_manager._manager_hooks.get(self._name, {})
                 on_register = hooks.get('on_register')
@@ -105,12 +94,10 @@ class LazyManagerProxy:
         return getattr(self._instance, name)
     
     def __setattr__(self, name, value):
-        """Handle attribute setting"""
+        """Handle attribute setting."""
         if name.startswith('_'):
-            # Internal attributes go to the proxy
             object.__setattr__(self, name, value)
         else:
-            # External attributes trigger initialization and go to the real manager
             self._initialize()
             setattr(self._instance, name, value)
 
@@ -128,50 +115,32 @@ class GFFDataWrapper:
     def get(self, path: str, default: T) -> Union[Any, T]: ...
     
     def get(self, path: str, default: Optional[T] = None) -> Union[Any, T]:
-        """
-        Get value at path (e.g., 'ClassList.0.Class')
-        
-        Args:
-            path: Dot-separated path to value
-            default: Default value if path doesn't exist
-            
-        Returns:
-            Value at path or default
-        """
+        """Get value at dot-separated path (e.g., 'ClassList.0.Class')."""
         parts = path.split('.')
         current = self._data
-        
+
         for part in parts:
             if current is None:
                 return default
-                
-            # Handle list indices
+
             if isinstance(current, list) and part.isdigit():
                 idx = int(part)
                 if 0 <= idx < len(current):
                     current = current[idx]
                 else:
                     return default
-            # Handle dict keys
             elif isinstance(current, dict):
                 current = current.get(part, default)
             else:
                 return default
-                
+
         return current
     
     def set(self, path: str, value: Any) -> None:
-        """
-        Set value at path
-        
-        Args:
-            path: Dot-separated path to value
-            value: Value to set
-        """
+        """Set value at dot-separated path."""
         parts = path.split('.')
         current = self._data
-        
-        # Navigate to parent
+
         for i, part in enumerate(parts[:-1]):
             if isinstance(current, list) and part.isdigit():
                 idx = int(part)
@@ -181,7 +150,6 @@ class GFFDataWrapper:
                     raise IndexError(f"Index {idx} out of range at {'.'.join(parts[:i+1])}")
             elif isinstance(current, dict):
                 if part not in current:
-                    # Create missing intermediate dicts
                     next_part = parts[i+1]
                     if next_part.isdigit():
                         current[part] = []
@@ -190,8 +158,7 @@ class GFFDataWrapper:
                 current = current[part]
             else:
                 raise ValueError(f"Cannot navigate path at {'.'.join(parts[:i+1])}")
-        
-        # Set final value
+
         final_key = parts[-1]
         if isinstance(current, list) and final_key.isdigit():
             idx = int(final_key)
@@ -205,17 +172,7 @@ class GFFDataWrapper:
             raise ValueError(f"Cannot set value at {path}")
     
     def get_typed(self, path: str, expected_type: Type[T], default: Optional[T] = None) -> T:
-        """
-        Get value at path with type checking
-        
-        Args:
-            path: Dot-separated path to value
-            expected_type: Expected type of the value
-            default: Default value if path doesn't exist or type mismatch
-            
-        Returns:
-            Value at path if it matches expected type, otherwise default
-        """
+        """Get value at path with type checking, returns default if type mismatch."""
         value = self.get(path, default)
         if isinstance(value, expected_type):
             return value
@@ -242,183 +199,97 @@ class GFFDataWrapper:
 
 
 class CharacterManager(EventEmitter):
-    """
-    Data-Driven Character Manager
-    Uses DynamicGameDataLoader for all character data structure understanding
-    """
-    
-    def __init__(self, character_data: Dict[str, Any], game_data_loader: Optional['DynamicGameDataLoader'] = None, rules_service: Optional[GameRulesService] = None, save_path: Optional[str] = None, **kwargs):
-        """
-        Initialize the data-driven character manager
+    """Data-driven character manager using DynamicGameDataLoader for game data."""
 
-        Args:
-            character_data: Raw GFF character data (plain dict with __struct_id__ metadata)
-            game_data_loader: DynamicGameDataLoader instance (creates new one if not provided)
-            rules_service: Optional GameRulesService instance
-            save_path: Optional path to the save directory/file (for sidecar data)
-            **kwargs: Ignored for backward compatibility (e.g., gff_element)
-        """
+    def __init__(self, character_data: Dict[str, Any], game_data_loader: Optional['DynamicGameDataLoader'] = None, rules_service: Optional[GameRulesService] = None, save_path: Optional[str] = None, **kwargs):
+        """Initialize the character manager with GFF data and game services."""
         super().__init__()
         self.character_data = character_data
         self.save_path = save_path
 
-        # Validate character data
         if not isinstance(character_data, dict):
             raise ValueError(f"character_data must be a dictionary, got {type(character_data)}")
-
         if not character_data:
             raise ValueError("character_data cannot be empty")
 
-        # Use GFFDataWrapper for dict access with path support
         self.gff = GFFDataWrapper(character_data)
-        logger.info("Using GFFDataWrapper for character data access")
-            
-        # Use provided loader or get singleton instance - this is our source of truth
+
         try:
             from gamedata.dynamic_loader.singleton import wait_for_loader_ready
-            
-            # If no loader provided, get/create singleton and wait for it
             if game_data_loader is None:
-                logger.info("Waiting for DynamicGameDataLoader to be ready...")
                 if not wait_for_loader_ready(timeout=30.0):
                     raise RuntimeError("DynamicGameDataLoader initialization timed out after 30 seconds")
                 self.game_data_loader = get_dynamic_game_data_loader()
             else:
-                # Use provided loader, but still check if ready
                 self.game_data_loader = game_data_loader
                 if not self.game_data_loader.is_ready():
-                    logger.info("Waiting for provided DynamicGameDataLoader to be ready...")
                     if not self.game_data_loader.wait_for_ready(timeout=30.0):
                         raise RuntimeError("Provided DynamicGameDataLoader not ready after 30 seconds")
-            
-            logger.info("DynamicGameDataLoader obtained successfully and ready")
         except Exception as e:
             logger.error(f"Failed to get DynamicGameDataLoader: {e}")
             raise RuntimeError(f"Could not get game data loader: {e}")
-        
-        # Initialize rules service
+
         try:
             self.rules_service = rules_service or GameRulesService()
-            logger.info("GameRulesService initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize GameRulesService: {e}")
             raise RuntimeError(f"Could not initialize rules service: {e}")
-        
-        # Manager registry
+
         self._managers: Dict[str, Any] = {}
         self._manager_classes: Dict[str, Type] = {}
-        
-        # Custom content tracking - now using dynamic detection
         self.custom_content: Dict[str, Dict[str, Any]] = {}
-        
-        # Transaction support
         self._current_transaction: Optional[Transaction] = None
         self._transaction_history: List[Transaction] = []
-        
-        # Cache ability score mapping - hardcoded standard mapping
-        self._ability_mapping = {
-            'strength': 'Str',
-            'dexterity': 'Dex', 
-            'constitution': 'Con',
-            'intelligence': 'Int',
-            'wisdom': 'Wis',
-            'charisma': 'Cha'
-        }
-        
-        # Custom content will be detected when ContentManager is registered by factory
-        logger.info(f"CharacterManager initialized")
+
+        logger.info("CharacterManager initialized")
     
-    def register_manager(self, name: str, manager_class: Type, 
+    def register_manager(self, name: str, manager_class: Type,
                         on_register: Optional[Callable] = None,
                         on_unregister: Optional[Callable] = None,
                         lazy: bool = False):
-        """
-        Register a subsystem manager with optional lifecycle hooks
-        
-        Args:
-            name: Manager name (e.g., 'class', 'feat')
-            manager_class: Manager class to instantiate
-            on_register: Optional callback to call after registration
-            on_unregister: Optional callback to call before unregistration
-            lazy: If True, defer instantiation until first access
-        """
-        # Validate manager class
+        """Register a subsystem manager with optional lifecycle hooks."""
         if not callable(manager_class):
             raise ValueError(f"Manager class {name} is not callable")
-        
+
         self._manager_classes[name] = manager_class
-        
-        # Store lifecycle hooks
+
         if not hasattr(self, '_manager_hooks'):
             self._manager_hooks = {}
-        self._manager_hooks[name] = {
-            'on_register': on_register,
-            'on_unregister': on_unregister
-        }
-        
+        self._manager_hooks[name] = {'on_register': on_register, 'on_unregister': on_unregister}
+
         if lazy:
-            # Create a lazy proxy instead of instantiating immediately
-            logger.info(f"Registering {name} manager for lazy initialization")
             self._managers[name] = LazyManagerProxy(name, manager_class, self)
         else:
-            # Instantiate manager with reference to this CharacterManager
             try:
-                logger.info(f"Instantiating {name} manager with class {manager_class.__name__}")
                 manager_instance = manager_class(self)
                 self._managers[name] = manager_instance
-                logger.info(f"Successfully created {name} manager instance")
-                
-                # Call registration hook if provided
                 if on_register:
                     try:
                         on_register(manager_instance)
                     except Exception as e:
                         logger.error(f"Error in on_register hook for {name}: {e}")
-                        
             except Exception as e:
                 logger.error(f"Failed to create {name} manager: {e}")
-                # Clean up partial registration
                 if name in self._manager_classes:
                     del self._manager_classes[name]
                 if name in self._manager_hooks:
                     del self._manager_hooks[name]
                 raise RuntimeError(f"Could not create {name} manager: {e}")
-        
-        logger.info(f"Registered {name} manager")
     
     def get_manager(self, name: str):
-        """
-        Get a registered manager by name.
-        
-        If the manager is a lazy proxy, this will trigger its initialization.
-        
-        Args:
-            name: Manager name
-            
-        Returns:
-            Manager instance or None if not registered
-        """
+        """Get a registered manager by name, triggering lazy initialization if needed."""
         manager = self._managers.get(name)
         if isinstance(manager, LazyManagerProxy):
-            # Access any attribute to trigger initialization
-            # The proxy will replace itself in _managers
             _ = manager._initialized
-            # Return the real manager from _managers
             return self._managers.get(name)
         return manager
     
     def unregister_manager(self, name: str):
-        """
-        Unregister a subsystem manager
-        
-        Args:
-            name: Manager name to unregister
-        """
+        """Unregister a subsystem manager."""
         if name not in self._managers:
             logger.warning(f"Attempted to unregister non-existent manager: {name}")
             return
-        
-        # Call unregistration hook if provided
+
         if hasattr(self, '_manager_hooks') and name in self._manager_hooks:
             on_unregister = self._manager_hooks[name].get('on_unregister')
             if on_unregister:
@@ -426,174 +297,107 @@ class CharacterManager(EventEmitter):
                     on_unregister(self._managers[name])
                 except Exception as e:
                     logger.error(f"Error in on_unregister hook for {name}: {e}")
-        
-        # Remove manager
+
         del self._managers[name]
         del self._manager_classes[name]
         if hasattr(self, '_manager_hooks') and name in self._manager_hooks:
             del self._manager_hooks[name]
-        
-        logger.info(f"Unregistered {name} manager")
     
     def begin_transaction(self) -> Transaction:
-        """Start a new transaction for atomic changes"""
+        """Start a new transaction for atomic changes."""
         if self._current_transaction:
             raise RuntimeError("Transaction already in progress")
-            
         self._current_transaction = Transaction(self)
-        logger.info(f"Started transaction {self._current_transaction.id}")
         return self._current_transaction
-    
-    
+
     def commit_transaction(self) -> Dict[str, Any]:
-        """Commit the current transaction"""
+        """Commit the current transaction."""
         if not self._current_transaction:
             raise RuntimeError("No transaction in progress")
-        
-        # Validate before committing
         is_valid, errors = self.validate_changes()
         if not is_valid:
             raise ValueError(f"Transaction validation failed: {'; '.join(errors)}")
-            
         result = self._current_transaction.commit()
         self._transaction_history.append(self._current_transaction)
         self._current_transaction = None
         return result
-    
+
     def rollback_transaction(self):
-        """Rollback the current transaction"""
+        """Rollback the current transaction."""
         if not self._current_transaction:
             raise RuntimeError("No transaction in progress")
-            
         self._current_transaction.rollback()
         self._current_transaction = None
 
     def _notify_managers(self, notification_type: str, data: Dict[str, Any]):
-        """
-        Internal notification system for managers
-        
-        Args:
-            notification_type: Type of notification
-            data: Notification data
-        """
+        """Send notification to all managers that implement the handler."""
         for name, manager in self._managers.items():
             if hasattr(manager, f'on_{notification_type}'):
                 method = getattr(manager, f'on_{notification_type}')
                 method(data)
-            
-            # Special handling for transaction rollback - update gff references
             if notification_type == 'transaction_rollback':
                 manager.gff = self.gff
     
     def get_character_summary(self) -> Dict[str, Any]:
-        """Get a summary of the character's current state aggregated from managers"""
-        # Get managers
-        ability_manager = self.get_manager('ability')  # AbilityManager handles ability scores (strength, dex, etc.)
+        """Get a summary of the character's current state aggregated from managers."""
+        identity_manager = self.get_manager('identity')
         class_manager = self.get_manager('class')
         race_manager = self.get_manager('race')
-        
+        ability_manager = self.get_manager('ability')
+        content_manager = self.get_manager('content')
+        feat_manager = self.get_manager('feat')
+
+        if not identity_manager:
+            raise RuntimeError("IdentityManager is required but not registered")
+        if not class_manager:
+            raise RuntimeError("ClassManager is required but not registered")
+        if not race_manager:
+            raise RuntimeError("RaceManager is required but not registered")
+        if not ability_manager:
+            raise RuntimeError("AbilityManager is required but not registered")
+
         summary = {
-            'name': ability_manager.get_character_name() if ability_manager else '',
-            'level': class_manager.get_total_level() if class_manager else 1,
-            'race': race_manager.get_race_name(self.gff.get('Race', 0)) if race_manager else f"Race_{self.gff.get('Race', 0)}",
+            'name': identity_manager.get_character_name(),
+            'level': class_manager.get_total_level(),
+            'race': race_manager.get_race_name(self.gff.get('Race', 0)),
             'alignment': {
                 'law_chaos': self.gff.get('LawfulChaotic', 50),
                 'good_evil': self.gff.get('GoodEvil', 50)
             },
-            'gender': self.gff.get('Gender', 0),  # Raw gender INT
+            'gender': self.gff.get('Gender', 0),
             'gold': self.gff.get('Gold', 0),
             'age': self.gff.get('Age', 0),
-            'subrace': race_manager._get_subrace_name(self.gff.get('Subrace', '')) if race_manager else '',
+            'subrace': race_manager._get_subrace_name(self.gff.get('Subrace', '')),
             'custom_content_count': len(self.custom_content),
-            'background': {}, 
+            'background': {},
             'domains': [],
-            'deity': '',
-            'biography': ''
+            'deity': content_manager.get_deity() if content_manager else '',
+            'biography': content_manager.get_biography() if content_manager else '',
+            'classes': class_manager.get_class_summary(),
+            'abilities': ability_manager.get_ability_scores()
         }
-        
-        # Get deity and biography from content manager
-        content_manager = self.get_manager('content')
-        if content_manager:
-            summary['deity'] = content_manager.get_deity()
-            summary['biography'] = content_manager.get_biography()
-        
-        # Populate Background and Domains
-        feat_manager = self.get_manager('feat')
-        if feat_manager and hasattr(feat_manager, 'get_feat_summary_fast'):
-            feat_summary = feat_manager.get_feat_summary_fast()
 
+        if feat_manager:
+            feat_summary = feat_manager.get_feat_summary_fast()
             if feat_summary.get('background_feats'):
                 summary['background'] = feat_summary['background_feats'][0]
-
             domain_feats = feat_summary.get('domain_feats', [])
             summary['domains'] = [f for f in domain_feats if feat_manager.is_domain_epithet_feat(f['id'])]
-        
-        # Aggregate class information from ClassManager
-        if class_manager and hasattr(class_manager, 'get_class_summary'):
-            summary['classes'] = class_manager.get_class_summary()
-        else:
-            # Fallback to direct access
-            summary['classes'] = [
-                {
-                    'class_id': c.get('Class', 0),
-                    'level': c.get('ClassLevel', 0),
-                    'name': class_manager.get_class_name(c.get('Class', 0)) if class_manager else f"Class_{c.get('Class', 0)}"
-                }
-                for c in self.gff.get('ClassList', [])
-                if isinstance(c, dict)
-            ]
-        
-        ability_manager = self.get_manager('ability')
-        if ability_manager and hasattr(ability_manager, 'get_ability_scores'):
-            summary['abilities'] = ability_manager.get_ability_scores()
-        elif ability_manager and hasattr(ability_manager, 'get_attributes'):
-            attributes = ability_manager.get_attributes()
-            summary['abilities'] = {
-                'strength': attributes.get('Str', 10),
-                'dexterity': attributes.get('Dex', 10),
-                'constitution': attributes.get('Con', 10),
-                'intelligence': attributes.get('Int', 10),
-                'wisdom': attributes.get('Wis', 10),
-                'charisma': attributes.get('Cha', 10)
-            }
-        else:
-            summary['abilities'] = {
-                'strength': self.gff.get('Str', 10),
-                'dexterity': self.gff.get('Dex', 10),
-                'constitution': self.gff.get('Con', 10),
-                'intelligence': self.gff.get('Int', 10),
-                'wisdom': self.gff.get('Wis', 10),
-                'charisma': self.gff.get('Cha', 10)
-            }
-        
-        # Add campaign/module/quest data if ContentManager is available
-        content_manager = self.get_manager('content')
+
         if content_manager:
             summary['campaign_name'] = content_manager.get_campaign_name()
             summary['module_name'] = content_manager.get_module_name()
             summary['area_name'] = content_manager.get_area_name()
             summary['quest_details'] = content_manager.get_quest_summary()
-            
-            # Also add the full campaign info
             campaign_info = content_manager.get_campaign_info()
             summary.update(campaign_info)
-        
+
         return summary
     
     def validate_changes(self, preview: bool = False) -> tuple[bool, List[str]]:
-        """
-        Validate all pending changes - corruption prevention only
-        
-        Args:
-            preview: If True, validate without applying
-            
-        Returns:
-            (is_valid, list_of_errors)
-        """
+        """Validate all pending changes for corruption prevention only."""
         errors = []
-        
-        # Only corruption prevention - no game rule validation
-        # Let each manager validate its state (they should only check corruption too)
+
         for name, manager in self._managers.items():
             if hasattr(manager, 'validate'):
                 is_valid, manager_errors = manager.validate()
@@ -603,15 +407,7 @@ class CharacterManager(EventEmitter):
         return len(errors) == 0, errors
     
     def batch_update(self, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Apply multiple updates at once
-        
-        Args:
-            updates: List of update operations
-            
-        Returns:
-            Summary of applied updates
-        """
+        """Apply multiple updates atomically within a transaction."""
         results = []
         txn = self.begin_transaction()
         
@@ -657,48 +453,32 @@ class CharacterManager(EventEmitter):
             raise
     
     def get_all_managers(self) -> Dict[str, Any]:
-        """
-        Get all registered managers
-        
-        Returns:
-            Dictionary of manager name to manager instance
-        """
+        """Get all registered managers."""
         return self._managers.copy()
     
     def reload_managers(self) -> None:
-        """Reload all managers (useful after game data changes)"""
+        """Reload all managers after game data changes."""
         logger.info("Reloading all managers")
-        
-        # Store current manager classes
         manager_classes = self._manager_classes.copy()
-        
-        # Unregister all managers
+
         for name in list(self._managers.keys()):
             self.unregister_manager(name)
-        
-        # Re-register all managers
+
         for name, manager_class in manager_classes.items():
             self.register_manager(name, manager_class)
-        
+
         logger.info(f"Reloaded {len(manager_classes)} managers")
     
     def get_manager_status(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get status/health of all managers
-        
-        Returns:
-            Dictionary with status info for each manager
-        """
+        """Get status/health of all managers."""
         status = {}
-        
+
         for name, manager in self._managers.items():
             manager_status = {
                 'registered': True,
                 'class': manager.__class__.__name__,
                 'has_validate': hasattr(manager, 'validate')
             }
-            
-            # Check if manager is healthy by calling validate if available
             if hasattr(manager, 'validate'):
                 try:
                     is_valid, errors = manager.validate()
@@ -707,30 +487,19 @@ class CharacterManager(EventEmitter):
                 except Exception as e:
                     manager_status['is_valid'] = False
                     manager_status['validation_errors'] = [f"Validation failed: {str(e)}"]
-            
             status[name] = manager_status
-        
         return status
     
     def undo_last_change(self) -> bool:
-        """
-        Undo the last committed transaction
-        
-        Returns:
-            True if undo was successful, False if no transaction to undo
-        """
+        """Undo the last committed transaction."""
         if not self._transaction_history:
             logger.warning("No transaction history to undo")
             return False
-        
-        # Get last transaction
+
         last_transaction = self._transaction_history.pop()
-        
-        # Restore character to state before transaction
         self.character_data = copy.deepcopy(last_transaction.original_state)
         self.gff = GFFDataWrapper(self.character_data)
-        
-        # Notify managers
+
         self._notify_managers('transaction_undone', {
             'transaction_id': last_transaction.id,
             'changes': last_transaction.changes
@@ -738,25 +507,9 @@ class CharacterManager(EventEmitter):
         
         logger.info(f"Undone transaction {last_transaction.id}")
         return True
-    
-    def redo_change(self) -> bool:
-        """
-        Redo a previously undone change
-        
-        Returns:
-            True if redo was successful, False if nothing to redo
-        """
-        # TODO: Implement redo stack
-        logger.warning("Redo not yet implemented")
-        return False
-    
+
     def get_transaction_history(self) -> List[Dict[str, Any]]:
-        """
-        Get full transaction history
-        
-        Returns:
-            List of transaction summaries
-        """
+        """Get full transaction history."""
         return [
             {
                 'id': txn.id,
@@ -796,21 +549,15 @@ class CharacterManager(EventEmitter):
         }
     
     def get_character_state(self) -> Dict[str, Any]:
-        """
-        Get comprehensive character state from all managers
-        
-        Returns:
-            Dict containing aggregated character state data from all subsystem managers
-        """
-        # Start with basic info
+        """Get comprehensive character state aggregated from all managers."""
         character_info = self.get_character_summary()
-        
+
         state_data = {
             'info': {
                 'id': getattr(self, '_character_id', 'unknown'),
                 'file_path': getattr(self, '_file_path', ''),
-                'file_name': '',  # Will be populated from file_path if available
-                'file_type': 'bic',  # Default, can be overridden
+                'file_name': '',
+                'file_type': 'bic',
                 'first_name': character_info.get('name', '').split()[0] if character_info.get('name') else '',
                 'last_name': ' '.join(character_info.get('name', '').split()[1:]) if len(character_info.get('name', '').split()) > 1 else '',
                 'full_name': character_info.get('name', ''),
@@ -825,8 +572,7 @@ class CharacterManager(EventEmitter):
             },
             'summary': character_info
         }
-        
-        # Populate file info if available
+
         if hasattr(self, '_file_path') and self._file_path:
             from pathlib import Path
             file_path = Path(self._file_path)
@@ -837,11 +583,9 @@ class CharacterManager(EventEmitter):
             elif file_path.suffix.lower() in ['.ifo']:
                 state_data['info']['file_type'] = 'ifo'
                 state_data['info']['is_savegame'] = True
-        
-        # Get data from all managers
+
         manager_data = {}
-        
-        # Abilities
+
         ability_manager = self.get_manager('ability')
         if ability_manager:
             try:
@@ -850,18 +594,16 @@ class CharacterManager(EventEmitter):
                 elif hasattr(ability_manager, 'get_attributes'):
                     manager_data['abilities'] = ability_manager.get_attributes()
             except Exception as e:
-                logger.warning(f"Failed to get ability data: {e}")
-        
-        # Combat stats
+                logger.error(f"Failed to get ability data: {e}")
+
         combat_manager = self.get_manager('combat')
         if combat_manager:
             try:
                 if hasattr(combat_manager, 'get_combat_stats'):
                     manager_data['combat'] = combat_manager.get_combat_stats()
             except Exception as e:
-                logger.warning(f"Failed to get combat data: {e}")
-        
-        # Skills
+                logger.error(f"Failed to get combat data: {e}")
+
         skill_manager = self.get_manager('skill')
         if skill_manager:
             try:
@@ -870,9 +612,8 @@ class CharacterManager(EventEmitter):
                 elif hasattr(skill_manager, 'get_skills'):
                     manager_data['skills'] = skill_manager.get_skills()
             except Exception as e:
-                logger.warning(f"Failed to get skill data: {e}")
-        
-        # Feats
+                logger.error(f"Failed to get skill data: {e}")
+
         feat_manager = self.get_manager('feat')
         if feat_manager:
             try:
@@ -881,9 +622,8 @@ class CharacterManager(EventEmitter):
                 elif hasattr(feat_manager, 'get_feats'):
                     manager_data['feats'] = feat_manager.get_feats()
             except Exception as e:
-                logger.warning(f"Failed to get feat data: {e}")
-        
-        # Spells
+                logger.error(f"Failed to get feat data: {e}")
+
         spell_manager = self.get_manager('spell')
         if spell_manager:
             try:
@@ -892,9 +632,8 @@ class CharacterManager(EventEmitter):
                 elif hasattr(spell_manager, 'get_spells'):
                     manager_data['spells'] = spell_manager.get_spells()
             except Exception as e:
-                logger.warning(f"Failed to get spell data: {e}")
-        
-        # Inventory
+                logger.error(f"Failed to get spell data: {e}")
+
         inventory_manager = self.get_manager('inventory')
         if inventory_manager:
             try:
@@ -903,9 +642,8 @@ class CharacterManager(EventEmitter):
                 elif hasattr(inventory_manager, 'get_inventory'):
                     manager_data['inventory'] = inventory_manager.get_inventory()
             except Exception as e:
-                logger.warning(f"Failed to get inventory data: {e}")
-        
-        # Classes
+                logger.error(f"Failed to get inventory data: {e}")
+
         class_manager = self.get_manager('class')
         if class_manager:
             try:
@@ -914,9 +652,8 @@ class CharacterManager(EventEmitter):
                 elif hasattr(class_manager, 'get_classes'):
                     manager_data['classes'] = class_manager.get_classes()
             except Exception as e:
-                logger.warning(f"Failed to get class data: {e}")
-        
-        # Race
+                logger.error(f"Failed to get class data: {e}")
+
         race_manager = self.get_manager('race')
         if race_manager:
             try:
@@ -925,9 +662,8 @@ class CharacterManager(EventEmitter):
                 elif hasattr(race_manager, 'get_race'):
                     manager_data['race'] = race_manager.get_race()
             except Exception as e:
-                logger.warning(f"Failed to get race data: {e}")
-        
-        # Save/Saving throws
+                logger.error(f"Failed to get race data: {e}")
+
         save_manager = self.get_manager('save')
         if save_manager:
             try:
@@ -936,40 +672,204 @@ class CharacterManager(EventEmitter):
                 elif hasattr(save_manager, 'get_saves'):
                     manager_data['saves'] = save_manager.get_saves()
             except Exception as e:
-                logger.warning(f"Failed to get save data: {e}")
-        
-        # Content
+                logger.error(f"Failed to get save data: {e}")
+
         content_manager = self.get_manager('content')
         if content_manager:
             try:
                 if hasattr(content_manager, 'get_content_summary'):
                     manager_data['content'] = content_manager.get_content_summary()
             except Exception as e:
-                logger.warning(f"Failed to get content data: {e}")
-        
-        # Add manager data to state
+                logger.error(f"Failed to get content data: {e}")
+
         state_data.update(manager_data)
-        
-        # Add metadata
         state_data['custom_content'] = self.custom_content or {}
         state_data['manager_status'] = self.get_manager_status()
         state_data['has_unsaved_changes'] = len(self._transaction_history) > 0
-        
+
         return state_data
     
-    def validate_character(self) -> Dict[str, Any]:
-        """
-        Validate character data across all managers
+    def update_deity(self, deity: str) -> None:
+        """Update character deity."""
+        self.gff.set('Deity', deity)
+        logger.info(f"Updated deity to: {deity}")
+
+    def update_biography(self, biography: str) -> None:
+        """Update character description/biography."""
+        desc_struct = self.gff.get('Description', {})
+        if isinstance(desc_struct, dict) and 'substrings' in desc_struct:
+            # Update existing structure
+            if desc_struct['substrings']:
+                desc_struct['substrings'][0]['string'] = biography
+            else:
+                desc_struct['substrings'] = [{'string': biography, 'language': 0, 'gender': 0}]
+            self.gff.set('Description', desc_struct)
+        else:
+            # Create new structure
+            self.gff.set('Description', {
+                'string_ref': 4294967295,
+                'substrings': [{'string': biography, 'language': 0, 'gender': 0}]
+            })
+        logger.info(f"Updated biography")
+
+    def update_name(self, first_name: Optional[str] = None, last_name: Optional[str] = None) -> None:
+        """Update character first and/or last name."""
+        if first_name is not None:
+            first_name_struct = self.gff.get('FirstName', {})
+            if isinstance(first_name_struct, dict):
+                first_name_struct['value'] = first_name
+                self.gff.set('FirstName', first_name_struct)
+            else:
+                self.gff.set('FirstName', {'value': first_name})
+            logger.info(f"Updated first_name to: {first_name}")
+            
+        if last_name is not None:
+            last_name_struct = self.gff.get('LastName', {})
+            if isinstance(last_name_struct, dict):
+                last_name_struct['value'] = last_name
+                self.gff.set('LastName', last_name_struct)
+            else:
+                self.gff.set('LastName', {'value': last_name})
+            logger.info(f"Updated last_name to: {last_name}")
+
+    def get_level_up_state(self) -> Dict[str, Any]:
+        """Get updated character state after class/level changes for UI updates."""
+        updated_state = {}
+
+        try:
+            class_manager = self.get_manager('class')
+            if class_manager:
+                updated_state['classes'] = class_manager.get_class_summary()
+                updated_state['combat'] = class_manager.get_attack_bonuses()
+                updated_state['saves'] = class_manager.calculate_total_saves()
+
+            skill_manager = self.get_manager('skill')
+            if skill_manager:
+                updated_state['skills'] = {
+                    'available_points': self.gff.get('SkillPoints', 0),
+                    'total_available': skill_manager.calculate_total_skill_points(
+                        self.gff.get('ClassList', [{}])[0].get('Class', 0),
+                        sum(c.get('ClassLevel', 0) for c in self.gff.get('ClassList', []))
+                    ),
+                    'spent_points': skill_manager._calculate_spent_skill_points()
+                }
+
+            feat_manager = self.get_manager('feat')
+            if feat_manager:
+                feat_list = self.gff.get('FeatList', [])
+                updated_state['feats'] = {
+                    'total_feats': len(feat_list),
+                    'feat_count': len(feat_list)
+                }
+
+            spell_manager = self.get_manager('spell')
+            if spell_manager and hasattr(spell_manager, 'get_spell_summary'):
+                updated_state['spells'] = spell_manager.get_spell_summary()
+
+            ability_manager = self.get_manager('ability')
+            if ability_manager:
+                class_list = self.gff.get('ClassList', [])
+                total_level = sum(c.get('ClassLevel', 0) for c in class_list)
+                ability_increases_available = total_level // 4
+                level_up_bonuses = ability_manager.get_level_up_modifiers()
+                bonuses_used = sum(level_up_bonuses.values())
+
+                updated_state['abilities'] = {
+                    'level_up_available': ability_increases_available - bonuses_used,
+                    'total_increases': ability_increases_available,
+                    'used_increases': bonuses_used
+                }
+
+        except Exception as e:
+            logger.error(f"Error getting level up state: {e}")
+            updated_state['error'] = str(e)
+
+        return updated_state
+
+    def get_abilities_summary(self) -> Dict[str, Any]:
+        """Aggregate all ability-related state for the UI."""
+        ability_manager = self.get_manager('ability')
+        if not ability_manager:
+            raise RuntimeError("Ability manager not available")
+
+        gff_abilities = ability_manager.get_attributes(include_equipment=False, include_racial=False)
+        level_up_mods = ability_manager.get_level_up_modifiers()
+        base_abilities = {
+            attr: gff_abilities[attr] - level_up_mods.get(attr, 0)
+            for attr in gff_abilities
+        }
+
+        effective_abilities = ability_manager.get_effective_attributes()
         
-        Returns:
-            Dict containing validation results with errors and warnings
-        """
+        # Get derived stats
+        try:
+            hit_points = ability_manager.get_hit_points()
+            derived_stats = {
+                'hit_points': {
+                    'current': hit_points['current'],
+                    'maximum': hit_points['max']
+                }
+            }
+        except Exception as e:
+            logger.error(f"Failed to get hit points: {e}")
+            derived_stats = {'hit_points': {'current': 0, 'maximum': 0}}
+
+        combat_stats = {}
+        combat_manager = self.get_manager('combat')
+        if combat_manager:
+            try:
+                combat_stats = {
+                    'armor_class': combat_manager.calculate_armor_class(),
+                    'initiative': combat_manager.calculate_initiative()
+                }
+            except Exception as e:
+                logger.error(f"Failed to get combat stats: {e}")
+
+        saving_throws = {}
+        save_manager = self.get_manager('save')
+        if save_manager:
+            try:
+                saving_throws = save_manager.calculate_saving_throws()
+            except Exception as e:
+                logger.error(f"Failed to get saving throws: {e}")
+
+        biography = ""
+        identity_manager = self.get_manager('identity')
+        if identity_manager:
+            biography = identity_manager.get_biography()
+
+        return {
+            'base_attributes': base_abilities,
+            'effective_attributes': effective_abilities,
+            'attribute_modifiers': ability_manager.get_attribute_modifiers(),
+            'detailed_modifiers': {
+                'base_modifiers': ability_manager.get_attribute_modifiers(),
+                'racial_modifiers': ability_manager.get_racial_modifiers(),
+                'item_modifiers': ability_manager.get_item_modifiers(),
+                'enhancement_modifiers': ability_manager.get_enhancement_modifiers(),
+                'temporary_modifiers': ability_manager.get_temporary_modifiers(),
+                'level_up_modifiers': ability_manager.get_level_up_modifiers(),
+                'total_modifiers': ability_manager.get_total_modifiers()
+            },
+            'point_buy_cost': ability_manager.calculate_point_buy_total(),
+            'derived_stats': derived_stats,
+            'combat_stats': combat_stats,
+            'saving_throws': saving_throws,
+            'encumbrance_limits': ability_manager.get_encumbrance_limits(),
+            'saving_throw_modifiers': ability_manager.get_saving_throw_modifiers(),
+            'skill_modifiers': ability_manager.get_skill_modifiers(),
+            'attribute_dependencies': ability_manager.get_attribute_dependencies(),
+            'biography': biography,
+            'point_summary': ability_manager.get_ability_points_summary()
+        }
+
+    def validate_character(self) -> Dict[str, Any]:
+        """Validate character data across all managers for corruption prevention."""
         all_errors = []
         all_warnings = []
         manager_errors = {}
         corruption_risks = []
-        
-        # Validate each manager
+
         for name, manager in self._managers.items():
             try:
                 if hasattr(manager, 'validate'):
@@ -988,17 +888,14 @@ class CharacterManager(EventEmitter):
                 manager_errors[name] = [error_msg]
                 all_errors.append(error_msg)
                 corruption_risks.append(f"{name} manager validation threw exception")
-        
-        # Run basic GFF validation
+
         try:
-            # Check critical fields exist
             required_fields = ['FirstName', 'Race', 'ClassList']
             for field in required_fields:
-                if not self.gff.has_field(field):
+                if self.gff.get(field) is None:
                     all_errors.append(f"Missing critical field: {field}")
                     corruption_risks.append(f"Missing {field} could cause game crashes")
-            
-            # Check class list integrity
+
             class_list = self.gff.get('ClassList', [])
             if not class_list:
                 all_errors.append("Empty ClassList - character needs at least one class")
@@ -1013,34 +910,29 @@ class CharacterManager(EventEmitter):
                             all_errors.append(f"ClassList[{i}] missing 'Class' field")
                         if 'ClassLevel' not in char_class:
                             all_errors.append(f"ClassList[{i}] missing 'ClassLevel' field")
-            
-            # Check ability scores
+
             for ability in ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']:
                 value = self.gff.get(ability, None)
                 if value is None:
                     all_errors.append(f"Missing ability score: {ability}")
                 elif not isinstance(value, int) or value < 1 or value > 255:
                     all_warnings.append(f"Unusual {ability} value: {value}")
-            
-            # Check alignment values
+
             law_chaos = self.gff.get('LawfulChaotic', None)
             good_evil = self.gff.get('GoodEvil', None)
             if law_chaos is None:
                 all_errors.append("Missing LawfulChaotic alignment value")
             elif not (0 <= law_chaos <= 100):
                 all_errors.append(f"Invalid LawfulChaotic value: {law_chaos} (must be 0-100)")
-            
             if good_evil is None:
                 all_errors.append("Missing GoodEvil alignment value")
             elif not (0 <= good_evil <= 100):
                 all_errors.append(f"Invalid GoodEvil value: {good_evil} (must be 0-100)")
-                
         except Exception as e:
             error_msg = f"GFF validation failed: {str(e)}"
             all_errors.append(error_msg)
             corruption_risks.append("GFF structure validation failed - data may be corrupted")
-        
-        # Check custom content integrity
+
         if self.custom_content:
             try:
                 content_manager = self.get_manager('content')
@@ -1051,7 +943,7 @@ class CharacterManager(EventEmitter):
                         all_warnings.extend(content_errors)
             except Exception as e:
                 all_warnings.append(f"Custom content validation failed: {str(e)}")
-        
+
         return {
             'valid': len(all_errors) == 0,
             'errors': all_errors,
@@ -1059,15 +951,3 @@ class CharacterManager(EventEmitter):
             'manager_errors': manager_errors,
             'corruption_risks': corruption_risks
         }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    

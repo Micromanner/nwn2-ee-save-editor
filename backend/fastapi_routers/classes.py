@@ -1,9 +1,7 @@
-"""
-Classes router - Class management endpoints
-"""
+"""Classes router - Class management endpoints."""
 
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from loguru import logger
 
 from fastapi_routers.dependencies import (
@@ -11,6 +9,11 @@ from fastapi_routers.dependencies import (
     get_character_session,
     CharacterManagerDep,
     CharacterSessionDep
+)
+from fastapi_models.class_models import (
+    ClassesState, ClassChangeRequest, ClassChangePreview, ClassChangeResult,
+    LevelUpRequest, LevelUpPreview, LevelUpResult, CategorizedClassesResponse,
+    FocusInfo, ClassFeaturesResponse, ClassAddRequest
 )
 
 router = APIRouter()
@@ -21,9 +24,7 @@ def get_classes_state(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get current classes state"""
-    from fastapi_models.class_models import ClassesState
-    
+    """Get current classes state."""
     try:
         class_manager = manager.get_manager('class')
         if not class_manager:
@@ -32,20 +33,12 @@ def get_classes_state(
                 detail="Class manager not available"
             )
         
-        # Use manager methods only - no duplicated logic
         class_summary = class_manager.get_class_summary()
-        if not class_summary:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not get class summary"
-            )
-        
         attack_bonuses = class_manager.get_attack_bonuses()
         total_saves = class_manager.calculate_total_saves()
         
-        # Use manager data directly - simplified structure
         response_data = {
-            **class_summary,  # classes, total_level, multiclass, can_multiclass
+            **class_summary,
             'combat_stats': {
                 **attack_bonuses,
                 **total_saves
@@ -57,7 +50,6 @@ def get_classes_state(
         
     except Exception as e:
         logger.error(f"Failed to get classes state for character {character_id}: {e}")
-        logger.error(f"Failed to get classes state for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get classes state: {str(e)}"
@@ -68,13 +60,9 @@ def get_classes_state(
 def change_class(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict  # Request body parameter
+    request: ClassChangeRequest = Body(...)
 ):
-    """
-    Change character's class using the unified CharacterManager
-    Returns all cascading changes (feats, spells, skills)
-    """
-    from fastapi_models.class_models import ClassChangeRequest, ClassChangePreview, ClassChangeResult
+    """Change character's class."""
     session = char_session
     manager = session.character_manager
     
@@ -86,62 +74,45 @@ def change_class(
                 detail="Class manager not available"
             )
         
-        # Validate class ID exists
-        class_id = request.get('class_id')
-        if class_id is None or not class_manager.rules_service.get_by_id('classes', class_id):
+        if not class_manager.rules_service.get_by_id('classes', request.class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid class ID: {class_id}"
+                detail=f"Invalid class ID: {request.class_id}"
             )
 
-        # Get old class ID if provided (for multiclass characters)
-        old_class_id = request.get('old_class_id')
-        
-        # Use class manager methods - no duplicated logic
-        if request.get('preview', False):
-            if old_class_id is not None:
-                # Multiclass character - change specific class
+        if request.preview:
+            changes = {}
+            if request.old_class_id is not None:
                 changes = class_manager.change_specific_class(
-                    old_class_id, class_id, request.get('preserve_level', True)
-                )
-                changes = class_manager.change_class(
-                    class_id, request.get('preserve_level', True)
+                    request.old_class_id, request.class_id, request.preserve_level
                 )
             
-            preview_data = {
-                'preview': True,
-                'class_change': changes or {},
-                'has_unsaved_changes': session.has_unsaved_changes()
-            }
-            return ClassChangePreview(**preview_data)
+            return ClassChangePreview(
+                preview=True,
+                class_change=changes or {},
+                has_unsaved_changes=session.has_unsaved_changes()
+            )
 
-        # Execute class change using manager
-        if old_class_id is not None:
-            # Multiclass character - change specific class
+        if request.old_class_id is not None:
             changes = class_manager.change_specific_class(
-                old_class_id, class_id, request.get('preserve_level', True)
+                request.old_class_id, request.class_id, request.preserve_level
             )
         else:
-            # Single class character - change primary class
             changes = class_manager.change_class(
-                class_id, request.get('preserve_level', True)
+                request.class_id, request.preserve_level
             )
 
-        # Get updated character state after all event handlers have executed
-        updated_state = _get_updated_character_state(manager)
+        updated_state = manager.get_level_up_state()
 
-        result = {
-            'success': True,
-            'message': 'Class changed successfully',
-            'class_change': changes or {},
-            'has_unsaved_changes': session.has_unsaved_changes(),
-            'updated_state': updated_state
-        }
-
-        return ClassChangeResult(**result)
+        return ClassChangeResult(
+            success=True,
+            message='Class changed successfully',
+            class_change=changes or {},
+            has_unsaved_changes=session.has_unsaved_changes(),
+            updated_state=updated_state
+        )
 
     except Exception as e:
-        logger.error(f"Failed to change class for character {character_id}: {e}")
         logger.error(f"Failed to change class for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -153,13 +124,9 @@ def change_class(
 def level_up(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict  # Request body parameter
+    request: LevelUpRequest = Body(...)
 ):
-    """
-    Adjust levels in a specific class (add or remove levels)
-    Supports level_change parameter for +/- level adjustments
-    """
-    from fastapi_models.class_models import LevelUpRequest, LevelUpPreview, LevelUpResult
+    """Adjust levels in a specific class."""
     session = char_session
     manager = session.character_manager
     
@@ -171,44 +138,31 @@ def level_up(
                 detail="Class manager not available"
             )
         
-        # Validate class ID exists
-        class_id = request.get('class_id')
-        if class_id is None or not class_manager.rules_service.get_by_id('classes', class_id):
+        if not class_manager.rules_service.get_by_id('classes', request.class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid class ID: {class_id}"
+                detail=f"Invalid class ID: {request.class_id}"
             )
-
-        # Get level change (default to +1 for compatibility)
-        level_change = request.get('level_change', 1)
         
-        if request.get('preview', False):
-            # Use manager methods only
-            preview_data = {
-                'preview': True,
-                'level_change': level_change,
-                'has_unsaved_changes': session.has_unsaved_changes()
-            }
-            return LevelUpPreview(**preview_data)
+        if request.preview:
+            return LevelUpPreview(
+                preview=True,
+                level_change=request.level_change,
+                has_unsaved_changes=session.has_unsaved_changes()
+            )
         
-        # Use class manager method - no duplicated logic
-        changes = class_manager.adjust_class_level(class_id, level_change)
-        
-        # Get updated character state after all event handlers have executed
-        updated_state = _get_updated_character_state(manager)
+        changes = class_manager.adjust_class_level(request.class_id, request.level_change)
+        updated_state = manager.get_level_up_state()
 
-        result = {
-            'success': True,
-            'message': 'Leveled up successfully',
-            'level_changes': changes or {},
-            'has_unsaved_changes': session.has_unsaved_changes(),
-            'updated_state': updated_state
-        }
-
-        return LevelUpResult(**result)
+        return LevelUpResult(
+            success=True,
+            message='Leveled up successfully',
+            level_changes=changes or {},
+            has_unsaved_changes=session.has_unsaved_changes(),
+            updated_state=updated_state
+        )
         
     except Exception as e:
-        logger.error(f"Failed to level up character {character_id}: {e}")
         logger.error(f"Failed to level up character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -224,99 +178,16 @@ def get_categorized_classes_for_character(
     type_filter: Optional[str] = Query(None, alias="type", description="Filter by 'base' or 'prestige'"),
     include_unplayable: bool = Query(False, description="Include NPC classes")
 ):
-    """
-    Get all classes organized by type and focus for UI selection
-    Includes character-specific context for prerequisites
-    """
-    from fastapi_models.class_models import CategorizedClassesResponse, FocusInfo
-    from character.service_modules.class_categorizer import ClassCategorizer, ClassType
-    from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
-
+    """Get all classes organized by type and focus for UI selection."""
     try:
-        # Get game data loader
-        game_data_loader = get_dynamic_game_data_loader()
-        if not game_data_loader:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Game data not available"
-            )
+        class_manager = manager.get_manager('class')
         
-        # Initialize categorizer
-        categorizer = ClassCategorizer(game_data_loader)
+        result = class_manager.get_categorized_classes(search, type_filter, include_unplayable)
         
-        # Handle search mode
-        if search:
-            search_filter = None
-            if type_filter == 'base':
-                search_filter = ClassType.BASE
-            elif type_filter == 'prestige':
-                search_filter = ClassType.PRESTIGE
-            
-            search_results = categorizer.search_classes(search, search_filter)
-            
-            # Get character context even for search
-            character_context = None
-            try:
-                character_context = _get_character_class_context(manager, categorizer)
-            except Exception as e:
-                logger.warning(f"Could not get character context: {e}")
-            
-            return CategorizedClassesResponse(
-                categories={},  # Empty categories for search mode
-                focus_info={},
-                total_classes=0,
-                include_unplayable=include_unplayable,
-                character_context=character_context,
-                search_results=[_serialize_class_info(class_info) for class_info in search_results],
-                query=search,
-                total_results=len(search_results)
-            )
+        character_context = _get_character_class_context(manager)
+        result['character_context'] = character_context
         
-        # Get full categorized classes
-        categories = categorizer.get_categorized_classes(include_unplayable)
-        
-        # Apply type filter if specified
-        if type_filter in ['base', 'prestige']:
-            filtered_categories = {type_filter: categories[type_filter]}
-        else:
-            filtered_categories = categories
-        
-        # Serialize the data
-        serialized_categories = {}
-        for class_type, focus_groups in filtered_categories.items():
-            serialized_categories[class_type] = {}
-            for focus, class_list in focus_groups.items():
-                if class_list:  # Only include non-empty categories
-                    serialized_categories[class_type][focus] = [
-                        _serialize_class_info(class_info) for class_info in class_list
-                    ]
-        
-        # Get focus display info
-        focus_info_raw = categorizer.get_focus_display_info()
-        focus_info = {
-            focus: FocusInfo(**info) for focus, info in focus_info_raw.items()
-        }
-        
-        # Get character context
-        character_context = None
-        try:
-            character_context = _get_character_class_context(manager, categorizer)
-        except Exception as e:
-            logger.warning(f"Could not get character context: {e}")
-        
-        response_data = {
-            'categories': serialized_categories,
-            'focus_info': focus_info,
-            'total_classes': sum(
-                len(class_list) 
-                for focus_groups in filtered_categories.values() 
-                for class_list in focus_groups.values()
-            ),
-            'include_unplayable': include_unplayable,
-            'character_context': character_context
-        }
-        
-        return CategorizedClassesResponse(**response_data)
+        return CategorizedClassesResponse(**result)
         
     except Exception as e:
         logger.error(f"Error getting categorized classes: {e}")
@@ -332,26 +203,14 @@ def get_categorized_classes_standalone(
     type_filter: Optional[str] = Query(None, alias="type", description="Filter by 'base' or 'prestige'"),
     include_unplayable: bool = Query(False, description="Include NPC classes")
 ):
-    """
-    Get all classes organized by type and focus (standalone, no character context needed)
-    """
-    from fastapi_models.class_models import CategorizedClassesResponse, FocusInfo
-    from character.service_modules.class_categorizer import ClassCategorizer, ClassType
+    """Get all classes organized by type."""
+    from services.gamedata.class_categorizer import ClassCategorizer, ClassType
     from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
 
     try:
-        # Get game data loader
         game_data_loader = get_dynamic_game_data_loader()
-        if not game_data_loader:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Game data not available"
-            )
-        
-        # Initialize categorizer
         categorizer = ClassCategorizer(game_data_loader)
         
-        # Handle search mode
         if search:
             search_filter = None
             if type_filter == 'base':
@@ -362,54 +221,35 @@ def get_categorized_classes_standalone(
             search_results = categorizer.search_classes(search, search_filter)
             
             return CategorizedClassesResponse(
-                categories={},  # Empty categories for search mode
-                focus_info={},
-                total_classes=0,
+                categories={}, 
+                focus_info={}, 
+                total_classes=0, 
                 include_unplayable=include_unplayable,
-                character_context=None,  # Will be set properly in character-specific endpoint
-                search_results=[_serialize_class_info(class_info) for class_info in search_results],
+                search_results=[c.to_dict() for c in search_results],
                 query=search,
                 total_results=len(search_results)
             )
         
-        # Get full categorized classes
         categories = categorizer.get_categorized_classes(include_unplayable)
-        
-        # Apply type filter if specified
         if type_filter in ['base', 'prestige']:
-            filtered_categories = {type_filter: categories[type_filter]}
-        else:
-            filtered_categories = categories
-        
-        # Serialize the data
+            categories = {type_filter: categories[type_filter]}
+            
         serialized_categories = {}
-        for class_type, focus_groups in filtered_categories.items():
-            serialized_categories[class_type] = {}
-            for focus, class_list in focus_groups.items():
-                if class_list:  # Only include non-empty categories
-                    serialized_categories[class_type][focus] = [
-                        _serialize_class_info(class_info) for class_info in class_list
-                    ]
+        for c_type, focus_groups in categories.items():
+            serialized_categories[c_type] = {
+                focus: [c.to_dict() for c in c_list]
+                for focus, c_list in focus_groups.items() if c_list
+            }
+            
+        focus_info = categorizer.get_focus_display_info()
         
-        # Get focus display info
-        focus_info_raw = categorizer.get_focus_display_info()
-        focus_info = {
-            focus: FocusInfo(**info) for focus, info in focus_info_raw.items()
-        }
-        
-        response_data = {
-            'categories': serialized_categories,
-            'focus_info': focus_info,
-            'total_classes': sum(
-                len(class_list) 
-                for focus_groups in filtered_categories.values() 
-                for class_list in focus_groups.values()
-            ),
-            'include_unplayable': include_unplayable
-        }
-        
-        return CategorizedClassesResponse(**response_data)
-        
+        return CategorizedClassesResponse(
+            categories=serialized_categories,
+            focus_info={k: FocusInfo(**v) for k, v in focus_info.items()},
+            total_classes=sum(len(l) for g in categories.values() for l in g.values()),
+            include_unplayable=include_unplayable
+        )
+
     except Exception as e:
         logger.error(f"Error getting categorized classes: {e}")
         raise HTTPException(
@@ -422,33 +262,22 @@ def get_categorized_classes_standalone(
 def add_class(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict  # Request body parameter
+    request: ClassAddRequest = Body(...)
 ):
-    """Add a new class to character (for multiclassing)"""
+    """Add a new class to character."""
     session = char_session
     manager = session.character_manager
     
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Validate class ID exists
-        class_id = request.get('class_id')
-        if class_id is None or not class_manager.rules_service.get_by_id('classes', class_id):
+        if not class_manager.rules_service.get_by_id('classes', request.class_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid class ID: {class_id}"
+                detail=f"Invalid class ID: {request.class_id}"
             )
 
-        # Use class manager method to add class level (handles new classes too)
-        changes = class_manager.add_class_level(class_id)
-
-        # Get updated character state after all event handlers have executed
-        updated_state = _get_updated_character_state(manager)
+        changes = class_manager.add_class_level(request.class_id)
+        updated_state = manager.get_level_up_state()
 
         return {
             'success': True,
@@ -459,7 +288,7 @@ def add_class(
         }
         
     except Exception as e:
-        logger.error(f"Failed to add class {class_id} to character {character_id}: {e}")
+        logger.error(f"Failed to add class {request.class_id} to character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to add class: {str(e)}"
@@ -472,19 +301,12 @@ def remove_class(
     class_id: int,
     char_session: CharacterSessionDep
 ):
-    """Remove a class from multiclass character"""
+    """Remove a class from multiclass character."""
     session = char_session
     manager = session.character_manager
     
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Use manager method directly
         result = class_manager.remove_class(class_id)
         
         return {
@@ -496,7 +318,6 @@ def remove_class(
         
     except Exception as e:
         logger.error(f"Failed to remove class {class_id} from character {character_id}: {e}")
-        logger.error(f"Failed to remove class for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove class: {str(e)}"
@@ -508,17 +329,9 @@ def validate_classes(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Validate current class configuration"""
-    
+    """Validate current class configuration."""
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Use manager method directly
         is_valid, errors = class_manager.validate()
         
         return {
@@ -528,41 +341,9 @@ def validate_classes(
         
     except Exception as e:
         logger.error(f"Failed to validate classes for character {character_id}: {e}")
-        logger.error(f"Failed to validate classes for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to validate classes: {str(e)}"
-        )
-
-
-@router.get("/characters/{character_id}/classes/progression/{class_id}")
-def get_class_progression_summary(
-    character_id: int,
-    class_id: int,
-    manager: CharacterManagerDep,
-    max_level: int = Query(20, description="Maximum level to show")
-):
-    """Get detailed class progression summary"""
-    
-    try:
-        class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Use manager method directly
-        progression = class_manager.get_class_progression_summary(class_id, max_level)
-        
-        return progression
-        
-    except Exception as e:
-        logger.error(f"Failed to get class progression for class {class_id}: {e}")
-        logger.error(f"Failed to get class progression summary for character {character_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get class progression summary: {str(e)}"
         )
 
 
@@ -571,25 +352,14 @@ def get_prestige_options(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get available prestige class options for character"""
-    
+    """Get available prestige class options."""
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Use manager method directly
-        prestige_options = class_manager.get_prestige_class_options()
-        
         return {
-            'prestige_classes': prestige_options
+            'prestige_classes': class_manager.get_prestige_class_options()
         }
         
     except Exception as e:
-        logger.error(f"Failed to get prestige options for character {character_id}: {e}")
         logger.error(f"Failed to get prestige options for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -603,17 +373,9 @@ def has_class_by_name(
     class_name: str,
     manager: CharacterManagerDep
 ):
-    """Check if character has levels in a specific class by name"""
-    
+    """Check if character has levels in a specific class."""
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Use manager method directly
         has_class = class_manager.has_class_by_name(class_name)
         class_level = class_manager.get_class_level_by_name(class_name) if has_class else 0
         
@@ -625,7 +387,6 @@ def has_class_by_name(
         
     except Exception as e:
         logger.error(f"Failed to check class {class_name} for character {character_id}: {e}")
-        logger.error(f"Failed to check class by name for character {character_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to check class by name: {str(e)}"
@@ -638,20 +399,10 @@ def get_class_level_info(
     class_id: int,
     manager: CharacterManagerDep
 ):
-    """Get level information for a class including max level and remaining levels"""
-    
+    """Get level information for a class."""
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-        
-        # Use manager method directly
-        level_info = class_manager.get_class_level_info(class_id)
-        
-        return level_info
+        return class_manager.get_class_level_info(class_id)
         
     except Exception as e:
         logger.error(f"Failed to get level info for class {class_id} for character {character_id}: {e}")
@@ -666,17 +417,10 @@ def get_level_history(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get character level up history"""
+    """Get character level up history."""
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-
-        history = class_manager.get_level_history()
-        return {'history': history}
+        return {'history': class_manager.get_level_history()}
 
     except Exception as e:
         logger.error(f"Failed to get level history for character {character_id}: {e}")
@@ -691,15 +435,9 @@ def get_experience(
     character_id: int,
     manager: CharacterManagerDep
 ):
-    """Get character experience points and level progress"""
+    """Get character experience points and level progress."""
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-
         return class_manager.get_xp_progress()
 
     except Exception as e:
@@ -714,20 +452,14 @@ def get_experience(
 def set_experience(
     character_id: int,
     char_session: CharacterSessionDep,
-    request: dict
+    request: dict = Body(...)
 ):
-    """Set character experience points"""
+    """Set character experience points."""
     session = char_session
     manager = session.character_manager
 
     try:
         class_manager = manager.get_manager('class')
-        if not class_manager:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Class manager not available"
-            )
-
         xp = request.get('xp')
         if xp is None:
             raise HTTPException(
@@ -761,33 +493,21 @@ def get_class_features(
     include_proficiencies: bool = Query(True, description="Include weapon/armor proficiencies"),
     character_id: Optional[int] = Query(None, description="Character ID for personalized data")
 ):
-    """
-    Get detailed class features and progression for a specific class
-    """
-    from fastapi_models.class_models import ClassFeaturesResponse
-    from character.service_modules.class_categorizer import ClassCategorizer
+    """Get detailed class features and progression."""
+    from services.gamedata.class_categorizer import ClassCategorizer
     from gamedata.dynamic_loader.singleton import get_dynamic_game_data_loader
 
     try:
-        # Get game data loader
         game_data_loader = get_dynamic_game_data_loader()
         if not game_data_loader:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Game data not available"
-            )
+            raise HTTPException(status_code=503, detail="Game data unavailable")
         
-        # Get class data
         class_data = game_data_loader.get_by_id('classes', class_id)
         if not class_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Class with ID {class_id} not found"
-            )
-        
-        # Use ClassCategorizer for class features - no duplicated logic
+            raise HTTPException(status_code=404, detail=f"Class {class_id} not found")
+            
         categorizer = ClassCategorizer(game_data_loader)
-        class_info = categorizer._create_simple_class_info(class_data, class_id)
+        class_info = categorizer.get_class_info(class_id)
         
         progression_data = {
             'class_id': class_id,
@@ -798,9 +518,17 @@ def get_class_features(
                 'is_spellcaster': class_info.is_spellcaster if class_info else False,
                 'spell_type': 'arcane' if class_info and class_info.has_arcane else ('divine' if class_info and class_info.has_divine else 'none')
             },
-            'description': class_info.parsed_description.__dict__ if class_info and class_info.parsed_description else {},
+            'description': {},
             'max_level_shown': max_level
         }
+        
+        if class_info and class_info.parsed_description:
+            progression_data['description'] = {
+                'title': getattr(class_info.parsed_description, 'title', ''),
+                'class_type': getattr(class_info.parsed_description, 'class_type', ''),
+                'summary': getattr(class_info.parsed_description, 'summary', ''),
+                'features': getattr(class_info.parsed_description, 'features', '')
+            }
         
         return ClassFeaturesResponse(**progression_data)
         
@@ -814,126 +542,21 @@ def get_class_features(
         )
 
 
-# Helper functions
-
-def _serialize_class_info(class_info):  # Return type removed for lazy loading
-    """Serialize ClassInfo object for API response"""
-    from fastapi_models.class_models import ClassInfo
-    # Serialize parsed description if available
-    parsed_desc = None
-    if class_info.parsed_description:
-        parsed_desc = {
-            'title': class_info.parsed_description.title,
-            'class_type': class_info.parsed_description.class_type,
-            'summary': class_info.parsed_description.summary,
-            'restrictions': class_info.parsed_description.restrictions,
-            'requirements': class_info.parsed_description.requirements,
-            'features': class_info.parsed_description.features,
-            'abilities': class_info.parsed_description.abilities,
-            'html': class_info.parsed_description.raw_html
-        }
-    
-    return ClassInfo(
-        id=class_info.id,
-        name=class_info.name,
-        label=class_info.label,
-        type=class_info.class_type.value,
-        focus=class_info.focus.value,
-        max_level=class_info.max_level,
-        hit_die=class_info.hit_die,
-        skill_points=class_info.skill_points,
-        is_spellcaster=class_info.is_spellcaster,
-        has_arcane=class_info.has_arcane,
-        has_divine=class_info.has_divine,
-        primary_ability=class_info.primary_ability,
-        bab_progression=class_info.bab_progression,
-        alignment_restricted=class_info.alignment_restricted,
-        description=class_info.description,
-        parsed_description=parsed_desc,
-        prerequisites=class_info.prerequisites
-    )
-
-
-def _get_character_class_context(manager, categorizer) -> Optional[Dict[str, Any]]:
-    """Get character-specific class context using manager methods only"""
+def _get_character_class_context(manager) -> Optional[Dict[str, Any]]:
+    """Get character-specific class context."""
     context = {}
-
     try:
-        # Use class manager methods - no duplicated logic
         class_manager = manager.get_manager('class')
         class_summary = class_manager.get_class_summary()
         context['current_classes'] = class_summary
 
-        # Use manager methods for prestige requirements if available
         if hasattr(class_manager, 'get_prestige_class_options'):
-            prestige_options = class_manager.get_prestige_class_options()
-            context['prestige_requirements'] = prestige_options
+            context['prestige_requirements'] = class_manager.get_prestige_class_options()
 
         context['can_multiclass'] = class_summary.get('can_multiclass', True)
         context['multiclass_slots_used'] = len(class_summary.get('classes', []))
-
     except Exception as e:
         logger.warning(f"Error getting character class context: {e}")
         context['error'] = str(e)
 
     return context
-
-
-def _get_updated_character_state(manager) -> Dict[str, Any]:
-    """Get updated character state after class/level changes"""
-    updated_state = {}
-
-    try:
-        # Get updated class info
-        class_manager = manager.get_manager('class')
-        if class_manager:
-            updated_state['classes'] = class_manager.get_class_summary()
-            updated_state['combat'] = class_manager.get_attack_bonuses()
-            updated_state['saves'] = class_manager.calculate_total_saves()
-
-        # Get updated skill info
-        skill_manager = manager.get_manager('skill')
-        if skill_manager:
-            updated_state['skills'] = {
-                'available_points': skill_manager.gff.get('SkillPoints', 0),
-                'total_available': skill_manager.calculate_total_skill_points(
-                    manager.gff.get('ClassList', [{}])[0].get('Class', 0),
-                    sum(c.get('ClassLevel', 0) for c in manager.gff.get('ClassList', []))
-                ),
-                'spent_points': skill_manager._calculate_spent_skill_points()
-            }
-
-        # Get updated feat info
-        feat_manager = manager.get_manager('feat')
-        if feat_manager:
-            feat_list = manager.gff.get('FeatList', [])
-            updated_state['feats'] = {
-                'total_feats': len(feat_list),
-                'feat_count': len(feat_list)
-            }
-
-        # Get updated spell info for casters
-        spell_manager = manager.get_manager('spell')
-        if spell_manager and hasattr(spell_manager, 'get_spell_summary'):
-            updated_state['spells'] = spell_manager.get_spell_summary()
-
-        # Get updated ability info (level-up bonuses available)
-        ability_manager = manager.get_manager('ability')
-        if ability_manager:
-            class_list = manager.gff.get('ClassList', [])
-            total_level = sum(c.get('ClassLevel', 0) for c in class_list)
-            ability_increases_available = total_level // 4
-            level_up_bonuses = ability_manager.get_level_up_modifiers()
-            bonuses_used = sum(level_up_bonuses.values())
-
-            updated_state['abilities'] = {
-                'level_up_available': ability_increases_available - bonuses_used,
-                'total_increases': ability_increases_available,
-                'used_increases': bonuses_used
-            }
-
-    except Exception as e:
-        logger.error(f"Error getting updated character state: {e}")
-        updated_state['error'] = str(e)
-
-    return updated_state

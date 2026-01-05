@@ -28,7 +28,7 @@ from character.events import EventType, EventData, ClassChangedEvent, FeatChange
 
 from nwn2_rust import GffParser
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
-from gamedata.services.game_rules_service import GameRulesService
+from services.gamedata.game_rules_service import GameRulesService
 
 
 @pytest.fixture

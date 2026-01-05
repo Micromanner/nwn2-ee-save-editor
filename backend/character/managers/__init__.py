@@ -10,6 +10,7 @@ from .race_manager import RaceManager
 from .content_manager import ContentManager
 from .character_state_manager import CharacterStateManager
 from .game_state_manager import GameStateManager
+from .identity_manager import IdentityManager
 
 __all__ = [
     'ClassManager',
@@ -24,4 +25,5 @@ __all__ = [
     'ContentManager',
     'CharacterStateManager',
     'GameStateManager',
+    'IdentityManager',
 ]

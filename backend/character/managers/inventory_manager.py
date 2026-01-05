@@ -1,9 +1,4 @@
-"""
-Data-Driven Inventory Manager - handles equipment effects, calculations, and item management
-Uses DynamicGameDataLoader for mod-compatible item data
-Provides informational data about proficiencies and requirements (no restrictions)
-Focuses on save corruption prevention rather than game rule enforcement
-"""
+"""Manages character inventory, equipment effects, and item data."""
 
 from typing import Dict, List, Set, Tuple, Optional, Any
 from loguru import logger
@@ -11,7 +6,7 @@ import time
 
 from ..events import EventEmitter, EventType, ClassChangedEvent, FeatChangedEvent
 from ..custom_content import CustomContentDetector
-from ..services.item_property_decoder import ItemPropertyDecoder
+from services.gamedata.item_property_decoder import ItemPropertyDecoder
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper
 
 
@@ -61,7 +56,7 @@ class InventoryManager(EventEmitter):
     ACCESSORY_SLOTS_BITMASK = 0x07CD
 
     def __init__(self, character_manager):
-        """Initialize the InventoryManager"""
+        """Initialize the InventoryManager."""
         super().__init__()
         self.character_manager = character_manager
         self.gff = character_manager.gff
@@ -81,7 +76,7 @@ class InventoryManager(EventEmitter):
         self._update_proficiency_cache()
 
     def _get_raw_equip_item_list(self) -> List[Tuple[int, Dict[str, Any]]]:
-        """Get equipped item list with bitmask-based struct IDs"""
+        """Get equipped item list with bitmask-based struct IDs."""
         equipped_items = self.gff.get('Equip_ItemList', [])
         if not equipped_items:
             return []
@@ -99,14 +94,14 @@ class InventoryManager(EventEmitter):
         return result
 
     def _get_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
-        """Get equipped item by its slot bitmask"""
+        """Get equipped item by its slot bitmask."""
         for item_bitmask, item_dict in self._get_raw_equip_item_list():
             if item_bitmask == bitmask:
                 return item_dict
         return None
 
     def _set_equipped_item_by_bitmask(self, bitmask: int, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Set an equipped item at a slot bitmask, returning previous item if any"""
+        """Set equipped item at slot bitmask, returning previous item."""
         equipped_items = self.gff.get('Equip_ItemList', [])
         if equipped_items is None:
             equipped_items = []
@@ -132,7 +127,7 @@ class InventoryManager(EventEmitter):
         return previous_item
 
     def _remove_equipped_item_by_bitmask(self, bitmask: int) -> Optional[Dict[str, Any]]:
-        """Remove an equipped item at a slot bitmask, returning removed item"""
+        """Remove equipped item at slot bitmask, returning removed item."""
         equipped_items = self.gff.get('Equip_ItemList', [])
         if not equipped_items:
             return None
@@ -146,28 +141,37 @@ class InventoryManager(EventEmitter):
 
         return None
 
+    def _resolve_locstring(self, locstring_struct: Dict[str, Any]) -> Optional[str]:
+        """Resolve a localized string structure to text"""
+        if not locstring_struct or not isinstance(locstring_struct, dict):
+            return None
+        
+        string_ref = locstring_struct.get('string_ref')
+        if string_ref is not None and string_ref != 4294967295:
+            return self.game_rules_service.rm.get_string(string_ref)
+
+        substrings = locstring_struct.get('substrings', [])
+        if substrings:
+            return substrings[0].get('value')
+
+        return None
+
     def _get_item_name(self, item: Dict[str, Any]) -> str:
-        """Get the proper item name from LocalizedName or fallback to base item label"""
+        """Get item name from LocalizedName or base item label"""
         localized_name = item.get('LocalizedName')
-        if localized_name and isinstance(localized_name, dict):
-            string_ref = localized_name.get('string_ref')
-            if string_ref is not None and string_ref != 4294967295:
-                try:
-                    resolved_name = self.game_rules_service.rm.get_string(string_ref)
-                    if resolved_name and not resolved_name.startswith('{StrRef:'):
-                        return resolved_name
-                except Exception:
-                    pass
+        name = self._resolve_locstring(localized_name)
+        if name:
+            return name
 
         base_item = item.get('BaseItem', 0)
         base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
         if base_item_data:
             return field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
-        else:
-            return f'Custom Item {base_item}'
+        
+        return f'Custom Item {base_item}'
 
     def _get_equippable_slots(self, base_item_data: Any) -> List[str]:
-        """Get list of slot names where this item can be equipped based on EquipableSlots bitmask"""
+        """Get list of slot names where item can be equipped."""
         if not base_item_data:
             return []
 
@@ -191,7 +195,7 @@ class InventoryManager(EventEmitter):
         return slots
 
     def _get_default_equip_slot(self, base_item_data: Any) -> Optional[str]:
-        """Get the default/primary slot for equipping this item"""
+        """Get default slot for equipping this item."""
         slots = self._get_equippable_slots(base_item_data)
         if not slots:
             return None
@@ -231,7 +235,7 @@ class InventoryManager(EventEmitter):
         return 'Miscellaneous'
 
     def _build_proficiency_mappings(self):
-        """Build dynamic mapping of feat IDs to proficiency types"""
+        """Build dynamic mapping of feat IDs to proficiency types."""
         self._feat_proficiency_map.clear()
         self._proficiency_reverse_map.clear()
 
@@ -268,13 +272,13 @@ class InventoryManager(EventEmitter):
         logger.info(f"Built proficiency mapping for {len(self._feat_proficiency_map)} feats")
     
     def _register_event_handlers(self):
-        """Register handlers for relevant events"""
+        """Register handlers for relevant events."""
         self.character_manager.on(EventType.CLASS_CHANGED, self.on_class_changed)
         self.character_manager.on(EventType.FEAT_ADDED, self.on_feat_added)
         self.character_manager.on(EventType.FEAT_REMOVED, self.on_feat_removed)
     
     def on_class_changed(self, event: ClassChangedEvent):
-        """Handle class change event"""
+        """Handle class change event."""
         logger.info(f"InventoryManager handling class change: {event.old_class_id} -> {event.new_class_id}")
 
         self._update_proficiency_cache()
@@ -283,19 +287,19 @@ class InventoryManager(EventEmitter):
         logger.info(f"Class changed - equipment remains equipped: {len(equipment_info)} items")
     
     def on_feat_added(self, event: FeatChangedEvent):
-        """Handle feat addition event"""
+        """Handle feat addition event."""
         if self._is_proficiency_feat(event.feat_id):
             logger.info(f"InventoryManager updating proficiencies for feat {event.feat_id}")
             self._update_proficiency_cache()
 
     def on_feat_removed(self, event: FeatChangedEvent):
-        """Handle feat removal event"""
+        """Handle feat removal event."""
         if self._is_proficiency_feat(event.feat_id):
             logger.info(f"InventoryManager updating proficiencies after feat removal {event.feat_id}")
             self._update_proficiency_cache()
     
     def get_equipped_item(self, slot: str) -> Optional[Dict[str, Any]]:
-        """Get item equipped in a specific slot by name"""
+        """Get item equipped in specific slot by name."""
         bitmask = self.SLOT_TO_BITMASK.get(slot)
         if bitmask is None:
             return None
@@ -303,15 +307,13 @@ class InventoryManager(EventEmitter):
         return self._get_equipped_item_by_bitmask(bitmask)
     
     def equip_item(self, item_data: Dict[str, Any], slot: str, inventory_index: Optional[int] = None) -> Tuple[bool, List[str]]:
-        """Equip an item in a specific slot, optionally removing from inventory"""
+        """Equip item in specific slot, optionally removing from inventory."""
         warnings = []
 
-        id_exists, id_messages = self.check_item_id_exists(item_data)
-        warnings.extend(id_messages)
+        if slot not in self.SLOT_TO_BITMASK:
+             return False, ["Invalid equipment slot"]
 
-        bitmask = self.SLOT_TO_BITMASK.get(slot)
-        if bitmask is None:
-            return False, ["Invalid equipment slot"]
+        bitmask = self.SLOT_TO_BITMASK[slot]
 
         if inventory_index is not None:
             removed_item = self.remove_from_inventory(inventory_index)
@@ -336,7 +338,7 @@ class InventoryManager(EventEmitter):
         return True, warnings
     
     def unequip_item(self, slot: str) -> Optional[Dict[str, Any]]:
-        """Unequip item from a slot by name"""
+        """Unequip item from slot by name."""
         bitmask = self.SLOT_TO_BITMASK.get(slot)
         if bitmask is None:
             logger.warning(f"Invalid slot name: {slot}")
@@ -360,7 +362,7 @@ class InventoryManager(EventEmitter):
         return None
     
     def add_to_inventory(self, item_data: Dict[str, Any]) -> Tuple[bool, Optional[int]]:
-        """Add an item to inventory. Returns (success, item_index)."""
+        """Add item to inventory, returning success and item index."""
         item_list = self.gff.get('ItemList', [])
 
         base_item = item_data.get('BaseItem', 0)
@@ -388,7 +390,7 @@ class InventoryManager(EventEmitter):
         return True, new_index
     
     def _is_proficiency_feat(self, feat_id: int) -> bool:
-        """Check if a feat grants proficiencies using dynamic mapping"""
+        """Check if feat grants proficiencies using dynamic mapping."""
         if feat_id in self._feat_proficiency_map:
             return True
 
@@ -403,7 +405,7 @@ class InventoryManager(EventEmitter):
         return False
     
     def _update_proficiency_cache(self):
-        """Update cached proficiency information"""
+        """Update cached proficiency information."""
         self._proficiency_cache.clear()
 
         feat_list = self.gff.get('FeatList', [])
@@ -418,7 +420,7 @@ class InventoryManager(EventEmitter):
             self._proficiency_cache.update(class_proficiencies)
     
     def _get_class_proficiencies(self, class_id: int) -> Set[int]:
-        """Get proficiency feats granted by a class using dynamic data"""
+        """Get proficiency feats granted by class using dynamic data."""
         proficiencies = set()
         class_data = self.game_rules_service.get_by_id('classes', class_id)
 
@@ -484,7 +486,7 @@ class InventoryManager(EventEmitter):
         return proficiencies
     
     def get_item_slot_info(self, base_item_data: Any, slot: str) -> Dict[str, Any]:
-        """Get informational data about item-slot compatibility"""
+        """Get informational data about item-slot compatibility."""
         if not base_item_data:
             return {'item_type': 0, 'is_typical_for_slot': False, 'slot_name': slot}
 
@@ -517,7 +519,7 @@ class InventoryManager(EventEmitter):
         }
     
     def get_item_proficiency_info(self, base_item_data: Any) -> Dict[str, Any]:
-        """Get informational data about item proficiency requirements"""
+        """Get informational data about item proficiency requirements."""
         if not base_item_data:
             return {'has_proficiency_requirements': False}
 
@@ -530,33 +532,17 @@ class InventoryManager(EventEmitter):
 
         return feat_manager.get_item_proficiency_requirements(base_item_data, item_type, weapon_type)
     
-    def get_item_ability_requirements(self, item_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get informational data about ability score requirements"""
-        _ = item_data
-        return []
 
-    def get_item_class_requirements(self, item_data: Dict[str, Any]) -> List[str]:
-        """Get informational data about class requirements"""
-        _ = item_data
-        return []
-
-    def get_item_alignment_requirements(self, item_data: Dict[str, Any]) -> List[str]:
-        """Get informational data about alignment requirements"""
-        _ = item_data
-        return []
     
     def calculate_encumbrance(self) -> Dict[str, Any]:
-        """Calculate character's encumbrance level"""
+        """Calculate character's encumbrance level."""
         total_weight = 0.0
 
         for _, item in self._get_raw_equip_item_list():
             base_item = item.get('BaseItem', 0)
             base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             if base_item_data:
-                try:
-                    tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                except (ValueError, TypeError):
-                    tenth_lbs = 0.0
+                tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
                 if tenth_lbs > 0:
                     weight = tenth_lbs / 10.0
                     total_weight += weight
@@ -566,10 +552,7 @@ class InventoryManager(EventEmitter):
             base_item = item.get('BaseItem', 0)
             base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             if base_item_data:
-                try:
-                    tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                except (ValueError, TypeError):
-                    tenth_lbs = 0.0
+                tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
                 if tenth_lbs > 0:
                     weight = tenth_lbs / 10.0
                     stack_size = item.get('StackSize', 1)
@@ -577,20 +560,18 @@ class InventoryManager(EventEmitter):
 
         strength = self.gff.get('Str', 10)
 
-        try:
-            encumbrance_data = self.game_rules_service.get_by_id('encumbrance', strength)
-            if encumbrance_data:
-                light_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'light', strength * 3.3)))
-                medium_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'medium', strength * 6.6)))
-                heavy_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 10)))
-            else:
-                light_load = float(strength * 3.3)
-                medium_load = float(strength * 6.6)
-                heavy_load = float(strength * 10)
-        except Exception:
+        # Strict lookup - if encumbrance table is missing/corrupt, we want to know
+        encumbrance_data = self.game_rules_service.get_by_id('encumbrance', strength)
+        if encumbrance_data:
+            light_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'light', strength * 3.3)))
+            medium_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'medium', strength * 6.6)))
+            heavy_load = float(field_mapper._safe_int(field_mapper.get_field_value(encumbrance_data, 'heavy', strength * 10.0)))
+        else:
+            # Fallback only if table entry missing for specific strength (logic hole), typically shouldn't happen
+            # converting to float to match types
             light_load = float(strength * 3.3)
             medium_load = float(strength * 6.6)
-            heavy_load = float(strength * 10)
+            heavy_load = float(strength * 10.0)
 
         if total_weight <= light_load:
             level = 'light'
@@ -610,99 +591,68 @@ class InventoryManager(EventEmitter):
         }
     
     def get_inventory_summary(self) -> Dict[str, Any]:
-        """Get summary of character's inventory"""
+        """Get summary of character's inventory."""
         if self.gff is None:
-            logger.error("InventoryManager error: self.gff is None")
-            return {
-                'total_items': 0,
-                'inventory_items': [],
-                'equipped_items': {},
-                'custom_items': [],
-                'encumbrance': {}
-            }
+            raise ValueError("InventoryManager error: self.gff is None")
 
-        try:
-            item_list = self.gff.get('ItemList', [])
-        except Exception as e:
-            logger.error(f"Error accessing ItemList from GFF: {e}")
-            item_list = []
+        item_list = self.gff.get('ItemList', [])
 
         inventory_items = []
         for idx, item in enumerate(item_list):
-            if item:
-                base_item = item.get('BaseItem', 0)
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-                is_custom = base_item_data is None
+            if not item:
+                continue
 
-                base_item_name = None
-                if base_item_data:
-                    base_item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
+            base_item = item.get('BaseItem', 0)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+            is_custom = base_item_data is None
 
-                item_name = self._get_item_name(item)
+            base_item_name = None
+            if base_item_data:
+                base_item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
 
-                decoded_properties = self.get_item_property_descriptions(item)
+            item_name = self._get_item_name(item)
+            decoded_properties = self.get_item_property_descriptions(item)
+            description = self._resolve_locstring(item.get('DescIdentified'))
 
-                description = None
-                localized_desc = item.get('DescIdentified')
-                if localized_desc and isinstance(localized_desc, dict):
-                    string_ref = localized_desc.get('string_ref')
-                    if string_ref is not None and string_ref != 4294967295:
-                        try:
-                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
-                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
-                                description = resolved_desc
-                        except Exception:
-                            pass
+            weight = 0.0
+            if base_item_data:
+                tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                if tenth_lbs > 0:
+                    weight = tenth_lbs / 10.0
+                    stack_size = item.get('StackSize', 1)
+                    if stack_size > 1:
+                        weight *= stack_size
 
-                weight = 0.0
-                if base_item_data:
-                    try:
-                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                        if tenth_lbs > 0:
-                            weight = tenth_lbs / 10.0
-                            stack_size = item.get('StackSize', 1)
-                            if stack_size > 1:
-                                weight *= stack_size
-                    except (ValueError, TypeError):
-                        weight = 0.0
+            value = 0
+            item_cost = item.get('Cost', 0)
+            modify_cost = item.get('ModifyCost', 0)
+            value = int(item_cost) + int(modify_cost)
 
-                value = 0
-                try:
-                    item_cost = item.get('Cost', 0)
-                    modify_cost = item.get('ModifyCost', 0)
-                    value = int(item_cost) + int(modify_cost)
-                except (ValueError, TypeError):
-                    value = 0
-
-                inventory_items.append({
-                    'index': idx,
-                    'item': item,
-                    'base_item': base_item,
-                    'base_item_name': base_item_name,
-                    'name': item_name,
-                    'description': description,
-                    'weight': weight,
-                    'value': value,
-                    'is_custom': is_custom,
-                    'stack_size': item.get('StackSize', 1),
-                    'enhancement': item.get('Enhancement', 0),
-                    'charges': item.get('Charges'),
-                    'identified': item.get('Identified', 1) != 0,
-                    'plot': item.get('Plot', 0) == 1,
-                    'cursed': item.get('Cursed', 0) == 1,
-                    'stolen': item.get('Stolen', 0) == 1,
-                    'decoded_properties': decoded_properties,
-                    'base_ac': self._get_item_base_ac(item),
-                    'category': self._get_item_category(base_item, base_item_data),
-                    'equippable_slots': self._get_equippable_slots(base_item_data),
-                    'default_slot': self._get_default_equip_slot(base_item_data)
-                })
+            inventory_items.append({
+                'index': idx,
+                'item': item,
+                'base_item': base_item,
+                'base_item_name': base_item_name,
+                'name': item_name,
+                'description': description,
+                'weight': weight,
+                'value': value,
+                'is_custom': is_custom,
+                'stack_size': item.get('StackSize', 1),
+                'enhancement': item.get('Enhancement', 0),
+                'charges': item.get('Charges'),
+                'identified': item.get('Identified', 1) != 0,
+                'plot': item.get('Plot', 0) == 1,
+                'cursed': item.get('Cursed', 0) == 1,
+                'stolen': item.get('Stolen', 0) == 1,
+                'decoded_properties': decoded_properties,
+                'base_ac': self._get_item_base_ac(item),
+                'category': self._get_item_category(base_item, base_item_data),
+                'equippable_slots': self._get_equippable_slots(base_item_data),
+                'default_slot': self._get_default_equip_slot(base_item_data)
+            })
         
-        try:
-            encumbrance = self.calculate_encumbrance()
-        except Exception as e:
-            logger.error(f"Error calculating encumbrance: {e}")
-            encumbrance = {}
+        encumbrance = self.calculate_encumbrance()
 
         summary = {
             'total_items': len(item_list),
@@ -712,90 +662,61 @@ class InventoryManager(EventEmitter):
             'encumbrance': encumbrance
         }
 
-        try:
-            raw_equip_list = self._get_raw_equip_item_list()
-        except Exception as e:
-            logger.error(f"Error getting raw equip items: {e}")
-            raw_equip_list = []
-
-        for bitmask, item in raw_equip_list:
+        for bitmask, item in self._get_raw_equip_item_list():
             if item is None:
                 continue
             
-            try:
-                slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
-                if not slot_name:
-                    continue
-                
-                base_item = item.get('BaseItem', 0)
-
-                base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
-                is_custom = base_item_data is None
-
-                base_item_name = None
-                if base_item_data:
-                    base_item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
-
-                item_name = self._get_item_name(item)
-
-                decoded_properties = self.get_item_property_descriptions(item)
-
-                description = None
-                localized_desc = item.get('DescIdentified')
-                if localized_desc and isinstance(localized_desc, dict):
-                    string_ref = localized_desc.get('string_ref')
-                    if string_ref is not None and string_ref != 4294967295:
-                        try:
-                            resolved_desc = self.game_rules_service.rm.get_string(string_ref)
-                            if resolved_desc and not resolved_desc.startswith('{StrRef:'):
-                                description = resolved_desc
-                        except Exception:
-                            pass
-
-                weight = 0.0
-                if base_item_data:
-                    try:
-                        tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
-                        if tenth_lbs > 0:
-                            weight = tenth_lbs / 10.0
-                    except (ValueError, TypeError):
-                        weight = 0.0
-
-                value = 0
-                try:
-                    item_cost = item.get('Cost', 0)
-                    modify_cost = item.get('ModifyCost', 0)
-                    value = int(item_cost) + int(modify_cost)
-                except (ValueError, TypeError):
-                    value = 0
-
-                summary['equipped_items'][slot_name] = {
-                    'base_item': base_item,
-                    'base_item_name': base_item_name,
-                    'custom': is_custom,
-                    'name': item_name,
-                    'description': description,
-                    'weight': weight,
-                    'value': value,
-                    'item_data': item,
-                    'decoded_properties': decoded_properties,
-                    'base_ac': self._get_item_base_ac(item)
-                }
-
-                if is_custom:
-                    summary['custom_items'].append({
-                        'slot': slot_name,
-                        'base_item': base_item,
-                        'name': item_name
-                    })
-            except Exception as e:
-                logger.error(f"Error processing equipped item for bitmask {bitmask}: {e}", exc_info=True)
+            slot_name = self.SLOT_BITMASK_MAPPING.get(bitmask)
+            if not slot_name:
                 continue
+            
+            base_item = item.get('BaseItem', 0)
+            base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
+            is_custom = base_item_data is None
+
+            base_item_name = None
+            if base_item_data:
+                base_item_name = field_mapper.get_field_value(base_item_data, 'label', f'Unknown Item {base_item}')
+
+            item_name = self._get_item_name(item)
+            decoded_properties = self.get_item_property_descriptions(item)
+            description = self._resolve_locstring(item.get('DescIdentified'))
+
+            weight = 0.0
+            if base_item_data:
+                tenth_lbs = float(field_mapper.get_field_value(base_item_data, 'TenthLBS', 0.0) or 0.0)
+                if tenth_lbs > 0:
+                    weight = tenth_lbs / 10.0
+
+            value = 0
+            item_cost = item.get('Cost', 0)
+            modify_cost = item.get('ModifyCost', 0)
+            value = int(item_cost) + int(modify_cost)
+
+            summary['equipped_items'][slot_name] = {
+                'base_item': base_item,
+                'base_item_name': base_item_name,
+                'custom': is_custom,
+                'name': item_name,
+                'description': description,
+                'weight': weight,
+                'value': value,
+                'item_data': item,
+                'decoded_properties': decoded_properties,
+                'base_ac': self._get_item_base_ac(item)
+            }
+
+            if is_custom:
+                summary['custom_items'].append({
+                    'slot': slot_name,
+                    'base_item': base_item,
+                    'name': item_name
+                })
 
         return summary
     
     def get_equipment_bonuses(self) -> Dict[str, Dict[str, int]]:
-        """Calculate all equipment bonuses for other managers to use"""
+        """Calculate all equipment bonuses."""
         bonuses = {
             'ac': {'armor': 0, 'shield': 0, 'deflection': 0, 'natural': 0},
             'saves': {'fortitude': 0, 'reflex': 0, 'will': 0},
@@ -828,39 +749,35 @@ class InventoryManager(EventEmitter):
                                 elif isinstance(target_val, list):
                                     target_val.append(value)
                                 else:
-                                    # Standard integer sum
-                                    try:
-                                        bonuses[category][bonus_type] += value
-                                    except (TypeError, ValueError):
-                                        # Fallback for incompatible types: store as list if addition fails
-                                        bonuses[category][bonus_type] = [target_val, value]
+                                    # Standard integer sum - strict, no fallback
+                                    bonuses[category][bonus_type] += int(value)
                             else:
                                 bonuses[category][bonus_type] = value
 
         return bonuses
     
     def get_ac_bonus(self) -> int:
-        """Get total AC bonus from equipment"""
+        """Get total AC bonus from equipment."""
         bonuses = self.get_equipment_bonuses()
         return sum(bonuses['ac'].values())
     
     def get_save_bonuses(self) -> Dict[str, int]:
-        """Get saving throw bonuses from equipment"""
+        """Get saving throw bonuses from equipment."""
         bonuses = self.get_equipment_bonuses()
         return bonuses['saves']
     
     def get_attribute_bonuses(self) -> Dict[str, int]:
-        """Get attribute bonuses from equipment"""
+        """Get attribute bonuses from equipment."""
         bonuses = self.get_equipment_bonuses()
         return bonuses['attributes']
     
     def get_skill_bonuses(self) -> Dict[str, int]:
-        """Get skill bonuses from equipment"""
+        """Get skill bonuses from equipment."""
         bonuses = self.get_equipment_bonuses()
         return bonuses['skills']
     
     def _get_item_base_ac(self, item_data: Dict[str, Any]) -> Optional[int]:
-        """Get the base AC value for armor/shield items"""
+        """Get base AC value for armor/shield items."""
         base_item = item_data.get('BaseItem', 0)
         base_item_int = int(base_item) if base_item else 0
 
@@ -870,16 +787,13 @@ class InventoryManager(EventEmitter):
                 armor_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
                 if armor_stats:
                     ac_value = field_mapper.get_field_value(armor_stats, 'ACBONUS', 0)
-                    try:
-                        ac_int = int(ac_value) if ac_value else 0
-                        if ac_int > 0:
-                            return ac_int
-                    except (ValueError, TypeError):
-                        pass
+                    ac_int = int(ac_value) if ac_value else 0
+                    if ac_int > 0:
+                        return ac_int
         return None
 
     def _calculate_item_bonuses(self, item_data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
-        """Calculate bonuses provided by a single item"""
+        """Calculate bonuses provided by single item."""
         bonuses = {
             'ac': {},
             'saves': {},
@@ -898,12 +812,9 @@ class InventoryManager(EventEmitter):
                 armor_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
                 if armor_stats:
                     ac_value = field_mapper.get_field_value(armor_stats, 'ACBONUS', 0)
-                    try:
-                        ac_int = int(ac_value) if ac_value else 0
-                        if ac_int > 0:
-                            bonuses['ac']['armor'] = ac_int
-                    except (ValueError, TypeError):
-                        pass
+                    ac_int = int(ac_value) if ac_value else 0
+                    if ac_int > 0:
+                        bonuses['ac']['armor'] = ac_int
 
         elif base_item_int in [14, 56, 57]:
             armor_rules_type = item_data.get('ArmorRulesType', 0)
@@ -911,12 +822,9 @@ class InventoryManager(EventEmitter):
                 shield_stats = self.game_rules_service.get_by_id('armorrulestats', armor_rules_type)
                 if shield_stats:
                     ac_value = field_mapper.get_field_value(shield_stats, 'ACBONUS', 0)
-                    try:
-                        ac_int = int(ac_value) if ac_value else 0
-                        if ac_int > 0:
-                            bonuses['ac']['shield'] = ac_int
-                    except (ValueError, TypeError):
-                        pass
+                    ac_int = int(ac_value) if ac_value else 0
+                    if ac_int > 0:
+                        bonuses['ac']['shield'] = ac_int
 
         properties = item_data.get('PropertiesList', [])
         for prop in properties:
@@ -934,7 +842,7 @@ class InventoryManager(EventEmitter):
         return bonuses
     
     def _parse_item_property(self, property_data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
-        """Parse a single item property for bonuses using the property decoder"""
+        """Parse single item property for bonuses using property decoder."""
         bonuses = {
             'ac': {},
             'saves': {},
@@ -960,7 +868,7 @@ class InventoryManager(EventEmitter):
         return bonuses
     
     def validate(self) -> Tuple[bool, List[str]]:
-        """Validate inventory for corruption prevention"""
+        """Validate inventory for corruption prevention."""
         errors = []
 
         equipment_info = self.get_equipment_info()
@@ -979,7 +887,7 @@ class InventoryManager(EventEmitter):
         return len(errors) == 0, errors
 
     def get_all_weapons(self) -> List[Dict[str, Any]]:
-        """Get all available weapons"""
+        """Get all available weapons."""
         all_weapons = []
         base_items = self.game_rules_service.get_table('baseitems')
 
@@ -1007,7 +915,7 @@ class InventoryManager(EventEmitter):
         return all_weapons
     
     def get_all_armor(self) -> List[Dict[str, Any]]:
-        """Get all available armor and shields"""
+        """Get all available armor and shields."""
         all_armor = []
         base_items = self.game_rules_service.get_table('baseitems')
 
@@ -1036,7 +944,7 @@ class InventoryManager(EventEmitter):
         return all_armor
     
     def filter_items_by_type(self, item_type: int) -> List[Dict[str, Any]]:
-        """Filter base items by type"""
+        """Filter base items by type."""
         filtered_items = []
         base_items = self.game_rules_service.get_table('baseitems')
         
@@ -1055,7 +963,7 @@ class InventoryManager(EventEmitter):
         return filtered_items
     
     def get_custom_items(self) -> List[Dict[str, Any]]:
-        """Get all custom/mod items in character's possession"""
+        """Get all custom/mod items in character's possession."""
         custom_items = []
 
         for bitmask, item in self._get_raw_equip_item_list():
@@ -1087,11 +995,11 @@ class InventoryManager(EventEmitter):
         return custom_items
     
     def has_custom_content(self) -> bool:
-        """Check if character has any custom/mod items"""
+        """Check if character has custom/mod items."""
         return len(self.get_custom_items()) > 0
     
     def get_equipment_summary_by_slot(self) -> Dict[str, Optional[Dict[str, Any]]]:
-        """Get detailed summary of equipped items by slot"""
+        """Get detailed summary of equipped items by slot."""
         equipment_summary = {slot_name: None for slot_name in self.SLOT_TO_BITMASK.keys()}
 
         for bitmask, item in self._get_raw_equip_item_list():
@@ -1113,7 +1021,7 @@ class InventoryManager(EventEmitter):
         return equipment_summary
     
     def get_item_property_descriptions(self, item_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get human-readable descriptions of all item properties"""
+        """Get human-readable descriptions of all item properties."""
         properties = item_data.get('PropertiesList', [])
         if not properties:
             return []
@@ -1121,7 +1029,7 @@ class InventoryManager(EventEmitter):
         return self.property_decoder.decode_all_properties(properties)
 
     def get_enhanced_item_summary(self, item_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get enhanced item summary with decoded properties"""
+        """Get enhanced item summary with decoded properties."""
         base_item = item_data.get('BaseItem', 0)
         base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
 
@@ -1149,7 +1057,7 @@ class InventoryManager(EventEmitter):
         }
 
     def remove_from_inventory(self, item_index: int) -> Tuple[bool, Optional[Dict[str, Any]], str]:
-        """Remove an item from inventory by index"""
+        """Remove item from inventory by index."""
         item_list = self.gff.get('ItemList', [])
         
         if not isinstance(item_list, list):
@@ -1174,7 +1082,7 @@ class InventoryManager(EventEmitter):
             return False, None, str(e)
 
     def update_item(self, item_index: Optional[int], slot: Optional[str], item_data: Dict[str, Any]) -> Tuple[bool, str]:
-        """Update an item in inventory or equipment"""
+        """Update item in inventory or equipment."""
         if slot:
             # Update equipped item
             bitmask = self.SLOT_TO_BITMASK.get(slot)
@@ -1201,7 +1109,7 @@ class InventoryManager(EventEmitter):
         return False, "Neither slot nor index provided"
 
     def add_item_by_base_type(self, base_item_id: int) -> Tuple[bool, Optional[Dict[str, Any]], str, Optional[int]]:
-        """Create a new item based on a base item type. Returns (success, item_data, message, item_index)."""
+        """Create new item based on base item type."""
         base_item_data = self.game_rules_service.get_by_id('baseitems', base_item_id)
         if not base_item_data:
             return False, None, f"Invalid base item ID: {base_item_id}", None
@@ -1233,7 +1141,7 @@ class InventoryManager(EventEmitter):
         return False, None, "Failed to add item to inventory", None
 
     def get_all_base_items(self) -> List[Dict[str, Any]]:
-        """Get all available base items for creation, filtering out padding/internal items"""
+        """Get all available base items for creation, filtering internal items."""
         all_base_items = []
         base_items = self.game_rules_service.get_table('baseitems')
 
@@ -1272,7 +1180,7 @@ class InventoryManager(EventEmitter):
         return sorted(all_base_items, key=lambda x: x['name'])
 
     def get_item_editor_metadata(self) -> Dict[str, Any]:
-        """Get all metadata needed for the item editor UI"""
+        """Get all metadata needed for item editor UI."""
         # Gather all metadata context for the decoder
         abilities = self.property_decoder._ability_map
         skills = self._get_all_skills()
@@ -1324,55 +1232,49 @@ class InventoryManager(EventEmitter):
         }
 
     def _get_all_skills(self) -> Dict[int, str]:
-        """Get all skills from rules service with StrRef resolution"""
+        """Get all skills from rules service with StrRef resolution."""
         skills = {}
-        try:
-            skill_table = self.game_rules_service.get_table('skills')
-            if skill_table:
-                for skill_id, skill_data in enumerate(skill_table):
-                    if not skill_data: continue
-                    name = field_mapper.get_field_value(skill_data, 'Name')
-                    if isinstance(name, int):
-                        name = self.game_rules_service.rm.get_string(name)
-                    if not name or name == '****':
-                        name = field_mapper.get_field_value(skill_data, 'Label', f'Skill {skill_id}')
-                    if name and not name.startswith('DEL_'):
-                        skills[skill_id] = name
-        except Exception: pass
+        skill_table = self.game_rules_service.get_table('skills')
+        if skill_table:
+            for skill_id, skill_data in enumerate(skill_table):
+                if not skill_data: continue
+                name = field_mapper.get_field_value(skill_data, 'Name')
+                if isinstance(name, int):
+                    name = self.game_rules_service.rm.get_string(name)
+                if not name or name == '****':
+                    name = field_mapper.get_field_value(skill_data, 'Label', f'Skill {skill_id}')
+                if name and not name.startswith('DEL_'):
+                    skills[skill_id] = name
         return skills
 
     def _get_all_races(self) -> Dict[int, str]:
-        """Get all races from rules service with StrRef resolution"""
+        """Get all races from rules service with StrRef resolution."""
         races = {}
-        try:
-            race_table = self.game_rules_service.get_table('racialtypes')
-            if race_table:
-                for race_id, race_data in enumerate(race_table):
-                    if not race_data: continue
-                    name = field_mapper.get_field_value(race_data, 'Name')
-                    if isinstance(name, int):
-                        name = self.game_rules_service.rm.get_string(name)
-                    if not name or name == '****':
-                        name = field_mapper.get_field_value(race_data, 'Label', f'Race {race_id}')
-                    races[race_id] = name
-        except Exception: pass
+        race_table = self.game_rules_service.get_table('racialtypes')
+        if race_table:
+            for race_id, race_data in enumerate(race_table):
+                if not race_data: continue
+                name = field_mapper.get_field_value(race_data, 'Name')
+                if isinstance(name, int):
+                    name = self.game_rules_service.rm.get_string(name)
+                if not name or name == '****':
+                    name = field_mapper.get_field_value(race_data, 'Label', f'Race {race_id}')
+                races[race_id] = name
         return races
 
     def _get_all_classes(self) -> Dict[int, str]:
-        """Get all classes from rules service with StrRef resolution"""
+        """Get all classes from rules service with StrRef resolution."""
         classes = {}
-        try:
-            class_table = self.game_rules_service.get_table('classes')
-            if class_table:
-                for class_id, class_data in enumerate(class_table):
-                    if not class_data: continue
-                    name = field_mapper.get_field_value(class_data, 'Name')
-                    if isinstance(name, int):
-                        name = self.game_rules_service.rm.get_string(name)
-                    if not name or name == '****':
-                        name = field_mapper.get_field_value(class_data, 'Label', f'Class {class_id}')
-                    classes[class_id] = name
-        except Exception: pass
+        class_table = self.game_rules_service.get_table('classes')
+        if class_table:
+            for class_id, class_data in enumerate(class_table):
+                if not class_data: continue
+                name = field_mapper.get_field_value(class_data, 'Name')
+                if isinstance(name, int):
+                    name = self.game_rules_service.rm.get_string(name)
+                if not name or name == '****':
+                    name = field_mapper.get_field_value(class_data, 'Label', f'Class {class_id}')
+                classes[class_id] = name
         return classes
 
     def get_available_templates(self) -> List[Dict[str, Any]]:
@@ -1403,45 +1305,48 @@ class InventoryManager(EventEmitter):
         return False, None, "Failed to add item to inventory"
 
     def _get_all_iprp_spells(self) -> Dict[int, str]:
-        """Get item property spells with StrRef resolution"""
+        """Get item property spells with StrRef resolution."""
         spells = {}
-        try:
-            spell_table = self.game_rules_service.get_table('iprp_spells')
-            if spell_table:
-                for spell_row_id, spell_data in enumerate(spell_table):
-                    if not spell_data: continue
-                    name = field_mapper.get_field_value(spell_data, 'Name')
-                    if isinstance(name, int):
-                        name = self.game_rules_service.rm.get_string(name)
-                    if not name or name == '****':
-                        name = field_mapper.get_field_value(spell_data, 'Label', f'Spell {spell_row_id}')
-                    spells[spell_row_id] = name
-        except Exception: pass
+        spell_table = self.game_rules_service.get_table('iprp_spells')
+        if spell_table:
+            for spell_row_id, spell_data in enumerate(spell_table):
+                if not spell_data: continue
+                name = field_mapper.get_field_value(spell_data, 'Name')
+                if isinstance(name, int):
+                    name = self.game_rules_service.rm.get_string(name)
+                if not name or name == '****':
+                    name = field_mapper.get_field_value(spell_data, 'Label', f'Spell {spell_row_id}')
+                spells[spell_row_id] = name
         return spells
 
     def _get_all_iprp_feats(self) -> Dict[int, str]:
-        """Get item property feats with StrRef resolution"""
+        """Get item property feats with StrRef resolution."""
         feats = {}
-        try:
-            feat_table = self.game_rules_service.get_table('iprp_feats')
-            if feat_table:
-                for i, row in enumerate(feat_table):
-                    if not row: continue
-                    name = field_mapper.get_field_value(row, 'Name')
-                    if isinstance(name, int):
-                        name = self.game_rules_service.rm.get_string(name)
-                    if not name or name == '****':
-                        name = field_mapper.get_field_value(row, 'Label', f'Feat {i}')
-                    feats[i] = name
-        except Exception: pass
+        feat_table = self.game_rules_service.get_table('iprp_feats')
+        if feat_table:
+            for i, row in enumerate(feat_table):
+                if not row: continue
+                name = field_mapper.get_field_value(row, 'Name')
+                if isinstance(name, int):
+                    name = self.game_rules_service.rm.get_string(name)
+                if not name or name == '****':
+                    name = field_mapper.get_field_value(row, 'Label', f'Feat {i}')
+                feats[i] = name
         return feats
 
-    def check_item_id_exists(self, item_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """Check if item ID exists/is valid"""
-        return True, []
+
+
+    def update_gold(self, amount: int) -> int:
+        """Update character's gold amount, returning the new amount."""
+        self.gff.set('Gold', amount)
+        # Emit generic character changed event to ensure UI updates
+        from ..events import EventType
+        self.character_manager.emit(EventType.CHARACTER_CHANGED, {'field': 'Gold', 'value': amount})
+        logger.info(f"Updated character gold to {amount}")
+        return amount
 
     def get_equipment_info(self) -> Dict[str, Dict[str, Any]]:
-        """Get information about all equipped items"""
+        """Get information about all equipped items."""
         info = {}
 
         for bitmask, item in self._get_raw_equip_item_list():
@@ -1453,17 +1358,7 @@ class InventoryManager(EventEmitter):
             base_item_data = self.game_rules_service.get_by_id('baseitems', base_item)
             item_name = self._get_item_name(item)
 
-            description = None
-            localized_desc = item.get('DescIdentified')
-            if localized_desc and isinstance(localized_desc, dict):
-                string_ref = localized_desc.get('string_ref')
-                if string_ref is not None and string_ref != 4294967295:
-                    try:
-                        resolved_desc = self.game_rules_service.rm.get_string(string_ref)
-                        if resolved_desc and not resolved_desc.startswith('{StrRef:'):
-                            description = resolved_desc
-                    except Exception:
-                        pass
+            description = self._resolve_locstring(item.get('DescIdentified'))
 
             info[slot_name] = {
                 'base_item': base_item,

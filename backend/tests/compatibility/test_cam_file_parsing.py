@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 backend_path = Path(__file__).parent.parent.parent  # Go up 3 levels to backend
 sys.path.insert(0, str(backend_path))
 
-from services.resource_manager import ResourceManager
+from services.core.resource_manager import ResourceManager
 from nwn2_rust import GffParser
 
 

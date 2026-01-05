@@ -1,14 +1,11 @@
-"""
-Pydantic models for CombatManager
-Handles combat statistics, attack bonuses, armor class, and damage
-"""
+"""Pydantic models for CombatManager."""
 
 from typing import Dict, Any, Optional, List, Literal
 from pydantic import BaseModel, Field
 
 
 class ArmorClassBreakdown(BaseModel):
-    """Detailed armor class calculation - matches CombatManager output"""
+    """Detailed armor class calculation - matches CombatManager output."""
     # Main AC values (matching manager field names)
     total: int = Field(..., description="Total AC")
     total_ac: int = Field(..., description="Total AC (duplicate for compatibility)")
@@ -43,7 +40,7 @@ class ArmorClassBreakdown(BaseModel):
 
 
 class BaseAttackBonusInfo(BaseModel):
-    """Base Attack Bonus progression and breakdown - matches CombatManager output"""
+    """Base Attack Bonus progression and breakdown - matches CombatManager output."""
     # Main BAB info
     base_attack_bonus: int = Field(0, description="Total base attack bonus")
     total_bab: Optional[int] = Field(None, description="Total BAB (alternative name)")
@@ -68,7 +65,7 @@ class BaseAttackBonusInfo(BaseModel):
 
 
 class AttackBonusBreakdown(BaseModel):
-    """Complete attack bonus calculation"""
+    """Complete attack bonus calculation."""
     total: int = Field(..., description="Total attack bonus")
     base_attack_bonus: int = Field(..., description="Base attack bonus")
     ability_modifier: int = Field(..., description="STR or DEX modifier")
@@ -88,7 +85,7 @@ class AttackBonusBreakdown(BaseModel):
 
 
 class DamageBonusBreakdown(BaseModel):
-    """Damage bonus calculation"""
+    """Damage bonus calculation."""
     total: int = Field(..., description="Total damage bonus")
     ability_modifier: int = Field(..., description="STR modifier (or DEX with finesse)")
     weapon_enhancement: int = Field(0, description="Weapon enhancement bonus")
@@ -107,7 +104,7 @@ class DamageBonusBreakdown(BaseModel):
 
 
 class WeaponInfo(BaseModel):
-    """Detailed weapon information"""
+    """Detailed weapon information."""
     name: str = Field(..., description="Weapon name")
     base_item_id: int = Field(..., description="Base item type ID")
     damage_dice: str = Field(..., description="Damage dice (e.g., '1d8')")
@@ -124,7 +121,7 @@ class WeaponInfo(BaseModel):
 
 
 class EquippedWeapons(BaseModel):
-    """Currently equipped weapons"""
+    """Currently equipped weapons."""
     main_hand: Optional[WeaponInfo] = None
     off_hand: Optional[WeaponInfo] = None
     ranged: Optional[WeaponInfo] = None
@@ -139,7 +136,7 @@ class EquippedWeapons(BaseModel):
 
 
 class DefensiveAbilities(BaseModel):
-    """Defensive combat abilities"""
+    """Defensive combat abilities."""
     damage_reduction: List[Dict[str, Any]] = Field(default_factory=list, description="DR types and amounts")
     energy_resistance: Dict[str, int] = Field(default_factory=dict, description="Energy resistance by type")
     damage_immunity: List[str] = Field(default_factory=list, description="Damage immunities")
@@ -153,7 +150,7 @@ class DefensiveAbilities(BaseModel):
 
 
 class CombatManeuvers(BaseModel):
-    """Special combat maneuver bonuses"""
+    """Special combat maneuver bonuses."""
     bull_rush: int = 0
     disarm: int = 0
     grapple: int = 0
@@ -166,7 +163,7 @@ class CombatManeuvers(BaseModel):
 
 
 class InitiativeInfo(BaseModel):
-    """Initiative calculation - matches CombatManager output"""
+    """Initiative calculation - matches CombatManager output."""
     total: int = Field(..., description="Total initiative bonus")
     dex_modifier: int = Field(..., description="Dexterity modifier")
     improved_initiative: int = Field(0, description="Improved Initiative feat bonus")
@@ -181,7 +178,7 @@ class InitiativeInfo(BaseModel):
 
 
 class CombatSummary(BaseModel):
-    """High-level combat statistics summary - matches CombatManager.get_combat_summary()"""
+    """High-level combat statistics summary - matches CombatManager.get_combat_summary()."""
     hit_points: int
     max_hit_points: int
     temporary_hit_points: int = 0
@@ -215,7 +212,7 @@ class CombatSummary(BaseModel):
 
 
 class CombatState(BaseModel):
-    """Complete combat state from CombatManager - matches get_combat_summary output"""
+    """Complete combat state from CombatManager - matches get_combat_summary output."""
     summary: CombatSummary
     armor_class: ArmorClassBreakdown
     base_attack_bonus: BaseAttackBonusInfo
@@ -233,13 +230,13 @@ class CombatState(BaseModel):
 
 
 class CombatUpdateRequest(BaseModel):
-    """Request to update combat values"""
+    """Request to update combat values."""
     field: str = Field(..., description="Combat field to update")
     value: Any = Field(..., description="New value")
     
     
 class CombatUpdateResponse(BaseModel):
-    """Response after updating combat values"""
+    """Response after updating combat values."""
     field: str
     old_value: Any
     new_value: Any
@@ -248,13 +245,13 @@ class CombatUpdateResponse(BaseModel):
 
 
 class CombatModeToggleRequest(BaseModel):
-    """Request to toggle combat mode"""
+    """Request to toggle combat mode."""
     mode: Literal['power_attack', 'combat_expertise', 'fighting_defensively', 'total_defense']
     active: bool
 
 
 class CombatModeToggleResponse(BaseModel):
-    """Response after toggling combat mode"""
+    """Response after toggling combat mode."""
     mode: str
     active: bool
     combat_summary: CombatSummary
@@ -265,7 +262,7 @@ class CombatModeToggleResponse(BaseModel):
 
 
 class DefensiveStats(BaseModel):
-    """Defensive combat statistics"""
+    """Defensive combat statistics."""
     armor_class: ArmorClassBreakdown
     defensive_abilities: DefensiveAbilities
     saving_throws: Dict[str, int] = Field(default_factory=dict, description="Base saving throw bonuses")
@@ -285,12 +282,12 @@ class DefensiveStats(BaseModel):
 
 
 class NaturalArmorUpdateRequest(BaseModel):
-    """Request to update natural armor value"""
+    """Request to update natural armor value."""
     natural_ac: int = Field(..., ge=0, le=255, description="New natural armor bonus")
 
 
 class NaturalArmorUpdateResponse(BaseModel):
-    """Response after updating natural armor - matches manager output"""
+    """Response after updating natural armor - matches manager output."""
     field: str = "NaturalAC"
     old_value: int
     new_value: int
@@ -302,12 +299,12 @@ class NaturalArmorUpdateResponse(BaseModel):
 
 
 class InitiativeBonusUpdateRequest(BaseModel):
-    """Request to update initiative misc bonus value"""
+    """Request to update initiative misc bonus value."""
     initiative_bonus: int = Field(..., ge=-128, le=127, description="New initiative misc bonus")
 
 
 class InitiativeBonusUpdateResponse(BaseModel):
-    """Response after updating initiative bonus - matches manager output"""
+    """Response after updating initiative bonus - matches manager output."""
     field: str = "initbonus"
     old_value: int
     new_value: int
@@ -316,13 +313,13 @@ class InitiativeBonusUpdateResponse(BaseModel):
 
 
 class HitPointsUpdateRequest(BaseModel):
-    """Request to update hit points"""
+    """Request to update hit points."""
     current_hp: Optional[int] = Field(None, description="New current hit points")
     max_hp: Optional[int] = Field(None, description="New max hit points")
 
 
 class HitPointsUpdateResponse(BaseModel):
-    """Response after updating hit points"""
+    """Response after updating hit points."""
     success: bool
     current: int
     max: int

@@ -9,7 +9,7 @@ from unittest.mock import Mock, MagicMock, patch, PropertyMock
 
 from character.managers.attribute_manager import AttributeManager
 from character.events import EventEmitter, EventData, EventType
-from gamedata.services.game_rules_service import GameRulesService
+from services.gamedata.game_rules_service import GameRulesService
 from gamedata.dynamic_loader.dynamic_game_data_loader import DynamicGameDataLoader
 
 

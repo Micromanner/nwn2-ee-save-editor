@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from character.managers.inventory_manager import InventoryManager
 from character.events import EventEmitter, EventType
-from character.services.item_property_decoder import ItemPropertyDecoder
+from services.gamedata.item_property_decoder import ItemPropertyDecoder
 
 class MockGFF:
     def __init__(self, data):

@@ -1,1 +1,0 @@
-# Character services module

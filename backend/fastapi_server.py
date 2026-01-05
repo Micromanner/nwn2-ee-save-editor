@@ -10,9 +10,8 @@ import os
 import sys
 import asyncio
 import time
-import atexit
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional
 from datetime import datetime
 import tempfile
 
@@ -75,7 +74,7 @@ sys.excepthook = panic_log
 print(f"[{datetime.now()}] Panic logger initialized", flush=True)
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks
+from fastapi import FastAPI, Request, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -88,15 +87,7 @@ import uvicorn
 backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
 
-# Import custom exceptions
-from fastapi_core.exceptions import (
-    NWN2SaveEditorException,
-    CharacterNotFoundException, 
-    CharacterSessionException,
-    SystemNotReadyException,
-    ValidationException,
-    SaveFileException
-)
+from services.fastapi.exceptions import SystemNotReadyException
 
 # Configure Loguru logging
 from config.logging_config import logger, ENABLE_LOG_VIEWER
@@ -117,8 +108,6 @@ _shared_services = {
 }
 _services_lock = asyncio.Lock()
 _initializing = False
-
-# No more log viewer process tracking - it runs in the same process
 
 # Global initialization lock to prevent duplicate background initialization
 _initialization_lock = asyncio.Lock()
@@ -159,7 +148,7 @@ def get_shared_resource_manager():
         _initializing = True
         logger.info("Creating shared ResourceManager instance")
         try:
-            from services.resource_manager import ResourceManager
+            from services.core.resource_manager import ResourceManager
             from config.nwn2_settings import nwn2_paths
             
             _shared_services['resource_manager'] = ResourceManager(
@@ -168,7 +157,7 @@ def get_shared_resource_manager():
             )
             
             # Register in independent registry to avoid import cycles during character loading
-            from fastapi_core.shared_services import register_shared_service
+            from services.fastapi.shared_services import register_shared_service
             register_shared_service('resource_manager', _shared_services['resource_manager'])
             
             logger.info("Shared ResourceManager instance created successfully")
@@ -192,7 +181,7 @@ async def get_shared_resource_manager_async():
             logger.info("Creating shared ResourceManager instance (async)")
             try:
                 # Run ResourceManager creation in thread pool
-                from services.resource_manager import ResourceManager
+                from services.core.resource_manager import ResourceManager
                 from config.nwn2_settings import nwn2_paths
                 
                 _shared_services['resource_manager'] = await asyncio.to_thread(
@@ -202,7 +191,7 @@ async def get_shared_resource_manager_async():
                 )
                 
                 # Register in independent registry to avoid import cycles during character loading
-                from fastapi_core.shared_services import register_shared_service
+                from services.fastapi.shared_services import register_shared_service
                 register_shared_service('resource_manager', _shared_services['resource_manager'])
                 
                 logger.info("Shared ResourceManager instance created successfully (async)")
@@ -292,7 +281,7 @@ def initialize_background_services():
         _shared_services['game_data_loader'] = loader
         
         # Register in independent registry to avoid import cycles during character loading
-        from fastapi_core.shared_services import register_shared_service
+        from services.fastapi.shared_services import register_shared_service
         register_shared_service('game_data_loader', loader)
         
         init_time = time.time() - start_time
@@ -317,12 +306,12 @@ def initialize_background_services():
         else:
             update_initialization_status('prereq_graph', 92, 'Building prerequisite graph...')
             logger.info("Building feat prerequisite graph...")
-            from character.managers.prerequisite_graph import get_prerequisite_graph
+            from services.gamedata.prerequisite_graph import get_prerequisite_graph
             
             start_time = time.time()
             
             # Build the graph with the game data loader
-            graph = get_prerequisite_graph(game_data_loader=_shared_services['game_data_loader'])
+            graph = get_prerequisite_graph(rules_service=_shared_services['game_data_loader'])
             
             if graph and graph.is_built:
                 _shared_services['prerequisite_graph'] = graph
@@ -428,8 +417,6 @@ ALLOWED_ORIGINS = [
     "http://tauri.localhost",     # HTTP Tauri (PRODUCTION FIX)
 ]
 
-print(f"CORS DEBUG: Allowing origins: {ALLOWED_ORIGINS}")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -439,36 +426,8 @@ app.add_middleware(
 )
 
 # ============================================================================
-# GLOBAL EXCEPTION HANDLERS - 2025 FastAPI Standards
+# GLOBAL EXCEPTION HANDLERS
 # ============================================================================
-
-# Exception classes are now imported from fastapi_core.exceptions
-
-@app.exception_handler(CharacterNotFoundException)
-def character_not_found_handler(request: Request, exc: CharacterNotFoundException):
-    """Handle character not found errors"""
-    logger.warning(f"Character not found: {exc.character_id}")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": "character_not_found",
-            "detail": exc.message,
-            "character_id": exc.character_id
-        }
-    )
-
-@app.exception_handler(CharacterSessionException)
-def character_session_handler(request: Request, exc: CharacterSessionException):
-    """Handle character session errors"""
-    logger.error(f"Character session error: {exc.message} (character_id: {exc.character_id})")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": "character_session_error",
-            "detail": exc.message,
-            "character_id": exc.character_id
-        }
-    )
 
 @app.exception_handler(SystemNotReadyException)
 def system_not_ready_handler(request: Request, exc: SystemNotReadyException):
@@ -750,7 +709,7 @@ try:
     app.include_router(alignment.router, prefix="/api", tags=["alignment"])
     routers_loaded.append("alignment")
     
-    logger.info(f"✓ Core routers loaded: {', '.join(routers_loaded)}")
+    logger.info(f"Core routers loaded: {', '.join(routers_loaded)}")
     
     # Try additional routers - profile each individually
     try:
@@ -790,7 +749,7 @@ try:
         app.include_router(spells.router, prefix="/api", tags=["spells"])
         routers_loaded.append("spells")
         
-        logger.info(f"✓ Character editing routers loaded: attributes, skills, feats, combat, spells")
+        logger.info("Character editing routers loaded: attributes, skills, feats, combat, spells")
         
     except Exception as e:
         logger.warning(f"Failed to load character editing routers: {e}")
@@ -826,16 +785,15 @@ try:
         app.include_router(saves.router, prefix="/api", tags=["saves"])
         routers_loaded.append("saves")
 
-        logger.info(f"✓ Additional routers loaded: inventory, classes, race, saves")
+        logger.info("Additional routers loaded: inventory, classes, race, saves")
         
     except Exception as e:
         logger.warning(f"Failed to load additional routers: {e}")
-        
+
 except Exception as e:
     logger.warning(f"Failed to include core routers: {e}")
     routers_loaded = []
 
-# Modern lifespan event handling is now implemented above
 
 def main():
     """Main entry point for FastAPI server"""

@@ -1,10 +1,6 @@
-"""
-Content Manager - handles custom content detection logic and campaign/module info
-Manages detection and tracking of custom content (feats, spells, classes) vs vanilla content
-Also extracts and manages campaign, module, and quest information from save files
-"""
+"""Manages custom content detection, campaign info, and module data extraction."""
 
-from typing import Dict, List, Any, Optional, Union, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Union
 from loguru import logger
 import os
 import shutil
@@ -12,11 +8,6 @@ import datetime
 
 from ..events import EventEmitter
 from gamedata.dynamic_loader.field_mapping_utility import field_mapper  # type: ignore
-
-if TYPE_CHECKING:
-    pass
-
-# Using global loguru logger
 
 
 class ContentManager(EventEmitter):
@@ -113,8 +104,8 @@ class ContentManager(EventEmitter):
                     }
     
     def _get_max_spell_level(self) -> int:
-        """Dynamically determine the maximum spell level based on character data"""
-        max_level = 9  # Default NWN2 maximum
+        """Determine the maximum spell level by checking character data."""
+        max_level = 9
         
         # Check for highest spell level in known lists
         for level in range(20):  # Check up to level 20 for custom content
@@ -134,22 +125,19 @@ class ContentManager(EventEmitter):
             return False
     
     def _get_content_name(self, table_name: str, content_id: int) -> str:
-        """Get content name from game data or fallback to generic name"""
+        """Get content name from game data using field mapping."""
         try:
             content_data = self.rules_service.get_by_id(table_name, content_id)
             if content_data:
-                # Use FieldMappingUtility to handle different name field variations
                 # cspell:ignore spellname strref
                 name_fields = ['name', 'label', 'feat', 'spellname', 'strref']
                 for name_field in name_fields:
                     name = field_mapper.get_field_value(content_data, name_field, '')
                     if name and str(name).strip() and str(name) != '****':
                         return str(name)
-        except Exception:
-            pass
-        
-        # Fallback to generic name
-        return f"Custom {table_name.title()[:-1]} {content_id}"
+        except Exception as e:
+            logger.warning(f"Failed to get content name for {table_name}:{content_id}: {e}")
+        return ''
     
     def _detect_content_source_dynamic(self, table_name: str, content_id: int) -> str:
         """Detect content source using dynamic validation against loaded data"""
@@ -198,21 +186,8 @@ class ContentManager(EventEmitter):
         ]
     
     def _strip_nwn2_formatting(self, text: str) -> str:
-        """
-        Strip NWN2 text formatting codes from a string
-
-        NWN2 uses codes like {0}, {1100}, {1200} for colors/fonts.
-        These should be stripped for display purposes.
-
-        Args:
-            text: Text that may contain formatting codes
-
-        Returns:
-            Text with formatting codes removed
-        """
+        """Strip NWN2 text formatting codes like {0}, {1100} from a string."""
         import re
-        # Pattern matches {digits} at start of string or anywhere
-        # Examples: {0}, {1100}, {1200}
         return re.sub(r'\{\d+\}', '', text).strip()
 
     def _resolve_localized_string(self, loc_string: Any, resource_manager=None) -> str:
@@ -243,13 +218,7 @@ class ContentManager(EventEmitter):
         return ''
 
     def _extract_quest_definitions(self) -> None:
-        """
-        FEATURE ON HOLD: Quest mapping is disabled in frontend due to duplicate/incorrect mappings.
-        See dialogue_mapping_service.py docstring and QUEST_MAPPING_UX_PROBLEM.md for details.
-
-        Extract quest definitions from module.jrl
-        Checks campaign folder first, then falls back to .mod file
-        """
+        """Extract quest definitions from module.jrl (FEATURE ON HOLD - see dialogue_mapping_service.py)."""
         if not hasattr(self, 'module_info') or not self.module_info:
             logger.info("ContentManager: No module info available for quest extraction")
             return
@@ -264,7 +233,7 @@ class ContentManager(EventEmitter):
         try:
             from config.nwn2_settings import nwn2_paths
             from nwn2_rust import GffParser
-            from services.resource_manager import ResourceManager
+            from services.core.resource_manager import ResourceManager
             import tempfile
             import lzma
 
@@ -310,7 +279,7 @@ class ContentManager(EventEmitter):
                             finally:
                                 try:
                                     os.unlink(tmp_path)
-                                except:
+                                except OSError:
                                     pass
 
                         except Exception as e:
@@ -326,7 +295,7 @@ class ContentManager(EventEmitter):
             # Use shared ResourceManager singleton for TLK string lookups
             resource_manager = None
             try:
-                from fastapi_core.shared_services import get_shared_resource_manager
+                from services.fastapi.shared_services import get_shared_resource_manager
                 resource_manager = get_shared_resource_manager()
             except Exception as e:
                 logger.warning(f"ContentManager: Could not get shared ResourceManager for TLK lookups: {e}")
@@ -472,20 +441,10 @@ class ContentManager(EventEmitter):
 
         return None
 
-    def get_all_quests(self) -> Dict[str, Dict[str, Any]]:
-        """FEATURE ON HOLD: Quest mapping disabled. Get all quest definitions."""
-        return self.quest_definitions.copy()
-
     def validate(self) -> tuple[bool, List[str]]:
-        """
-        Validate custom content state
-
-        Returns:
-            (is_valid, list_of_errors)
-        """
+        """Validate custom content state, returning (is_valid, errors)."""
         errors = []
 
-        # Basic validation - ensure custom content dict is consistent
         try:
             for key, item in self.custom_content.items():
                 # Check that key matches content
@@ -520,7 +479,7 @@ class ContentManager(EventEmitter):
         logger.info(f"ContentManager: Starting campaign data extraction from {save_path}")
         
         try:
-            from services.savegame_handler import SaveGameHandler
+            from services.core.savegame_handler import SaveGameHandler
             handler = SaveGameHandler(save_path)
             logger.info("ContentManager: Created SaveGameHandler")
             
@@ -899,7 +858,7 @@ class ContentManager(EventEmitter):
         logger.info("ContentManager: Looking for current module info")
         try:
             # Try to extract from SaveGameHandler first
-            from services.savegame_handler import SaveGameHandler
+            from services.core.savegame_handler import SaveGameHandler
             handler = SaveGameHandler(save_path)
             current_module = handler.extract_current_module()
             
@@ -1353,19 +1312,7 @@ class ContentManager(EventEmitter):
         var_type: str = 'int',
         module_id: Optional[str] = None
     ) -> bool:
-        """
-        Update a module variable in VarTable.
-
-        Args:
-            var_name: Name of the variable to update
-            value: New value for the variable
-            var_type: Type of variable ('int', 'float', 'string')
-            module_id: Optional module ID. If None, updates current module.
-                       If specified, updates the variable in that module's .z file.
-
-        Returns:
-            True if update succeeded, False otherwise
-        """
+        """Update a variable in VarTable for the specified or current module."""
         if not hasattr(self.character_manager, 'save_path'):
             logger.error("ContentManager: No save_path available")
             return False
@@ -1400,7 +1347,7 @@ class ContentManager(EventEmitter):
         var_type: str
     ) -> bool:
         """Update variable in standalone module.ifo for current module"""
-        from services.savegame_handler import SaveGameHandler
+        from services.core.savegame_handler import SaveGameHandler
         from nwn2_rust import GffParser, GffWriter
 
         handler = SaveGameHandler(save_path, create_load_backup=False)
@@ -1531,91 +1478,80 @@ class ContentManager(EventEmitter):
         elif var_type == 'string':
             variables['strings'][var_name] = str(value)
 
-    # =========================================================================
-    # DEITY AND BIOGRAPHY MANAGEMENT - NOT SURE IF THIS IS THE BEST PLACE
-    # =========================================================================
-    
     def get_available_deities(self) -> List[Dict[str, Any]]:
-            """Get list of available deities from game data."""
+        """Get list of available deities from game data."""
+        try:
+            deities = []
+            deity_data = self.rules_service.get_table('nwn2_deities')
+            
+            from services.core.resource_manager import ResourceManager
             try:
-                deities = []
-                deity_data = self.rules_service.get_table('nwn2_deities')
-                
-                # Helper for Description Resolution
-                from services.resource_manager import ResourceManager
+                resource_manager = ResourceManager()
+            except Exception:
+                resource_manager = None
+                logger.warning("ContentManager: ResourceManager unavailable for descriptions")
+
+            if not deity_data:
+                return []
+
+            for row_id, row in enumerate(deity_data):
                 try:
-                    resource_manager = ResourceManager()
-                except Exception:
-                    resource_manager = None
-                    logger.warning("ContentManager: ResourceManager unavailable for descriptions")
+                    if isinstance(row, dict):
+                        removed = row.get('Removed', '0')
+                        first = row.get('FirstName')
+                        last = row.get('LastName')
+                        icon = row.get('IconID', '')
+                        desc_ref = row.get('DescID')
+                    else:
+                        removed = getattr(row, 'Removed', '0')
+                        first = getattr(row, 'FirstName', None)
+                        last = getattr(row, 'LastName', None)
+                        icon = getattr(row, 'IconID', '')
+                        desc_ref = getattr(row, 'DescID', None)
 
-                if not deity_data:
-                    return []
-
-                for row_id, row in enumerate(deity_data):
-                    try:
-                        # 1. Safe Attribute Extraction
-                        if isinstance(row, dict):
-                            removed = row.get('Removed', '0')
-                            first = row.get('FirstName')
-                            last = row.get('LastName')
-                            icon = row.get('IconID', '')
-                            desc_ref = row.get('DescID')
-                        else:
-                            removed = getattr(row, 'Removed', '0')
-                            first = getattr(row, 'FirstName', None)
-                            last = getattr(row, 'LastName', None)
-                            icon = getattr(row, 'IconID', '')
-                            desc_ref = getattr(row, 'DescID', None)
-
-                        # 2. Validation
-                        # Handle "None" explicitly so it doesn't become the string "None"
-                        first_str = str(first).strip() if first is not None else ""
-                        last_str = str(last).strip() if last is not None else ""
-                        
-                        if str(removed) == '1' or first_str.lower() == 'padding':
-                            continue
-
-                        name = ' '.join(filter(None, [first_str, last_str]))
-                        if not name:
-                            continue
-
-                        # 3. Description Resolution
-                        description = ''
-                        if desc_ref is not None and resource_manager:
-                            try:
-                                val_ref = int(desc_ref) if str(desc_ref).isdigit() else 0
-                                if val_ref > 0:
-                                    description = resource_manager.get_string(val_ref) or ''
-                            except Exception:
-                                pass # Fail silently on desc lookup
-
-                        # 4. Parse Details
-                        parsed = self._parse_deity_description(description, name)
-
-                        deities.append({
-                            'id': row_id,
-                            'name': name,
-                            'description': parsed['description'],
-                            'aliases': parsed['aliases'],
-                            'alignment': parsed['alignment'],
-                            'portfolio': parsed['portfolio'],
-                            'favored_weapon': parsed['favored_weapon'],
-                            'icon': str(icon),
-                        })
-                        
-                    except Exception as row_error:
-                        # Log specific row failure but continue loading others
-                        logger.error(f"Failed to load deity row {row_id}: {row_error}")
+                    first_str = str(first).strip() if first is not None else ""
+                    last_str = str(last).strip() if last is not None else ""
+                    
+                    if str(removed) == '1' or first_str.lower() == 'padding':
                         continue
 
-                deities.sort(key=lambda d: d['name'])
-                logger.info(f"ContentManager: Loaded {len(deities)} available deities")
-                return deities
+                    name = ' '.join(filter(None, [first_str, last_str]))
+                    if not name:
+                        continue
 
-            except Exception as e:
-                logger.error(f"ContentManager: Fatal error getting deities: {e}", exc_info=True)
-                return []
+                    description = ''
+                    if desc_ref is not None and resource_manager:
+                        try:
+                            val_ref = int(desc_ref) if str(desc_ref).isdigit() else 0
+                            if val_ref > 0:
+                                description = resource_manager.get_string(val_ref) or ''
+                        except Exception:
+                            pass
+
+                    parsed = self._parse_deity_description(description, name)
+
+                    deities.append({
+                        'id': row_id,
+                        'name': name,
+                        'description': parsed['description'],
+                        'aliases': parsed['aliases'],
+                        'alignment': parsed['alignment'],
+                        'portfolio': parsed['portfolio'],
+                        'favored_weapon': parsed['favored_weapon'],
+                        'icon': str(icon),
+                    })
+                    
+                except Exception as row_error:
+                    logger.error(f"Failed to load deity row {row_id}: {row_error}")
+                    continue
+
+            deities.sort(key=lambda d: d['name'])
+            logger.info(f"ContentManager: Loaded {len(deities)} available deities")
+            return deities
+
+        except Exception as e:
+            logger.error(f"ContentManager: Fatal error getting deities: {e}", exc_info=True)
+            return []
 
     def get_deity(self) -> str:
         """Get current deity from character GFF data."""
@@ -1680,56 +1616,46 @@ class ContentManager(EventEmitter):
         return default
 
     def _parse_deity_description(self, raw_desc: str, deity_name: str) -> Dict[str, str]:
-            """Parses raw NWN2 deity description string to extract structured data."""
-            import re
-            
-            # Default empty structure
-            data = {k: '' for k in ['description', 'aliases', 'alignment', 'portfolio', 'favored_weapon']}
-            
-            if not raw_desc:
-                return data
-
-            try:
-                cleaned = raw_desc
-
-                # 1. Clean Header (Case insensitive, handles color tags and simple names)
-                # Escaping deity_name prevents regex errors if name has special chars
-                safe_name = re.escape(deity_name)
-                cleaned = re.sub(r'(?:<color=[^>]+>\s*)?<b>\s*' + safe_name + r'\s*</b>(?:</color>)?', '', cleaned, flags=re.IGNORECASE)
-                cleaned = re.sub(r'^\s*' + safe_name + r'\s*:\s*', '', cleaned, flags=re.IGNORECASE)
-
-                # 2. Extract Fields Helper
-                def extract(label, key):
-                    nonlocal cleaned
-                    # Find "<b>Label:</b>"
-                    pattern = re.compile(r'<b>\s*' + re.escape(label) + r'\s*:?\s*</b>', re.IGNORECASE)
-                    match = pattern.search(cleaned)
-                    if match:
-                        start = match.end()
-                        # Find end of content (next <b> tag or end of string)
-                        next_tag = re.search(r'<b>', cleaned[start:])
-                        end = start + next_tag.start() if next_tag else len(cleaned)
-                        
-                        # Extract, strip tags/whitespace
-                        val = cleaned[start:end]
-                        val = re.sub(r'<[^>]+>', '', val).strip(' :-,.\n')
-                        data[key] = val
-                        
-                        # Remove from main text
-                        cleaned = cleaned[:match.start()] + cleaned[end:]
-
-                extract('Aliases', 'aliases')
-                extract('Alignment', 'alignment')
-                extract('Portfolio', 'portfolio')
-                extract('Favored Weapon', 'favored_weapon')
-
-                # 3. Final Description Clean
-                desc = re.sub(r'<[^>]+>', '', cleaned).strip()
-                data['description'] = re.sub(r'\n\s*\n', '\n\n', desc)
-                
-            except Exception as e:
-                logger.warning(f"Error parsing description for {deity_name}: {e}")
-                # Fallback: return whole text as description if parsing fails
-                data['description'] = re.sub(r'<[^>]+>', '', raw_desc).strip()
-
+        """Parse NWN2 deity description string to extract structured data."""
+        import re
+        
+        data = {k: '' for k in ['description', 'aliases', 'alignment', 'portfolio', 'favored_weapon']}
+        
+        if not raw_desc:
             return data
+
+        try:
+            cleaned = raw_desc
+
+            safe_name = re.escape(deity_name)
+            cleaned = re.sub(r'(?:<color=[^>]+>\s*)?<b>\s*' + safe_name + r'\s*</b>(?:</color>)?', '', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r'^\s*' + safe_name + r'\s*:\s*', '', cleaned, flags=re.IGNORECASE)
+
+            def extract(label, key):
+                nonlocal cleaned
+                pattern = re.compile(r'<b>\s*' + re.escape(label) + r'\s*:?\s*</b>', re.IGNORECASE)
+                match = pattern.search(cleaned)
+                if match:
+                    start = match.end()
+                    next_tag = re.search(r'<b>', cleaned[start:])
+                    end = start + next_tag.start() if next_tag else len(cleaned)
+                    
+                    val = cleaned[start:end]
+                    val = re.sub(r'<[^>]+>', '', val).strip(' :-,.\n')
+                    data[key] = val
+                    
+                    cleaned = cleaned[:match.start()] + cleaned[end:]
+
+            extract('Aliases', 'aliases')
+            extract('Alignment', 'alignment')
+            extract('Portfolio', 'portfolio')
+            extract('Favored Weapon', 'favored_weapon')
+
+            desc = re.sub(r'<[^>]+>', '', cleaned).strip()
+            data['description'] = re.sub(r'\n\s*\n', '\n\n', desc)
+            
+        except Exception as e:
+            logger.warning(f"Error parsing description for {deity_name}: {e}")
+            data['description'] = re.sub(r'<[^>]+>', '', raw_desc).strip()
+
+        return data
