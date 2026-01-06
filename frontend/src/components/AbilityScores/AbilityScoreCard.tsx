@@ -130,7 +130,7 @@ export default function AbilityScoreCard({
           {name} breakdown details
         </div>
         <div className="breakdown-row breakdown-base">
-          <span className="breakdown-label">Base:</span>
+          <span className="breakdown-label">Raw Base:</span>
           <div className="breakdown-controls">
             <Button
               onClick={handleDecrease}
