@@ -125,6 +125,7 @@ class PerformanceProfiler:
         
         return build_report(self.root)
     
+    def print_report(self, max_depth: Optional[int] = None, min_duration_ms: float = 0):
         """Print a formatted timing report to console and optionally to file."""
         self.finalize()
         

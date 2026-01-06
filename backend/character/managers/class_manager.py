@@ -801,6 +801,11 @@ class ClassManager(EventEmitter):
         
         for i in range(10):
             new_entry[f"{LVL_STAT_KNOWN_LIST}{i}"] = []
+            new_entry[f"{LVL_STAT_KNOWN_REMOVE_LIST}{i}"] = []
+        
+        lvl_stat_list.append(new_entry)
+        self.gff.set(LVL_STAT_LIST, lvl_stat_list)
+        logger.info(f"Recorded level up history: Class {class_id}, HP {hp_gained}")
             
     def get_categorized_classes(self, search: str = None, type_filter: str = None, include_unplayable: bool = False) -> Dict[str, Any]:
         """Get all classes organized by type and focus."""
@@ -897,11 +902,6 @@ class ClassManager(EventEmitter):
             }
             
         return progression_data
-
-        new_entry[f"{LVL_STAT_KNOWN_REMOVE_LIST}{i}"] = []
-        lvl_stat_list.append(new_entry)
-        self.gff.set(LVL_STAT_LIST, lvl_stat_list)
-        logger.info(f"Recorded level up history: Class {class_id}, HP {hp_gained}")
 
     def on_skill_points_awarded(self, event: Any):
         """Handle SKILL_POINTS_AWARDED event by updating the latest level history entry."""

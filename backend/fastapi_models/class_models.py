@@ -101,7 +101,7 @@ class ClassState(BaseModel):
 
 class ClassChangeRequest(BaseModel):
     """Request to change character classes."""
-    action: Literal['change_primary', 'add_level', 'remove_class'] = Field(..., description="Type of change")
+    action: Optional[Literal['change_primary', 'add_level', 'remove_class']] = Field(None, description="Type of change")
     class_id: int = Field(..., description="Class to modify")
     
     preserve_level: bool = Field(True, description="Keep total level when changing primary class")
