@@ -251,11 +251,11 @@ export default function SpellsEditor() {
     }
   }, [character?.id, spells, invalidateSubsystems, showToast]);
 
-  const handleRemoveSpell = useCallback(async (spellId: number, classIndex: number) => {
+  const handleRemoveSpell = useCallback(async (spellId: number, classIndex: number, spellLevel: number) => {
     if (!character?.id) return;
 
     try {
-      const response = await CharacterAPI.manageSpell(character.id, 'remove', spellId, classIndex);
+      const response = await CharacterAPI.manageSpell(character.id, 'remove', spellId, classIndex, spellLevel);
       await spells.load({ force: true });
       await invalidateSubsystems(['combat']);
       showToast(response.message || 'Spell removed successfully', 'success');

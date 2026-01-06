@@ -17,7 +17,7 @@ export interface SpellCardProps {
   spell: SpellInfo;
   isOwned: boolean;
   onAdd?: (spellId: number, classIndex: number, spellLevel: number) => void;
-  onRemove?: (spellId: number, classIndex: number) => void;
+  onRemove?: (spellId: number, classIndex: number, spellLevel: number) => void;
   onLoadDetails?: (spell: SpellInfo) => Promise<SpellInfo | null>;
   casterClasses: Array<{index: number; name: string; class_id: number; can_edit_spells: boolean}>;
 }
@@ -170,7 +170,7 @@ function SpellCardComponent({
                   onClick={(e) => {
                     e.stopPropagation();
                     const classIndex = casterClasses.find(cls => cls.class_id === spell.class_id)?.index ?? selectedClassIndex;
-                    onRemove(spell.id, classIndex);
+                    onRemove(spell.id, classIndex, spell.level);
                   }}
                 >
                   Remove
