@@ -384,14 +384,19 @@ class SkillManager(EventEmitter):
             return None
 
         label = field_mapper.get_field_value(skill_data, 'label')
-        name = field_mapper.get_field_value(skill_data, 'name') or label
         key_ability = field_mapper.get_field_value(skill_data, 'key_ability')
         armor_check_val = field_mapper.get_field_value(skill_data, 'armor_check_penalty')
+        
+        tlk_name = None
+        if hasattr(skill_data, 'Name'):
+            raw_name = skill_data.Name
+            if raw_name and not str(raw_name).isdigit():
+                tlk_name = raw_name
 
         info = {
             'id': skill_id,
             'label': label or f'Skill_{skill_id}',
-            'name': name or f'Skill_{skill_id}',
+            'name': tlk_name or label or f'Skill_{skill_id}',
             'key_ability': key_ability or 'STR',
             'armor_check': int(armor_check_val or 0) > 0,
             'is_class_skill': self.is_class_skill(skill_id),
@@ -598,10 +603,16 @@ class SkillManager(EventEmitter):
             key_ability = field_mapper.get_field_value(skill_data, 'key_ability')
             armor_check = field_mapper.get_field_value(skill_data, 'armor_check')
             untrained = field_mapper.get_field_value(skill_data, 'untrained')
+            
+            tlk_name = None
+            if hasattr(skill_data, 'Name'):
+                raw_name = skill_data.Name
+                if raw_name and not str(raw_name).isdigit():
+                    tlk_name = raw_name
 
             skill_info = {
                 'id': skill_id,
-                'name': label or f'Skill_{skill_id}',
+                'name': tlk_name or label or f'Skill_{skill_id}',
                 'description': field_mapper.get_field_value(skill_data, 'description') or '',
                 'key_ability': key_ability or 'STR',
                 'ranks': self.get_skill_ranks(skill_id),

@@ -32,7 +32,7 @@ export default function SkillsEditor() {
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortColumn, setSortColumn] = useState<'name' | 'total' | 'ranks' | null>(null);
+  const [sortColumn, setSortColumn] = useState<'name' | 'total' | 'ranks' | null>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
@@ -64,14 +64,23 @@ export default function SkillsEditor() {
     is_class_skill: boolean;
     armor_check: boolean;
   }>) => {
-    return skillList.map(skill => ({
-      ...skill,
-      current_ranks: localSkillOverrides[skill.id] ?? skill.current_ranks
-    }));
+    return skillList.map(skill => {
+      const overrideRanks = localSkillOverrides[skill.id];
+      if (overrideRanks !== undefined) {
+        const rankDiff = overrideRanks - skill.current_ranks;
+        return {
+          ...skill,
+          current_ranks: overrideRanks,
+          total_modifier: skill.total_modifier + rankDiff
+        };
+      }
+      return skill;
+    });
   };
 
-  const classSkills = applyOverrides(skillsSubsystem.data?.class_skills?.filter(skill => !skill.name.startsWith('DEL_')) || []);
-  const crossClassSkills = applyOverrides(skillsSubsystem.data?.cross_class_skills?.filter(skill => !skill.name.startsWith('DEL_')) || []);
+  const isValidSkillName = (name: string) => !name.startsWith('DEL_') && !name.startsWith('***');
+  const classSkills = applyOverrides(skillsSubsystem.data?.class_skills?.filter(skill => isValidSkillName(skill.name)) || []);
+  const crossClassSkills = applyOverrides(skillsSubsystem.data?.cross_class_skills?.filter(skill => isValidSkillName(skill.name)) || []);
   const skills = [...classSkills, ...crossClassSkills];
 
   const totalAvailable = skillsSubsystem.data?.total_available ?? 0;
@@ -87,7 +96,7 @@ export default function SkillsEditor() {
     const handleScroll = () => {
       if (headerRef.current) {
         const rect = headerRef.current.getBoundingClientRect();
-        setShowFixedHeader(rect.bottom < 56);
+        setShowFixedHeader(rect.bottom < 87);
       }
     };
 
@@ -248,7 +257,7 @@ export default function SkillsEditor() {
     
     return createPortal(
       <div 
-        className="fixed top-[56px] z-50"
+        className="fixed top-[87px] z-50"
         style={{ 
           left: `${tableLeft}px`, 
           width: `${tableWidth}px` 
@@ -398,7 +407,7 @@ export default function SkillsEditor() {
 
       <FixedHeader />
 
-      <Card ref={cardRef}>
+      <Card ref={cardRef} className="mt-5">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table ref={tableRef} className="w-full" style={{ tableLayout: 'fixed' }}>
