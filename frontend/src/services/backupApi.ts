@@ -1,7 +1,3 @@
-/**
- * Backup API service for managing save file backups
- */
-
 const API_BASE = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:8000/api' 
   : '/api';
@@ -42,9 +38,6 @@ export interface CleanupResponse {
 }
 
 export class BackupAPI {
-  /**
-   * List all available backups for a character
-   */
   static async listBackups(characterId: number): Promise<BackupsResponse> {
     const response = await fetch(`${API_BASE}/savegame/${characterId}/backups`);
     
@@ -56,9 +49,6 @@ export class BackupAPI {
     return response.json();
   }
 
-  /**
-   * Restore a save from backup
-   */
   static async restoreFromBackup(
     characterId: number, 
     request: RestoreRequest
@@ -79,9 +69,6 @@ export class BackupAPI {
     return response.json();
   }
 
-  /**
-   * Clean up old backups, keeping only the most recent ones
-   */
   static async cleanupBackups(
     characterId: number, 
     keepCount: number = 10
@@ -101,16 +88,10 @@ export class BackupAPI {
     return response.json();
   }
 
-  /**
-   * Format backup timestamp for display
-   */
   static formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
   }
 
-  /**
-   * Format backup size for display
-   */
   static formatSize(sizeBytes: number): string {
     if (sizeBytes < 1024) return `${sizeBytes} B`;
     if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;

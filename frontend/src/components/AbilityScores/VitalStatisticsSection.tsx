@@ -60,7 +60,6 @@ export default function VitalStatisticsSection({
 }: VitalStatisticsSectionProps) {
   const t = useTranslations();
   
-  // Default stats if none provided
   const [internalStats, setInternalStats] = useState<CharacterStats>({
     hitPoints: 100,
     maxHitPoints: 100,
@@ -87,14 +86,12 @@ export default function VitalStatisticsSection({
 
   const healthPercentage = Math.min(100, (stats.hitPoints / stats.maxHitPoints) * 100);
 
-  // Helper function to get modifier class for color coding
   const getModifierClass = (modifier: number) => {
     if (modifier > 0) return 'positive';
     if (modifier < 0) return 'negative';
     return 'zero';
   };
 
-  // Helper functions for updating stats via parent callback
   const updateArmorClass = (base: number) => {
     updateStats({ armorClass: { ...stats.armorClass, base } });
   };
@@ -121,14 +118,12 @@ export default function VitalStatisticsSection({
         <h3 className="section-title">{t('abilityScores.vitalStatistics')}</h3>
         <div className="vital-stats-grid">
 
-          {/* Health */}
           <Card variant="interactive" className="flex flex-col h-full">
             <div className="attribute-header-responsive">
               <span className="attribute-name-responsive">Health</span>
             </div>
             
             <div className="attribute-breakdown">
-              {/* Health Bar */}
               <div className="breakdown-row">
                 <div className="health-bar-container">
                   <div className="health-bar-track">
@@ -142,8 +137,7 @@ export default function VitalStatisticsSection({
                   </div>
                 </div>
               </div>
-              
-              {/* HP Input */}
+
               <div className="breakdown-row breakdown-base">
                 <span className="breakdown-label">Hit Points:</span>
                 <div className="hp-controls">
@@ -168,7 +162,6 @@ export default function VitalStatisticsSection({
             </div>
           </Card>
 
-          {/* Armor Class */}
           <Card variant="interactive" className="flex flex-col h-full">
             <div className="attribute-header-responsive">
               <span className="attribute-name-responsive">Armor Class</span>
@@ -232,7 +225,6 @@ export default function VitalStatisticsSection({
             </div>
           </Card>
 
-          {/* Initiative */}
           <Card variant="interactive" className="flex flex-col h-full">
             <div className="attribute-header-responsive">
               <span className="attribute-name-responsive">Initiative</span>
@@ -296,7 +288,6 @@ export default function VitalStatisticsSection({
             </div>
           </Card>
 
-          {/* Fortitude */}
           <Card variant="interactive" className="flex flex-col h-full">
             <div className="attribute-header-responsive">
               <span className="attribute-name-responsive">Fortitude</span>
@@ -360,7 +351,6 @@ export default function VitalStatisticsSection({
             </div>
           </Card>
 
-          {/* Reflex */}
           <Card variant="interactive" className="flex flex-col h-full">
             <div className="attribute-header-responsive">
               <span className="attribute-name-responsive">Reflex</span>
@@ -424,7 +414,6 @@ export default function VitalStatisticsSection({
             </div>
           </Card>
 
-          {/* Will */}
           <Card variant="interactive" className="flex flex-col h-full">
             <div className="attribute-header-responsive">
               <span className="attribute-name-responsive">Will</span>

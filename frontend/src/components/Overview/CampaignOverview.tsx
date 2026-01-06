@@ -65,36 +65,6 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
     }
   };
 
-  // Helper function to get difficulty name
-  const getDifficultyName = (level?: number): string => {
-    const difficulties = {
-      0: 'Very Easy',
-      1: 'Easy', 
-      2: 'Normal',
-      3: 'Hard',
-      4: 'Very Hard'
-    };
-    return difficulties[level as keyof typeof difficulties] || `Level ${level || 1}`;
-  };
-
-
-  // Helper function to get language name from ID
-  const getLanguageName = (languageId?: number): string => {
-    const languages = {
-      0: 'English',
-      1: 'French', 
-      2: 'German',
-      3: 'Italian',
-      4: 'Spanish',
-      5: 'Polish',
-      6: 'Korean',
-      7: 'Chinese Traditional',
-      8: 'Chinese Simplified',
-      9: 'Japanese'
-    };
-    return languages[languageId as keyof typeof languages] || character.detectedLanguage || 'English (Default)';
-  };
-
   return (
     <CollapsibleSection 
       title="Campaign Overview" 
@@ -118,7 +88,7 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
             <div>
               <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Difficulty</div>
               <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
-                {getDifficultyName(character.difficultyLevel)}
+                {character.difficultyLabel || 'Normal'}
               </div>
             </div>
             {character.lastSavedTimestamp ? (
@@ -182,7 +152,7 @@ const CampaignOverview: React.FC<CampaignOverviewProps> = ({ character }) => {
             <div>
               <div className="text-xs text-[rgb(var(--color-text-muted))] uppercase mb-1">Language</div>
               <div className="text-lg font-medium text-[rgb(var(--color-text-primary))]">
-                {getLanguageName(character.languageId)}
+                {character.languageLabel || character.detectedLanguage || 'English'}
               </div>
             </div>
             {character.lastSavedTimestamp ? (

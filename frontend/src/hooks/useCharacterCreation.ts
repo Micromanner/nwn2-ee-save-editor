@@ -33,7 +33,7 @@ interface CharacterData {
 }
 
 export const useCharacterCreation = () => {
-  const { api: _api } = useTauri(); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const { api: _api } = useTauri();
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +42,6 @@ export const useCharacterCreation = () => {
     setError(null);
     
     try {
-      // Create the character (no separate validation endpoint)
       const response = await DynamicAPI.fetch(`/characters/create`, {
         method: 'POST',
         headers: {
@@ -110,10 +109,8 @@ export const useCharacterCreation = () => {
 
   const createAndExportForPlay = async (characterData: CharacterData) => {
     try {
-      // Create the character first
       const createResult = await createCharacter(characterData);
       
-      // Then export it to localvault
       if (createResult.file_path) {
         const exportResult = await exportToLocalVault(createResult.file_path);
         return {

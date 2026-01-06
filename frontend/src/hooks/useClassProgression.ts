@@ -69,18 +69,11 @@ export interface UseClassProgressionOptions {
 }
 
 export interface UseClassProgressionReturn {
-  // Data
   progression: ClassProgression | null;
-  
-  // State
   isLoading: boolean;
   error: string | null;
-  
-  // Actions
   fetchProgression: (classId: number, options?: UseClassProgressionOptions) => Promise<void>;
   clearProgression: () => void;
-  
-  // Computed data for UI
   currentLevelFeatures: (level: number) => ClassFeature[];
   getLevelRange: (startLevel: number, endLevel: number) => LevelProgression[];
   getProgressionSummary: () => {
@@ -135,7 +128,6 @@ export function useClassProgression(
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch class progression';
       setError(errorMessage);
-      console.error('Error fetching class progression:', err);
     } finally {
       setIsLoading(false);
     }
@@ -194,7 +186,6 @@ export function useClassProgression(
     };
   }, [progression]);
 
-  // Auto-fetch effect
   useEffect(() => {
     if (autoFetch && characterId) {
       // This would require a default class ID - skip auto-fetch for now
@@ -203,18 +194,11 @@ export function useClassProgression(
   }, [autoFetch, characterId]);
 
   return {
-    // Data
     progression,
-    
-    // State
     isLoading,
     error,
-    
-    // Actions
     fetchProgression,
     clearProgression,
-    
-    // Computed data
     currentLevelFeatures,
     getLevelRange,
     getProgressionSummary
@@ -260,7 +244,6 @@ export function useMultiClassProgression(
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch class progression';
         newErrors[classId] = errorMessage;
-        console.error(`Error fetching progression for class ${classId}:`, err);
       }
     });
     

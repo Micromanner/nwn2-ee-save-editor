@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useTranslations } from '@/hooks/useTranslations';
-import CharacterPortrait from '@/components/ui/CharacterPortrait';
 import NWN2Icon from '@/components/ui/NWN2Icon';
 
 type NavItem = {
@@ -107,7 +106,7 @@ interface SidebarProps {
   isLoading?: boolean;
 }
 
-export default function Sidebar({ activeTab, onTabChange, currentCharacter, onBackToMain, isLoading }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, currentCharacter, onBackToMain, isLoading: _isLoading }: SidebarProps) {
   const t = useTranslations();
   const [showBackToMainDialog, setShowBackToMainDialog] = useState(false);
   
@@ -119,7 +118,7 @@ export default function Sidebar({ activeTab, onTabChange, currentCharacter, onBa
     ? [...baseNavItems, ...companionOnlyNavItems]
     : baseNavItems;
     
-  const handleBackToMainClick = () => {
+  const _handleBackToMainClick = () => {
     if (hasUnsavedChanges) {
       setShowBackToMainDialog(true);
     } else {

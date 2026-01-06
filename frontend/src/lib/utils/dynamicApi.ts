@@ -1,8 +1,6 @@
 import { TauriAPI } from '../tauri-api';
 import { tauriCompatibleFetch } from './tauriFetch';
 
-console.log('📦 DynamicAPI: Module loaded/parsed');
-
 /**
  * Dynamic API utility that gets the backend URL from Tauri
  * instead of using hardcoded environment variables
@@ -16,12 +14,9 @@ class DynamicAPI {
    */
   static async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.log('DynamicAPI already initialized with:', this.baseUrl);
       return;
     }
 
-    console.log('🔧 DynamicAPI: Starting initialization...');
-    
     // Get the base URL from Tauri
     const url = await TauriAPI.getFastAPIBaseURL();
     
@@ -32,7 +27,6 @@ class DynamicAPI {
     }
 
     this.baseUrl = url;
-    console.log('✅ DynamicAPI: Successfully got base URL from Tauri:', this.baseUrl);
     this.isInitialized = true;
   }
 
@@ -47,9 +41,7 @@ class DynamicAPI {
    * Get the API base URL (with /api suffix)
    */
   static async getApiBaseUrl(): Promise<string> {
-    console.log('🔧 DynamicAPI: getApiBaseUrl called, initialized:', this.isInitialized);
     await this.initialize();
-    console.log('🔧 DynamicAPI: After initialize, baseUrl:', this.baseUrl);
     return `${this.baseUrl}/api`;
   }
 

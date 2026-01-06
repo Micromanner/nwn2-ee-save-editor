@@ -13,9 +13,9 @@ interface EditorHeaderProps {
 
 export default function EditorHeader({
   characterName,
-  saveName,
+  saveName: _saveName,
   onBack,
-  onImport,
+  onImport: _onImport,
   onExport,
   onSave,
   isModified = false,

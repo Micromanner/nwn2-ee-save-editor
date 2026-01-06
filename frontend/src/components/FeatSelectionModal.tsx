@@ -1,8 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Card } from '@/components/ui/Card';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
@@ -34,14 +33,11 @@ export function FeatSelectionModal({ isOpen, onClose, featType, title }: FeatSel
       setError(null);
       try {
         if (!character?.id) return;
-        console.log(`[FeatSelectionModal] Fetching legitimate feats type=${featType}`);
-        // We fetch "legitimate" feats filtered by the specific bitmask
         const response = await CharacterAPI.getLegitimateFeats(character.id, {
             featType: featType,
             limit: 1000, 
             search: searchTerm || undefined
         });
-        console.log(`[FeatSelectionModal] Fetched ${response.feats.length} feats`);
         setFeats(response.feats);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load feats');
@@ -56,14 +52,6 @@ export function FeatSelectionModal({ isOpen, onClose, featType, title }: FeatSel
   const handleSelect = async (featId: number) => {
       if (!character?.id) return;
       try {
-          // If it's a Background (type 128) or Domain (8192), we might want to remove existing ones first?
-          // Backend logic:
-          // - Backgrounds: usually you can only have one. The backend feat manager MIGHT handle this, 
-          //   but usually `add_feat` just adds it. `remove_feat` removes it.
-          //   For now, we just ADD. The user can remove old ones if needed, or we rely on backend rules.
-          //   Actually, for Backgrounds/Domains, it's often a swap.
-          //   Let's just do ADD for now.
-          
           await CharacterAPI.addFeat(character.id, featId);
           await invalidateSubsystems(['feats', 'combat', 'abilityScores']);
           showToast('Feature added successfully', 'success');
@@ -78,8 +66,8 @@ export function FeatSelectionModal({ isOpen, onClose, featType, title }: FeatSel
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-[rgb(var(--color-surface-1))] border border-[rgb(var(--color-surface-border))] rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="p-4 border-b border-[rgb(var(--color-surface-border))] flex justify-between items-center bg-[rgb(var(--color-surface-2))]">
+
           <h2 className="text-xl font-bold text-[rgb(var(--color-text-primary))]">{title}</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,8 +76,8 @@ export function FeatSelectionModal({ isOpen, onClose, featType, title }: FeatSel
           </Button>
         </div>
         
-        {/* Search */}
         <div className="p-4 border-b border-[rgb(var(--color-surface-border))] bg-[rgb(var(--color-surface-1))]">
+
             <input 
                 type="text" 
                 placeholder="Search..." 
@@ -99,8 +87,8 @@ export function FeatSelectionModal({ isOpen, onClose, featType, title }: FeatSel
             />
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
+
           {isLoading ? (
              <div className="flex justify-center p-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[rgb(var(--color-primary))]"></div>
@@ -122,8 +110,8 @@ export function FeatSelectionModal({ isOpen, onClose, featType, title }: FeatSel
           )}
         </div>
         
-        {/* Footer */}
         <div className="p-4 border-t border-[rgb(var(--color-surface-border))] bg-[rgb(var(--color-surface-2))] flex justify-end">
+
           <Button variant="outline" onClick={onClose}>Cancel</Button>
         </div>
       </div>

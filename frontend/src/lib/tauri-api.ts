@@ -8,7 +8,6 @@ export interface SaveFile {
   modified?: number;
 }
 
-// The TauriAPI class remains the same, as its methods are correctly defined.
 export class TauriAPI {
   // Check for Tauri context
   static async isAvailable(): Promise<boolean> {
@@ -29,9 +28,7 @@ export class TauriAPI {
   }
 
   static async getFastAPIBaseURL(): Promise<string> {
-    console.log('🔧 TauriAPI: Calling get_fastapi_base_url...');
     const result = await invoke('get_fastapi_base_url');
-    console.log('✅ TauriAPI: Got base URL from Tauri:', result);
     return result as string;
   }
 
@@ -123,8 +120,5 @@ export class TauriAPI {
   static async closeSettingsWindow(): Promise<void> {
     return await invoke('close_settings_window');
   }
-
-  // Note: Desktop authentication is now handled automatically by Django middleware
-  // No explicit session initialization needed
 }
 

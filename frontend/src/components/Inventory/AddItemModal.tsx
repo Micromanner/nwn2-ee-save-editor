@@ -108,9 +108,8 @@ export default function AddItemModal({
     }
   }, [isOpen]);
 
-  const BASE_CATEGORY_ORDER = ['Armor & Clothing', 'Weapons', 'Magic Items', 'Accessories', 'Miscellaneous'];
-
   const baseCategories = useMemo(() => {
+    const BASE_CATEGORY_ORDER = ['Armor & Clothing', 'Weapons', 'Magic Items', 'Accessories', 'Miscellaneous'];
     const presentCategories = new Set<string>();
     baseItems.forEach(item => {
       if (item.category) presentCategories.add(item.category);

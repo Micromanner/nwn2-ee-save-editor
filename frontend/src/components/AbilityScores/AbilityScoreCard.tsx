@@ -41,21 +41,18 @@ export default function AbilityScoreCard({
   const [clickedButton, setClickedButton] = useState<'increase' | 'decrease' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Determine modifier class for color coding
   const getModifierClass = useCallback(() => {
     if (modifier > 0) return 'positive';
     if (modifier < 0) return 'negative';
     return 'zero';
   }, [modifier]);
 
-  // Helper function to get value modifier class
   const getValueClass = useCallback((value: number) => {
     if (value > 0) return 'positive';
     if (value < 0) return 'negative';
     return 'zero';
   }, []);
 
-  // Handle input change with validation
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parseInt(e.target.value) || min;
     const clampedValue = Math.max(min, Math.min(max, newValue));
@@ -63,12 +60,10 @@ export default function AbilityScoreCard({
     onChange(clampedValue);
   }, [min, max, onChange]);
 
-  // Handle button press with animation
   const handleIncrease = useCallback(() => {
     setClickedButton('increase');
     onIncrease();
     
-    // Clear visual feedback
     setTimeout(() => {
       setClickedButton(null);
     }, 200);
@@ -78,13 +73,11 @@ export default function AbilityScoreCard({
     setClickedButton('decrease');
     onDecrease();
     
-    // Clear visual feedback
     setTimeout(() => {
       setClickedButton(null);
     }, 200);
   }, [onDecrease]);
 
-  // Handle keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     const currentValue = baseValue !== undefined ? baseValue : value;
     switch (e.key) {
@@ -125,7 +118,6 @@ export default function AbilityScoreCard({
         </span>
       </div>
 
-      {/* Integrated breakdown with controls */}
       <div 
         className="attribute-breakdown"
         role="region"
@@ -137,8 +129,6 @@ export default function AbilityScoreCard({
         >
           {name} breakdown details
         </div>
-        
-        {/* Base row with integrated controls */}
         <div className="breakdown-row breakdown-base">
           <span className="breakdown-label">Base:</span>
           <div className="breakdown-controls">
@@ -248,8 +238,7 @@ export default function AbilityScoreCard({
           </>
         )}
       </div>
-      
-      {/* Hidden help text for screen readers */}
+
       <div 
         id={`${shortName}-help`} 
         className="sr-only"

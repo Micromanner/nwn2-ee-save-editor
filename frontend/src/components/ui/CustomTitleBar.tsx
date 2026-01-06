@@ -17,8 +17,8 @@ export default function CustomTitleBar() {
       try {
         const name = await getName();
         setAppName(name);
-      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
-        console.log('Running in dev mode, using default app name');
+      } catch {
+        // Running in dev mode, using default app name
       }
     };
     getAppName();
@@ -30,18 +30,17 @@ export default function CustomTitleBar() {
         const appWindow = getCurrentWindow();
         const maximized = await appWindow.isMaximized();
         setIsMaximized(maximized);
-      } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
-        console.log('Could not check maximized state');
+      } catch {
+        // Could not check maximized state
       }
     };
-    
+
     checkMaximized();
-    
-    // Listen for window state changes
-    const unlisten = getCurrentWindow().onResized((_e) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+
+    const unlisten = getCurrentWindow().onResized(() => {
       checkMaximized();
     });
-    
+
     return () => {
       unlisten.then(fn => fn());
     };
@@ -52,8 +51,8 @@ export default function CustomTitleBar() {
     try {
       const appWindow = getCurrentWindow();
       await appWindow.minimize();
-    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log('Minimize not available in dev mode');
+    } catch {
+      // Minimize not available in dev mode
     }
   };
 
@@ -61,11 +60,10 @@ export default function CustomTitleBar() {
     try {
       const appWindow = getCurrentWindow();
       await appWindow.toggleMaximize();
-      // Update state immediately after toggle
       const maximized = await appWindow.isMaximized();
       setIsMaximized(maximized);
-    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log('Maximize not available in dev mode');
+    } catch {
+      // Maximize not available in dev mode
     }
   };
 
@@ -73,8 +71,8 @@ export default function CustomTitleBar() {
     try {
       const appWindow = getCurrentWindow();
       await appWindow.close();
-    } catch (_error) { // eslint-disable-line @typescript-eslint/no-unused-vars
-      console.log('Close not available in dev mode');
+    } catch {
+      // Close not available in dev mode
     }
   };
 

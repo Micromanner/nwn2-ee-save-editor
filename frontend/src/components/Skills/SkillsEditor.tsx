@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from '@/hooks/useTranslations';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
@@ -14,7 +14,6 @@ export default function SkillsEditor() {
   const t = useTranslations();
   const { character } = useCharacterContext();
   
-  // Use subsystem hook for skills - use typed subsystem
   const skillsSubsystem = useSubsystem('skills');
 
   const [isUpdating, setIsUpdating] = useState(false);
@@ -36,12 +35,10 @@ export default function SkillsEditor() {
   const [sortColumn, setSortColumn] = useState<'name' | 'total' | 'ranks' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  // Load skills data only if missing when component mounts
   useEffect(() => {
     const loadSkillsData = async () => {
       if (!character?.id) return;
-      
-      // Only load if we don't have data yet - no forced refresh on tab switch
+
       if (!skillsSubsystem.data) {
         try {
           await skillsSubsystem.load();
@@ -52,14 +49,11 @@ export default function SkillsEditor() {
     };
 
     loadSkillsData();
-  }, [character?.id, skillsSubsystem]); // Load only when character changes or data is missing
+  }, [character?.id, skillsSubsystem]);
 
-  // Reset local overrides when new data loads (like AbilityScores pattern)
   useEffect(() => {
     setLocalSkillOverrides({});
   }, [skillsSubsystem.data]);
-
-  // Apply local overrides to skills (simple pattern like AbilityScores)
   const applyOverrides = (skillList: Array<{
     id: number;
     name: string;
@@ -79,14 +73,13 @@ export default function SkillsEditor() {
   const classSkills = applyOverrides(skillsSubsystem.data?.class_skills?.filter(skill => !skill.name.startsWith('DEL_')) || []);
   const crossClassSkills = applyOverrides(skillsSubsystem.data?.cross_class_skills?.filter(skill => !skill.name.startsWith('DEL_')) || []);
   const skills = [...classSkills, ...crossClassSkills];
-  
-  // Use backend data for points (let backend handle calculations)
+
   const totalAvailable = skillsSubsystem.data?.total_available ?? 0;
   const totalSpentPoints = skillsSubsystem.data?.spent_points || 0;
-  const pointsBalance = totalAvailable - totalSpentPoints;  // Can be negative if overspent
-  const availableSkillPoints = Math.max(0, pointsBalance);  // Show 0, never negative
-  const overdrawnSkillPoints = pointsBalance < 0 ? Math.abs(pointsBalance) : 0;  // Shows how much overspent
-  const _totalSkillPoints = totalAvailable; // eslint-disable-line @typescript-eslint/no-unused-vars
+  const pointsBalance = totalAvailable - totalSpentPoints;
+  const availableSkillPoints = Math.max(0, pointsBalance);
+  const overdrawnSkillPoints = pointsBalance < 0 ? Math.abs(pointsBalance) : 0;
+  const _totalSkillPoints = totalAvailable;
   const isLoading = skillsSubsystem.isLoading;
   const error = skillsSubsystem.error;
 
@@ -94,7 +87,6 @@ export default function SkillsEditor() {
     const handleScroll = () => {
       if (headerRef.current) {
         const rect = headerRef.current.getBoundingClientRect();
-        // Show fixed header when original header goes above viewport (56px for TopBar)
         setShowFixedHeader(rect.bottom < 56);
       }
     };
@@ -104,23 +96,20 @@ export default function SkillsEditor() {
         const ths = headerRef.current.querySelectorAll('th');
         const widths = Array.from(ths).map(th => th.getBoundingClientRect().width);
         setColumnWidths(widths);
-        
-        // Measure card dimensions instead of table
+
         const cardRect = cardRef.current.getBoundingClientRect();
         setTableWidth(cardRect.width);
         setTableLeft(cardRect.left);
       }
     };
 
-    // Find the scrollable parent (main element)
     const scrollContainer = document.querySelector('main');
-    
+
     if (scrollContainer) {
       scrollContainer.addEventListener('scroll', handleScroll);
     }
     window.addEventListener('resize', measureColumnWidths);
-    
-    // Initial measurements after a short delay to ensure DOM is ready
+
     setTimeout(() => {
       handleScroll();
       measureColumnWidths();
@@ -136,39 +125,32 @@ export default function SkillsEditor() {
 
   const handleUpdateSkillRank = async (skillId: number, newRank: number) => {
     if (!character?.id) return;
-    
+
     const skill = skills.find(s => s.id === skillId);
     if (!skill) return;
 
-    // Validation: allow overspending (Overdrawn logic) - only block negative
     if (newRank < 0) return;
-    // Note: We allow exceeding max_ranks - skill will be shown as "overdrawn"
-    
-    // 1. Optimistic update (like AbilityScores pattern)
+
     setLocalSkillOverrides(prev => ({
       ...prev,
       [skillId]: newRank
     }));
-    
+
     setUpdatingSkills(prev => new Set([...prev, skillId]));
-    
+
     try {
-      // 2. Send to backend and get updated data in response
       const updates = { [skillId]: newRank };
       const response = await CharacterAPI.updateSkills(character.id, updates);
-      
-      // 3. Use response data directly instead of refetching
+
       if (response && response.skill_summary) {
         skillsSubsystem.updateData({ ...response.skill_summary, error: null });
       } else {
-        // Fallback to refresh if response doesn't have expected data
         await skillsSubsystem.load();
       }
-      
+
     } catch (err) {
       console.error('Error updating skill:', err);
-      
-      // 4. Revert on error (like AbilityScores pattern)
+
       setLocalSkillOverrides(prev => {
         const updated = { ...prev };
         delete updated[skillId];
@@ -184,39 +166,27 @@ export default function SkillsEditor() {
   };
 
   const handleButtonClick = (buttonType: 'increase' | 'decrease', skillId: number) => {
-    console.log('🔘 Button clicked:', { buttonType, skillId });
-    
     const buttonKey = `${buttonType}-${skillId}`;
     setClickedButton(buttonKey);
     setTimeout(() => setClickedButton(null), 150);
-    
+
     const skill = skills.find(s => s.id === skillId);
-    if (!skill) {
-      console.log('❌ Skill not found in handleButtonClick');
-      return;
-    }
-    
-    console.log('📋 Current skill data:', { name: skill.name, currentRanks: skill.current_ranks });
-    
+    if (!skill) return;
+
     if (buttonType === 'increase') {
-      console.log('⬆️ Increasing skill rank');
       handleUpdateSkillRank(skillId, skill.current_ranks + 1);
     } else {
-      console.log('⬇️ Decreasing skill rank');
       handleUpdateSkillRank(skillId, skill.current_ranks - 1);
     }
   };
 
   const resetAllSkills = async () => {
     if (!character?.id) return;
-    
+
     setIsUpdating(true);
-    
+
     try {
-      const _response = await CharacterAPI.resetSkills(character.id); // eslint-disable-line @typescript-eslint/no-unused-vars
-      
-      // After reset, refresh the data to get new state
-      // Note: Reset endpoint doesn't return skill_summary, so we need to refetch
+      await CharacterAPI.resetSkills(character.id);
       await skillsSubsystem.load();
     } catch (err) {
       console.error('Error resetting skills:', err);
@@ -257,25 +227,22 @@ export default function SkillsEditor() {
       return sortDirection === 'asc' ? compareValue : -compareValue;
     });
 
-  // Re-measure column widths when data changes
   useEffect(() => {
     const measureColumnWidths = () => {
       if (headerRef.current && cardRef.current) {
         const ths = headerRef.current.querySelectorAll('th');
         const widths = Array.from(ths).map(th => th.getBoundingClientRect().width);
         setColumnWidths(widths);
-        
-        // Measure card dimensions instead of table
+
         const cardRect = cardRef.current.getBoundingClientRect();
         setTableWidth(cardRect.width);
         setTableLeft(cardRect.left);
       }
     };
-    
+
     setTimeout(measureColumnWidths, 0);
   }, [sortedAndFilteredSkills]);
 
-  // Fixed header component
   const FixedHeader = () => {
     if (!showFixedHeader || typeof document === 'undefined') return null;
     
@@ -354,7 +321,6 @@ export default function SkillsEditor() {
     );
   };
 
-  // Early return for loading/error states
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -381,7 +347,6 @@ export default function SkillsEditor() {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent padding="p-3" className="text-center">
@@ -409,7 +374,6 @@ export default function SkillsEditor() {
         </Card>
       </div>
 
-      {/* Header Controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Input
@@ -432,10 +396,8 @@ export default function SkillsEditor() {
         </div>
       </div>
 
-      {/* Fixed Header Portal */}
       <FixedHeader />
 
-      {/* Skills Table */}
       <Card ref={cardRef}>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -566,15 +528,13 @@ export default function SkillsEditor() {
                       </div>
                     </td>
                     <td className="p-3 text-center text-sm text-[rgb(var(--color-text-secondary))]">
-                      {/* Display the ability modifier component - approximate as total minus ranks */}
                       {formatModifier(skill.total_modifier - skill.current_ranks)}
                     </td>
                     <td className="p-3 text-center text-sm text-[rgb(var(--color-text-secondary))]">
-                      <span 
+                      <span
                         className="cursor-help"
                         title={t('skills.miscModifiers')}
                       >
-                        {/* Misc modifiers are included in total_modifier but not shown separately */}
                         {display('-')}
                       </span>
                     </td>

@@ -37,20 +37,16 @@ interface ClassAndLevelsEditorProps {
   onLevelGains?: () => void;
 }
 
-export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: ClassAndLevelsEditorProps) {
+export default function ClassAndLevelsEditor({ onNavigate: _onNavigate, onLevelGains }: ClassAndLevelsEditorProps) {
   const t = useTranslations();
   const { character, isLoading, error } = useCharacterContext();
   
-  // Use the classes subsystem hook
   const classesSubsystem = useSubsystem('classes');
-  
-  // Use the classes level hook with subsystem data
   const {
     classes,
     totalLevel,
     categorizedClasses,
-    findClassInfoById,
-    isUpdating,
+
     adjustClassLevel,
     changeClass,
     addClass,
@@ -82,8 +78,8 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
       if (!classesSubsystem.data && !classesSubsystem.isLoading) {
         try {
           await classesSubsystem.load();
-        } catch (err) {
-          console.error('Failed to load character classes:', err);
+        } catch {
+          // Error handled by subsystem
         }
       }
     };
@@ -98,15 +94,13 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
     }
   }, [character?.id, xpProgress, fetchXPProgress]);
 
-  // Update XP input when xpProgress changes
-  // Update XP input when xpProgress changes
+
   useEffect(() => {
     if (xpProgress) {
       setXpInput(xpProgress.current_xp.toString());
     }
   }, [xpProgress]);
 
-  // Removed calculateGains - relying on backend response
 
   const handleAdjustClassLevel = async (index: number, delta: number) => {
     if (!classes[index]) return;
@@ -119,25 +113,14 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
     });
 
     try {
-      // Cast response to any to access dynamic backend data
-      const response = await adjustClassLevel(classes[index].id, delta) as any;
-      console.log('Level up response:', response);
-      
-      // If we leveled up successfully, show the helper using backend data
-      // Structure is response.level_changes.gains
+      const response = await adjustClassLevel(classes[index].id, delta) as { level_changes?: { gains?: unknown } };
       const gains = response?.level_changes?.gains;
       
-      if (delta > 0 && gains) {
-        console.log('Level up gains found:', gains);
-        
-        if (onLevelGains) {
-          onLevelGains();
-        }
-      } else {
-        console.warn('Level up successful but no gains returned', response);
+      if (delta > 0 && gains && onLevelGains) {
+        onLevelGains();
       }
-    } catch (err) {
-      console.error('Failed to adjust class level:', err);
+    } catch {
+      // Error handled by hook
     } finally {
       setProcessingActions(prev => {
         const next = new Set(prev);
@@ -160,8 +143,8 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
     try {
       await changeClass(classes[index].id, newClassInfo);
       setExpandedClassDropdown(null);
-    } catch (err) {
-      console.error('Failed to change class:', err);
+    } catch {
+      // Error handled by hook
     } finally {
       setProcessingActions(prev => {
         const next = new Set(prev);
@@ -181,32 +164,20 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
     });
 
     try {
-      // Check if we're changing an existing class (expandedClassDropdown is set)
       if (expandedClassDropdown !== null) {
         await handleChangeClass(expandedClassDropdown, classInfo);
         setShowClassSelector(false);
         return;
       }
 
-      // Adding a new class
-      // Cast response to any to access dynamic backend data
-      const response = await addClass(classInfo) as any;
-      console.log('Add class response:', response);
-      
-      // Use backend gains - for add_class it's in response.changes.gains
+      const response = await addClass(classInfo) as { changes?: { gains?: unknown } };
       const gains = response?.changes?.gains;
       
-      if (gains) {
-        console.log('Add class gains found:', gains);
-        
-        if (onLevelGains) {
-          onLevelGains();
-        }
-      } else {
-        console.warn('Add class successful but no gains returned', response);
+      if (gains && onLevelGains) {
+        onLevelGains();
       }
-    } catch (err) {
-      console.error('Failed to handle class selection:', err);
+    } catch {
+      // Error handled by hook
     } finally {
       setProcessingActions(prev => {
         const next = new Set(prev);
@@ -230,8 +201,8 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
 
     try {
       await removeClass(classes[index].id);
-    } catch (err) {
-      console.error('Failed to remove class:', err);
+    } catch {
+      // Error handled by hook
     } finally {
       setProcessingActions(prev => {
         const next = new Set(prev);
@@ -263,8 +234,8 @@ export default function ClassAndLevelsEditor({ onNavigate, onLevelGains }: Class
         await setExperience(newXP);
         // fetchXPProgress called by hook automatically
       }
-    } catch (err) {
-      console.error('Failed to set XP:', err);
+    } catch {
+      // Error setting XP
       // Revert on error
       if (xpProgress) {
         setXpInput(xpProgress.current_xp.toString());

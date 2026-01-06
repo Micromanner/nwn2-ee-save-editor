@@ -2,7 +2,6 @@
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { VariableSizeList } from 'react-window';
-// Note: This component is deprecated in favor of GameDataList
 
 interface FeatInfo {
   id: number;
@@ -43,16 +42,15 @@ interface VirtualizedFeatGridProps {
   onValidate?: (featId: number) => void;
 }
 
-// Hook to detect screen size and calculate columns
 function useGridColumns() {
   const [columns, setColumns] = useState(1);
 
   useEffect(() => {
     const updateColumns = () => {
       const width = window.innerWidth;
-      if (width >= 1280) { // xl breakpoint
+      if (width >= 1280) {
         setColumns(3);
-      } else if (width >= 1024) { // lg breakpoint  
+      } else if (width >= 1024) {
         setColumns(2);
       } else {
         setColumns(1);
@@ -67,7 +65,6 @@ function useGridColumns() {
   return columns;
 }
 
-// Group feats into rows based on column count
 function useGridRows(feats: FeatInfo[], columns: number) {
   return useMemo(() => {
     const rows: FeatInfo[][] = [];
@@ -78,7 +75,6 @@ function useGridRows(feats: FeatInfo[], columns: number) {
   }, [feats, columns]);
 }
 
-// Row component for virtualized list
 interface RowProps {
   index: number;
   style: React.CSSProperties;
@@ -102,7 +98,6 @@ interface RowProps {
 
 const Row = ({ index, style, data }: RowProps) => {
   const { rows, columns } = data;
-  // Removed unused destructured properties: isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate
   const rowFeats = rows[index];
 
   if (!rowFeats) return null;
@@ -116,11 +111,9 @@ const Row = ({ index, style, data }: RowProps) => {
       }`}>
         {rowFeats.map((feat, colIndex) => (
           <div key={`${feat.id}-${index}-${colIndex}`} className="text-muted text-sm p-2 border rounded">
-            {/* Deprecated virtualized grid - use GameDataList instead */}
             {feat.label}
           </div>
         ))}
-        {/* Fill empty cells in partial rows */}
         {Array.from({ length: columns - rowFeats.length }).map((_, emptyIndex) => (
           <div key={`empty-${index}-${emptyIndex}`} />
         ))}
@@ -143,9 +136,8 @@ export default function VirtualizedFeatGrid({
   const columns = useGridColumns();
   const rows = useGridRows(feats, columns);
 
-  // Calculate row height - approximately 120px per row based on FeatCard size
   const getItemSize = useCallback(() => {
-    return 120 + 12; // Card height + gap
+    return 132;
   }, []);
 
   const itemData = useMemo(() => ({
@@ -171,7 +163,7 @@ export default function VirtualizedFeatGrid({
       itemCount={rows.length}
       itemSize={getItemSize}
       itemData={itemData}
-      overscanCount={2} // Render 2 extra rows above/below viewport
+      overscanCount={2}
       className="virtualized-grid"
     >
       {Row}

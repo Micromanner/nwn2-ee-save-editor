@@ -62,6 +62,10 @@ class CharacterSummary(BaseModel):
     deity: Optional[str] = None
     biography: Optional[str] = None
 
+    # Formatted labels (moved from frontend)
+    difficulty_label: Optional[str] = None
+    language_label: Optional[str] = None
+
 
 class ManagerStatus(BaseModel):
     """Status of an individual manager."""

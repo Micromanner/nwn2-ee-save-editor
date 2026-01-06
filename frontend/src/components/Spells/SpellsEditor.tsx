@@ -33,7 +33,7 @@ export default function SpellsEditor() {
   const [selectedLevels, setSelectedLevels] = useState<Set<number>>(new Set());
 
   const [availableSpells, setAvailableSpells] = useState<SpellInfo[]>([]);
-  const [availableSpellsLoading, setAvailableSpellsLoading] = useState(false);
+  const [, setAvailableSpellsLoading] = useState(false);
   const [availableSpellsError, setAvailableSpellsError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasNext, setHasNext] = useState(false);
@@ -98,7 +98,7 @@ export default function SpellsEditor() {
     };
 
     loadAvailableSpells();
-  }, [character?.id, activeTab, currentPage, SPELLS_PER_PAGE, selectedClasses, selectedSchools, selectedLevels, searchTerm]);
+  }, [character?.id, activeTab, currentPage, SPELLS_PER_PAGE, selectedClasses, selectedSchools, selectedLevels, searchTerm, setTotalSpells]);
 
   const casterClasses = useMemo(() => {
     if (!spellsData?.spellcasting_classes) return [];
@@ -128,7 +128,7 @@ export default function SpellsEditor() {
     }));
   }, [spellsData]);
 
-  // Known spells - what the character CAN cast (from known_spells API)
+  /* Known Spells */
   const allMySpells = useMemo((): SpellInfo[] => {
     if (!spellsData?.known_spells) return [];
 
@@ -145,7 +145,7 @@ export default function SpellsEditor() {
     })) as SpellInfo[];
   }, [spellsData?.known_spells]);
 
-  // Prepared spells - what's in slots TODAY (grouped by spell to show count)
+  /* Prepared Spells */
   const preparedSpells = useMemo((): SpellInfo[] => {
     if (!spellsData?.memorized_spells) return [];
 
@@ -159,17 +159,17 @@ export default function SpellsEditor() {
         existing.count++;
       } else {
         spellMap.set(key, {
-          spell: {
-            id: ms.spell_id,
-            name: ms.name,
-            level: ms.level,
-            icon: ms.icon,
-            school_name: ms.school_name,
-            description: ms.description,
-            class_id: ms.class_id,
-            available_classes: [],
-          },
-          count: 1,
+            spell: {
+                id: ms.spell_id,
+                name: ms.name,
+                level: ms.level,
+                icon: ms.icon,
+                school_name: ms.school_name,
+                description: ms.description,
+                class_id: ms.class_id,
+                available_classes: [],
+            },
+            count: 1,
         });
       }
     }
@@ -180,24 +180,22 @@ export default function SpellsEditor() {
     }));
   }, [spellsData?.memorized_spells]);
 
-  const ownedSpellIds = useMemo(() => {
-    return new Set(allMySpells.map(s => s.id));
-  }, [allMySpells]);
+  const ownedSpellIds = useMemo(() => new Set(allMySpells.map(s => s.id)), [allMySpells]);
 
   const filterAndSortSpells = useCallback((spells: SpellInfo[]) => {
     let filtered = [...spells];
 
     if (selectedClasses.size > 0) {
       const classIds = new Set(Array.from(selectedClasses).map(c => Number(c)));
-      filtered = filtered.filter(spell => {
-        return spell.class_id !== undefined && classIds.has(spell.class_id);
-      });
+      filtered = filtered.filter(spell => 
+        spell.class_id !== undefined && classIds.has(spell.class_id)
+      );
     }
 
     if (selectedSchools.size > 0) {
-      filtered = filtered.filter(spell => {
-        return spell.school_name && selectedSchools.has(spell.school_name);
-      });
+      filtered = filtered.filter(spell => 
+        spell.school_name && selectedSchools.has(spell.school_name)
+      );
     }
 
     if (selectedLevels.size > 0) {
@@ -206,14 +204,10 @@ export default function SpellsEditor() {
 
     filtered.sort((a, b) => {
       switch (sortBy) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'level':
-          return a.level - b.level;
-        case 'school':
-          return (a.school_name || '').localeCompare(b.school_name || '');
-        default:
-          return 0;
+        case 'name': return a.name.localeCompare(b.name);
+        case 'level': return a.level - b.level;
+        case 'school': return (a.school_name || '').localeCompare(b.school_name || '');
+        default: return 0;
       }
     });
 
@@ -254,7 +248,6 @@ export default function SpellsEditor() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to learn spell';
       showToast(errorMessage, 'error');
-      console.error('Failed to learn spell:', error);
     }
   }, [character?.id, spells, invalidateSubsystems, showToast]);
 
@@ -269,7 +262,6 @@ export default function SpellsEditor() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to remove spell';
       showToast(errorMessage, 'error');
-      console.error('Failed to remove spell:', error);
     }
   }, [character?.id, spells, invalidateSubsystems, showToast]);
 

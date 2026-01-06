@@ -8,6 +8,7 @@ import DynamicAPI from '@/lib/utils/dynamicApi';
 export interface AbilitiesData {
   abilities?: Record<string, number>;
   effective_attributes?: Record<string, number>;
+  attribute_modifiers?: Record<string, number>;
   derived_stats?: {
     hit_points?: {
       current?: number;
@@ -188,21 +189,6 @@ const SUBSYSTEM_CONFIG: Record<SubsystemType, { endpoint: string }> = {
   classes: { endpoint: 'classes/state' },
 };
 
-// Subsystem dependency map - defines which subsystems need refresh when another updates
-// Used by hooks to trigger silent refresh of dependent subsystems after updates
-// Example: When inventory changes (equip/unequip), refresh abilityScores, combat, saves, skills
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const SUBSYSTEM_DEPENDENCIES: Record<SubsystemType, SubsystemType[]> = {
-  abilityScores: ['abilityScores', 'combat', 'saves', 'skills'], // Self + dependents for AC/stats refresh
-  inventory: ['abilityScores', 'combat', 'saves', 'skills'], // Equipment affects stats, AC, saves, skills
-  classes: ['abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells'], // Class/level affects everything
-  combat: [],
-  saves: [],
-  skills: [],
-  feats: ['combat'], // Feats affect BAB, AC, saves
-  spells: [],
-};
-
 // Subsystem type mappings
 interface SubsystemTypeMap {
   feats: FeatsData;
@@ -334,15 +320,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     options: { force?: boolean; silent?: boolean } = {}
   ): Promise<unknown> => {
     if (!characterId) {
-      console.warn(`Cannot load ${subsystem}: No character loaded`);
       return null;
     }
 
     const config = SUBSYSTEM_CONFIG[subsystem];
     const { silent = false } = options;
-
-    // Always fetch fresh data - no caching
-    console.log(`Loading fresh ${subsystem} data${silent ? ' (silent)' : ''}`);
 
     // Update loading state (skip if silent)
     if (!silent) {
@@ -458,7 +440,6 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
         await DynamicAPI.fetch(`/session/characters/${characterId}/session/stop`, {
           method: 'DELETE'
         });
-        console.log(`Backend session closed for character ${characterId}`);
       } catch (err) {
         // Log but don't throw - we still want to clear frontend state
         console.warn('Failed to close backend session:', err);
@@ -493,15 +474,12 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }
   }, [characterId, loadMetadataInternal]);
 
-  // Load character
   const loadCharacter = useCallback(async (id: number) => {
     setIsLoading(true);
     setError(null);
-    console.log('CharacterContext - Loading character with ID:', id);
-    
+
     try {
       const data = await CharacterAPI.getCharacterState(id);
-      console.log('CharacterContext - Received character data:', data);
       setCharacter(data);
       setCharacterId(id);
       
@@ -513,7 +491,6 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load character';
       setError(errorMessage);
-      console.error('CharacterContext - Failed to load character:', err);
     } finally {
       setIsLoading(false);
     }
@@ -525,15 +502,13 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
-      // Close any existing backend session first
       if (characterId) {
         try {
           await DynamicAPI.fetch(`/session/characters/${characterId}/session/stop`, {
             method: 'DELETE'
           });
-          console.log(`Closed previous session for character ${characterId} before importing new save`);
-        } catch (err) {
-          console.warn('Failed to close previous backend session:', err);
+        } catch {
+          // Previous session cleanup failed, continue with import
         }
       }
       
@@ -560,35 +535,25 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';
       setError(errorMessage);
-      console.error('Failed to import character:', err);
     } finally {
       setIsLoading(false);
     }
-
   }, [characterId, loadMetadataInternal]);
 
-
-
-  // Refresh all data
   const refreshAll = useCallback(async () => {
     if (!characterId) return;
-    
-    // Reload character
+
     await loadCharacter(characterId);
-    
-    // Reload all subsystems
+
     const loadPromises = Object.keys(SUBSYSTEM_CONFIG).map(subsystem =>
-      loadSubsystem(subsystem as SubsystemType).catch(err => 
-        console.error(`Failed to refresh ${subsystem}:`, err)
-      )
+      loadSubsystem(subsystem as SubsystemType).catch(() => {})
     );
-    
+
     await Promise.all(loadPromises);
   }, [characterId, loadCharacter, loadSubsystem]);
 
-  // partial update without reload
   const updateCharacterPartial = useCallback((data: Partial<CharacterData>) => {
-      setCharacter(prev => prev ? { ...prev, ...data } : null);
+    setCharacter(prev => prev ? { ...prev, ...data } : null);
   }, []);
 
   const value: CharacterContextState = {

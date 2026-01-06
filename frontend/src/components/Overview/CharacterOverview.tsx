@@ -8,7 +8,7 @@ import { CharacterAPI } from '@/services/characterApi';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import CampaignOverview from './CampaignOverview';
-import DeitySelectionModal, { Deity } from './DeitySelectionModal';
+import DeitySelectionModal from './DeitySelectionModal';
 
 interface CharacterOverviewProps {
   onNavigate?: (tab: string) => void;
@@ -61,50 +61,15 @@ function CollapsibleSection({ title, children, defaultOpen = false, badge }: Col
   );
 }
 
-export default function CharacterOverview({ onNavigate: _onNavigate }: CharacterOverviewProps) { // eslint-disable-line @typescript-eslint/no-unused-vars
+export default function CharacterOverview({ onNavigate: _onNavigate }: CharacterOverviewProps) {
   const t = useTranslations();
-  const { character, isLoading, error, refreshAll, updateCharacterPartial } = useCharacterContext();
+  const { character, isLoading, error, refreshAll: _refreshAll, updateCharacterPartial } = useCharacterContext();
   const combat = useSubsystem('combat');
   const skills = useSubsystem('skills');
   const feats = useSubsystem('feats');
   const saves = useSubsystem('saves');
   const abilities = useSubsystem('abilityScores');
   const classes = useSubsystem('classes');
-  
-  console.log('CharacterOverview component rendered/mounted');
-  console.log('Character HP data:', character?.hitPoints, character?.maxHitPoints, character?.current_hit_points, character?.max_hit_points);
-  console.log('Character BAB data:', character?.baseAttackBonus);
-  console.log('Abilities subsystem data:', abilities.data);
-  if (abilities.data) {
-    console.log('Abilities data keys:', Object.keys(abilities.data));
-    console.log('Looking for HP in abilities data...', abilities.data.derived_stats?.hit_points);
-  }
-  console.log('Combat subsystem data:', combat.data);
-  if (combat.data) {
-    console.log('Combat data keys:', Object.keys(combat.data));
-    console.log('Combat BAB data:', combat.data.base_attack_bonus);
-    console.log('Combat BAB type:', typeof combat.data.base_attack_bonus);
-    if (combat.data.base_attack_bonus && typeof combat.data.base_attack_bonus === 'object') {
-      console.log('Combat BAB object keys:', Object.keys(combat.data.base_attack_bonus));
-      console.log('Combat BAB base_attack_bonus:', combat.data.base_attack_bonus.base_attack_bonus);
-    }
-  }
-  console.log('Skills subsystem data:', skills.data);
-  console.log('Feats subsystem data:', feats.data);
-  console.log('Saves subsystem data:', saves.data);
-
-  // Debug: Manual refresh function to test data fetching
-  const _handleManualRefresh = () => { // eslint-disable-line @typescript-eslint/no-unused-vars
-    console.log('Manual refresh triggered');
-    refreshAll();
-  };
-  
-  // Debug: Log character data to see what we're getting
-  useEffect(() => {
-    if (character) {
-      console.log('CharacterOverview - Successfully loaded character:', character.name, 'Level', character.level);
-    }
-  }, [character]);
   
   // Name editing state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -114,27 +79,14 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
   
   // Deity editing state
   const [isDeityModalOpen, setIsDeityModalOpen] = useState(false);
-  const [deity, setDeity] = useState('');
-  const [availableDeities, setAvailableDeities] = useState<Deity[]>([]);
+  const [, setDeity] = useState('');
+
   
   // Biography editing state
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [biography, setBiography] = useState('');
   
-  // Fetch available deities on mount
-  useEffect(() => {
-    const fetchDeities = async () => {
-      if (!character?.id) return;
-      try {
-        const deities = await CharacterAPI.getAvailableDeities(character.id);
-        // Map API Deity to local Deity interface if needed, or trust structural compatibility
-        setAvailableDeities(deities);
-      } catch (error) {
-        console.error('Failed to fetch deities:', error);
-      }
-    };
-    fetchDeities();
-  }, [character?.id]);
+
   
   // Initialize name fields when character changes
   useEffect(() => {
@@ -243,38 +195,14 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
   
   // Load subsystems data only if missing - don't force refresh on every tab switch
   useEffect(() => {
-    console.log('CharacterOverview - Character changed or component mounted, checking data status');
-    console.log('CharacterOverview - Character data:', character);
     if (character) {
-      console.log('CharacterOverview - Checking subsystem data status for character:', character.name || character.id);
-      
       // Only load data if missing, don't force refresh
-      if (!abilities.data && !abilities.isLoading) {
-        console.log('CharacterOverview - Loading abilities data (missing)');
-        abilities.load().catch(err => console.warn('Failed to load abilities data:', err));
-      }
-      if (!combat.data && !combat.isLoading) {
-        console.log('CharacterOverview - Loading combat data (missing)');
-        combat.load().catch(err => console.warn('Failed to load combat data:', err));
-      }
-      if (!skills.data && !skills.isLoading) {
-        console.log('CharacterOverview - Loading skills data (missing)');
-        skills.load().catch(err => console.warn('Failed to load skills data:', err));
-      }
-      if (!feats.data && !feats.isLoading) {
-        console.log('CharacterOverview - Loading feats data (missing)');
-        feats.load().catch(err => console.warn('Failed to load feats data:', err));
-      }
-      if (!saves.data && !saves.isLoading) {
-        console.log('CharacterOverview - Loading saves data (missing)');
-        saves.load().catch(err => console.warn('Failed to load saves data:', err));
-      }
-      if (!classes.data && !classes.isLoading) {
-        console.log('CharacterOverview - Loading classes data (missing)');
-        classes.load().catch(err => console.warn('Failed to load classes data:', err));
-      }
-    } else {
-      console.log('CharacterOverview - No character loaded, skipping data loading');
+      if (!abilities.data && !abilities.isLoading) abilities.load().catch(console.warn);
+      if (!combat.data && !combat.isLoading) combat.load().catch(console.warn);
+      if (!skills.data && !skills.isLoading) skills.load().catch(console.warn);
+      if (!feats.data && !feats.isLoading) feats.load().catch(console.warn);
+      if (!saves.data && !saves.isLoading) saves.load().catch(console.warn);
+      if (!classes.data && !classes.isLoading) classes.load().catch(console.warn);
     }
   }, [character?.id, abilities, combat, skills, feats, saves, classes]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -557,11 +485,11 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
         <CollapsibleSection 
           title={t('navigation.abilityScores')} 
           defaultOpen={true}
-          badge={(abilities.data?.effective_attributes ? formatModifier(Object.values(abilities.data.effective_attributes).reduce((sum, val) => sum + Math.floor((val - 10) / 2), 0)) : character.abilities ? formatModifier(Object.values(character.abilities).reduce((sum, val) => sum + Math.floor((val - 10) / 2), 0)) : '-')}
+          badge={(abilities.data?.effective_attributes ? formatModifier(Object.values(abilities.data.attribute_modifiers || {}).reduce((sum: number, val: number) => sum + val, 0)) : '-')}
         >
           <div className="grid grid-cols-3 md:grid-cols-6 gap-y-6 gap-x-4">
             {(abilities.data?.effective_attributes ? Object.entries(abilities.data.effective_attributes) : character.abilities ? Object.entries(character.abilities) : []).map(([key, value]) => {
-              const modifier = Math.floor((value - 10) / 2);
+              const modifier = abilities.data?.attribute_modifiers?.[key] ?? Math.floor((value - 10) / 2);
               const modifierColor = modifier > 0 ? 'var(--color-success)' : modifier < 0 ? 'var(--color-error)' : 'var(--color-text-muted)';
               return (
                 <div key={key} className="">
@@ -763,7 +691,7 @@ export default function CharacterOverview({ onNavigate: _onNavigate }: Character
         isOpen={isDeityModalOpen}
         onClose={() => setIsDeityModalOpen(false)}
         onSelectDeity={handleSelectDeity}
-        availableDeities={availableDeities}
+        characterId={character?.id || 0}
         currentDeity={character.deity}
       />
     </div>

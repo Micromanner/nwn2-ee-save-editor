@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { gameData, type PagedResponse } from './gamedata';
 
-// Generic hook for loading game data
 export function useGameData<T = unknown>(
   fetcher: () => Promise<T>,
   deps: unknown[] = []
@@ -43,12 +42,10 @@ export function useGameData<T = unknown>(
   return { data, loading, error };
 }
 
-// Specific hooks for common data
 export function useAppearanceData() {
   return useGameData(() => gameData.appearance.getAll());
 }
 
-// Separate hooks for individual appearance data
 export function useAppearanceModels() {
   return useGameData(() => gameData.appearance.get());
 }
@@ -84,7 +81,6 @@ export function useSpells(characterId?: number, filters?: {
   );
 }
 
-// Hook for paginated data with automatic loading
 export function usePaginatedData<T>(
   fetcher: (page: number) => Promise<PagedResponse<T>>
 ) {

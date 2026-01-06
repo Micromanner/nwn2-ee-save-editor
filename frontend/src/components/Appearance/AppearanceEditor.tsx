@@ -85,8 +85,7 @@ export default function AppearanceEditor() {
       case 'tattooColor2':
         setTattooColor2(numValue);
         break;
-    }
-    // TODO: Update character through context
+    };
   };
 
   // Filter appearance data based on search
@@ -146,7 +145,6 @@ export default function AppearanceEditor() {
           </TabsList>
 
           <TabsContent value="body" className="space-y-6">
-            {/* Character Model Search */}
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>{t('appearance.characterModel')}</Label>
@@ -186,7 +184,6 @@ export default function AppearanceEditor() {
                 </ScrollArea>
               </div>
 
-              {/* Body Type */}
               <div className="space-y-2">
                 <Label>{t('appearance.bodyType')}</Label>
                 <div className="flex items-center space-x-4">
@@ -202,7 +199,6 @@ export default function AppearanceEditor() {
                 </div>
               </div>
 
-              {/* Head Variation */}
               <div className="space-y-2">
                 <Label>{t('appearance.headVariation')}</Label>
                 <div className="flex items-center space-x-4">
@@ -218,7 +214,6 @@ export default function AppearanceEditor() {
                 </div>
               </div>
 
-              {/* Hair Style */}
               <div className="space-y-2">
                 <Label>{t('appearance.hairStyle')}</Label>
                 <div className="flex items-center space-x-4">

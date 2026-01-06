@@ -83,9 +83,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const detectedPath = await api.detectNWN2Installation();
       
       if (detectedPath) {
-        // Auto-save the detected path
         await updateGameSettings({ nwn2_installation_path: detectedPath });
-        console.log('Auto-detected and saved NWN2 installation:', detectedPath);
       }
       
       return detectedPath;
@@ -105,13 +103,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, [saveSettings]);
 
-  // Auto-detect game path on first load if not set
   useEffect(() => {
     if (api && !gameSettings.nwn2_installation_path && !isLoading) {
-      console.log('Auto-detecting NWN2 installation on first load...');
-      detectGamePath().catch(err => {
-        console.warn('Auto-detection failed:', err);
-      });
+      detectGamePath().catch(() => {});
     }
   }, [api, gameSettings.nwn2_installation_path, detectGamePath, isLoading]);
 

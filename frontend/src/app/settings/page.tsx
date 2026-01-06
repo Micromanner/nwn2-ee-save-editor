@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/Label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { pathService, PathConfig } from '@/lib/api/paths';
 import { open } from '@tauri-apps/plugin-dialog';
-import { FolderIcon, CheckCircleIcon, XCircleIcon, PlusIcon, TrashIcon, CogIcon, SwatchIcon, LanguageIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
+import { FolderIcon, CheckCircleIcon, XCircleIcon, PlusIcon, TrashIcon, CogIcon, LanguageIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 import ThemeCustomizer from '@/components/Settings/ThemeCustomizer';
 import { useLocale } from '@/providers/LocaleProvider';
 
@@ -48,13 +48,9 @@ export default function SettingsPage() {
     const updated = { ...appSettings, ...newSettings };
     setAppSettings(updated);
     localStorage.setItem('nwn2ee-app-settings', JSON.stringify(updated));
-    
-    // Apply theme changes
     if (newSettings.theme) {
       applyTheme(newSettings.theme);
     }
-    
-    // Apply font size changes
     if (newSettings.fontSize) {
       applyFontSize(newSettings.fontSize);
     }

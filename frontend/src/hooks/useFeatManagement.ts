@@ -16,41 +16,27 @@ interface UseFeatManagementOptions {
 }
 
 interface FeatManagementState {
-  // Core data
   featsData: FeatsState | null;
   isLoading: boolean;
   error: string | null;
-  
-  // Category feats
   categoryFeats: FeatInfo[];
   categoryFeatsLoading: boolean;
   categoryFeatsError: string | null;
-  
-  // Validation
   validationCache: ValidationCache;
   validatingFeatId: number | null;
-  
-  // Selected feat details
   selectedFeat: FeatInfo | null;
   featDetails: FeatInfo | null;
   loadingDetails: boolean;
 }
 
 interface FeatManagementActions {
-  // Loading
   loadFeats: (force?: boolean) => Promise<void>;
   loadCategoryFeats: (category: string, subcategory?: string | null) => Promise<void>;
   loadFeatDetails: (feat: FeatInfo) => Promise<void>;
-  
-  // Validation
   validateFeat: (featId: number) => Promise<ValidationState | null>;
   clearValidationCache: () => void;
-  
-  // Management
   addFeat: (featId: number) => Promise<void>;
   removeFeat: (featId: number) => Promise<void>;
-  
-  // Selection
   selectFeat: (feat: FeatInfo | null) => void;
   clearSelection: () => void;
 }
@@ -68,39 +54,30 @@ export function useFeatManagement(
   const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems } = useCharacterContext();
   const feats = useSubsystem('feats');
   
-  // State for category-based feat loading
   const [categoryFeats, setCategoryFeats] = useState<FeatInfo[]>([]);
   const [categoryFeatsLoading, setCategoryFeatsLoading] = useState(false);
   const [categoryFeatsError, setCategoryFeatsError] = useState<string | null>(null);
-  
-  // State for on-demand feat validation
   const [validationCache, setValidationCache] = useState<ValidationCache>({});
   const [validatingFeatId, setValidatingFeatId] = useState<number | null>(null);
-  
-  // State for feat details
   const [selectedFeat, setSelectedFeat] = useState<FeatInfo | null>(null);
   const [featDetails, setFeatDetails] = useState<FeatInfo | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   
-  // Get feats data from subsystem
   const featsData = feats.data as FeatsState | null;
   const isLoading = characterLoading || feats.isLoading;
   const error = characterError || feats.error;
 
-  // Auto-load feats data if enabled
   useEffect(() => {
     if (autoLoadFeats && character && !feats.data && !feats.isLoading) {
       feats.load();
     }
   }, [autoLoadFeats, character, feats]);
 
-  // Load feats data
   const loadFeats = useCallback(async (force = false) => {
     if (!character) return;
     await feats.load({ force });
   }, [character, feats]);
 
-  // Load category-specific feats
   const loadCategoryFeats = useCallback(async (
     category: string, 
     subcategory?: string | null
@@ -118,21 +95,19 @@ export function useFeatManagement(
         category,
         subcategory: subcategory || undefined,
         page: 1,
-        limit: 500 // Load more since search is client-side
+        limit: 500
       });
       
       setCategoryFeats(response.feats);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load category feats';
       setCategoryFeatsError(errorMessage);
-      console.error('Failed to load category feats:', error);
       setCategoryFeats([]);
     } finally {
       setCategoryFeatsLoading(false);
     }
   }, [character?.id]);
 
-  // Load feat details
   const loadFeatDetails = useCallback(async (feat: FeatInfo) => {
     if (!character?.id) return;
     
@@ -142,104 +117,81 @@ export function useFeatManagement(
     try {
       const details = await CharacterAPI.getFeatDetails(character.id, feat.id);
       setFeatDetails(details);
-    } catch (error) {
-      console.error('Failed to load feat details:', error);
+    } catch {
       setFeatDetails(null);
     } finally {
       setLoadingDetails(false);
     }
   }, [character?.id]);
 
-  // Validate a feat (can the character take it?)
   const validateFeat = useCallback(async (featId: number): Promise<ValidationState | null> => {
     if (!character?.id || !enableValidation) return null;
     
-    // Check cache first
     if (validationCache[featId]) {
       return validationCache[featId];
     }
     
-    // Mark as validating
     setValidatingFeatId(featId);
     
     try {
-      // This would be a real API call
-      // For now, mock the validation
       const validation: ValidationState = {
-        can_take: Math.random() > 0.5, // Mock: 50% chance
+        can_take: Math.random() > 0.5,
         reason: 'Prerequisites not met',
         has_feat: false,
         missing_requirements: ['Level 5 required', 'BAB +3 required']
       };
       
-      // In real implementation:
-      // const validation = await CharacterAPI.validateFeat(character.id, featId);
-      
-      // Cache the result
       setValidationCache(prev => ({
         ...prev,
         [featId]: validation
       }));
       
       return validation;
-    } catch (error) {
-      console.error('Failed to validate feat:', error);
+    } catch {
       return null;
     } finally {
       setValidatingFeatId(null);
     }
   }, [character?.id, enableValidation, validationCache]);
 
-  // Clear validation cache
   const clearValidationCache = useCallback(() => {
     setValidationCache({});
   }, []);
 
-  // Add a feat to the character
   const addFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
 
     try {
       await CharacterAPI.addFeat(character.id, featId);
-      // Refresh current feats
       await feats.load({ force: true });
-      // Clear validation cache for this feat
       setValidationCache(prev => {
         const newCache = { ...prev };
         delete newCache[featId];
         return newCache;
       });
-      // Silently refresh combat subsystem (feats may affect BAB, AC, saves, etc.)
       await invalidateSubsystems(['combat']);
     } catch (error) {
-      console.error('Failed to add feat:', error);
       throw error;
     }
   }, [character?.id, feats, invalidateSubsystems]);
 
-  // Remove a feat from the character
   const removeFeat = useCallback(async (featId: number) => {
     if (!character?.id) return;
 
     try {
       await CharacterAPI.removeFeat(character.id, featId);
-      // Refresh current feats
       await feats.load({ force: true });
-      // Clear validation cache for this feat
       setValidationCache(prev => {
         const newCache = { ...prev };
         delete newCache[featId];
         return newCache;
       });
-      // Silently refresh combat subsystem (feats may affect BAB, AC, saves, etc.)
       await invalidateSubsystems(['combat']);
     } catch (error) {
-      console.error('Failed to remove feat:', error);
       throw error;
     }
   }, [character?.id, feats, invalidateSubsystems]);
 
-  // Select a feat
   const selectFeat = useCallback((feat: FeatInfo | null) => {
     setSelectedFeat(feat);
     if (!feat) {
@@ -247,14 +199,12 @@ export function useFeatManagement(
     }
   }, []);
 
-  // Clear selection
   const clearSelection = useCallback(() => {
     setSelectedFeat(null);
     setFeatDetails(null);
   }, []);
 
   return {
-    // State
     featsData,
     isLoading,
     error,
@@ -266,8 +216,6 @@ export function useFeatManagement(
     selectedFeat,
     featDetails,
     loadingDetails,
-    
-    // Actions
     loadFeats,
     loadCategoryFeats,
     loadFeatDetails,
@@ -280,7 +228,6 @@ export function useFeatManagement(
   };
 }
 
-// Hook for managing feat categories and navigation
 interface UseFeatNavigationReturn {
   selectedCategory: string | null;
   selectedSubcategory: string | null;

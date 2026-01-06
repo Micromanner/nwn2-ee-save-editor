@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import { FixedSizeList } from 'react-window';
-// Note: This component is deprecated in favor of GameDataList
 
 interface FeatInfo {
   id: number;
@@ -43,7 +42,6 @@ interface VirtualizedFeatListProps {
   onValidate?: (featId: number) => void;
 }
 
-// Row component for virtualized list
 interface RowProps {
   index: number;
   style: React.CSSProperties;
@@ -66,16 +64,14 @@ interface RowProps {
 
 const Row = ({ index, style, data }: RowProps) => {
   const { feats } = data;
-  // Removed unused destructured properties: isActive, onDetails, onAdd, onRemove, validationCache, validatingFeatId, onValidate
   const feat = feats[index];
 
   if (!feat) return null;
 
   return (
     <div style={style} className="px-4">
-      {/* VirtualizedFeatList is deprecated - use GameDataList instead */}
       <div className="text-muted text-sm">
-        Virtualized list item for feat: {feat.label}
+        {feat.label}
       </div>
     </div>
   );
@@ -112,9 +108,9 @@ export default function VirtualizedFeatList({
       height={height}
       width="100%"
       itemCount={feats.length}
-      itemSize={48} // Fixed height for list items (matches current list view)
+      itemSize={48}
       itemData={itemData}
-      overscanCount={5} // Render 5 extra items above/below viewport  
+      overscanCount={5}
       className="virtualized-list"
     >
       {Row}

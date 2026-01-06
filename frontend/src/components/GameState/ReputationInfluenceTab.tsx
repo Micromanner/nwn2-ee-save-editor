@@ -46,8 +46,7 @@ export default function ReputationInfluenceTab() {
           companionInfluence[id] = data.influence;
         });
         setLocalCompanionInfluence(companionInfluence);
-      } catch (err) {
-        console.error('Failed to load companion influence:', err);
+      } catch {
       }
 
       setIsLoading(false);
@@ -118,8 +117,7 @@ export default function ReputationInfluenceTab() {
       try {
         const companionResponse = await gameStateAPI.getCompanionInfluence(characterId);
         setCompanions(companionResponse.companions);
-      } catch (err) {
-        console.error('Failed to refresh companion data:', err);
+      } catch {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.loadingFailed'));

@@ -25,7 +25,6 @@ const loadMessages = async (locale: string) => {
     return messages.default;
   } catch (error) {
     console.error(`Failed to load messages for locale: ${locale}`, error);
-    // Fallback to English
     const messages = await import('../../i18n/en.json');
     return messages.default;
   }
@@ -37,7 +36,6 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load saved locale from localStorage
     const savedLocale = localStorage.getItem('locale') || 'en';
     setLocaleState(savedLocale);
     

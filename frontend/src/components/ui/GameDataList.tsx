@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { display } from '@/utils/dataHelpers';
 
 export interface GameDataItem {
   id: number;
@@ -83,7 +82,6 @@ export default function GameDataList<T extends GameDataItem>({
   showHeader = false,
   headerLabels = {},
   renderMain,
-  renderDetails: _renderDetails, // eslint-disable-line @typescript-eslint/no-unused-vars
   renderTags,
   renderAction,
   renderLevel,
@@ -108,12 +106,8 @@ export default function GameDataList<T extends GameDataItem>({
     setExpandedGroups(newExpanded);
   };
 
-  // Default renderers
   const defaultRenderMain = (item: T) => (
     <div className="game-data-col-main">
-      {/* <div className="game-data-icon-wrapper">
-        <NWN2Icon icon={item.icon || ''} iconUrl={item.icon_url} size="sm" />
-      </div> */}
       <div className="game-data-content">
         <h4 className="game-data-title">
           {item.name}
@@ -124,16 +118,6 @@ export default function GameDataList<T extends GameDataItem>({
           </div>
         )}
       </div>
-    </div>
-  );
-
-  const _defaultRenderDetails = (item: T) => ( // eslint-disable-line @typescript-eslint/no-unused-vars
-    <div className="game-data-col-details">
-      {item.description && (
-        <p className="game-data-description">
-          {display(item.description)}
-        </p>
-      )}
     </div>
   );
 
@@ -151,50 +135,43 @@ export default function GameDataList<T extends GameDataItem>({
 
   const renderHeader = () => {
     if (!showHeader) return null;
-    
+
     return (
       <div className="game-data-header">
-        {/* Main Column Header */}
         <div className="game-data-header-cell">
           {headerLabels.main || 'Name'}
         </div>
-        
-        {/* Level Column Header */}
+
         {renderLevel && (
           <div className="game-data-header-cell game-data-col-level">
             {headerLabels.level || 'Level'}
           </div>
         )}
-        
-        {/* Range Column Header */}
+
         {renderRange && (
           <div className="game-data-header-cell game-data-col-range">
             {headerLabels.range || 'Range'}
           </div>
         )}
-        
-        {/* Duration Column Header */}
+
         {renderDuration && (
           <div className="game-data-header-cell game-data-col-duration">
             {headerLabels.duration || 'Duration'}
           </div>
         )}
-        
-        {/* Save Column Header */}
+
         {renderSave && (
           <div className="game-data-header-cell game-data-col-save">
             {headerLabels.save || 'Save'}
           </div>
         )}
-        
-        {/* Tags Column Header */}
+
         {renderTags && (
           <div className="game-data-header-cell">
             {headerLabels.tags || 'Tags'}
           </div>
         )}
-        
-        {/* Action Column Header */}
+
         {onItemAction && (
           <div className="game-data-header-cell">
             {headerLabels.action || 'Action'}
@@ -207,32 +184,17 @@ export default function GameDataList<T extends GameDataItem>({
   const renderItem = (item: T, index: number) => {
     const itemClassName = getItemClassName ? getItemClassName(item) : '';
     const baseClassName = `game-data-list-item ${item.isActive ? 'active' : ''} ${itemClassName}`.trim();
-    
-    // Create a more unique key using multiple properties
     const uniqueKey = `${item.id}-${item.name?.replace(/\s+/g, '-')}-${index}`;
 
     return (
       <div key={uniqueKey} className={baseClassName}>
         <div className="game-data-grid">
-          {/* Main Column */}
           {renderMain ? renderMain(item) : defaultRenderMain(item)}
-          
-          {/* Level Column */}
           {renderLevel && renderLevel(item)}
-          
-          {/* Range Column */}
           {renderRange && renderRange(item)}
-          
-          {/* Duration Column */}
           {renderDuration && renderDuration(item)}
-          
-          {/* Save Column */}
           {renderSave && renderSave(item)}
-          
-          {/* Tags/Classes Column */}
           {renderTags && renderTags(item)}
-          
-          {/* Action Column */}
           {onItemAction && (renderAction ? renderAction(item) : defaultRenderAction(item))}
         </div>
       </div>
@@ -265,8 +227,7 @@ export default function GameDataList<T extends GameDataItem>({
     );
   }
 
-  // Group items if groupBy function is provided
-  const groupedItems = groupBy 
+  const groupedItems = groupBy
     ? items.reduce((acc, item) => {
         const group = groupBy(item);
         if (!acc[group]) {
@@ -280,27 +241,23 @@ export default function GameDataList<T extends GameDataItem>({
   return (
     <Card className="flex-1" padding="p-0">
       <ScrollArea className="h-full">
-        {/* Table Header */}
         {renderHeader()}
-        
+
         <div className="p-4">
           <div className="space-y-0">
             {Object.entries(groupedItems)
             .sort(([a], [b]) => {
               const numA = Number(a);
               const numB = Number(b);
-              // Handle special cases (like -1 for unavailable)
               if (numA === -1 && numB !== -1) return 1;
               if (numB === -1 && numA !== -1) return -1;
-              // Numeric sort
               if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-              // String sort
               return String(a).localeCompare(String(b));
             })
             .map(([group, groupItems]) => (
               <div key={group} className="game-data-section">
                 {groupBy && (
-                  <div 
+                  <div
                     className="game-data-level-header"
                     onClick={() => toggleGroup(group)}
                   >
@@ -315,11 +272,10 @@ export default function GameDataList<T extends GameDataItem>({
                     </div>
                   </div>
                 )}
-                
+
                 {(!groupBy || expandedGroups.has(group)) && (
                   <div>
                     {groupItems.map((item, index) => {
-                      // Calculate a global index across all groups for truly unique keys
                       const globalIndex = Object.entries(groupedItems)
                         .slice(0, Object.keys(groupedItems).indexOf(group))
                         .reduce((acc, [, items]) => acc + items.length, 0) + index;

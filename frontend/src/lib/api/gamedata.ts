@@ -1,6 +1,5 @@
 import { apiClient } from './client';
 
-// Response types
 export interface PagedResponse<T> {
   count: number;
   next: string | null;
@@ -17,22 +16,18 @@ export interface GameDataItem {
   [key: string]: unknown;
 }
 
-// Service class for all game data endpoints
 export class GameDataService {
   private readonly basePath = '/gamedata';
 
-  // Simple endpoints that return dictionaries
   private async getDict<T = Record<string, unknown>>(endpoint: string): Promise<T> {
     return apiClient.get<T>(`${this.basePath}/${endpoint}`);
   }
 
-  // Paged endpoints that return results arrays
   private async getPaged<T = unknown>(endpoint: string, page?: number): Promise<PagedResponse<T>> {
     const params = page ? `?page=${page}` : '';
     return apiClient.get<PagedResponse<T>>(`${this.basePath}/${endpoint}${params}`);
   }
 
-  // Appearance endpoints
   appearance = {
     get: () => this.getDict('appearance'),
     getPortraits: () => this.getDict('portraits'),
@@ -45,7 +40,6 @@ export class GameDataService {
     }>('appearance_all'),
   };
 
-  // Character creation endpoints
   races = () => this.getPaged('races');
   subraces = () => this.getPaged('subraces');
   classes = () => this.getPaged('classes');
@@ -54,8 +48,7 @@ export class GameDataService {
   deities = () => this.getPaged('deities');
   domains = () => this.getPaged('domains');
   backgrounds = () => this.getPaged('backgrounds');
-  
-  // Character progression endpoints
+
   feats = async (characterId: number, featType?: number) => {
     const typeParam = featType !== undefined ? `?type=${featType}` : '';
     const response = await apiClient.get<{legitimate_feats: GameDataItem[], total: number}>(`/characters/${characterId}/feats/legitimate${typeParam}`);
@@ -84,7 +77,6 @@ export class GameDataService {
       target_type: string;
     }
     
-    // Build query parameters for server-side filtering
     const params = new URLSearchParams();
     if (filters?.level !== undefined && filters.level !== -1) {
       params.append('level', filters.level.toString());
@@ -103,17 +95,14 @@ export class GameDataService {
     return response.spells;
   };
   abilities = () => this.getPaged('abilities');
-  
-  // Item endpoints
+
   baseItems = () => this.getPaged('base_items');
   itemProperties = () => this.getPaged('item_properties');
-  
-  // Category endpoints
+
   featCategories = () => this.getPaged('feat_categories');
   spellSchools = () => this.getPaged('spell_schools');
   skillCategories = () => this.getPaged('skill_categories');
-  
-  // Companion endpoints
+
   companions = () => this.getPaged('companions');
   packages = () => this.getPaged('packages');
 }

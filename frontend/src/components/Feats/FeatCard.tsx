@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import NWN2Icon from '@/components/ui/NWN2Icon';
-import { display } from '@/utils/dataHelpers';
 import type { FeatInfo, Prerequisite } from './types';
 import { cn } from '@/lib/utils';
 

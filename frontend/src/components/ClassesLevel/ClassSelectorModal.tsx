@@ -110,7 +110,7 @@ export default function ClassSelectorModal({
   const [searchResults, setSearchResults] = useState<ClassInfo[]>([]);
   const [selectedClassType, setSelectedClassType] = useState<'base' | 'prestige' | 'npc'>('base');
 
-  // Handle search
+
   useEffect(() => {
     const performSearch = async () => {
       if (!searchQuery.trim() || !characterId) {
@@ -123,8 +123,7 @@ export default function ClassSelectorModal({
           `/characters/${characterId}/classes/categorized?search=${encodeURIComponent(searchQuery)}`
         );
         setSearchResults(data.search_results);
-      } catch (err) {
-        console.error('Search failed:', err);
+      } catch {
         setSearchResults([]);
       }
     };
@@ -133,7 +132,6 @@ export default function ClassSelectorModal({
     return () => clearTimeout(timeoutId);
   }, [searchQuery, characterId]);
 
-  // Reset search when modal opens/closes
   useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
@@ -141,8 +139,6 @@ export default function ClassSelectorModal({
     }
   }, [isOpen]);
 
-  // TODO: Replace hardcoded focus labels with real data from backend
-  // Backend should provide human-readable focus names and descriptions from 2DA files
   const getFocusLabel = (focus: string) => {
     switch (focus) {
       case 'combat': return '';
@@ -154,14 +150,6 @@ export default function ClassSelectorModal({
     }
   };
 
-  // TODO: Replace frontend calculations with real backend prerequisite validation
-  // Frontend should NOT calculate prerequisites - backend should provide validation results
-  // Backend should check:
-  // - Character alignment vs class alignment restrictions  
-  // - Actual prerequisite requirements from PreReqTable (skills, feats, BAB, saves, etc.)
-  // - Multi-class penalties and restrictions
-  // - Level requirements for prestige classes
-  // - Any custom mod requirements from HAK files
   const checkClassPrerequisites = (classInfo: ClassInfo): MulticlassValidation => {
     const hasClass = currentClasses.some(c => c.name === classInfo.name);
     const atMaxClasses = currentClasses.length >= maxClasses;
@@ -171,7 +159,7 @@ export default function ClassSelectorModal({
     let reason = '';
     let canAdd = true;
     
-    // Check various conditions
+
     if (hasClass) {
       reason = 'Already have this class';
       canAdd = false;
@@ -182,27 +170,24 @@ export default function ClassSelectorModal({
       reason = `Character at maximum level (${maxLevel})`;
       canAdd = false;
     } else if (isPrestige) {
-      // Additional prestige class checks
       if (totalLevel < 6) {
         reason = 'Prestige classes require character level 6+';
         canAdd = false;
       }
-      // TODO: Replace with real prerequisite checking from backend API
-      // Backend should validate: skills, feats, BAB, saves, alignment, etc.
-    }
+      }
     
     return {
       can_add: canAdd,
       reason: canAdd ? undefined : reason,
       requirements_met: {
-        alignment: true, // TODO: Get real alignment validation from backend
-        prerequisites: !isPrestige || totalLevel >= 6, // TODO: Get real prerequisite validation from backend
+        alignment: true,
+        prerequisites: !isPrestige || totalLevel >= 6,
         level_limit: !atMaxLevel
       }
     };
   };
 
-  // Render class card with prerequisite validation
+
   const renderClassCard = (classInfo: ClassInfo) => {
     const validation = checkClassPrerequisites(classInfo);
     
@@ -227,11 +212,6 @@ export default function ClassSelectorModal({
                   </span>
                 )}
               </div>
-              {/* TODO: Display rich class descriptions from backend
-                   Backend has DescriptionParser (backend/character/utils/description_parser.py) that can parse
-                   NWN2's HTML-like class descriptions into structured data (summary, requirements, features, abilities).
-                   Consider adding an expandable description panel or tooltip when hovering/selecting a class.
-              */}
               <div className="text-xs text-[rgb(var(--color-text-muted))] mt-1">
                 {classInfo.primary_ability} • d{classInfo.hit_die} • {formatNumber(classInfo.skill_points)} skills
                 {classInfo.is_spellcaster && ` • ${classInfo.has_arcane ? 'Arcane' : 'Divine'} Caster`}
@@ -243,16 +223,6 @@ export default function ClassSelectorModal({
             </div>
           </div>
           
-          {/* TODO: Replace with real prerequisite validation from backend
-               Backend should provide detailed prerequisite information:
-               - Specific skill requirements (e.g., "Stealth 8+ required")
-               - Required feats (e.g., "Weapon Focus required")
-               - BAB requirements (e.g., "Base Attack Bonus +5 required")
-               - Save requirements (e.g., "Will Save +3 required")
-               - Alignment restrictions with specific allowed alignments
-               - Race restrictions if any
-               - Class level requirements (e.g., "3 levels of Rogue required")
-          */}
           {!validation.can_add && validation.reason && (
             <div className="text-xs text-red-400 mt-2 p-2 bg-red-500/10 rounded border border-red-500/20">
               <div className="flex items-center gap-1">
@@ -263,13 +233,7 @@ export default function ClassSelectorModal({
             </div>
           )}
           
-          {/* TODO: Replace with real prerequisite status from backend
-               Show actual prerequisite checks with specific details:
-               - ✓ Hide in Plain Sight: 15 (character has 20)
-               - ✗ Uncanny Dodge: Required (character missing)
-               - ✓ Sneak Attack: +3d6 (character has +4d6)
-          */}
-          
+
         </CardContent>
       </Card>
     );
@@ -281,7 +245,6 @@ export default function ClassSelectorModal({
     <div className="class-modal-overlay">
       <Card className="class-modal-container">
         <CardContent padding="p-0" className="flex flex-col h-full">
-          {/* Header */}
           <div className="class-modal-header">
             <div className="class-modal-header-row">
               <h3 className="class-modal-title">
@@ -297,7 +260,6 @@ export default function ClassSelectorModal({
               </Button>
             </div>
             
-            {/* Search Bar */}
             <div className="class-modal-search-container">
               <Search className="class-modal-search-icon" />
               <Input
@@ -309,10 +271,9 @@ export default function ClassSelectorModal({
             </div>
           </div>
 
-          {/* Content */}
           <div className="class-modal-content">
             {searchQuery.trim() ? (
-              /* Search Results */
+
               <div className="p-4">
                 <h4 className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-3">
                   {searchResults.length} results for &quot;{searchQuery}&quot;
@@ -322,7 +283,7 @@ export default function ClassSelectorModal({
                 </div>
               </div>
             ) : (
-              /* Categorized View */
+
               <Tabs value={selectedClassType} onValueChange={(value) => setSelectedClassType(value as 'base' | 'prestige' | 'npc')}>
                 <TabsList className="w-full flex bg-transparent p-0 gap-2 px-4 mt-4 mb-0">
                   <TabsTrigger 
@@ -420,7 +381,6 @@ export default function ClassSelectorModal({
             )}
           </div>
 
-          {/* Footer */}
           <div className="class-modal-footer">
             <div className="class-modal-footer-content">
               <span>

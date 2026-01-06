@@ -23,7 +23,7 @@ export default function Dashboard({
   onContinueEditing,
   onCloseSession
 }: DashboardProps) {
-  const t = useTranslations();
+  useTranslations();
   const [appName, setAppName] = useState('NWN2:EE Save Editor');
 
   useEffect(() => {
@@ -32,7 +32,6 @@ export default function Dashboard({
 
   return (
     <div className="flex flex-col h-full bg-[rgb(var(--color-background))] text-[rgb(var(--color-text-primary))] p-8 overflow-y-auto w-full">
-      {/* Header / Logo */}
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-[rgb(var(--color-primary))] to-[rgb(var(--color-primary-600))] bg-clip-text text-transparent mb-2">
           {appName}
@@ -43,8 +42,6 @@ export default function Dashboard({
       </div>
 
       <div className="max-w-6xl mx-auto w-full flex flex-col gap-8">
-        
-        {/* Active Session Card (if character loaded) */}
         {activeCharacter && (
           <div className="w-full animate-in fade-in slide-in-from-top-4 duration-300">
             <div className="bg-[rgb(var(--color-primary)/0.1)] rounded-lg p-6 border border-[rgb(var(--color-primary)/0.3)] shadow-elevation-2 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -81,7 +78,6 @@ export default function Dashboard({
           </div>
         )}
 
-        {/* Quick Actions Row */}
         <div className="w-full">
           <div className="bg-[rgb(var(--color-surface-1))] rounded-lg p-6 shadow-elevation-1 border border-[rgb(var(--color-surface-border))]">
             <h2 className="text-xl font-semibold mb-4 text-[rgb(var(--color-text-primary))]">Quick Actions</h2>
@@ -118,7 +114,6 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Save Selector Column */}
         <div className="w-full space-y-6">
           <div className="bg-[rgb(var(--color-surface-1))] rounded-lg p-6 shadow-elevation-1 border border-[rgb(var(--color-surface-border))] h-full min-h-[660px] flex flex-col">
             <h2 className="text-xl font-semibold mb-4 text-[rgb(var(--color-text-primary))]">Select a Save Game</h2>

@@ -1,42 +1,32 @@
-// Shared type definitions for the Spells system
-
 export interface SpellInfo {
   id: number;
   name: string;
   description?: string;
   icon?: string;
 
-  // Spell properties
   school_id?: number;
   school_name?: string;
   level: number;
 
-  // Casting properties
   cast_time?: string;
   range?: string;
   conjuration_time?: string;
   components?: string;
 
-  // Target information
   target_type?: string;
   available_metamagic?: string;
 
-  // Class availability
   available_classes: string[];
   class_id?: number;
 
-  // Client-side properties for UI state (matching existing SpellList)
   isLearned?: boolean;
   icon_url?: string;
 
-  // Computed properties for compatibility
   school?: string;
   innate_level?: number;
 
-  // UI grouping - number of times this spell is memorized
   memorized_count?: number;
 
-  // Domain spell indicator
   is_domain_spell?: boolean;
 }
 

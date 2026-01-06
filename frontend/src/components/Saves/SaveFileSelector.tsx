@@ -18,7 +18,7 @@ export function SaveFileSelector() {
   const { importCharacter, character, isLoading: characterLoading } = useCharacterContext();
   const { gameSettings } = useSettings();
   
-  console.log('🔧 SaveFileSelector: Tauri context state:', { isAvailable, isLoading, hasApi: !!api });
+
   
   interface ExtendedSaveFile extends SaveFile {
     character?: string;
@@ -28,7 +28,7 @@ export function SaveFileSelector() {
   const [saves, setSaves] = useState<ExtendedSaveFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [autoScanComplete, setAutoScanComplete] = useState(false);
@@ -40,39 +40,25 @@ export function SaveFileSelector() {
   const [backupRefreshKey, setBackupRefreshKey] = useState(0);
 
   const loadAvailableSaves = useCallback(async () => {
-    const startTime = performance.now();
-    console.log('🔧 SaveFileSelector: loadAvailableSaves called');
-    console.log('🔧 SaveFileSelector: API in loadAvailableSaves:', !!api);
-    
     if (!api) {
-      console.log('❌ SaveFileSelector: No API available in loadAvailableSaves');
       return;
     }
     
     setLoading(true);
     setError(null);
     try {
-      console.log('🔧 SaveFileSelector: Calling backend /saves/list...');
-      const apiStart = performance.now();
-      
-      // Call backend API instead of Tauri API
-      const response = await apiClient.get<any>('/saves/list?limit=10'); // limit 10 for "Last 3" + buffer
-      
-      const apiEnd = performance.now();
-      console.log(`✅ SaveFileSelector: API call took ${apiEnd - apiStart}ms`);
+      const response = await apiClient.get<{files: Array<{name: string; path: string; thumbnail?: string; character_name?: string; modified?: string; is_directory: boolean}>}>('/saves/list?limit=10');
       
       if (response && response.files) {
         const mappedSaves: ExtendedSaveFile[] = response.files
-            .filter((f: any) => f.is_directory) 
-            .map((f: any) => ({
+            .filter((f) => f.is_directory) 
+            .map((f) => ({
                 name: f.name,
                 path: f.path,
                 thumbnail: f.thumbnail || '', 
                 character: f.character_name,
                 modified: f.modified ? parseFloat(f.modified) * 1000 : undefined
             }));
-            
-        console.log('✅ SaveFileSelector: Found saves:', mappedSaves);
         setSaves(mappedSaves);
       }
     } catch (err) {
@@ -81,8 +67,6 @@ export function SaveFileSelector() {
       setError(`Failed to find save files. Please check if NWN2 save directory exists. Details: ${errorMessage}`);
     } finally {
       setLoading(false);
-      const endTime = performance.now();
-      console.log(`🔧 SaveFileSelector: Total loadAvailableSaves took ${endTime - startTime}ms`);
     }
   }, [api]);
 
@@ -92,7 +76,6 @@ export function SaveFileSelector() {
 
     try {
       await importCharacter(saveFile.path);
-      console.log('Save imported successfully');
       setError(null);
     } catch (err) {
       console.error('Failed to import save:', err);
@@ -106,7 +89,7 @@ export function SaveFileSelector() {
     }
   }, [importCharacter]);
 
-  const saveCharacter = useCallback(async () => {
+  const _saveCharacter = useCallback(async () => {
     if (!character?.id) {
       setError('No character loaded to save');
       return;
@@ -116,9 +99,7 @@ export function SaveFileSelector() {
     setError(null);
 
     try {
-      // Send sync signal to save current character state
-      const result = await CharacterAPI.saveCharacter(character.id, { sync_current_state: true });
-      console.log('Character saved successfully:', result);
+      await CharacterAPI.saveCharacter(character.id, { sync_current_state: true });
       
       // Show launch dialog after successful save (if enabled in settings)
       if (gameSettings.show_launch_dialog) {
@@ -143,9 +124,7 @@ export function SaveFileSelector() {
     }
 
     try {
-      // Launch the game with stored path preference
       await api.launchNWN2Game(gameSettings.nwn2_installation_path);
-      console.log('Game launched successfully');
       
       // Close the dialog
       setShowLaunchDialog(false);
@@ -169,7 +148,6 @@ export function SaveFileSelector() {
     setError(null);
 
     // If a save is selected, show backups for that specific save
-    // Otherwise, show all backups in the main backups directory
     let backupsPath = '';
 
     if (selectedFile) {
@@ -193,8 +171,6 @@ export function SaveFileSelector() {
         create_pre_restore_backup: true,
         confirm_restore: true
       });
-
-      console.log('Backup restored successfully');
       setShowBackupBrowser(false);
 
       if (selectedFile) {
@@ -223,18 +199,14 @@ export function SaveFileSelector() {
   }, []);
 
   useEffect(() => {
-    console.log('🔧 SaveFileSelector: useEffect triggered:', { isAvailable, hasApi: !!api });
     if (isAvailable && api && !autoScanComplete) {
-      console.log('✅ SaveFileSelector: Auto-scanning for saves on startup...');
       loadAvailableSaves().finally(() => {
         setAutoScanComplete(true);
       });
     }
   }, [isAvailable, api, autoScanComplete, loadAvailableSaves]);
 
-  // Expose backup handler to parent - always available
   useEffect(() => {
-    // Always expose the function, even without a save selected
     (window as Window & { __openBackups?: () => void }).__openBackups = handleOpenBackupsFolder;
 
     return () => {
@@ -332,7 +304,6 @@ export function SaveFileSelector() {
         </div>
       )}
 
-      {/* Browse button */}
       <div className="flex gap-2 mt-4 mb-6">
         <Button
           variant="outline"
@@ -345,7 +316,6 @@ export function SaveFileSelector() {
         </Button>
       </div>
 
-      {/* Auto-detected saves */}
       {loading && !autoScanComplete ? (
         <div className="text-xs text-text-muted">Scanning for saves...</div>
       ) : saves.length > 0 ? (

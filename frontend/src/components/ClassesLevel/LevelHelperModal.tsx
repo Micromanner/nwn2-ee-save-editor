@@ -34,32 +34,40 @@ export default function LevelHelperModal({ isOpen, onClose, className, onNavigat
   })();
 
   const abilityPoints = (() => {
-    const data = abilityScoresSubsystem.data as any;
+    const data = abilityScoresSubsystem.data as { point_summary?: { available?: number } } | null;
     if (!data?.point_summary) return 0;
     return data.point_summary.available ?? 0;
   })();
 
   // Get feat slots from feats subsystem
   const featSlots = (() => {
-    const data = featsSubsystem.data as any;
+    const data = featsSubsystem.data as { point_summary?: { available?: number } } | null;
     if (!data?.point_summary) return 0;
     return data.point_summary.available ?? 0;
   })();
 
   // Get spell slots data
   const spellData = (() => {
-    const data = spellsSubsystem.data as any;
+    interface CasterClass {
+      slots_by_level?: Record<string, number>;
+    }
+    interface SpellSubsystemData {
+      spell_summary?: {
+        caster_classes?: CasterClass[];
+      };
+    }
+    const data = spellsSubsystem.data as SpellSubsystemData | null;
     if (!data?.spell_summary?.caster_classes?.length) return null;
 
     const allSlots: Record<number, number> = {};
     let totalSlots = 0;
 
-    data.spell_summary.caster_classes.forEach((cls: any) => {
+    data.spell_summary.caster_classes.forEach((cls: CasterClass) => {
       if (cls.slots_by_level) {
         Object.entries(cls.slots_by_level).forEach(([level, count]) => {
           const lvl = parseInt(level);
-          allSlots[lvl] = (allSlots[lvl] || 0) + (count as number);
-          totalSlots += count as number;
+          allSlots[lvl] = (allSlots[lvl] || 0) + count;
+          totalSlots += count;
         });
       }
     });

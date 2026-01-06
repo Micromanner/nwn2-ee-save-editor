@@ -369,6 +369,9 @@ class CharacterManager(EventEmitter):
             'age': self.gff.get('Age', 0),
             'subrace': race_manager._get_subrace_name(self.gff.get('Subrace', '')),
             'custom_content_count': len(self.custom_content),
+            # Difficulty/Language now handled by ContentManager if available
+            'difficulty_label': content_manager.get_campaign_info().get('difficulty_label') if content_manager else 'Normal',
+            'language_label': content_manager.get_campaign_info().get('language_label') if content_manager else 'English',
             'background': {},
             'domains': [],
             'deity': content_manager.get_deity() if content_manager else '',
@@ -393,6 +396,7 @@ class CharacterManager(EventEmitter):
             summary.update(campaign_info)
 
         return summary
+
     
     def validate_changes(self, preview: bool = False) -> tuple[bool, List[str]]:
         """Validate all pending changes for corruption prevention only."""

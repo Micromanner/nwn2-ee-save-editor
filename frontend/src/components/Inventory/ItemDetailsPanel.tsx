@@ -5,6 +5,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { formatNumber } from '@/utils/dataHelpers';
+import { getRarityTextColor } from '@/utils/itemHelpers';
 import { Trash2, Edit } from 'lucide-react';
 
 export interface DecodedProperty {
@@ -72,28 +73,15 @@ export default function ItemDetailsPanel({
 }: ItemDetailsPanelProps) {
   const t = useTranslations();
   const [showDebug, setShowDebug] = React.useState(false);
+  const isDev = process.env.NODE_ENV === 'development';
 
   if (!item) {
     return null;
   }
 
-  const getRarityColor = (rarity?: string) => {
-    switch (rarity) {
-      case 'uncommon': return 'text-[rgb(var(--color-success))]';
-      case 'rare': return 'text-[rgb(var(--color-primary))]';
-      case 'epic': return 'text-[rgb(var(--color-secondary))]';
-      case 'legendary': return 'text-[rgb(var(--color-warning))]';
-      default: return 'text-[rgb(var(--color-text-primary))]';
-    }
-  };
-
   return (
     <Card className="min-w-[320px] h-full flex flex-col">
       <CardContent className="p-6 flex flex-col h-full gap-4">
-        {/* Fixed Header Removed, keeping structure consistent */}
-
-
-        {/* Content */}
         <div className="flex-1 min-h-0 space-y-4 overflow-y-auto custom-scrollbar pr-2">
           <div className="text-center">
             <div className="w-[58px] h-[58px] bg-[rgb(var(--color-surface-1))] rounded border border-[rgb(var(--color-surface-border)/0.6)] mx-auto mb-4 overflow-hidden">
@@ -101,7 +89,7 @@ export default function ItemDetailsPanel({
                 {item.name.charAt(0)}
               </div>
             </div>
-            <h4 className={`font-medium ${getRarityColor(item.rarity)}`}>
+            <h4 className={`font-medium ${getRarityTextColor(item.rarity)}`}>
               {item.name}
             </h4>
             {item.rarity && item.rarity !== 'common' && (
@@ -238,14 +226,12 @@ export default function ItemDetailsPanel({
             </div>
           )}
 
-          {/* Debug Panel inside scrollable area or outside? keeping inside for now as it can be long */}
-          {showDebug && (
+          {isDev && showDebug && (
             <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4 mt-4">
               <h5 className="text-sm font-semibold text-[rgb(var(--color-text-primary))] mb-2">
                 Debug Data
               </h5>
               <div className="space-y-3">
-                {/* Computed Values */}
                 <div>
                   <div className="text-xs font-semibold text-[rgb(var(--color-text-secondary))] mb-1">Computed Values:</div>
                   <div className="text-xs bg-[rgb(var(--color-surface-1))] p-2 rounded font-mono">
@@ -255,7 +241,6 @@ export default function ItemDetailsPanel({
                   </div>
                 </div>
 
-                {/* Decoded Properties */}
                 {decodedProperties && decodedProperties.length > 0 && (
                   <div>
                     <div className="text-xs font-semibold text-[rgb(var(--color-text-secondary))] mb-1">
@@ -267,7 +252,6 @@ export default function ItemDetailsPanel({
                   </div>
                 )}
 
-                {/* Raw Backend Data */}
                 {rawData && (
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -287,12 +271,11 @@ export default function ItemDetailsPanel({
               </div>
             </div>
           )}
+
         </div>
 
-        {/* Fixed Footer */}
         <div className="flex-shrink-0 mt-auto">
           <div className="border-t border-[rgb(var(--color-surface-border)/0.4)] pt-4 flex gap-2">
-            {/* Primary Action: Equip/Unequip */}
             {canUnequip && onUnequip && (
               <Button
                 className="flex-1"
@@ -315,7 +298,6 @@ export default function ItemDetailsPanel({
               </Button>
             )}
 
-            {/* Secondary Action: Edit & Destroy */}
             <Button
               variant="outline"
               size="icon"
@@ -336,14 +318,16 @@ export default function ItemDetailsPanel({
             >
               <Trash2 className="w-5 h-5" />
             </Button>
-            
-            <button
-               onClick={() => setShowDebug(!showDebug)}
-               className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded border border-[rgb(var(--color-surface-border))] text-[rgb(var(--color-text-muted))] hover:bg-[rgb(var(--color-surface-2))] hover:text-[rgb(var(--color-text-secondary))] transition-colors ml-2"
-               title="Toggle debug info"
-            >
-               <span className="text-xs font-mono">DBG</span>
-            </button>
+
+            {isDev && (
+              <button
+                onClick={() => setShowDebug(!showDebug)}
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded border border-[rgb(var(--color-surface-border))] text-[rgb(var(--color-text-muted))] hover:bg-[rgb(var(--color-surface-2))] hover:text-[rgb(var(--color-text-secondary))] transition-colors ml-2"
+                title="Toggle debug info"
+              >
+                <span className="text-xs font-mono">DBG</span>
+              </button>
+            )}
           </div>
         </div>
       </CardContent>

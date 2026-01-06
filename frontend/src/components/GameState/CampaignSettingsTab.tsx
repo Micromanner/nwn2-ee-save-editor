@@ -58,7 +58,6 @@ export default function CampaignSettingsTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load campaign settings';
       setError(errorMessage);
-      console.error('Failed to load campaign settings:', err);
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +75,6 @@ export default function CampaignSettingsTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load campaign variables';
       setCampaignError(errorMessage);
-      console.error('Failed to load campaign variables:', err);
     } finally {
       setIsLoadingCampaign(false);
     }
@@ -94,7 +92,6 @@ export default function CampaignSettingsTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load backups';
       setRestoreError(errorMessage);
-      console.error('Failed to load campaign backups:', err);
     } finally {
       setIsLoadingBackups(false);
     }
@@ -119,7 +116,6 @@ export default function CampaignSettingsTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to restore from backup';
       setRestoreError(errorMessage);
-      console.error('Failed to restore campaign:', err);
     } finally {
       setIsRestoring(false);
     }
@@ -165,7 +161,6 @@ export default function CampaignSettingsTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save changes';
       setError(errorMessage);
-      console.error('Failed to save campaign settings:', err);
     } finally {
       setIsSaving(false);
     }
@@ -209,7 +204,6 @@ export default function CampaignSettingsTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save changes';
       setCampaignError(errorMessage);
-      console.error('Failed to save campaign variables:', err);
     } finally {
       setIsSavingCampaign(false);
     }

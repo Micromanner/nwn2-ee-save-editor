@@ -25,7 +25,7 @@ export function useIconPreloader(icons: string[], options: PreloadOptions = {}) 
       }
 
       const img = new Image();
-      const iconUrl = buildIconUrl(iconName, { useEnhanced: true });
+      const iconUrl = buildIconUrl(iconName);
       
       img.onload = () => {
         if (addPreloadedIcon) {
@@ -79,7 +79,7 @@ export function useIconPreloader(icons: string[], options: PreloadOptions = {}) 
       }
     };
 
-    preloadInBatches().catch(console.error);
+    preloadInBatches().catch(() => {});
 
     return () => {
       cancelled = true;

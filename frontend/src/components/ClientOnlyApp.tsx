@@ -1,7 +1,5 @@
 'use client';
 
-console.log('📦 ClientOnlyApp: File loaded/parsed');
-
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTauri } from '@/providers/TauriProvider';
@@ -22,7 +20,7 @@ import CompanionsView from '@/components/Companions/CompanionsView';
 import CharacterBuilder from '@/components/CharacterBuilder';
 import GameStateEditor from '@/components/GameState/GameStateEditor';
 import SettingsPage from '@/app/settings/page';
-import SaveFileSelectorWrapper from '@/components/Saves/SaveFileSelectorWrapper';
+
 import TauriInitializer from '@/components/TauriInitializer';
 import { CharacterProvider, useCharacterContext } from '@/contexts/CharacterContext';
 import { IconCacheProvider } from '@/contexts/IconCacheContext';
@@ -33,7 +31,6 @@ import { Button } from '@/components/ui/Button';
 
 import LevelHelperModal from '@/components/ClassesLevel/LevelHelperModal';
 
-// Inner component that uses the character context
 function AppContent() {
   const t = useTranslations();
   const { isAvailable, isLoading, api } = useTauri();
@@ -41,7 +38,6 @@ function AppContent() {
   const { clearCharacter, characterId, importCharacter, loadCharacter } = useCharacterContext();
 
   const [activeTab, setActiveTab] = useState('overview');
-  // New viewMode state to decouple character presence from UI view
   const [viewMode, setViewMode] = useState<'dashboard' | 'editor'>('dashboard');
 
   const [currentCompanion, setCurrentCompanion] = useState<{
@@ -100,7 +96,6 @@ function AppContent() {
   };
 
   const handleBackToMain = () => {
-    // Clear companion selection to show main character
     setCurrentCompanion(null);
   };
 
@@ -193,11 +188,7 @@ function AppContent() {
       setShowSettings(true);
   };
 
-  // Custom tab change handler that fetches fresh data
   const handleTabChange = async (tabId: string) => {
-    // Intercept settings tab to show the full-page settings overlay
-
-
     setActiveTab(tabId);
     
     // Fetch fresh data for subsystem-related tabs
@@ -205,42 +196,32 @@ function AppContent() {
       try {
         switch (tabId) {
           case 'skills':
-            console.log('Fetching fresh skills data...');
             await loadSubsystem('skills');
             break;
           case 'classes':
-            console.log('Fetching fresh classes data...');
             await loadSubsystem('classes');
             break;
           case 'abilityScores':
-            console.log('Fetching fresh ability scores data...');
             await loadSubsystem('abilityScores');
             break;
           case 'feats':
-            console.log('Fetching fresh feats data...');
             await loadSubsystem('feats');
             break;
           case 'combat':
-            console.log('Fetching fresh combat data...');
             await loadSubsystem('combat');
             break;
           case 'saves':
-            console.log('Fetching fresh saves data...');
             await loadSubsystem('saves');
             break;
           case 'spells':
-            console.log('Fetching fresh spells data...');
             await loadSubsystem('spells');
             break;
           case 'inventory':
-            console.log('Fetching fresh inventory data...');
             await loadSubsystem('inventory');
             break;
           case 'gameState':
-            console.log('Fetching fresh game state data...');
             break;
           case 'overview':
-            console.log('Fetching fresh overview data...');
             await loadSubsystem('abilityScores');
             await loadSubsystem('combat');
             await loadSubsystem('skills');
@@ -248,7 +229,6 @@ function AppContent() {
             await loadSubsystem('saves');
             await loadSubsystem('classes');
             break;
-          // For other tabs like 'appearance', etc., no specific fetch needed
           default:
             break;
         }
@@ -259,10 +239,7 @@ function AppContent() {
   };
 
 
-  // Poll Django initialization status with exponential backoff
   useEffect(() => {
-    console.log('🔍 useEffect: Starting, api=', !!api);
-    console.log('🔍 useEffect: NEXT_PUBLIC_API_URL =', process.env.NEXT_PUBLIC_API_URL);
     if (!api) return;
     
     let timeoutId: NodeJS.Timeout;
@@ -274,8 +251,6 @@ function AppContent() {
     
     const checkInitStatus = async () => {
       try {
-        console.log('🔧 ClientOnlyApp: NEXT_PUBLIC_API_URL =', process.env.NEXT_PUBLIC_API_URL);
-        // Initialize DynamicAPI first to get the dynamic port from Tauri
         await DynamicAPI.initialize();
         const response = await DynamicAPI.fetch('/system/initialization/status/');
         if (!response.ok) return;
@@ -304,18 +279,14 @@ function AppContent() {
         return;
       }
       
-      // Schedule next poll with exponential backoff
       if (isActive) {
         timeoutId = setTimeout(() => {
           checkInitStatus();
-          // Increase delay for next poll (exponential backoff)
           pollDelay = Math.min(pollDelay * 1.5, maxDelay);
         }, pollDelay);
       }
     };
-    
-    // Start polling
-    console.log('🔍 useEffect: About to start first checkInitStatus...');
+
     checkInitStatus();
     
     return () => {
@@ -323,11 +294,9 @@ function AppContent() {
       clearTimeout(timeoutId);
     };
   }, [api]);
-  
-  // Track overall app readiness
+
   useEffect(() => {
     if (isAvailable && api && backendReady) {
-      // Small delay for smooth transition
       const timer = setTimeout(() => {
         setAppReady(true);
       }, 500);
@@ -335,7 +304,6 @@ function AppContent() {
     }
   }, [isAvailable, api, backendReady]);
 
-  // Show full-page loading screen until app is ready
   if (!appReady || isLoading || !isAvailable || !api) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[rgb(var(--color-background))]">
@@ -348,8 +316,7 @@ function AppContent() {
               <h1 className="text-2xl font-bold text-[rgb(var(--color-text-primary))] mb-2">NWN2 Save Editor</h1>
               <p className="text-[rgb(var(--color-text-secondary))]">{initProgress.message}</p>
             </div>
-            
-            {/* Progress bar */}
+
             <div className="w-full bg-[rgb(var(--color-surface-2))] rounded-full h-3 mb-4">
               <div 
                 className="bg-[rgb(var(--color-primary))] h-3 rounded-full transition-all duration-500 ease-out"
@@ -372,37 +339,28 @@ function AppContent() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Initialize Tauri immediately when app loads */}
       <TauriInitializer />
-      
-      {/* Custom Title Bar - Fixed at top */}
+
       <div className="flex-shrink-0">
         <CustomTitleBar />
       </div>
-      
-      {/* Main Content Area */}
+
       <div className="flex-1 flex overflow-hidden">
         {(() => {
-          // --- BRANCH 1: EDITOR MODE ---
-          // Condition: We have a character AND we are explicitly in editor mode.
-          // This takes precedence so that if we are editing, we stay in the editor structure.
           if (viewMode === 'editor' && character) {
              return (
               <div className="flex flex-col w-full h-full overflow-hidden">
-                 {/* Editor Header - Full Width */}
-                 <EditorHeader 
+                 <EditorHeader
                     characterName={character.name}
-                    saveName="Save File" // TODO: Get actual save name
+                    saveName="Save File"
                     onBack={handleEditorBack}
-                    onImport={() => console.log('Import clicked')}
-                    onExport={() => console.log('Export clicked')}
+                    onImport={() => {}}
+                    onExport={() => {}}
                     onSave={handleSaveCharacter}
                     isModified={character.has_unsaved_changes}
                   />
-                  
-                 {/* Content Area - Sidebar + Main */}
+
                  <div className="flex-1 flex overflow-hidden">
-                    {/* Left Sidebar */}
                     <Sidebar 
                       activeTab={activeTab === 'dashboard_minimized' ? 'overview' : activeTab} 
                       onTabChange={handleTabChange}
@@ -414,7 +372,6 @@ function AppContent() {
                     <div className="flex-1 flex flex-col overflow-hidden">
                       <main className="flex-1 bg-[rgb(var(--color-background))] overflow-y-auto">
                         <div className="p-6">
-                            {/* ... Content Renderers ... */}
                           {activeTab === 'overview' && (
                             <div className="space-y-6">
                               <h2 className="text-2xl font-semibold text-[rgb(var(--color-text-primary))]">{t('navigation.overview')}</h2>
@@ -508,12 +465,9 @@ function AppContent() {
              );
           }
 
-          // --- BRANCH 2: DASHBOARD SETTINGS OVERLAY ---
-          // Condition: NOT in editor mode, and showSettings is strictly true.
           if (showSettings) {
             return (
               <div className="flex flex-col h-full w-full bg-[rgb(var(--color-background))]">
-                {/* Settings Header - Overlay Style */}
                 <div className="h-14 flex items-center px-4 bg-[rgb(var(--color-surface-2))] border-b border-[rgb(var(--color-surface-border))] shadow-sm flex-shrink-0">
                   <div className="flex items-center w-full">
                     <Button 
@@ -527,16 +481,14 @@ function AppContent() {
                     <span className="text-sm font-medium text-[rgb(var(--color-text-secondary))]">Application Settings</span>
                   </div>
                 </div>
-                
-                {/* Settings Content - Added proper padding */}
+
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 max-w-5xl mx-auto w-full">
                    <SettingsPage />
                 </div>
               </div>
             );
           }
-          
-          // --- BRANCH 3: DASHBOARD (Default) ---
+
           return (
             <Dashboard 
               onOpenBackups={handleOpenBackups}
@@ -551,7 +503,6 @@ function AppContent() {
         })()}
       </div>
 
-      {/* Loading Overlay Transition */}
       {showLoadingOverlay && (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[rgb(var(--color-background))] animate-in fade-in duration-200">
           <div className="flex flex-col items-center gap-4">
@@ -562,8 +513,7 @@ function AppContent() {
           </div>
         </div>
       )}
-      
-      {/* Feedback Toast/Modal */}
+
       {feedback && (
         <div className="fixed top-20 right-8 z-[10000] animate-in fade-in slide-in-from-right-8 duration-300">
           <div className={`rounded-lg shadow-lg border p-4 flex items-center gap-3 ${
@@ -589,7 +539,6 @@ function AppContent() {
         </div>
       )}
 
-      {/* Level Helper Modal - Global to persist navigation, now dynamically queries subsystems */}
       <LevelHelperModal
         isOpen={showLevelHelper}
         onClose={() => setShowLevelHelper(false)}
@@ -600,7 +549,6 @@ function AppContent() {
         }}
       />
 
-      {/* Game Launch Dialog */}
       <GameLaunchDialog
         isOpen={showLaunchDialog}
         onClose={() => setShowLaunchDialog(false)}
@@ -611,56 +559,47 @@ function AppContent() {
   );
 }
 
-// Main export component that provides the context
 export default function ClientOnlyApp() {
-  console.log('🚀 ClientOnlyApp: Component rendering/mounting');
-  const [backendReady, setBackendReady] = useState(false);
+  const [, setBackendReady] = useState(false);
 
-  // Backend readiness detection with exponential backoff (same as AppContent)
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     let isActive = true;
-    let pollDelay = 500; // Start at 500ms
-    const maxDelay = 5000; // Max 5 seconds between polls
-    const maxTotalTime = 60000; // 60 second total timeout
+    let pollDelay = 500;
+    const maxDelay = 5000;
+    const maxTotalTime = 60000;
     const startTime = Date.now();
-    
+
     const checkInitStatus = async () => {
       try {
-        // Initialize DynamicAPI first to get the dynamic port from Tauri
         await DynamicAPI.initialize();
         const response = await DynamicAPI.fetch('/system/initialization/status/');
         if (!response.ok) return;
-        
+
         const data = await response.json();
-        
+
         if (isActive && data.stage === 'ready') {
           setBackendReady(true);
-          return; // Stop polling
+          return;
         }
       } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
-        // Django might not be ready yet
       }
-      
-      // Check total timeout
+
       if (Date.now() - startTime > maxTotalTime) {
         console.error('Backend initialization timeout after 60 seconds');
         return;
       }
-      
-      // Schedule next poll with exponential backoff
+
       if (isActive) {
         timeoutId = setTimeout(() => {
           checkInitStatus();
-          // Increase delay for next poll (exponential backoff)
           pollDelay = Math.min(pollDelay * 1.5, maxDelay);
         }, pollDelay);
       }
     };
-    
-    // Start polling
+
     checkInitStatus();
-    
+
     return () => {
       isActive = false;
       clearTimeout(timeoutId);
@@ -668,7 +607,7 @@ export default function ClientOnlyApp() {
   }, []);
 
   return (
-    <IconCacheProvider backendReady={backendReady}>
+    <IconCacheProvider>
       <CharacterProvider>
         <AppContent />
       </CharacterProvider>

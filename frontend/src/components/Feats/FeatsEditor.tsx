@@ -29,10 +29,10 @@ export default function FeatsEditor() {
   const [selectedTypes, setSelectedTypes] = useState<Set<number>>(new Set());
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const [availableFeats, setAvailableFeats] = useState<FeatInfo[]>([]);
-  const [availableFeatsLoading, setAvailableFeatsLoading] = useState(false);
+  const [,setAvailableFeatsLoading] = useState(false);
   const [availableFeatsError, setAvailableFeatsError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [availableTotal, setAvailableTotal] = useState(0); 
+  const [, setAvailableTotal] = useState(0); 
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
   const FEATS_PER_PAGE = 50;
@@ -66,17 +66,13 @@ export default function FeatsEditor() {
           : undefined;
 
         if (showAvailableOnly) {
-           // Fetch all available feats (can take = true)
            const response = await CharacterAPI.getAvailableFeats(character.id, featTypeBitmask);
            setAvailableFeats(response.available_feats);
            setAvailableTotal(response.total);
-           // Available feats endpoint returns all, no pagination meta. 
-           // We will handle pagination/filtering client-side for available feats or simply show all.
            setTotalFeats(response.total);
            setHasNext(false); 
            setHasPrevious(false);
         } else {
-           // Fetch all legitimate feats (paginated)
            const response = await CharacterAPI.getLegitimateFeats(character.id, {
              page: currentPage,
              limit: FEATS_PER_PAGE,
@@ -100,7 +96,7 @@ export default function FeatsEditor() {
     };
 
     loadAvailableFeats();
-  }, [character?.id, activeTab, currentPage, FEATS_PER_PAGE, selectedTypes, searchTerm, showAvailableOnly]);
+  }, [character?.id, activeTab, currentPage, FEATS_PER_PAGE, selectedTypes, searchTerm, showAvailableOnly, setTotalFeats]);
 
 
   const allMyFeats = useMemo(() => {
@@ -161,10 +157,6 @@ export default function FeatsEditor() {
   const filteredMyFeats = useMemo(() => filterAndSortFeats(searchedMyFeats), [searchedMyFeats, filterAndSortFeats]);
 
   const filteredAvailableFeats = useMemo(() => {
-    // If showAvailableOnly is true, we have the full list in availableFeats (non-paginated from backend in this implementation context, or at least a big list)
-    // We need to filter it by search term and sort it client-side.
-    // If showAvailableOnly is false, availableFeats is already paginated/searched by the backend.
-
     let listToFilter = availableFeats;
     
     // Filter out owned feats
@@ -185,7 +177,7 @@ export default function FeatsEditor() {
         case 'type':
           return a.type - b.type;
         case 'level':
-          return 0; // Level info might not be available on basic feat info yet
+          return 0;
         default:
           return 0;
       }
@@ -202,7 +194,6 @@ export default function FeatsEditor() {
       await feats.load({ force: true });
       await invalidateSubsystems(['combat', 'abilityScores']);
 
-      // Show success notification
       if (response.message && (response.message.includes('feats:') || response.message.includes('abilities:'))) {
         showToast(response.message, 'success', 6000);
       } else {
@@ -211,7 +202,6 @@ export default function FeatsEditor() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to add feat';
       showToast(errorMessage, 'error');
-      console.error('Failed to add feat:', error);
     }
   }, [character?.id, feats, invalidateSubsystems, showToast]);
 
@@ -226,7 +216,6 @@ export default function FeatsEditor() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to remove feat';
       showToast(errorMessage, 'error');
-      console.error('Failed to remove feat:', error);
     }
   }, [character?.id, feats, invalidateSubsystems, showToast]);
 
@@ -236,8 +225,7 @@ export default function FeatsEditor() {
     try {
       const details = await CharacterAPI.getFeatDetails(character.id, feat.id);
       return details;
-    } catch (error) {
-      console.error('Failed to load feat details:', error);
+    } catch {
       return null;
     }
   }, [character?.id]);

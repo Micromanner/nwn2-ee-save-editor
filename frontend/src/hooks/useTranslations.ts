@@ -12,7 +12,6 @@ export function useTranslations() {
       if (message && typeof message === 'object' && k in message) {
         message = (message as Record<string, unknown>)[k];
       } else {
-        console.warn(`Translation key not found: ${key}`);
         return key;
       }
     }

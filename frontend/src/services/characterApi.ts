@@ -1,5 +1,3 @@
-// Character API service for fetching character data from FastAPI backend
-
 import DynamicAPI from '../lib/utils/dynamicApi';
 
 export interface CharacterAbilities {
@@ -61,7 +59,6 @@ export interface DamageResistance {
   amount: number;
 }
 
-// API Response interfaces
 export interface SaveResult {
   success: boolean;
   changes: Record<string, unknown>;
@@ -403,6 +400,8 @@ export interface CharacterData {
   // Session & locale data
   detectedLanguage?: string;
   languageId?: number;
+  languageLabel?: string;
+  difficultyLabel?: string;
   localizationStatus?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -436,7 +435,6 @@ export interface CharacterData {
 }
 
 export class CharacterAPI {
-  // Get character state (comprehensive data)
   static async getCharacterState(characterId: number): Promise<CharacterData> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/state`);
     if (!response.ok) {
@@ -447,7 +445,6 @@ export class CharacterAPI {
     return this.mapBackendToFrontend(data);
   }
 
-  // Get character details (basic data)
   static async getCharacterDetails(characterId: number): Promise<CharacterData> {
     // Use summary endpoint instead of non-existent basic details endpoint
     const response = await DynamicAPI.fetch(`/characters/${characterId}/summary`);
@@ -459,15 +456,10 @@ export class CharacterAPI {
     return this.mapBackendToFrontend(data);
   }
 
-  // List all characters
   static async listCharacters(): Promise<CharacterData[]> {
-    // Backend doesn't have a list characters endpoint - this would need to be implemented
-    // For now, return empty array
-    console.warn('listCharacters() called but no backend endpoint exists');
     return [];
   }
 
-  // Import character from save game
   static async importCharacter(savePath: string): Promise<{id: number; name: string}> {
     const response = await DynamicAPI.fetch(`/savegames/import`, {
       method: 'POST',
@@ -496,18 +488,11 @@ export class CharacterAPI {
     };
   }
 
-  // Update character data
   static async updateCharacter(characterId: number, updates: Partial<{ first_name: string; last_name: string; [key: string]: unknown }>): Promise<CharacterData> {
-    // Backend doesn't have a generic update character endpoint
-    // Use the savegame update endpoint with sync_current_state for now
-    console.warn('updateCharacter() called but no backend endpoint exists, using save instead');
     await this.saveCharacter(characterId, updates);
-    
-    // Return updated character state
     return this.getCharacterState(characterId);
   }
 
-  // Save character changes to save game
   static async saveCharacter(characterId: number, updates: Record<string, unknown> = {}): Promise<SaveResult> {
     const response = await DynamicAPI.fetch(`/${characterId}/update`, {
       method: 'POST',
@@ -530,7 +515,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Feat management methods
   static async getCharacterFeats(characterId: number, featType?: number): Promise<FeatsStateResponse> {
     const typeParam = featType !== undefined ? `?type=${featType}` : '';
     const response = await DynamicAPI.fetch(`/characters/${characterId}/feats/state${typeParam}`);
@@ -630,7 +614,6 @@ export class CharacterAPI {
 
 
 
-  // Spells API methods
   static async getLegitimateSpells(
     characterId: number,
     options: {
@@ -688,7 +671,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Skills API methods
   static async getSkillsState(characterId: number): Promise<SkillsStateResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/skills/state`);
     if (!response.ok) {
@@ -730,7 +712,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Attributes API methods
   static async getAttributesState(characterId: number): Promise<AbilitiesStateResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/abilities`);
     if (!response.ok) {
@@ -754,7 +735,7 @@ export class CharacterAPI {
     return response.json();
   }
 
-  static async setAttribute(characterId: number, attribute: string, value: number): Promise<any> {
+  static async setAttribute(characterId: number, attribute: string, value: number): Promise<{ success: boolean; attribute: string; value: number }> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/abilities/${attribute}/set`, {
       method: 'POST',
       headers: {
@@ -769,7 +750,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Alignment API methods
   static async getAlignment(characterId: number): Promise<AlignmentResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/alignment`);
     if (!response.ok) {
@@ -793,7 +773,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Biography API methods
   static async getBiography(characterId: number): Promise<string> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/biography`);
     if (!response.ok) {
@@ -818,7 +797,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Deity API methods
   static async getAvailableDeities(characterId: number): Promise<Deity[]> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/available-deities`);
     if (!response.ok) {
@@ -852,9 +830,8 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Hit Points API methods
-  static async updateHitPoints(characterId: number, currentHp?: number, maxHp?: number): Promise<any> {
-    const payload: any = {};
+  static async updateHitPoints(characterId: number, currentHp?: number, maxHp?: number): Promise<{ success: boolean; current_hp?: number; max_hp?: number }> {
+    const payload: { current_hp?: number; max_hp?: number } = {};
     if (currentHp !== undefined) payload.current_hp = currentHp;
     if (maxHp !== undefined) payload.max_hp = maxHp;
 
@@ -872,7 +849,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Combat stats API methods
   static async updateArmorClass(characterId: number, naturalAC: number): Promise<CombatUpdateResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/combat/update-ac`, {
       method: 'POST',
@@ -888,7 +864,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Initiative API methods
   static async updateInitiativeBonus(characterId: number, initiativeBonus: number): Promise<CombatUpdateResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/combat/update-initiative`, {
       method: 'POST',
@@ -904,7 +879,6 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Saving throws API methods
   static async updateSavingThrows(characterId: number, saveUpdates: Record<string, number>): Promise<{ success: boolean; updated: string[] }> {
     // Use misc-bonus endpoint for each save type (backend doesn't have bulk update)
     const promises = Object.entries(saveUpdates).map(([saveType, value]) =>
@@ -927,7 +901,6 @@ export class CharacterAPI {
     return { success: true, updated: Object.keys(saveUpdates) };
   }
 
-  // Race manager API methods
   static async getRaceData(characterId: number): Promise<RaceDataResponse> {
     const response = await DynamicAPI.fetch(`/characters/${characterId}/race/current`);
     if (!response.ok) {
@@ -936,44 +909,24 @@ export class CharacterAPI {
     return response.json();
   }
 
-  // Map backend data structure to frontend interface
   private static mapBackendToFrontend(backendData: Record<string, unknown>): CharacterData {
-    // Handle null or undefined input
     if (!backendData) {
       throw new Error('No character data received from backend');
     }
-    
-    console.log('Mapping backend data:', backendData);
-    
-    // Handle FastAPI response format - extract from nested structure
+
     const summary = (backendData.summary as Record<string, unknown>) || backendData;
     const info = (backendData.info as Record<string, unknown>) || {};
     const abilities = (backendData.abilities as Record<string, unknown>) || summary.abilities || {};
     const classesData = (backendData.classes as Record<string, unknown>) || summary.classes || {};
     const alignmentData = (backendData.alignment as Record<string, unknown>) || summary.alignment || {};
-    
-    // Extract character ID - prefer from info, then summary, then root
+    const combatStats = (backendData.combat_stats as Record<string, unknown>) || {};
+
     const characterId = info.id || summary.id || backendData.id;
-    
-    // Extract name - prefer from summary, then info, then construct from parts
-    const name = summary.name || info.full_name || 
-                 `${info.first_name || ''} ${info.last_name || ''}`.trim() || 
+    const name = summary.name || info.full_name ||
+                 `${info.first_name || ''} ${info.last_name || ''}`.trim() ||
                  'Unknown Character';
-    
-    // Extract classes array
     const classesArray = ((classesData as { classes: Array<Record<string, unknown>> })?.classes) || [];
-    
-    // Map alignment from law_chaos and good_evil
-    const alignmentMap: { [key: string]: string } = {
-      '0_0': 'True Neutral', '0_1': 'Neutral Good', '0_2': 'Neutral Evil',
-      '1_0': 'Lawful Neutral', '1_1': 'Lawful Good', '1_2': 'Lawful Evil', 
-      '2_0': 'Chaotic Neutral', '2_1': 'Chaotic Good', '2_2': 'Chaotic Evil',
-    };
-    
-    const lawChaos = (alignmentData as { law_chaos?: number }).law_chaos || 0;
-    const goodEvil = (alignmentData as { good_evil?: number }).good_evil || 0;
-    const alignmentKey = `${Math.floor(lawChaos / 50)}_${Math.floor(goodEvil / 50)}`;
-    const alignmentString = (alignmentData as { alignment_string?: string }).alignment_string || alignmentMap[alignmentKey] || 'True Neutral';
+    const alignmentString = (alignmentData as { alignment_string?: string }).alignment_string || 'True Neutral';
     
     return {
       id: typeof characterId === 'string' ? parseInt(characterId) : (characterId as number) || undefined,
@@ -1007,30 +960,26 @@ export class CharacterAPI {
         will: Number((backendData.saves as SavesData)?.will || 0)
       },
       armorClass: Number(summary.armor_class || 10),
-      // New fields
-      background: (summary.background as any) || undefined,
-      domains: (summary.domains as any[]) || [],
+      background: (summary.background as CharacterData['background']) || undefined,
+      domains: (summary.domains as CharacterData['domains']) || [],
       gold: Number(summary.gold || 0),
       location: String(summary.area_name || backendData.area_name || ''),
       portrait: String(summary.portrait || info.portrait || ''),
       customPortrait: summary.custom_portrait ? String(summary.custom_portrait) : undefined,
-      // Combat stats
       baseAttackBonus: Number(summary.base_attack_bonus || 0),
-      // Character progress
       totalSkillPoints: summary.skill_points_total ? Number(summary.skill_points_total) : undefined,
       availableSkillPoints: summary.skill_points_available ? Number(summary.skill_points_available) : undefined,
       totalFeats: Number(summary.total_feats || 0),
-      // Physical stats
       movementSpeed: 30,
       size: 'Medium',
-      initiative: Math.floor(((Number((abilities as { dexterity?: number }).dexterity) || 10) - 10) / 2),
-      // Campaign info
+      initiative: Number((combatStats.initiative as { total?: number })?.total || 0),
       campaignName: String(backendData.campaign_name || ''),
       moduleName: String(backendData.module_name || ''),
-      // Quest data
       completedQuests: Number((backendData.quest_details as CharacterData['questDetails'])?.summary?.completed_quests || 0),
       currentQuests: Number((backendData.quest_details as CharacterData['questDetails'])?.summary?.active_quests || 0),
-      questDetails: backendData.quest_details as CharacterData['questDetails']
+      questDetails: backendData.quest_details as CharacterData['questDetails'],
+      difficultyLabel: String(summary.difficulty_label || 'Normal'),
+      languageLabel: String(summary.language_label || 'English')
     };
   }
 }

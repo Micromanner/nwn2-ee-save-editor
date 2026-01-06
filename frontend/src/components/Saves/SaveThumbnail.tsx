@@ -30,18 +30,14 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
       setError(false);
 
       try {
-        console.log('🖼️ Loading thumbnail from:', thumbnailPath);
         const base64Data = await TauriAPI.getSaveThumbnail(thumbnailPath);
-        console.log('📦 Received base64 data:', base64Data.length, 'characters');
 
         if (!isCancelled) {
-          // Create data URL from base64 string (now WebP format)
           const dataUrl = `data:image/webp;base64,${base64Data}`;
-          console.log('🔗 Created WebP data URL (first 100 chars):', dataUrl.substring(0, 100));
           setThumbnailUrl(dataUrl);
         }
-      } catch (err) {
-        console.error('❌ Failed to load thumbnail:', err);
+      } catch {
+
         if (!isCancelled) {
           setError(true);
         }
@@ -59,7 +55,6 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
     };
   }, [thumbnailPath]);
 
-  // Cleanup URL on unmount
   useEffect(() => {
     return () => {
       if (thumbnailUrl) {
@@ -93,7 +88,6 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={thumbnailUrl}
       alt="Save thumbnail"

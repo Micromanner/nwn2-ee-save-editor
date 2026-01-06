@@ -3,9 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Plus, X, Search } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useToast } from '@/contexts/ToastContext';
@@ -18,6 +17,8 @@ import { useInventorySearch } from '@/hooks/useInventorySearch';
 import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor, DragStartEvent, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/core';
 import AddItemModal from './AddItemModal';
 import { BaseItem, ItemTemplate } from '@/services/inventoryApi';
+import { safeToNumber } from '@/utils/dataHelpers';
+import { getRarityBorderColor } from '@/utils/itemHelpers';
 
 
 interface Item {
@@ -129,15 +130,6 @@ const SLOT_MAPPING: Record<string, string> = {
   'l hand': 'left_hand', 'left_hand': 'left_hand',
   'r hand': 'right_hand', 'right_hand': 'right_hand',
   'arrows': 'arrows', 'bullets': 'bullets', 'bolts': 'bolts'
-};
-
-const safeToNumber = (value: unknown, defaultValue: number = 0): number => {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? defaultValue : parsed;
-  }
-  return defaultValue;
 };
 
 export default function InventoryEditor() {
@@ -451,7 +443,7 @@ export default function InventoryEditor() {
     }
   };
 
-  const handleUpdateItem = async (updatedGffData: any) => {
+  const handleUpdateItem = async (updatedGffData: Record<string, unknown>) => {
     if (!character?.id) return;
     try {
       const response = await inventoryAPI.updateItem(character.id, {
@@ -572,9 +564,9 @@ export default function InventoryEditor() {
         {...listeners}
         onClick={onClick}
         className={`aspect-square relative rounded border-2 
-          ${isSelected 
-            ? 'bg-[rgb(var(--color-primary)/0.2)] border-[rgb(var(--color-primary))] shadow-[0_0_10px_rgb(var(--color-primary)/0.3)]' 
-            : `bg-[rgb(var(--color-surface-2))] ${getRarityColor(item.rarity)} hover:border-[rgb(var(--color-primary)/0.5)]`
+          ${isSelected
+            ? 'bg-[rgb(var(--color-primary)/0.2)] border-[rgb(var(--color-primary))] shadow-[0_0_10px_rgb(var(--color-primary)/0.3)]'
+            : `bg-[rgb(var(--color-surface-2))] ${getRarityBorderColor(item.rarity)} hover:border-[rgb(var(--color-primary)/0.5)]`
           }
            cursor-grab active:cursor-grabbing
         `}
@@ -790,6 +782,8 @@ export default function InventoryEditor() {
         setSelectedItemRawData(null);
       }
     }
+  // This effect intentionally only reacts to inventory data changes to sync selection state
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inventoryData.data, selectedItemInventoryIndex]);
 
   const [activeDragItem, setActiveDragItem] = useState<{ item: Item; index: number } | null>(null);
@@ -845,16 +839,6 @@ export default function InventoryEditor() {
         if (!isEquipping) {
              await handleUnequipItem(slotToUnequip);
         }
-    }
-  };
-
-  const getRarityColor = (rarity?: string) => {
-    switch (rarity) {
-      case 'uncommon': return 'border-[rgb(var(--color-success))]';
-      case 'rare': return 'border-[rgb(var(--color-primary))]';
-      case 'epic': return 'border-[rgb(var(--color-secondary))]';
-      case 'legendary': return 'border-[rgb(var(--color-warning))]';
-      default: return 'border-[rgb(var(--color-surface-border)/0.6)]';
     }
   };
 
@@ -1129,7 +1113,6 @@ export default function InventoryEditor() {
           
           </div>
 
-          {/* Modals and Overlays */}
         <AddItemModal
             isOpen={showAddItemModal}
             onClose={() => setShowAddItemModal(false)}

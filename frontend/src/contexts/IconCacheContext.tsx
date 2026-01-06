@@ -40,10 +40,9 @@ export function useIconCache() {
 
 interface IconCacheProviderProps {
   children: React.ReactNode;
-  backendReady?: boolean;
 }
 
-export function IconCacheProvider({ children, backendReady: _backendReady = false }: IconCacheProviderProps) { // eslint-disable-line @typescript-eslint/no-unused-vars
+export function IconCacheProvider({ children }: IconCacheProviderProps) {
   const [cacheStats, setCacheStats] = useState<IconCacheStats | null>(null);
   const [cacheReady, setCacheReady] = useState<boolean | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);

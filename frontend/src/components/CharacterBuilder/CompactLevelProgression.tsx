@@ -95,12 +95,10 @@ const CompactLevelProgression: React.FC<CompactLevelProgressionProps> = ({
                     </div>
                   )}
                   
-                  {/* Feat indicator */}
                   {(level.level % 3 === 0 || level.level === 1) && (
                     <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-green-500 rounded-full" />
                   )}
                   
-                  {/* Ability increase indicator */}
                   {level.level % 4 === 0 && (
                     <div className="absolute top-0.5 left-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full" />
                   )}

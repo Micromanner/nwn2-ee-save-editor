@@ -57,38 +57,29 @@ export default function VirtualizedFeatSection({
   onValidate
 }: VirtualizedFeatSectionProps) {
   
-  // Calculate optimal height for virtualization
   const virtualizedHeight = useMemo(() => {
     if (feats.length === 0) return 0;
     
     if (viewMode === 'list') {
-      // List mode: 48px per item
       const totalHeight = feats.length * 48;
       return Math.min(totalHeight, maxHeight);
     } else {
-      // Grid mode: estimate rows and height
-      // Assume 3 columns max, so divide by 3 and round up for row count
       const estimatedRows = Math.ceil(feats.length / 3);
-      const totalHeight = estimatedRows * 132; // 120px card + 12px gap
+      const totalHeight = estimatedRows * 132;
       return Math.min(totalHeight, maxHeight);
     }
   }, [feats.length, viewMode, maxHeight]);
 
-  // Don't render if no feats
   if (feats.length === 0) {
     return null;
   }
 
-  // Use non-virtualized rendering for small lists (< 20 items) to avoid overhead
   if (feats.length < 20) {
     return (
       <div className={viewMode === 'grid' ? 
         'grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3' : 
         'space-y-2'
       }>
-        {/* Fallback to original FeatCard rendering for small lists */}
-        {/* This will be imported from the parent component */}
-        {/* For now, let the parent handle small lists */}
       </div>
     );
   }

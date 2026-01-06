@@ -57,7 +57,6 @@ export function useSkills(): UseSkillsReturn {
       setTotalSkillPoints((data.skill_points?.available || 0) + (data.skill_points?.spent || 0));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load skills');
-      console.error('Error loading skills data:', err);
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +112,6 @@ export function useSkills(): UseSkillsReturn {
       await CharacterAPI.updateSkills(character.id, updates);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update skill');
-      console.error('Error updating skill:', err);
       // Revert on error
       await loadSkillsData();
     } finally {
@@ -132,7 +130,6 @@ export function useSkills(): UseSkillsReturn {
       await loadSkillsData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset skills');
-      console.error('Error resetting skills:', err);
     } finally {
       setIsUpdating(false);
     }

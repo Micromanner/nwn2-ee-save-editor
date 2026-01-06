@@ -3,9 +3,6 @@
 import { useMemo, useCallback } from 'react';
 import Fuse from 'fuse.js';
 
-// Use a generic type parameter instead of defining our own FeatInfo
-// This allows the hook to work with any feat-like data structure
-
 interface SearchOptions {
   keys?: string[];
   threshold?: number;

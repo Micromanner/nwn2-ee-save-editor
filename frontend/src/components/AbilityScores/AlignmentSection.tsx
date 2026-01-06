@@ -17,13 +17,11 @@ export default function AlignmentSection({
 }: AlignmentSectionProps) {
   const t = useTranslations();
   
-  // Default alignment if none provided
   const [internalAlignment, setInternalAlignment] = useState<Alignment>({
     lawChaos: 50,
     goodEvil: 50
   });
 
-  // Use external alignment if provided, otherwise use internal state
   const currentAlignment = externalAlignment || internalAlignment;
   const { getAlignmentColor } = useAlignment(currentAlignment);
   const alignmentColor = getAlignmentColor(currentAlignment.lawChaos, currentAlignment.goodEvil);
@@ -47,10 +45,7 @@ export default function AlignmentSection({
       <CardContent className="p-6">
         <h3 className="section-title">{t('character.alignment')}</h3>
         <div className="max-w-3xl mx-auto">
-          {/* Interactive Grid - Centered */}
           <div className="flex flex-col items-center justify-center space-y-6">
-            
-            {/* Value Cards Above Grid */}
             <div className="grid grid-cols-2 gap-6 max-w-sm mx-auto">
               <div className="bg-[rgb(var(--color-surface-2))] rounded-lg p-4 border border-[rgb(var(--color-surface-border))] text-center">
                 <div className="text-xs font-medium text-[rgb(var(--color-text-muted))] uppercase tracking-wide mb-2">

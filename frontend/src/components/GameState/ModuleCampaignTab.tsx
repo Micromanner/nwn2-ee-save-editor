@@ -52,12 +52,9 @@ export default function ModuleCampaignTab() {
     try {
       const { modules, current_module } = await gameStateAPI.getAllModules(characterId);
       setAvailableModules(modules);
-
-      // Set selected module to current module or first module
       const initialModule = current_module || (modules.length > 0 ? modules[0].id : null);
       setSelectedModuleId(initialModule);
-    } catch (err) {
-      console.error('Failed to load modules:', err);
+    } catch {
     }
   };
 
@@ -83,7 +80,6 @@ export default function ModuleCampaignTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load module data';
       setModuleError(errorMessage);
-      console.error('Failed to load module data:', err);
     } finally {
       setIsLoadingModule(false);
     }
@@ -130,7 +126,6 @@ export default function ModuleCampaignTab() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save changes';
       setModuleError(errorMessage);
-      console.error('Failed to save module variables:', err);
     } finally {
       setIsSavingModule(false);
     }

@@ -57,7 +57,6 @@ export function useSaves() {
         });
       }
     } catch (err) {
-      console.error('Failed to load saves data:', err);
       // Fallback to character data
       setSavesData({
         fortitude: character.saves?.fortitude || 0,
@@ -81,14 +80,12 @@ export function useSaves() {
     if (!character?.id) return;
     
     try {
-      const result = await CharacterAPI.updateSavingThrows(character.id, { [saveType]: bonus });
-      console.log(`${saveType} bonus update result:`, result);
+      await CharacterAPI.updateSavingThrows(character.id, { [saveType]: bonus });
       
       // Reload saves data to get updated values
       await loadSaves();
       
     } catch (err) {
-      console.error(`Failed to update ${saveType} bonus:`, err);
       throw err;
     }
   }, [character?.id, loadSaves]);

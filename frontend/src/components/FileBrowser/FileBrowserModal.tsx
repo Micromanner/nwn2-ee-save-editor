@@ -229,7 +229,7 @@ export default function FileBrowserModal({
   }, [isOpen, currentPath, mode, refreshKey]);
 
   const isItemLoaded = (index: number) => index < files.length;
-  const loadMoreItems = (startIndex: number) => {
+  const loadMoreItems = (_startIndex: number) => {
     if (loadingMore || files.length >= totalFiles) return Promise.resolve();
     return loadFiles(false);
   };
@@ -452,11 +452,11 @@ export default function FileBrowserModal({
                   loadMoreItems={loadMoreItems}
                   threshold={5}
                 >
-                  {({ onItemsRendered, ref }: { onItemsRendered: (props: ListOnItemsRenderedProps) => any, ref: (ref: any) => void }) => (
+                  {({ onItemsRendered, ref }: { onItemsRendered: (props: ListOnItemsRenderedProps) => void, ref: (ref: List | null) => void }) => (
                     <List
                       key={`list-${currentPath}`} // Only reset on path change, not totalFiles change
                       ref={(node) => {
-                        // @ts-ignore
+                        // @ts-expect-error listRef.current type mismatch with react-window
                         listRef.current = node;
                         ref(node);
                       }}

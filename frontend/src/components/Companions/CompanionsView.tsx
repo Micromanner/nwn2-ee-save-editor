@@ -29,15 +29,12 @@ export default function CompanionsView({ onLoadCompanion, currentCharacterName }
   const t = useTranslations();
   const { character, isLoading, error } = useCharacterContext();
   const inDevelopment = true;
-  const companions: Companion[] = []; // TODO: Get from provider when backend supports companions
-  const hasUnsavedChanges = true; // TODO: Get from provider - temporarily true for testing
+  const companions: Companion[] = [];
+  const hasUnsavedChanges = true;
   const loadCompanion = (companion: Companion) => {
-    console.log('Loading companion:', companion.id);
-    // Call the parent handler if provided
     if (onLoadCompanion) {
       onLoadCompanion(companion.name);
     }
-    // TODO: Implement full backend integration
   };
   const [companionToLoad, setCompanionToLoad] = useState<Companion | null>(null);
 
@@ -191,7 +188,6 @@ export default function CompanionsView({ onLoadCompanion, currentCharacterName }
         ))}
       </div>
 
-      {/* TODO: Add confirmation dialog when AlertDialog component is available */}
       {companionToLoad && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <Card className="max-w-md">

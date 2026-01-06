@@ -13,17 +13,14 @@ export async function tauriCompatibleFetch(
       if (isTauri) {
         const mod = await import('@tauri-apps/plugin-http');
         const tauriFetch = mod.fetch as typeof fetch;
-        // console.debug('[tauriFetch] Using Tauri plugin-http');
         return await tauriFetch(input as RequestInfo, init);
       }
     } catch {
-      // console.warn('[tauriFetch] Failed to load plugin-http, falling back to window.fetch');
     }
   }
 
   if (typeof fetch !== 'function') {
     throw new Error('No fetch implementation available');
   }
-  // console.debug('[tauriFetch] Using browser fetch');
   return await fetch(input, init);
 }

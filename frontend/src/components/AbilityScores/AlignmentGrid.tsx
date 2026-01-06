@@ -11,7 +11,6 @@ interface AlignmentGridProps {
 export default function AlignmentGrid({ onAlignmentSelect, currentAlignment }: AlignmentGridProps) {
   const { alignmentGridData, getAlignmentColor } = useAlignment(currentAlignment);
 
-  // Check if alignment is active based on current alignment prop
   const isAlignmentActive = (lawChaosRange: [number, number], goodEvilRange: [number, number]): boolean => {
     return currentAlignment.lawChaos >= lawChaosRange[0] && currentAlignment.lawChaos <= lawChaosRange[1] &&
            currentAlignment.goodEvil >= goodEvilRange[0] && currentAlignment.goodEvil <= goodEvilRange[1];

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { display } from '@/utils/dataHelpers';
+import { CharacterAPI } from '@/services/characterApi';
 
 const X = ({ className }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,7 +33,7 @@ interface DeitySelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectDeity: (deityName: string) => void;
-  availableDeities: Deity[];
+  characterId: number;
   currentDeity?: string;
 }
 
@@ -41,26 +41,46 @@ export default function DeitySelectionModal({
   isOpen,
   onClose,
   onSelectDeity,
-  availableDeities,
+  characterId,
   currentDeity
 }: DeitySelectionModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDeity, setSelectedDeity] = useState<Deity | null>(null);
+  const [, setIsLoading] = useState(false);
+  const [deities, setDeities] = useState<Deity[]>([]);
+
+  useEffect(() => {
+    const fetchDeities = async () => {
+      try {
+        setIsLoading(true);
+        const deitiesData = await CharacterAPI.getAvailableDeities(characterId);
+        setDeities(deitiesData);
+      } catch (error) {
+        console.error('Failed to load deities:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchDeities();
+    }
+  }, [isOpen, characterId]);
 
   useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
       if (currentDeity) {
-        const match = availableDeities.find(d => d.name === currentDeity);
+        const match = deities.find(d => d.name === currentDeity);
         setSelectedDeity(match || null);
       } else {
         setSelectedDeity(null);
       }
     }
-  }, [isOpen, currentDeity, availableDeities]);
+  }, [isOpen, currentDeity, deities]);
 
   const filteredDeities = useMemo(() => {
-    let filtered = availableDeities;
+    let filtered = deities;
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
       filtered = filtered.filter(d => 
@@ -69,7 +89,7 @@ export default function DeitySelectionModal({
       );
     }
     return filtered;
-  }, [availableDeities, searchQuery]);
+  }, [deities, searchQuery]);
 
   const handleSelect = () => {
     if (selectedDeity) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -8,14 +8,14 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Plus, Trash2, X, Save } from 'lucide-react';
-import { inventoryAPI, ItemEditorMetadataResponse, PropertyMetadata } from '@/services/inventoryApi';
+import { inventoryAPI, ItemEditorMetadataResponse } from '@/services/inventoryApi';
 import { useTranslations } from '@/hooks/useTranslations';
 
 interface ItemPropertyEditorProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updatedData: any) => Promise<void>;
-  itemData: any; // Raw GFF data
+  onSave: (updatedData: Record<string, unknown>) => Promise<void>;
+  itemData: Record<string, unknown>;
   characterId: number | undefined;
   itemIndex?: number | null;
   slot?: string | null;
@@ -27,51 +27,51 @@ export default function ItemPropertyEditor({
   onSave,
   itemData,
   characterId,
-  itemIndex,
-  slot
+  itemIndex: _itemIndex,
+  slot: _slot
 }: ItemPropertyEditorProps) {
-  const t = useTranslations();
-  const [localData, setLocalData] = useState<any>(null);
+  useTranslations();
+  const [localData, setLocalData] = useState<Record<string, unknown> | null>(null);
   const [metadata, setMetadata] = useState<ItemEditorMetadataResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('basic');
+
+  const loadMetadata = useCallback(async () => {
+    if (!characterId) return;
+    setIsLoading(true);
+    try {
+      const data = await inventoryAPI.getEditorMetadata(characterId);
+      setMetadata(data);
+    } catch {
+    } finally {
+      setIsLoading(false);
+    }
+  }, [characterId]);
 
   useEffect(() => {
     if (isOpen && itemData) {
       setLocalData(JSON.parse(JSON.stringify(itemData)));
       loadMetadata();
     }
-  }, [isOpen, itemData]);
+  }, [isOpen, itemData, loadMetadata]);
 
-  const loadMetadata = async () => {
-    if (!characterId) return;
-    setIsLoading(true);
-    try {
-      const data = await inventoryAPI.getEditorMetadata(characterId);
-      setMetadata(data);
-    } catch (error) {
-      console.error('Failed to load item editor metadata:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleBasicChange = (field: string, value: any) => {
-    setLocalData((prev: any) => ({
+  const handleBasicChange = (field: string, value: unknown) => {
+    setLocalData((prev: Record<string, unknown> | null) => ({
       ...prev,
       [field]: value
     }));
   };
 
   const handleLocalizedChange = (field: string, value: string) => {
-    setLocalData((prev: any) => {
-      const newData = { ...prev };
-      if (!newData[field]) {
+    setLocalData((prev: Record<string, unknown> | null) => {
+      const newData = { ...prev } as Record<string, unknown>;
+      const existingField = newData[field] as Record<string, unknown> | undefined;
+      if (!existingField) {
         newData[field] = { string_ref: 4294967295, strings: { '0': value } };
       } else {
         newData[field] = {
-          ...newData[field],
-          strings: { ...newData[field].strings, '0': value }
+          ...existingField,
+          strings: { ...(existingField.strings as Record<string, string>), '0': value }
         };
       }
       return newData;
@@ -79,13 +79,14 @@ export default function ItemPropertyEditor({
   };
 
   const getLocalizedValue = (field: string) => {
-    return localData?.[field]?.strings?.['0'] || '';
+    const fieldData = localData?.[field] as Record<string, unknown> | undefined;
+    const strings = fieldData?.strings as Record<string, string> | undefined;
+    return strings?.['0'] || '';
   };
 
   const handleAddProperty = () => {
     if (!metadata?.property_types.length) return;
-    
-    // Default to first property type (usually enhancement)
+
     const firstProp = metadata.property_types[0];
     
     const newProp = {
@@ -101,26 +102,25 @@ export default function ItemPropertyEditor({
       UsesPerDay: 255
     };
 
-    setLocalData((prev: any) => ({
+    setLocalData((prev: Record<string, unknown> | null) => ({
       ...prev,
-      PropertiesList: [...(prev.PropertiesList || []), newProp]
+      PropertiesList: [...((prev?.PropertiesList as unknown[]) || []), newProp]
     }));
   };
 
   const handleRemoveProperty = (index: number) => {
-    setLocalData((prev: any) => {
-      const newList = [...(prev.PropertiesList || [])];
+    setLocalData((prev: Record<string, unknown> | null) => {
+      const newList = [...((prev?.PropertiesList as unknown[]) || [])];
       newList.splice(index, 1);
       return { ...prev, PropertiesList: newList };
     });
   };
 
-  const handlePropertyChange = (index: number, field: string, value: any) => {
-    setLocalData((prev: any) => {
-      const newList = [...(prev.PropertiesList || [])];
+  const handlePropertyChange = (index: number, field: string, value: unknown) => {
+    setLocalData((prev: Record<string, unknown> | null) => {
+      const newList = [...((prev?.PropertiesList as Record<string, unknown>[]) || [])];
       const property = { ...newList[index], [field]: value };
-      
-      // If PropertyName changed, reset subtype/cost_value if necessary
+
       if (field === 'PropertyName') {
         const propMeta = metadata?.property_types.find(p => p.id === value);
         if (propMeta) {
@@ -143,17 +143,9 @@ export default function ItemPropertyEditor({
     return propertyDef?.subtype_options || null;
   };
 
-  const getCostOptions = (propertyName: number) => {
-    if (!metadata) return null;
-    const propertyDef = metadata.property_types.find(p => p.id === propertyName);
-    return propertyDef?.cost_table_options || null;
-  };
 
-  const getParam1Options = (propertyName: number) => {
-    if (!metadata) return null;
-    const propertyDef = metadata.property_types.find(p => p.id === propertyName);
-    return propertyDef?.param1_options || null;
-  };
+
+
 
   const handleSave = async () => {
     await onSave(localData);
@@ -278,7 +270,7 @@ export default function ItemPropertyEditor({
                 </div>
                 <ScrollArea className="flex-1">
                   <div className="space-y-3 p-4">
-                    {(localData.PropertiesList || []).map((prop: any, index: number) => {
+                    {((localData?.PropertiesList as Array<{ PropertyName: number; Subtype?: number; CostValue?: number; Param1Value?: number }>) || []).map((prop, index) => {
                       const subtypeOptions = getSubtypeOptions(prop.PropertyName);
                       const propMeta = metadata?.property_types.find(p => p.id === prop.PropertyName);
 

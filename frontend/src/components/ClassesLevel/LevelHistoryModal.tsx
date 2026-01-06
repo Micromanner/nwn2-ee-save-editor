@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useTranslations } from '@/hooks/useTranslations';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -45,13 +45,7 @@ export default function LevelHistoryModal({ isOpen, onClose }: LevelHistoryModal
   const [error, setError] = useState<string | null>(null);
   const [expandedLevels, setExpandedLevels] = useState<Set<number>>(new Set());
 
-  useEffect(() => {
-    if (isOpen && characterId) {
-      fetchHistory();
-    }
-  }, [isOpen]);
-
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -69,7 +63,14 @@ export default function LevelHistoryModal({ isOpen, onClose }: LevelHistoryModal
     } finally {
       setLoading(false);
     }
-  };
+  }, [characterId]);
+
+  useEffect(() => {
+    if (isOpen && characterId) {
+      fetchHistory();
+    }
+  }, [isOpen, characterId, fetchHistory]);
+
 
   const toggleLevel = (level: number) => {
     setExpandedLevels(prev => {

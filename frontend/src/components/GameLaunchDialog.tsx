@@ -32,16 +32,12 @@ export function GameLaunchDialog({ isOpen, onClose, onLaunch, saveName, gamePath
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop with blur */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
       />
       
-      {/* Modal Content */}
       <div className="relative bg-[rgb(var(--color-surface-1))] rounded-xl border border-[rgb(var(--color-surface-border))] shadow-2xl p-6 max-w-md w-full animate-in zoom-in-95 duration-200 slide-in-from-bottom-2">
-        
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
              <div>
@@ -78,7 +74,6 @@ export function GameLaunchDialog({ isOpen, onClose, onLaunch, saveName, gamePath
           )}
         </div>
 
-        {/* Action Area */}
         <div className="space-y-4">
           <label className="flex items-center space-x-3 cursor-pointer group bg-[rgb(var(--color-surface-2))] p-3 rounded-md border border-[rgb(var(--color-surface-border))] hover:border-[rgb(var(--color-primary)/0.5)] transition-colors">
             <div className="relative flex items-center">

@@ -68,8 +68,8 @@ function InventoryFiltersComponent({
   onStatusFiltersChange,
   sortBy,
   onSortChange,
-  filteredCount,
-  totalCount,
+  filteredCount: _filteredCount,
+  totalCount: _totalCount,
 }: InventoryFiltersProps) {
   const t = useTranslations();
 
@@ -211,10 +211,6 @@ function InventoryFiltersComponent({
                         </Button>
                     </div>
                   )}
-
-                  {/* Close on click outside is not implemented natively here for simplicity, 
-                      but in a real app ideally use a Popover component or click-outside hook. 
-                      For now, the user can toggle nicely. */}
               </div>
         </div>
       </div>

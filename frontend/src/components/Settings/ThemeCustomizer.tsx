@@ -128,8 +128,8 @@ export default function ThemeCustomizer() {
     if (savedCustomThemes) {
       try {
         setCustomThemes(JSON.parse(savedCustomThemes));
-      } catch (err) {
-        console.error('Error loading custom themes:', err);
+      } catch {
+        // Invalid JSON in localStorage, use empty array
       }
     }
 
@@ -140,8 +140,8 @@ export default function ThemeCustomizer() {
         setSelectedThemeName(name);
         setColors(savedColors);
         applyColorsToDOM(savedColors);
-      } catch (err) {
-        console.error('Error loading active theme:', err);
+      } catch {
+        loadThemeFromCSS();
       }
     } else {
       loadThemeFromCSS();
@@ -275,7 +275,7 @@ export default function ThemeCustomizer() {
     </div>
   );
 
-  const allThemes = [...PRESET_THEMES, ...customThemes];
+
 
   return (
     <Card>

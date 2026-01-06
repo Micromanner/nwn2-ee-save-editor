@@ -130,3 +130,15 @@ export function formatDuration(seconds: number | null | undefined): string {
 export function safe<T>(value: T | null | undefined, fallback: T | string = '-'): T | string {
   return value ?? fallback;
 }
+
+/**
+ * Safely parse unknown value to number with fallback
+ */
+export function safeToNumber(value: unknown, defaultValue: number = 0): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+  return defaultValue;
+}

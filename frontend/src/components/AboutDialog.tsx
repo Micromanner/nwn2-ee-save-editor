@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { getName, getVersion } from '@tauri-apps/api/app';
-import { Button, buttonVariants } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { ScrollArea } from '@/components/ui/ScrollArea';
-import { cn } from '@/lib/utils';
+
 
 interface AboutDialogProps {
   isOpen: boolean;

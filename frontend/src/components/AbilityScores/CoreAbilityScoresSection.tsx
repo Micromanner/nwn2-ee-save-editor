@@ -31,7 +31,6 @@ export default function CoreAbilityScoresSection({
 }: CoreAbilityScoresSectionProps) {
   const t = useTranslations();
   
-  // Default ability scores if none provided
   const [internalAbilityScores, setInternalAbilityScores] = useState<AbilityScore[]>([
     { name: t('abilityScores.strength'), shortName: 'STR', value: 10, modifier: 0 },
     { name: t('abilityScores.dexterity'), shortName: 'DEX', value: 10, modifier: 0 },
@@ -41,7 +40,6 @@ export default function CoreAbilityScoresSection({
     { name: t('abilityScores.charisma'), shortName: 'CHA', value: 10, modifier: 0 },
   ]);
 
-  // Use external ability scores if provided, otherwise use internal state
   const abilityScores = externalAbilityScores || internalAbilityScores;
 
   const calculateModifier = (value: number): number => {
@@ -50,41 +48,28 @@ export default function CoreAbilityScoresSection({
 
   const updateAbilityScore = (index: number, newValue: number) => {
     const clampedValue = Math.max(3, Math.min(50, newValue));
-    const newModifier = calculateModifier(clampedValue);
 
     if (onAbilityScoreChange) {
-      // If external handler provided, use it
       onAbilityScoreChange(index, clampedValue);
     } else {
-      // Otherwise update internal state
       const newAbilityScores = [...internalAbilityScores];
       newAbilityScores[index].value = clampedValue;
-      newAbilityScores[index].modifier = newModifier;
+      newAbilityScores[index].modifier = calculateModifier(clampedValue);
       setInternalAbilityScores(newAbilityScores);
     }
   };
 
   const increaseAbilityScore = (index: number) => {
-    // Use baseValue if available, otherwise fall back to value
-    const currentValue = abilityScores[index].baseValue !== undefined 
-      ? abilityScores[index].baseValue 
-      : abilityScores[index].value;
+    const currentValue = abilityScores[index].baseValue ?? abilityScores[index].value;
     const newValue = currentValue + 1;
-    
-    // Double check bounds before calling update
     if (newValue <= 50) {
       updateAbilityScore(index, newValue);
     }
   };
 
   const decreaseAbilityScore = (index: number) => {
-    // Use baseValue if available, otherwise fall back to value
-    const currentValue = abilityScores[index].baseValue !== undefined
-      ? abilityScores[index].baseValue
-      : abilityScores[index].value;
+    const currentValue = abilityScores[index].baseValue ?? abilityScores[index].value;
     const newValue = currentValue - 1;
-    
-    // Double check bounds before calling update
     if (newValue >= 3) {
       updateAbilityScore(index, newValue);
     }
@@ -101,7 +86,7 @@ export default function CoreAbilityScoresSection({
               name={attr.name}
               shortName={attr.shortName}
               value={attr.value}
-              modifier={calculateModifier(attr.value)}
+              modifier={attr.modifier}
               baseValue={attr.baseValue}
               breakdown={attr.breakdown}
               onIncrease={() => increaseAbilityScore(index)}

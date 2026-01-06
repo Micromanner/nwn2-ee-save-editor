@@ -108,9 +108,8 @@ export interface XPProgress {
 
 export function useClassesLevel(classesData?: ClassesData | null) {
   const { characterId, invalidateSubsystems, categorizedClasses, isMetadataLoading } = useCharacterContext();
-  const [isUpdating, setIsUpdating] = useState(false); // No local state for XP - derive from classesData
-  // const [xpProgress, setXpProgress] = useState<XPProgress | null>(null);
-  const [isLoadingXP, setIsLoadingXP] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isLoadingXP, _setIsLoadingXP] = useState(false);
 
   // Helper function to find class info from categorized data
   const findClassInfoById = useCallback((classId: number): ClassInfo | undefined => {
@@ -184,10 +183,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
       
       return response;
-      
-      return response;
     } catch (err) {
-      console.error('Error adjusting class level:', err);
       throw err;
     } finally {
       setIsUpdating(false);
@@ -214,7 +210,6 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       // Silently refresh all dependent subsystems
       await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
     } catch (err) {
-      console.error('Error changing class:', err);
       throw err;
     } finally {
       setIsUpdating(false);
@@ -249,10 +244,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
       
       return response;
-      
-      return response;
     } catch (err) {
-      console.error('Error adding class:', err);
       throw err;
     } finally {
       setIsUpdating(false);
@@ -274,7 +266,6 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       // Silently refresh all dependent subsystems
       await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
     } catch (err) {
-      console.error('Error removing class:', err);
       throw err;
     } finally {
       setIsUpdating(false);
@@ -312,7 +303,6 @@ export function useClassesLevel(classesData?: ClassesData | null) {
   }, [classes]);
 
   // Fetch XP progress
-  // Use XP progress from classes subsystem if available
   const xpProgress = useMemo(() => {
      if (classesData?.xp_progress) {
        return classesData.xp_progress;
@@ -320,32 +310,15 @@ export function useClassesLevel(classesData?: ClassesData | null) {
      return null;
   }, [classesData]);
 
-  // Fallback fetching - mainly for initial load if backend doesn't support combined yet
-  // or if we need to force update for some reason (though subsystem refresh covers it)
-  // We keep the fetch logic but don't auto-trigger it if we have data
   const fetchXPProgress = useCallback(async () => {
     if (!characterId) return;
     try {
-      // If we have data from classes subsystem, we probably don't need this separate call
-      // But keeping it available for manual refresh if needed
-      const response = await apiClient.get<XPProgress>(`/characters/${characterId}/classes/experience`);
-      
-      // Only set if we really need to (but now we use derived state mostly)
-      // This is a bit tricky with derived vs separate state.
-      // Best approach: If subsystem provides it, use it. If not, separate.
-      // But we just removed the separate state 'xpProgress'.
-      // So this function is largely redundant unless we re-introduce state or rely solely on subsystem.
-      
-      // To properly support legacy/fallback, we should rely on subsystem refresh.
-      // So this function effectively just refreshes the classes subsystem now.
       await invalidateSubsystems(['classes']);
-      
-    } catch (error) {
-      console.error('Failed to fetch XP progress:', error);
+    } catch {
+      // XP progress fetch failed silently
     }
   }, [characterId, invalidateSubsystems]); 
 
-  // Initial load handled by subsystem
 
 
   // Set experience points
@@ -357,7 +330,6 @@ export function useClassesLevel(classesData?: ClassesData | null) {
       await apiClient.post(`/characters/${characterId}/classes/experience`, { xp });
       await fetchXPProgress();
     } catch (err) {
-      console.error('Error setting experience:', err);
       throw err;
     } finally {
       setIsUpdating(false);
