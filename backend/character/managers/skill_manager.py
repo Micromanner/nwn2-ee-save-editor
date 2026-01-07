@@ -97,6 +97,7 @@ class SkillManager(EventEmitter):
         if total_level <= 1:
             return level_1_points
 
+        subsequent_levels = total_level - 1
         return level_1_points + (points_per_level * subsequent_levels)
 
     def _calculate_true_lifetime_skill_points(self) -> int:
@@ -139,6 +140,14 @@ class SkillManager(EventEmitter):
         current_cost = self.calculate_skill_cost(skill_id, current_ranks)
         new_cost = self.calculate_skill_cost(skill_id, ranks)
         net_cost = new_cost - current_cost
+        
+        is_class_skill = self.is_class_skill(skill_id)
+        logger.debug(
+            f"set_skill_rank: skill_id={skill_id}, is_class_skill={is_class_skill}, "
+            f"current_ranks={current_ranks}, new_ranks={ranks}, "
+            f"current_cost={current_cost}, new_cost={new_cost}, net_cost={net_cost}, "
+            f"available_points={available_points}"
+        )
 
         max_ranks = self.get_max_skill_ranks(skill_id)
         if ranks > max_ranks:
@@ -248,14 +257,18 @@ class SkillManager(EventEmitter):
         if ranks == 0:
             return 0
 
-        if self.is_class_skill(skill_id):
+        is_class = self.is_class_skill(skill_id)
+        if is_class:
+            logger.debug(f"calculate_skill_cost: skill_id={skill_id} is CLASS skill, returning {ranks}")
             return ranks
 
         # Able Learner feat (ID 406) makes cross-class skills cost 1 point
         feat_manager = self.character_manager.get_manager('feat')
         if feat_manager and feat_manager.has_feat(406):
+            logger.debug(f"calculate_skill_cost: skill_id={skill_id} has Able Learner, returning {ranks}")
             return ranks
 
+        logger.debug(f"calculate_skill_cost: skill_id={skill_id} is CROSS-CLASS skill, returning {ranks * 2}")
         return ranks * 2
 
     def calculate_skill_modifier(self, skill_id: int) -> int:

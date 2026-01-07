@@ -526,7 +526,7 @@ export default function SkillsEditor() {
                           onClick={() => handleButtonClick('increase', skill.id)}
                           variant="outline"
                           size="sm"
-                          disabled={updatingSkills.has(skill.id)}
+                          disabled={updatingSkills.has(skill.id) || (!skill.is_class_skill && availableSkillPoints === 1)}
                           clicked={clickedButton === `increase-${skill.id}`}
                           aria-label={`Increase ${skill.name}`}
                           title={`Increase ${skill.name} (cost: ${skill.is_class_skill ? '1' : '2'} points, max: ${skill.max_ranks})`}
