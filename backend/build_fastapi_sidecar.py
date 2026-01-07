@@ -128,12 +128,16 @@ def build_with_nuitka():
     print(f"Building FastAPI server for {sys.platform} with Nuitka...")
     print(f"Output file: {output_name}")
     print(f"Command: {' '.join(cmd)}")
-    
-    # Run the Nuitka build
-    result = subprocess.run(cmd, cwd=BACKEND_DIR)
-    
+
+    # Run the Nuitka build - stream output live, capture stderr for error reporting
+    result = subprocess.run(cmd, cwd=BACKEND_DIR, stderr=subprocess.PIPE, text=True)
+
     if result.returncode != 0:
         print("\nNuitka build failed!")
+        if result.stderr:
+            print("=== NUITKA ERROR OUTPUT ===")
+            print(result.stderr)
+            print("=== END ERROR OUTPUT ===")
         return False
         
     # Check if the output directory and executable were created
