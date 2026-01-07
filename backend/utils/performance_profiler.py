@@ -64,19 +64,19 @@ class PerformanceProfiler:
         self.current_stack.append(entry)
         
         try:
-            logger.debug(f"{'  ' * (len(self.current_stack) - 2)}→ Starting: {name}")
+            # logger.debug(f"{'  ' * (len(self.current_stack) - 2)}→ Starting: {name}")
             yield entry
         finally:
             entry.end_time = time.time()
             self.current_stack.pop()
-            logger.debug(f"{'  ' * (len(self.current_stack) - 1)}← Completed: {name} ({entry.duration_ms:.2f}ms)")
+            # logger.debug(f"{'  ' * (len(self.current_stack) - 1)}← Completed: {name} ({entry.duration_ms:.2f}ms)")
     
     def mark(self, name: str, **metadata):
         """Mark a point in time without creating a context."""
         entry = TimingEntry(name, time.time(), end_time=time.time(), metadata=metadata)
         parent = self.current_stack[-1]
         parent.children.append(entry)
-        logger.debug(f"{'  ' * (len(self.current_stack) - 1)}• Marked: {name}")
+        # logger.debug(f"{'  ' * (len(self.current_stack) - 1)}• Marked: {name}")
     
     def add_metadata(self, key: str, value: Any):
         """Add metadata to the current timing context."""

@@ -24,7 +24,6 @@ class SaveManager(EventEmitter):
         }
         
         self._racial_cache = {}
-        self._saves_cache = None
 
         self._initialize_data_lookups()
         self._register_event_handlers()
@@ -62,9 +61,7 @@ class SaveManager(EventEmitter):
         self.character_manager.on(EventType.FEAT_REMOVED, self._on_feat_changed)
     
     def calculate_saving_throws(self) -> Dict[str, Any]:
-        """Calculate all saving throws with complete breakdown and request-level caching."""
-        if self._saves_cache is not None:
-            return self._saves_cache.copy()
+        """Calculate all saving throws with complete breakdown."""
 
         # 1. Base Saves (Classes + Epic)
         base_saves = self._calculate_base_saves()
@@ -167,7 +164,6 @@ class SaveManager(EventEmitter):
             }
         }
 
-        self._saves_cache = result.copy()
         return result
 
     def _calculate_base_saves(self) -> Dict[str, int]:
@@ -177,13 +173,10 @@ class SaveManager(EventEmitter):
         total_will = 0
         
         lvl_stat_list = self.gff.get('LvlStatList', [])
-        class_list = self.gff.get('ClassList', [])
-        total_char_level = sum(c.get('ClassLevel', 0) for c in class_list)
+
         
         if lvl_stat_list and isinstance(lvl_stat_list, list):
             # Calculate from level history (use available data)
-            if len(lvl_stat_list) != total_char_level:
-                logger.debug(f"LvlStatList length ({len(lvl_stat_list)}) differs from total level ({total_char_level}) - using available history")
 
             current_class_levels = {}
             for i, level_entry in enumerate(lvl_stat_list):
@@ -247,8 +240,8 @@ class SaveManager(EventEmitter):
         return {'fortitude': 0, 'reflex': 0, 'will': 0}
 
     def _invalidate_saves_cache(self):
-        """Invalidate the saves cache."""
-        self._saves_cache = None
+        """No-op - caching removed due to thread safety issues with concurrent requests."""
+        pass
 
     def _calculate_feat_bonuses(self) -> Dict[str, int]:
         """Calculate save bonuses from feats by delegating to FeatManager."""

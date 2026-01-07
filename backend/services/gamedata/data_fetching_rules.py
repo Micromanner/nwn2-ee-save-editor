@@ -93,7 +93,7 @@ class DataFetchingRules:
             self._retry_counts[cache_key] = self._retry_counts.get(cache_key, 0) + 1
             self._last_attempt[cache_key] = time.time()
             
-            logger.debug(f"Recorded attempt: {cache_key} (attempt #{self._retry_counts[cache_key]})")
+            # logger.debug(f"Recorded attempt: {cache_key} (attempt #{self._retry_counts[cache_key]})")
             
             # Warn when approaching retry limit
             if self._retry_counts[cache_key] >= self.max_retries - 1:
@@ -135,7 +135,8 @@ class DataFetchingRules:
                     if not self._scan_mode:
                         logger.info(f"Recovered: {cache_key}")
             else:
-                logger.debug(f"Success: {cache_key}")
+                # logger.debug(f"Success: {cache_key}")
+                pass
     
     def record_failure(
         self, table_name: str, method_name: str = "get_table",

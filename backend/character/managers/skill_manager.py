@@ -259,16 +259,16 @@ class SkillManager(EventEmitter):
 
         is_class = self.is_class_skill(skill_id)
         if is_class:
-            logger.debug(f"calculate_skill_cost: skill_id={skill_id} is CLASS skill, returning {ranks}")
+            # logger.debug(f"calculate_skill_cost: skill_id={skill_id} is CLASS skill, returning {ranks}")
             return ranks
 
         # Able Learner feat (ID 406) makes cross-class skills cost 1 point
         feat_manager = self.character_manager.get_manager('feat')
         if feat_manager and feat_manager.has_feat(406):
-            logger.debug(f"calculate_skill_cost: skill_id={skill_id} has Able Learner, returning {ranks}")
+            # logger.debug(f"calculate_skill_cost: skill_id={skill_id} has Able Learner, returning {ranks}")
             return ranks
 
-        logger.debug(f"calculate_skill_cost: skill_id={skill_id} is CROSS-CLASS skill, returning {ranks * 2}")
+        # logger.debug(f"calculate_skill_cost: skill_id={skill_id} is CROSS-CLASS skill, returning {ranks * 2}")
         return ranks * 2
 
     def calculate_skill_modifier(self, skill_id: int) -> int:
@@ -440,7 +440,10 @@ class SkillManager(EventEmitter):
             spent_points = self._calculate_spent_skill_points()
 
             # Use true lifetime points from history, not theoretical single-class calc
-            total_available = self._calculate_true_lifetime_skill_points()
+            # total_available = self._calculate_true_lifetime_skill_points()
+
+            # Fix: avoid double calculation. Total lifetime points is simply spent + current available.
+            total_available = spent_points + available_points
             
             # If total_available is 0 (new/empty char), fallback to theoretical might be needed?
             # But initialized char has LvlStatList.

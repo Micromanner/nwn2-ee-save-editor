@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
@@ -114,25 +114,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   const [localAbilityScoreOverrides, setLocalAbilityScoreOverrides] = useState<Record<string, number>>({});
   const [localStatsOverrides, setLocalStatsOverrides] = useState<Partial<CharacterStats>>({});
 
-  const lastValidDataRef = useRef<AbilityScoreState | null>(null);
-  
-  const isDataValid = (data: AbilityScoreState | null | undefined): data is AbilityScoreState => {
-    if (!data) return false;
-    if (!data.saving_throws || Object.keys(data.saving_throws).length === 0) return false;
-    if (!data.combat_stats) return false;
-    if (!data.detailed_modifiers || Object.keys(data.detailed_modifiers).length === 0) return false;
-    
-    return true;
-  };
-
-  if (isDataValid(abilityScoreData)) {
-    lastValidDataRef.current = abilityScoreData;
-  }
-
-  const dataToUse = isDataValid(abilityScoreData) ? abilityScoreData : lastValidDataRef.current;
-
   useEffect(() => {
-    if (isDataValid(abilityScoreData)) {
+    if (abilityScoreData) {
       setLocalAbilityScoreOverrides({});
       setLocalStatsOverrides({});
     }
@@ -143,25 +126,25 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
   }, []);
 
   const abilityScores = useMemo((): AbilityScore[] => {
-    if (!dataToUse) return [];
+    if (!abilityScoreData) return [];
 
     const getEditValue = (attrKey: string) => {
-      return localAbilityScoreOverrides[attrKey] ?? dataToUse.base_attributes[attrKey] ?? 10;
+      return localAbilityScoreOverrides[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
     };
 
     const getDisplayValue = (attrKey: string) => {
       const override = localAbilityScoreOverrides[attrKey];
       if (override !== undefined) {
-          const originalBase = dataToUse.base_attributes[attrKey] ?? 10;
-          const originalEffective = dataToUse.effective_attributes?.[attrKey] ?? originalBase;
+          const originalBase = abilityScoreData.base_attributes[attrKey] ?? 10;
+          const originalEffective = abilityScoreData.effective_attributes?.[attrKey] ?? originalBase;
           const bonus = originalEffective - originalBase;
           return override + bonus;
       }
-      return dataToUse.effective_attributes?.[attrKey] ?? dataToUse.base_attributes[attrKey] ?? 10;
+      return abilityScoreData.effective_attributes?.[attrKey] ?? abilityScoreData.base_attributes[attrKey] ?? 10;
     };
     
-    const getDetailedMod = (category: keyof typeof dataToUse.detailed_modifiers, attr: string) => {
-      return dataToUse.detailed_modifiers?.[category]?.[attr] ?? 0;
+    const getDetailedMod = (category: keyof typeof abilityScoreData.detailed_modifiers, attr: string) => {
+      return abilityScoreData.detailed_modifiers?.[category]?.[attr] ?? 0;
     };
 
     return [
@@ -250,36 +233,35 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         }
       },
     ];
-  }, [dataToUse, localAbilityScoreOverrides, t, calculateModifier]);
+  }, [abilityScoreData, localAbilityScoreOverrides, t, calculateModifier]);
 
   const stats = useMemo((): CharacterStats => {
-    if (!dataToUse) {
-      return {
-        hitPoints: 0,
-        maxHitPoints: 0,
-        experience: 0,
-        level: 1,
-        armorClass: { base: 10, total: 10 },
-        fortitude: { base: 0, total: 0 },
-        reflex: { base: 0, total: 0 },
-        will: { base: 0, total: 0 },
-        initiative: { base: 0, total: 0 },
-      };
+    const defaultStats: CharacterStats = {
+      hitPoints: 0,
+      maxHitPoints: 0,
+      experience: 0,
+      level: 1,
+      armorClass: { base: 10, total: 10 },
+      fortitude: { base: 0, total: 0 },
+      reflex: { base: 0, total: 0 },
+      will: { base: 0, total: 0 },
+      initiative: { base: 0, total: 0 },
+    };
+
+    if (!abilityScoreData) {
+      return defaultStats;
     }
     
-    const extractBaseTotal = (
+    const extractStat = (
       obj: unknown, 
-      statType: 'ac' | 'initiative' | 'fortitude' | 'reflex' | 'will',
-      fallbackObj?: unknown
+      statType: 'ac' | 'initiative' | 'fortitude' | 'reflex' | 'will'
     ) => {
       const overrideKey = statType === 'ac' ? 'armorClass' : statType;
       const localOverride = localStatsOverrides[overrideKey as keyof CharacterStats];
       
-      if ((obj === null || obj === undefined) && fallbackObj) {
-         return extractBaseTotal(fallbackObj, statType);
+      if (obj === null || obj === undefined) {
+        return { base: 0, total: 0 };
       }
-
-      const fallbackData = (fallbackObj && typeof fallbackObj === 'object') ? fallbackObj as Record<string, unknown> : {};
 
       if (typeof obj === 'number') {
         const baseValue = localOverride && typeof localOverride === 'object' && 'base' in localOverride 
@@ -288,58 +270,35 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         return { base: baseValue, total: obj };
       }
       
-      if (typeof obj === 'object' && obj !== null) {
+      if (typeof obj === 'object') {
         const objData = obj as Record<string, unknown>;
         
         let base = 0;
-        let total = 0;
+        const total = (typeof objData.total === 'number' ? objData.total : 
+                typeof objData.value === 'number' ? objData.value : 0);
         const result: { base: number; total: number; [key: string]: number } = { base, total };
-        total = (typeof objData.total === 'number' ? objData.total : 
-                typeof objData.value === 'number' ? objData.value : 
-                typeof fallbackData.total === 'number' ? fallbackData.total as number : 0);
+        
         switch (statType) {
           case 'ac':
             const components = objData.components as Record<string, unknown> | undefined;
-            const fallbackComponents = fallbackData.components as Record<string, unknown> | undefined;
-            
-            base = (typeof components?.natural === 'number' ? components.natural : 
-                   typeof fallbackComponents?.natural === 'number' ? fallbackComponents.natural as number : 0);
-                   
-            result.dexMod = (typeof components?.dex === 'number' ? components.dex : 
-                            typeof fallbackComponents?.dex === 'number' ? fallbackComponents.dex as number : 0);
-                            
-            result.equipment = ((typeof components?.armor === 'number' ? components.armor : 
-                               typeof fallbackComponents?.armor === 'number' ? fallbackComponents.armor as number : 0) + 
-                              (typeof components?.shield === 'number' ? components.shield : 
-                               typeof fallbackComponents?.shield === 'number' ? fallbackComponents.shield as number : 0));
+            base = typeof components?.natural === 'number' ? components.natural : 0;
+            result.dexMod = typeof components?.dex === 'number' ? components.dex : 0;
+            result.equipment = (typeof components?.armor === 'number' ? components.armor : 0) + 
+                              (typeof components?.shield === 'number' ? components.shield : 0);
             break;
           case 'initiative':
-            base = (typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 
-                   typeof fallbackData.misc_bonus === 'number' ? fallbackData.misc_bonus as number : 0);
-                   
-            result.dexMod = (typeof objData.dex_modifier === 'number' ? objData.dex_modifier : 
-                            typeof fallbackData.dex_modifier === 'number' ? fallbackData.dex_modifier as number : 0);
-                            
-            result.feats = (typeof objData.improved_initiative === 'number' ? objData.improved_initiative : 
-                           typeof fallbackData.improved_initiative === 'number' ? fallbackData.improved_initiative as number : 0);
+            base = typeof objData.misc_bonus === 'number' ? objData.misc_bonus : 0;
+            result.dexMod = typeof objData.dex_modifier === 'number' ? objData.dex_modifier : 0;
+            result.feats = typeof objData.improved_initiative === 'number' ? objData.improved_initiative : 0;
             break;
           case 'fortitude':
           case 'reflex':
           case 'will':
-            base = (typeof objData.misc === 'number' ? objData.misc : 
-                   typeof fallbackData.misc === 'number' ? fallbackData.misc as number : 0);
-            
-            result.abilityMod = (typeof objData.ability === 'number' ? objData.ability : 
-                                typeof fallbackData.ability === 'number' ? fallbackData.ability as number : 0);
-                                
-            result.classMod = (typeof objData.base === 'number' ? objData.base : 
-                              typeof fallbackData.base === 'number' ? fallbackData.base as number : 0);
-                              
-            result.racial = (typeof objData.racial === 'number' ? objData.racial : 
-                            typeof fallbackData.racial === 'number' ? fallbackData.racial as number : 0);
-                            
-            result.feat = (typeof objData.feat === 'number' ? objData.feat : 
-                          typeof fallbackData.feat === 'number' ? fallbackData.feat as number : 0);
+            base = typeof objData.misc === 'number' ? objData.misc : 0;
+            result.abilityMod = typeof objData.ability === 'number' ? objData.ability : 0;
+            result.classMod = typeof objData.base === 'number' ? objData.base : 0;
+            result.racial = typeof objData.racial === 'number' ? objData.racial : 0;
+            result.feat = typeof objData.feat === 'number' ? objData.feat : 0;
             break;
         }
 
@@ -348,28 +307,23 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         }
         
         result.base = base;
-        result.total = total;
         return result;
       }
       return { base: 0, total: 0 };
     };
-
-    const fallbackStats = lastValidDataRef.current;
     
-    const stats = {
-      hitPoints: localStatsOverrides.hitPoints ?? dataToUse.derived_stats.hit_points.current,
-      maxHitPoints: localStatsOverrides.maxHitPoints ?? dataToUse.derived_stats.hit_points.maximum,
+    return {
+      hitPoints: localStatsOverrides.hitPoints ?? abilityScoreData.derived_stats.hit_points.current,
+      maxHitPoints: localStatsOverrides.maxHitPoints ?? abilityScoreData.derived_stats.hit_points.maximum,
       experience: localStatsOverrides.experience ?? 0,
       level: localStatsOverrides.level ?? 1,
-      armorClass: extractBaseTotal(dataToUse.combat_stats?.armor_class, 'ac', fallbackStats?.combat_stats?.armor_class),
-      fortitude: extractBaseTotal(dataToUse.saving_throws?.fortitude, 'fortitude', fallbackStats?.saving_throws?.fortitude),
-      reflex: extractBaseTotal(dataToUse.saving_throws?.reflex, 'reflex', fallbackStats?.saving_throws?.reflex),
-      will: extractBaseTotal(dataToUse.saving_throws?.will, 'will', fallbackStats?.saving_throws?.will),
-      initiative: extractBaseTotal(dataToUse.combat_stats?.initiative, 'initiative', fallbackStats?.combat_stats?.initiative),
+      armorClass: extractStat(abilityScoreData.combat_stats?.armor_class, 'ac'),
+      fortitude: extractStat(abilityScoreData.saving_throws?.fortitude, 'fortitude'),
+      reflex: extractStat(abilityScoreData.saving_throws?.reflex, 'reflex'),
+      will: extractStat(abilityScoreData.saving_throws?.will, 'will'),
+      initiative: extractStat(abilityScoreData.combat_stats?.initiative, 'initiative'),
     };
-
-    return stats;
-  }, [dataToUse, localStatsOverrides]);
+  }, [abilityScoreData, localStatsOverrides]);
 
   const [alignment, setAlignment] = useState<Alignment>({
     lawChaos: 50,
@@ -420,7 +374,7 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       await CharacterAPI.updateAttributes(characterId, {
         [backendAttrName]: clampedValue
       });
-      await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills']);
+      await invalidateSubsystems(['abilityScores', 'combat', 'skills']);
 
     } catch (err) {
       setLocalAbilityScoreOverrides(prev => {
@@ -449,7 +403,6 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
         await CharacterAPI.updateArmorClass(characterId, updates.armorClass.base);
       }
       
-      
       if (updates.initiative?.base !== undefined) {
         await CharacterAPI.updateInitiativeBonus(characterId, updates.initiative.base);
       }
@@ -462,11 +415,8 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
       if (Object.keys(saveUpdates).length > 0) {
         await CharacterAPI.updateSavingThrows(characterId, saveUpdates);
       }
-      
-      if (updates.hitPoints !== undefined || updates.maxHitPoints !== undefined) {
-      }
 
-      await invalidateSubsystems(['abilityScores', 'combat', 'saves']);
+      await invalidateSubsystems(['abilityScores', 'combat']);
 
     } catch (err) {
       setLocalStatsOverrides(prev => {
@@ -488,7 +438,6 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
     try {
       const result = await CharacterAPI.updateAlignment(characterId, newAlignment);
       
-      // Update with server response to ensure consistency
       setAlignment({
         lawChaos: result.lawChaos,
         goodEvil: result.goodEvil,
@@ -522,6 +471,6 @@ export function useAbilityScores(abilityScoreData?: AbilityScoreState | null) {
 
     updateAlignment,
     
-    pointSummary: dataToUse?.point_summary,
+    pointSummary: abilityScoreData?.point_summary,
   };
 }

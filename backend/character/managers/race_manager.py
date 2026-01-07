@@ -568,27 +568,28 @@ class RaceManager(EventEmitter):
         return {}
 
     def get_racial_modifier_deltas(self) -> Dict[str, int]:
-        """Get difference between subrace and base race modifiers."""
+        """Get racial ability modifiers for this character."""
         attributes = ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha']
-        deltas = {attr: 0 for attr in attributes}
+        result = {attr: 0 for attr in attributes}
 
+        # Check for subrace first - subrace overrides base race
+        subrace_raw = self.gff.get('Subrace')
+        if subrace_raw:
+            subrace_name = self._get_subrace_name(subrace_raw)
+            subrace_data = self._get_subrace_data(subrace_name)
+            if subrace_data:
+                sub_mods = field_mapper.get_ability_modifiers(subrace_data)
+                for attr in attributes:
+                    result[attr] = sub_mods.get(attr, 0)
+                return result
+
+        # No subrace - use base race modifiers
         race_id = self.gff.get('Race')
         base_mods = self._get_racial_ability_modifiers(race_id)
-
-        subrace_raw = self.gff.get('Subrace')
-        if not subrace_raw:
-            return deltas
-            
-        subrace_name = self._get_subrace_name(subrace_raw)
-        subrace_data = self._get_subrace_data(subrace_name)
-        sub_mods = field_mapper.get_ability_modifiers(subrace_data) if subrace_data else {}
-
         for attr in attributes:
-            base = base_mods.get(attr, 0)
-            sub = sub_mods.get(attr, 0)
-            deltas[attr] = sub - base
+            result[attr] = base_mods.get(attr, 0)
             
-        return deltas
+        return result
 
     def _get_favored_class(self, race_id: int) -> Optional[int]:
         """Get favored class for a race."""

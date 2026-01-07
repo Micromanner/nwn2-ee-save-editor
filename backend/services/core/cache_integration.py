@@ -51,7 +51,7 @@ class PrecompiledCacheIntegration:
             raw_data = bytes(raw_data)
 
         parser = self._reconstruct_parser(raw_data)
-        logger.debug(f"Loaded {table_name} from pre-compiled cache")
+        # logger.debug(f"Loaded {table_name} from pre-compiled cache")
         return parser
 
     def build_cache(self) -> bool:

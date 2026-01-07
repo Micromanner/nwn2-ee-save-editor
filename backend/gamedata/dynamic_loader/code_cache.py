@@ -96,17 +96,17 @@ class SecureCodeCache:
                         current_hash = self.get_file_hash(file_path)
                         if cached_info.get('file_hash') == current_hash:
                             code = cache_file.read_text(encoding='utf-8')
-                            logger.debug(f"Loaded cached code for {table_name}")
+                            # logger.debug(f"Loaded cached code for {table_name}")
                             return code
                     elif not file_path:
                         code = cache_file.read_text(encoding='utf-8')
-                        logger.debug(f"Loaded cached code for {table_name} (no file validation)")
+                        # logger.debug(f"Loaded cached code for {table_name} (no file validation)")
                         return code
             except Exception as e:
                 logger.warning(f"Failed to load cached code for {table_name}: {e}")
         
         # Generate new code
-        logger.debug(f"Generating new code for {table_name}")
+        # logger.debug(f"Generating new code for {table_name}")
         code_string = code_generator_func()
         
         try:
@@ -151,7 +151,7 @@ class SecureCodeCache:
                     self.metadata.pop(cache_key, None)
         
         if removed_count > 0:
-            logger.debug(f"Removed {removed_count} old cache files for {table_name}")
+            # logger.debug(f"Removed {removed_count} old cache files for {table_name}")
             self._save_metadata()
     
     def clear_cache(self):
@@ -211,7 +211,7 @@ class SecureCodeCache:
                 try:
                     cache_file.unlink()
                     orphaned_count += 1
-                    logger.debug(f"Removed orphaned cache file: {cache_file.name}")
+                    # logger.debug(f"Removed orphaned cache file: {cache_file.name}")
                 except Exception as e:
                     logger.error(f"Failed to remove orphaned file {cache_file}: {e}")
         
@@ -253,7 +253,7 @@ class SecureCodeCache:
             with open(relationships_file, 'w') as f:
                 json.dump(cache_data, f, indent=2)
             
-            logger.debug(f"Saved {len(rel_data)} relationships to cache")
+            # logger.debug(f"Saved {len(rel_data)} relationships to cache")
             
         except Exception as e:
             logger.error(f"Failed to save relationships to cache: {e}")
@@ -269,7 +269,7 @@ class SecureCodeCache:
             with open(relationships_file, 'r') as f:
                 data = json.load(f)
             
-            logger.debug(f"Loaded {len(data.get('relationships', []))} relationships from cache")
+            # logger.debug(f"Loaded {len(data.get('relationships', []))} relationships from cache")
             return data
             
         except Exception as e:

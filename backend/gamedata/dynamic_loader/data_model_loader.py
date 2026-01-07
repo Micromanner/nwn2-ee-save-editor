@@ -384,7 +384,7 @@ class DataModelLoader:
         
         vanilla_class = self._try_load_vanilla_class(table_name)
         if vanilla_class:
-            logger.debug(f"Using pre-generated vanilla class for {table_name}")
+        # logger.debug(f"Using pre-generated vanilla class for {table_name}")
             return table_name, vanilla_class
         
         def generate_code():
@@ -430,14 +430,14 @@ class DataModelLoader:
             
             if hasattr(vanilla_module, class_name):
                 vanilla_class = getattr(vanilla_module, class_name)
-                logger.debug(f"Loaded vanilla class for {table_name}")
+                # logger.debug(f"Loaded vanilla class for {table_name}")
                 return vanilla_class
             else:
-                logger.debug(f"Vanilla class not found for {table_name}, using dynamic generation")
+                # logger.debug(f"Vanilla class not found for {table_name}, using dynamic generation")
                 return None
                 
         except Exception as e:
-            logger.debug(f"Could not load vanilla class for {table_name}: {e}")
+            # logger.debug(f"Could not load vanilla class for {table_name}: {e}")
             return None
 
     def _has_vanilla_class(self, table_name: str) -> bool:
@@ -641,10 +641,11 @@ class DataModelLoader:
                 self._string_lookup_stats['batch_time_ms'] += batch_time
 
                 strings_per_sec = (len(str_refs_list) / batch_time * 1000) if batch_time > 0 else float('inf')
-                logger.debug(f"TLK batch lookup for {table_name}: "
-                           f"{len(str_refs_list)} strings in {batch_time:.2f}ms "
-                           f"({strings_per_sec:.0f} strings/sec)" if strings_per_sec != float('inf') else
-                           f"{len(str_refs_list)} strings in {batch_time:.2f}ms (instant)")
+                # logger.debug(f"TLK batch lookup for {table_name}: "
+                #            f"{len(str_refs_list)} strings in {batch_time:.2f}ms "
+                #            f"({strings_per_sec:.0f} strings/sec)" if strings_per_sec != float('inf') else
+                #            f"{len(str_refs_list)} strings in {batch_time:.2f}ms (instant)")
+                pass
                 
             except Exception as e:
                 logger.warning(f"Batch TLK lookup failed for {table_name}, falling back to individual lookups: {e}")
@@ -667,8 +668,9 @@ class DataModelLoader:
         
         total_time = (time.time() - start_time) * 1000
         
-        if string_cache:
-            logger.debug(f"Created string cache for {table_name}: "
-                       f"{len(string_cache)} resolved strings in {total_time:.2f}ms")
+        # if string_cache:
+        #     logger.debug(f"Created string cache for {table_name}: "
+        #                f"{len(string_cache)} resolved strings in {total_time:.2f}ms")
+        pass
         
         return string_cache
