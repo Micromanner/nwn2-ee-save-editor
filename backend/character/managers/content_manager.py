@@ -1114,18 +1114,45 @@ class ContentManager(EventEmitter):
         if not backups_folder or not os.path.exists(backups_folder):
             return []
 
+        current_campaign_id = self.module_info.get('campaign_id')
+        
         backups = []
         try:
+            from nwn2_rust import GffParser
+            
             for filename in os.listdir(backups_folder):
                 if filename.endswith('.cam'):
                     filepath = os.path.join(backups_folder, filename)
-                    stat = os.stat(filepath)
-                    backups.append({
-                        'filename': filename,
-                        'path': filepath,
-                        'size_bytes': stat.st_size,
-                        'created': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    })
+                    try:
+                        stat = os.stat(filepath)
+                        
+                        if current_campaign_id:
+                            guid_prefix = current_campaign_id[:8] if len(current_campaign_id) >= 8 else current_campaign_id
+                            
+                            try:
+                                file_guid_raw = GffParser(filepath).get_field('GUID')
+                                
+                                # Convert GUID bytes to hex string
+                                if isinstance(file_guid_raw, bytes):
+                                    file_guid = file_guid_raw.hex()
+                                else:
+                                    file_guid = str(file_guid_raw) if file_guid_raw else ''
+                                
+                                if file_guid != current_campaign_id:
+                                    continue
+                            except Exception as e:
+                                logger.warning(f"ContentManager: Failed to read GUID from backup {filename}: {e}")
+                                continue
+
+                        backups.append({
+                            'filename': filename,
+                            'path': filepath,
+                            'size_bytes': stat.st_size,
+                            'created': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        })
+                    except OSError:
+                        pass
+                        
             # Sort by created date, newest first
             backups.sort(key=lambda x: x['created'], reverse=True)
         except Exception as e:
