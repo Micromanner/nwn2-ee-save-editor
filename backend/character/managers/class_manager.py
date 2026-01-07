@@ -185,16 +185,17 @@ class ClassManager(EventEmitter):
             class_level_gained=current_class_lvl
         )
         self.character_manager.emit(event)
-
+        
         lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
         points_gained = 0
         if lvl_stat_list:
             last_entry = lvl_stat_list[-1]
             points_gained = last_entry.get(LVL_STAT_SKILL_POINTS, 0)
-
+        
+        current_sp = self.gff.get('SkillPoints', 0) # Read fresh
         gains = {
             'skill_points': points_gained,
-            'total_skill_points': self.gff.get('SkillPoints', 0),
+            'total_skill_points': current_sp,
             'feats': 0,
             'ability_score': False,
             'new_spells': False
@@ -497,22 +498,48 @@ class ClassManager(EventEmitter):
         
         return changes
     
-    def _calculate_historical_skill_points(self) -> Dict[int, int]:
-        """Reconstruct skill points per class from history entries."""
+    def _calculate_theoretical_skill_points(self) -> Dict[int, int]:
+        """Calculate theoretical skill points per class based on level history and current stats."""
+        race_id = self.gff.get('Race', 0)
+        race_data = self.rules_service.get_by_id('racialtypes', race_id)
+        race_bonus = 0
+        if race_data:
+            race_bonus = field_mapper.get_field_value(race_data, 'SkillPointModifier', 0)
+            race_bonus = field_mapper._safe_int(race_bonus, 0)
+
+        modifiers = self._calculate_ability_modifiers()
+        int_mod = modifiers.get('INT', 0)
+
         lvl_stat_list = self.gff.get(LVL_STAT_LIST, [])
         if not lvl_stat_list:
             return {}
 
         class_points = {}
-        for entry in lvl_stat_list:
+        for idx, entry in enumerate(lvl_stat_list):
             class_id = entry.get(LVL_STAT_CLASS, -1)
             if class_id == -1:
                 continue
-            skill_list = entry.get(LVL_STAT_SKILL_LIST, [])
-            points_this_level = sum(s.get("Rank", 0) for s in skill_list if isinstance(s, dict))
-            class_points[class_id] = class_points.get(class_id, 0) + points_this_level
+
+            class_data = self.rules_service.get_by_id('classes', class_id)
+            if not class_data:
+                continue
+
+            # Default base is usually 2 for most classes if missing
+            base_sp = field_mapper.get_field_value(class_data, 'SkillPointBase', 2)
+            base_sp = field_mapper._safe_int(base_sp, 2)
+
+            # Formula: max(1, Base + INT + Race)
+            points = max(1, base_sp + int_mod + race_bonus)
+            
+            # x4 at level 1 (Level 1 is index 0 in history)
+            if idx == 0:
+                points *= 4
+            
+            class_points[class_id] = class_points.get(class_id, 0) + points
 
         return class_points
+
+
 
     def _calculate_ability_modifiers(self) -> Dict[str, int]:
         """Get ability modifiers from AbilityManager."""
@@ -615,7 +642,7 @@ class ClassManager(EventEmitter):
     def get_class_summary(self) -> Dict[str, Any]:
         """Get summary of character's classes."""
         class_list = self.gff.get('ClassList', [])
-        historical_points = self._calculate_historical_skill_points()
+        historical_points = self._calculate_theoretical_skill_points()
 
         classes = []
         for c in class_list:
@@ -672,7 +699,7 @@ class ClassManager(EventEmitter):
 
             calculated_total = sum(c['_raw_calc'] for c in classes)
 
-            if calculated_total > 0 and actual_total != calculated_total:
+            if calculated_total > 0:
                 ratio = actual_total / calculated_total
                 current_sum = 0
                 max_points = -1
@@ -984,6 +1011,14 @@ class ClassManager(EventEmitter):
                                     self.gff.set('SkillList', char_skill_list)
                                     skills_refunded += ranks_spent
                                     logger.debug(f"Removed {ranks_spent} ranks from skill {skill_idx}")
+
+            # Deduct the skill points that were gained at this level
+            points_gained = entry.get('SkillPoints', 0)
+            if points_gained > 0:
+                current_total_sp = self.gff.get('SkillPoints', 0)
+                new_total_sp = max(0, current_total_sp - points_gained)
+                self.gff.set('SkillPoints', new_total_sp)
+                logger.debug(f"Removed {points_gained} skill points gained at level {i+1}")
 
             ability_idx = entry.get('LvlStatAbility')
             if ability_idx is not None and ability_idx >= 0:
@@ -1425,11 +1460,13 @@ class ClassManager(EventEmitter):
         txn = self.character_manager.begin_transaction()
 
         try:
+
+            levels_to_remove = class_list[class_to_remove].get('ClassLevel', 0)
+            self._remove_level_history_for_class(class_id, levels_to_remove)
+
             removed_class = class_list.pop(class_to_remove)
             self.gff.set('ClassList', class_list)
-
-            self._remove_class_features_and_feats(class_id)
-            self._remove_class_from_history(class_id)
+            
             self._recalculate_all_stats()
 
             event = ClassChangedEvent(
@@ -1437,7 +1474,7 @@ class ClassManager(EventEmitter):
                 source_manager='class',
                 timestamp=time.time(),
                 old_class_id=class_id,
-                new_class_id=-1,  # Indicates removal
+                new_class_id=-1,  
                 level=removed_class.get('ClassLevel', 0)
             )
             self.character_manager.emit(event)

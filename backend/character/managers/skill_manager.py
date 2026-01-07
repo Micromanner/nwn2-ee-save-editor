@@ -34,6 +34,10 @@ class SkillManager(EventEmitter):
             self._update_class_skills_cache(event.new_class_id)
             return
 
+        if event.new_class_id < 0:
+            logger.info("Class removed, skipping skill reset and point recalculation")
+            return
+
         total_skill_points = self.calculate_total_skill_points(event.new_class_id, event.level)
         self.reset_all_skills()
         self.gff.set('SkillPoints', total_skill_points)
@@ -93,8 +97,13 @@ class SkillManager(EventEmitter):
         if total_level <= 1:
             return level_1_points
 
-        subsequent_levels = total_level - 1
         return level_1_points + (points_per_level * subsequent_levels)
+
+    def _calculate_true_lifetime_skill_points(self) -> int:
+        """Calculate total lifetime skill points as (Spent + Unspent)."""
+        spent = self._calculate_spent_skill_points()
+        unspent = self.gff.get('SkillPoints', 0)
+        return spent + unspent
     
     def calculate_skill_points_for_level(self, class_data, int_modifier: int, is_first_level: bool = False) -> int:
         """Calculate skill points gained for a single level."""
@@ -351,13 +360,16 @@ class SkillManager(EventEmitter):
         if not race_manager:
             raise RuntimeError("RaceManager not available")
 
-        racial_props = race_manager.get_racial_properties()
-        race_name = racial_props.get('race_name', '').lower()
-
-        # NWN2 engine hardcodes human +1 skill/level (no 2DA field exists for this)
-        if 'human' in race_name:
-            return 1
-
+        race_id = self.gff.get('Race', 0)
+        race_data = self.game_rules_service.get_by_id('racialtypes', race_id)
+        
+        if race_data:
+            skill_point_mod = field_mapper.get_field_value(race_data, 'SkillPointModifier')
+            if skill_point_mod is not None:
+                try:
+                    return int(skill_point_mod)
+                except (ValueError, TypeError):
+                    pass
         return 0
 
     def _get_ability_modifiers(self) -> Dict[str, int]:
@@ -414,10 +426,23 @@ class SkillManager(EventEmitter):
             available_points = self.gff.get('SkillPoints', 0)
             spent_points = self._calculate_spent_skill_points()
 
-            total_level = self._get_total_level()
-            primary_class = self.gff.get('ClassList', [{}])[0].get('Class', 0) if self.gff.get('ClassList') else 0
-            total_available = self.calculate_total_skill_points(primary_class, total_level)
+            # Use true lifetime points from history, not theoretical single-class calc
+            total_available = self._calculate_true_lifetime_skill_points()
+            
+            # If total_available is 0 (new/empty char), fallback to theoretical might be needed?
+            # But initialized char has LvlStatList.
+            
             overspent = max(0, spent_points - total_available)
+
+            summary = {
+                'total_available': total_available,
+                'available_points': available_points,
+                'spent_points': spent_points,
+                'overspent': overspent,
+                # ... other fields ...
+            }
+            logger.info(f"SkillManager: get_skill_summary -> GFF Avail: {available_points}, Total Life: {total_available}, Spent: {spent_points}")
+
 
             is_positional = skill_list and isinstance(skill_list[0], dict) and 'Skill' not in skill_list[0]
 
@@ -805,10 +830,8 @@ class SkillManager(EventEmitter):
 
     def get_skill_spending_info(self) -> Dict[str, int]:
         """Get detailed skill point spending breakdown."""
-        total_level = self._get_total_level()
-        primary_class = self.gff.get('ClassList', [{}])[0].get('Class', 0) if self.gff.get('ClassList') else 0
-
-        total_available = self.calculate_total_skill_points(primary_class, total_level)
+        total_available = self._calculate_true_lifetime_skill_points()
+        
         spent_points = self._calculate_spent_skill_points()
         available_points = self.gff.get('SkillPoints', 0)
         overspent = max(0, spent_points - total_available)
@@ -818,7 +841,7 @@ class SkillManager(EventEmitter):
             'spent_points': spent_points,
             'available_points': available_points,
             'overspent': overspent,
-            'remaining': available_points  # Alias for available_points
+            'remaining': available_points  
         }
 
     def update_skills(self, skills_dict: Dict[str, int]) -> Tuple[List[Any], List[str]]:

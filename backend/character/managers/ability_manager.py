@@ -323,9 +323,6 @@ class AbilityManager(EventEmitter):
     def _on_class_changed(self, event: ClassChangedEvent):
         """Handle class change events."""
         self._invalidate_attributes_cache()
-        if event.is_level_adjustment:
-            return
-        self._adjust_level_up_bonuses_for_level(event.level)
 
     def _on_level_gained(self, event: LevelGainedEvent):
         """Handle level gained events."""
@@ -414,10 +411,8 @@ class AbilityManager(EventEmitter):
 
     def get_encumbrance_limits(self) -> Dict[str, Any]:
         """Get encumbrance thresholds based on Strength."""
-        strength = self.gff.get('Str')
-        if strength is None:
-            raise ValueError("Str attribute missing from GFF")
-        strength = int(strength)
+        attributes = self.get_attributes(include_equipment=True)
+        strength = attributes.get('Str', 0)
 
         from gamedata.dynamic_loader.field_mapping_utility import field_mapper
         encumbrance_data = self.game_rules_service.get_by_id('encumbrance', strength)
@@ -696,7 +691,8 @@ class AbilityManager(EventEmitter):
     
     def get_attribute_modifier(self, attribute: str) -> int:
         """Get D&D modifier for a single attribute."""
-        value = self.get_attribute(attribute)
+        attrs = self.get_attributes(include_equipment=False)
+        value = attrs.get(attribute, 0)
         return (value - 10) // 2
 
     def get_attribute_dependencies(self) -> Dict[str, List[str]]:
@@ -744,7 +740,8 @@ class AbilityManager(EventEmitter):
 
     def get_all_modifiers(self) -> Dict[str, int]:
         """Get all ability modifiers using uppercase GFF field names."""
-        return {attr.upper(): self.get_attribute_modifier(attr) for attr in self.ATTRIBUTES}
+        mods = self.get_attribute_modifiers()
+        return {attr.upper(): mods.get(attr, 0) for attr in self.ATTRIBUTES}
 
     def get_racial_modifiers(self) -> Dict[str, int]:
         """Get combined racial + subrace attribute modifiers (delta)."""
@@ -798,52 +795,11 @@ class AbilityManager(EventEmitter):
 
         return levelup_bonuses
 
-    def _adjust_level_up_bonuses_for_level(self, new_total_level: int):
-        """Adjust level-up bonuses when character level decreases."""
-        levelup_list = self.gff.get('LevelUpList', [])
-        bonuses_to_remove = {attr: 0 for attr in self.ATTRIBUTES}
-        valid_levelup_entries = []
 
-        for levelup_entry in levelup_list:
-            if not isinstance(levelup_entry, dict):
-                continue
-            entry_level = levelup_entry.get('Level', 0)
-            if entry_level <= new_total_level:
-                valid_levelup_entries.append(levelup_entry)
-            else:
-                for attr in self.ATTRIBUTES:
-                    for field_name in [f'{attr}Gain', f'Ability{attr}', attr]:
-                        if field_name in levelup_entry:
-                            bonus_amount = levelup_entry.get(field_name, 0)
-                            if bonus_amount > 0:
-                                bonuses_to_remove[attr] += bonus_amount
-
-        if any(bonus > 0 for bonus in bonuses_to_remove.values()):
-            current_attrs = self.get_attributes(include_equipment=False)
-            for attr in self.ATTRIBUTES:
-                if bonuses_to_remove[attr] > 0:
-                    old_value = current_attrs[attr]
-                    new_value = max(3, old_value - bonuses_to_remove[attr])
-                    self.gff.set(attr, new_value)
-
-            self.gff.set('LevelUpList', valid_levelup_entries)
-
-            event = EventData(
-                event_type=EventType.ATTRIBUTE_CHANGED,
-                source_manager='ability',
-                timestamp=time.time()
-            )
-            event.level_reduction = True
-            event.new_level = new_total_level
-            event.removed_bonuses = bonuses_to_remove
-            event.removed_entries = len(levelup_list) - len(valid_levelup_entries)
-            self.character_manager.emit(event)
-        elif len(valid_levelup_entries) != len(levelup_list):
-            self.gff.set('LevelUpList', valid_levelup_entries)
 
     def get_total_modifiers(self) -> Dict[str, int]:
         """Get total effective D&D modifiers from all sources."""
-        base_attrs = self.get_attributes(include_equipment=False)
+        base_attrs = self.get_attributes(include_equipment=False, include_racial=False)
         racial_mods = self.get_racial_modifiers()
         item_mods = self.get_item_modifiers()
         enhancement_mods = self.get_enhancement_modifiers()
