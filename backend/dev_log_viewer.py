@@ -26,15 +26,10 @@ def get_session_file(session_id: str) -> Optional[Path]:
             return None
         session_id = sessions[0]
     
-    # Try exact match first
     f = LOG_DIR / f"app_{session_id}.log"
     if f.exists():
         return f
     
-    # Fallback for legacy app.log if formatted appropriately (unlikely now)
-    if session_id == "legacy":
-        return LOG_DIR / "app.log"
-        
     return None
 
 def get_available_sessions() -> List[str]:
@@ -45,9 +40,9 @@ def get_available_sessions() -> List[str]:
     sessions = []
     # Scan for app_YYYYMMDD_HHMMSS.log pattern
     for log_file in LOG_DIR.glob("app_*.log"):
-        name = log_file.stem  # e.g., app_20260105_123456
+        name = log_file.stem  
         if len(name) > 4:
-            session_id = name[4:]  # 20260105_123456
+            session_id = name[4:]  
             sessions.append(session_id)
 
     return sorted(sessions, reverse=True)  # Newest first
@@ -66,15 +61,10 @@ def get_available_modules(session_id: Optional[str] = None) -> List[str]:
                     parts = line.split(" | ")
                     # Format: Time | Level | Module:Line - Msg
                     if len(parts) >= 3:
-                        # Index 2 is usually "module:line - msg"
-                        # Or Index 3 if session ID is present (legacy)
-                        
-                        # Heuristic: Check if part 1 is level (DEBUG/INFO/etc)
                         p1 = parts[1].strip()
                         if p1 in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
                             module_col = parts[2]
                         elif len(parts) >= 4:
-                            # Try legacy format: Time | [Session] | Level | Module
                             p2 = parts[2].strip()
                             if p2 in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
                                 module_col = parts[3]
@@ -84,7 +74,7 @@ def get_available_modules(session_id: Optional[str] = None) -> List[str]:
                             continue
 
                         module_part = module_col.split(":")[0].strip()
-                        if module_part and module_part != "__main__" and "." in module_part:
+                        if module_part and module_part != "__main__":
                             modules.add(module_part)
     except Exception:
         pass
@@ -255,7 +245,7 @@ async def log_viewer():
                 <input type="text" id="searchInput" placeholder="Search logs...">
             </div>
 
-            <button onclick="loadLogs()">Refresh</button>
+            <button onclick="refreshAll()">Refresh</button>
             <button onclick="clearFilters()">Clear Filters</button>
             <button onclick="toggleAutoRefresh()">Auto-Refresh: <span id="autoStatus">OFF</span></button>
             <button class="copy-btn" id="copyPortBtn" onclick="copyPort()">Copy App Port</button>
@@ -366,6 +356,11 @@ async def log_viewer():
                 }}
             }}
 
+            async function refreshAll() {{
+                await loadModules();
+                await loadLogs();
+            }}
+
             function clearFilters() {{
                 // Default to first session (current)
                 const sessionSelect = document.getElementById('sessionFilter');
@@ -376,7 +371,7 @@ async def log_viewer():
                 document.getElementById('moduleFilter').value = '';
                 document.getElementById('levelFilter').value = '';
                 document.getElementById('searchInput').value = '';
-                loadLogs();
+                refreshAll();
             }}
 
             function toggleAutoRefresh() {{
@@ -385,8 +380,8 @@ async def log_viewer():
                 status.textContent = autoRefresh ? 'ON' : 'OFF';
 
                 if (autoRefresh) {{
-                    loadLogs();
-                    autoRefreshInterval = setInterval(loadLogs, 2000);
+                    refreshAll();
+                    autoRefreshInterval = setInterval(refreshAll, 2000);
                 }} else {{
                     if (autoRefreshInterval) {{
                         clearInterval(autoRefreshInterval);
@@ -443,7 +438,12 @@ async def log_viewer():
                 await loadSessions();  // Load sessions first
                 await loadModules();   // Then modules (for current session)
                 loadPort();            // Load port (synchronous now)
-                loadLogs();            // Then logs 
+                
+                // Enable auto-refresh by default
+                autoRefresh = true;
+                document.getElementById('autoStatus').textContent = 'ON';
+                refreshAll();
+                autoRefreshInterval = setInterval(refreshAll, 2000);
             }}
 
             initializePage();

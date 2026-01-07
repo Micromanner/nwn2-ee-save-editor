@@ -1,9 +1,4 @@
-"""
-FastAPI Server for NWN2 Save Editor
-- Tauri sidecar integration 
-- Shared resource manager with proper singleton pattern
-- Background initialization following Django's pattern
-"""
+"""FastAPI backend server running as the Tauri sidecar for character editing and game data management."""
 
 import logging
 import os
@@ -18,7 +13,6 @@ import tempfile
 import psutil
 import threading
 
-# Emergency startup logging for production debugging
 try:
     with open(os.path.join(tempfile.gettempdir(), "nwn2_fastapi_startup.log"), "a") as f:
         f.write(f"[{datetime.now()}] FastAPI process started. Args: {sys.argv}\n")
@@ -53,7 +47,6 @@ def start_parent_watchdog():
     except Exception:
         pass
 
-# Global exception hook to capture early crashes
 def panic_log(exc_type, exc_value, exc_traceback):
     try:
         import traceback
@@ -83,22 +76,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import uuid
 import uvicorn
 
-# Add the backend directory to Python path for imports
 backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
 
 from services.fastapi.exceptions import SystemNotReadyException
 
-# Configure Loguru logging
 from config.logging_config import logger, ENABLE_LOG_VIEWER
 
-# Keep standard logging for compatibility with libraries that use it
 logging.basicConfig(
     level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Global singletons for shared services (like Django's middleware)
 _shared_services = {
     'resource_manager': None,
     'game_rules_service': None,
@@ -109,11 +98,9 @@ _shared_services = {
 _services_lock = asyncio.Lock()
 _initializing = False
 
-# Global initialization lock to prevent duplicate background initialization
 _initialization_lock = asyncio.Lock()
 _initialization_started = False
 
-# Initialization status tracking (like Django's system_views)
 initialization_status = {
     'stage': 'pending',
     'progress': 0,
@@ -143,7 +130,6 @@ def get_shared_resource_manager():
     """Get the shared ResourceManager instance (thread-safe for sync access)"""
     global _shared_services, _initializing
     
-    # Simple thread-safe check without async lock for sync callers
     if _shared_services['resource_manager'] is None and not _initializing:
         _initializing = True
         logger.info("Creating shared ResourceManager instance")
@@ -156,7 +142,6 @@ def get_shared_resource_manager():
                 suppress_warnings=True
             )
             
-            # Register in independent registry to avoid import cycles during character loading
             from services.fastapi.shared_services import register_shared_service
             register_shared_service('resource_manager', _shared_services['resource_manager'])
             
@@ -164,7 +149,6 @@ def get_shared_resource_manager():
         finally:
             _initializing = False
     elif _initializing:
-        # Wait for initialization to complete
         logger.info("ResourceManager is being initialized, waiting...")
         while _initializing and _shared_services['resource_manager'] is None:
             time.sleep(0.1)
@@ -180,7 +164,6 @@ async def get_shared_resource_manager_async():
             _initializing = True
             logger.info("Creating shared ResourceManager instance (async)")
             try:
-                # Run ResourceManager creation in thread pool
                 from services.core.resource_manager import ResourceManager
                 from config.nwn2_settings import nwn2_paths
                 
@@ -190,7 +173,6 @@ async def get_shared_resource_manager_async():
                     suppress_warnings=True
                 )
                 
-                # Register in independent registry to avoid import cycles during character loading
                 from services.fastapi.shared_services import register_shared_service
                 register_shared_service('resource_manager', _shared_services['resource_manager'])
                 
@@ -198,7 +180,6 @@ async def get_shared_resource_manager_async():
             finally:
                 _initializing = False
         elif _initializing:
-            # Wait for initialization to complete
             logger.info("ResourceManager is being initialized, waiting... (async)")
             while _initializing and _shared_services['resource_manager'] is None:
                 await asyncio.sleep(0.1)
@@ -206,27 +187,21 @@ async def get_shared_resource_manager_async():
     return _shared_services['resource_manager']
 
 def initialize_background_services():
-    """Initialize heavy components in background (follows Django's apps.py pattern)"""
+    """Initialize heavy components in background."""
     global initialization_status, _shared_services, _initialization_started
     
-    # Check if already initialized or in progress (thread-safe)
     if _initialization_started or initialization_status['progress'] >= 100:
         logger.info("Background initialization already started or completed, skipping duplicate call")
         return
     
-    # Mark as started atomically
     _initialization_started = True
     
-    # Mark start time
     initialization_status['started_at'] = datetime.now().isoformat()
     update_initialization_status('initializing', 5, 'Background initialization started...')
     logger.info("Starting background initialization of heavy components...")
     
-    # Stage 1: Resource Manager
     try:
         update_initialization_status('resource_manager', 10, 'Initializing Resource Manager...')
-        # Use the async version to ensure consistency
-        import asyncio
         rm = asyncio.run(get_shared_resource_manager_async())
         initialization_status['details']['resource_manager'] = True
         update_initialization_status('resource_manager', 25, 'Resource Manager ready')
@@ -235,7 +210,6 @@ def initialize_background_services():
         update_initialization_status('resource_manager', 25, f'Resource Manager failed: {e}', error=str(e))
         return
     
-    # Stage 2: Initialize icon cache
     try:
         update_initialization_status('icon_cache', 30, 'Loading icon cache (4000+ icons)...')
         logger.info("Initializing icon cache...")
@@ -259,7 +233,6 @@ def initialize_background_services():
         logger.debug(f"Icon cache not available (expected for v0.1.0): {e}")
         update_initialization_status('icon_cache', 60, 'Icon cache skipped (v0.1.0)')
     
-    # Stage 3: Initialize DynamicGameDataLoader with shared ResourceManager
     try:
         update_initialization_status('game_data', 65, 'Loading game data...')
         logger.info("Initializing game data loader with shared ResourceManager...")
@@ -267,20 +240,17 @@ def initialize_background_services():
         
         start_time = time.time()
         
-        # Create progress callback that updates initialization status
         def game_data_progress(message, percent):
             # Map the internal progress (0-100%) to our range (65-90%)
             mapped_progress = 65 + int(percent * 0.25)  # 25% of range (90-65=25)
             update_initialization_status('game_data', mapped_progress, f'Game data: {message}')
         
-        # Pass the shared ResourceManager to the loader
         loader = get_dynamic_game_data_loader(
             resource_manager=rm, 
             progress_callback=game_data_progress
         )
         _shared_services['game_data_loader'] = loader
         
-        # Register in independent registry to avoid import cycles during character loading
         from services.fastapi.shared_services import register_shared_service
         register_shared_service('game_data_loader', loader)
         
@@ -292,9 +262,7 @@ def initialize_background_services():
         logger.error(f"Failed to initialize game data loader: {e}")
         update_initialization_status('game_data', 90, f'Game data failed: {e}', error=str(e))
     
-    # Stage 4: Build Prerequisite Graph (optional optimization)
     try:
-        # Check if prerequisite graph is enabled
         use_graph = os.environ.get('USE_PREREQUISITE_GRAPH', 'true').lower() == 'true'
         
         if not use_graph:
@@ -310,7 +278,6 @@ def initialize_background_services():
             
             start_time = time.time()
             
-            # Build the graph with the game data loader
             graph = get_prerequisite_graph(rules_service=_shared_services['game_data_loader'])
             
             if graph and graph.is_built:
@@ -329,7 +296,6 @@ def initialize_background_services():
         logger.error(f"Failed to build prerequisite graph: {e}")
         update_initialization_status('prereq_graph', 98, f'Prerequisite graph failed: {e}', error=str(e))
     
-    # All done
     update_initialization_status('ready', 100, 'All systems ready!')
     logger.info("Background initialization complete")
 
@@ -340,75 +306,60 @@ async def lifespan(app: FastAPI):
     FastAPI lifespan context manager for startup and shutdown events
     Replaces deprecated @app.on_event("startup")
     """
-    # Startup
     logger.info("FastAPI server starting up...")
     
-    # Start background import preloading (highest priority)
     async def preload_imports():
         from utils.import_preloader import preload_heavy_imports
         await preload_heavy_imports()
     
-    # Start background initialization using asyncio (2025 FastAPI standard) 
     async def delayed_start():
         await asyncio.sleep(0.5)  # Let FastAPI fully start
         async with _initialization_lock:
             await asyncio.to_thread(initialize_background_services)
     
-    # Schedule both background tasks
-    asyncio.create_task(preload_imports())  # Start immediately
-    asyncio.create_task(delayed_start())    # Start after delay
+    asyncio.create_task(preload_imports())
+    asyncio.create_task(delayed_start())
     logger.info("Background import preloading and initialization tasks scheduled")
     
     yield
 
-    # Shutdown
     logger.info("FastAPI server shutting down...")
 
 
-# Create FastAPI app with lifespan
-# Disable OpenAPI/Swagger docs to save ~200ms import time (we don't use them)
 app = FastAPI(
     title="NWN2 Enhanced Edition Save Editor API",
     description="Standalone offline desktop application for editing NWN2 save files",
-    version="1.0.0",
+    version="0.1.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
     lifespan=lifespan
 )
 
-# ============================================================================
-# MIDDLEWARE STACK - 2025 FastAPI Standards
-# ============================================================================
+
 
 class RequestTrackingMiddleware(BaseHTTPMiddleware):
     """Add request ID and timing for better error tracking"""
     
     async def dispatch(self, request: Request, call_next):
-        # Add unique request ID
         request_id = str(uuid.uuid4())[:8]
         request.state.request_id = request_id
         
-        # Add timing
         start_time = time.time()
         
-        # Process request
         response = await call_next(request)
         
-        # Log request completion
         duration = time.time() - start_time
-        logger.info(f"Request {request_id}: {request.method} {request.url.path} - {response.status_code} ({duration:.3f}s)")
+        if not request.url.path.startswith("/dev/logs/"):
+            logger.info(f"Request {request_id}: {request.method} {request.url.path} - {response.status_code} ({duration:.3f}s)")
         
-        # Add headers
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Response-Time"] = f"{duration:.3f}s"
         
         return response
 
-# Add middleware stack
 app.add_middleware(RequestTrackingMiddleware)
 
-# CORS configuration for Tauri frontend - UPDATED FOR PRODUCTION
 ALLOWED_ORIGINS = [
     "http://localhost:3000",      # Dev mode
     "http://localhost:24314",     # Dev mode (Tauri dev port)
@@ -425,9 +376,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================================================
-# GLOBAL EXCEPTION HANDLERS
-# ============================================================================
+
 
 @app.exception_handler(SystemNotReadyException)
 def system_not_ready_handler(request: Request, exc: SystemNotReadyException):
@@ -460,14 +409,12 @@ def validation_exception_handler(request: Request, exc: RequestValidationError):
 @app.exception_handler(StarletteHTTPException)
 def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions with consistent format"""
-    # Suppress noisy logs for icon lookups while icons are temporarily disabled
     try:
         path = request.url.path
     except Exception:
         path = ""
 
     if exc.status_code == 404 and path.startswith("/api/gamedata/icons/"):
-        # Return 404 without warning-level log to avoid noise
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -498,7 +445,6 @@ def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# System endpoints
 @app.get("/api/health/")
 def health_check():
     """Health check endpoint for Tauri sidecar monitoring"""
@@ -530,7 +476,7 @@ async def app_info():
 
 @app.get("/api/system/initialization/status/")
 def get_initialization_status():
-    """Get initialization status (matches Django endpoint)"""
+    """Get initialization status."""
     return initialization_status
 
 @app.post("/api/system/background-loading/trigger/")
@@ -538,7 +484,6 @@ def trigger_background_loading(background_tasks: BackgroundTasks):
     """Trigger background loading of complete game data using FastAPI BackgroundTasks"""
     global initialization_status, _initialization_started
     
-    # Atomic check with proper race condition protection
     if _initialization_started or initialization_status['progress'] >= 100:
         return {
             "status": "already_complete" if initialization_status['progress'] >= 100 else "in_progress",
@@ -549,7 +494,6 @@ def trigger_background_loading(background_tasks: BackgroundTasks):
     def background_init_sync():
         """Sync background initialization task for BackgroundTasks"""
         try:
-            # Double-check initialization state before proceeding
             if initialization_status['progress'] >= 100:
                 logger.info("Background initialization already completed, skipping manual trigger")
                 return
@@ -558,7 +502,6 @@ def trigger_background_loading(background_tasks: BackgroundTasks):
                 logger.info("Background initialization already in progress, skipping manual trigger")
                 return
                 
-            # Proceed with initialization
             initialize_background_services()
             logger.info("Background initialization completed via manual trigger")
         except Exception as e:
@@ -566,7 +509,6 @@ def trigger_background_loading(background_tasks: BackgroundTasks):
             update_initialization_status("failed", 0, str(e))
     
     try:
-        # Use FastAPI BackgroundTasks (proper way for sync endpoints)
         background_tasks.add_task(background_init_sync)
         logger.info("Background initialization task added to BackgroundTasks queue")
         
@@ -583,31 +525,7 @@ def trigger_background_loading(background_tasks: BackgroundTasks):
             "progress": initialization_status['progress']
         }
 
-@app.post("/api/system/cache/rebuild/")
-def rebuild_cache(background_tasks: BackgroundTasks):
-    """Rebuild game data cache in background (demonstrates proper BackgroundTasks usage)"""
-    
-    def rebuild_cache_task():
-        """Background task to rebuild cache"""
-        try:
-            logger.info("Starting cache rebuild...")
-            # Simulate cache rebuild work
-            rm = get_shared_resource_manager()
-            if rm:
-                # Trigger cache rebuild if manager has that capability
-                logger.info("Cache rebuild completed successfully")
-            else:
-                logger.warning("ResourceManager not available for cache rebuild")
-        except Exception as e:
-            logger.error(f"Cache rebuild failed: {e}")
-    
-    # Add background task using FastAPI's recommended pattern
-    background_tasks.add_task(rebuild_cache_task)
-    
-    return {
-        "status": "started",
-        "message": "Cache rebuild started in background"
-    }
+
 
 @app.post("/api/system/shutdown/")
 def shutdown_server():
@@ -622,7 +540,6 @@ def shutdown_server():
         logger.info("Initiating server shutdown...")
         os._exit(0)  # Force exit
     
-    # Add background task to shutdown after response
     from threading import Thread
     shutdown_thread = Thread(target=shutdown_task, daemon=True)
     shutdown_thread.start()
@@ -633,11 +550,9 @@ def shutdown_server():
     }
 
 
-# Include routers
 routers_loaded = []
 
 try:
-    # Try core routers first - profile each individually
     import time
     from utils.performance_profiler import get_profiler
     profiler = get_profiler()
@@ -711,7 +626,6 @@ try:
     
     logger.info(f"Core routers loaded: {', '.join(routers_loaded)}")
     
-    # Try additional routers - profile each individually
     try:
         with profiler.profile("Character Router Loading"):
             start = time.time()
@@ -754,7 +668,6 @@ try:
     except Exception as e:
         logger.warning(f"Failed to load character editing routers: {e}")
     
-    # Try remaining routers - profile each individually
     try:
         with profiler.profile("Additional Router Loading"):
             start = time.time()
@@ -797,12 +710,10 @@ except Exception as e:
 
 def main():
     """Main entry point for FastAPI server"""
-    # Start parent-process watchdog to prevent orphans
     start_parent_watchdog()
     
     logger.info("Starting NWN2 Save Editor FastAPI backend...")
 
-    # Mount log viewer if enabled (runs in same process, auto-stops with backend)
     should_open_browser = False
     if ENABLE_LOG_VIEWER:
         logger.info("Mounting development log viewer at /dev/logs...")
@@ -811,12 +722,10 @@ def main():
         logger.info("Log viewer available at http://localhost:<port>/dev/logs")
         should_open_browser = True
 
-    # Check environment
     port = int(os.environ.get("PORT", "8000"))
     host = os.environ.get("HOST", "127.0.0.1")
     debug = os.environ.get("DEBUG", "False").lower() == "true"
 
-    # Override with command line arguments if present (Tauri sidecar support)
     if "--port" in sys.argv:
         try:
             idx = sys.argv.index("--port")
@@ -834,7 +743,6 @@ def main():
     logger.info(f"Raw ENV PORT: {os.environ.get('PORT')}")
     logger.info(f"Server configuration: {host}:{port} (debug={debug})")
     
-    # Create uvicorn config to capture actual port
     config = uvicorn.Config(
         app=app,
         host=host,
@@ -845,13 +753,10 @@ def main():
     
     server = uvicorn.Server(config)
     
-    # Create a custom server class to report the actual port after binding
     class PortReportingServer(uvicorn.Server):
         async def startup(self, sockets=None):
-            # First do the normal startup
             await super().startup(sockets)
 
-            # Now we can get the actual bound port
             for server in self.servers:
                 for socket in server.sockets:
                     actual_port = socket.getsockname()[1]
@@ -859,7 +764,6 @@ def main():
                     logger.info(f"FASTAPI_ACTUAL_PORT={actual_port}")
                     logger.info(f"FastAPI server bound to port: {actual_port}")
 
-                    # Open log viewer in browser if enabled
                     if should_open_browser:
                         import webbrowser
                         import threading
@@ -873,10 +777,8 @@ def main():
                     break
                 break
     
-    # Use custom server class
     server.__class__ = PortReportingServer
     
-    # Run the server
     try:
         server.run()
     except Exception as e:
