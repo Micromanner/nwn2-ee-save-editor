@@ -117,11 +117,12 @@ def build_with_nuitka():
         "--show-progress",
         "--show-memory",
 
-        "--windows-console-mode=disable",
-
         "--remove-output",
         str(BACKEND_DIR / "fastapi_server.py")
     ]
+
+    if sys.platform == "win32":
+        cmd.insert(-2, "--windows-console-mode=disable")
     
 
     print(f"Building FastAPI server for {sys.platform} with Nuitka...")

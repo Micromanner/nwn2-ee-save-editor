@@ -143,14 +143,30 @@ jobs:
         run: |
           echo "Original size of sidecar distribution:"
           du -sh frontend/src-tauri/binaries/fastapi_server.dist || true
-          
+
           echo "Stripping binaries..."
           find frontend/src-tauri/binaries/fastapi_server.dist -name "*.so*" -exec strip --strip-unneeded {} \; || true
           strip --strip-unneeded frontend/src-tauri/binaries/fastapi_server.dist/fastapi-server || true
-          
+
           echo "Size after stripping:"
           du -sh frontend/src-tauri/binaries/fastapi_server.dist || true
 
+      - name: Strip Debug Symbols (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "Original size of sidecar distribution:"
+          $size = (Get-ChildItem -Recurse frontend/src-tauri/binaries/fastapi_server.dist | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host "$([math]::Round($size, 2)) MB"
+
+          Write-Host "Stripping binaries with llvm-strip..."
+          Get-ChildItem -Recurse frontend/src-tauri/binaries/fastapi_server.dist -Include *.dll,*.pyd,*.exe | ForEach-Object {
+            & "C:\Program Files\LLVM\bin\llvm-strip.exe" --strip-unneeded $_.FullName 2>$null
+          }
+
+          Write-Host "Size after stripping:"
+          $size = (Get-ChildItem -Recurse frontend/src-tauri/binaries/fastapi_server.dist | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host "$([math]::Round($size, 2)) MB"
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -162,14 +178,42 @@ jobs:
           projectPath: "./frontend"
           args: ${{ matrix.args }}
 
+      - name: Strip AppImage Contents (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        run: |
+          APPIMAGE_PATH=$(find frontend/src-tauri/target/release/bundle/appimage -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE_PATH" ]; then
+            echo "Original AppImage size:"
+            du -sh "$APPIMAGE_PATH"
+
+            chmod +x "$APPIMAGE_PATH"
+            cd frontend/src-tauri/target/release/bundle/appimage
+            ./*.AppImage --appimage-extract
+
+            find squashfs-root -name "*.so*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
+            strip --strip-unneeded squashfs-root/usr/bin/app 2>/dev/null || true
+
+            rm -f *.AppImage
+
+            wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+            chmod +x appimagetool
+            ARCH=x86_64 ./appimagetool squashfs-root
+
+            rm -rf squashfs-root appimagetool
+
+            echo "New AppImage size:"
+            du -sh *.AppImage
+          fi
+
       - name: Package Windows Portable
         if: matrix.platform == 'windows-latest'
         shell: bash
         run: |
           mkdir -p portable-staging/resources/binaries
           
-          # Copy Main Executable
-          cp "frontend/src-tauri/target/release/NWN2EE Save Editor.exe" "portable-staging/"
+          # Copy Main Executable (binary name is 'app.exe' from Cargo.toml)
+          cp "frontend/src-tauri/target/release/app.exe" "portable-staging/NWN2EE Save Editor.exe"
           
           # Copy Sidecar (FastAPI Dist)
           # Tauri resources are expected in 'resources/' relative to the binary

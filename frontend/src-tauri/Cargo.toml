@@ -35,3 +35,10 @@ base64 = "0.22"
 webp = "0.2.2"
 dotenvy = "0.15"
 lazy_static = "1.4"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
