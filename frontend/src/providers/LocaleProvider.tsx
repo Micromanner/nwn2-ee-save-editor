@@ -1,4 +1,3 @@
-'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { IntlProvider } from 'react-intl';
@@ -53,12 +52,6 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('locale', newLocale);
     setIsLoading(false);
   };
-
-  if (isLoading) {
-    return <div className="h-screen bg-background flex items-center justify-center">
-      <div className="text-text-muted">Loading...</div>
-    </div>;
-  }
 
   return (
     <LocaleContext.Provider value={{ locale, setLocale, messages }}>

@@ -1,6 +1,6 @@
-'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { TauriAPI } from '@/lib/tauri-api';
 
 interface TauriContextType {
@@ -37,7 +37,6 @@ export function TauriProvider({ children }: TauriProviderProps) {
       
       let tauriExists = false;
       try {
-        const { invoke } = await import('@tauri-apps/api/core');
         await invoke('check_fastapi_health');
         tauriExists = true;
       } catch {

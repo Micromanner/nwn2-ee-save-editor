@@ -1,4 +1,3 @@
-'use client';
 
 import { useState, useCallback, useEffect } from 'react';
 import { CharacterAPI } from '@/services/characterApi';

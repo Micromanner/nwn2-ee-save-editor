@@ -1,6 +1,6 @@
-'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTauri } from '@/providers/TauriProvider';
 import { SaveFile } from '@/lib/tauri-api';
 import { SaveThumbnail } from './SaveThumbnail';
@@ -132,7 +132,6 @@ export function SaveFileSelector() {
       // Close the editor if requested
       if (closeEditor) {
         // Use Tauri to close the application
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
         await getCurrentWindow().close();
       }
     } catch (err) {

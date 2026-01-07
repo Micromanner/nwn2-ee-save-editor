@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTauri } from '@/providers/TauriProvider';
@@ -19,7 +17,7 @@ import CharacterOverview from '@/components/Overview/CharacterOverview';
 import CompanionsView from '@/components/Companions/CompanionsView';
 import CharacterBuilder from '@/components/CharacterBuilder';
 import GameStateEditor from '@/components/GameState/GameStateEditor';
-import SettingsPage from '@/app/settings/page';
+import SettingsPage from '@/pages/SettingsPage';
 
 import TauriInitializer from '@/components/TauriInitializer';
 import { CharacterProvider, useCharacterContext } from '@/contexts/CharacterContext';
@@ -297,10 +295,7 @@ function AppContent() {
 
   useEffect(() => {
     if (isAvailable && api && backendReady) {
-      const timer = setTimeout(() => {
-        setAppReady(true);
-      }, 500);
-      return () => clearTimeout(timer);
+      setAppReady(true);
     }
   }, [isAvailable, api, backendReady]);
 

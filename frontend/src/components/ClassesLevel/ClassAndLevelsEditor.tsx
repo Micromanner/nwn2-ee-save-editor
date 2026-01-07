@@ -1,4 +1,3 @@
-'use client';
 
 import { useState, useEffect } from 'react';
 import { Pencil, Swords, X, History, AlertTriangle } from 'lucide-react';

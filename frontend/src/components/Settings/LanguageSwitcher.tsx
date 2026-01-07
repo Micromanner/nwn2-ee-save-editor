@@ -1,4 +1,3 @@
-'use client';
 
 import { useLocale } from '@/providers/LocaleProvider';
 import { useState } from 'react';

@@ -1,7 +1,4 @@
-'use client';
-
 import { buildIconUrl } from '@/lib/api/enhanced-icons';
-import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useIconCache } from '@/contexts/IconCacheContext';
 import DynamicAPI from '@/lib/utils/dynamicApi';
@@ -60,8 +57,8 @@ export default function NWN2Icon({
     const sizeConfig = sizeMap[size];
     return (
       <div className={`${sizeConfig.class} rounded ${className} icon-container`}>
-        <Image 
-          src={fullIconUrl} 
+        <img
+          src={fullIconUrl}
           alt={alt || icon}
           width={sizeConfig.px}
           height={sizeConfig.px}

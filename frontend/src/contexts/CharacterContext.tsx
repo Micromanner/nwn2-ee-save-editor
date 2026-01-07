@@ -1,4 +1,3 @@
-'use client';
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CharacterAPI, CharacterData } from '@/services/characterApi';

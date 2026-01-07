@@ -1,4 +1,3 @@
-'use client';
 
 import { useAlignment } from '@/hooks/useAlignment';
 import NWN2Icon from '@/components/ui/NWN2Icon';

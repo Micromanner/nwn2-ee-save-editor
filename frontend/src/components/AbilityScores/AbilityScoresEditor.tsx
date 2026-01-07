@@ -1,4 +1,3 @@
-'use client';
 
 import { useEffect, useCallback } from 'react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';

@@ -1,4 +1,3 @@
-'use client';
 
 import React, { memo, useState } from 'react';
 import { ChevronDown, ChevronUp, Sparkles, Check } from 'lucide-react';

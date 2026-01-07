@@ -1,4 +1,3 @@
-'use client';
 
 import React, { memo, useState } from 'react';
 import { ChevronDown, ChevronUp, Shield, Swords, Sparkles, Sun, Zap, Check, X, AlertCircle } from 'lucide-react';

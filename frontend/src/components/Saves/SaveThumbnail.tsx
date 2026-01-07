@@ -1,4 +1,3 @@
-'use client';
 
 import { useState, useEffect } from 'react';
 import { TauriAPI } from '@/lib/tauri-api';
@@ -11,7 +10,7 @@ interface SaveThumbnailProps {
 
 export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: SaveThumbnailProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!thumbnailPath);
   const [error, setError] = useState(false);
 
   const sizeClasses = {
@@ -74,7 +73,7 @@ export function SaveThumbnail({ thumbnailPath, size = 'md', className = '' }: Sa
   if (loading) {
     return (
       <div className={`${sizeClasses[size]} bg-surface-2 rounded flex items-center justify-center ${className}`}>
-        <div className="text-xs text-text-muted">Loading...</div>
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[rgb(var(--color-primary))]"></div>
       </div>
     );
   }

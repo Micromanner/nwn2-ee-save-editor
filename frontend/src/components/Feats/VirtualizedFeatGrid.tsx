@@ -1,4 +1,3 @@
-'use client';
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { VariableSizeList } from 'react-window';

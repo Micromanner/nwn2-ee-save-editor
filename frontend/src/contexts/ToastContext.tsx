@@ -1,4 +1,3 @@
-'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Toast, ToastContainer, ToastType } from '@/components/ui/Toast';

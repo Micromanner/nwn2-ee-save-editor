@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
-import SaveFileSelectorWrapper from '@/components/Saves/SaveFileSelectorWrapper';
+import { SaveFileSelector } from '@/components/Saves/SaveFileSelector';
 import { useTranslations } from '@/hooks/useTranslations';
 import { getName } from '@tauri-apps/api/app';
 
@@ -118,7 +118,7 @@ export default function Dashboard({
           <div className="bg-[rgb(var(--color-surface-1))] rounded-lg p-6 shadow-elevation-1 border border-[rgb(var(--color-surface-border))] h-full min-h-[660px] flex flex-col">
             <h2 className="text-xl font-semibold mb-4 text-[rgb(var(--color-text-primary))]">Select a Save Game</h2>
             <div className="flex-1 overflow-hidden">
-               <SaveFileSelectorWrapper />
+               <SaveFileSelector />
             </div>
           </div>
         </div>

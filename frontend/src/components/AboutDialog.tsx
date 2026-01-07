@@ -1,4 +1,3 @@
-'use client';
 
 import { useState, useEffect } from 'react';
 import { getName, getVersion } from '@tauri-apps/api/app';

@@ -1,4 +1,3 @@
-'use client';
 
 import { useTauri } from '@/providers/TauriProvider';
 
