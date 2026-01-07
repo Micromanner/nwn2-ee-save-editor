@@ -15,6 +15,47 @@ class ItemPropertyDecoder:
         self._subtype_caches = {}
         self._ability_map = {0: 'Str', 1: 'Dex', 2: 'Con', 3: 'Int', 4: 'Wis', 5: 'Cha'}
         self._save_map = {0: 'fortitude', 1: 'reflex', 2: 'will'}
+
+        # Label cleanup mappings for better UX
+        self.label_cleanups = {
+            # Alignment abbreviations
+            'TN': 'True Neutral',
+            # AC type underscores
+            'AC_Natural': 'Natural Armor',
+            'AC_Armor': 'Armor Bonus', 
+            'AC_Shield': 'Shield Bonus',
+            'AC_Deflection': 'Deflection Bonus',
+            'AC_Dodge': 'Dodge Bonus',
+            # OnHit standardization (Bonus_X and DC=X → DC X)
+            'Bonus_14': 'DC 14', 'DC=14': 'DC 14',
+            'Bonus_16': 'DC 16', 'DC=16': 'DC 16',
+            'Bonus_18': 'DC 18', 'DC=18': 'DC 18',
+            'Bonus_20': 'DC 20', 'DC=20': 'DC 20',
+            'Bonus_22': 'DC 22', 'DC=22': 'DC 22',
+            'Bonus_24': 'DC 24', 'DC=24': 'DC 24',
+            'Bonus_26': 'DC 26', 'DC=26': 'DC 26',
+            'Bonus_28': 'DC 28', 'DC=28': 'DC 28',
+            'Bonus_30': 'DC 30', 'DC=30': 'DC 30',
+            'Bonus_32': 'DC 32', 'DC=32': 'DC 32',
+            'Bonus_34': 'DC 34', 'DC=34': 'DC 34',
+            'Bonus_36': 'DC 36', 'DC=36': 'DC 36',
+            'Bonus_38': 'DC 38', 'DC=38': 'DC 38',
+            'DC=40': 'DC 40',
+        }
+        
+        # Patterns to filter out from option labels (dev/placeholder entries)
+        self.invalid_label_patterns = [p.lower() for p in [
+            '****',       # Empty placeholder
+            '**',         # Another placeholder format
+            'DEL_',       # Deleted entries prefix
+            'DELETED',    # Deleted entries
+            'padding',    # Placeholder rows
+            'None',       # Empty/null placeholder
+            'REMOVED',    # Removed entries
+            'TEST',       # Test entries
+            'INVALID',    # Invalid entries
+        ]]
+
         self._context_lists = {
             'abilities': self._ability_map,
             'saving_throws': {0: 'Fortitude', 1: 'Reflex', 2: 'Will'},
@@ -33,58 +74,44 @@ class ItemPropertyDecoder:
             }
         }
         
-        self._init_property_mappings()
-        self.property_overrides = {
-            # Base Game Overrides - Correcting Table Mappings
-            0: {'cost_table': 'iprp_bonuscost', 'force_cost_idx': 1, 'suppress_p1': True},      # Ability Bonus: Value is in Cost
-            1: {'suppress_p1': True},      # AC Bonus: P1 (Abilities) is junk
-            6: {'suppress_p1': True},      # Enhancement Bonus: P1 (Abilities) is junk
-            10: {'suppress_p1': True},    # Attack/Damage Penalty: Value is in P1->Cost
-            11: {'cost_table': 'iprp_weightcost', 'force_cost_idx': 10, 'suppress_p1': True}, # Weight Reduction: Fix table index (10=iprp_weightcost)
-            # 16: Damage Bonus - Now handled by logic (Param1->CostTable, suppress Param1)
-            81: {'cost_table': 'iprp_weightinc', 'force_cost_idx': 30, 'suppress_p1': True}, # Weight Increase: Fix table (30=iprp_weightinc)
+        # Properties to hide from the editor entirely
+        self.hidden_property_ids = {
+            # Technical engine flags - not meaningful for users
+            30,  # DoubleStack - inventory system flag
+            83,  # Visual Effect - flat with no options
             
-            # Properties with misaligned Value tables (using specific tables instead of junk 2DA indices)
-            45: {'param1_table': 'iprp_bonuscost'}, # Mighty: use bonuscost (+1 to +20)
-            51: {'suppress_p1': True},      # Regeneration: P1 (Abilities) is junk, uses Cost for value
-            55: {'param1_table': 'iprp_skillcost'}, # Thieves' Tools: use skillcost (+1 to +50)
-            56: {'param1_table': 'iprp_bonuscost'}, # Attack Bonus: use bonuscost
-            63: {'suppress_cost': True, 'suppress_p1': True}, # Class Limitation: metadata handled by Subtype
-            66: {'param1_table': 'iprp_bonushp'},   # Bonus Hitpoints: use bonushp table
-            67: {'param1_table': 'iprp_meleecost'}, # Regeneration Vampiric: use meleecost (+1 to +20)
-            84: {'suppress_p1': True},    # Arcane Spell Failure: use P1 (-50% to +50%), mapped to Cost
+            # Redundant placeholders
+            47,  # DamageNone - just remove damage properties instead
+            79,  # Special Walk - only has "Default" option which does nothing
             
-            # Pure Binary Toggles - Suppressing all options to keep UI flat
-            14: {'suppress_p1': True, 'suppress_cost': True}, # Boomerang
-            25: {'suppress_p1': True, 'suppress_cost': True}, # Dancing
-            26: {'suppress_p1': True, 'suppress_cost': True}, # Darkvision
-            30: {'suppress_p1': True, 'suppress_cost': True}, # Double Stack
-            31: {'suppress_p1': True, 'suppress_cost': True}, # Half-Elves
-            32: {'suppress_p1': True, 'suppress_cost': True}, # Enhanced Container
-            35: {'suppress_p1': True, 'suppress_cost': True}, # Haste
-            36: {'suppress_p1': True, 'suppress_cost': True}, # Holy Avenger
-            38: {'suppress_p1': True, 'suppress_cost': True}, # Improved Evasion
-            43: {'suppress_p1': True, 'suppress_cost': True}, # Keen
-            46: {'suppress_p1': True, 'suppress_cost': True}, # Mind Blank
-            47: {'suppress_p1': True, 'suppress_cost': True}, # No Combat Damage
-            61: {'suppress_p1': True, 'suppress_cost': True}, # Unlimited Ammunition
-            68: {'suppress_p1': True, 'suppress_cost': True}, # Vorpal
-            69: {'suppress_p1': True, 'suppress_cost': True}, # Wounding
-            71: {'suppress_p1': True, 'suppress_cost': True}, # True Seeing
-            75: {'suppress_p1': True, 'suppress_cost': True}, # Freedom of Movement
+            # Monster-only properties (for creature items, not player equipment)
+            72,  # On Monster Hit
+            77,  # Monster Damage
             
-            # Complex Properties with specific UI needs
-            12: {'suppress_cost': True, 'suppress_p1': True}, # Bonus Feat: only needs Subtype
-            44: {'suppress_cost': True, 'suppress_p1': True}, # Light: only needs Subtype
-            63: {'suppress_cost': True, 'suppress_p1': True}, # Use Limitation Class: only needs Subtype
-            76: {'suppress_cost': True, 'suppress_p1': True}, # Poison: only needs Subtype
-            77: {'suppress_p1': True},                         # Monster Damage: only needs Subtype
-            22: {'suppress_cost': True},                       # Damage Reduction: Subtype is type, P1 is amount
-            23: {'suppress_p1': True},                         # Damage Resistance: Subtype is type, P1->Cost is amount
-            87: {'suppress_p1': True, 'suppress_cost': True},
-            88: {'suppress_p1': True, 'suppress_cost': True},
-            39: {'suppress_subtype': True},
+            # Duplicates
+            92,  # Damage Vulnerability (duplicate of ID 24)
+            
+            # Misconfigured/incomplete data
+            76,  # Poison - has weight % options instead of DC/duration
+            54,  # SpellSchool Immunity - flat with no school selection
+            90,  # Damage Reduction - ambiguous numeric options (soak vs bypass unclear)
+            33,  # DamageMelee - has type but no damage amount
+            34,  # DamageRanged - has type but no damage amount
+            31,  # EnhancedContainer BonusSlot - flat property with no options
         }
+        
+        
+        # Property-specific label overrides
+        self.property_label_overrides = {
+            81: 'Weight Modifier (Lbs)',  # Was "Weight Increase" but has both +/-
+        }
+        
+        self.property_overrides = {
+            # Only keep overrides for true data anomalies that need fixing
+        }
+        
+        # Initialize AFTER all config dicts are defined
+        self._init_property_mappings()
     
     def _init_property_mappings(self):
         """Initialize property type mappings and caches."""
@@ -92,16 +119,39 @@ class ItemPropertyDecoder:
             itempropdef_table = self.rules_service.get_table('itempropdef')
             if itempropdef_table:
                 for prop_id, prop_data in enumerate(itempropdef_table):
-                    if prop_data:
-                        self._property_cache[prop_id] = {
-                            'id': prop_id,
-                            'label': field_mapper.get_field_value(prop_data, 'Label', f'Property_{prop_id}'),
-                            'subtype_ref': field_mapper.get_field_value(prop_data, 'SubTypeResRef', ''),
-                            'cost_table_ref': field_mapper.get_field_value(prop_data, 'CostTableResRef', ''),
-                            'param1_ref': field_mapper.get_field_value(prop_data, 'Param1ResRef', ''),
-                            'description': field_mapper.get_field_value(prop_data, 'Description', ''),
-                            'game_str_ref': field_mapper.get_field_value(prop_data, 'GameStrRef', ''),
-                        }
+                    if not prop_data: continue
+
+                    label = field_mapper.get_field_value(prop_data, 'Label')
+                    name = field_mapper.get_field_value(prop_data, 'Name')
+                    
+                    if self._is_invalid_label(label) and self._is_invalid_label(name):
+                        continue
+                    display_label = None
+                    if name is not None:
+                        try:
+                            # If name is an integer, it's a TLK reference
+                            name_id = int(name)
+                            resolved = self.rules_service.rm.get_string(name_id)
+                            if resolved and not self._is_invalid_label(resolved):
+                                display_label = resolved
+                        except (ValueError, TypeError):
+                            if isinstance(name, str) and not self._is_invalid_label(name):
+                                display_label = name
+                    
+                    if not display_label:
+                        display_label = label if label else f'Property_{prop_id}'
+
+                    self._property_cache[prop_id] = {
+                        'id': prop_id,
+                        'label': display_label,
+                        'subtype_ref': field_mapper.get_field_value(prop_data, 'SubTypeResRef', ''),
+                        'cost_table_ref': field_mapper.get_field_value(prop_data, 'CostTableResRef', ''),
+                        'param1_ref': field_mapper.get_field_value(prop_data, 'Param1ResRef', ''),
+                        'description': field_mapper.get_field_value(prop_data, 'Description', ''),
+                        'game_str_ref': field_mapper.get_field_value(prop_data, 'GameStrRef', ''),
+                        'raw_label': label,
+                        'raw_name': name
+                    }
             logger.info(f"Cached {len(self._property_cache)} item property definitions")
         except Exception as e:
             logger.error(f"Failed to load itempropdef table: {e}")
@@ -112,29 +162,33 @@ class ItemPropertyDecoder:
             return None
         property_name = property_data.get('PropertyName', 0)
         subtype = property_data.get('Subtype', 0)
-        cost_table = property_data.get('CostTable', 0)
         cost_value = property_data.get('CostValue', 0)
         param1 = property_data.get('Param1', 0)
         param1_value = property_data.get('Param1Value', 0)
         
         prop_def = self._property_cache.get(property_name)
         if not prop_def:
-            raise ValueError(f"Unknown property ID {property_name} - not found in itempropdef.2da")
-        
-        decoded_info = self._decode_specific_property(
-            property_name, prop_def, subtype, cost_value, param1, param1_value
-        )
-
-        if decoded_info is None:
+            logger.warning(f"Unknown or invalid property ID {property_name} - skipping decode")
             return None
+        
+        try:
+            decoded_info = self._decode_specific_property(
+                property_name, prop_def, subtype, cost_value, param1, param1_value
+            )
 
-        decoded_info.update({
-            'property_id': property_name,
-            'raw_data': property_data,
-            'decoded': True
-        })
+            if decoded_info is None:
+                return None
 
-        return decoded_info
+            decoded_info.update({
+                'property_id': property_name,
+                'raw_data': property_data,
+                'decoded': True
+            })
+
+            return decoded_info
+        except Exception as e:
+            logger.error(f"Error decoding property {property_name}: {e}")
+            return None
     
     def _decode_specific_property(self, prop_id: int, prop_def: Dict[str, Any],
                                  subtype: int, cost_value: int, param1: int,
@@ -714,7 +768,7 @@ class ItemPropertyDecoder:
             78: "Immunity: Spells by Level",
             79: "Special Walk",
             80: "Healer's Kit",
-            81: "Weight Increase",
+            81: "Weight Modifier (Lbs)",
             83: "Visual Effect",
             84: "Arcane Spell Failure",
             85: "Arrow Catching",
@@ -729,62 +783,45 @@ class ItemPropertyDecoder:
 
         for prop_id, prop_def in enumerate(prop_defs):
             if not prop_def: continue
+            if prop_id not in self._property_cache: continue
+            if prop_id in self.hidden_property_ids: continue
             
             overrides = self.property_overrides.get(prop_id, {})
-            original_label = field_mapper.get_field_value(prop_def, 'Label')
-            if not original_label or original_label == '****' or original_label == 'None':
-                name_val = field_mapper.get_field_value(prop_def, 'Name')
-                if isinstance(name_val, int):
-                    original_label = self.rules_service.rm.get_string(name_val)
-                else:
-                    original_label = name_val if name_val != '****' else f'Property {prop_id}'
             
-            if not original_label or original_label.lower().startswith('del_') or original_label.upper() == 'DELETED' or original_label.lower() == 'padding':
-                continue
+            # Use the resolved/cached label which already handles TLK resolution
+            original_label = self._property_cache[prop_id].get('label')
             
-            # Additional filter for SubTypeResRef == 'padding'
-            subtype_ref = field_mapper.get_field_value(prop_def, 'SubTypeResRef', '').lower()
-            if subtype_ref == 'padding':
+            if self._is_invalid_label(original_label):
                 continue
 
             clean_label = original_label.replace('Property_', '').replace('_', ' ')
             if prop_id in label_overrides:
                 clean_label = label_overrides[prop_id]
+            elif prop_id in self.property_label_overrides:
+                clean_label = self.property_label_overrides[prop_id]
 
-            # Subtype logic
             subtype_ref = field_mapper.get_field_value(prop_def, 'SubTypeResRef', '').lower()
             mapping_val = self.subtype_map.get(subtype_ref, subtype_ref)
-            if prop_id in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 17, 18, 19, 20, 21, 23, 24, 27, 28, 29, 39, 40, 41, 44, 45, 48, 49, 50, 52, 53, 56, 57, 58, 59, 60, 66, 67, 70, 73, 74, 76, 77, 78, 80, 81, 82, 84, 85, 91, 92]:
-                cost_table_idx = self._resolve_indexed_column(prop_def, 'Param1ResRef', 'iprp_costtable')
-                param1_idx = None
-            else:
-                cost_table_idx = self._resolve_indexed_column(prop_def, 'CostTableResRef', 'iprp_costtable')
-                param1_idx = self._resolve_indexed_column(prop_def, 'Param1ResRef', 'iprp_paramtable')
 
-            # 2. Secondary table index (Param1)
+            cost_table_idx = self._resolve_indexed_column(prop_def, 'CostTableResRef', 'iprp_costtable')
+            param1_idx = self._resolve_indexed_column(prop_def, 'Param1ResRef', 'iprp_paramtable')
 
             if 'force_cost_idx' in overrides:
                 cost_table_idx = overrides['force_cost_idx']
             if 'force_p1_idx' in overrides:
                 param1_idx = overrides['force_p1_idx']
-
-            flat_ids = {
-                14, 25, 26, 30, 31, 32, 35, 36, 
-                38, 43, 46, 47, 51, 61, 66, 
-                67, 68, 69, 71, 75, 87, 88, 89
-            }
             
-            is_flat_bonus = prop_id in flat_ids
+            # is_flat is now determined dynamically: if no subtype, no cost options, no param1 options
             
-            has_subtype = False
             subtype_options = {}
+            has_subtype = False
             if subtype_ref and not overrides.get('suppress_subtype'):
                 try:
-                    if mapping_val in self._context_lists:
-                        subtype_options = self._context_lists[mapping_val]
-                        has_subtype = True
-                    elif context and mapping_val in context:
+                    if context and mapping_val in context:
                         subtype_options = context[mapping_val]
+                        has_subtype = True
+                    elif mapping_val in self._context_lists:
+                        subtype_options = self._context_lists[mapping_val]
                         has_subtype = True
                     else:
                         subtype_table = self.rules_service.get_table(subtype_ref)
@@ -796,10 +833,10 @@ class ItemPropertyDecoder:
 
             has_cost_table = False
             cost_table_options = {}
-            if cost_table_idx is not None and not overrides.get('suppress_cost'):
+            if not overrides.get('suppress_cost'):
                 try:
                     table_name = overrides.get('cost_table')
-                    if not table_name:
+                    if not table_name and cost_table_idx is not None:
                         table_name = self._get_mapping_table_resref('iprp_costtable', cost_table_idx, prop_id=prop_id)
                     
                     if table_name:
@@ -809,10 +846,10 @@ class ItemPropertyDecoder:
 
             has_param1 = False
             param1_options = {}
-            if param1_idx is not None and not overrides.get('suppress_p1'):
+            if not overrides.get('suppress_p1'):
                 try:
                     table_name = overrides.get('param1_table')
-                    if not table_name:
+                    if not table_name and param1_idx is not None:
                         table_name = self._get_mapping_table_resref('iprp_paramtable', param1_idx, prop_id=prop_id)
                     
                     if table_name:
@@ -825,6 +862,11 @@ class ItemPropertyDecoder:
                         
                         has_param1 = len(param1_options) > 0
                 except (ValueError, TypeError): pass
+
+            # Apply label cleanups to all option dicts for better UX
+            subtype_options = self._apply_label_cleanups(subtype_options)
+            cost_table_options = self._apply_label_cleanups(cost_table_options)
+            param1_options = self._apply_label_cleanups(param1_options)
 
             metadata.append({
                 'id': prop_id,
@@ -873,13 +915,60 @@ class ItemPropertyDecoder:
         else:
             resref = field_mapper.get_field_value(row, 'Name') or field_mapper.get_field_value(row, 'TableResRef')
             
-        if resref == '****' or not resref:
+        if self._is_invalid_label(resref): 
             resref = None
         else:
             resref = str(resref).lower()
         
         self._mapping_cache[cache_key] = resref
         return resref
+
+    def _is_invalid_label(self, label: Any) -> bool:
+        """Check if a label matches any invalid patterns (Dev/Placeholder/Deleted)."""
+        if label is None:
+            return True
+        
+        s_label = str(label).strip()
+        if not s_label:
+            return True
+            
+        s_label_lower = s_label.lower()
+        for pattern in self.invalid_label_patterns:
+            if pattern in s_label_lower:
+                return True
+        return False
+
+    def _apply_label_cleanups(self, options: Dict[int, str]) -> Dict[int, str]:
+        """Apply label_cleanups, filter invalid entries, and sort options."""
+        if not options:
+            return options
+        
+        cleaned_items = []
+        seen_labels = set()
+        for k, v in options.items():
+            if self._is_invalid_label(v):
+                continue
+                
+            # Apply label cleanups
+            cleaned = self.label_cleanups.get(v, v)
+            
+            # Deduplicate for UI - keep first occurrence
+            if cleaned not in seen_labels:
+                seen_labels.add(cleaned)
+                cleaned_items.append((k, cleaned))
+        
+        # Sort by value - numeric values sorted numerically (negatives first), text alphabetically
+        def sort_key(item):
+            val = item[1]
+            # Try to extract numeric value for sorting
+            import re
+            match = re.search(r'(-?\d+\.?\d*)', val)
+            if match:
+                return (0, float(match.group(1)), val)  
+            return (1, 0, val.lower())  
+        
+        sorted_items = sorted(cleaned_items, key=sort_key)
+        return {k: v for k, v in sorted_items}
 
     def _get_iprp_table_options(self, table_name: str) -> Optional[Dict[int, str]]:
         """Resolve a 2DA table into an options map."""
@@ -901,18 +990,29 @@ class ItemPropertyDecoder:
             if not row: continue
             
             name_val = field_mapper.get_field_value(row, 'Name')
-            if is_iprp and name_val and name_val != '****':
+            if is_iprp and not self._is_invalid_label(name_val):
                 s_name = str(name_val).strip()
                 if s_name.startswith('+') or s_name.startswith('-') or (s_name and s_name[0].isdigit()):
-                    options[i] = s_name
-                    continue
-                if s_name.lower() == 'none': continue
+                    # Extract first number - might be TLK ref in corrupted data
+                    first_num = s_name.split()[0] if ' ' in s_name else s_name
+                    if first_num.isdigit() and int(first_num) > 100:
+                        try:
+                            translated = self.rules_service.rm.get_string(int(first_num))
+                            if translated and not self._is_invalid_label(translated):
+                                options[i] = translated
+                                continue
+                        except (ValueError, TypeError): pass
+                    # Use the value as-is if no TLK translation (like DC=14 or +5)
+                    if '  ' not in s_name:  # Skip if obviously corrupted multi-space data
+                        options[i] = s_name
+                        continue
+                if self._is_invalid_label(s_name): continue
 
             game_string_ref = field_mapper.get_field_value(row, 'GameString')
             if game_string_ref and str(game_string_ref).isdigit():
                 try:
                     label = self.rules_service.rm.get_string(int(game_string_ref))
-                    if label and label != '****':
+                    if label and not self._is_invalid_label(label):
                         options[i] = label
                         continue
                 except (ValueError, TypeError): pass
@@ -924,17 +1024,26 @@ class ItemPropertyDecoder:
                 if val > 100:
                     try:
                         translated = self.rules_service.rm.get_string(val)
-                        if translated and translated != '****':
+                        if translated and not self._is_invalid_label(translated):
                             label = translated
                     except (ValueError, TypeError): pass
 
-            if (not label or label == '****') and name_val and name_val != '****':
-                label = name_val
+            # Prefer Name over Label if Name is more descriptive
+            # This handles cases like iprp_bladecost where Label has garbage class names
+            if not self._is_invalid_label(name_val):
+                str_name = str(name_val).strip()
+                str_label = str(label).strip() if label else ''
+                if (self._is_invalid_label(label) or 
+                    (str_name and (' ' in str_name or '+' in str_name or '-' in str_name))):
+                    label = str_name
             
-            if label and label != '****':
+            if not self._is_invalid_label(label):
                 s_label = str(label)
+                cleanups = getattr(self, 'label_cleanups', {})
+                s_label = cleanups.get(s_label, s_label)
                 if s_label not in options.values():
-                    options[i] = s_label
+                    pass
+                options[i] = s_label
         
         self._table_options_cache[table_name] = options
         return options

@@ -181,9 +181,7 @@ export default function ItemDetailsPanel({
               </h5>
               <div className="space-y-1 max-h-[135px] overflow-y-auto custom-scrollbar pr-2">
                 {decodedProperties.map((prop, idx) => {
-                  const displayText = prop.description && typeof prop.description === 'string'
-                    ? prop.description
-                    : prop.label;
+                  const displayText = prop.label || prop.description || 'Unknown Property';
 
                   return (
                     <div key={idx} className="text-sm text-[rgb(var(--color-text-primary))] bg-[rgb(var(--color-surface-1)/0.5)] rounded px-2 py-1.5">
