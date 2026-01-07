@@ -91,30 +91,24 @@ impl TDAParser {
         let mut header_parsed = false;
         let mut columns_parsed = false;
         let mut line_count = 0;
-        
+
         for line in content.lines() {
             line_count += 1;
-            
+
             // Validate line length
             self.security_limits().validate_line_length(line.len())?;
-            
+
             // Tokenize the line
             let tokens = tokenizer.tokenize_line(line)?;
-            
+
             // Skip empty lines and comments
             if tokens.is_empty() {
                 continue;
             }
-            
+
             if !header_parsed {
-                // Special handling for header - always tokenize on spaces, not tabs
-                let header_tokens = if line.trim().starts_with("2DA") {
-                    // Force space-based tokenization for header line
-                    tokenizer.tokenize_space_separated(line.trim())?
-                } else {
-                    tokens
-                };
-                self.parse_header(&header_tokens)?;
+                // Position-based header parsing - no tokenization needed
+                self.parse_header_direct(line.trim())?;
                 header_parsed = true;
             } else if !columns_parsed {
                 self.parse_columns(&tokens)?;
@@ -133,31 +127,55 @@ impl TDAParser {
         Ok(())
     }
 
-    /// Parse the 2DA header line
-    fn parse_header(&mut self, tokens: &[Token]) -> TDAResult<()> {
-        if tokens.len() < 2 {
-            return Err(TDAError::InvalidHeader(
-                tokens.iter().map(|t| t.content.trim()).collect::<Vec<_>>().join(" ")
-            ));
+    /// Parse the 2DA header line using position-based extraction
+    /// Handles: "2DA V2.0", "2DA\tV2.0", "2DAMV1.0" (merge files)
+    fn parse_header_direct(&mut self, line: &str) -> TDAResult<()> {
+        let bytes = line.as_bytes();
+
+        // Minimum header length: "2DA V2.0" = 8 chars, "2DAMV1.0" = 8 chars
+        if bytes.len() < 8 {
+            return Err(TDAError::InvalidHeader(line.to_string()));
         }
-        
-        // Trim token content to handle padded headers
-        let token0 = tokens[0].content.trim();
-        let token1 = tokens[1].content.trim();
-        
-        // Check for standard 2DA V2.0 header (with typo tolerance)
-        if token1 == "V2.0" {
-            if token0 != "2DA" {
-                // Log warning for non-standard header but continue
-                self.metadata_mut().has_warnings = true;
+
+        // Check file type at position 0..3 or 0..4
+        let is_2dam = bytes.len() >= 4 && &bytes[0..4] == b"2DAM";
+        let is_2da = &bytes[0..3] == b"2DA";
+
+        if !is_2da && !is_2dam {
+            return Err(TDAError::InvalidHeader(line.to_string()));
+        }
+
+        // Extract version based on format
+        let version = if is_2dam {
+            // 2DAM format: "2DAMV1.0" - version starts at position 4
+            if bytes.len() >= 8 {
+                std::str::from_utf8(&bytes[4..8]).unwrap_or("")
+            } else {
+                ""
             }
-            self.metadata_mut().format_version = format!("{} {}", token0, token1);
         } else {
-            return Err(TDAError::InvalidHeader(
-                tokens.iter().map(|t| t.content.trim()).collect::<Vec<_>>().join(" ")
-            ));
+            // 2DA format: "2DA V2.0" or "2DA\tV2.0" - version starts at position 4
+            // Skip the separator (space or tab) at position 3
+            if bytes.len() >= 8 && (bytes[3] == b' ' || bytes[3] == b'\t') {
+                std::str::from_utf8(&bytes[4..8]).unwrap_or("")
+            } else {
+                ""
+            }
+        };
+
+        // Validate version
+        if version != "V2.0" && version != "V1.0" {
+            return Err(TDAError::InvalidHeader(line.to_string()));
         }
-        
+
+        // Set metadata
+        if is_2dam {
+            self.metadata_mut().format_version = format!("2DAM{}", version);
+            self.metadata_mut().has_warnings = true; // 2DAM is non-standard
+        } else {
+            self.metadata_mut().format_version = format!("2DA {}", version);
+        }
+
         Ok(())
     }
 
@@ -504,5 +522,55 @@ abc     item3       "Third Item"
         assert_eq!(parser.get_cell_by_name(0, "Name").unwrap(), Some("First Item"));
         assert_eq!(parser.get_cell_by_name(1, "Name").unwrap(), Some("Second Item"));
         assert_eq!(parser.get_cell_by_name(2, "Name").unwrap(), Some("Third Item"));
+    }
+
+    #[test]
+    fn test_tab_separated_header() {
+        // Header with tab separator instead of space
+        let data = "2DA\tV2.0\n\nLabel\tName\n0\ttest1\tvalue1\n";
+
+        let mut parser = TDAParser::new();
+        parser.parse_from_string(data).unwrap();
+
+        assert_eq!(parser.metadata().format_version, "2DA V2.0");
+        assert_eq!(parser.column_count(), 2);
+        assert_eq!(parser.row_count(), 1);
+    }
+
+    #[test]
+    fn test_2dam_merge_file() {
+        // 2DAM merge file format (V1.0)
+        let data = "2DAMV1.0\n\nLabel\tName\n0\ttest1\tvalue1\n";
+
+        let mut parser = TDAParser::new();
+        parser.parse_from_string(data).unwrap();
+
+        assert_eq!(parser.metadata().format_version, "2DAMV1.0");
+        assert!(parser.metadata().has_warnings); // 2DAM is non-standard
+        assert_eq!(parser.column_count(), 2);
+    }
+
+    #[test]
+    fn test_v1_format() {
+        // V1.0 format support
+        let data = "2DA V1.0\n\nLabel\tName\n0\ttest1\tvalue1\n";
+
+        let mut parser = TDAParser::new();
+        parser.parse_from_string(data).unwrap();
+
+        assert_eq!(parser.metadata().format_version, "2DA V1.0");
+    }
+
+    #[test]
+    fn test_tab_separated_with_quoted_commas() {
+        // Real-world case: tab-separated with quoted fields containing commas
+        let data = "2DA\tV2.0\n\nName\tComment\tResRefs\n0\tBeetles\t\",various beetles\"\t\"a,b,c\"\n";
+
+        let mut parser = TDAParser::new();
+        parser.parse_from_string(data).unwrap();
+
+        assert_eq!(parser.column_count(), 3);
+        assert_eq!(parser.get_cell_by_name(0, "Comment").unwrap(), Some(",various beetles"));
+        assert_eq!(parser.get_cell_by_name(0, "ResRefs").unwrap(), Some("a,b,c"));
     }
 }

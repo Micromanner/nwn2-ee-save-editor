@@ -258,7 +258,7 @@ mod tests {
         let test_file = temp_dir.path().join("test.2da");
         fs::write(&test_file, "2DA V2.0\n\n    Label\n0   TestEntry\n").unwrap();
         
-        let result = walker.scan_directory_for_2da_files(temp_dir.path(), false);
+        let result = walker.scan_directory_for_2das(temp_dir.path(), false);
         assert!(result.is_ok());
         
         let resources = result.unwrap();

@@ -50,86 +50,34 @@ impl TDATokenizer {
     }
 
     /// Tokenize tab-separated line (skips empty fields from consecutive tabs, handles quoted strings)
-    /// 2DA format uses **** for null values, not empty fields - empty fields from \t\t are artifacts
+    /// Split by tabs first, then process each field - avoids quote-tracking bugs
     fn tokenize_tab_separated<'a>(&self, line: &'a str) -> TDAResult<LineTokens<'a>> {
         let mut tokens = SmallVec::new();
-        let mut chars = line.char_indices().peekable();
-        let mut field_start = 0;
+        let mut position = 0;
 
-        while let Some((pos, ch)) = chars.next() {
-            if ch == '"' {
-                // Handle quoted string - find matching quote
-                let mut found_closing = false;
+        for field in line.split('\t') {
+            let trimmed = field.trim();
 
-                while let Some((_next_pos, next_ch)) = chars.peek() {
-                    if *next_ch == '"' {
-                        chars.next(); // consume the closing quote
-                        found_closing = true;
-                        break;
+            if !trimmed.is_empty() {
+                let token = if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+                    Token {
+                        content: &trimmed[1..trimmed.len() - 1],
+                        was_quoted: true,
+                        position,
                     }
-                    chars.next();
-                }
-
-                if !found_closing {
-                    return Err(TDAError::InvalidToken {
-                        position: pos,
-                        token: line[pos..].to_string(),
-                    });
-                }
-
-                // Continue until we find a tab or end of line
-                while let Some((_, next_ch)) = chars.peek() {
-                    if *next_ch == '\t' {
-                        break;
+                } else {
+                    Token {
+                        content: trimmed,
+                        was_quoted: false,
+                        position,
                     }
-                    chars.next();
-                }
-
-            } else if ch == '\t' {
-                // Found field separator
-                let field_content = line[field_start..pos].trim();
-
-                // Skip empty fields - 2DA uses **** for nulls, not empty strings
-                if !field_content.is_empty() {
-                    let token = if field_content.starts_with('"') && field_content.ends_with('"') && field_content.len() >= 2 {
-                        Token {
-                            content: &field_content[1..field_content.len()-1],
-                            was_quoted: true,
-                            position: field_start,
-                        }
-                    } else {
-                        Token {
-                            content: field_content,
-                            was_quoted: false,
-                            position: field_start,
-                        }
-                    };
-                    tokens.push(token);
-                }
-                field_start = pos + 1; // Start after the tab
+                };
+                tokens.push(token);
             }
+
+            position += field.len() + 1; // +1 for the tab
         }
 
-        // Handle the last field (after the last tab or the entire line if no tabs)
-        let field_content = line[field_start..].trim();
-
-        // Skip empty fields
-        if !field_content.is_empty() {
-            let token = if field_content.starts_with('"') && field_content.ends_with('"') && field_content.len() >= 2 {
-                Token {
-                    content: &field_content[1..field_content.len()-1],
-                    was_quoted: true,
-                    position: field_start,
-                }
-            } else {
-                Token {
-                    content: field_content,
-                    was_quoted: false,
-                    position: field_start,
-                }
-            };
-            tokens.push(token);
-        }
         Ok(tokens)
     }
 
@@ -305,5 +253,41 @@ mod tests {
         let mut tokenizer = TDATokenizer::new();
         let tokens = tokenizer.tokenize_line("# This is a comment").unwrap();
         assert_eq!(tokens.len(), 0);
+    }
+
+    #[test]
+    fn test_tab_separated_with_quoted_commas() {
+        let mut tokenizer = TDATokenizer::new();
+        // Quoted field containing commas - common in NWN2 2DA files
+        let tokens = tokenizer.tokenize_line("0\tTableName\t\",value with comma\"\t****").unwrap();
+
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(tokens[0].content, "0");
+        assert_eq!(tokens[1].content, "TableName");
+        assert_eq!(tokens[2].content, ",value with comma");
+        assert_eq!(tokens[2].was_quoted, true);
+        assert_eq!(tokens[3].content, "****");
+    }
+
+    #[test]
+    fn test_tab_separated_multiple_quoted_fields() {
+        let mut tokenizer = TDATokenizer::new();
+        // Multiple quoted fields with commas
+        let tokens = tokenizer.tokenize_line("1\tName\t\"a,b,c\"\t\"x,y\"").unwrap();
+
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(tokens[2].content, "a,b,c");
+        assert_eq!(tokens[3].content, "x,y");
+    }
+
+    #[test]
+    fn test_tab_separated_unquoted_with_internal_quotes() {
+        let mut tokenizer = TDATokenizer::new();
+        // Field that doesn't start with quote but has quote inside - treat as literal
+        let tokens = tokenizer.tokenize_line("0\tSome\"Value\t****").unwrap();
+
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[1].content, "Some\"Value");
+        assert_eq!(tokens[1].was_quoted, false);
     }
 }
