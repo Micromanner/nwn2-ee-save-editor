@@ -152,7 +152,7 @@ class InventoryManager(EventEmitter):
 
         substrings = locstring_struct.get('substrings', [])
         if substrings:
-            return substrings[0].get('value')
+            return substrings[0].get('string')
 
         return None
 
@@ -1119,9 +1119,9 @@ class InventoryManager(EventEmitter):
             'Tag': f"new_item_{base_item_id}",
             'LocalizedName': {
                 'string_ref': 4294967295,
-                'substrings': [{'lang_id': 0, 'value': self._get_item_name({'BaseItem': base_item_id})}]
+                'substrings': [{'language': 0, 'gender': 0, 'string': self._get_item_name({'BaseItem': base_item_id})}]
             },
-            'Description': {
+            'DescIdentified': {
                 'string_ref': 4294967295,
                 'substrings': []
             },

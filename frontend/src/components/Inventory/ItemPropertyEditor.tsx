@@ -18,6 +18,8 @@ interface ItemPropertyEditorProps {
   characterId: number | undefined;
   itemIndex?: number | null;
   slot?: string | null;
+  resolvedName?: string;
+  resolvedDescription?: string;
 }
 
 export default function ItemPropertyEditor({
@@ -27,7 +29,9 @@ export default function ItemPropertyEditor({
   itemData,
   characterId,
   itemIndex: _itemIndex,
-  slot: _slot
+  slot: _slot,
+  resolvedName,
+  resolvedDescription
 }: ItemPropertyEditorProps) {
   useTranslations();
   const [localData, setLocalData] = useState<Record<string, unknown> | null>(null);
@@ -49,10 +53,27 @@ export default function ItemPropertyEditor({
 
   useEffect(() => {
     if (isOpen && itemData) {
-      setLocalData(JSON.parse(JSON.stringify(itemData)));
+      const data = JSON.parse(JSON.stringify(itemData));
+      if (data.StackSize === undefined) data.StackSize = 1;
+
+      if (resolvedName && data.LocalizedName) {
+        const substrings = data.LocalizedName.substrings;
+        if (!substrings || substrings.length === 0) {
+          data.LocalizedName.substrings = [{ language: 0, gender: 0, string: resolvedName }];
+        }
+      }
+
+      if (resolvedDescription && data.DescIdentified) {
+        const substrings = data.DescIdentified.substrings;
+        if (!substrings || substrings.length === 0) {
+          data.DescIdentified.substrings = [{ language: 0, gender: 0, string: resolvedDescription }];
+        }
+      }
+
+      setLocalData(data);
       loadMetadata();
     }
-  }, [isOpen, itemData, loadMetadata]);
+  }, [isOpen, itemData, loadMetadata, resolvedName, resolvedDescription]);
 
   const handleBasicChange = (field: string, value: unknown) => {
     setLocalData((prev: Record<string, unknown> | null) => ({
@@ -66,11 +87,11 @@ export default function ItemPropertyEditor({
       const newData = { ...prev } as Record<string, unknown>;
       const existingField = newData[field] as Record<string, unknown> | undefined;
       if (!existingField) {
-        newData[field] = { string_ref: 4294967295, strings: { '0': value } };
+        newData[field] = { string_ref: 4294967295, substrings: [{ language: 0, gender: 0, string: value }] };
       } else {
         newData[field] = {
           ...existingField,
-          strings: { ...(existingField.strings as Record<string, string>), '0': value }
+          substrings: [{ language: 0, gender: 0, string: value }]
         };
       }
       return newData;
@@ -79,8 +100,11 @@ export default function ItemPropertyEditor({
 
   const getLocalizedValue = (field: string) => {
     const fieldData = localData?.[field] as Record<string, unknown> | undefined;
-    const strings = fieldData?.strings as Record<string, string> | undefined;
-    return strings?.['0'] || '';
+    const substrings = fieldData?.substrings as Array<{language?: number, string?: string}> | undefined;
+    if (substrings && substrings.length > 0) {
+      return substrings[0]?.string || '';
+    }
+    return '';
   };
 
   const handleAddProperty = () => {
@@ -147,6 +171,7 @@ export default function ItemPropertyEditor({
 
 
   const handleSave = async () => {
+    if (!localData) return;
     await onSave(localData);
     onClose();
   };
@@ -201,9 +226,9 @@ export default function ItemPropertyEditor({
                     <div>
                       <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Description</label>
                       <textarea
-                        className="w-full bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] rounded-md p-2 text-sm text-[rgb(var(--color-text-primary))] outline-none min-h-[100px]"
-                        value={getLocalizedValue('Description')}
-                        onChange={(e) => handleLocalizedChange('Description', e.target.value)}
+                        className="w-full bg-[rgb(var(--color-surface-2))] border border-[rgb(var(--color-surface-border))] rounded-md p-2 text-sm text-[rgb(var(--color-text-primary))] outline-none min-h-[200px] resize-y"
+                        value={getLocalizedValue('DescIdentified')}
+                        onChange={(e) => handleLocalizedChange('DescIdentified', e.target.value)}
                       />
                     </div>
 
@@ -212,7 +237,7 @@ export default function ItemPropertyEditor({
                         <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Stack Size</label>
                         <Input
                           type="number"
-                          value={localData.StackSize || 1}
+                          value={(localData.StackSize as number | undefined) ?? 1}
                           onChange={(e) => handleBasicChange('StackSize', parseInt(e.target.value))}
                         />
                       </div>
@@ -220,7 +245,7 @@ export default function ItemPropertyEditor({
                         <label className="text-sm font-medium text-[rgb(var(--color-text-muted))] mb-1 block">Charges</label>
                         <Input
                           type="number"
-                          value={localData.Charges || 0}
+                          value={(localData.Charges as number | undefined) ?? 0}
                           onChange={(e) => handleBasicChange('Charges', parseInt(e.target.value))}
                         />
                       </div>

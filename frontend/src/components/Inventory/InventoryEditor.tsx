@@ -199,6 +199,8 @@ export default function InventoryEditor() {
   );
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [selectedItemRawData, setSelectedItemRawData] = useState<Record<string, unknown> | null>(null);
+  const [selectedItemResolvedName, setSelectedItemResolvedName] = useState<string | undefined>(undefined);
+  const [selectedItemResolvedDescription, setSelectedItemResolvedDescription] = useState<string | undefined>(undefined);
   const [selectedItemInventoryIndex, setSelectedItemInventoryIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<ItemTypeFilter>('all');
@@ -401,6 +403,8 @@ export default function InventoryEditor() {
         await inventoryData.load();
         setSelectedItem(null);
         setSelectedItemRawData(null);
+        setSelectedItemResolvedName(undefined);
+        setSelectedItemResolvedDescription(undefined);
         setSelectedItemInventoryIndex(null);
       } else {
         showToast(response.message, 'error');
@@ -604,7 +608,8 @@ export default function InventoryEditor() {
       if (equippedItem) {
         const summary = (inventoryData.data as unknown as LocalInventoryData).summary;
         const mappedSlot = SLOT_MAPPING[slotName.toLowerCase()];
-        const rawItemData = mappedSlot ? summary?.equipped_items[mappedSlot]?.item_data : null;
+        const equipData = mappedSlot ? summary?.equipped_items[mappedSlot] : null;
+        const rawItemData = equipData?.item_data || null;
 
         const itemForDetails: Item = {
           id: `equipped_${slotName.toLowerCase().replace(' ', '_')}`,
@@ -621,6 +626,8 @@ export default function InventoryEditor() {
         };
         setSelectedItem(itemForDetails);
         setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+        setSelectedItemResolvedName(equipData?.name);
+        setSelectedItemResolvedDescription(equipData?.description);
         setSelectedItemInventoryIndex(null);
       }
     };
@@ -703,6 +710,8 @@ export default function InventoryEditor() {
 
         setSelectedItem(item);
         setSelectedItemRawData(inventoryItem.item as Record<string, unknown> | null);
+        setSelectedItemResolvedName(inventoryItem.name);
+        setSelectedItemResolvedDescription(inventoryItem.description);
         setSelectedItemInventoryIndex(pendingNewItemIndex);
         setShowPropertyEditor(true);
         setPendingNewItemIndex(null);
@@ -728,11 +737,13 @@ export default function InventoryEditor() {
           is_stolen: false
         });
         setSelectedItemRawData(equipData.item_data as Record<string, unknown> | null);
+        setSelectedItemResolvedName(equipData.name);
+        setSelectedItemResolvedDescription(equipData.description);
         setSelectedItemInventoryIndex(null);
         setPendingEquipSlot(null);
-        return; 
+        return;
       }
-      
+
       if (!isEquipping) {
          setPendingEquipSlot(null);
       }
@@ -749,8 +760,10 @@ export default function InventoryEditor() {
       if (matchIndex !== -1 && currentInventory[matchIndex]) {
         const newItem = currentInventory[matchIndex]!;
         setSelectedItem(newItem);
-        const rawItem = summary?.inventory_items?.find(i => safeToNumber(i.index, -1) === matchIndex)?.item;
-        setSelectedItemRawData(rawItem as Record<string, unknown> | null);
+        const inventoryItem = summary?.inventory_items?.find(i => safeToNumber(i.index, -1) === matchIndex);
+        setSelectedItemRawData(inventoryItem?.item as Record<string, unknown> | null);
+        setSelectedItemResolvedName(inventoryItem?.name);
+        setSelectedItemResolvedDescription(inventoryItem?.description);
         setSelectedItemInventoryIndex(matchIndex);
         setPendingUnequipItem(null);
         return;
@@ -768,17 +781,23 @@ export default function InventoryEditor() {
       if (!currentItem) {
         setSelectedItem(null);
         setSelectedItemRawData(null);
+        setSelectedItemResolvedName(undefined);
+        setSelectedItemResolvedDescription(undefined);
         setSelectedItemInventoryIndex(null);
       } else {
         setSelectedItem(currentItem);
-        const rawItem = (inventoryData.data as unknown as LocalInventoryData)?.summary?.inventory_items?.[selectedItemInventoryIndex]?.item;
-        setSelectedItemRawData(rawItem as Record<string, unknown> | null);
+        const inventoryItem = (inventoryData.data as unknown as LocalInventoryData)?.summary?.inventory_items?.[selectedItemInventoryIndex];
+        setSelectedItemRawData(inventoryItem?.item as Record<string, unknown> | null);
+        setSelectedItemResolvedName(inventoryItem?.name);
+        setSelectedItemResolvedDescription(inventoryItem?.description);
       }
     } else if (selectedItem?.equipped && selectedItem.slot) {
       const currentEquipped = getEquippedItemForSlot(selectedItem.slot);
       if (!currentEquipped) {
         setSelectedItem(null);
         setSelectedItemRawData(null);
+        setSelectedItemResolvedName(undefined);
+        setSelectedItemResolvedDescription(undefined);
       }
     }
   // This effect intentionally only reacts to inventory data changes to sync selection state
@@ -978,6 +997,8 @@ export default function InventoryEditor() {
                                 onClick={() => {
                                     setSelectedItem(item);
                                     setSelectedItemRawData(rawItemData as Record<string, unknown> | null);
+                                    setSelectedItemResolvedName(inventoryItem?.name);
+                                    setSelectedItemResolvedDescription(inventoryItem?.description);
                                     setSelectedItemInventoryIndex(originalIndex >= 0 ? originalIndex : null);
                                 }}
                             >
@@ -1132,6 +1153,8 @@ export default function InventoryEditor() {
             characterId={character?.id}
             itemIndex={selectedItemInventoryIndex}
             slot={selectedItem?.equipped ? selectedItem.slot : null}
+            resolvedName={selectedItemResolvedName}
+            resolvedDescription={selectedItemResolvedDescription}
           />
         )}
       </div>
