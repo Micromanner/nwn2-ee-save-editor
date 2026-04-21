@@ -16,7 +16,8 @@
     "chooseCharacter": "Choose Character",
     "chooseCharacterHint": "{save} contains multiple player characters. Pick the one to edit.",
     "playerSlot": "Slot {slot}",
-    "unnamedPlayer": "Player {index}"
+    "unnamedPlayer": "Player {index}",
+    "levelFallback": "Level {level}"
   },
   "fileBrowser": {
     "loadSave": "Load Save",

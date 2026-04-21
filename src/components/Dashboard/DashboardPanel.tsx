@@ -72,7 +72,7 @@ export default function DashboardPanel() {
               ? new Date(save.modified * 1000).toLocaleString()
               : '',
             thumbnail: null,
-            isActive: save.path === loadedSavePath,
+            isActive: false,
           };
         });
 
@@ -100,7 +100,14 @@ export default function DashboardPanel() {
 
     loadSaves();
     return () => { cancelled = true; };
-  }, [handleError, loadedSavePath, saveMode]);
+  }, [handleError, saveMode]);
+
+  useEffect(() => {
+    setSaves(prev => prev.map((entry, i) => ({
+      ...entry,
+      isActive: savePaths[i] === loadedSavePath,
+    })));
+  }, [loadedSavePath, savePaths]);
 
   useEffect(() => {
     if (!character) {
@@ -379,7 +386,7 @@ export default function DashboardPanel() {
             {saveCharacters.map(player => {
               const classSummary = player.classes.length > 0
                 ? player.classes.map(entry => `${entry.name} ${entry.level}`).join(' / ')
-                : `Level ${player.total_level}`;
+                : t('dashboard.levelFallback', { level: player.total_level });
               const isCurrentSelection =
                 loadedSavePath === pendingSaveSelection?.path &&
                 loadedPlayerIndex === player.player_index;
