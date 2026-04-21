@@ -96,7 +96,7 @@ export interface SaveCharacterClass {
 
 export interface SaveCharacterOption {
   player_index: number;
-  name: string;
+  name: string | null;
   race: string;
   total_level: number;
   classes: SaveCharacterClass[];

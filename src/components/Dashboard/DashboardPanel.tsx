@@ -413,7 +413,9 @@ export default function DashboardPanel() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: T.text }}>{player.name}</div>
+                      <div style={{ fontWeight: 600, color: T.text }}>
+                        {player.name ?? t('dashboard.unnamedPlayer', { index: player.player_index + 1 })}
+                      </div>
                       <div style={{ marginTop: 4, fontSize: 12, color: T.textMuted }}>
                         {player.race}
                       </div>

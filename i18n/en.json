@@ -15,7 +15,8 @@
     "multiplayer": "Multiplayer",
     "chooseCharacter": "Choose Character",
     "chooseCharacterHint": "{save} contains multiple player characters. Pick the one to edit.",
-    "playerSlot": "Slot {slot}"
+    "playerSlot": "Slot {slot}",
+    "unnamedPlayer": "Player {index}"
   },
   "fileBrowser": {
     "loadSave": "Load Save",

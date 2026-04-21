@@ -67,7 +67,7 @@ pub struct SaveCharacterClass {
 #[derive(Clone, serde::Serialize, specta::Type)]
 pub struct SaveCharacterOption {
     pub player_index: usize,
-    pub name: String,
+    pub name: Option<String>,
     pub race: String,
     pub total_level: i32,
     pub classes: Vec<SaveCharacterClass>,
@@ -78,14 +78,8 @@ fn summarize_save_character(
     character: Character,
     game_data: &GameData,
 ) -> SaveCharacterOption {
-    let name = {
-        let full_name = character.full_name();
-        if full_name.trim().is_empty() {
-            format!("Player {}", player_index + 1)
-        } else {
-            full_name
-        }
-    };
+    let full_name = character.full_name();
+    let name = (!full_name.trim().is_empty()).then_some(full_name);
 
     let classes = character
         .class_entries()
