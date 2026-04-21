@@ -2,6 +2,7 @@ pub mod character;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod events;
 pub mod file_operations;
 pub mod loaders;
 #[cfg(debug_assertions)]

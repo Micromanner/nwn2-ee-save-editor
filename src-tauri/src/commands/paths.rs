@@ -1,9 +1,10 @@
 use crate::commands::{CommandError, CommandResult};
 use crate::config::PathSource;
+use crate::events::PATHS_CHANGED_EVENT;
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
-use tauri::State;
-use tracing::{debug, instrument};
+use tauri::{AppHandle, Emitter, State};
+use tracing::{debug, error, instrument};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathInfo {
@@ -96,9 +97,40 @@ fn build_path_config(paths: &crate::config::NWN2Paths) -> PathConfig {
     }
 }
 
-async fn sync_resource_manager_paths(state: &AppState, snapshot: crate::config::NWN2Paths) {
-    let mut resource_manager = state.resource_manager.write().await;
-    resource_manager.update_paths(snapshot).await;
+async fn sync_resource_manager_paths(
+    app: &AppHandle,
+    state: &AppState,
+    snapshot: crate::config::NWN2Paths,
+) -> PathConfig {
+    let config = build_path_config(&snapshot);
+
+    {
+        let mut resource_manager = state.resource_manager.write().await;
+        resource_manager.update_paths(snapshot).await;
+    }
+    {
+        let mut game_data = state.game_data.write();
+        game_data.clear();
+    }
+    {
+        let mut session = state.session.write();
+        session.close_character();
+    }
+    *state.model_list_cache.lock() = None;
+
+    if let Err(err) = crate::commands::gamedata::load_game_data_impl(state).await {
+        error!(
+            error = %err,
+            "Failed to reload game data after path change; clearing stale state"
+        );
+        let mut game_data = state.game_data.write();
+        game_data.clear();
+    }
+
+    if let Err(err) = app.emit(PATHS_CHANGED_EVENT, config.clone()) {
+        error!(error = %err, "Failed to emit paths-changed event");
+    }
+    config
 }
 
 #[tauri::command]
@@ -110,8 +142,9 @@ pub async fn get_paths_config(state: State<'_, AppState>) -> CommandResult<PathC
 }
 
 #[tauri::command]
-#[instrument(name = "set_game_folder", skip(state))]
+#[instrument(name = "set_game_folder", skip(app, state))]
 pub async fn set_game_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -133,18 +166,19 @@ pub async fn set_game_folder(
         })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("Game folder set to: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "set_documents_folder", skip(state))]
+#[instrument(name = "set_documents_folder", skip(app, state))]
 pub async fn set_documents_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -166,18 +200,19 @@ pub async fn set_documents_folder(
         })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("Documents folder set to: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "set_steam_workshop_folder", skip(state))]
+#[instrument(name = "set_steam_workshop_folder", skip(app, state))]
 pub async fn set_steam_workshop_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -199,18 +234,19 @@ pub async fn set_steam_workshop_folder(
         })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("Steam workshop folder set to: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "add_override_folder", skip(state))]
+#[instrument(name = "add_override_folder", skip(app, state))]
 pub async fn add_override_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -232,18 +268,19 @@ pub async fn add_override_folder(
         })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("Override folder added: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "remove_override_folder", skip(state))]
+#[instrument(name = "remove_override_folder", skip(app, state))]
 pub async fn remove_override_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -259,18 +296,19 @@ pub async fn remove_override_folder(
             })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("Override folder removed: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "add_hak_folder", skip(state))]
+#[instrument(name = "add_hak_folder", skip(app, state))]
 pub async fn add_hak_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -292,18 +330,19 @@ pub async fn add_hak_folder(
         })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("HAK folder added: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "remove_hak_folder", skip(state))]
+#[instrument(name = "remove_hak_folder", skip(app, state))]
 pub async fn remove_hak_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
@@ -319,18 +358,21 @@ pub async fn remove_hak_folder(
             })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: format!("HAK folder removed: {path}"),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "reset_game_folder", skip(state))]
-pub async fn reset_game_folder(state: State<'_, AppState>) -> CommandResult<PathUpdateResponse> {
+#[instrument(name = "reset_game_folder", skip(app, state))]
+pub async fn reset_game_folder(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<PathUpdateResponse> {
     debug!("Resetting game folder to auto-detected");
     let snapshot = {
         let mut paths = state.paths.write();
@@ -343,18 +385,19 @@ pub async fn reset_game_folder(state: State<'_, AppState>) -> CommandResult<Path
             })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: "Game folder reset to auto-detected".to_string(),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "reset_documents_folder", skip(state))]
+#[instrument(name = "reset_documents_folder", skip(app, state))]
 pub async fn reset_documents_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Resetting documents folder to auto-detected");
@@ -369,18 +412,19 @@ pub async fn reset_documents_folder(
             })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: "Documents folder reset to auto-detected".to_string(),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
 #[tauri::command]
-#[instrument(name = "reset_steam_workshop_folder", skip(state))]
+#[instrument(name = "reset_steam_workshop_folder", skip(app, state))]
 pub async fn reset_steam_workshop_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Resetting Steam workshop folder to auto-detected");
@@ -395,12 +439,12 @@ pub async fn reset_steam_workshop_folder(
             })?;
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
+    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(PathUpdateResponse {
         success: true,
         message: "Steam workshop folder reset to auto-detected".to_string(),
-        paths: build_path_config(&snapshot),
+        paths,
     })
 }
 
@@ -413,8 +457,11 @@ pub struct AutoDetectResponse {
 }
 
 #[tauri::command]
-#[instrument(name = "auto_detect_paths", skip(state))]
-pub async fn auto_detect_paths(state: State<'_, AppState>) -> CommandResult<AutoDetectResponse> {
+#[instrument(name = "auto_detect_paths", skip(app, state))]
+pub async fn auto_detect_paths(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<AutoDetectResponse> {
     debug!("Auto-detecting all paths");
     let snapshot = {
         let mut paths = state.paths.write();
@@ -424,21 +471,22 @@ pub async fn auto_detect_paths(state: State<'_, AppState>) -> CommandResult<Auto
         let _ = paths.reset_steam_workshop_folder();
         paths.clone()
     };
-    sync_resource_manager_paths(&state, snapshot.clone()).await;
-
     let game_installations = snapshot
         .game_folder()
         .map(|p| vec![p.to_string_lossy().to_string()])
         .unwrap_or_default();
+    let documents_folder = snapshot
+        .documents_folder()
+        .map(|p| p.to_string_lossy().to_string());
+    let steam_workshop = snapshot
+        .steam_workshop_folder()
+        .map(|p| p.to_string_lossy().to_string());
+    let current_paths = sync_resource_manager_paths(&app, &state, snapshot).await;
 
     Ok(AutoDetectResponse {
         game_installations,
-        documents_folder: snapshot
-            .documents_folder()
-            .map(|p| p.to_string_lossy().to_string()),
-        steam_workshop: snapshot
-            .steam_workshop_folder()
-            .map(|p| p.to_string_lossy().to_string()),
-        current_paths: build_path_config(&snapshot),
+        documents_folder,
+        steam_workshop,
+        current_paths,
     })
 }

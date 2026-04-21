@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Fragment, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Button, Card, Elevation, HTMLTable, InputGroup, Menu, MenuItem,
   NonIdealState, Spinner, Switch, Tab, Tabs,
@@ -10,6 +10,7 @@ import { T, formatBytes } from '../theme';
 import { KVRow, ParchmentDialog, StepInput } from '../shared';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
 import { useTranslations } from '@/hooks/useTranslations';
 import { gameStateAPI } from '@/services/gameStateApi';
 import type {
@@ -1007,13 +1008,16 @@ export function GameStatePanel() {
   const [activeTab, setActiveTab] = useState<string>('reputation');
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [pathsVersion, setPathsVersion] = useState(0);
+
+  usePathsChangedEvent(() => setPathsVersion(v => v + 1));
 
   useEffect(() => {
     if (!characterId) return;
     gameStateAPI.getCampaignSettings(characterId)
       .then(s => setCampaignId(s.guid || null))
       .catch(() => setCampaignId(null));
-  }, [characterId]);
+  }, [characterId, pathsVersion]);
 
   if (!characterId) {
     return (
@@ -1025,44 +1029,46 @@ export function GameStatePanel() {
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 16px 0' }}>
-          <Tabs
-            id="gamestate-tabs"
-            selectedTabId={activeTab}
-            onChange={(newTab) => setActiveTab(newTab as string)}
-            large
-          >
-            <Tab id="reputation" title={t('gameState.tabs.companionInfluence')} />
-            <Tab id="moduleVars" title={t('gameState.tabs.moduleAndVariables')} />
-            <Tab id="campaignSettings" title={t('gameState.tabs.campaignAndVariables')} />
-          </Tabs>
-        </div>
-
-        <div style={{ display: activeTab === 'reputation' ? undefined : 'none' }}>
-          <ReputationTab characterId={characterId} />
-        </div>
-        <div style={{ display: activeTab === 'moduleVars' ? undefined : 'none' }}>
-          <ModuleInfoSection characterId={characterId} onModuleIdChange={setSelectedModuleId} />
-        </div>
-        <div style={{ display: activeTab === 'campaignSettings' ? undefined : 'none' }}>
-          <CampaignSettingsSection characterId={characterId} />
-        </div>
-      </Card>
-
-      <div style={{ display: activeTab === 'moduleVars' ? undefined : 'none' }}>
+      <Fragment key={pathsVersion}>
         <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
-          <ModuleVariablesSection characterId={characterId} moduleId={selectedModuleId} />
-        </Card>
-      </div>
+          <div style={{ padding: '10px 16px 0' }}>
+            <Tabs
+              id="gamestate-tabs"
+              selectedTabId={activeTab}
+              onChange={(newTab) => setActiveTab(newTab as string)}
+              large
+            >
+              <Tab id="reputation" title={t('gameState.tabs.companionInfluence')} />
+              <Tab id="moduleVars" title={t('gameState.tabs.moduleAndVariables')} />
+              <Tab id="campaignSettings" title={t('gameState.tabs.campaignAndVariables')} />
+            </Tabs>
+          </div>
 
-      {campaignId && (
-        <div style={{ display: activeTab === 'campaignSettings' ? undefined : 'none' }}>
+          <div style={{ display: activeTab === 'reputation' ? undefined : 'none' }}>
+            <ReputationTab characterId={characterId} />
+          </div>
+          <div style={{ display: activeTab === 'moduleVars' ? undefined : 'none' }}>
+            <ModuleInfoSection characterId={characterId} onModuleIdChange={setSelectedModuleId} />
+          </div>
+          <div style={{ display: activeTab === 'campaignSettings' ? undefined : 'none' }}>
+            <CampaignSettingsSection characterId={characterId} />
+          </div>
+        </Card>
+
+        <div style={{ display: activeTab === 'moduleVars' ? undefined : 'none' }}>
           <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
-            <CampaignVariablesSection characterId={characterId} />
+            <ModuleVariablesSection characterId={characterId} moduleId={selectedModuleId} />
           </Card>
         </div>
-      )}
+
+        {campaignId && (
+          <div style={{ display: activeTab === 'campaignSettings' ? undefined : 'none' }}>
+            <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
+              <CampaignVariablesSection characterId={characterId} />
+            </Card>
+          </div>
+        )}
+      </Fragment>
     </div>
   );
 }

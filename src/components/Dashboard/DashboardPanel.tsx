@@ -6,6 +6,7 @@ import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
 import { useToast } from '@/contexts/ToastContext';
 import { TauriAPI } from '@/lib/tauri-api';
 import { CharacterAPI, type SaveCharacterOption } from '@/services/characterApi';
@@ -34,6 +35,9 @@ export default function DashboardPanel() {
   const [isResolvingSaveCharacters, setIsResolvingSaveCharacters] = useState(false);
   const [loadedSavePath, setLoadedSavePath] = useState<string | null>(null);
   const [loadedPlayerIndex, setLoadedPlayerIndex] = useState<number | null>(null);
+  const [pathsVersion, setPathsVersion] = useState(0);
+
+  usePathsChangedEvent(() => setPathsVersion(v => v + 1));
 
   const [showVaultBrowser, setShowVaultBrowser] = useState(false);
   const [showBackupBrowser, setShowBackupBrowser] = useState(false);
@@ -100,7 +104,7 @@ export default function DashboardPanel() {
 
     loadSaves();
     return () => { cancelled = true; };
-  }, [handleError, saveMode]);
+  }, [handleError, saveMode, pathsVersion]);
 
   useEffect(() => {
     setSaves(prev => prev.map((entry, i) => ({

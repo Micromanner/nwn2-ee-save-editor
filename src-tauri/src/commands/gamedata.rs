@@ -200,8 +200,12 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
         }
     }
 
+    load_game_data_impl(&state).await
+}
+
+pub(crate) async fn load_game_data_impl(state: &AppState) -> CommandResult<bool> {
     info!("Starting game data initialization");
-    update_init_status(&state, "initializing", 0.0, "Starting initialization...");
+    update_init_status(state, "initializing", 0.0, "Starting initialization...");
 
     {
         let paths = state.paths.read();
@@ -209,7 +213,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
             info!("Game folder missing or invalid - entering needsConfiguration state");
             drop(paths);
             update_init_status(
-                &state,
+                state,
                 "needsConfiguration",
                 0.0,
                 "Game folder not configured",
@@ -219,7 +223,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
     }
 
     update_init_status(
-        &state,
+        state,
         "initializing",
         1.0,
         "Initializing ResourceManager...",
@@ -236,7 +240,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
     }
     info!("ResourceManager initialized");
 
-    update_init_status(&state, "initializing", 2.0, "Loading TLK strings...");
+    update_init_status(state, "initializing", 2.0, "Loading TLK strings...");
     let tlk_parser = {
         let rm = state.resource_manager.read().await;
         if let Some(parser) = rm.get_tlk_parser() {
@@ -247,7 +251,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
             );
             drop(rm);
             update_init_status(
-                &state,
+                state,
                 "needsConfiguration",
                 0.0,
                 "dialog.tlk not found in configured game folder",
@@ -256,7 +260,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
         }
     };
 
-    update_init_status(&state, "initializing", 5.0, "Loading 2DA tables...");
+    update_init_status(state, "initializing", 5.0, "Loading 2DA tables...");
     let mut loader =
         DataModelLoader::with_options(Arc::clone(&state.resource_manager), true, false);
 
@@ -280,7 +284,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
             }
         })?;
 
-    update_init_status(&state, "finalizing", 95.0, "Finalizing...");
+    update_init_status(state, "finalizing", 95.0, "Finalizing...");
     {
         let mut game_data = state.game_data.write();
         game_data.tables = loaded_data.tables;
@@ -296,7 +300,7 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
         table_count
     );
 
-    update_init_status(&state, "ready", 100.0, "Ready");
+    update_init_status(state, "ready", 100.0, "Ready");
     Ok(true)
 }
 

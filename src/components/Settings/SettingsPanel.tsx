@@ -9,6 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useLocale } from '@/providers/LocaleProvider';
 import { useFontSize } from '@/providers/FontSizeProvider';
+import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
 import { pathService, PathConfig } from '@/lib/api/paths';
 import { T } from '../theme';
 import { KVRow, ParchmentDialog } from '../shared';
@@ -21,15 +22,20 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function PathRow({ label, path, exists, autoDetected, onEdit, onReset }: {
+function PathRow({ label, path, exists, autoDetected, onEdit, onReset, rowKey, busyKey }: {
   label: string;
   path: string | null;
   exists: boolean;
   autoDetected: boolean;
   onEdit?: () => void;
   onReset?: () => void;
+  rowKey?: string;
+  busyKey?: string | null;
 }) {
   const t = useTranslations();
+  const editKey = rowKey ? `${rowKey}:edit` : null;
+  const resetKey = rowKey ? `${rowKey}:reset` : null;
+  const isBusy = busyKey != null;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -60,49 +66,81 @@ function PathRow({ label, path, exists, autoDetected, onEdit, onReset }: {
       </div>
       <div style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
         {!autoDetected && onReset && (
-          <Button small minimal text={t('settings.paths.reset')} onClick={onReset} style={{ color: T.textMuted }} />
+          <Button
+            small
+            minimal
+            text={t('settings.paths.reset')}
+            onClick={onReset}
+            loading={busyKey === resetKey}
+            disabled={isBusy && busyKey !== resetKey}
+            style={{ color: T.textMuted }}
+          />
         )}
         {onEdit && (
-          <Button small outlined text={path ? t('settings.paths.change') : t('settings.paths.set')} onClick={onEdit} />
+          <Button
+            small
+            outlined
+            text={path ? t('settings.paths.change') : t('settings.paths.set')}
+            onClick={onEdit}
+            loading={busyKey === editKey}
+            disabled={isBusy && busyKey !== editKey}
+          />
         )}
       </div>
     </div>
   );
 }
 
-function CustomFolderList({ folders, addLabel, onAdd, onRemove }: {
+function CustomFolderList({ folders, addLabel, onAdd, onRemove, rowKey, busyKey }: {
   folders: { path: string; exists: boolean }[];
   addLabel: string;
   onAdd: () => void;
   onRemove: (path: string) => void;
+  rowKey?: string;
+  busyKey?: string | null;
 }) {
+  const addKey = rowKey ? `${rowKey}:add` : null;
+  const isBusy = busyKey != null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {folders.map((folder) => (
-        <div
-          key={folder.path}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 12px', background: T.surfaceAlt, borderRadius: 4,
-            border: `1px solid ${T.borderLight}`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-            <GameIcon icon={GiFullFolder} size={14} color={T.textMuted} />
-            <span className="t-mono" style={{ color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {folder.path}
-            </span>
-            <GameIcon icon={folder.exists ? GiCheckMark : GiBrokenShield} size={14} color={folder.exists ? T.positive : T.negative} />
+      {folders.map((folder) => {
+        const removeKey = rowKey ? `${rowKey}:remove:${folder.path}` : null;
+        return (
+          <div
+            key={folder.path}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 12px', background: T.surfaceAlt, borderRadius: 4,
+              border: `1px solid ${T.borderLight}`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+              <GameIcon icon={GiFullFolder} size={14} color={T.textMuted} />
+              <span className="t-mono" style={{ color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {folder.path}
+              </span>
+              <GameIcon icon={folder.exists ? GiCheckMark : GiBrokenShield} size={14} color={folder.exists ? T.positive : T.negative} />
+            </div>
+            <Button
+              small
+              minimal
+              icon="trash"
+              onClick={() => onRemove(folder.path)}
+              loading={busyKey === removeKey}
+              disabled={isBusy && busyKey !== removeKey}
+              style={{ color: T.textMuted }}
+            />
           </div>
-          <Button small minimal icon="trash" onClick={() => onRemove(folder.path)} style={{ color: T.textMuted }} />
-        </div>
-      ))}
+        );
+      })}
       <Button
         small
         outlined
         icon="plus"
         text={addLabel}
         onClick={onAdd}
+        loading={busyKey === addKey}
+        disabled={isBusy && busyKey !== addKey}
         style={{ alignSelf: 'flex-start' }}
       />
     </div>
@@ -229,10 +267,13 @@ function GeneralTab() {
 function PathsTab() {
   const t = useTranslations();
   const [paths, setPaths] = useState<PathConfig | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
     pathService.getConfig().then((response) => setPaths(response.paths)).catch(() => {});
   }, []);
+
+  usePathsChangedEvent(setPaths);
 
   const selectFolder = async (title: string): Promise<string | null> => {
     try {
@@ -241,9 +282,10 @@ function PathsTab() {
     } catch { return null; }
   };
 
-  const reloadConfig = async () => {
-    const response = await pathService.getConfig();
-    setPaths(response.paths);
+  const runBusy = async (key: string, action: () => Promise<unknown>) => {
+    setBusyKey(key);
+    try { await action(); } catch { /* ignore */ }
+    finally { setBusyKey(null); }
   };
 
   const updatePath = async (type: 'game' | 'documents' | 'workshop') => {
@@ -254,50 +296,46 @@ function PathsTab() {
     };
     const selected = await selectFolder(titleKeys[type]);
     if (!selected) return;
-    try {
+    await runBusy(`${type}:edit`, async () => {
       switch (type) {
         case 'game': await pathService.setGameFolder(selected); break;
         case 'documents': await pathService.setDocumentsFolder(selected); break;
         case 'workshop': await pathService.setSteamWorkshopFolder(selected); break;
       }
-      await reloadConfig();
-    } catch { /* ignore */ }
+    });
   };
 
   const resetPath = async (type: 'game' | 'documents' | 'workshop') => {
-    try {
+    await runBusy(`${type}:reset`, async () => {
       switch (type) {
         case 'game': await pathService.resetGameFolder(); break;
         case 'documents': await pathService.resetDocumentsFolder(); break;
         case 'workshop': await pathService.resetSteamWorkshopFolder(); break;
       }
-      await reloadConfig();
-    } catch { /* ignore */ }
+    });
   };
 
   const addCustomFolder = async (type: 'override' | 'hak') => {
     const title = type === 'override' ? t('settings.paths.selectOverrideFolder') : t('settings.paths.selectHakFolder');
     const selected = await selectFolder(title);
     if (!selected) return;
-    try {
+    await runBusy(`${type}:add`, async () => {
       if (type === 'override') {
         await pathService.addOverrideFolder(selected);
       } else {
         await pathService.addHakFolder(selected);
       }
-      await reloadConfig();
-    } catch { /* ignore */ }
+    });
   };
 
   const removeCustomFolder = async (type: 'override' | 'hak', path: string) => {
-    try {
+    await runBusy(`${type}:remove:${path}`, async () => {
       if (type === 'override') {
         await pathService.removeOverrideFolder(path);
       } else {
         await pathService.removeHakFolder(path);
       }
-      await reloadConfig();
-    } catch { /* ignore */ }
+    });
   };
 
   if (!paths) {
@@ -308,20 +346,20 @@ function PathsTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <SectionHeader title={t('settings.paths.mainPaths')} />
-        <PathRow label={t('settings.paths.gameFolder')} path={paths.game_folder.path} exists={paths.game_folder.exists} autoDetected={paths.game_folder.source === 'auto'} onEdit={() => updatePath('game')} onReset={() => resetPath('game')} />
-        <PathRow label={t('settings.paths.documentsFolder')} path={paths.documents_folder.path} exists={paths.documents_folder.exists} autoDetected={paths.documents_folder.source === 'auto'} onEdit={() => updatePath('documents')} onReset={() => resetPath('documents')} />
-        <PathRow label={t('settings.paths.workshopFolder')} path={paths.steam_workshop_folder.path} exists={paths.steam_workshop_folder.exists} autoDetected={paths.steam_workshop_folder.source === 'auto'} onEdit={() => updatePath('workshop')} onReset={() => resetPath('workshop')} />
+        <PathRow rowKey="game" busyKey={busyKey} label={t('settings.paths.gameFolder')} path={paths.game_folder.path} exists={paths.game_folder.exists} autoDetected={paths.game_folder.source === 'auto'} onEdit={() => updatePath('game')} onReset={() => resetPath('game')} />
+        <PathRow rowKey="documents" busyKey={busyKey} label={t('settings.paths.documentsFolder')} path={paths.documents_folder.path} exists={paths.documents_folder.exists} autoDetected={paths.documents_folder.source === 'auto'} onEdit={() => updatePath('documents')} onReset={() => resetPath('documents')} />
+        <PathRow rowKey="workshop" busyKey={busyKey} label={t('settings.paths.workshopFolder')} path={paths.steam_workshop_folder.path} exists={paths.steam_workshop_folder.exists} autoDetected={paths.steam_workshop_folder.source === 'auto'} onEdit={() => updatePath('workshop')} onReset={() => resetPath('workshop')} />
         <PathRow label={t('settings.paths.localvaultFolder')} path={paths.localvault_folder.path} exists={paths.localvault_folder.exists} autoDetected={paths.localvault_folder.source === 'derived'} />
       </div>
 
       <div>
         <SectionHeader title={t('settings.paths.customOverrideFolders')} />
-        <CustomFolderList folders={paths.custom_override_folders} addLabel={t('settings.paths.addOverrideFolder')} onAdd={() => addCustomFolder('override')} onRemove={(p) => removeCustomFolder('override', p)} />
+        <CustomFolderList rowKey="override" busyKey={busyKey} folders={paths.custom_override_folders} addLabel={t('settings.paths.addOverrideFolder')} onAdd={() => addCustomFolder('override')} onRemove={(p) => removeCustomFolder('override', p)} />
       </div>
 
       <div>
         <SectionHeader title={t('settings.paths.customHakFolders')} />
-        <CustomFolderList folders={paths.custom_hak_folders} addLabel={t('settings.paths.addHakFolder')} onAdd={() => addCustomFolder('hak')} onRemove={(p) => removeCustomFolder('hak', p)} />
+        <CustomFolderList rowKey="hak" busyKey={busyKey} folders={paths.custom_hak_folders} addLabel={t('settings.paths.addHakFolder')} onAdd={() => addCustomFolder('hak')} onRemove={(p) => removeCustomFolder('hak', p)} />
       </div>
     </div>
   );

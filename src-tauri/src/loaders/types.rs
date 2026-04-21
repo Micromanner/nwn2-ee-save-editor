@@ -105,6 +105,13 @@ impl GameData {
         self.tables.len()
     }
 
+    pub fn clear(&mut self) {
+        self.tables.clear();
+        self.rule_detector = None;
+        self.relationships = ValidationReport::default();
+        self.priority_tables.clear();
+    }
+
     pub fn table_names(&self) -> impl Iterator<Item = &str> {
         self.tables.keys().map(std::string::String::as_str)
     }
