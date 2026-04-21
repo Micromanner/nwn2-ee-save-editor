@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button, ButtonGroup, Dialog, DialogBody, DialogFooter, Spinner } from '@blueprintjs/core';
-import { GiOpenFolder, GiScrollUnfurled, GiBackwardTime, GiCog } from 'react-icons/gi';
+import { Button, Dialog, DialogBody, DialogFooter, Spinner, Tab, Tabs } from '@blueprintjs/core';
+import { GiBackwardTime, GiCharacter, GiCog, GiOpenFolder, GiOrganigram, GiScrollUnfurled } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
@@ -226,24 +226,32 @@ export default function DashboardPanel() {
           borderBottom: `1px solid ${T.borderLight}`,
         }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <ButtonGroup minimal>
-              <Button
-                small
-                active={saveMode === 'sp'}
+            <Tabs
+              id="save-mode-tabs"
+              selectedTabId={saveMode}
+              onChange={(id) => setSaveMode(id as 'sp' | 'mp')}
+            >
+              <Tab
+                id="sp"
                 disabled={isBusy}
-                onClick={() => setSaveMode('sp')}
-              >
-                {t('dashboard.singlePlayer')}
-              </Button>
-              <Button
-                small
-                active={saveMode === 'mp'}
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <GameIcon icon={GiCharacter} size={14} />
+                    {t('dashboard.singlePlayer')}
+                  </span>
+                }
+              />
+              <Tab
+                id="mp"
                 disabled={isBusy}
-                onClick={() => setSaveMode('mp')}
-              >
-                {t('dashboard.multiplayer')}
-              </Button>
-            </ButtonGroup>
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <GameIcon icon={GiOrganigram} size={14} />
+                    {t('dashboard.multiplayer')}
+                  </span>
+                }
+              />
+            </Tabs>
           </div>
 
           <div style={{ display: 'flex', gap: 4 }}>
