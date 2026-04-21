@@ -150,12 +150,12 @@ impl SessionState {
     }
 
     pub fn save_character(&mut self, game_data: &GameData) -> Result<(), String> {
-        if self.savegame_handler.is_none() {
-            return Err("No active save handler".to_string());
-        }
-        if self.character.is_none() {
-            return Err("No character loaded".to_string());
-        }
+        self.savegame_handler
+            .as_ref()
+            .ok_or_else(|| "No active save handler".to_string())?;
+        self.character
+            .as_ref()
+            .ok_or_else(|| "No character loaded".to_string())?;
 
         let char_fields = {
             let character = self.character.as_mut().unwrap();
@@ -355,62 +355,29 @@ fn serialize_playerlist_bytes(
     let file_type = gff.file_type.clone();
     let file_version = gff.file_version.clone();
 
-    let root_fields_raw = gff
+    let mut root_fields: IndexMap<String, GffValue<'static>> = gff
         .read_struct_fields(0)
-        .map_err(|e| format!("Failed to read playerlist.ifo root struct: {e}"))?;
-
-    let mut root_fields: IndexMap<String, GffValue<'static>> = root_fields_raw
+        .map_err(|e| format!("Failed to read playerlist.ifo root struct: {e}"))?
         .into_iter()
         .map(|(k, v)| (k, v.force_owned()))
         .collect();
 
-    fn merge_player_entry_fields(
-        existing: &IndexMap<String, GffValue<'static>>,
-        updated_character_fields: &IndexMap<String, GffValue<'static>>,
-    ) -> IndexMap<String, GffValue<'static>> {
-        let mut merged = existing.clone();
-        for (key, value) in updated_character_fields {
-            merged.insert(key.clone(), value.clone());
-        }
-        merged
-    }
+    let Some(GffValue::ListOwned(players)) = root_fields.get_mut("Mod_PlayerList") else {
+        return Err("playerlist.ifo Mod_PlayerList is missing or not a list".to_string());
+    };
 
-    match root_fields.get_mut("Mod_PlayerList") {
-        Some(GffValue::ListOwned(players)) => {
-            if players.is_empty() {
-                if player_index == 0 {
-                    players.push(character_fields.clone());
-                } else {
-                    return Err(format!(
-                        "Selected player index {player_index} is out of range for an empty Mod_PlayerList"
-                    ));
-                }
-            } else {
-                let Some(player_entry) = players.get_mut(player_index) else {
-                    return Err(format!(
-                        "Selected player index {player_index} is out of range for Mod_PlayerList with {} entries",
-                        players.len()
-                    ));
-                };
-                *player_entry = merge_player_entry_fields(player_entry, character_fields);
-            }
-        }
-        Some(_) => {
-            return Err("Mod_PlayerList in playerlist.ifo is not a list".to_string());
-        }
-        None => {
-            if player_index == 0 {
-                root_fields.insert(
-                    "Mod_PlayerList".to_string(),
-                    GffValue::ListOwned(vec![character_fields.clone()]),
-                );
-            } else {
-                return Err(format!(
-                    "Selected player index {player_index} is out of range because Mod_PlayerList is missing"
-                ));
-            }
-        }
+    let players_len = players.len();
+    let player_entry = players.get_mut(player_index).ok_or_else(|| {
+        format!(
+            "Selected player index {player_index} is out of range for Mod_PlayerList with {players_len} entries"
+        )
+    })?;
+
+    let mut merged = player_entry.clone();
+    for (key, value) in character_fields {
+        merged.insert(key.clone(), value.clone());
     }
+    *player_entry = merged;
 
     GffWriter::new(&file_type, &file_version)
         .write(root_fields)
