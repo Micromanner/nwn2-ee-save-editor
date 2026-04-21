@@ -1,4 +1,8 @@
+use crate::character::Character;
 use crate::commands::{CommandError, CommandResult};
+use crate::loaders::GameData;
+use crate::parsers::gff::GffParser;
+use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
 use tauri::{AppHandle, Manager, State};
 use tracing::{error, info, instrument, warn};
@@ -9,14 +13,20 @@ pub async fn load_character(
     state: State<'_, AppState>,
     app: AppHandle,
     file_path: String,
+    player_index: Option<usize>,
 ) -> CommandResult<bool> {
     info!("Load character command invoked");
 
     let mut session = state.session.write();
-    match session.load_character(&file_path) {
+    match session.load_character(&file_path, player_index) {
         Ok(()) => {
             info!("Character loaded successfully via command");
             drop(session);
+            {
+                let game_data = state.game_data.read();
+                let mut session = state.session.write();
+                session.normalize_loaded_skill_points(&game_data);
+            }
             tokio::spawn(async move {
                 let state = app.state::<AppState>();
 
@@ -45,9 +55,102 @@ pub async fn load_character(
         }
         Err(e) => {
             error!("Failed to load character: {}", e);
-            Err(CommandError::CharacterNotFound { path: file_path })
+            Err(CommandError::FileError {
+                message: e,
+                path: Some(file_path),
+            })
         }
     }
+}
+
+#[derive(Clone, serde::Serialize, specta::Type)]
+pub struct SaveCharacterClass {
+    pub name: String,
+    pub level: u8,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type)]
+pub struct SaveCharacterOption {
+    pub player_index: usize,
+    pub name: String,
+    pub race: String,
+    pub total_level: i32,
+    pub classes: Vec<SaveCharacterClass>,
+}
+
+fn summarize_save_character(
+    player_index: usize,
+    character: Character,
+    game_data: &GameData,
+) -> SaveCharacterOption {
+    let name = {
+        let full_name = character.full_name();
+        if full_name.trim().is_empty() {
+            format!("Player {}", player_index + 1)
+        } else {
+            full_name
+        }
+    };
+
+    let classes = character
+        .class_entries()
+        .into_iter()
+        .map(|entry| SaveCharacterClass {
+            name: character.get_class_name(entry.class_id, game_data),
+            level: entry.level.clamp(0, i32::from(u8::MAX)) as u8,
+        })
+        .collect();
+
+    SaveCharacterOption {
+        player_index,
+        name,
+        race: character.race_name(game_data),
+        total_level: character.total_level(),
+        classes,
+    }
+}
+
+#[tauri::command]
+#[instrument(name = "list_save_characters_command", skip(state), fields(file_path = %file_path))]
+pub async fn list_save_characters(
+    state: State<'_, AppState>,
+    file_path: String,
+) -> CommandResult<Vec<SaveCharacterOption>> {
+    let handler = SaveGameHandler::new(&file_path, false, false).map_err(CommandError::from)?;
+    let playerlist_data = handler.extract_player_data().map_err(CommandError::from)?;
+    let gff = GffParser::from_bytes(playerlist_data).map_err(|e| CommandError::ParseError {
+        message: format!("Failed to parse playerlist.ifo: {e}"),
+        context: Some(file_path.clone()),
+    })?;
+
+    let mut player_entries =
+        crate::state::session_state::read_playerlist_entries(gff).map_err(|message| {
+            CommandError::ParseError {
+                message,
+                context: Some(file_path.clone()),
+            }
+        })?;
+
+    if let Ok(Some(player_bic_data)) = handler.extract_player_bic()
+        && let Ok(primary_fields) =
+            crate::state::session_state::read_player_bic_entry(player_bic_data)
+        && let Some(primary_index) = crate::state::session_state::resolve_primary_player_index(
+            &player_entries,
+            Some(&primary_fields),
+        )
+        && let Some(primary_entry) = player_entries.get_mut(primary_index)
+    {
+        *primary_entry = primary_fields;
+    }
+
+    let game_data = state.game_data.read();
+    Ok(player_entries
+        .into_iter()
+        .enumerate()
+        .map(|(player_index, fields)| {
+            summarize_save_character(player_index, Character::from_gff(fields), &game_data)
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -93,6 +196,7 @@ pub struct SessionInfo {
     pub character_loaded: bool,
     pub file_path: Option<String>,
     pub dirty: bool,
+    pub player_index: Option<usize>,
 }
 
 #[tauri::command]
@@ -105,6 +209,10 @@ pub async fn get_session_info(state: State<'_, AppState>) -> CommandResult<Sessi
             .as_ref()
             .map(|p| p.to_string_lossy().to_string()),
         dirty: session.has_unsaved_changes(),
+        player_index: session
+            .character
+            .as_ref()
+            .map(|_| session.selected_player_index),
     })
 }
 

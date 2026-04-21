@@ -16,9 +16,17 @@ interface SaveListProps {
   onSelect: (index: number) => void;
   onDoubleClick?: (index: number) => void;
   onBrowseFile?: (file: FileInfo) => void;
+  defaultBrowsePath?: string;
 }
 
-export function SaveList({ saves, selectedIndex, onSelect, onDoubleClick, onBrowseFile }: SaveListProps) {
+export function SaveList({
+  saves,
+  selectedIndex,
+  onSelect,
+  onDoubleClick,
+  onBrowseFile,
+  defaultBrowsePath,
+}: SaveListProps) {
   const t = useTranslations();
   const [showBrowser, setShowBrowser] = useState(false);
   const [browsePath, setBrowsePath] = useState('');
@@ -63,7 +71,15 @@ export function SaveList({ saves, selectedIndex, onSelect, onDoubleClick, onBrow
             borderBottom: `1px solid ${T.borderLight}`,
           }}
         >
-          <Button minimal icon={<GameIcon icon={GiOpenFolder} size={16} />} intent="primary" onClick={() => setShowBrowser(true)}>
+          <Button
+            minimal
+            icon={<GameIcon icon={GiOpenFolder} size={16} />}
+            intent="primary"
+            onClick={() => {
+              setBrowsePath(defaultBrowsePath ?? '');
+              setShowBrowser(true);
+            }}
+          >
             {t('dashboard.browse')}
           </Button>
         </div>

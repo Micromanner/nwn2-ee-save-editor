@@ -152,8 +152,8 @@ export const CharacterStateAPI = {
   /**
    * Load a character from a save file.
    */
-  loadCharacter: (filePath: string) =>
-    invoke<boolean>('load_character', { filePath }),
+  loadCharacter: (filePath: string, playerIndex?: number) =>
+    invoke<boolean>('load_character', { filePath, playerIndex }),
 
   /**
    * Save the current character.

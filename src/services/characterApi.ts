@@ -89,6 +89,19 @@ export interface SaveResult {
   backup_created: boolean;
 }
 
+export interface SaveCharacterClass {
+  name: string;
+  level: number;
+}
+
+export interface SaveCharacterOption {
+  player_index: number;
+  name: string;
+  race: string;
+  total_level: number;
+  classes: SaveCharacterClass[];
+}
+
 export interface FeatResponse {
   id: number;
   feat_id?: number;
@@ -647,9 +660,18 @@ export class CharacterAPI {
     return [];
   }
 
-  static async importCharacter(savePath: string): Promise<{id: number; name: string}> {
+  static async listSaveCharacters(savePath: string): Promise<SaveCharacterOption[]> {
     try {
-      await invoke('load_character', { filePath: savePath });
+      return await invoke<SaveCharacterOption[]>('list_save_characters', { filePath: savePath });
+    } catch (error) {
+      console.error('Error listing save characters:', error);
+      throw new Error(String(error));
+    }
+  }
+
+  static async importCharacter(savePath: string, playerIndex?: number): Promise<{id: number; name: string}> {
+    try {
+      await invoke('load_character', { filePath: savePath, playerIndex });
       const name = await invoke<string>('get_character_name');
       return {
         id: Date.now(), // Unique session ID to trigger state updates

@@ -384,8 +384,7 @@ fn write_string(writer: &mut impl Write, s: &str) -> PlayerInfoResult<()> {
 
 fn extract_string(fields: &IndexMap<String, GffValue<'_>>, key: &str) -> Option<String> {
     match fields.get(key)? {
-        GffValue::String(s) => Some(s.to_string()),
-        GffValue::ResRef(s) => Some(s.to_string()),
+        GffValue::String(s) | GffValue::ResRef(s) => Some(s.to_string()),
         _ => None,
     }
 }

@@ -98,6 +98,7 @@ pub fn run() {
             get_default_localvault_path,
             // Session
             crate::commands::session::load_character,
+            crate::commands::session::list_save_characters,
             crate::commands::session::save_character,
             crate::commands::session::close_character,
             crate::commands::session::get_session_info,

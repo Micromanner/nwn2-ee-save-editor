@@ -6,7 +6,25 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_shell::ShellExt;
 
 use crate::services::playerinfo::PlayerInfo;
+use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
+
+fn read_save_character_name(save_path: &std::path::Path) -> Option<String> {
+    if let Ok(handler) = SaveGameHandler::new(save_path, false, false)
+        && let Ok(Some(summary)) = handler.read_character_summary()
+    {
+        let name = [summary.first_name, summary.last_name]
+            .into_iter()
+            .filter(|part| !part.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !name.trim().is_empty() {
+            return Some(name);
+        }
+    }
+
+    PlayerInfo::get_player_name(save_path.join("playerinfo.bin")).ok()
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct SaveFile {
@@ -85,7 +103,7 @@ pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String>
                 .as_secs() as i64
         });
 
-    let character_name = PlayerInfo::get_player_name(save_path.join("playerinfo.bin")).ok();
+    let character_name = read_save_character_name(&save_path);
 
     Ok(SaveFile {
         path: path_str,
@@ -113,16 +131,24 @@ pub async fn select_nwn2_directory(app: tauri::AppHandle) -> Result<String, Stri
 }
 
 #[tauri::command]
-pub async fn find_nwn2_saves(state: State<'_, AppState>) -> Result<Vec<SaveFile>, String> {
+pub async fn find_nwn2_saves(
+    state: State<'_, AppState>,
+    save_mode: Option<String>,
+) -> Result<Vec<SaveFile>, String> {
     use std::time::Instant;
     let start_time = Instant::now();
     log::info!("[Rust] Finding available NWN2 saves.");
 
-    let saves_path = state
+    let base_saves_path = state
         .paths
         .read()
         .saves()
         .ok_or("Could not determine NWN2 saves path")?;
+    let saves_path = if save_mode.as_deref() == Some("mp") {
+        base_saves_path.join("multiplayer")
+    } else {
+        base_saves_path
+    };
     let mut saves = Vec::new();
 
     let scan_start = Instant::now();
@@ -179,8 +205,7 @@ pub async fn find_nwn2_saves(state: State<'_, AppState>) -> Result<Vec<SaveFile>
                         .as_secs() as i64
                 });
 
-            let character_name =
-                PlayerInfo::get_player_name(entry.path().join("playerinfo.bin")).ok();
+            let character_name = read_save_character_name(&entry.path());
 
             saves.push(SaveFile {
                 name: save_name,
@@ -525,23 +550,7 @@ pub async fn browse_saves(
             .ok()
             .map(|s| s.trim().to_string());
 
-        let playerinfo_path = entry_path.join("playerinfo.bin");
-        let character_name = match PlayerInfo::get_player_name(&playerinfo_path) {
-            Ok(name) => {
-                log::debug!(
-                    "[browse_saves] Parsed character name: {name} from {}",
-                    playerinfo_path.display()
-                );
-                Some(name)
-            }
-            Err(e) => {
-                log::debug!(
-                    "[browse_saves] Failed to parse playerinfo.bin at {}: {e}",
-                    playerinfo_path.display()
-                );
-                None
-            }
-        };
+        let character_name = read_save_character_name(&entry_path);
 
         let thumbnail_path = entry_path.join("screen.tga");
         let thumbnail = if thumbnail_path.exists() {
@@ -589,12 +598,20 @@ pub async fn browse_saves(
 }
 
 #[tauri::command]
-pub async fn get_default_saves_path(state: State<'_, AppState>) -> Result<String, String> {
-    let saves_path = state
+pub async fn get_default_saves_path(
+    state: State<'_, AppState>,
+    save_mode: Option<String>,
+) -> Result<String, String> {
+    let base_saves_path = state
         .paths
         .read()
         .saves()
         .ok_or("Could not determine NWN2 saves path")?;
+    let saves_path = if save_mode.as_deref() == Some("mp") {
+        base_saves_path.join("multiplayer")
+    } else {
+        base_saves_path
+    };
     Ok(saves_path.to_string_lossy().to_string())
 }
 

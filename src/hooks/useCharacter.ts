@@ -6,7 +6,7 @@ interface UseCharacterResult {
   isLoading: boolean;
   error: string | null;
   loadCharacter: (characterId: number) => Promise<void>;
-  importCharacter: (savePath: string) => Promise<void>;
+  importCharacter: (savePath: string, playerIndex?: number) => Promise<void>;
   refreshCharacter: () => Promise<void>;
 }
 
@@ -38,12 +38,12 @@ export function useCharacter(): UseCharacterResult {
     }
   }, []);
 
-  const importCharacter = useCallback(async (savePath: string) => {
+  const importCharacter = useCallback(async (savePath: string, playerIndex?: number) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const importResult = await CharacterAPI.importCharacter(savePath);
+      const importResult = await CharacterAPI.importCharacter(savePath, playerIndex);
       await loadCharacter(importResult.id);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';

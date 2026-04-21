@@ -10,7 +10,12 @@
     "closeSession": "Close Session",
     "active": "Active",
     "sessionActive": "Session Active: {name}",
-    "openSave": "Open Save"
+    "openSave": "Open Save",
+    "singlePlayer": "Single Player",
+    "multiplayer": "Multiplayer",
+    "chooseCharacter": "Choose Character",
+    "chooseCharacterHint": "{save} contains multiple player characters. Pick the one to edit.",
+    "playerSlot": "Slot {slot}"
   },
   "fileBrowser": {
     "loadSave": "Load Save",

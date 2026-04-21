@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button, Spinner } from '@blueprintjs/core';
+import { Button, ButtonGroup, Dialog, DialogBody, DialogFooter, Spinner } from '@blueprintjs/core';
 import { GiOpenFolder, GiScrollUnfurled, GiBackwardTime, GiCog } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useToast } from '@/contexts/ToastContext';
-import { TauriAPI, type SaveFile } from '@/lib/tauri-api';
+import { TauriAPI } from '@/lib/tauri-api';
+import { CharacterAPI, type SaveCharacterOption } from '@/services/characterApi';
 import { T, PATTERN_BG } from '../theme';
 import '../blueprint.css';
 import { SaveList } from './SaveList';
@@ -19,21 +20,34 @@ import { BackupAPI } from '@/services/backupApi';
 
 export default function DashboardPanel() {
   const t = useTranslations();
-  const { importCharacter, refreshAll } = useCharacterContext();
+  const { character, importCharacter, refreshAll } = useCharacterContext();
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
 
+  const [saveMode, setSaveMode] = useState<'sp' | 'mp'>('sp');
   const [saves, setSaves] = useState<SaveEntryData[]>([]);
   const [savePaths, setSavePaths] = useState<string[]>([]);
+  const [defaultSavePath, setDefaultSavePath] = useState('');
   const [isLoadingSaves, setIsLoadingSaves] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isResolvingSaveCharacters, setIsResolvingSaveCharacters] = useState(false);
+  const [loadedSavePath, setLoadedSavePath] = useState<string | null>(null);
+  const [loadedPlayerIndex, setLoadedPlayerIndex] = useState<number | null>(null);
 
   const [showVaultBrowser, setShowVaultBrowser] = useState(false);
   const [showBackupBrowser, setShowBackupBrowser] = useState(false);
   const [backupPath, setBackupPath] = useState('');
   const [backupRefreshKey, setBackupRefreshKey] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
+  const [saveCharacters, setSaveCharacters] = useState<SaveCharacterOption[]>([]);
+  const [pendingSaveSelection, setPendingSaveSelection] = useState<{
+    path: string;
+    label: string;
+  } | null>(null);
+
+  const isBusy = isImporting || isResolvingSaveCharacters;
 
   useEffect(() => {
     let cancelled = false;
@@ -41,9 +55,13 @@ export default function DashboardPanel() {
     async function loadSaves() {
       setIsLoadingSaves(true);
       try {
-        const result: SaveFile[] = await TauriAPI.findNWN2Saves();
+        const [result, defaultPath] = await Promise.all([
+          TauriAPI.findNWN2Saves(saveMode),
+          invoke<string>('get_default_saves_path', { saveMode }),
+        ]);
         if (cancelled) return;
 
+        setDefaultSavePath(defaultPath);
         const paths: string[] = [];
         const entries: SaveEntryData[] = result.map(save => {
           paths.push(save.path);
@@ -54,14 +72,14 @@ export default function DashboardPanel() {
               ? new Date(save.modified * 1000).toLocaleString()
               : '',
             thumbnail: null,
-            isActive: false,
+            isActive: save.path === loadedSavePath,
           };
         });
 
         setSaves(entries);
         setSavePaths(paths);
+        setSelectedIndex(null);
 
-        // Load thumbnails in background
         result.forEach((save, i) => {
           if (save.thumbnail) {
             TauriAPI.getSaveThumbnail(save.thumbnail).then(base64 => {
@@ -70,7 +88,7 @@ export default function DashboardPanel() {
                   j === i ? { ...s, thumbnail: base64 } : s
                 ));
               }
-            }).catch(() => { /* thumbnail failed, keep placeholder */ });
+            }).catch(() => {});
           }
         });
       } catch (err) {
@@ -82,16 +100,32 @@ export default function DashboardPanel() {
 
     loadSaves();
     return () => { cancelled = true; };
-  }, [handleError]);
+  }, [handleError, loadedSavePath, saveMode]);
 
-  const handleOpenSave = async () => {
-    if (selectedIndex === null || isImporting) return;
-    const path = savePaths[selectedIndex];
-    if (!path) return;
+  useEffect(() => {
+    if (!character) {
+      setLoadedSavePath(null);
+      setLoadedPlayerIndex(null);
+    }
+  }, [character]);
 
+  const confirmSwitch = async (nextLabel: string) => {
+    if (!character) return true;
+    return TauriAPI.confirmSaveSwitch(character.name || t('character.noCharacter'), nextLabel);
+  };
+
+  const importSaveSelection = async (path: string, label: string, playerIndex?: number) => {
     setIsImporting(true);
     try {
-      await importCharacter(path);
+      await importCharacter(path, playerIndex);
+      setLoadedSavePath(path);
+      setLoadedPlayerIndex(playerIndex ?? 0);
+      setSaves(prev =>
+        prev.map((save, index) => ({ ...save, isActive: savePaths[index] === path })),
+      );
+      setPendingSaveSelection(null);
+      setSaveCharacters([]);
+      setShowCharacterPicker(false);
     } catch (err) {
       handleError(err);
     } finally {
@@ -99,19 +133,45 @@ export default function DashboardPanel() {
     }
   };
 
+  const beginImportFlow = async (path: string, label: string) => {
+    if (isBusy) return;
+
+    setIsResolvingSaveCharacters(true);
+    try {
+      const players = await CharacterAPI.listSaveCharacters(path);
+      if (players.length <= 1) {
+        const nextLabel = players[0]?.name || label;
+        const confirmed = await confirmSwitch(nextLabel);
+        if (!confirmed) return;
+
+        await importSaveSelection(path, label, players[0]?.player_index);
+        return;
+      }
+
+      setPendingSaveSelection({ path, label });
+      setSaveCharacters(players);
+      setShowCharacterPicker(true);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setIsResolvingSaveCharacters(false);
+    }
+  };
+
+  const handleOpenSave = async () => {
+    if (selectedIndex === null || isBusy) return;
+    const path = savePaths[selectedIndex];
+    if (!path) return;
+
+    await beginImportFlow(path, saves[selectedIndex]?.characterName || saves[selectedIndex]?.folderName || path);
+  };
+
   const handleSelectAndOpen = async (index: number) => {
     setSelectedIndex(index);
     const path = savePaths[index];
     if (!path) return;
 
-    setIsImporting(true);
-    try {
-      await importCharacter(path);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setIsImporting(false);
-    }
+    await beginImportFlow(path, saves[index]?.characterName || saves[index]?.folderName || path);
   };
 
   const handleImportVaultFile = async (file: FileInfo) => {
@@ -127,14 +187,7 @@ export default function DashboardPanel() {
   };
 
   const handleBrowseFile = async (file: FileInfo) => {
-    setIsImporting(true);
-    try {
-      await importCharacter(file.path);
-    } catch (err) {
-      handleError(err);
-    } finally {
-      setIsImporting(false);
-    }
+    await beginImportFlow(file.path, file.character_name || file.save_name || file.name);
   };
 
   return (
@@ -161,23 +214,51 @@ export default function DashboardPanel() {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           padding: '10px 24px',
           borderBottom: `1px solid ${T.borderLight}`,
         }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <ButtonGroup minimal>
+              <Button
+                small
+                active={saveMode === 'sp'}
+                disabled={isBusy}
+                onClick={() => setSaveMode('sp')}
+              >
+                {t('dashboard.singlePlayer')}
+              </Button>
+              <Button
+                small
+                active={saveMode === 'mp'}
+                disabled={isBusy}
+                onClick={() => setSaveMode('mp')}
+              >
+                {t('dashboard.multiplayer')}
+              </Button>
+            </ButtonGroup>
+          </div>
+
           <div style={{ display: 'flex', gap: 4 }}>
             {selectedIndex !== null && (
               <Button
                 small
                 intent="primary"
                 icon={<GameIcon icon={GiOpenFolder} size={14} />}
-                loading={isImporting}
+                loading={isBusy}
                 onClick={handleOpenSave}
+                disabled={isBusy}
               >
                 {t('dashboard.openSave')}
               </Button>
             )}
-            <Button minimal small icon={<GameIcon icon={GiScrollUnfurled} size={14} />} onClick={() => setShowVaultBrowser(true)}>
+            <Button
+              minimal
+              small
+              icon={<GameIcon icon={GiScrollUnfurled} size={14} />}
+              onClick={() => setShowVaultBrowser(true)}
+              disabled={isBusy}
+            >
               {t('actions.importCharacter')}
             </Button>
             <Button
@@ -206,7 +287,7 @@ export default function DashboardPanel() {
                   if (path) {
                     setBackupPath(path);
                   }
-                } catch { /* open dialog anyway */ }
+                } catch {}
                 setShowBackupBrowser(true);
               }}
             >
@@ -230,6 +311,7 @@ export default function DashboardPanel() {
               onSelect={setSelectedIndex}
               onDoubleClick={handleSelectAndOpen}
               onBrowseFile={handleBrowseFile}
+              defaultBrowsePath={defaultSavePath}
             />
           )}
         </div>
@@ -276,6 +358,92 @@ export default function DashboardPanel() {
       />
 
       {showSettings && <SettingsDialog isOpen onClose={() => setShowSettings(false)} />}
+
+      <Dialog
+        isOpen={showCharacterPicker}
+        onClose={() => {
+          if (isImporting) return;
+          setShowCharacterPicker(false);
+          setPendingSaveSelection(null);
+          setSaveCharacters([]);
+        }}
+        title={t('dashboard.chooseCharacter')}
+      >
+        <DialogBody>
+          <div style={{ color: T.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+            {t('dashboard.chooseCharacterHint', {
+              save: pendingSaveSelection?.label || t('dashboard.openSave'),
+            })}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {saveCharacters.map(player => {
+              const classSummary = player.classes.length > 0
+                ? player.classes.map(entry => `${entry.name} ${entry.level}`).join(' / ')
+                : `Level ${player.total_level}`;
+              const isCurrentSelection =
+                loadedSavePath === pendingSaveSelection?.path &&
+                loadedPlayerIndex === player.player_index;
+
+              return (
+                <button
+                  key={`${pendingSaveSelection?.path ?? 'save'}-${player.player_index}`}
+                  type="button"
+                  disabled={isImporting}
+                  onClick={async () => {
+                    if (!pendingSaveSelection) return;
+                    const confirmed = await confirmSwitch(player.name || pendingSaveSelection.label);
+                    if (!confirmed) return;
+                    await importSaveSelection(
+                      pendingSaveSelection.path,
+                      pendingSaveSelection.label,
+                      player.player_index,
+                    );
+                  }}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    border: isCurrentSelection
+                      ? `1px solid ${T.accent}`
+                      : `1px solid ${T.borderLight}`,
+                    background: isCurrentSelection ? 'rgba(160, 82, 45, 0.10)' : T.surfaceAlt,
+                    cursor: isImporting ? 'wait' : 'pointer',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: T.text }}>{player.name}</div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: T.textMuted }}>
+                        {player.race}
+                      </div>
+                      <div style={{ marginTop: 8, fontSize: 12, color: T.textMuted }}>
+                        {classSummary}
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0, fontSize: 11, color: T.textMuted }}>
+                      {t('dashboard.playerSlot', { slot: player.player_index + 1 })}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </DialogBody>
+        <DialogFooter
+          actions={(
+            <Button
+              text={t('actions.cancel')}
+              onClick={() => {
+                setShowCharacterPicker(false);
+                setPendingSaveSelection(null);
+                setSaveCharacters([]);
+              }}
+              disabled={isImporting}
+            />
+          )}
+        />
+      </Dialog>
     </div>
   );
 }
