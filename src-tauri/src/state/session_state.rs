@@ -135,11 +135,17 @@ impl SessionState {
         self.savegame_handler
             .as_ref()
             .ok_or_else(|| "No active save handler".to_string())?;
-        self.character
+        let character = self
+            .character
             .as_ref()
             .ok_or_else(|| "No character loaded".to_string())?;
 
-        let char_fields = self.character.as_ref().unwrap().clone_gff();
+        if !character.is_modified() {
+            info!("No changes to save");
+            return Ok(());
+        }
+
+        let char_fields = character.clone_gff();
 
         let (playerlist_data, player_bic_data) = {
             let handler = self.savegame_handler.as_ref().unwrap();
