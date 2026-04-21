@@ -300,7 +300,9 @@ fn write_playerinfo_for_character(
         PlayerInfo::new()
     };
 
-    let subrace_label = character.subrace_name(game_data).unwrap_or_default();
+    // playerinfo.bin's subrace field is the load-menu display text; NWN2 matches
+    // the icon by TLK name, so resolve labels/indices through race_display_name.
+    let subrace_label = character.race_display_name(game_data);
     let alignment_name = character.alignment().alignment_string();
     let classes = character
         .class_entries()
