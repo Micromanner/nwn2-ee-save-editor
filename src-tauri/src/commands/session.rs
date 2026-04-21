@@ -22,11 +22,6 @@ pub async fn load_character(
         Ok(()) => {
             info!("Character loaded successfully via command");
             drop(session);
-            {
-                let game_data = state.game_data.read();
-                let mut session = state.session.write();
-                session.normalize_loaded_skill_points(&game_data);
-            }
             tokio::spawn(async move {
                 let state = app.state::<AppState>();
 

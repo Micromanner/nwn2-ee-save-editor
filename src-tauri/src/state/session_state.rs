@@ -131,24 +131,6 @@ impl SessionState {
         Ok(())
     }
 
-    pub fn normalize_loaded_skill_points(&mut self, game_data: &GameData) {
-        let Some(character) = self.character.as_mut() else {
-            return;
-        };
-
-        let summary = character.get_skill_points_summary(game_data);
-        if summary.mismatch == 0 {
-            return;
-        }
-
-        let was_modified = character.is_modified();
-        character.normalize_skill_points(game_data);
-
-        if !was_modified {
-            character.mark_saved();
-        }
-    }
-
     pub fn save_character(&mut self, game_data: &GameData) -> Result<(), String> {
         self.savegame_handler
             .as_ref()
@@ -157,14 +139,7 @@ impl SessionState {
             .as_ref()
             .ok_or_else(|| "No character loaded".to_string())?;
 
-        let char_fields = {
-            let character = self.character.as_mut().unwrap();
-            character.normalize_skill_points(game_data);
-            character
-                .recalculate_stats(game_data)
-                .map_err(|e| format!("Failed to recalculate class-derived stats: {e}"))?;
-            character.clone_gff()
-        };
+        let char_fields = self.character.as_ref().unwrap().clone_gff();
 
         let (playerlist_data, player_bic_data) = {
             let handler = self.savegame_handler.as_ref().unwrap();
