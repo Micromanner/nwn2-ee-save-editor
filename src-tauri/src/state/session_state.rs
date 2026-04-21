@@ -14,6 +14,7 @@ use crate::services::savegame_handler::SaveGameHandler;
 
 pub struct SessionState {
     pub current_file_path: Option<PathBuf>,
+    pub save_dir: Option<PathBuf>,
     pub savegame_handler: Option<SaveGameHandler>,
     pub character: Option<Character>,
     pub selected_player_index: usize,
@@ -36,6 +37,7 @@ impl SessionState {
 
         Self {
             current_file_path: None,
+            save_dir: None,
             savegame_handler: None,
             character: None,
             selected_player_index: 0,
@@ -120,9 +122,18 @@ impl SessionState {
             character.total_level()
         );
 
+        let save_dir = if path.is_dir() {
+            path.clone()
+        } else {
+            path.parent()
+                .map(PathBuf::from)
+                .ok_or_else(|| "Failed to determine save directory".to_string())?
+        };
+
         self.character = Some(character);
         self.savegame_handler = Some(handler);
         self.current_file_path = Some(path);
+        self.save_dir = Some(save_dir);
         self.module_info_cache = None;
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
@@ -192,6 +203,7 @@ impl SessionState {
         self.character = None;
         self.savegame_handler = None;
         self.current_file_path = None;
+        self.save_dir = None;
         self.selected_player_index = 0;
         self.primary_player_index = None;
         self.feat_cache = None;
@@ -221,26 +233,10 @@ impl SessionState {
         self.character.as_mut()
     }
 
-    fn current_save_dir(&self) -> Result<PathBuf, String> {
-        let current_path = self
-            .current_file_path
-            .as_ref()
-            .ok_or("No current save path")?;
-
-        if current_path.is_dir() {
-            Ok(current_path.clone())
-        } else {
-            current_path
-                .parent()
-                .map(PathBuf::from)
-                .ok_or_else(|| "Failed to determine save directory".to_string())
-        }
-    }
-
     fn write_playerinfo(&self, game_data: &GameData) -> Result<(), String> {
         let character = self.character.as_ref().ok_or("No character loaded")?;
-        let save_dir = self.current_save_dir()?;
-        write_playerinfo_for_character(&save_dir, character, game_data)
+        let save_dir = self.save_dir.as_ref().ok_or("No current save path")?;
+        write_playerinfo_for_character(save_dir, character, game_data)
     }
 
     #[instrument(name = "SessionState::export_to_localvault", skip(self, paths))]
