@@ -1,7 +1,7 @@
 use app_lib::parsers::gff::parser::GffParser;
 use app_lib::parsers::gff::types::GffValue;
 use app_lib::parsers::gff::writer::GffWriter;
-use app_lib::services::savegame_handler::SaveGameHandler;
+use app_lib::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 use std::path::PathBuf;
 
 fn set_tint_channel(
@@ -161,7 +161,10 @@ fn set_armor_tint_test_colors() {
 
     let mut handler = SaveGameHandler::new(&test_save, false, false).expect("handler");
     handler
-        .update_player_complete(&new_ifo, &new_bic, None, None)
+        .rewrite_player_files(|_src| Ok(PlayerOutputs {
+            playerlist: new_ifo,
+            player_bic: Some(new_bic),
+        }))
         .expect("update");
 
     println!("Test save written to: {}", test_save.display());

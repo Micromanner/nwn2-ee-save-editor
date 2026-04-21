@@ -68,6 +68,31 @@ pub struct CharacterStats {
     pub cha: u8,
 }
 
+pub struct PlayerSources<'a> {
+    pub playerlist: &'a [u8],
+    pub player_bic: Option<&'a [u8]>,
+}
+
+pub struct PlayerOutputs {
+    pub playerlist: Vec<u8>,
+    /// `None` preserves the source bytes (used for non-primary-slot MP writes).
+    pub player_bic: Option<Vec<u8>>,
+}
+
+fn read_archive_entry<R: Read + std::io::Seek>(
+    archive: &mut ZipArchive<R>,
+    filename: &str,
+) -> SaveGameResult<Vec<u8>> {
+    let mut entry = archive
+        .by_name(filename)
+        .map_err(|_| SaveGameError::FileNotInSave {
+            filename: filename.into(),
+        })?;
+    let mut buf = Vec::with_capacity(entry.size() as usize);
+    entry.read_to_end(&mut buf)?;
+    Ok(buf)
+}
+
 pub struct SaveGameHandler {
     save_dir: PathBuf,
     zip_path: PathBuf,
@@ -327,68 +352,73 @@ impl SaveGameHandler {
         Ok(())
     }
 
-    pub fn update_player_complete(
-        &mut self,
-        playerlist_content: &[u8],
-        playerbic_content: Option<&[u8]>,
-        _base_stats: Option<&CharacterStats>,
-        _char_summary: Option<&CharacterSummary>,
-    ) -> SaveGameResult<()> {
+    /// Rewrite playerlist.ifo and player.bic inside the save zip in a single pass.
+    ///
+    /// The transform closure receives the source bytes for both files and returns
+    /// the new bytes. Returning `player_bic: None` preserves the source bytes
+    /// unchanged - used for multiplayer non-primary-slot writes where the primary
+    /// player's BIC must stay intact.
+    pub fn rewrite_player_files<F>(&mut self, transform: F) -> SaveGameResult<()>
+    where
+        F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
+    {
+        let src_file = File::open(&self.zip_path)?;
+        let mut src_archive = ZipArchive::new(src_file)?;
+
+        let playerlist_src = read_archive_entry(&mut src_archive, PLAYERLIST_IFO)?;
+        let player_bic_src = match read_archive_entry(&mut src_archive, PLAYER_BIC) {
+            Ok(b) => Some(b),
+            Err(SaveGameError::FileNotInSave { .. }) => None,
+            Err(e) => return Err(e),
+        };
+
+        let outputs = transform(PlayerSources {
+            playerlist: &playerlist_src,
+            player_bic: player_bic_src.as_deref(),
+        })
+        .map_err(SaveGameError::Transform)?;
+
         let temp_path = self.zip_path.with_extension("zip.tmp");
-
         {
-            let src_file = File::open(&self.zip_path)?;
-            let mut src_archive = ZipArchive::new(src_file)?;
-
             let dst_file = File::create(&temp_path)?;
-            let mut dst_archive = ZipWriter::new(dst_file);
+            let mut dst = ZipWriter::new(dst_file);
 
             let options = SimpleFileOptions::default()
                 .compression_method(CompressionMethod::Deflated)
                 .last_modified_time(*NWN2_DATE_TIME);
 
-            let mut playerlist_written = false;
-            let mut playerbic_present = false;
-
+            let mut bic_seen = false;
             for i in 0..src_archive.len() {
-                let mut src_entry = src_archive.by_index(i)?;
-                let name = src_entry.name().to_string();
-
-                if name == PLAYERLIST_IFO {
-                    dst_archive.start_file(&name, options)?;
-                    dst_archive.write_all(playerlist_content)?;
-                    playerlist_written = true;
-                } else if name == PLAYER_BIC {
-                    playerbic_present = true;
-                    dst_archive.start_file(&name, options)?;
-                    if let Some(playerbic_content) = playerbic_content {
-                        dst_archive.write_all(playerbic_content)?;
-                    } else {
-                        let mut buffer = Vec::with_capacity(src_entry.size() as usize);
-                        src_entry.read_to_end(&mut buffer)?;
-                        dst_archive.write_all(&buffer)?;
+                let mut entry = src_archive.by_index(i)?;
+                let name = entry.name().to_string();
+                dst.start_file(&name, options)?;
+                match name.as_str() {
+                    PLAYERLIST_IFO => dst.write_all(&outputs.playerlist)?,
+                    PLAYER_BIC => {
+                        bic_seen = true;
+                        if let Some(bytes) = &outputs.player_bic {
+                            dst.write_all(bytes)?;
+                        } else {
+                            let mut buf = Vec::with_capacity(entry.size() as usize);
+                            entry.read_to_end(&mut buf)?;
+                            dst.write_all(&buf)?;
+                        }
                     }
-                } else {
-                    dst_archive.start_file(&name, options)?;
-                    let mut buffer = Vec::with_capacity(src_entry.size() as usize);
-                    src_entry.read_to_end(&mut buffer)?;
-                    dst_archive.write_all(&buffer)?;
+                    _ => {
+                        let mut buf = Vec::with_capacity(entry.size() as usize);
+                        entry.read_to_end(&mut buf)?;
+                        dst.write_all(&buf)?;
+                    }
                 }
             }
-
-            if !playerlist_written {
-                dst_archive.start_file(PLAYERLIST_IFO, options)?;
-                dst_archive.write_all(playerlist_content)?;
+            if !bic_seen && let Some(bytes) = &outputs.player_bic {
+                dst.start_file(PLAYER_BIC, options)?;
+                dst.write_all(bytes)?;
             }
-
-            if !playerbic_present && let Some(playerbic_content) = playerbic_content {
-                dst_archive.start_file(PLAYER_BIC, options)?;
-                dst_archive.write_all(playerbic_content)?;
-            }
-
-            dst_archive.finish()?;
+            dst.finish()?;
         }
 
+        drop(src_archive);
         fs::rename(&temp_path, &self.zip_path)?;
 
         info!("Updated player files in save");

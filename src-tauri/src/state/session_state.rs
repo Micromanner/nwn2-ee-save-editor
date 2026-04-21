@@ -10,7 +10,7 @@ use crate::services::PlayerInfo;
 use crate::services::campaign::content::{ModuleInfo, ModuleVariables};
 use crate::services::item_property_decoder::ItemPropertyDecoder;
 use crate::services::resource_manager::ResourceManager;
-use crate::services::savegame_handler::SaveGameHandler;
+use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 
 pub struct SessionState {
     pub current_file_path: Option<PathBuf>,
@@ -143,8 +143,9 @@ impl SessionState {
     }
 
     pub fn save_character(&mut self, game_data: &GameData) -> Result<(), String> {
-        self.savegame_handler
-            .as_ref()
+        let handler = self
+            .savegame_handler
+            .as_mut()
             .ok_or_else(|| "No active save handler".to_string())?;
         let character = self
             .character
@@ -157,32 +158,21 @@ impl SessionState {
         }
 
         let char_fields = character.clone_gff();
-
-        let (playerlist_data, player_bic_data) = {
-            let handler = self.savegame_handler.as_ref().unwrap();
-            let playerlist_data = handler
-                .extract_player_data()
-                .map_err(|e| format!("Failed to read playerlist.ifo: {e}"))?;
-            let player_bic_data = handler
-                .extract_player_bic()
-                .map_err(|e| format!("Failed to read player.bic: {e}"))?;
-            (playerlist_data, player_bic_data)
-        };
-
-        let playerlist_bytes =
-            serialize_playerlist_bytes(playerlist_data, &char_fields, self.selected_player_index)?;
+        let selected_player_index = self.selected_player_index;
         let update_primary_player_files =
-            self.primary_player_index == Some(self.selected_player_index);
-        let player_bic_bytes = if update_primary_player_files {
-            Some(serialize_player_bic_bytes(player_bic_data, &char_fields)?)
-        } else {
-            None
-        };
+            self.primary_player_index == Some(selected_player_index);
 
-        self.savegame_handler
-            .as_mut()
-            .unwrap()
-            .update_player_complete(&playerlist_bytes, player_bic_bytes.as_deref(), None, None)
+        handler
+            .rewrite_player_files(|src| {
+                let playerlist =
+                    serialize_playerlist_bytes(src.playerlist, &char_fields, selected_player_index)?;
+                let player_bic = if update_primary_player_files {
+                    Some(serialize_player_bic_bytes(src.player_bic, &char_fields)?)
+                } else {
+                    None
+                };
+                Ok(PlayerOutputs { playerlist, player_bic })
+            })
             .map_err(|e| format!("Failed to write save file: {e}"))?;
 
         if update_primary_player_files {
@@ -192,8 +182,7 @@ impl SessionState {
         self.character.as_mut().unwrap().mark_saved();
 
         info!(
-            "Character saved successfully (playerlist={} bytes, player.bic_updated={})",
-            playerlist_bytes.len(),
+            "Character saved successfully (player.bic_updated={})",
             update_primary_player_files
         );
         Ok(())
@@ -324,11 +313,11 @@ fn write_playerinfo_for_character(
 }
 
 fn serialize_playerlist_bytes(
-    playerlist_data: Vec<u8>,
+    playerlist_data: &[u8],
     character_fields: &IndexMap<String, GffValue<'static>>,
     player_index: usize,
 ) -> Result<Vec<u8>, String> {
-    let gff = GffParser::from_bytes(playerlist_data)
+    let gff = GffParser::from_bytes(playerlist_data.to_vec())
         .map_err(|e| format!("playerlist.ifo parse error: {e}"))?;
 
     let file_type = gff.file_type.clone();
@@ -468,7 +457,7 @@ pub(crate) fn resolve_primary_player_index(
 }
 
 fn serialize_player_bic_bytes(
-    player_bic_data: Option<Vec<u8>>,
+    player_bic_data: Option<&[u8]>,
     character_fields: &IndexMap<String, GffValue<'static>>,
 ) -> Result<Vec<u8>, String> {
     let Some(player_bic_data) = player_bic_data else {
@@ -477,7 +466,7 @@ fn serialize_player_bic_bytes(
             .map_err(|e| format!("player.bic serialization error: {e}"));
     };
 
-    let gff = GffParser::from_bytes(player_bic_data)
+    let gff = GffParser::from_bytes(player_bic_data.to_vec())
         .map_err(|e| format!("player.bic parse error: {e}"))?;
     let file_type = gff.file_type.clone();
     let file_version = gff.file_version.clone();

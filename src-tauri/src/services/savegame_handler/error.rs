@@ -44,6 +44,9 @@ pub enum SaveGameError {
 
     #[error("GFF parse error: {0}")]
     GffParse(String),
+
+    #[error("{0}")]
+    Transform(String),
 }
 
 impl serde::Serialize for SaveGameError {
