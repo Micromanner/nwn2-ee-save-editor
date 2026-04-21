@@ -10,6 +10,14 @@ use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
 
 fn read_save_character_name(save_path: &std::path::Path) -> Option<String> {
+    // playerinfo.bin is NWN2's own load-menu metadata file - cheap flat read.
+    // Only fall back to parsing player.bic out of the zip when it's missing.
+    if let Ok(name) = PlayerInfo::get_player_name(save_path.join("playerinfo.bin"))
+        && !name.trim().is_empty()
+    {
+        return Some(name);
+    }
+
     if let Ok(handler) = SaveGameHandler::new(save_path, false, false)
         && let Ok(Some(summary)) = handler.read_character_summary()
     {
@@ -23,7 +31,7 @@ fn read_save_character_name(save_path: &std::path::Path) -> Option<String> {
         }
     }
 
-    PlayerInfo::get_player_name(save_path.join("playerinfo.bin")).ok()
+    None
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
