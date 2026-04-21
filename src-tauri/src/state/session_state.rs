@@ -469,17 +469,39 @@ fn serialize_player_bic_bytes(
     player_bic_data: Option<Vec<u8>>,
     character_fields: &IndexMap<String, GffValue<'static>>,
 ) -> Result<Vec<u8>, String> {
-    let (file_type, file_version) = if let Some(player_bic_data) = player_bic_data {
-        let gff = GffParser::from_bytes(player_bic_data)
-            .map_err(|e| format!("player.bic parse error: {e}"))?;
-        let file_type = gff.file_type.clone();
-        let file_version = gff.file_version.clone();
-        (file_type, file_version)
-    } else {
-        ("BIC ".to_string(), "V3.2".to_string())
+    let Some(player_bic_data) = player_bic_data else {
+        return GffWriter::new("BIC ", "V3.2")
+            .write(character_fields.clone())
+            .map_err(|e| format!("player.bic serialization error: {e}"));
     };
 
+    let gff = GffParser::from_bytes(player_bic_data)
+        .map_err(|e| format!("player.bic parse error: {e}"))?;
+    let file_type = gff.file_type.clone();
+    let file_version = gff.file_version.clone();
+    let root_struct_id = gff
+        .get_struct_id(0)
+        .map_err(|e| format!("Failed to read player.bic root struct_id: {e}"))?;
+    let bic_fields = gff
+        .read_struct_fields(0)
+        .map_err(|e| format!("Failed to read player.bic fields: {e}"))?;
+
+    // Merge character_fields into existing BIC: overwrite keys that BIC already has,
+    // preserve BIC-only keys, skip GFF-internal metadata.
+    let mut merged: IndexMap<String, GffValue<'static>> = bic_fields
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned()))
+        .collect();
+    for (key, value) in character_fields {
+        if key.starts_with("__") {
+            continue;
+        }
+        if merged.contains_key(key) {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+
     GffWriter::new(&file_type, &file_version)
-        .write(character_fields.clone())
+        .write_with_struct_id(merged, root_struct_id)
         .map_err(|e| format!("player.bic serialization error: {e}"))
 }
