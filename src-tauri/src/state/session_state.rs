@@ -159,19 +159,24 @@ impl SessionState {
 
         let char_fields = character.clone_gff();
         let selected_player_index = self.selected_player_index;
-        let update_primary_player_files =
-            self.primary_player_index == Some(selected_player_index);
+        let update_primary_player_files = self.primary_player_index == Some(selected_player_index);
 
         handler
             .rewrite_player_files(|src| {
-                let playerlist =
-                    serialize_playerlist_bytes(src.playerlist, &char_fields, selected_player_index)?;
+                let playerlist = serialize_playerlist_bytes(
+                    src.playerlist,
+                    &char_fields,
+                    selected_player_index,
+                )?;
                 let player_bic = if update_primary_player_files {
                     Some(serialize_player_bic_bytes(src.player_bic, &char_fields)?)
                 } else {
                     None
                 };
-                Ok(PlayerOutputs { playerlist, player_bic })
+                Ok(PlayerOutputs {
+                    playerlist,
+                    player_bic,
+                })
             })
             .map_err(|e| format!("Failed to write save file: {e}"))?;
 

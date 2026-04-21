@@ -238,10 +238,12 @@ fn test_multiplayer_non_primary_slot_write_preserves_primary_mirrors() {
         playerlist_with_transition_fields(original_playerlist, player_index, &after_slot_fields);
 
     handler
-        .rewrite_player_files(|_src| Ok(PlayerOutputs {
-            playerlist: updated_playerlist,
-            player_bic: None,
-        }))
+        .rewrite_player_files(|_src| {
+            Ok(PlayerOutputs {
+                playerlist: updated_playerlist,
+                player_bic: None,
+            })
+        })
         .expect("Failed to write non-primary slot playerlist update");
 
     let reparsed_playerlist = handler
