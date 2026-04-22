@@ -382,6 +382,7 @@ impl ResourceManager {
     async fn load_base_tlk(&mut self) -> ResourceManagerResult<()> {
         let paths = self.paths.read().await;
         let base_tlk_path = paths.dialog_tlk();
+        let documents_folder = paths.documents_folder().cloned();
         let workshop_folder = paths.steam_workshop_folder().cloned();
         drop(paths);
 
@@ -406,8 +407,37 @@ impl ResourceManager {
             }
         }
 
-        // NWN2 EE distributes extended TLK via Steam Workshop.
-        // Scan workshop items for dialog.TLK with more entries (spell descriptions etc.)
+        // Mods like Kaedrin's PrC Pack (Nexus install) ship a merged dialog.tlk
+        // into the user Documents folder. Engine-documented user TLK override.
+        if let Some(ref docs_dir) = documents_folder {
+            for name in ["dialog.tlk", "dialog.TLK"] {
+                let candidate = docs_dir.join(name);
+                if !candidate.exists() {
+                    continue;
+                }
+                match module_loader::load_tlk(&candidate) {
+                    Ok(parser) => {
+                        let count = parser.string_count();
+                        let best_count = best_parser.as_ref().map_or(0, TLKParser::string_count);
+                        if count > best_count {
+                            info!(
+                                "Found Documents TLK with more entries: {} ({} > {})",
+                                candidate.display(),
+                                count,
+                                best_count
+                            );
+                            best_source = candidate.display().to_string();
+                            best_parser = Some(parser);
+                        }
+                        break;
+                    }
+                    Err(e) => debug!("Skipping Documents TLK {}: {}", candidate.display(), e),
+                }
+            }
+        }
+
+        // Mods like Kaedrin's PrC Pack (Workshop install) ship a merged dialog.tlk
+        // inside their workshop item folder. Same "highest string count wins" heuristic.
         if let Some(ref workshop_dir) = workshop_folder
             && let Ok(entries) = std::fs::read_dir(workshop_dir)
         {
