@@ -124,17 +124,6 @@ jobs:
           cp src-tauri/target/release/bundle/nsis/*-setup.exe "installer-staging/NWN2EE-Save-Editor-${VERSION}-Setup.exe"
           7z a "NWN2EE-Save-Editor-${VERSION}-Windows-Installer.zip" ./installer-staging/*
 
-      - name: Upload Windows Installer Asset
-        if: matrix.platform == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Windows-Installer.zip
-          asset_name: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Windows-Installer.zip
-          asset_content_type: application/zip
-
       - name: Package Windows Portable
         if: matrix.platform == 'windows-latest'
         shell: bash
@@ -144,16 +133,14 @@ jobs:
           cp "src-tauri/target/release/app.exe" "portable-staging/NWN2EE Save Editor.exe"
           7z a "NWN2EE-Save-Editor-${VERSION}-Windows-Portable.zip" ./portable-staging/*
 
-      - name: Upload Windows Portable Asset
+      - name: Upload Windows Assets to Release
         if: matrix.platform == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Windows-Portable.zip
-          asset_name: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Windows-Portable.zip
-          asset_content_type: application/zip
+          tag_name: v${{ needs.create-release.outputs.version }}
+          files: |
+            NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Windows-Installer.zip
+            NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Windows-Portable.zip
 
       - name: Package Linux AppImage
         if: matrix.platform == 'ubuntu-latest'
@@ -164,17 +151,6 @@ jobs:
           cp src-tauri/target/release/bundle/appimage/*.AppImage appimage-staging/
           cd appimage-staging && zip "../NWN2EE-Save-Editor-${VERSION}-Linux-AppImage.zip" ./*
 
-      - name: Upload Linux AppImage Asset
-        if: matrix.platform == 'ubuntu-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Linux-AppImage.zip
-          asset_name: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Linux-AppImage.zip
-          asset_content_type: application/zip
-
       - name: Package Linux Deb
         if: matrix.platform == 'ubuntu-latest'
         shell: bash
@@ -184,13 +160,11 @@ jobs:
           cp src-tauri/target/release/bundle/deb/*.deb deb-staging/
           cd deb-staging && zip "../NWN2EE-Save-Editor-${VERSION}-Linux-Deb.zip" ./*
 
-      - name: Upload Linux Deb Asset
+      - name: Upload Linux Assets to Release
         if: matrix.platform == 'ubuntu-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Linux-Deb.zip
-          asset_name: NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Linux-Deb.zip
-          asset_content_type: application/zip
+          tag_name: v${{ needs.create-release.outputs.version }}
+          files: |
+            NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Linux-AppImage.zip
+            NWN2EE-Save-Editor-${{ needs.create-release.outputs.version }}-Linux-Deb.zip
