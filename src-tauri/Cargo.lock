@@ -143,6 +143,7 @@ dependencies = [
  "tracing-subscriber",
  "walkdir",
  "webp",
+ "winreg",
  "xz2",
  "zip",
 ]

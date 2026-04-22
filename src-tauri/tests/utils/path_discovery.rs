@@ -217,3 +217,45 @@ fn test_is_gog_installation() {
         println!("Path contains 'gog': {path_contains_gog}");
     }
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn test_gog_registry_discovery_on_windows() {
+    use std::path::Path;
+
+    let discovery = discover_nwn2_paths_rust(None).expect("discovery succeeds");
+
+    let gog_registry_timing = discovery
+        .timing_breakdown
+        .iter()
+        .find(|t| t.operation == "gog_registry");
+
+    assert!(
+        gog_registry_timing.is_some(),
+        "gog_registry timing entry should always be recorded on Windows"
+    );
+
+    let timing = gog_registry_timing.unwrap();
+    println!(
+        "gog_registry: {}ms, {} product IDs checked, {} paths found",
+        timing.duration_ms, timing.paths_checked, timing.paths_found
+    );
+
+    if timing.paths_found == 0 {
+        println!("No GOG NWN2 install in registry; test is a no-op.");
+        return;
+    }
+
+    let found_gog_install = discovery.nwn2_paths.iter().any(|p| {
+        let path = Path::new(p);
+        path.exists()
+            && (path.join("data").exists()
+                || path.join("dialog.tlk").exists()
+                || path.join("nwn2main.exe").exists())
+    });
+
+    assert!(
+        found_gog_install,
+        "Registry-reported path should appear as a validated install"
+    );
+}

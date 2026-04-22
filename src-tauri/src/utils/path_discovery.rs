@@ -9,7 +9,14 @@ const KNOWN_GAME_FOLDER_NAMES: &[&str] = &[
     "Neverwinter Nights 2 Enhanced Edition",
     "Neverwinter Nights 2",
     "NWN2",
+    "Enhanced Edition",
+    "Neverwinter Nights 2 Complete",
+    "Neverwinter Nights 2 Platinum",
 ];
+
+const STEAM_APP_IDS: &[&str] = &["2738630", "2760"];
+
+const GOG_PRODUCT_IDS: &[&str] = &["1993442013", "1207659162"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathTiming {
@@ -35,7 +42,7 @@ pub fn discover_nwn2_paths_rust(
     let mut timing_breakdown = Vec::new();
 
     let candidate_start = Instant::now();
-    let candidate_paths = if let Some(custom_paths) = search_paths {
+    let mut candidate_paths = if let Some(custom_paths) = search_paths {
         build_candidate_paths_from_roots(custom_paths.into_iter().map(PathBuf::from).collect())
     } else {
         get_default_candidate_paths()
@@ -45,6 +52,17 @@ pub fn discover_nwn2_paths_rust(
         duration_ms: candidate_start.elapsed().as_millis() as u64,
         paths_checked: candidate_paths.len() as u32,
         paths_found: 0,
+    });
+
+    let gog_start = Instant::now();
+    let gog_registry_paths = get_gog_install_paths_from_registry();
+    let gog_found = gog_registry_paths.len() as u32;
+    candidate_paths.extend(gog_registry_paths);
+    timing_breakdown.push(PathTiming {
+        operation: "gog_registry".to_string(),
+        duration_ms: gog_start.elapsed().as_millis() as u64,
+        paths_checked: GOG_PRODUCT_IDS.len() as u32,
+        paths_found: gog_found,
     });
 
     let validation_start = Instant::now();
@@ -215,6 +233,32 @@ fn add_steam_root_candidates(
 fn add_steam_library_candidates(library_root: &Path, candidates: &mut HashSet<PathBuf>) {
     add_named_install_candidates(&library_root.join("steamapps").join("common"), candidates);
     add_named_install_candidates(&library_root.join("common"), candidates);
+
+    for install_path in find_steam_installs_via_appmanifest(library_root) {
+        candidates.insert(install_path);
+    }
+}
+
+fn find_steam_installs_via_appmanifest(library_root: &Path) -> Vec<PathBuf> {
+    let steamapps = library_root.join("steamapps");
+    let mut install_paths = Vec::new();
+
+    for app_id in STEAM_APP_IDS {
+        let acf_path = steamapps.join(format!("appmanifest_{app_id}.acf"));
+        let Some(install_dir) = parse_acf_installdir(&acf_path) else {
+            continue;
+        };
+        install_paths.push(steamapps.join("common").join(install_dir));
+    }
+
+    install_paths
+}
+
+fn parse_acf_installdir(acf_path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(acf_path).ok()?;
+    content
+        .lines()
+        .find_map(|line| parse_vdf_key_value(line, "installdir"))
 }
 
 fn add_named_install_candidates(base: &Path, candidates: &mut HashSet<PathBuf>) {
@@ -440,6 +484,38 @@ fn epic_manifest_dirs() -> Vec<PathBuf> {
     manifest_paths
 }
 
+#[cfg(target_os = "windows")]
+fn get_gog_install_paths_from_registry() -> Vec<PathBuf> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let mut install_paths = Vec::new();
+
+    for product_id in GOG_PRODUCT_IDS {
+        for prefix in [
+            "SOFTWARE\\WOW6432Node\\GOG.com\\Games",
+            "SOFTWARE\\GOG.com\\Games",
+        ] {
+            let subkey = format!("{prefix}\\{product_id}");
+            let Ok(key) = hklm.open_subkey(&subkey) else {
+                continue;
+            };
+            if let Ok(path) = key.get_value::<String, _>("path") {
+                install_paths.push(PathBuf::from(path));
+                break;
+            }
+        }
+    }
+
+    install_paths
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_gog_install_paths_from_registry() -> Vec<PathBuf> {
+    Vec::new()
+}
+
 fn is_nwn2_installation(path: &Path) -> bool {
     let indicators = ["data", "dialog.tlk", "nwn2main.exe", "nwn2.exe", "enhanced"];
 
@@ -462,8 +538,9 @@ fn is_nwn2_installation(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_candidate_paths_from_roots, get_epic_manifest_install_paths_from_dirs,
-        parse_steam_libraryfolders,
+        KNOWN_GAME_FOLDER_NAMES, build_candidate_paths_from_roots,
+        find_steam_installs_via_appmanifest, get_epic_manifest_install_paths_from_dirs,
+        parse_acf_installdir, parse_steam_libraryfolders,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -545,5 +622,91 @@ mod tests {
         let install_paths = get_epic_manifest_install_paths_from_dirs(vec![manifest_dir]);
 
         assert_eq!(install_paths, vec![install_path]);
+    }
+
+    #[test]
+    fn test_parse_acf_reads_installdir() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let acf_path = temp_dir.path().join("appmanifest_2738630.acf");
+        fs::write(
+            &acf_path,
+            "\"AppState\"\n{\n    \"appid\"        \"2738630\"\n    \"name\"         \"NWN2 Enhanced Edition\"\n    \"installdir\"   \"Enhanced Edition\"\n}\n",
+        )
+        .expect("write acf");
+
+        assert_eq!(
+            parse_acf_installdir(&acf_path),
+            Some("Enhanced Edition".to_string())
+        );
+    }
+
+    #[test]
+    fn test_find_steam_installs_via_appmanifest_returns_renamed_folder() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let library_root = temp_dir.path();
+        let steamapps = library_root.join("steamapps");
+        fs::create_dir_all(&steamapps).expect("steamapps dir");
+        fs::write(
+            steamapps.join("appmanifest_2738630.acf"),
+            "\"AppState\"\n{\n    \"installdir\"   \"Custom Renamed Folder\"\n}\n",
+        )
+        .expect("write acf");
+
+        let installs = find_steam_installs_via_appmanifest(library_root);
+
+        let expected = steamapps.join("common").join("Custom Renamed Folder");
+        assert_eq!(installs, vec![expected]);
+    }
+
+    #[test]
+    fn test_build_candidate_paths_includes_renamed_folder_via_appmanifest() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let steam_root = temp_dir.path().join("Steam");
+        let steamapps_dir = steam_root.join("steamapps");
+        fs::create_dir_all(&steamapps_dir).expect("steamapps dir");
+
+        let vdf_path = steamapps_dir.join("libraryfolders.vdf");
+        let library_root = temp_dir.path().join("SteamLibrary");
+        fs::create_dir_all(library_root.join("steamapps")).expect("library steamapps");
+        fs::write(
+            &vdf_path,
+            format!(
+                "\"libraryfolders\"\n{{\n    \"0\"\n    {{\n        \"path\"        \"{}\"\n    }}\n}}\n",
+                library_root.to_string_lossy().replace('\\', "\\\\")
+            ),
+        )
+        .expect("write vdf");
+        fs::write(
+            library_root
+                .join("steamapps")
+                .join("appmanifest_2738630.acf"),
+            "\"AppState\"\n{\n    \"installdir\"   \"Custom Renamed Folder\"\n}\n",
+        )
+        .expect("write acf");
+
+        let candidates = build_candidate_paths_from_roots(vec![steam_root]);
+        let expected = library_root
+            .join("steamapps")
+            .join("common")
+            .join("Custom Renamed Folder");
+
+        assert!(
+            candidates.contains(&expected),
+            "appmanifest install dir should be a candidate even when folder is renamed"
+        );
+    }
+
+    #[test]
+    fn test_known_folder_names_include_new_entries() {
+        for expected in [
+            "Enhanced Edition",
+            "Neverwinter Nights 2 Complete",
+            "Neverwinter Nights 2 Platinum",
+        ] {
+            assert!(
+                KNOWN_GAME_FOLDER_NAMES.contains(&expected),
+                "KNOWN_GAME_FOLDER_NAMES should include {expected}"
+            );
+        }
     }
 }
