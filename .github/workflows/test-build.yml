@@ -47,6 +47,10 @@ jobs:
 
   build:
     needs: [check]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +100,22 @@ jobs:
         with:
           projectPath: "."
           includeUpdaterJson: false
+
+      - name: Attest Windows binaries
+        if: matrix.platform == 'windows-latest'
+        uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-path: |
+            src-tauri/target/release/app.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+
+      - name: Attest Linux binaries
+        if: matrix.platform == 'ubuntu-latest'
+        uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
 
       - name: Package Windows Installer
         if: matrix.platform == 'windows-latest'
