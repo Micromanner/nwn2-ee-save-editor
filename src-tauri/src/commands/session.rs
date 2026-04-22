@@ -2,6 +2,7 @@ use crate::character::Character;
 use crate::commands::{CommandError, CommandResult};
 use crate::loaders::GameData;
 use crate::parsers::gff::GffParser;
+use crate::services::load_diagnostics::{self, LoadInput, LoadReport, LoadStage, LoadStatus};
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
 use tauri::{AppHandle, Manager, State};
@@ -17,11 +18,30 @@ pub async fn load_character(
 ) -> CommandResult<bool> {
     info!("Load character command invoked");
 
-    let mut session = state.session.write();
-    match session.load_character(&file_path, player_index) {
+    let file_size = std::fs::metadata(&file_path).ok().map(|m| m.len());
+    let mut report = LoadReport::new(LoadInput {
+        file_path: file_path.clone(),
+        player_index,
+        file_size,
+    });
+
+    let load_result = {
+        let mut session = state.session.write();
+        session.load_character(&file_path, player_index, &mut report)
+    };
+
+    // Snapshot capture walks override/hak/workshop directories — skip on clean
+    // loads so heavy mod installs don't pay 100ms+ on every successful load.
+    if report.status != LoadStatus::Ok {
+        report.snapshot = Some(load_diagnostics::snapshot::capture(&state).await);
+    }
+    report.finalize();
+    let diagnostics_path =
+        load_diagnostics::writer::write(&report).map(|p| p.display().to_string());
+
+    match load_result {
         Ok(()) => {
             info!("Character loaded successfully via command");
-            drop(session);
             tokio::spawn(async move {
                 let state = app.state::<AppState>();
 
@@ -48,12 +68,23 @@ pub async fn load_character(
             });
             Ok(true)
         }
-        Err(e) => {
-            error!("Failed to load character: {}", e);
-            Err(CommandError::FileError {
-                message: e,
-                path: Some(file_path),
-            })
+        Err(load_err) => {
+            error!("Failed to load character: {}", load_err.message);
+            let cmd_err = match load_err.stage {
+                LoadStage::Gff | LoadStage::Playerlist | LoadStage::Bic => {
+                    CommandError::ParseError {
+                        message: load_err.message,
+                        context: Some(load_err.stage.to_string()),
+                        diagnostics_path,
+                    }
+                }
+                _ => CommandError::FileError {
+                    message: load_err.message,
+                    path: Some(file_path),
+                    diagnostics_path,
+                },
+            };
+            Err(cmd_err)
         }
     }
 }
@@ -110,6 +141,7 @@ pub async fn list_save_characters(
     let gff = GffParser::from_bytes(playerlist_data).map_err(|e| CommandError::ParseError {
         message: format!("Failed to parse playerlist.ifo: {e}"),
         context: Some(file_path.clone()),
+        diagnostics_path: None,
     })?;
 
     let mut player_entries =
@@ -117,6 +149,7 @@ pub async fn list_save_characters(
             CommandError::ParseError {
                 message,
                 context: Some(file_path.clone()),
+                diagnostics_path: None,
             }
         })?;
 
@@ -165,6 +198,7 @@ pub async fn save_character(
                     .current_file_path
                     .as_ref()
                     .map(|p| p.to_string_lossy().to_string()),
+                diagnostics_path: None,
             })
         }
     }
@@ -228,6 +262,7 @@ pub async fn export_to_localvault(state: State<'_, AppState>) -> CommandResult<S
             Err(CommandError::FileError {
                 message: e,
                 path: None,
+                diagnostics_path: None,
             })
         }
     }

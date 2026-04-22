@@ -2,6 +2,7 @@ pub mod campaign;
 pub mod class_categorizer;
 pub mod item_cost_calculator;
 pub mod item_property_decoder;
+pub mod load_diagnostics;
 pub mod model_loader;
 pub mod playerinfo;
 pub mod resource_manager;

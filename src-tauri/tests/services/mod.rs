@@ -1,6 +1,7 @@
 mod campaign;
 mod item_appearance_candidates;
 mod item_property_decoder;
+mod load_diagnostics;
 mod playerinfo;
 mod resource_manager;
 mod rule_detector;

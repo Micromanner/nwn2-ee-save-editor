@@ -31,12 +31,14 @@ pub enum CommandError {
     FileError {
         message: String,
         path: Option<String>,
+        diagnostics_path: Option<String>,
     },
 
     #[error("Parse error: {message}")]
     ParseError {
         message: String,
         context: Option<String>,
+        diagnostics_path: Option<String>,
     },
 
     // Game logic errors
@@ -69,6 +71,7 @@ impl From<std::io::Error> for CommandError {
         Self::FileError {
             message: e.to_string(),
             path: None,
+            diagnostics_path: None,
         }
     }
 }
@@ -106,16 +109,19 @@ impl From<crate::services::savegame_handler::SaveGameError> for CommandError {
             | SaveGameError::RestoreFailed(msg) => Self::FileError {
                 message: msg,
                 path: None,
+                diagnostics_path: None,
             },
             SaveGameError::Io(io_err) => Self::FileError {
                 message: io_err.to_string(),
                 path: None,
+                diagnostics_path: None,
             },
             SaveGameError::CorruptedZip(msg)
             | SaveGameError::GffParse(msg)
             | SaveGameError::InvalidStructure(msg) => Self::ParseError {
                 message: msg,
                 context: None,
+                diagnostics_path: None,
             },
             SaveGameError::ValidationFailed { filename, reason } => Self::ValidationError {
                 field: filename,

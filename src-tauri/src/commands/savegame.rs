@@ -126,6 +126,7 @@ pub async fn delete_backup(state: State<'_, AppState>, backup_path: String) -> C
         return Err(CommandError::FileError {
             message: "Backup path is not a directory".to_string(),
             path: Some(backup_path),
+            diagnostics_path: None,
         });
     }
 

@@ -49,12 +49,12 @@ export interface InvalidValueError extends CommandErrorBase {
 
 export interface FileErrorError extends CommandErrorBase {
   code: 'FileError';
-  details: { message: string; path: string | null };
+  details: { message: string; path: string | null; diagnostics_path?: string | null };
 }
 
 export interface ParseErrorError extends CommandErrorBase {
   code: 'ParseError';
-  details: { message: string; context: string | null };
+  details: { message: string; context: string | null; diagnostics_path?: string | null };
 }
 
 export interface InsufficientResourcesError extends CommandErrorBase {
@@ -162,6 +162,11 @@ export interface TranslatedError {
   recovery: string | null;
 }
 
+function appendDiagnostics(message: string, path: string | null | undefined, t: TranslationFn): string {
+  if (!path) return message;
+  return `${message}\n\n${t('errors.message.diagnosticsPath', { path })}`;
+}
+
 export function getTranslatedError(error: CommandError, t: TranslationFn): TranslatedError {
   switch (error.code) {
     case 'NoCharacterLoaded':
@@ -194,22 +199,26 @@ export function getTranslatedError(error: CommandError, t: TranslationFn): Trans
         message: t('errors.message.invalidValue', { field: error.details.field, expected: error.details.expected, actual: error.details.actual }),
         recovery: t('errors.recovery.invalidValue'),
       };
-    case 'FileError':
+    case 'FileError': {
+      const base = error.details.path
+        ? t('errors.message.fileErrorWithPath', { path: error.details.path, message: error.details.message })
+        : t('errors.message.fileError', { message: error.details.message });
       return {
         title: t('errors.title.fileError'),
-        message: error.details.path
-          ? t('errors.message.fileErrorWithPath', { path: error.details.path, message: error.details.message })
-          : t('errors.message.fileError', { message: error.details.message }),
+        message: appendDiagnostics(base, error.details.diagnostics_path, t),
         recovery: t('errors.recovery.fileError'),
       };
-    case 'ParseError':
+    }
+    case 'ParseError': {
+      const base = error.details.context
+        ? t('errors.message.parseErrorWithContext', { context: error.details.context, message: error.details.message })
+        : t('errors.message.parseError', { message: error.details.message });
       return {
         title: t('errors.title.parseError'),
-        message: error.details.context
-          ? t('errors.message.parseErrorWithContext', { context: error.details.context, message: error.details.message })
-          : t('errors.message.parseError', { message: error.details.message }),
+        message: appendDiagnostics(base, error.details.diagnostics_path, t),
         recovery: t('errors.recovery.parseError'),
       };
+    }
     case 'InsufficientResources':
       return {
         title: t('errors.title.resourceError'),

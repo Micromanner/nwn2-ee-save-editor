@@ -148,11 +148,11 @@ fn path_source_to_string(source: PathSource) -> String {
     }
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<String> {
-    info!("Exporting debug log");
-
+/// Collect the current debug snapshot from shared state.
+///
+/// Pure data-gathering with no file I/O. Used by both the manual
+/// `export_debug_log` command and the automatic load diagnostics report.
+pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
     // Collect all sync-locked data before any .await (parking_lot guards are !Send)
     let (
         paths_debug,
@@ -401,7 +401,7 @@ pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<Strin
         validation,
     };
 
-    let debug_log = DebugLog {
+    DebugLog {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
@@ -415,7 +415,15 @@ pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<Strin
         game_data: game_data_debug,
         session: session_debug,
         character_summary,
-    };
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<String> {
+    info!("Exporting debug log");
+
+    let debug_log = gather_debug_data(&state).await;
 
     let json = serde_json::to_string_pretty(&debug_log)
         .map_err(|e| CommandError::Internal(format!("Failed to serialize debug log: {e}")))?;
@@ -431,6 +439,7 @@ pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<Strin
     std::fs::write(&file_path, &json).map_err(|e| CommandError::FileError {
         message: format!("Failed to write debug log: {e}"),
         path: Some(file_path.to_string_lossy().to_string()),
+        diagnostics_path: None,
     })?;
 
     info!("Debug log exported to {}", file_path.display());

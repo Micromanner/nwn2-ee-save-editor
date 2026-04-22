@@ -9,6 +9,7 @@ use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::services::PlayerInfo;
 use crate::services::campaign::content::{ModuleInfo, ModuleVariables};
 use crate::services::item_property_decoder::ItemPropertyDecoder;
+use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 
@@ -48,50 +49,93 @@ impl SessionState {
         }
     }
 
-    #[instrument(name = "SessionState::load_character", skip(self), fields(file_path = %file_path))]
+    #[instrument(name = "SessionState::load_character", skip(self, report), fields(file_path = %file_path))]
     pub fn load_character(
         &mut self,
         file_path: &str,
         player_index: Option<usize>,
-    ) -> Result<(), String> {
+        report: &mut LoadReport,
+    ) -> Result<(), LoadError> {
         info!("Loading character from save file");
         let path = PathBuf::from(file_path);
 
         crate::services::savegame_handler::backup::clear_backup_tracking();
 
+        let fatal = |report: &mut LoadReport,
+                     stage: LoadStage,
+                     message: String,
+                     context: serde_json::Value|
+         -> LoadError {
+            warn!("{message}");
+            report.set_fatal(stage, message.clone(), context.clone());
+            LoadError {
+                stage,
+                message,
+                context,
+            }
+        };
+
         debug!("Creating SaveGameHandler");
         let handler = SaveGameHandler::new(&path, false, true).map_err(|e| {
-            warn!("Failed to create save handler: {}", e);
-            format!("Failed to create save handler: {e}")
+            fatal(
+                report,
+                LoadStage::SaveOpen,
+                format!("Failed to create save handler: {e}"),
+                serde_json::json!({ "file_path": file_path }),
+            )
         })?;
         debug!("SaveGameHandler created");
 
         debug!("Extracting playerlist.ifo from save archive");
         let playerlist_data = handler.extract_player_data().map_err(|e| {
-            warn!("Failed to extract playerlist.ifo: {}", e);
-            format!("Failed to extract playerlist.ifo: {e}")
+            fatal(
+                report,
+                LoadStage::Playerlist,
+                format!("Failed to extract playerlist.ifo: {e}"),
+                serde_json::json!({ "file_path": file_path }),
+            )
         })?;
         info!("playerlist.ifo extracted ({} bytes)", playerlist_data.len());
 
         debug!("Parsing playerlist.ifo GFF data");
         let gff = GffParser::from_bytes(playerlist_data).map_err(|e| {
-            warn!("GFF parse error: {}", e);
-            format!("GFF Parse error: {e}")
+            fatal(
+                report,
+                LoadStage::Gff,
+                format!("GFF Parse error: {e}"),
+                serde_json::json!({ "file_path": file_path, "which": "playerlist.ifo" }),
+            )
         })?;
         debug!("playerlist.ifo parsed successfully");
 
-        let player_entries = read_playerlist_entries(gff)?;
+        let player_entries = read_playerlist_entries(gff).map_err(|e| {
+            fatal(
+                report,
+                LoadStage::Playerlist,
+                format!("Failed to read playerlist entries: {e}"),
+                serde_json::Value::Null,
+            )
+        })?;
+
+        let bic_warning = |report: &mut LoadReport, reason: String| {
+            warn!("{reason}");
+            report.add_warning(
+                LoadStage::Bic,
+                reason,
+                serde_json::json!({ "fallback": "playerlist_slot" }),
+            );
+        };
         let player_bic_fields = match handler.extract_player_bic() {
             Ok(Some(player_bic_data)) => match read_player_bic_entry(player_bic_data) {
                 Ok(fields) => Some(fields),
                 Err(err) => {
-                    warn!("Failed to parse player.bic while loading save: {}", err);
+                    bic_warning(report, format!("Failed to parse player.bic: {err}"));
                     None
                 }
             },
             Ok(None) => None,
             Err(err) => {
-                warn!("Failed to extract player.bic while loading save: {}", err);
+                bic_warning(report, format!("Failed to extract player.bic: {err}"));
                 None
             }
         };
@@ -99,18 +143,23 @@ impl SessionState {
             resolve_primary_player_index(&player_entries, player_bic_fields.as_ref());
         let selected_player_index = player_index.unwrap_or(primary_player_index.unwrap_or(0));
 
-        let fields = if primary_player_index == Some(selected_player_index) {
-            if let Some(fields) = player_bic_fields {
+        let fields = match player_bic_fields {
+            Some(fields) if primary_player_index == Some(selected_player_index) => {
                 debug!(
                     "Using player.bic as authoritative source for playerlist slot {}",
                     selected_player_index
                 );
                 fields
-            } else {
-                read_playerlist_entry_from_entries(&player_entries, selected_player_index)?
             }
-        } else {
-            read_playerlist_entry_from_entries(&player_entries, selected_player_index)?
+            _ => read_playerlist_entry_from_entries(&player_entries, selected_player_index)
+                .map_err(|e| {
+                    fatal(
+                        report,
+                        LoadStage::Playerlist,
+                        format!("Failed to read playerlist slot: {e}"),
+                        serde_json::json!({ "selected_player_index": selected_player_index }),
+                    )
+                })?,
         };
         info!("Character data extracted ({} fields)", fields.len());
 
@@ -124,10 +173,15 @@ impl SessionState {
 
         let save_dir = if path.is_dir() {
             path.clone()
+        } else if let Some(parent) = path.parent().map(PathBuf::from) {
+            parent
         } else {
-            path.parent()
-                .map(PathBuf::from)
-                .ok_or_else(|| "Failed to determine save directory".to_string())?
+            return Err(fatal(
+                report,
+                LoadStage::SaveOpen,
+                "Failed to determine save directory".to_string(),
+                serde_json::json!({ "file_path": file_path }),
+            ));
         };
 
         self.character = Some(character);
