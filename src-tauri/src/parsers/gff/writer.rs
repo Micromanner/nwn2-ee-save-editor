@@ -1,10 +1,20 @@
+use std::borrow::Cow;
 use std::io::{Cursor, Write};
 
 use byteorder::{LittleEndian, WriteBytesExt};
+use encoding_rs::WINDOWS_1252;
 use indexmap::IndexMap;
 
 use super::error::GffError;
 use super::types::{GffFieldType, GffValue};
+
+/// Encode a Rust string (UTF-8 internally) to Windows-1252 bytes for GFF storage.
+/// Returns borrowed bytes on the ASCII fast path; mirrors the parser's
+/// `WINDOWS_1252.decode` to guarantee round-trip stability.
+fn encode_w1252(s: &str) -> Cow<'_, [u8]> {
+    let (cow, _, _) = WINDOWS_1252.encode(s);
+    cow
+}
 
 pub struct GffWriter {
     pub file_type: String,
@@ -208,15 +218,15 @@ impl GffWriter {
             }
             GffValue::String(v) => {
                 let offset = self.field_data.position() as u32;
-                let bytes = v.as_bytes();
+                let bytes = encode_w1252(&v);
                 self.field_data
                     .write_u32::<LittleEndian>(bytes.len() as u32)?;
-                self.field_data.write_all(bytes)?;
+                self.field_data.write_all(&bytes)?;
                 (GffFieldType::String, offset)
             }
             GffValue::ResRef(v) => {
                 let offset = self.field_data.position() as u32;
-                let bytes = v.as_bytes();
+                let bytes = encode_w1252(&v);
                 let len = bytes.len().min(32) as u8;
                 self.field_data.write_u8(len)?;
                 self.field_data.write_all(&bytes[..len as usize])?;
@@ -231,10 +241,13 @@ impl GffWriter {
             GffValue::LocString(v) => {
                 let offset = self.field_data.position() as u32;
 
-                let mut content_size = 0;
-                for sub in &v.substrings {
-                    content_size += 8 + sub.string.len();
-                }
+                let encoded: Vec<Cow<'_, [u8]>> = v
+                    .substrings
+                    .iter()
+                    .map(|sub| encode_w1252(&sub.string))
+                    .collect();
+
+                let content_size: usize = encoded.iter().map(|b| 8 + b.len()).sum();
                 let total_size = 8 + content_size;
 
                 self.field_data
@@ -244,9 +257,8 @@ impl GffWriter {
                 self.field_data
                     .write_u32::<LittleEndian>(v.substrings.len() as u32)?;
 
-                for sub in &v.substrings {
+                for (sub, bytes) in v.substrings.iter().zip(encoded.iter()) {
                     let id = (sub.language << 1) | (sub.gender & 1);
-                    let bytes = sub.string.as_bytes();
                     self.field_data.write_u32::<LittleEndian>(id)?;
                     self.field_data
                         .write_u32::<LittleEndian>(bytes.len() as u32)?;

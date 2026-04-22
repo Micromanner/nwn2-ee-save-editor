@@ -30,3 +30,6 @@ mod diagnose_model_scale;
 
 #[path = "debugging/armor_debug_dump.rs"]
 mod armor_debug_dump;
+
+#[path = "debugging/dump_gff_reference.rs"]
+mod dump_gff_reference;

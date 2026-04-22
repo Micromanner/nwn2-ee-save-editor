@@ -315,6 +315,104 @@ async fn test_file_multiple_saves() {
     );
 }
 
+/// Round-trip non-ASCII content through parse → write → re-parse and verify
+/// byte-for-byte stability. Guards against UTF-8/Windows-1252 confusion in the
+/// writer: GFF stores Windows-1252, so writing raw UTF-8 bytes would cause
+/// every save to double the byte count of non-ASCII localized strings.
+#[tokio::test]
+async fn test_roundtrip_non_ascii_locstring_stable() {
+    let (_temp_dir, temp_path, bytes) = create_temp_bic("occidiooctavon/occidiooctavon1.bic");
+
+    let samples: &[(u32, &str)] = &[
+        (0, "English: Adaur lives in West Harbor."),
+        (2, "German: Es macht mir Ärger - übel, schön, größer, weiß."),
+        (4, "Spanish: ¡Qué día! Niño piñata año corazón."),
+        (1, "French: Peut-être être élève à côté du café."),
+        (3, "Italian: perché città università pietà più."),
+        (5, "Polish with transliteration: opowiesci zlych drow."),
+        (6, "Symbols: © ® ± ¼ ½ ¾ « » ¡ ¿"),
+    ];
+
+    let parser = GffParser::from_bytes(bytes).expect("Parse");
+    let root = parser.read_struct_fields(0).expect("Read root");
+
+    let mut root_owned: indexmap::IndexMap<String, GffValue<'static>> = indexmap::IndexMap::new();
+    for (k, v) in root {
+        if k == "Description" {
+            let substrings = samples
+                .iter()
+                .map(|(lang, text)| LocalizedSubstring {
+                    string: Cow::Owned((*text).to_string()),
+                    language: *lang,
+                    gender: 0,
+                })
+                .collect();
+            root_owned.insert(
+                k,
+                GffValue::LocString(LocalizedString {
+                    string_ref: -1,
+                    substrings,
+                }),
+            );
+        } else {
+            root_owned.insert(k, v.force_owned());
+        }
+    }
+
+    let mut current_bytes: Vec<u8> = {
+        let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
+        writer.write(root_owned).expect("Write #1")
+    };
+
+    let mut byte_lens_by_pass: Vec<Vec<usize>> = Vec::new();
+
+    for pass in 1..=3 {
+        std::fs::write(&temp_path, &current_bytes).expect("Save to disk");
+        let reread = std::fs::read(&temp_path).expect("Re-read");
+
+        let p = GffParser::from_bytes(reread).expect("Re-parse");
+        let r = p.read_struct_fields(0).expect("Read root");
+
+        let desc = r.get("Description").expect("Description present");
+        let ls = match desc {
+            GffValue::LocString(ls) => ls.clone(),
+            _ => panic!("Description should be LocString"),
+        };
+
+        let lens: Vec<usize> = ls.substrings.iter().map(|s| s.string.len()).collect();
+        println!("Pass {pass}: substring lens = {lens:?}");
+
+        for (i, (_, original)) in samples.iter().enumerate() {
+            let actual = &ls.substrings[i].string;
+            assert_eq!(
+                actual.as_ref(),
+                *original,
+                "Pass {pass} substring[{i}] corrupted: expected {original:?}, got {actual:?}"
+            );
+        }
+
+        byte_lens_by_pass.push(lens);
+
+        let mut next_root: indexmap::IndexMap<String, GffValue<'static>> =
+            indexmap::IndexMap::new();
+        for (k, v) in r {
+            next_root.insert(k, v.force_owned());
+        }
+        let mut writer = GffWriter::new(&p.file_type, &p.file_version);
+        current_bytes = writer.write(next_root).expect("Write");
+    }
+
+    let first = &byte_lens_by_pass[0];
+    for (i, lens) in byte_lens_by_pass.iter().enumerate() {
+        assert_eq!(
+            lens,
+            first,
+            "Pass {} substring lengths diverged from pass 1 - encoding is not round-trip stable",
+            i + 1
+        );
+    }
+}
+
 #[tokio::test]
 async fn test_file_verify_bytes_on_disk() {
     let (_temp_dir, temp_path, bytes) = create_temp_bic("occidiooctavon/occidiooctavon1.bic");
