@@ -20,6 +20,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: setup node
         uses: actions/setup-node@v4
         with:
@@ -30,17 +32,44 @@ jobs:
           VERSION=$(node -pe "require('./package.json').version")
           echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: build changelog
+        id: changelog
+        shell: bash
+        run: |
+          PREV=$(git tag --sort=-creatordate --merged HEAD | grep '^v' | grep -v "^v${PACKAGE_VERSION}$" | head -1 || true)
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          FEATURES=$(git log $RANGE --pretty="- %s" | grep -E "^- feat" || true)
+          FIXES=$(git log $RANGE --pretty="- %s" | grep -E "^- fix" || true)
+          REFACTORS=$(git log $RANGE --pretty="- %s" | grep -E "^- refactor" || true)
+          PRS=$(git log $RANGE --pretty="- %s" | grep -E "\(#[0-9]+\)$" | grep -vE "^- (feat|fix|refactor|ci|chore|style|docs|test|perf)" || true)
+          {
+            echo "body<<CHANGELOG_EOF"
+            [ -n "$FEATURES" ] && printf "## Features\n%s\n\n" "$FEATURES"
+            [ -n "$FIXES" ] && printf "## Fixes\n%s\n\n" "$FIXES"
+            [ -n "$REFACTORS" ] && printf "## Refactors\n%s\n\n" "$REFACTORS"
+            [ -n "$PRS" ] && printf "## Merged PRs\n%s\n\n" "$PRS"
+            echo "CHANGELOG_EOF"
+          } >> $GITHUB_OUTPUT
       - name: create release
         id: create-release
         uses: actions/github-script@v6
+        env:
+          CHANGELOG_BODY: ${{ steps.changelog.outputs.body }}
         with:
           script: |
+            const body = process.env.CHANGELOG_BODY && process.env.CHANGELOG_BODY.trim().length > 0
+              ? process.env.CHANGELOG_BODY
+              : 'Take a look at the assets to download and install this app.';
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: `v${process.env.PACKAGE_VERSION}`,
-              name: `Desktop App v${process.env.PACKAGE_VERSION}`,
-              body: 'Take a look at the assets to download and install this app.',
+              name: `NWN2EE Save Editor v${process.env.PACKAGE_VERSION}`,
+              body,
               draft: true,
               prerelease: false
             })
