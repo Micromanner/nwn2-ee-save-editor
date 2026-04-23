@@ -16,6 +16,8 @@ pub enum BridgeError {
     InstallNotFound(PathBuf),
     #[error("input path not found: {0}")]
     InputNotFound(PathBuf),
+    #[error("toolset bridge is not available on this platform: {0}")]
+    PlatformUnsupported(String),
     #[error("bridge exited with code {code}: {stderr}")]
     NonZeroExit { code: i32, stderr: String },
     #[error("bridge terminated by signal: {stderr}")]

@@ -13,7 +13,9 @@
 
 mod cache;
 mod client;
+mod resolver;
 mod types;
 
 pub use client::{BridgeClient, BridgeError, BridgeResult};
+pub use resolver::build_client;
 pub use types::{CampaignModuleEntry, CampaignModules, ResolutionKind};

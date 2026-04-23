@@ -94,6 +94,45 @@ impl From<crate::character::CharacterError> for CommandError {
     }
 }
 
+impl From<crate::services::toolset_bridge::BridgeError> for CommandError {
+    fn from(e: crate::services::toolset_bridge::BridgeError) -> Self {
+        use crate::services::toolset_bridge::BridgeError;
+        match e {
+            BridgeError::BridgeNotFound(path) => Self::NotFound {
+                item: format!("Toolset bridge: {}", path.display()),
+            },
+            BridgeError::InstallNotFound(path) => Self::NotFound {
+                item: format!("NWN2 install: {}", path.display()),
+            },
+            BridgeError::InputNotFound(path) => Self::NotFound {
+                item: format!("Module/campaign: {}", path.display()),
+            },
+            BridgeError::PlatformUnsupported(msg) => Self::OperationFailed {
+                operation: "toolset bridge".to_string(),
+                reason: msg,
+            },
+            BridgeError::NonZeroExit { code, stderr } => Self::OperationFailed {
+                operation: format!("toolset bridge (exit {code})"),
+                reason: stderr,
+            },
+            BridgeError::KilledBySignal { stderr } => Self::OperationFailed {
+                operation: "toolset bridge (killed)".to_string(),
+                reason: stderr,
+            },
+            BridgeError::ParseFailed(err) => Self::ParseError {
+                message: err.to_string(),
+                context: Some("toolset bridge json".to_string()),
+                diagnostics_path: None,
+            },
+            BridgeError::Io(err) => Self::FileError {
+                message: err.to_string(),
+                path: None,
+                diagnostics_path: None,
+            },
+        }
+    }
+}
+
 impl From<crate::services::savegame_handler::SaveGameError> for CommandError {
     fn from(e: crate::services::savegame_handler::SaveGameError) -> Self {
         use crate::services::savegame_handler::SaveGameError;

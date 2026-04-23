@@ -321,6 +321,9 @@ pub fn run() {
             crate::commands::campaign::restore_campaign_variable_backup,
             crate::commands::campaign::list_module_backups,
             crate::commands::campaign::restore_module_backup,
+            // Toolset Bridge
+            crate::commands::toolset::toolset_list_modules,
+            crate::commands::toolset::toolset_get_quest_graph,
             // Appearance
             crate::commands::appearance::get_appearance_state,
             crate::commands::appearance::update_appearance,
