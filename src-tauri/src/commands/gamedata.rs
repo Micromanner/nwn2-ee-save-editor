@@ -135,6 +135,37 @@ pub struct AvailableFeat {
     pub description: Option<i32>,
 }
 
+#[derive(serde::Serialize)]
+pub struct AvailableIcon {
+    pub id: i32,
+    pub resref: String,
+}
+
+#[tauri::command]
+pub async fn get_available_icons(state: State<'_, AppState>) -> CommandResult<Vec<AvailableIcon>> {
+    let game_data = state.game_data.read();
+    let table = game_data
+        .get_table("nwn2_icons")
+        .ok_or_else(|| CommandError::NotFound {
+            item: "nwn2_icons table".to_string(),
+        })?;
+
+    let mut icons = Vec::with_capacity(table.row_count());
+    for i in 0..table.row_count() {
+        if let Some(row) = table.get_by_id(i as i32)
+            && let Some(resref) = row_str(&row, "icon")
+            && resref != "****"
+            && !resref.is_empty()
+        {
+            icons.push(AvailableIcon {
+                id: i as i32,
+                resref,
+            });
+        }
+    }
+    Ok(icons)
+}
+
 #[tauri::command]
 pub async fn get_available_feats(state: State<'_, AppState>) -> CommandResult<Vec<AvailableFeat>> {
     let game_data = state.game_data.read();

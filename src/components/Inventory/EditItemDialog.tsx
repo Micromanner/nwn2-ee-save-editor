@@ -11,6 +11,8 @@ import { useInventoryManagement } from '@/hooks/useInventoryManagement';
 import { type ItemEditorMetadataResponse, type PropertyMetadata } from '@/services/inventoryApi';
 import { stripNwn2Tags, nwn2ToHtml, htmlToNwn2 } from '@/utils/nwn2Markup';
 import { ItemAppearanceTab } from './ItemAppearanceTab';
+import { IconPickerDialog } from './IconPickerDialog';
+import { useIcon } from '@/hooks/useIcon';
 import type { ItemAppearance } from '@/lib/bindings';
 
 function sortCostTableEntries(entries: [string, string][]): [string, string][] {
@@ -66,6 +68,7 @@ export interface EditItemDialogProps {
   slot?: string | null;
   resolvedName?: string;
   resolvedDescription?: string;
+  resolvedIcon?: string;
   preloadedMetadata?: ItemEditorMetadataResponse | null;
   appearance?: ItemAppearance | null;
 }
@@ -79,6 +82,7 @@ export function EditItemDialog({
   slot,
   resolvedName,
   resolvedDescription,
+  resolvedIcon,
   preloadedMetadata,
   appearance,
 }: EditItemDialogProps) {
@@ -90,8 +94,11 @@ export function EditItemDialog({
   const [tab, setTab] = useState<string>('basic');
   const [localData, setLocalData] = useState<Record<string, unknown> | null>(null);
   const [localAppearance, setLocalAppearance] = useState<ItemAppearance | null>(null);
+  const [localIconResref, setLocalIconResref] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editorInitialized, setEditorInitialized] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const iconPreviewUrl = useIcon(localIconResref);
 
   const nameRef = useRef<HTMLDivElement>(null);
   const descRef = useRef<HTMLDivElement>(null);
@@ -129,9 +136,10 @@ export function EditItemDialog({
 
     setLocalData(data);
     setLocalAppearance(appearance ? structuredClone(appearance) : null);
+    setLocalIconResref(resolvedIcon ?? null);
     setEditorInitialized(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, itemData, characterId, resolvedName, resolvedDescription]);
+  }, [isOpen, itemData, characterId, resolvedName, resolvedDescription, resolvedIcon]);
 
   useEffect(() => {
     if (!isOpen || !localData || editorInitialized) return;
@@ -254,6 +262,7 @@ export function EditItemDialog({
   const itemName = stripNwn2Tags(getLocalizedValue('LocalizedName'));
 
   return (
+    <>
     <ParchmentDialog
       isOpen={isOpen}
       onClose={onClose}
@@ -285,6 +294,32 @@ export function EditItemDialog({
         <Tabs id="edit-item-tab" selectedTabId={tab} onChange={(id) => setTab(id as string)}>
           <Tab id="basic" title={t('inventory.basicInfoTab')} panel={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 56, height: 56, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `1px solid ${T.border}`, borderRadius: 3, background: T.surfaceAlt,
+                  }}
+                >
+                  {iconPreviewUrl ? (
+                    <img src={iconPreviewUrl} alt="" width={48} height={48} draggable={false} />
+                  ) : (
+                    <div style={{ width: 48, height: 48, background: T.border, borderRadius: 2 }} />
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <Button
+                    icon="edit"
+                    text={t('inventory.changeIcon')}
+                    onClick={() => setIconPickerOpen(true)}
+                  />
+                  <span className="t-sm" style={{ color: T.textMuted }}>
+                    {localIconResref || '-'}
+                  </span>
+                </div>
+              </div>
+
               <div>
                 <label className="t-semibold" style={{ color: T.textMuted, display: 'block', marginBottom: 4 }}>{t('inventory.editor.name')}</label>
                 <div
@@ -486,5 +521,15 @@ export function EditItemDialog({
         </Tabs>
       )}
     </ParchmentDialog>
+    <IconPickerDialog
+      isOpen={iconPickerOpen}
+      onClose={() => setIconPickerOpen(false)}
+      initialResref={localIconResref}
+      onPick={({ rowId, resref }) => {
+        setLocalIconResref(resref);
+        setLocalData(prev => prev ? { ...prev, Icon: rowId } : prev);
+      }}
+    />
+    </>
   );
 }

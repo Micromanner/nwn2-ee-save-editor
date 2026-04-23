@@ -133,6 +133,7 @@ export function InventoryPanel() {
   const [editAppearance, setEditAppearance] = useState<ItemAppearance | null>(null);
   const [editResolvedName, setEditResolvedName] = useState<string | undefined>(undefined);
   const [editResolvedDescription, setEditResolvedDescription] = useState<string | undefined>(undefined);
+  const [editResolvedIcon, setEditResolvedIcon] = useState<string | undefined>(undefined);
 
   const inventoryData = inventorySubsystem.data;
 
@@ -163,6 +164,7 @@ export function InventoryPanel() {
       setEditAppearance(newItem.appearance);
       setEditResolvedName(newItem.name || undefined);
       setEditResolvedDescription(newItem.description || undefined);
+      setEditResolvedIcon(newItem.icon || undefined);
       setEditItemOpen(true);
     }
   }, [pendingEditIndex, inventoryData]);
@@ -405,6 +407,7 @@ export function InventoryPanel() {
               }
               setEditResolvedName(selectedItem.name || undefined);
               setEditResolvedDescription(selectedItem.description || undefined);
+              setEditResolvedIcon(selectedItem.icon || undefined);
               setEditItemOpen(true);
             }}
             onEquip={handleEquip}
@@ -423,6 +426,7 @@ export function InventoryPanel() {
         slot={editItemSlot}
         resolvedName={editResolvedName}
         resolvedDescription={editResolvedDescription}
+        resolvedIcon={editResolvedIcon}
         preloadedMetadata={itemEditorMetadata}
         appearance={editAppearance}
       />

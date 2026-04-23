@@ -281,6 +281,7 @@ pub fn run() {
             crate::commands::gamedata::get_available_base_items,
             crate::commands::gamedata::get_available_spell_schools,
             crate::commands::gamedata::get_available_item_properties,
+            crate::commands::gamedata::get_available_icons,
             // Paths
             crate::commands::paths::get_paths_config,
             crate::commands::paths::set_game_folder,

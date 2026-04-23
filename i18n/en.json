@@ -325,7 +325,23 @@
     "propertyValue": "Value",
     "stackSize": "Stack Size",
     "save": "Save",
-    "editItem": "Edit"
+    "editItem": "Edit",
+    "changeIcon": "Change icon",
+    "iconPickerTitle": "Select icon",
+    "searchIcons": "Search icons...",
+    "noIconsMatch": "No icons match your search.",
+    "loadingIcons": "Loading icons...",
+    "iconCategories": {
+      "all": "All",
+      "weapons": "Weapons",
+      "armor": "Armor",
+      "apparel": "Apparel",
+      "jewelry": "Jewelry",
+      "potions": "Potions",
+      "scrolls": "Scrolls & Books",
+      "crafting": "Crafting",
+      "other": "Other"
+    }
   },
   "feats": {
     "selectFeatDetail": "Select a feat to view details",
