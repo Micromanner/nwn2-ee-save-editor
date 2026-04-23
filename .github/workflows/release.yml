@@ -133,7 +133,7 @@ jobs:
         uses: actions/attest-build-provenance@v4.1.0
         with:
           subject-path: |
-            src-tauri/target/release/app.exe
+            src-tauri/target/release/nwn2ee-save-editor.exe
             src-tauri/target/release/bundle/nsis/*-setup.exe
 
       - name: Attest Linux binaries
@@ -159,7 +159,7 @@ jobs:
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
           mkdir -p portable-staging
-          cp "src-tauri/target/release/app.exe" "portable-staging/NWN2EE Save Editor.exe"
+          cp "src-tauri/target/release/nwn2ee-save-editor.exe" "portable-staging/NWN2EE Save Editor.exe"
           7z a "NWN2EE-Save-Editor-${VERSION}-Windows-Portable.zip" ./portable-staging/*
 
       - name: Upload Windows Assets to Release
