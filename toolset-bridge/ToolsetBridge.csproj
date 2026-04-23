@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <LangVersion>10</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ToolsetBridge</RootNamespace>
+    <AssemblyName>toolset-bridge</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <!-- Stage the Release build output into dist/ so Tauri bundle.resources + the release
+       workflow can pick up a stable, committed path. Debug builds are untouched. -->
+  <Target Name="StageDist" AfterTargets="Build" Condition=" '$(Configuration)' == 'Release' ">
+    <ItemGroup>
+      <_DistFiles Include="$(OutputPath)*.exe;$(OutputPath)*.dll;$(OutputPath)*.config" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DistFiles)"
+          DestinationFolder="$(MSBuildProjectDirectory)\dist\"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- NWN2:EE reference DLLs. Private=False ensures they are NOT copied into build output. -->
+  <!-- They are resolved at runtime from the user's install via AssemblyResolver. -->
+  <ItemGroup>
+    <Reference Include="NWN2Toolset64">
+      <HintPath>bin\Debug\NWN2Toolset64.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NWN2RulesLib64">
+      <HintPath>bin\Debug\NWN2RulesLib64.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="OEIShared64">
+      <HintPath>bin\Debug\OEIShared64.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="OEILocalization64">
+      <HintPath>bin\Debug\OEILocalization64.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ManagedResourceInterface64">
+      <HintPath>bin\Debug\ManagedResourceInterface64.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="managednwscript64">
+      <HintPath>bin\Debug\managednwscript64.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

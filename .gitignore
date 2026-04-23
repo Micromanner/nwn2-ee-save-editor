@@ -49,6 +49,18 @@ tools/
 reference/
 .cspell.json
 
+# Toolset bridge — track source + committed dist artifacts, ignore local build/dev junk
+toolset-bridge/bin/
+toolset-bridge/obj/
+toolset-bridge/*.mod
+toolset-bridge/*.ifo
+toolset-bridge/*.json
+toolset-bridge/README.md
+!toolset-bridge/dist/
+!toolset-bridge/dist/*.exe
+!toolset-bridge/dist/*.dll
+!toolset-bridge/dist/*.config
+
 # Claude
 CLAUDE.md
 .claude/

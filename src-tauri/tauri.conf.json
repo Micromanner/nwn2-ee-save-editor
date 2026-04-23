@@ -53,13 +53,18 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "externalBin": [],
+    "resources": [
+      "../toolset-bridge/dist/toolset-bridge.exe",
+      "../toolset-bridge/dist/toolset-bridge.exe.config",
+      "../toolset-bridge/dist/Newtonsoft.Json.dll",
+      "../toolset-bridge/dist/0Harmony.dll"
+    ],
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installMode": "both"
       }
-    },
-    "externalBin": [],
-    "resources": []
+    }
   }
 }

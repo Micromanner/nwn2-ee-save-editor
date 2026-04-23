@@ -8,6 +8,7 @@ pub mod playerinfo;
 pub mod resource_manager;
 pub mod rule_detector;
 pub mod savegame_handler;
+pub mod toolset_bridge;
 
 pub use resource_manager::{
     CacheStats, CampaignInfo, ContainerType, ModuleInfo, OverrideSource, ResourceLocation,

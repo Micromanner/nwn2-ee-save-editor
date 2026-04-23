@@ -228,3 +228,45 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
+
+---
+
+## toolset-bridge — redistributed runtime dependencies
+
+The `toolset-bridge.exe` helper bundled on Windows links against managed DLLs shipped with Neverwinter Nights 2: Enhanced Edition at runtime. Those DLLs (Obsidian / Aspyr property) are **never redistributed** by this project — they are resolved from the user's own NWN2:EE install via `AppDomain.AssemblyResolve`. A legally-obtained NWN2:EE install is required for quest data extraction.
+
+The bridge binary itself is shipped with two MIT-licensed NuGet dependencies that are redistributed as peer DLLs:
+
+### Newtonsoft.Json
+
+- Copyright 2007 James Newton-King
+- Source: https://github.com/JamesNK/Newtonsoft.Json
+- License: MIT
+
+### Lib.Harmony (HarmonyLib)
+
+- Copyright 2017 Andreas Pardeike
+- Source: https://github.com/pardeike/Harmony
+- License: MIT
+
+### MIT License
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
