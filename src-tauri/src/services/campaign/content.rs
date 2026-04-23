@@ -16,7 +16,6 @@ use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 
 use crate::config::NWN2Paths;
 use crate::services::campaign::backup::backup_module_z;
-use crate::services::campaign::journal::{QuestDefinition, parse_journal_gff};
 use crate::services::savegame_handler::SaveGameHandler;
 
 /// Write a `VarTable` entry's Type/Value, preserving the existing `Value`
@@ -202,65 +201,6 @@ pub fn extract_module_info_by_id(
     let save_dir = handler.save_dir();
     let z_path = find_module_z_file(save_dir, module_id)?;
     parse_module_z_file(&z_path, module_id, paths)
-}
-
-pub fn extract_journal(
-    handler: &SaveGameHandler,
-) -> Result<HashMap<String, QuestDefinition>, String> {
-    let current_module_id = handler.extract_current_module().unwrap_or_default();
-    let save_dir = handler.save_dir();
-
-    // Find all .z files
-    let mut z_files = Vec::new();
-    if let Ok(entries) = fs::read_dir(save_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|e| e == "z") {
-                z_files.push(path);
-            }
-        }
-    }
-
-    if z_files.is_empty() {
-        return Ok(HashMap::new());
-    }
-
-    // Try to find the current module first
-    for z_file in &z_files {
-        let file_stem = z_file
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        if file_stem == current_module_id
-            && let Ok(journal) = parse_journal_from_z(z_file)
-        {
-            return Ok(journal);
-        }
-    }
-
-    // Fallback to first .z file
-    if !z_files.is_empty()
-        && let Ok(journal) = parse_journal_from_z(&z_files[0])
-    {
-        return Ok(journal);
-    }
-
-    Ok(HashMap::new())
-}
-
-fn parse_journal_from_z(path: &Path) -> Result<HashMap<String, QuestDefinition>, String> {
-    let decompressed = decompress_z_file(path)?;
-
-    let mut erf_parser = ErfParser::new();
-    erf_parser
-        .parse_from_bytes(&decompressed)
-        .map_err(|e| format!("Failed to parse ERF: {e}"))?;
-
-    let journal_bytes = erf_parser
-        .extract_resource("module.jrl")
-        .map_err(|e| format!("module.jrl not found: {e}"))?;
-
-    parse_journal_gff(&journal_bytes, &path.file_stem().unwrap().to_string_lossy())
 }
 
 fn parse_module_z_file(

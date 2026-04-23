@@ -304,7 +304,6 @@ pub fn run() {
             crate::commands::campaign::get_module_info,
             crate::commands::campaign::list_modules,
             crate::commands::campaign::get_module_info_by_id,
-            crate::commands::campaign::get_journal,
             crate::commands::campaign::update_global_int,
             crate::commands::campaign::update_global_float,
             crate::commands::campaign::update_global_string,
@@ -325,6 +324,10 @@ pub fn run() {
             // Toolset Bridge
             crate::commands::toolset::toolset_list_modules,
             crate::commands::toolset::toolset_get_quest_graph,
+            crate::commands::toolset::toolset_get_faction_table,
+            crate::commands::toolset::toolset_get_module_variables,
+            // Save Graph (aggregated quest view across save + campaign modules)
+            crate::commands::save_graph::save_get_quest_graph,
             // Appearance
             crate::commands::appearance::get_appearance_state,
             crate::commands::appearance::update_appearance,

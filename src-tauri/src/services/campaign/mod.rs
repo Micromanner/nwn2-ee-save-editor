@@ -1,7 +1,6 @@
 pub mod backup;
 pub mod content;
 pub mod globals;
-pub mod journal;
 pub mod settings;
 
 // use tracing::error;
@@ -13,11 +12,10 @@ use self::backup::{
 };
 use self::content::{
     ModuleInfo, ModuleSummary, ModuleVariables,
-    batch_update_module_variables as batch_update_mod_vars, extract_journal, extract_module_info,
+    batch_update_module_variables as batch_update_mod_vars, extract_module_info,
     extract_module_info_by_id, list_modules as list_mods, update_module_variable as update_mod_var,
 };
 use self::globals::GlobalsParser;
-use self::journal::QuestDefinition;
 use self::settings::{
     CampaignBackupInfo, CampaignSettings, list_campaign_backups as list_cam_backups,
     read_campaign_settings, restore_campaign_from_backup as restore_cam_backup,
@@ -65,12 +63,6 @@ impl CampaignManager {
         module_id: &str,
     ) -> Result<(ModuleInfo, ModuleVariables), String> {
         extract_module_info_by_id(handler, paths, module_id)
-    }
-
-    pub fn get_journal(
-        handler: &SaveGameHandler,
-    ) -> Result<HashMap<String, QuestDefinition>, String> {
-        extract_journal(handler)
     }
 
     pub fn analyze_quest_progress(handler: &SaveGameHandler) -> Result<QuestOverview, String> {

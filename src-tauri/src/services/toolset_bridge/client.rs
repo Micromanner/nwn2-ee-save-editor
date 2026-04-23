@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, info, warn};
 
 use super::cache::GraphCache;
-use super::types::CampaignModules;
+use super::types::{CampaignModules, ModuleGraph};
 
 #[derive(Debug, Error)]
 pub enum BridgeError {
@@ -72,7 +71,7 @@ impl BridgeClient {
 
     /// Extract the full reference graph (journal, factions, convo, module variables)
     /// for a single `.mod` file. Results are cached on disk by module-file fingerprint.
-    pub fn graph(&self, module_path: &Path) -> BridgeResult<Value> {
+    pub fn graph(&self, module_path: &Path) -> BridgeResult<ModuleGraph> {
         if !module_path.exists() {
             return Err(BridgeError::InputNotFound(module_path.to_path_buf()));
         }

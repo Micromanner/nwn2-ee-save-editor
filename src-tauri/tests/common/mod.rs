@@ -85,6 +85,43 @@ pub async fn create_test_context() -> TestContext {
 }
 
 #[allow(dead_code)]
+pub fn toolset_bridge_exe() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("src-tauri has a parent")
+        .join("toolset-bridge/dist/toolset-bridge.exe")
+}
+
+#[allow(dead_code)]
+pub fn nwn2_install_path() -> PathBuf {
+    if let Ok(env_path) = std::env::var("NWN2_INSTALL") {
+        return PathBuf::from(env_path);
+    }
+    PathBuf::from("C:/Program Files (x86)/Steam/steamapps/common/NWN2 Enhanced Edition")
+}
+
+/// Returns `true` when either the bridge binary or the NWN2 install is missing,
+/// after writing a human-readable skip reason to stderr. Callers should early-return.
+#[allow(dead_code)]
+pub fn skip_if_toolset_prereqs_missing(
+    bridge: &std::path::Path,
+    install: &std::path::Path,
+) -> bool {
+    if !bridge.is_file() {
+        eprintln!(
+            "skipping: bridge not built at {} — run `dotnet build -c Release -p:Platform=x64` in toolset-bridge/",
+            bridge.display()
+        );
+        return true;
+    }
+    if !install.is_dir() {
+        eprintln!("skipping: NWN2 install not found at {}", install.display());
+        return true;
+    }
+    false
+}
+
+#[allow(dead_code)]
 pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
     if !dst.exists() {
         std::fs::create_dir_all(dst)?;

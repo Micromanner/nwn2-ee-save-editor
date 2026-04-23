@@ -18,4 +18,8 @@ mod types;
 
 pub use client::{BridgeClient, BridgeError, BridgeResult};
 pub use resolver::build_client;
-pub use types::{CampaignModuleEntry, CampaignModules, ResolutionKind};
+pub use types::{
+    CampaignModuleEntry, CampaignModules, ConvoFunctor, ConvoGraph, ConvoNode, Faction, FactionRep,
+    FunctorKind, GraphModuleInfo, JournalCategory, JournalData, JournalEntry, ModuleGraph,
+    ModuleVariable, ResolutionKind,
+};

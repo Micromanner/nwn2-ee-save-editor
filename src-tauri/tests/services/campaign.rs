@@ -35,20 +35,6 @@ fn test_campaign_manager_read_operations() {
     assert!(!info.module_name.is_empty());
     assert!(!vars.integers.is_empty() || !vars.strings.is_empty() || !vars.floats.is_empty());
 
-    // Test get_journal
-    let journal = CampaignManager::get_journal(&handler).expect("Failed to get journal");
-    // Classic Campaign should have some quests
-    if journal.is_empty() {
-        println!(
-            "Warning: Journal is empty. This might be expected if module.jrl is missing in the fixture."
-        );
-    } else {
-        assert!(!journal.is_empty());
-    }
-
-    // Check for a specific quest if known, e.g. "00_b_Retake" or similar
-    // (I don't know exact keys, but non-empty is a good start)
-
     // Test analyze_quest_progress
     let overview =
         CampaignManager::analyze_quest_progress(&handler).expect("Failed to analyze quests");

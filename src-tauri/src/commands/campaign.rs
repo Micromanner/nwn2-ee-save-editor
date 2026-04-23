@@ -2,7 +2,6 @@ use crate::commands::{CommandError, CommandResult};
 use crate::parsers::xml::{CompanionStatus, FullSummary, XmlData};
 use crate::services::campaign::CampaignManager;
 use crate::services::campaign::content::{ModuleInfo, ModuleSummary, ModuleVariables};
-use crate::services::campaign::journal::QuestDefinition;
 use crate::services::campaign::settings::{CampaignBackupInfo, CampaignSettings};
 use crate::state::AppState;
 use std::collections::HashMap;
@@ -79,18 +78,6 @@ pub async fn get_module_info_by_id(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     CampaignManager::get_module_info_by_id(handler, &paths, &module_id).map_err(CommandError::from)
-}
-
-#[tauri::command]
-pub async fn get_journal(
-    state: State<'_, AppState>,
-) -> CommandResult<HashMap<String, QuestDefinition>> {
-    let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::get_journal(handler).map_err(CommandError::from)
 }
 
 #[tauri::command]
