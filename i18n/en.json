@@ -459,7 +459,75 @@
     "tabs": {
       "companionInfluence": "Companion Influence",
       "moduleAndVariables": "Module & Variables",
-      "campaignAndVariables": "Campaign & Variables"
+      "campaignAndVariables": "Campaign & Variables",
+      "quests": "Quests"
+    },
+    "quests": {
+      "title": "Quests",
+      "campaignContext": {
+        "campaign": "Campaign",
+        "campaignId": "Campaign ID",
+        "currentModule": "Current module",
+        "modules": "Modules",
+        "orphans": "Aggregation notes",
+        "current": "current",
+        "unresolved": "unresolved",
+        "noCampaign": "No campaign resolved — single-module view only"
+      },
+      "list": {
+        "tag": "Tag",
+        "name": "Name",
+        "priority": "Priority",
+        "xp": "XP",
+        "live": "Live",
+        "source": "Source",
+        "transitions": "Trans.",
+        "definedIn": "Defined in",
+        "searchPlaceholder": "Search tag or name",
+        "statusAll": "All statuses",
+        "statusActive": "Active",
+        "statusComplete": "Complete",
+        "statusUntouched": "Untouched",
+        "sourceAll": "All sources",
+        "sourceNormal": "Normal",
+        "sourceLiveOnly": "Live only",
+        "sourceTransitionOnly": "Transition only",
+        "emptyFiltered": "No quests match the filter",
+        "emptyAll": "This save has no quests to display"
+      },
+      "detail": {
+        "notStarted": "Not started",
+        "final": "final",
+        "noText": "(no text)",
+        "noTransitionsLiveOnly": "No transitions — live-only tag",
+        "noEntries": "No journal entries declared",
+        "header": "Overview",
+        "entries": "Journal entries",
+        "transitions": "Transitions",
+        "liveOverlay": "Live overlay",
+        "groupPrefix": "to state",
+        "coGlobals": "Co-authored globals",
+        "coLocals": "Co-authored locals",
+        "gatingConditions": "Gating conditions",
+        "none": "None",
+        "selectQuest": "Select a quest on the left to view details",
+        "liveOverlayGlobals": "Globals",
+        "liveOverlayLocals": "Module locals",
+        "unset": "(unset)",
+        "expected": "expected"
+      },
+      "sourceBadge": {
+        "normal": "normal",
+        "live_only": "live only",
+        "transition_only": "transition only"
+      },
+      "orphanKind": {
+        "unresolved_campaign": "Campaign unresolved",
+        "unresolved_module": "Module unresolved",
+        "graph_failed": "Graph failed",
+        "journal_read_failed": "Journal read failed"
+      },
+      "failedToLoad": "Failed to load quest graph"
     },
     "companions": {
       "failedToLoad": "Failed to load companions",

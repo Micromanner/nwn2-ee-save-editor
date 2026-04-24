@@ -123,6 +123,22 @@ impl GameData {
         let mut tlk = self.strings.write().ok()?;
         tlk.get_string(str_ref as usize).ok().flatten()
     }
+
+    pub fn get_strings_batch(&self, str_refs: &[i32]) -> std::collections::HashMap<i32, String> {
+        let mut out = std::collections::HashMap::with_capacity(str_refs.len());
+        let Ok(mut tlk) = self.strings.write() else {
+            return out;
+        };
+        for &str_ref in str_refs {
+            if str_ref < 0 {
+                continue;
+            }
+            if let Ok(Some(value)) = tlk.get_string(str_ref as usize) {
+                out.insert(str_ref, value);
+            }
+        }
+        out
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

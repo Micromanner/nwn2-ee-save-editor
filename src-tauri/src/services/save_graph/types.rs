@@ -55,6 +55,10 @@ pub struct TransitionNode {
     pub dlg: String,
     pub node: i32,
     pub new_state: u32,
+    /// Conversation-node `text_strref` from the bridge's `ConvoNode` (stock
+    /// `dialog.tlk` only; caller resolves via `tlk_get_strings`). `None` when the
+    /// underlying node's strref is invalid (bridge emits `-1`).
+    pub text_strref: Option<i32>,
     /// Same-node actions whose `kind` is one of the `global_*` variants.
     pub co_authored_globals: Vec<ConvoFunctor>,
     /// Same-node actions with `kind = module_local`.

@@ -142,3 +142,57 @@ fn save_graph_degrades_without_campaign() {
         graph.orphans
     );
 }
+
+#[test]
+fn save_graph_transitions_carry_text_strref() {
+    let bridge = common::toolset_bridge_exe();
+    let install = common::nwn2_install_path();
+    if common::skip_if_toolset_prereqs_missing(&bridge, &install) {
+        return;
+    }
+
+    let fixture = common::fixtures_path().join("saves/Classic_Campaign");
+    if !fixture.exists() {
+        eprintln!("skipping: Classic_Campaign fixture not present");
+        return;
+    }
+
+    let tmp = TempDir::new().unwrap();
+    let save_path = tmp.path().join("Classic_Campaign_textstrref");
+    common::copy_dir_recursive(&fixture, &save_path).expect("copy fixture");
+
+    let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+
+    let mut paths = NWN2Paths::new();
+    paths.set_game_folder(&install).expect("set_game_folder");
+
+    let (module_info, module_vars) =
+        extract_module_info(&handler, &paths).expect("extract_module_info");
+
+    let cache_dir = TempDir::new().unwrap();
+    let client =
+        BridgeClient::new(bridge, install, cache_dir.path().to_path_buf()).expect("BridgeClient");
+
+    let graph = save_graph::build(BuildContext {
+        handler: &handler,
+        paths: &paths,
+        client: &client,
+        player_index: 0,
+        current_module: &module_info,
+        current_module_vars: &module_vars,
+    })
+    .expect("save_graph::build");
+
+    // At least one transition on the OC should carry a resolvable strref — module
+    // authors overwhelmingly use real localized lines on journal-advancing nodes.
+    let transitions_with_strref = graph
+        .quests
+        .iter()
+        .flat_map(|q| q.transitions.iter())
+        .filter(|t| t.text_strref.is_some())
+        .count();
+    assert!(
+        transitions_with_strref > 0,
+        "expected at least one TransitionNode with a populated text_strref"
+    );
+}

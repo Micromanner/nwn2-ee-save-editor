@@ -260,6 +260,7 @@ pub fn run() {
             crate::commands::savegame::delete_backup,
             // GameData
             crate::commands::gamedata::get_tlk_string,
+            crate::commands::gamedata::tlk_get_strings,
             crate::commands::gamedata::get_2da_row,
             crate::commands::gamedata::list_2da_tables,
             crate::commands::gamedata::initialize_game_data,

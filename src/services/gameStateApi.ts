@@ -1,5 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export type {
+  SaveGraph,
+  QuestAggregate,
+  TransitionNode,
+  JournalCategory,
+  JournalEntry,
+  ConvoFunctor,
+  FunctorKind,
+  AggregatedModule,
+  CampaignSummary,
+  LiveModuleVar,
+  ModuleVarValue,
+  OrphanNote,
+  OrphanKind,
+  ResolutionKind,
+  XmlData,
+} from '@/components/GameState/QuestsTab/types';
+import type { SaveGraph } from '@/components/GameState/QuestsTab/types';
+
 export interface CompanionInfluenceData {
   name: string;
   influence: number | null;
@@ -629,12 +648,26 @@ export class GameStateAPI {
   }
 
   async getEnrichedQuests(characterId: number): Promise<EnrichedQuestsResponse> {
-      return { 
-          quests: [], 
-          unmapped_variables: [], 
-          stats: { total: 0, completed: 0, active: 0, unmapped: 0 }, 
-          cache_info: { cached: false, dialogue_count: 0, mapping_count: 0, campaign_name: "" } 
+      return {
+          quests: [],
+          unmapped_variables: [],
+          stats: { total: 0, completed: 0, active: 0, unmapped: 0 },
+          cache_info: { cached: false, dialogue_count: 0, mapping_count: 0, campaign_name: "" }
       };
+  }
+
+  async getSaveQuestGraph(): Promise<SaveGraph> {
+    return invoke<SaveGraph>('save_get_quest_graph');
+  }
+
+  async getTlkStrings(strRefs: number[]): Promise<Record<number, string>> {
+    if (strRefs.length === 0) return {};
+    const result = await invoke<Record<string, string>>('tlk_get_strings', { strRefs });
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(result)) {
+      out[Number(k)] = v;
+    }
+    return out;
   }
 }
 

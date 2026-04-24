@@ -36,6 +36,17 @@ pub async fn get_tlk_string(state: State<'_, AppState>, str_ref: u32) -> Command
 }
 
 #[tauri::command]
+pub async fn tlk_get_strings(
+    state: State<'_, AppState>,
+    str_refs: Vec<u32>,
+) -> CommandResult<HashMap<u32, String>> {
+    let game_data = state.game_data.read();
+    let signed: Vec<i32> = str_refs.iter().map(|&r| r as i32).collect();
+    let batch = game_data.get_strings_batch(&signed);
+    Ok(batch.into_iter().map(|(k, v)| (k as u32, v)).collect())
+}
+
+#[tauri::command]
 pub async fn get_2da_row(
     state: State<'_, AppState>,
     table_name: String,

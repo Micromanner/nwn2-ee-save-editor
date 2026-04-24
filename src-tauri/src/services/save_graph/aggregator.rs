@@ -288,6 +288,13 @@ fn collect_transitions(
         }
     }
 
+    // Bridge emits -1 as "no valid strref"; normalize to None for the UI.
+    let text_strref = if node.text_strref < 0 {
+        None
+    } else {
+        Some(node.text_strref)
+    };
+
     for action in &node.actions {
         let Some((tag, new_state)) = extract_journal_transition(action) else {
             continue;
@@ -304,6 +311,7 @@ fn collect_transitions(
             dlg: node.dlg.clone(),
             node: node.node,
             new_state,
+            text_strref,
             co_authored_globals: co_globals.clone(),
             co_authored_locals: co_locals.clone(),
             gating_conditions: node.conditions.clone(),

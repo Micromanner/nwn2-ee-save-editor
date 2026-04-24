@@ -13,6 +13,7 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
 import { useTranslations } from '@/hooks/useTranslations';
 import { gameStateAPI } from '@/services/gameStateApi';
+import { QuestsTab } from './QuestsTab/QuestsTab';
 import type {
   CompanionInfluenceData,
   ModuleInfo,
@@ -1041,6 +1042,7 @@ export function GameStatePanel() {
               <Tab id="reputation" title={t('gameState.tabs.companionInfluence')} />
               <Tab id="moduleVars" title={t('gameState.tabs.moduleAndVariables')} />
               <Tab id="campaignSettings" title={t('gameState.tabs.campaignAndVariables')} />
+              <Tab id="quests" title={t('gameState.tabs.quests')} />
             </Tabs>
           </div>
 
@@ -1068,6 +1070,8 @@ export function GameStatePanel() {
             </Card>
           </div>
         )}
+
+        {activeTab === 'quests' && <QuestsTab />}
       </Fragment>
     </div>
   );
