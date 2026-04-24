@@ -709,6 +709,13 @@
     "close": "Закрыть",
     "about": "О программе"
   },
+  "update": {
+    "available": "Доступна новая версия",
+    "current": "Установлено v{current}",
+    "latest": "Последняя v{latest}",
+    "download": "Скачать",
+    "dismiss": "Закрыть"
+  },
   "about": {
     "title": "О программе",
     "appInfo": "Инфо",

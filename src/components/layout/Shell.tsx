@@ -12,6 +12,7 @@ import '../blueprint.css';
 import { TitleBar } from './TitleBar';
 import { Navbar } from './Navbar';
 import { Sidebar, preloadSidebarIcons } from './Sidebar';
+import { UpdateBanner } from './UpdateBanner';
 import { OverviewPanel } from '../Overview/OverviewPanel';
 import { AbilitiesPanel } from '../AbilityScores/AbilitiesPanel';
 import { ClassesPanel } from '../ClassesLevel/ClassesPanel';
@@ -73,6 +74,7 @@ function ShellContent() {
     return (
       <div className="bp-app" style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: T.bg }}>
         <TitleBar onAboutClick={() => setShowAbout(true)} />
+        <UpdateBanner />
         {character && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -96,6 +98,7 @@ function ShellContent() {
   return (
     <div className="bp-app" style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: T.bg }}>
       <TitleBar onAboutClick={() => setShowAbout(true)} />
+      <UpdateBanner />
       <Navbar onBack={handleBackToDashboard} />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />

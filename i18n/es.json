@@ -710,6 +710,13 @@
     "close": "Cerrar",
     "about": "Acerca de"
   },
+  "update": {
+    "available": "Hay una nueva versión disponible",
+    "current": "Instalada v{current}",
+    "latest": "Última v{latest}",
+    "download": "Descargar",
+    "dismiss": "Descartar"
+  },
   "about": {
     "title": "Acerca de",
     "appInfo": "Info de la App",

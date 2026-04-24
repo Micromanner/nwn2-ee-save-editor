@@ -710,6 +710,13 @@
     "close": "Zamknij",
     "about": "O Programie"
   },
+  "update": {
+    "available": "Dostępna jest nowa wersja",
+    "current": "Zainstalowana v{current}",
+    "latest": "Najnowsza v{latest}",
+    "download": "Pobierz",
+    "dismiss": "Odrzuć"
+  },
   "about": {
     "title": "O Programie",
     "appInfo": "Info o App",

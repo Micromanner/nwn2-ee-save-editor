@@ -810,6 +810,13 @@
     "close": "Close",
     "about": "About"
   },
+  "update": {
+    "available": "A new version is available",
+    "current": "Installed v{current}",
+    "latest": "Latest v{latest}",
+    "download": "Download",
+    "dismiss": "Dismiss"
+  },
   "about": {
     "title": "About",
     "appInfo": "App Info",

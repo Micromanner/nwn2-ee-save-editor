@@ -708,6 +708,13 @@
     "close": "Fermer",
     "about": "À Propos"
   },
+  "update": {
+    "available": "Une nouvelle version est disponible",
+    "current": "Installée v{current}",
+    "latest": "Dernière v{latest}",
+    "download": "Télécharger",
+    "dismiss": "Ignorer"
+  },
   "about": {
     "title": "À Propos",
     "appInfo": "Infos App",
