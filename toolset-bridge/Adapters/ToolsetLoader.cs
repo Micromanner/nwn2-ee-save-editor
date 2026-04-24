@@ -35,22 +35,28 @@ public static class ToolsetLoader
         // LoadStandardResources() walks BaseDirectory/Data/*.zip relative to it.
         Directory.SetCurrentDirectory(nwn2Install);
 
-        if (ResourceManager.Instance == null)
-            _ = new NWN2ResourceManager(); // self-assigns ResourceManager.ms_cInstance
+        Timing.Measure("mgr_ctor", () =>
+        {
+            if (ResourceManager.Instance == null)
+                _ = new NWN2ResourceManager(); // self-assigns ResourceManager.ms_cInstance
+        });
 
-        NWN2ResourceManager.Instance.LoadStandardResources();
+        Timing.Measure("load_std_resources", () => NWN2ResourceManager.Instance.LoadStandardResources());
 
         // Load the base TLK so OEIExoLocString.ToString() resolves TLK string refs.
         // Without this, all journal/convo text comes back empty. English-only; per-language
         // support and custom TLKs (module.ifo Mod_CustomTlk) would layer on top.
-        TalkTable.Instance.TalkTableDirectory = nwn2Install;
-        BWLanguages.CurrentLanguage = BWLanguages.BWLanguage.English;
-        TalkTable.Instance.Open(BWLanguages.BWLanguage.English);
+        Timing.Measure("tlk_open", () =>
+        {
+            TalkTable.Instance.TalkTableDirectory = nwn2Install;
+            BWLanguages.CurrentLanguage = BWLanguages.BWLanguage.English;
+            TalkTable.Instance.Open(BWLanguages.BWLanguage.English);
+        });
 
         // ModuleInfo setters reach NWN2ToolsetMainForm.App.DefaultPropertyGrid from
         // OEIUnserialize. Those code paths are patched out in GuiStubPatches so they
         // just assign the backing private field and return. No MainForm needed.
-        GuiStubPatches.Apply();
+        Timing.Measure("harmony_patch", () => GuiStubPatches.Apply());
 
         s_resourceManagerReady = true;
     }

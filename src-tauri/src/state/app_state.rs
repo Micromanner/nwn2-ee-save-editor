@@ -7,6 +7,7 @@ use crate::commands::models::ModelEntry;
 use crate::config::{AppConfig, NWN2Paths};
 use crate::loaders::GameData;
 use crate::services::resource_manager::ResourceManager;
+use crate::services::toolset_bridge::BridgeClient;
 use crate::state::session_state::SessionState;
 
 #[derive(Clone, serde::Serialize)]
@@ -34,6 +35,10 @@ pub struct AppState {
     pub session: Arc<RwLock<SessionState>>,
     pub init_status: Arc<RwLock<InitStatus>>,
     pub model_list_cache: Mutex<Option<Vec<ModelEntry>>>,
+    /// Shared long-lived toolset-bridge client. Spawned lazily on first use so
+    /// startup doesn't pay for it unless/until a Quests-tab or toolset command
+    /// fires; kept across commands to amortize ~1s of bridge init.
+    pub bridge_client: Mutex<Option<Arc<BridgeClient>>>,
 }
 
 impl AppState {
@@ -78,6 +83,7 @@ impl AppState {
             session: Arc::new(RwLock::new(session)),
             init_status: Arc::new(RwLock::new(InitStatus::default())),
             model_list_cache: Mutex::new(None),
+            bridge_client: Mutex::new(None),
         }
     }
 }

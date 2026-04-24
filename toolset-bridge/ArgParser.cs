@@ -19,12 +19,15 @@ public sealed record ParsedArgs(
 public static class ArgParser
 {
     private static readonly HashSet<string> KnownSubcommands =
-        new(StringComparer.OrdinalIgnoreCase) { "journal", "faction", "module", "convo", "graph", "list-modules" };
+        new(StringComparer.OrdinalIgnoreCase) { "journal", "faction", "module", "convo", "graph", "list-modules", "serve" };
 
     // Subcommands that skip the heavy toolset init (ResourceManager, TLK, Harmony patches).
     // They still require --nwn2-install because OEIShared.dll hosts the GFF reader they use.
     public static readonly HashSet<string> NoToolsetInitSubcommands =
         new(StringComparer.OrdinalIgnoreCase) { "list-modules" };
+
+    public static readonly HashSet<string> ServeSubcommands =
+        new(StringComparer.OrdinalIgnoreCase) { "serve" };
 
     public static ParsedArgs Parse(string[] args)
     {
@@ -78,6 +81,12 @@ public static class ArgParser
                 throw new ArgParseException("list-modules requires --campaign <path>");
             if (modulePath != null)
                 throw new ArgParseException("list-modules does not accept --module");
+        }
+        else if (ServeSubcommands.Contains(subcommand))
+        {
+            // serve reads module/campaign paths from its stdin request loop, not argv.
+            if (modulePath != null || campaignPath != null)
+                throw new ArgParseException($"{subcommand} does not accept --module or --campaign");
         }
         else
         {

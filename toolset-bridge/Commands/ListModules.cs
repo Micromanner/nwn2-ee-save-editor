@@ -14,6 +14,15 @@ public static class ListModules
     // no ResourceManager, TLK, or Harmony init required.
     public static int Run(string campaignPath, string nwn2Install, string outPath)
     {
+        var result = Compute(campaignPath, nwn2Install);
+        if (result == null) return ExitCodes.LoadFailed;
+        var json = JsonConvert.SerializeObject(result, Formatting.Indented);
+        CommandOutput.Write(outPath, json);
+        return ExitCodes.Ok;
+    }
+
+    public static CampaignModulesShape? Compute(string campaignPath, string nwn2Install)
+    {
         string camFile;
         string camFolder;
         if (File.Exists(campaignPath) &&
@@ -29,13 +38,13 @@ public static class ListModules
             if (!File.Exists(camFile))
             {
                 Log.Error($"no campaign.cam under {campaignPath}");
-                return ExitCodes.LoadFailed;
+                return null;
             }
         }
         else
         {
             Log.Error($"campaign path not found: {campaignPath}");
-            return ExitCodes.LoadFailed;
+            return null;
         }
 
         var gff = new GFFFile(camFile);
@@ -72,9 +81,7 @@ public static class ListModules
             }
         }
 
-        var json = JsonConvert.SerializeObject(result, Formatting.Indented);
-        CommandOutput.Write(outPath, json);
-        return ExitCodes.Ok;
+        return result;
     }
 
     private static int GetInt(GFFStruct s, string name)

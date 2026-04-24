@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text;
 using ToolsetBridge.Adapters;
 
@@ -14,6 +15,8 @@ public static class Program
         // bytes, making graph() fail with "stdout was not UTF-8" for affected modules.
         Console.OutputEncoding = new UTF8Encoding(false);
 
+        Timing.Start();
+
         ParsedArgs parsed;
         try
         {
@@ -27,7 +30,7 @@ public static class Program
 
         try
         {
-            AssemblyResolver.Install(parsed.Nwn2Install);
+            Timing.Measure("resolver", () => AssemblyResolver.Install(parsed.Nwn2Install));
         }
         catch (Exception ex)
         {
@@ -40,11 +43,13 @@ public static class Program
         {
             try
             {
-                return parsed.Subcommand.ToLowerInvariant() switch
+                var code = parsed.Subcommand.ToLowerInvariant() switch
                 {
                     "list-modules" => Commands.ListModules.Run(parsed.CampaignPath!, parsed.Nwn2Install, parsed.OutPath),
                     _ => UnknownSubcommand(parsed.Subcommand),
                 };
+                Timing.Emit($"subcommand={parsed.Subcommand}");
+                return code;
             }
             catch (Exception ex)
             {
@@ -53,13 +58,31 @@ public static class Program
             }
         }
 
+        // Serve mode: pay resource_mgr init once, then loop on stdin requests.
+        // Module loads happen per-request inside the serve loop (not here).
+        if (ArgParser.ServeSubcommands.Contains(parsed.Subcommand))
+        {
+            try
+            {
+                Timing.Measure("resource_mgr", () => ToolsetLoader.EnsureResourceManager(parsed.Nwn2Install));
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"resource_mgr init failed: {ex}");
+                return ExitCodes.LoadFailed;
+            }
+            Timing.Emit("subcommand=serve phase=init");
+            return Commands.Serve.Run(parsed.Nwn2Install);
+        }
+
         LoadedContext ctx;
         try
         {
-            ToolsetLoader.EnsureResourceManager(parsed.Nwn2Install);
-            ctx = parsed.ModulePath != null
-                ? ToolsetLoader.LoadModule(parsed.ModulePath)
-                : ToolsetLoader.LoadCampaign(parsed.CampaignPath!);
+            Timing.Measure("resource_mgr", () => ToolsetLoader.EnsureResourceManager(parsed.Nwn2Install));
+            var parsedCopy = parsed;
+            ctx = Timing.Measure("module_open", () => parsedCopy.ModulePath != null
+                ? ToolsetLoader.LoadModule(parsedCopy.ModulePath)
+                : ToolsetLoader.LoadCampaign(parsedCopy.CampaignPath!));
         }
         catch (Exception ex)
         {
@@ -71,7 +94,7 @@ public static class Program
 
         try
         {
-            return parsed.Subcommand.ToLowerInvariant() switch
+            var code = parsed.Subcommand.ToLowerInvariant() switch
             {
                 "journal" => Commands.JournalDump.Run(ctx, parsed.OutPath),
                 "faction" => Commands.FactionDump.Run(ctx, parsed.OutPath),
@@ -80,6 +103,8 @@ public static class Program
                 "graph" => Commands.Graph.Run(ctx, parsed.OutPath),
                 _ => UnknownSubcommand(parsed.Subcommand),
             };
+            Timing.Emit($"subcommand={parsed.Subcommand} module={Path.GetFileName(parsed.ModulePath ?? parsed.CampaignPath ?? "")}");
+            return code;
         }
         catch (Exception ex)
         {

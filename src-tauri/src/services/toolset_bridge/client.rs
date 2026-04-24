@@ -1,6 +1,10 @@
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 
+use parking_lot::Mutex;
+use serde::Deserialize;
+use serde_json::value::RawValue;
 use thiserror::Error;
 use tracing::{debug, info, warn};
 
@@ -17,10 +21,10 @@ pub enum BridgeError {
     InputNotFound(PathBuf),
     #[error("toolset bridge is not available on this platform: {0}")]
     PlatformUnsupported(String),
-    #[error("bridge exited with code {code}: {stderr}")]
-    NonZeroExit { code: i32, stderr: String },
-    #[error("bridge terminated by signal: {stderr}")]
-    KilledBySignal { stderr: String },
+    #[error("bridge returned error: {0}")]
+    ServeError(String),
+    #[error("bridge process died: {0}")]
+    ProcessDied(String),
     #[error("failed to parse bridge json: {0}")]
     ParseFailed(#[from] serde_json::Error),
     #[error("io error: {0}")]
@@ -29,10 +33,45 @@ pub enum BridgeError {
 
 pub type BridgeResult<T> = Result<T, BridgeError>;
 
+/// Envelope returned by the serve loop: `{"ok":true,"data":<payload>}` on success,
+/// `{"ok":false,"error":"..."}` on failure. `data` stays as a `RawValue` so callers
+/// can cache the payload JSON verbatim without a parse+reserialize round-trip.
+#[derive(Deserialize)]
+struct Envelope {
+    ok: bool,
+    #[serde(default)]
+    data: Option<Box<RawValue>>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// Long-lived bridge process. One `serve` child is spawned lazily on first
+/// request and reused for every subsequent call, amortizing the ~1s of toolset
+/// init (ResourceManager + Harmony patches + TLK open) across all modules in
+/// a session.
 pub struct BridgeClient {
     bridge_exe: PathBuf,
     nwn2_install: PathBuf,
     cache: GraphCache,
+    conn: Mutex<Option<ServeConnection>>,
+}
+
+struct ServeConnection {
+    child: std::process::Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl Drop for ServeConnection {
+    fn drop(&mut self) {
+        // Best-effort graceful shutdown: ask the serve loop to exit, close our write
+        // end so it reads EOF even if the write failed, then detach. We don't
+        // wait() here because Drop should stay fast; leftover zombies are the OS's
+        // problem at this point (the app is typically shutting down too).
+        let _ = writeln!(self.stdin, "{{\"op\":\"shutdown\"}}");
+        let _ = self.stdin.flush();
+        let _ = self.child.kill();
+    }
 }
 
 impl BridgeClient {
@@ -52,6 +91,7 @@ impl BridgeClient {
             bridge_exe,
             nwn2_install,
             cache,
+            conn: Mutex::new(None),
         })
     }
 
@@ -61,12 +101,12 @@ impl BridgeClient {
         if !campaign_path.exists() {
             return Err(BridgeError::InputNotFound(campaign_path.to_path_buf()));
         }
-        let out = self.run_capture(&[
-            "--campaign",
-            &campaign_path.to_string_lossy(),
-            "list-modules",
-        ])?;
-        Ok(serde_json::from_str(&out)?)
+        let req = serde_json::json!({
+            "op": "list_modules",
+            "campaign": campaign_path.to_string_lossy(),
+        });
+        let data = self.request(&req)?;
+        Ok(serde_json::from_str(data.get())?)
     }
 
     /// Extract the full reference graph (journal, factions, convo, module variables)
@@ -83,38 +123,134 @@ impl BridgeClient {
         }
 
         info!(?module_path, "bridge graph cache miss; invoking bridge");
-        let out = self.run_capture(&["--module", &module_path.to_string_lossy(), "graph"])?;
+        let req = serde_json::json!({
+            "op": "graph",
+            "module": module_path.to_string_lossy(),
+        });
+        let data = self.request(&req)?;
+        let raw = data.get();
 
-        if let Err(e) = self.cache.store(&key, &out) {
+        if let Err(e) = self.cache.store(&key, raw) {
             warn!("failed to write bridge graph cache: {e}");
         }
-        Ok(serde_json::from_str(&out)?)
+        Ok(serde_json::from_str(raw)?)
     }
 
-    fn run_capture(&self, extra: &[&str]) -> BridgeResult<String> {
+    /// Send one request line, read one response line. Retries once after
+    /// respawning the child if the pipe looks broken — covers the case where
+    /// the previous session's child exited between calls.
+    fn request(&self, op: &serde_json::Value) -> BridgeResult<Box<RawValue>> {
+        let mut guard = self.conn.lock();
+
+        match self.request_on_guard(&mut guard, op) {
+            Ok(data) => Ok(data),
+            Err(BridgeError::ProcessDied(msg)) => {
+                warn!("bridge process died ({msg}); respawning and retrying");
+                *guard = None;
+                self.request_on_guard(&mut guard, op)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn request_on_guard(
+        &self,
+        guard: &mut parking_lot::MutexGuard<'_, Option<ServeConnection>>,
+        op: &serde_json::Value,
+    ) -> BridgeResult<Box<RawValue>> {
+        if guard.is_none() {
+            **guard = Some(self.spawn_serve()?);
+        }
+        let conn = guard.as_mut().expect("connection just ensured");
+
+        let mut req_line = serde_json::to_vec(op)?;
+        req_line.push(b'\n');
+        if let Err(e) = conn
+            .stdin
+            .write_all(&req_line)
+            .and_then(|()| conn.stdin.flush())
+        {
+            return Err(BridgeError::ProcessDied(format!("write failed: {e}")));
+        }
+
+        let mut resp = String::new();
+        let n = conn
+            .stdout
+            .read_line(&mut resp)
+            .map_err(|e| BridgeError::ProcessDied(format!("read failed: {e}")))?;
+        if n == 0 {
+            return Err(BridgeError::ProcessDied("stdout closed (EOF)".to_string()));
+        }
+
+        let env: Envelope = serde_json::from_str(&resp)?;
+        if env.ok {
+            env.data.ok_or_else(|| {
+                BridgeError::ServeError("ok=true response missing 'data' field".to_string())
+            })
+        } else {
+            Err(BridgeError::ServeError(
+                env.error
+                    .unwrap_or_else(|| "unknown serve error".to_string()),
+            ))
+        }
+    }
+
+    fn spawn_serve(&self) -> BridgeResult<ServeConnection> {
         let mut cmd = Command::new(&self.bridge_exe);
         cmd.arg("--nwn2-install")
             .arg(&self.nwn2_install)
-            .args(extra);
-        // Bridge writes JSON to stdout when --out is "-" (the default).
+            .arg("serve")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
-        debug!(?cmd, "spawning bridge");
-        let output = cmd.output()?;
+        debug!(?cmd, "spawning bridge serve process");
+        let mut child = cmd.spawn()?;
+        let stdin = child.stdin.take().expect("piped stdin just set");
+        let stdout = BufReader::new(child.stdout.take().expect("piped stdout just set"));
+        let stderr = child.stderr.take().expect("piped stderr just set");
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            return match output.status.code() {
-                Some(c) => Err(BridgeError::NonZeroExit { code: c, stderr }),
-                None => Err(BridgeError::KilledBySignal { stderr }),
-            };
+        spawn_stderr_forwarder(stderr);
+
+        Ok(ServeConnection {
+            child,
+            stdin,
+            stdout,
+        })
+    }
+}
+
+/// Read bridge stderr line-by-line and forward through tracing. Runs on a
+/// dedicated thread for the child's lifetime; terminates when the pipe closes.
+fn spawn_stderr_forwarder(stderr: ChildStderr) {
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line_result in reader.lines() {
+            match line_result {
+                Ok(line) if line.is_empty() => {}
+                Ok(line) => forward_bridge_line(&line),
+                Err(e) => {
+                    debug!("bridge stderr reader exiting: {e}");
+                    break;
+                }
+            }
         }
+    });
+}
 
-        let stdout = String::from_utf8(output.stdout).map_err(|e| {
-            BridgeError::ParseFailed(serde_json::Error::io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("bridge stdout was not UTF-8: {e}"),
-            )))
-        })?;
-        Ok(stdout)
+/// Route each bridge stderr line through `tracing` so `[timing]` breakdowns and
+/// `[info]`/`[warn]`/`[error]` messages land in the app log. Unprefixed lines go
+/// out at debug level so they never disappear silently.
+fn forward_bridge_line(line: &str) {
+    if let Some(rest) = line.strip_prefix("[timing] ") {
+        tracing::info!(target: "toolset_bridge", "{rest}");
+    } else if let Some(rest) = line.strip_prefix("[info] ") {
+        debug!(target: "toolset_bridge", "{rest}");
+    } else if let Some(rest) = line.strip_prefix("[warn] ") {
+        warn!(target: "toolset_bridge", "{rest}");
+    } else if let Some(rest) = line.strip_prefix("[error] ") {
+        tracing::error!(target: "toolset_bridge", "{rest}");
+    } else {
+        debug!(target: "toolset_bridge", "{line}");
     }
 }

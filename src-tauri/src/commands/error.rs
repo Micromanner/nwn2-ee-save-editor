@@ -111,13 +111,13 @@ impl From<crate::services::toolset_bridge::BridgeError> for CommandError {
                 operation: "toolset bridge".to_string(),
                 reason: msg,
             },
-            BridgeError::NonZeroExit { code, stderr } => Self::OperationFailed {
-                operation: format!("toolset bridge (exit {code})"),
-                reason: stderr,
+            BridgeError::ServeError(msg) => Self::OperationFailed {
+                operation: "toolset bridge".to_string(),
+                reason: msg,
             },
-            BridgeError::KilledBySignal { stderr } => Self::OperationFailed {
-                operation: "toolset bridge (killed)".to_string(),
-                reason: stderr,
+            BridgeError::ProcessDied(msg) => Self::OperationFailed {
+                operation: "toolset bridge (process died)".to_string(),
+                reason: msg,
             },
             BridgeError::ParseFailed(err) => Self::ParseError {
                 message: err.to_string(),
