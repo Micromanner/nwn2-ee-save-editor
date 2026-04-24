@@ -1509,6 +1509,54 @@ impl super::Character {
             new_item.insert("Icon".to_string(), GffValue::Dword(id));
         }
 
+        // Seed default model fields so the base item actually renders in-game.
+        // Without these, the save has no ModelPart / Variation values and the
+        // engine draws an empty model. Variant 1 is the universally-present
+        // first variant for every in-world item family in vanilla NWN2.
+        let modeltype = game_data
+            .get_table("baseitems")
+            .and_then(|t| t.get_by_id(base_item_id))
+            .and_then(|row| row_str(&row, "modeltype"))
+            .unwrap_or_default();
+        match modeltype.trim() {
+            "2" => {
+                // ThreePartWeapon: ModelPart1/2/3 pick the three sub-meshes.
+                new_item.insert("ModelPart1".to_string(), GffValue::Byte(1));
+                new_item.insert("ModelPart2".to_string(), GffValue::Byte(1));
+                new_item.insert("ModelPart3".to_string(), GffValue::Byte(1));
+            }
+            "0" => {
+                // SinglePart (shields, misc): game reads ModelPart1 for
+                // variant selection; Variation is vestigial for these.
+                new_item.insert("ModelPart1".to_string(), GffValue::Byte(1));
+            }
+            "3" => {
+                // BodyArmor: variant comes from Variation.
+                new_item.insert("Variation".to_string(), GffValue::Int(1));
+            }
+            _ => {
+                // Modeltype empty / unknown (rings, amulets, etc.) — no
+                // in-world model, nothing to seed.
+            }
+        }
+
+        // Seed an explicit all-zero Tintable for any item with an in-world
+        // model so the in-game render matches the editor viewer (which also
+        // multiplies by zero -> black). Without an explicit Tintable the
+        // engine falls back to the base item's default coloring, which
+        // diverges from what the user sees in the appearance preview.
+        if matches!(modeltype.trim(), "0" | "2" | "3") {
+            let tint = crate::character::appearance_helpers::build_tint_struct(
+                &crate::character::appearance_helpers::TintChannels::default(),
+            );
+            let mut tintable_outer = IndexMap::new();
+            tintable_outer.insert("Tint".to_string(), GffValue::StructOwned(Box::new(tint)));
+            new_item.insert(
+                "Tintable".to_string(),
+                GffValue::StructOwned(Box::new(tintable_outer)),
+            );
+        }
+
         let inventory_index = inv_list.len();
         inv_list.push(new_item);
         self.set_list("ItemList", inv_list);
@@ -2827,23 +2875,50 @@ fn write_appearance_into_item(
         }
     };
 
+    // Only write a numeric appearance field when it already existed in the
+    // GFF or the new value is nonzero. Base-items-tab adds create an item
+    // with no ModelPartN / Variation fields; unconditionally writing 0 into
+    // them tells the engine "render model variant 0" (empty) instead of
+    // falling back to the base item default.
+    let write_num = |item: &mut IndexMap<String, GffValue<'static>>,
+                     key: &str,
+                     value: i32,
+                     typed: GffValue<'static>| {
+        if value != 0 || item.contains_key(key) {
+            item.insert(key.to_string(), typed);
+        }
+    };
+
     let new_variation = typed_int(item.get("Variation"), appearance.variation);
     let new_mp1 = typed_byte(item.get("ModelPart1"), appearance.model_parts[0]);
     let new_mp2 = typed_byte(item.get("ModelPart2"), appearance.model_parts[1]);
     let new_mp3 = typed_byte(item.get("ModelPart3"), appearance.model_parts[2]);
 
-    item.insert("Variation".to_string(), new_variation);
-    item.insert("ModelPart1".to_string(), new_mp1);
-    item.insert("ModelPart2".to_string(), new_mp2);
-    item.insert("ModelPart3".to_string(), new_mp3);
+    write_num(item, "Variation", appearance.variation, new_variation);
+    write_num(item, "ModelPart1", appearance.model_parts[0], new_mp1);
+    write_num(item, "ModelPart2", appearance.model_parts[1], new_mp2);
+    write_num(item, "ModelPart3", appearance.model_parts[2], new_mp3);
 
-    let tint = crate::character::appearance_helpers::build_tint_struct(&appearance.tints);
-    let mut tintable_outer = IndexMap::new();
-    tintable_outer.insert("Tint".to_string(), GffValue::StructOwned(Box::new(tint)));
-    item.insert(
-        "Tintable".to_string(),
-        GffValue::StructOwned(Box::new(tintable_outer)),
-    );
+    // Tintable: same rule — skip if absent and all channels are (0,0,0).
+    // Alpha isn't checked to match `read_item_tint_with_fallback`'s own
+    // "has color" heuristic, so round-trip of a template-backed item with
+    // non-default alpha but zero RGB stays stable either way.
+    let tints_all_zero = [
+        &appearance.tints.channel1,
+        &appearance.tints.channel2,
+        &appearance.tints.channel3,
+    ]
+    .iter()
+    .all(|ch| ch.r == 0 && ch.g == 0 && ch.b == 0);
+    if !tints_all_zero || item.contains_key("Tintable") {
+        let tint = crate::character::appearance_helpers::build_tint_struct(&appearance.tints);
+        let mut tintable_outer = IndexMap::new();
+        tintable_outer.insert("Tint".to_string(), GffValue::StructOwned(Box::new(tint)));
+        item.insert(
+            "Tintable".to_string(),
+            GffValue::StructOwned(Box::new(tintable_outer)),
+        );
+    }
 }
 
 /// Enforce NWN2 GFF schema types on every entry of an item's PropertiesList.
