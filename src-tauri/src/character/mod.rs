@@ -141,6 +141,27 @@ impl Character {
         self.gff.clone()
     }
 
+    /// Run `f` against the character; if it returns `Err`, roll back all GFF
+    /// mutations so the character is left in its pre-call state. Useful for
+    /// multi-step operations (`swap_class`, looping level-up/down) where a
+    /// partial failure would otherwise leave `ClassList` / `LvlStatList` /
+    /// derived stats inconsistent.
+    pub fn transactional<F, T, E>(&mut self, f: F) -> Result<T, E>
+    where
+        F: FnOnce(&mut Self) -> Result<T, E>,
+    {
+        let gff_snapshot = self.gff.clone();
+        let modified_snapshot = self.modified;
+        match f(self) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                self.gff = gff_snapshot;
+                self.modified = modified_snapshot;
+                Err(e)
+            }
+        }
+    }
+
     /// Basic character validation.
     ///
     /// Performs fundamental checks to ensure character integrity.

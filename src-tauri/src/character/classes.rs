@@ -2698,16 +2698,14 @@ impl Character {
             });
         }
 
-        // 1. Remove all levels of old class (use internal to skip recalculate_stats each time)
-        for _ in 0..current_level {
-            self.level_down_internal(old_class_id, game_data)?;
-        }
-
-        self.level_up(new_class_id, game_data)?;
-
-        self.reconcile_class_feats(&[old_class_id], game_data);
-
-        Ok(())
+        self.transactional(|c| {
+            for _ in 0..current_level {
+                c.level_down_internal(old_class_id, game_data)?;
+            }
+            c.level_up(new_class_id, game_data)?;
+            c.reconcile_class_feats(&[old_class_id], game_data);
+            Ok(())
+        })
     }
 
     /// Change the primary class (index 0) and rewrite history.

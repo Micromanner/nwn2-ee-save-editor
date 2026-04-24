@@ -76,6 +76,8 @@ export type ClassesData = ClassesState;
 
 export type { XpProgress } from '@/lib/bindings';
 
+const CLASS_SUBSYSTEMS = ['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells'] as const;
+
 export function useClassesLevel(classesData?: ClassesData | null) {
   const { characterId, invalidateSubsystems, categorizedClasses, isMetadataLoading } = useCharacterContext();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -127,126 +129,85 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     });
   }, [classesData, categorizedClasses, findClassInfoById]);
 
+  // Always refresh class-related subsystems after a mutation (success OR failure)
+  // so a partial backend failure can't leave the UI showing stale pre-failure state.
+  const runWithRefresh = useCallback(async (op: () => Promise<void>) => {
+    setIsUpdating(true);
+    try {
+      await op();
+    } finally {
+      await invalidateSubsystems([...CLASS_SUBSYSTEMS])
+        .catch(err => console.warn('Class subsystem refresh failed', err));
+      setIsUpdating(false);
+    }
+  }, [invalidateSubsystems]);
+
   const adjustClassLevel = useCallback(async (classId: number, delta: number) => {
     if (!characterId) return;
-    
+
     const cls = classes.find(c => c.id === classId);
     if (!cls) return;
 
     const newLevel = Math.max(1, cls.level + delta);
     if (newLevel === cls.level) return;
-    
-    // Check prestige class level limits
-    if (delta > 0 && cls.max_level && cls.max_level > 0) {
-      if (newLevel > cls.max_level) {
-        throw new Error(`Cannot add level to ${cls.name}: maximum level is ${cls.max_level}, character already has ${cls.level} levels`);
-      }
-    }
-    
-    setIsUpdating(true);
 
-    try {
+    if (delta > 0 && cls.max_level && cls.max_level > 0 && newLevel > cls.max_level) {
+      throw new Error(`Cannot add level to ${cls.name}: maximum level is ${cls.max_level}, character already has ${cls.level} levels`);
+    }
+
+    await runWithRefresh(async () => {
       if (delta > 0) {
-          await invoke('add_class_level', { classId, count: delta });
+        await invoke('add_class_level', { classId, count: delta });
       } else {
-          await invoke('remove_class_levels', { classId, count: Math.abs(delta) });
+        await invoke('remove_class_levels', { classId, count: Math.abs(delta) });
       }
-
-      // Silently refresh all dependent subsystems
-      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
-      
-    } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        throw new Error(errorMsg);
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [characterId, classes, invalidateSubsystems]);
+    });
+  }, [characterId, classes, runWithRefresh]);
 
   const changeClass = useCallback(async (classId: number, newClassInfo: ClassInfo) => {
     if (!characterId) return;
-    
-    // Check if new class is already taken
+
     if (classes.some(c => c.id !== classId && c.id === newClassInfo.id)) {
       throw new Error('This class is already assigned to the character');
     }
-    
-    setIsUpdating(true);
 
-    try {
-      await invoke('change_class', { 
-        oldClassId: classId, 
-        newClassId: newClassInfo.id, 
-        preserveLevel: true 
+    await runWithRefresh(async () => {
+      await invoke('change_class', {
+        oldClassId: classId,
+        newClassId: newClassInfo.id,
       });
-
-      // Silently refresh all dependent subsystems
-      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      throw new Error(errorMsg);
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [characterId, classes, invalidateSubsystems]);
+    });
+  }, [characterId, classes, runWithRefresh]);
 
   const addClass = useCallback(async (classInfo: ClassInfo) => {
     if (!characterId || !classesData) return;
-    
-    // Check if class is already assigned
+
     if (classes.some(c => c.id === classInfo.id)) {
       throw new Error('This class is already assigned to the character');
     }
-    
-    // Check class/level limits
     if (classes.length >= 4) {
       throw new Error('Maximum of 4 classes allowed');
     }
-    
     if (classesData.total_level >= 60) {
       throw new Error('Maximum level of 60 reached');
     }
-    
-    setIsUpdating(true);
 
-    try {
-      await invoke('add_class_entry', { 
-        classId: classInfo.id, 
-        level: 1 
-      });
-
-      // Silently refresh all dependent subsystems
-      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
-      
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      throw new Error(errorMsg);
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [characterId, classes, classesData, invalidateSubsystems]);
+    await runWithRefresh(async () => {
+      await invoke('add_class_level', { classId: classInfo.id });
+    });
+  }, [characterId, classes, classesData, runWithRefresh]);
 
   const removeClass = useCallback(async (classId: number) => {
     if (!characterId) return;
-    
+
     if (classes.length <= 1) {
       throw new Error('Character must have at least one class');
     }
-    
-    setIsUpdating(true);
 
-    try {
+    await runWithRefresh(async () => {
       await invoke('remove_class_entry', { classId });
-
-      // Silently refresh all dependent subsystems
-      await invalidateSubsystems(['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells']);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      throw new Error(errorMsg);
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [characterId, classes, invalidateSubsystems]);
+    });
+  }, [characterId, classes, runWithRefresh]);
 
   // Helper function to check if a class can level up
   const canLevelUp = useCallback((classId: number): boolean => {
@@ -304,11 +265,8 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     setIsUpdating(true);
     try {
       await invoke('set_experience', { xp });
-      await fetchXPProgress();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      throw new Error(errorMsg); // Propagate error
     } finally {
+      await fetchXPProgress();
       setIsUpdating(false);
     }
   }, [characterId, fetchXPProgress]);

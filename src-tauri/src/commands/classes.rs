@@ -208,7 +208,8 @@ pub async fn decode_alignment_restriction(bits: i32) -> CommandResult<Option<Str
 pub async fn add_class_level(
     state: State<'_, AppState>,
     class_id: i32,
-) -> CommandResult<LevelUpResult> {
+    count: Option<i32>,
+) -> CommandResult<Vec<LevelUpResult>> {
     let mut session = state.session.write();
     let game_data = state.game_data.read();
     let character = session
@@ -216,8 +217,22 @@ pub async fn add_class_level(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
+    let count = count.unwrap_or(1);
+    if count < 1 {
+        return Err(CommandError::ValidationError {
+            field: "count".to_string(),
+            reason: format!("count must be >= 1, got {count}"),
+        });
+    }
+
     character
-        .level_up(ClassId(class_id), &game_data)
+        .transactional(|c| -> Result<_, crate::character::CharacterError> {
+            let mut results = Vec::with_capacity(count as usize);
+            for _ in 0..count {
+                results.push(c.level_up(ClassId(class_id), &game_data)?);
+            }
+            Ok(results)
+        })
         .map_err(|e| CommandError::ValidationError {
             field: "level_up".to_string(),
             reason: e.to_string(),
@@ -258,15 +273,24 @@ pub async fn remove_class_levels(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    for _ in 0..count {
-        character
-            .level_down(ClassId(class_id), &game_data)
-            .map_err(|e| CommandError::ValidationError {
-                field: "level_down".to_string(),
-                reason: e.to_string(),
-            })?;
+    if count < 1 {
+        return Err(CommandError::ValidationError {
+            field: "count".to_string(),
+            reason: format!("count must be >= 1, got {count}"),
+        });
     }
-    Ok(())
+
+    character
+        .transactional(|c| -> Result<(), crate::character::CharacterError> {
+            for _ in 0..count {
+                c.level_down(ClassId(class_id), &game_data)?;
+            }
+            Ok(())
+        })
+        .map_err(|e| CommandError::ValidationError {
+            field: "level_down".to_string(),
+            reason: e.to_string(),
+        })
 }
 
 #[tauri::command]
