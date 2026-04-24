@@ -181,6 +181,22 @@ pub fn restore_from_backup(
         });
     }
 
+    // Defense-in-depth: refuse to restore a backup into a save_dir it doesn't
+    // belong to. The backup's parent folder is named after its origin save;
+    // it must match the target save_dir's folder name.
+    let backup_origin = backup_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str());
+    let target_name = save_dir.file_name().and_then(|n| n.to_str());
+    if let (Some(origin), Some(target)) = (backup_origin, target_name)
+        && origin != target
+    {
+        return Err(SaveGameError::RestoreFailed(format!(
+            "Backup belongs to save '{origin}' but target is '{target}'; refusing cross-save restore"
+        )));
+    }
+
     let pre_restore_backup = if create_pre_restore && save_dir.exists() {
         Some(create_pre_restore_backup(save_dir)?)
     } else {
@@ -397,5 +413,38 @@ mod tests {
 
         clear_backup_tracking();
         assert!(!has_backup_been_created(&path));
+    }
+
+    #[test]
+    fn test_restore_refuses_cross_save() {
+        let tmp = std::env::temp_dir().join(format!(
+            "nwn2_restore_guard_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let saves_root = tmp.join("saves");
+        let backups_root = saves_root.join("backups");
+        let backup_for_b = backups_root.join("b").join("backup_20260425_000000");
+        let save_a = saves_root.join("a");
+
+        fs::create_dir_all(&backup_for_b).unwrap();
+        fs::create_dir_all(&save_a).unwrap();
+        fs::write(backup_for_b.join("resgff.zip"), b"b-data").unwrap();
+        fs::write(save_a.join("resgff.zip"), b"a-data").unwrap();
+
+        let result = restore_from_backup(&backup_for_b, &save_a, false);
+        assert!(
+            matches!(result, Err(SaveGameError::RestoreFailed(_))),
+            "cross-save restore should be rejected, got: {result:?}"
+        );
+        assert_eq!(
+            fs::read(save_a.join("resgff.zip")).unwrap(),
+            b"a-data",
+            "target save must not be modified when guard trips"
+        );
+
+        fs::remove_dir_all(&tmp).ok();
     }
 }
