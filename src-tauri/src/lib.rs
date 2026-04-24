@@ -329,6 +329,7 @@ pub fn run() {
             crate::commands::toolset::toolset_get_module_variables,
             // Save Graph (aggregated quest view across save + campaign modules)
             crate::commands::save_graph::save_get_quest_graph,
+            crate::commands::save_graph::save_get_quest_transitions,
             // Appearance
             crate::commands::appearance::get_appearance_state,
             crate::commands::appearance::update_appearance,

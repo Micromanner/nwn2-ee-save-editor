@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { HTMLSelect, HTMLTable, InputGroup } from '@blueprintjs/core';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
-import type { QuestAggregate } from './types';
+import type { QuestSummary } from './types';
 import { effectiveSource, selectedRowStyle, type QuestSource } from './utils';
 
 type StatusFilter = 'all' | 'active' | 'complete' | 'untouched';
 type SourceFilter = 'all' | QuestSource;
 type SortKey = 'name' | 'live';
 
-function statusOf(q: QuestAggregate): Exclude<StatusFilter, 'all'> {
+function statusOf(q: QuestSummary): Exclude<StatusFilter, 'all'> {
   if (q.live_state == null) return 'untouched';
   const matching = q.category.entries.find(e => e.id === q.live_state);
   if (matching?.final) return 'complete';
@@ -25,7 +25,7 @@ function EmptyRow({ message }: { message: string }) {
 export function QuestList({
   quests, selectedTag, onSelect,
 }: {
-  quests: QuestAggregate[];
+  quests: QuestSummary[];
   selectedTag: string | null;
   onSelect: (tag: string) => void;
 }) {
@@ -98,7 +98,7 @@ export function QuestList({
           <td style={{ color: source !== 'normal' ? T.negative : T.textMuted }}>
             {source !== 'normal' ? t(`gameState.quests.sourceBadge.${source}`) : ''}
           </td>
-          <td style={{ textAlign: 'right' }}>{q.transitions.length}</td>
+          <td style={{ textAlign: 'right' }}>{q.transition_count}</td>
           <td title={q.defined_in.join(', ')} style={{ color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {q.defined_in.join(', ') || '-'}
           </td>

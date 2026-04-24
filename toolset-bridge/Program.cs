@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using ToolsetBridge.Adapters;
 
 namespace ToolsetBridge;
@@ -7,6 +8,12 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        // Force UTF-8 on stdout so graph JSON with non-ASCII bytes (e.g. localized
+        // dialog strings in Neverwinter_A1) survives the pipe into the Rust client.
+        // Without this, Windows transcodes through the active codepage and corrupts
+        // bytes, making graph() fail with "stdout was not UTF-8" for affected modules.
+        Console.OutputEncoding = new UTF8Encoding(false);
+
         ParsedArgs parsed;
         try
         {

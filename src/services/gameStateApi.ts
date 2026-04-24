@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export type {
   SaveGraph,
-  QuestAggregate,
+  QuestSummary,
   TransitionNode,
   JournalCategory,
   JournalEntry,
@@ -17,7 +17,7 @@ export type {
   ResolutionKind,
   XmlData,
 } from '@/components/GameState/QuestsTab/types';
-import type { SaveGraph } from '@/components/GameState/QuestsTab/types';
+import type { SaveGraph, TransitionNode } from '@/components/GameState/QuestsTab/types';
 
 export interface CompanionInfluenceData {
   name: string;
@@ -658,6 +658,10 @@ export class GameStateAPI {
 
   async getSaveQuestGraph(): Promise<SaveGraph> {
     return invoke<SaveGraph>('save_get_quest_graph');
+  }
+
+  async getSaveQuestTransitions(tag: string): Promise<TransitionNode[]> {
+    return invoke<TransitionNode[]>('save_get_quest_transitions', { tag });
   }
 
   async getTlkStrings(strRefs: number[]): Promise<Record<number, string>> {

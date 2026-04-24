@@ -1,31 +1,46 @@
 import { useEffect } from 'react';
-import { HTMLTable, NonIdealState } from '@blueprintjs/core';
+import { HTMLTable, NonIdealState, Spinner } from '@blueprintjs/core';
 import { GiScrollQuill } from 'react-icons/gi';
 import { T } from '../../theme';
 import { KVRow } from '../../shared';
 import { GameIcon } from '../../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTlkResolver } from '@/hooks/useTlkResolver';
-import type { QuestAggregate, SaveGraph } from './types';
+import type { QuestTransitionsResolver } from '@/hooks/useQuestTransitions';
+import type { QuestSummary, SaveGraph, TransitionNode } from './types';
 import { effectiveSource, selectedRowStyle } from './utils';
 import { TransitionsList } from './TransitionsList';
 import { LiveOverlay } from './LiveOverlay';
 
 export function QuestDetail({
-  quest, graph,
+  quest, graph, transitions,
 }: {
-  quest: QuestAggregate | null;
+  quest: QuestSummary | null;
   graph: SaveGraph;
+  transitions: QuestTransitionsResolver;
 }) {
   const t = useTranslations();
   const tlk = useTlkResolver();
 
+  const entry = quest ? transitions.get(quest.tag) : undefined;
+  const loadedTransitions: TransitionNode[] | null =
+    entry?.state === 'resolved' ? entry.transitions : null;
+
   useEffect(() => {
-    if (quest) tlk.prime(quest.transitions.map(tr => tr.text_strref));
+    if (quest) transitions.load(quest.tag);
+    // `transitions.load` is a stable useCallback; omitted from deps so this only
+    // re-fires when the selected quest actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quest?.tag]);
+
+  useEffect(() => {
+    if (loadedTransitions) {
+      tlk.prime(loadedTransitions.map(tr => tr.text_strref));
+    }
     // `tlk.prime` is a stable useCallback; skip `tlk` from deps to avoid
     // re-firing on every parent render (the resolver returns a fresh object).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quest]);
+  }, [loadedTransitions]);
 
   if (!quest) {
     return (
@@ -122,15 +137,39 @@ export function QuestDetail({
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.transitions')}
         </div>
-        <TransitionsList quest={quest} tlk={tlk} />
+        {renderTransitionsSection(entry, quest, loadedTransitions, tlk, t)}
       </div>
 
       <div style={{ padding: '12px 16px' }}>
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.liveOverlay')}
         </div>
-        <LiveOverlay quest={quest} graph={graph} />
+        <LiveOverlay transitions={loadedTransitions ?? []} graph={graph} />
       </div>
     </div>
   );
+}
+
+function renderTransitionsSection(
+  entry: ReturnType<QuestTransitionsResolver['get']>,
+  quest: QuestSummary,
+  loaded: TransitionNode[] | null,
+  tlk: ReturnType<typeof useTlkResolver>,
+  t: ReturnType<typeof useTranslations>,
+) {
+  if (!entry || entry.state === 'pending') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: T.textMuted }}>
+        <Spinner size={16} /> <span>{t('gameState.quests.detail.loadingTransitions')}</span>
+      </div>
+    );
+  }
+  if (entry.state === 'error') {
+    return (
+      <div style={{ color: T.negative }}>
+        {t('gameState.quests.detail.transitionsFailed')}: {entry.message}
+      </div>
+    );
+  }
+  return <TransitionsList quest={quest} transitions={loaded ?? []} tlk={tlk} />;
 }

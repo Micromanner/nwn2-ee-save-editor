@@ -5,6 +5,7 @@ import { GameIcon } from '../../shared/GameIcon';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { useQuestTransitions } from '@/hooks/useQuestTransitions';
 import { gameStateAPI } from '@/services/gameStateApi';
 import type { SaveGraph } from './types';
 import { CampaignContextCard } from './CampaignContextCard';
@@ -18,6 +19,7 @@ export function QuestsTab() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const transitions = useQuestTransitions();
 
   useEffect(() => {
     setIsLoading(true);
@@ -67,7 +69,7 @@ export function QuestsTab() {
             />
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <QuestDetail quest={selectedQuest} graph={graph} />
+            <QuestDetail quest={selectedQuest} graph={graph} transitions={transitions} />
           </div>
         </div>
       </Card>

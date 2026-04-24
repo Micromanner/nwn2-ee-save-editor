@@ -1,37 +1,82 @@
+use std::sync::Arc;
+
 use tauri::{AppHandle, State};
 
 use crate::commands::campaign::cached_module_info;
 use crate::commands::{CommandError, CommandResult};
-use crate::services::save_graph::{self, BuildContext, SaveGraph};
+use crate::services::save_graph::{
+    self, BuildContext, SaveGraph, SaveGraphSummary, TransitionNode,
+};
 use crate::services::toolset_bridge;
 use crate::state::AppState;
 
+/// Lightweight Quests-tab payload: campaign + module roster + per-quest summaries
+/// without transition arrays. Full `SaveGraph` is cached in `SessionState` so the
+/// companion `save_get_quest_transitions` command is an in-memory lookup.
 #[tauri::command]
 pub async fn save_get_quest_graph(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> CommandResult<SaveGraph> {
-    let (module_info, module_vars) = cached_module_info(&state)?;
+) -> CommandResult<SaveGraphSummary> {
+    let graph = ensure_quest_graph(&app, &state)?;
+    Ok(SaveGraphSummary::from(graph.as_ref()))
+}
 
-    let client = toolset_bridge::build_client(&app, &state).map_err(CommandError::from)?;
+/// Returns the full transition list for a single quest tag, served out of the
+/// session-cached `SaveGraph`. Builds the graph if it hasn't been cached yet.
+#[tauri::command]
+pub async fn save_get_quest_transitions(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    tag: String,
+) -> CommandResult<Vec<TransitionNode>> {
+    let graph = ensure_quest_graph(&app, &state)?;
+    let transitions = graph
+        .quests
+        .iter()
+        .find(|q| q.tag == tag)
+        .map(|q| q.transitions.clone())
+        .unwrap_or_default();
+    Ok(transitions)
+}
 
-    let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let player_index = session
-        .primary_player_index
-        .unwrap_or(session.selected_player_index);
-    let paths = state.paths.read();
+fn ensure_quest_graph(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+) -> CommandResult<Arc<SaveGraph>> {
+    if let Some(cached) = state.session.read().quest_graph_cache.clone() {
+        return Ok(cached);
+    }
 
-    save_graph::build(BuildContext {
-        handler,
-        paths: &paths,
-        client: &client,
-        player_index,
-        current_module: &module_info,
-        current_module_vars: &module_vars,
-    })
-    .map_err(CommandError::from)
+    // cached_module_info internally takes session read/write locks — resolve it
+    // before we take our own session lock for the build.
+    let (module_info, module_vars) = cached_module_info(state)?;
+
+    let client = toolset_bridge::build_client(app, state).map_err(CommandError::from)?;
+
+    let graph = {
+        let session = state.session.read();
+        let handler = session
+            .savegame_handler
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        let player_index = session
+            .primary_player_index
+            .unwrap_or(session.selected_player_index);
+        let paths = state.paths.read();
+
+        save_graph::build(BuildContext {
+            handler,
+            paths: &paths,
+            client: &client,
+            player_index,
+            current_module: &module_info,
+            current_module_vars: &module_vars,
+        })
+        .map_err(CommandError::from)?
+    };
+
+    let shared = Arc::new(graph);
+    state.session.write().quest_graph_cache = Some(shared.clone());
+    Ok(shared)
 }

@@ -500,6 +500,8 @@
         "final": "final",
         "noText": "(no text)",
         "noTransitionsLiveOnly": "No transitions — live-only tag",
+        "loadingTransitions": "Loading transitions…",
+        "transitionsFailed": "Failed to load transitions",
         "noEntries": "No journal entries declared",
         "header": "Overview",
         "entries": "Journal entries",

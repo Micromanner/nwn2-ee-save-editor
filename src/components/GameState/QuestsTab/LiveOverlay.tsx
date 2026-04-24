@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { HTMLTable } from '@blueprintjs/core';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
-import type { ConvoFunctor, LiveModuleVar, QuestAggregate, SaveGraph, XmlData } from './types';
+import type { ConvoFunctor, LiveModuleVar, SaveGraph, TransitionNode, XmlData } from './types';
 
 interface Reference {
   name: string;
@@ -35,10 +35,10 @@ function finalize(map: Map<string, Set<string | number | boolean>>): Reference[]
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function splitReferences(quest: QuestAggregate): { globals: Reference[]; locals: Reference[] } {
+function splitReferences(transitions: TransitionNode[]): { globals: Reference[]; locals: Reference[] } {
   const globalsByName = new Map<string, Set<string | number | boolean>>();
   const localsByName = new Map<string, Set<string | number | boolean>>();
-  for (const tr of quest.transitions) {
+  for (const tr of transitions) {
     for (const source of [tr.co_authored_globals, tr.co_authored_locals, tr.gating_conditions]) {
       for (const f of source) {
         if (isGlobal(f.kind)) collectByName(globalsByName, f);
@@ -67,10 +67,15 @@ function isGlobal(kind: ConvoFunctor['kind']): boolean {
   return kind === 'global_int' || kind === 'global_string' || kind === 'global_float' || kind === 'global_bool';
 }
 
-export function LiveOverlay({ quest, graph }: { quest: QuestAggregate; graph: SaveGraph }) {
+export function LiveOverlay({
+  transitions, graph,
+}: {
+  transitions: TransitionNode[];
+  graph: SaveGraph;
+}) {
   const t = useTranslations();
 
-  const { globals, locals } = useMemo(() => splitReferences(quest), [quest]);
+  const { globals, locals } = useMemo(() => splitReferences(transitions), [transitions]);
 
   if (globals.length === 0 && locals.length === 0) {
     return <div style={{ color: T.textMuted, fontStyle: 'italic' }}>{t('gameState.quests.detail.none')}</div>;

@@ -3,9 +3,10 @@ use serde::Serialize;
 use crate::parsers::xml::XmlData;
 use crate::services::toolset_bridge::{ConvoFunctor, JournalCategory, ResolutionKind};
 
-/// One-shot aggregated view of everything the quest-state editor UI needs:
-/// campaign identity, every module the save touches, per-quest transition graph,
-/// and live overlay of the save's current state.
+/// Full aggregated graph kept server-side (cached in `SessionState`). Per-quest
+/// `transitions` can balloon into multi-MB payloads across a long campaign, so the
+/// IPC response uses the `SaveGraphSummary` projection and clients fetch
+/// transitions on demand via `save_get_quest_transitions`.
 #[derive(Debug, Clone, Serialize)]
 pub struct SaveGraph {
     pub campaign: CampaignSummary,
@@ -14,6 +15,52 @@ pub struct SaveGraph {
     pub globals: XmlData,
     pub current_module_variables: Vec<LiveModuleVar>,
     pub orphans: Vec<OrphanNote>,
+}
+
+/// IPC-facing projection of `SaveGraph` that drops per-quest transition arrays in
+/// favor of `transition_count`. Keeps the initial Quests-tab payload to a size the
+/// webview can deserialize without stalling.
+#[derive(Debug, Clone, Serialize)]
+pub struct SaveGraphSummary {
+    pub campaign: CampaignSummary,
+    pub modules: Vec<AggregatedModule>,
+    pub quests: Vec<QuestSummary>,
+    pub globals: XmlData,
+    pub current_module_variables: Vec<LiveModuleVar>,
+    pub orphans: Vec<OrphanNote>,
+}
+
+impl From<&SaveGraph> for SaveGraphSummary {
+    fn from(g: &SaveGraph) -> Self {
+        let quests = g
+            .quests
+            .iter()
+            .map(|q| QuestSummary {
+                tag: q.tag.clone(),
+                category: q.category.clone(),
+                defined_in: q.defined_in.clone(),
+                live_state: q.live_state,
+                transition_count: q.transitions.len(),
+            })
+            .collect();
+        Self {
+            campaign: g.campaign.clone(),
+            modules: g.modules.clone(),
+            quests,
+            globals: g.globals.clone(),
+            current_module_variables: g.current_module_variables.clone(),
+            orphans: g.orphans.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct QuestSummary {
+    pub tag: String,
+    pub category: JournalCategory,
+    pub defined_in: Vec<String>,
+    pub live_state: Option<u32>,
+    pub transition_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]

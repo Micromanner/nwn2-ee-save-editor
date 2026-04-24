@@ -11,6 +11,7 @@ use crate::services::campaign::content::{ModuleInfo, ModuleVariables};
 use crate::services::item_property_decoder::ItemPropertyDecoder;
 use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
+use crate::services::save_graph::SaveGraph;
 use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 
 pub struct SessionState {
@@ -23,6 +24,12 @@ pub struct SessionState {
     pub item_property_decoder: ItemPropertyDecoder,
     pub feat_cache: Option<Vec<FeatInfo>>,
     pub module_info_cache: Option<(ModuleInfo, ModuleVariables)>,
+    /// Cached aggregated quest graph for the current save. Built on first
+    /// `save_get_quest_graph` call so per-quest transition fetches are O(lookup).
+    /// `Arc` so cache hits don't deep-clone the multi-MB graph — projection and
+    /// per-quest fetch both read through the shared pointer.
+    /// Cleared whenever the save changes (`load_character`, `close_character`).
+    pub quest_graph_cache: Option<Arc<SaveGraph>>,
 }
 
 impl SessionState {
@@ -46,6 +53,7 @@ impl SessionState {
             item_property_decoder,
             feat_cache: None,
             module_info_cache: None,
+            quest_graph_cache: None,
         }
     }
 
@@ -189,6 +197,7 @@ impl SessionState {
         self.current_file_path = Some(path);
         self.save_dir = Some(save_dir);
         self.module_info_cache = None;
+        self.quest_graph_cache = None;
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
 
@@ -256,6 +265,7 @@ impl SessionState {
         self.primary_player_index = None;
         self.feat_cache = None;
         self.module_info_cache = None;
+        self.quest_graph_cache = None;
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
 

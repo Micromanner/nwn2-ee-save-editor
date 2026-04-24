@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
-import type { ConvoFunctor, QuestAggregate, TransitionNode } from './types';
+import type { ConvoFunctor, QuestSummary, TransitionNode } from './types';
 
 function formatParam(param: unknown): string {
   if (param == null) return 'null';
@@ -47,12 +47,18 @@ function FunctorList({ title, items }: { title: string; items: ConvoFunctor[] })
   );
 }
 
-export function TransitionsList({ quest, tlk }: { quest: QuestAggregate; tlk: TlkResolver }) {
+export function TransitionsList({
+  quest, transitions, tlk,
+}: {
+  quest: QuestSummary;
+  transitions: TransitionNode[];
+  tlk: TlkResolver;
+}) {
   const t = useTranslations();
 
   const groups = useMemo(() => {
     const byState = new Map<number, TransitionNode[]>();
-    for (const tr of quest.transitions) {
+    for (const tr of transitions) {
       const list = byState.get(tr.new_state) ?? [];
       list.push(tr);
       byState.set(tr.new_state, list);
@@ -63,9 +69,9 @@ export function TransitionsList({ quest, tlk }: { quest: QuestAggregate; tlk: Tl
       transitions: byState.get(state)!,
       entryText: quest.category.entries.find(e => e.id === state),
     }));
-  }, [quest]);
+  }, [transitions, quest.category.entries]);
 
-  if (quest.transitions.length === 0) {
+  if (transitions.length === 0) {
     return (
       <div style={{ color: T.textMuted, fontStyle: 'italic' }}>
         {t('gameState.quests.detail.noTransitionsLiveOnly')}

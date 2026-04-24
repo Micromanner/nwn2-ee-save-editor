@@ -47,12 +47,15 @@ export interface TransitionNode {
   gating_conditions: ConvoFunctor[];
 }
 
-export interface QuestAggregate {
+/// Lightweight per-quest row returned by `save_get_quest_graph`. Transitions
+/// are omitted to keep the initial payload small; fetch them on demand via
+/// `save_get_quest_transitions`.
+export interface QuestSummary {
   tag: string;
   category: JournalCategory;
   defined_in: string[];
   live_state: number | null;
-  transitions: TransitionNode[];
+  transition_count: number;
 }
 
 export interface AggregatedModule {
@@ -98,7 +101,7 @@ export interface XmlData {
 export interface SaveGraph {
   campaign: CampaignSummary;
   modules: AggregatedModule[];
-  quests: QuestAggregate[];
+  quests: QuestSummary[];
   globals: XmlData;
   current_module_variables: LiveModuleVar[];
   orphans: OrphanNote[];

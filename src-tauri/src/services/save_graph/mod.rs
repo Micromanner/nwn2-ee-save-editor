@@ -12,5 +12,5 @@ mod types;
 pub use aggregator::{BuildContext, build};
 pub use types::{
     AggregatedModule, CampaignSummary, LiveModuleVar, ModuleVarValue, OrphanKind, OrphanNote,
-    QuestAggregate, SaveGraph, TransitionNode,
+    QuestAggregate, QuestSummary, SaveGraph, SaveGraphSummary, TransitionNode,
 };
