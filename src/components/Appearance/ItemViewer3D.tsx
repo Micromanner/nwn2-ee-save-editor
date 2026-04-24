@@ -20,6 +20,17 @@ interface ItemViewer3DProps {
 const PART_LETTERS = ['a', 'b', 'c'] as const;
 const partGroupName = (letter: string) => `__item_part_${letter}`;
 
+// Item meshes tag tint masks with channels 2 and 3 swapped relative to the
+// chest-armor convention used by character body rendering. The shader is
+// shared, so swap on the way in to match what the game actually renders.
+// Backend already does this swap for boots/gloves/bracer override_tints;
+// this covers the top-level tint that applies to the primary item mesh.
+const swapItemTints = (t: TintChannels): TintChannels => ({
+  channel1: t.channel1,
+  channel2: t.channel3,
+  channel3: t.channel2,
+});
+
 // Backend tags composite weapon meshes with part = "item_a" / "item_b" / "item_c";
 // simple items use "item" and collapse into a single bucket ('_').
 const meshPartLetter = (m: MeshData): string => {
@@ -132,7 +143,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         rootGroup.add(rootBone);
       }
 
-      const tintColors = tintChannelsToColors(appearanceRef.current.tints);
+      const tintColors = tintChannelsToColors(swapItemTints(appearanceRef.current.tints));
 
       const buckets: Record<string, MeshData[]> = {};
       for (const m of modelData.meshes) {
@@ -215,7 +226,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         partIndex,
         variant,
       });
-      const tintColors = tintChannelsToColors(appearanceRef.current.tints);
+      const tintColors = tintChannelsToColors(swapItemTints(appearanceRef.current.tints));
       const newGroup = await buildPartGroup(data.meshes, letter, tintColors);
 
       const old = model.getObjectByName(partGroupName(letter));
@@ -238,7 +249,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
   useEffect(() => {
     if (!sceneRef.current) return;
-    const colors = tintChannelsToColors(appearance.tints);
+    const colors = tintChannelsToColors(swapItemTints(appearance.tints));
     updateTintUniforms(sceneRef.current, 'item', colors);
   }, [appearance.tints, sceneRef]);
 
