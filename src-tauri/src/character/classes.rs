@@ -775,6 +775,11 @@ impl Character {
         let mut char_feat_list = self.get_list_owned("FeatList").unwrap_or_default();
         let mut char_skill_list = self.get_list_owned("SkillList").unwrap_or_default();
 
+        // Captured here for sync_mclass_levupin (called near end of fn).
+        let removed_class_idx = class_list
+            .iter()
+            .position(|c| c.get("Class").and_then(gff_value_to_i32) == Some(class_id.0));
+
         // Find all level history entries for this class
         let mut indices_to_remove: Vec<usize> = Vec::new();
         let mut total_hp_reduction = 0i32;
@@ -953,8 +958,10 @@ impl Character {
             }
         }
 
-        // Remove class from ClassList
-        class_list.retain(|c| c.get("Class").and_then(gff_value_to_i32) != Some(class_id.0));
+        // Remove class from ClassList (index captured above)
+        if let Some(idx) = removed_class_idx {
+            class_list.remove(idx);
+        }
 
         // Revert ability increases
         for ability_idx in ability_reductions {
@@ -987,12 +994,37 @@ impl Character {
         self.set_list("FeatList", char_feat_list);
         self.set_list("SkillList", char_skill_list);
 
+        if let Some(idx) = removed_class_idx {
+            self.sync_mclass_levupin(idx);
+        }
+
         // Recalculate stats once at the end
         self.recalculate_stats(game_data)?;
 
         self.reconcile_class_feats(&[class_id], game_data);
 
         Ok(())
+    }
+
+    /// Keep the top-level `MClassLevUpIn` byte in sync after removing the
+    /// class entry at `removed_idx`. The game uses this byte as an index into
+    /// `ClassList` when the player clicks Level Up; if it points past the
+    /// last entry the engine dereferences NULL and crashes nwn2.exe with an
+    /// access violation.
+    fn sync_mclass_levupin(&mut self, removed_idx: usize) {
+        let class_count = self.class_count();
+        if class_count == 0 {
+            self.set_byte("MClassLevUpIn", 0);
+            return;
+        }
+        let current = self.get_i32("MClassLevUpIn").unwrap_or(0).max(0) as usize;
+        let adjusted = match current.cmp(&removed_idx) {
+            std::cmp::Ordering::Greater => current - 1,
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Less => current,
+        };
+        let clamped = adjusted.min(class_count - 1);
+        self.set_byte("MClassLevUpIn", clamped as u8);
     }
 
     pub fn level_history(&self) -> Vec<LevelHistoryEntry> {
@@ -2232,7 +2264,7 @@ impl Character {
 
         // 7. Update ClassList
         let mut class_list = self.get_list_owned("ClassList").unwrap_or_default();
-        let mut entries_to_remove = Vec::new();
+        let mut removed_idx: Option<usize> = None;
         for (i, entry) in class_list.iter_mut().enumerate() {
             if entry.get("Class").and_then(gff_value_to_i32) == Some(class_id.0) {
                 let current_level = entry
@@ -2245,17 +2277,21 @@ impl Character {
                         GffValue::Short((current_level - 1) as i16),
                     );
                 } else {
-                    entries_to_remove.push(i);
+                    removed_idx = Some(i);
                 }
                 break;
             }
         }
-        for i in entries_to_remove.into_iter().rev() {
+        if let Some(i) = removed_idx {
             class_list.remove(i);
         }
 
         self.set_list("ClassList", class_list);
         self.set_list("LvlStatList", lvl_stat_list);
+
+        if let Some(idx) = removed_idx {
+            self.sync_mclass_levupin(idx);
+        }
 
         Ok(())
     }
@@ -3001,6 +3037,45 @@ mod tests {
         assert_eq!(character.class_count(), 1);
         assert!(!character.has_class(ClassId(3)));
         assert!(character.has_class(ClassId(0)));
+    }
+
+    #[test]
+    fn test_remove_class_clamps_mclass_levupin() {
+        let mut character = create_test_character();
+        character.set_byte("MClassLevUpIn", 1);
+        let game_data = create_mock_game_data();
+
+        character.remove_class(ClassId(3), &game_data).unwrap();
+
+        assert_eq!(character.class_count(), 1);
+        assert_eq!(character.get_i32("MClassLevUpIn"), Some(0));
+    }
+
+    #[test]
+    fn test_level_down_to_zero_clamps_mclass_levupin() {
+        // Same fix path via level_down_internal: dropping a class from
+        // level 1 to 0 removes its ClassList entry.
+        let mut character = create_test_character();
+        character.set_byte("MClassLevUpIn", 1);
+        let game_data = create_mock_game_data();
+
+        character.level_down(ClassId(3), &game_data).unwrap();
+        character.level_down(ClassId(3), &game_data).unwrap();
+        character.level_down(ClassId(3), &game_data).unwrap();
+
+        assert_eq!(character.class_count(), 1);
+        assert_eq!(character.get_i32("MClassLevUpIn"), Some(0));
+    }
+
+    #[test]
+    fn test_remove_class_preserves_mclass_levupin_when_unaffected() {
+        let mut character = create_test_character();
+        character.set_byte("MClassLevUpIn", 0);
+        let game_data = create_mock_game_data();
+
+        character.remove_class(ClassId(3), &game_data).unwrap();
+
+        assert_eq!(character.get_i32("MClassLevUpIn"), Some(0));
     }
 
     #[test]

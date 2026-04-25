@@ -33,3 +33,6 @@ mod armor_debug_dump;
 
 #[path = "debugging/dump_gff_reference.rs"]
 mod dump_gff_reference;
+
+#[path = "debugging/diff_class_edits.rs"]
+mod diff_class_edits;
