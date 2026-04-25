@@ -119,6 +119,19 @@ fn determine_class_focus(row: &AHashMap<String, Option<String>>) -> ClassFocus {
     let has_divine = row_bool(row, "hasdivine", false);
     let skill_points = row_int(row, "skillpointbase", 2);
     let hit_die = row_int(row, "hitdie", 8);
+    let bab_table = row_str(row, "attackbonustable").unwrap_or_default();
+    let is_full_bab = bab_table.eq_ignore_ascii_case("CLS_ATK_1");
+
+    // Full-BAB classes are primarily martial even when they have half-caster
+    // spell access (e.g. Paladin, Ranger have hasdivine=1 but are warriors,
+    // not divine casters). Classify them by their non-spell profile.
+    if is_full_bab {
+        return if skill_points >= 6 {
+            ClassFocus::SkillSpecialist
+        } else {
+            ClassFocus::Combat
+        };
+    }
 
     if has_arcane {
         ClassFocus::ArcaneCaster
@@ -354,5 +367,109 @@ pub fn get_categorized_classes(game_data: &GameData) -> CategorizedClasses {
         categories,
         focus_info: get_focus_display_info(),
         total_classes,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(fields: &[(&str, &str)]) -> AHashMap<String, Option<String>> {
+        fields
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), Some((*v).to_string())))
+            .collect()
+    }
+
+    #[test]
+    fn full_bab_half_caster_is_not_divine() {
+        // Ranger: full BAB, 6 skill points, hasdivine=1.
+        let ranger = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "1"),
+            ("skillpointbase", "6"),
+            ("hitdie", "8"),
+            ("attackbonustable", "CLS_ATK_1"),
+        ]);
+        assert_eq!(determine_class_focus(&ranger), ClassFocus::SkillSpecialist);
+
+        // Paladin: full BAB, 2 skill points, hasdivine=1.
+        let paladin = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "1"),
+            ("skillpointbase", "2"),
+            ("hitdie", "10"),
+            ("attackbonustable", "CLS_ATK_1"),
+        ]);
+        assert_eq!(determine_class_focus(&paladin), ClassFocus::Combat);
+    }
+
+    #[test]
+    fn full_casters_keep_caster_focus() {
+        let cleric = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "1"),
+            ("skillpointbase", "2"),
+            ("hitdie", "8"),
+            ("attackbonustable", "CLS_ATK_2"),
+        ]);
+        assert_eq!(determine_class_focus(&cleric), ClassFocus::DivineCaster);
+
+        let druid = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "1"),
+            ("skillpointbase", "4"),
+            ("hitdie", "8"),
+            ("attackbonustable", "CLS_ATK_2"),
+        ]);
+        assert_eq!(determine_class_focus(&druid), ClassFocus::DivineCaster);
+
+        let wizard = row(&[
+            ("hasarcane", "1"),
+            ("hasdivine", "0"),
+            ("skillpointbase", "2"),
+            ("hitdie", "4"),
+            ("attackbonustable", "CLS_ATK_3"),
+        ]);
+        assert_eq!(determine_class_focus(&wizard), ClassFocus::ArcaneCaster);
+
+        let bard = row(&[
+            ("hasarcane", "1"),
+            ("hasdivine", "0"),
+            ("skillpointbase", "6"),
+            ("hitdie", "6"),
+            ("attackbonustable", "CLS_ATK_2"),
+        ]);
+        assert_eq!(determine_class_focus(&bard), ClassFocus::ArcaneCaster);
+    }
+
+    #[test]
+    fn martial_non_casters_unaffected() {
+        let fighter = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "0"),
+            ("skillpointbase", "2"),
+            ("hitdie", "10"),
+            ("attackbonustable", "CLS_ATK_1"),
+        ]);
+        assert_eq!(determine_class_focus(&fighter), ClassFocus::Combat);
+
+        let barbarian = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "0"),
+            ("skillpointbase", "4"),
+            ("hitdie", "12"),
+            ("attackbonustable", "CLS_ATK_1"),
+        ]);
+        assert_eq!(determine_class_focus(&barbarian), ClassFocus::Combat);
+
+        let rogue = row(&[
+            ("hasarcane", "0"),
+            ("hasdivine", "0"),
+            ("skillpointbase", "8"),
+            ("hitdie", "6"),
+            ("attackbonustable", "CLS_ATK_2"),
+        ]);
+        assert_eq!(determine_class_focus(&rogue), ClassFocus::SkillSpecialist);
     }
 }
