@@ -21,12 +21,12 @@ use super::{Character, CharacterError};
 use crate::character::feats::FeatSource;
 use crate::character::gff_helpers::gff_value_to_i32;
 use crate::character::identity::Alignment;
-use crate::character::types::{AbilityIndex, ClassId, FeatId, RaceId, SkillId};
+use crate::character::types::{
+    AbilityIndex, ClassId, FeatId, MAX_CLASSES, MAX_TOTAL_LEVEL, RaceId, SkillId,
+};
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
 use crate::utils::parsing::{row_bool, row_int, row_str};
-
-const MAX_CLASSES: usize = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
 pub struct SkillPointsSummary {
@@ -35,7 +35,6 @@ pub struct SkillPointsSummary {
     pub current_unspent: i32,
     pub mismatch: i32,
 }
-const MAX_TOTAL_LEVEL: i32 = 60;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
 pub struct ClassEntry {
@@ -3024,7 +3023,10 @@ mod tests {
         character.add_class_entry(ClassId(5), 1).unwrap();
         assert_eq!(character.class_count(), 3);
 
-        let result = character.add_class_entry(ClassId(7), 1);
+        character.add_class_entry(ClassId(7), 1).unwrap();
+        assert_eq!(character.class_count(), 4);
+
+        let result = character.add_class_entry(ClassId(9), 1);
         assert!(result.is_err());
     }
 

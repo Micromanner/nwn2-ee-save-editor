@@ -456,7 +456,7 @@ pub const ALIGNMENT_EVIL_THRESHOLD: i32 = 30;
 pub const ALIGNMENT_GOOD_THRESHOLD: i32 = 70;
 
 pub const MAX_TOTAL_LEVEL: i32 = 60;
-pub const MAX_CLASSES: usize = 3;
+pub const MAX_CLASSES: usize = 4;
 pub const HEROIC_LEVEL_CAP: i32 = 20;
 pub const ABILITY_INCREASE_INTERVAL: i32 = 4;
 
