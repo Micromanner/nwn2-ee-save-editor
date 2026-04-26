@@ -78,7 +78,11 @@
     "launchGame": "Lancer le Jeu",
     "launching": "Lancement...",
     "stayInEditor": "Rester dans l'Éditeur",
-    "closeEditorAfterLaunch": "Fermer l'éditeur après lancement"
+    "closeEditorAfterLaunch": "Fermer l'éditeur après lancement",
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "undoLabel": "Annuler : {action}",
+    "redoLabel": "Rétablir : {action}"
   },
   "character": {
     "noCharacter": "Aucun Personnage",

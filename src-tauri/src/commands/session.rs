@@ -245,6 +245,57 @@ pub async fn has_unsaved_changes(state: State<'_, AppState>) -> CommandResult<bo
     Ok(session.has_unsaved_changes())
 }
 
+#[derive(serde::Serialize, specta::Type)]
+pub struct UndoResult {
+    pub applied: bool,
+    pub label: Option<String>,
+    pub can_undo: bool,
+    pub can_redo: bool,
+}
+
+#[derive(serde::Serialize, specta::Type)]
+pub struct HistoryState {
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub undo_label: Option<String>,
+    pub redo_label: Option<String>,
+}
+
+#[tauri::command]
+pub async fn undo(state: State<'_, AppState>) -> CommandResult<UndoResult> {
+    let mut session = state.session.write();
+    let label = session.undo();
+    Ok(UndoResult {
+        applied: label.is_some(),
+        label,
+        can_undo: session.can_undo(),
+        can_redo: session.can_redo(),
+    })
+}
+
+#[tauri::command]
+pub async fn redo(state: State<'_, AppState>) -> CommandResult<UndoResult> {
+    let mut session = state.session.write();
+    let label = session.redo();
+    Ok(UndoResult {
+        applied: label.is_some(),
+        label,
+        can_undo: session.can_undo(),
+        can_redo: session.can_redo(),
+    })
+}
+
+#[tauri::command]
+pub async fn get_history_state(state: State<'_, AppState>) -> CommandResult<HistoryState> {
+    let session = state.session.read();
+    Ok(HistoryState {
+        can_undo: session.can_undo(),
+        can_redo: session.can_redo(),
+        undo_label: session.undo_label().map(str::to_owned),
+        redo_label: session.redo_label().map(str::to_owned),
+    })
+}
+
 #[tauri::command]
 #[instrument(name = "export_to_localvault_command", skip(state))]
 pub async fn export_to_localvault(state: State<'_, AppState>) -> CommandResult<String> {

@@ -58,6 +58,39 @@ pub async fn update_character(
     super::inventory::ensure_decoder_initialized(&state).await;
 
     let mut session = state.session.write();
+    {
+        let mut changed_fields: Vec<&str> = Vec::new();
+        if updates.first_name.is_some() {
+            changed_fields.push("first_name");
+        }
+        if updates.last_name.is_some() {
+            changed_fields.push("last_name");
+        }
+        if updates.age.is_some() {
+            changed_fields.push("age");
+        }
+        if updates.gender.is_some() {
+            changed_fields.push("gender");
+        }
+        if updates.deity.is_some() {
+            changed_fields.push("deity");
+        }
+        if updates.description.is_some() {
+            changed_fields.push("description");
+        }
+        if updates.alignment.is_some() {
+            changed_fields.push("alignment");
+        }
+        if updates.experience.is_some() {
+            changed_fields.push("experience");
+        }
+        let label = if changed_fields.is_empty() {
+            "Update character".to_string()
+        } else {
+            format!("Update character: {}", changed_fields.join(", "))
+        };
+        session.record_history(label, None);
+    }
     let character = session
         .character
         .as_mut()
@@ -122,6 +155,36 @@ pub async fn update_abilities(
 
     {
         let mut session = state.session.write();
+        let changes: Vec<(&str, i32)> = [
+            ("Strength", updates.str_),
+            ("Dexterity", updates.dex),
+            ("Constitution", updates.con),
+            ("Intelligence", updates.int),
+            ("Wisdom", updates.wis),
+            ("Charisma", updates.cha),
+        ]
+        .into_iter()
+        .filter_map(|(name, val)| val.map(|v| (name, v)))
+        .collect();
+        let (label, coalesce_key) = match changes.as_slice() {
+            [] => ("Update abilities".to_string(), None),
+            [(name, value)] => (
+                format!("Set {name} to {value}"),
+                Some(format!("ability:{name}")),
+            ),
+            multi => (
+                format!(
+                    "Set {}",
+                    multi
+                        .iter()
+                        .map(|(n, v)| format!("{n} to {v}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None,
+            ),
+        };
+        session.record_history(label, coalesce_key.as_deref());
         let character = session
             .character
             .as_mut()
@@ -220,6 +283,7 @@ pub async fn apply_point_buy(
 
     {
         let mut session = state.session.write();
+        session.record_history("Apply point buy", None);
         let character = session
             .character
             .as_mut()

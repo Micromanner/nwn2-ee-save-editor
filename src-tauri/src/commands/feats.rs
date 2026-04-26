@@ -105,6 +105,14 @@ pub async fn validate_feat_prerequisites(
 pub async fn add_feat(state: State<'_, AppState>, feat_id: i32) -> CommandResult<FeatActionResult> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let feat_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_feat_name(crate::character::FeatId(feat_id), &game_data)
+    };
+    session.record_history(format!("Add feat: {feat_label}"), None);
 
     // Background feats only take effect when CharBackground (Dword on the character root)
     // points at the matching backgrounds.2da row; adding the feat alone is not enough.
@@ -211,6 +219,14 @@ pub async fn remove_feat(
 ) -> CommandResult<FeatActionResult> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let feat_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_feat_name(FeatId(feat_id), &game_data)
+    };
+    session.record_history(format!("Remove feat: {feat_label}"), None);
 
     // Background feats only take effect when CharBackground points at the matching row;
     // clearing that field is required for the game to treat the character as having no background.
@@ -307,7 +323,19 @@ pub async fn swap_feat(
     old_feat_id: i32,
     new_feat_id: i32,
 ) -> CommandResult<()> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let (old_label, new_label) = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        (
+            character.get_feat_name(FeatId(old_feat_id), &game_data),
+            character.get_feat_name(FeatId(new_feat_id), &game_data),
+        )
+    };
+    session.record_history(format!("Swap feat: {old_label} -> {new_label}"), None);
     let result = {
         let character = session
             .character
@@ -366,6 +394,14 @@ pub async fn get_available_domains(state: State<'_, AppState>) -> CommandResult<
 pub async fn add_domain(state: State<'_, AppState>, domain_id: i32) -> CommandResult<Vec<i32>> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let domain_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_domain_name(DomainId(domain_id), &game_data)
+    };
+    session.record_history(format!("Add domain: {domain_label}"), None);
     let feats = {
         let character = session
             .character
@@ -386,6 +422,14 @@ pub async fn add_domain(state: State<'_, AppState>, domain_id: i32) -> CommandRe
 pub async fn remove_domain(state: State<'_, AppState>, domain_id: i32) -> CommandResult<Vec<i32>> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let domain_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_domain_name(DomainId(domain_id), &game_data)
+    };
+    session.record_history(format!("Remove domain: {domain_label}"), None);
     let feats = {
         let character = session
             .character

@@ -85,7 +85,11 @@
     "launchGame": "Launch Game",
     "launching": "Launching...",
     "stayInEditor": "Stay in Editor",
-    "closeEditorAfterLaunch": "Close editor after launching game"
+    "closeEditorAfterLaunch": "Close editor after launching game",
+    "undo": "Undo",
+    "redo": "Redo",
+    "undoLabel": "Undo: {action}",
+    "redoLabel": "Redo: {action}"
   },
   "character": {
     "noCharacter": "No Character",

@@ -95,6 +95,7 @@ pub async fn get_level_history(
 #[tauri::command]
 pub async fn set_experience(state: State<'_, AppState>, xp: i32) -> CommandResult<()> {
     let mut session = state.session.write();
+    session.record_history(format!("Set XP to {xp}"), Some("xp"));
     let character = session
         .character
         .as_mut()
@@ -113,7 +114,16 @@ pub async fn add_class_entry(
     class_id: i32,
     level: i32,
 ) -> CommandResult<()> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let class_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_class_name(ClassId(class_id), &game_data)
+    };
+    session.record_history(format!("Add level: {class_label}"), None);
     let character = session
         .character
         .as_mut()
@@ -132,7 +142,16 @@ pub async fn set_class_level(
     class_id: i32,
     new_level: i32,
 ) -> CommandResult<()> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let class_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_class_name(ClassId(class_id), &game_data)
+    };
+    session.record_history(format!("Set {class_label} to level {new_level}"), None);
     let character = session
         .character
         .as_mut()
@@ -147,8 +166,16 @@ pub async fn set_class_level(
 
 #[tauri::command]
 pub async fn remove_class_entry(state: State<'_, AppState>, class_id: i32) -> CommandResult<()> {
-    let mut session = state.session.write();
     let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    let class_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_class_name(ClassId(class_id), &game_data)
+    };
+    session.record_history(format!("Remove class: {class_label}"), None);
     let character = session
         .character
         .as_mut()
@@ -210,13 +237,6 @@ pub async fn add_class_level(
     class_id: i32,
     count: Option<i32>,
 ) -> CommandResult<Vec<LevelUpResult>> {
-    let mut session = state.session.write();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
     let count = count.unwrap_or(1);
     if count < 1 {
         return Err(CommandError::ValidationError {
@@ -224,6 +244,21 @@ pub async fn add_class_level(
             reason: format!("count must be >= 1, got {count}"),
         });
     }
+
+    let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    let class_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_class_name(ClassId(class_id), &game_data)
+    };
+    session.record_history(format!("Add {count} {class_label} level(s)"), None);
+    let character = session
+        .character
+        .as_mut()
+        .ok_or(CommandError::NoCharacterLoaded)?;
 
     character
         .transactional(|c| -> Result<_, crate::character::CharacterError> {
@@ -245,8 +280,19 @@ pub async fn change_class(
     old_class_id: i32,
     new_class_id: i32,
 ) -> CommandResult<()> {
-    let mut session = state.session.write();
     let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    let (old_label, new_label) = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        (
+            character.get_class_name(ClassId(old_class_id), &game_data),
+            character.get_class_name(ClassId(new_class_id), &game_data),
+        )
+    };
+    session.record_history(format!("Change class: {old_label} -> {new_label}"), None);
     let character = session
         .character
         .as_mut()
@@ -266,19 +312,27 @@ pub async fn remove_class_levels(
     class_id: i32,
     count: i32,
 ) -> CommandResult<()> {
-    let mut session = state.session.write();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
     if count < 1 {
         return Err(CommandError::ValidationError {
             field: "count".to_string(),
             reason: format!("count must be >= 1, got {count}"),
         });
     }
+
+    let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    let class_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_class_name(ClassId(class_id), &game_data)
+    };
+    session.record_history(format!("Remove {count} {class_label} level(s)"), None);
+    let character = session
+        .character
+        .as_mut()
+        .ok_or(CommandError::NoCharacterLoaded)?;
 
     character
         .transactional(|c| -> Result<(), crate::character::CharacterError> {

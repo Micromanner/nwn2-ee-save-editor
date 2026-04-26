@@ -1,6 +1,8 @@
 use indexmap::IndexMap;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, instrument, warn};
 
 use crate::character::{Character, FeatInfo};
@@ -13,6 +15,17 @@ use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
 use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
+
+const HISTORY_LIMIT: usize = 100;
+const COALESCE_WINDOW: Duration = Duration::from_millis(500);
+
+pub struct HistoryEntry {
+    pub label: String,
+    pub coalesce_key: Option<String>,
+    pub timestamp: Instant,
+    gff_snapshot: IndexMap<String, GffValue<'static>>,
+    modified_snapshot: bool,
+}
 
 pub struct SessionState {
     pub current_file_path: Option<PathBuf>,
@@ -30,6 +43,8 @@ pub struct SessionState {
     /// per-quest fetch both read through the shared pointer.
     /// Cleared whenever the save changes (`load_character`, `close_character`).
     pub quest_graph_cache: Option<Arc<SaveGraph>>,
+    pub undo_stack: VecDeque<HistoryEntry>,
+    pub redo_stack: Vec<HistoryEntry>,
 }
 
 impl SessionState {
@@ -54,6 +69,8 @@ impl SessionState {
             feat_cache: None,
             module_info_cache: None,
             quest_graph_cache: None,
+            undo_stack: VecDeque::new(),
+            redo_stack: Vec::new(),
         }
     }
 
@@ -200,6 +217,7 @@ impl SessionState {
         self.quest_graph_cache = None;
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
+        self.clear_history();
 
         info!("Character loaded successfully");
         Ok(())
@@ -266,7 +284,93 @@ impl SessionState {
         self.feat_cache = None;
         self.module_info_cache = None;
         self.quest_graph_cache = None;
+        self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
+    }
+
+    pub fn record_history(&mut self, label: impl Into<String>, coalesce_key: Option<&str>) {
+        let Some(character) = self.character.as_ref() else {
+            return;
+        };
+        let now = Instant::now();
+        if let Some(coalesce_key) = coalesce_key
+            && let Some(last) = self.undo_stack.back()
+            && last.coalesce_key.as_deref() == Some(coalesce_key)
+            && now.duration_since(last.timestamp) < COALESCE_WINDOW
+        {
+            return;
+        }
+        let entry = HistoryEntry {
+            label: label.into(),
+            coalesce_key: coalesce_key.map(str::to_owned),
+            timestamp: now,
+            gff_snapshot: character.clone_gff(),
+            modified_snapshot: character.is_modified(),
+        };
+        self.undo_stack.push_back(entry);
+        if self.undo_stack.len() > HISTORY_LIMIT {
+            self.undo_stack.pop_front();
+        }
+        self.redo_stack.clear();
+    }
+
+    pub fn undo(&mut self) -> Option<String> {
+        let entry = self.undo_stack.pop_back()?;
+        let label = entry.label.clone();
+        let redo_entry = self.character.as_ref().map(|ch| HistoryEntry {
+            label: label.clone(),
+            coalesce_key: entry.coalesce_key.clone(),
+            timestamp: Instant::now(),
+            gff_snapshot: ch.clone_gff(),
+            modified_snapshot: ch.is_modified(),
+        });
+        if let Some(character) = self.character.as_mut() {
+            character.restore_snapshot(entry.gff_snapshot, entry.modified_snapshot);
+        }
+        if let Some(redo) = redo_entry {
+            self.redo_stack.push(redo);
+        }
+        Some(label)
+    }
+
+    pub fn redo(&mut self) -> Option<String> {
+        let entry = self.redo_stack.pop()?;
+        let label = entry.label.clone();
+        let undo_entry = self.character.as_ref().map(|ch| HistoryEntry {
+            label: label.clone(),
+            coalesce_key: entry.coalesce_key.clone(),
+            timestamp: Instant::now(),
+            gff_snapshot: ch.clone_gff(),
+            modified_snapshot: ch.is_modified(),
+        });
+        if let Some(character) = self.character.as_mut() {
+            character.restore_snapshot(entry.gff_snapshot, entry.modified_snapshot);
+        }
+        if let Some(undo) = undo_entry {
+            self.undo_stack.push_back(undo);
+        }
+        Some(label)
+    }
+
+    pub fn clear_history(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+
+    pub fn undo_label(&self) -> Option<&str> {
+        self.undo_stack.back().map(|e| e.label.as_str())
+    }
+
+    pub fn redo_label(&self) -> Option<&str> {
+        self.redo_stack.last().map(|e| e.label.as_str())
     }
 
     pub fn invalidate_feat_cache(&mut self) {
@@ -564,4 +668,112 @@ fn serialize_player_bic_bytes(
     GffWriter::new(&file_type, &file_version)
         .write_with_struct_id(merged, root_struct_id)
         .map_err(|e| format!("player.bic serialization error: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parsers::gff::GffValue;
+
+    fn make_gff_with_str(str_val: i32) -> IndexMap<String, GffValue<'static>> {
+        let mut map = IndexMap::new();
+        map.insert("Str".to_string(), GffValue::Byte(str_val as u8));
+        map
+    }
+
+    fn read_str(gff: &IndexMap<String, GffValue<'static>>) -> i32 {
+        match gff.get("Str") {
+            Some(GffValue::Byte(v)) => i32::from(*v),
+            _ => -1,
+        }
+    }
+
+    fn make_session_with_character(gff: IndexMap<String, GffValue<'static>>) -> SessionState {
+        let paths = Arc::new(tokio::sync::RwLock::new(
+            crate::config::nwn2_paths::NWN2Paths::new(),
+        ));
+        let rm = Arc::new(tokio::sync::RwLock::new(
+            crate::services::resource_manager::ResourceManager::new(paths),
+        ));
+        let mut session = SessionState::new(rm);
+        session.character = Some(Character::from_gff(gff));
+        session
+    }
+
+    #[test]
+    fn undo_redo_round_trips_attribute_change() {
+        let initial_gff = make_gff_with_str(10);
+        let mut session = make_session_with_character(initial_gff);
+
+        session.record_history("Set STR to 18", None);
+
+        let mutated = make_gff_with_str(18);
+        session
+            .character
+            .as_mut()
+            .unwrap()
+            .restore_snapshot(mutated, true);
+
+        assert_eq!(read_str(session.character.as_ref().unwrap().gff()), 18);
+
+        let label = session.undo();
+        assert_eq!(label.as_deref(), Some("Set STR to 18"));
+        assert_eq!(read_str(session.character.as_ref().unwrap().gff()), 10);
+
+        let label = session.redo();
+        assert_eq!(label.as_deref(), Some("Set STR to 18"));
+        assert_eq!(read_str(session.character.as_ref().unwrap().gff()), 18);
+    }
+
+    #[test]
+    fn coalesce_skips_second_push_within_window() {
+        let gff = make_gff_with_str(10);
+        let mut session = make_session_with_character(gff);
+
+        session.record_history("Set STR to 15", Some("ability:STR"));
+        session.record_history("Set STR to 16", Some("ability:STR"));
+
+        assert_eq!(session.undo_stack.len(), 1);
+        assert_eq!(session.undo_stack.back().unwrap().label, "Set STR to 15");
+    }
+
+    #[test]
+    fn redo_cleared_on_new_history() {
+        let gff = make_gff_with_str(10);
+        let mut session = make_session_with_character(gff);
+
+        session.record_history("first", None);
+        session.undo();
+        assert_eq!(session.redo_stack.len(), 1);
+
+        session.record_history("second", None);
+        assert_eq!(session.redo_stack.len(), 0);
+    }
+
+    #[test]
+    fn clear_history_empties_both_stacks() {
+        let gff = make_gff_with_str(10);
+        let mut session = make_session_with_character(gff);
+
+        session.record_history("op1", None);
+        session.record_history("op2", None);
+        session.undo();
+        session.clear_history();
+
+        assert!(session.undo_stack.is_empty());
+        assert!(session.redo_stack.is_empty());
+    }
+
+    #[test]
+    fn history_limit_enforced() {
+        let gff = make_gff_with_str(10);
+        let mut session = make_session_with_character(gff);
+
+        for i in 0..=HISTORY_LIMIT {
+            session.record_history(format!("op{i}"), None);
+        }
+
+        assert_eq!(session.undo_stack.len(), HISTORY_LIMIT);
+        assert_eq!(session.undo_stack.front().unwrap().label, "op1");
+    }
 }

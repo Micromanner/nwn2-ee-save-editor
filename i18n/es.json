@@ -78,7 +78,11 @@
     "launchGame": "Iniciar Juego",
     "launching": "Iniciando...",
     "stayInEditor": "Permanecer en el Editor",
-    "closeEditorAfterLaunch": "Cerrar editor tras iniciar el juego"
+    "closeEditorAfterLaunch": "Cerrar editor tras iniciar el juego",
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "undoLabel": "Deshacer: {action}",
+    "redoLabel": "Rehacer: {action}"
   },
   "character": {
     "noCharacter": "Sin Personaje",

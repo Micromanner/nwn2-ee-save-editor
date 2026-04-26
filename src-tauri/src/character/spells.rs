@@ -1971,6 +1971,31 @@ impl Character {
         })
     }
 
+    pub fn get_spell_name(&self, spell_id: SpellId, game_data: &GameData) -> String {
+        let Some(spells_table) = game_data.get_table("spells") else {
+            return format!("#{}", spell_id.0);
+        };
+        let Some(spell_data) = spells_table.get_by_id(spell_id.0) else {
+            return format!("#{}", spell_id.0);
+        };
+        if let Some(name_raw) = spell_data.get("name").and_then(|v| v.as_ref()) {
+            if let Ok(strref) = name_raw.parse::<i32>() {
+                if let Some(name) = game_data.get_string(strref)
+                    && !name.is_empty()
+                {
+                    return name;
+                }
+            } else if !name_raw.is_empty() {
+                return name_raw.clone();
+            }
+        }
+        spell_data
+            .get("label")
+            .and_then(|v| v.as_ref())
+            .map(std::string::ToString::to_string)
+            .unwrap_or_else(|| format!("#{}", spell_id.0))
+    }
+
     /// Resolve the school of magic for a spell.
     ///
     /// Returns (school_id, school_name) tuple. The school field can be either

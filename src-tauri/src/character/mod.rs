@@ -141,6 +141,11 @@ impl Character {
         self.gff.clone()
     }
 
+    pub fn restore_snapshot(&mut self, gff: IndexMap<String, GffValue<'static>>, modified: bool) {
+        self.gff = gff;
+        self.modified = modified;
+    }
+
     /// Run `f` against the character; if it returns `Err`, roll back all GFF
     /// mutations so the character is left in its pre-call state. Useful for
     /// multi-step operations (`swap_class`, looping level-up/down) where a

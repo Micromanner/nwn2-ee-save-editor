@@ -78,7 +78,11 @@
     "launchGame": "Запустить игру",
     "launching": "Запуск...",
     "stayInEditor": "Остаться в редакторе",
-    "closeEditorAfterLaunch": "Закрыть редактор после запуска"
+    "closeEditorAfterLaunch": "Закрыть редактор после запуска",
+    "undo": "Отменить",
+    "redo": "Вернуть",
+    "undoLabel": "Отменить: {action}",
+    "redoLabel": "Вернуть: {action}"
   },
   "character": {
     "noCharacter": "Нет персонажа",

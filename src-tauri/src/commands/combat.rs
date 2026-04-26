@@ -60,6 +60,10 @@ pub async fn update_natural_armor(
     value: i32,
 ) -> CommandResult<NaturalArmorChange> {
     let mut session = state.session.write();
+    session.record_history(
+        format!("Set natural armor to {value}"),
+        Some("combat:natural_armor"),
+    );
     let character = session
         .character
         .as_mut()
@@ -80,6 +84,10 @@ pub async fn update_initiative_bonus(
     value: i32,
 ) -> CommandResult<InitiativeChange> {
     let mut session = state.session.write();
+    session.record_history(
+        format!("Set initiative bonus to {value}"),
+        Some("combat:initiative"),
+    );
     let character = session
         .character
         .as_mut()
@@ -113,12 +121,6 @@ pub async fn set_misc_save_bonus(
     save_type: i32,
     value: i32,
 ) -> CommandResult<SaveChange> {
-    let mut session = state.session.write();
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
     let save_enum = match save_type {
         1 => SaveType::Fortitude,
         2 => SaveType::Reflex,
@@ -131,6 +133,16 @@ pub async fn set_misc_save_bonus(
             });
         }
     };
+
+    let mut session = state.session.write();
+    session.record_history(
+        format!("Set misc save bonus to {value}"),
+        Some("combat:misc_save"),
+    );
+    let character = session
+        .character
+        .as_mut()
+        .ok_or(CommandError::NoCharacterLoaded)?;
 
     let old_misc = match save_enum {
         SaveType::Fortitude => character.base_fortitude(),

@@ -90,6 +90,7 @@ pub fn update_appearance(
     let rm = state.resource_manager.blocking_read();
 
     let mut session = state.session.write();
+    session.record_history("Update appearance", None);
     let character = session
         .character
         .as_mut()

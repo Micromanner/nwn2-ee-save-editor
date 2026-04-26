@@ -105,6 +105,9 @@ pub fn run() {
             crate::commands::session::get_session_info,
             crate::commands::session::has_unsaved_changes,
             crate::commands::session::export_to_localvault,
+            crate::commands::session::undo,
+            crate::commands::session::redo,
+            crate::commands::session::get_history_state,
             // Character - Identity
             crate::commands::character::get_character_name,
             crate::commands::character::get_first_name,

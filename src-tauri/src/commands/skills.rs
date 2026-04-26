@@ -123,7 +123,7 @@ pub async fn set_skill_rank(
     let game_data = state.game_data.read();
     let mut session = state.session.write();
 
-    let (old_ranks, old_cost, new_cost) = {
+    let (old_ranks, old_cost, new_cost, skill_label) = {
         let character = session
             .character
             .as_ref()
@@ -138,9 +138,14 @@ pub async fn set_skill_rank(
         );
         let new_cost =
             character.calculate_skill_cost(SkillId(skill_id), ranks, has_able_learner, &game_data);
-        (old_ranks, old_cost, new_cost)
+        let skill_label = character.get_skill_name(SkillId(skill_id), &game_data);
+        (old_ranks, old_cost, new_cost, skill_label)
     };
 
+    session.record_history(
+        format!("Set {skill_label} to rank {ranks}"),
+        Some(&format!("skill:{skill_id}")),
+    );
     let character = session
         .character
         .as_mut()
@@ -174,6 +179,7 @@ pub async fn set_skill_rank(
 pub async fn reset_all_skills(state: State<'_, AppState>) -> CommandResult<i32> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    session.record_history("Reset all skills", None);
     let character = session
         .character
         .as_mut()

@@ -39,6 +39,8 @@ import type {
   FeatId,
   SpellId,
   SkillId,
+  UndoResult,
+  HistoryState,
 } from '../bindings';
 
 /**
@@ -226,6 +228,11 @@ export const CharacterStateAPI = {
 
   removeFromInventory: (index: number) =>
     invoke<RemoveItemResult>('remove_from_inventory', { index }),
+
+  // History
+  getHistoryState: () => invoke<HistoryState>('get_history_state'),
+  undo: () => invoke<UndoResult>('undo'),
+  redo: () => invoke<UndoResult>('redo'),
 };
 
 export default CharacterStateAPI;

@@ -81,6 +81,10 @@ pub async fn get_last_name(state: State<'_, AppState>) -> CommandResult<String> 
 #[tauri::command]
 pub async fn set_first_name(state: State<'_, AppState>, name: String) -> CommandResult<String> {
     let mut session = state.session.write();
+    session.record_history(
+        format!("Set first name to {name}"),
+        Some("identity:first_name"),
+    );
     let character = session
         .character
         .as_mut()
@@ -92,6 +96,10 @@ pub async fn set_first_name(state: State<'_, AppState>, name: String) -> Command
 #[tauri::command]
 pub async fn set_last_name(state: State<'_, AppState>, name: String) -> CommandResult<String> {
     let mut session = state.session.write();
+    session.record_history(
+        format!("Set last name to {name}"),
+        Some("identity:last_name"),
+    );
     let character = session
         .character
         .as_mut()
@@ -113,6 +121,7 @@ pub async fn get_character_age(state: State<'_, AppState>) -> CommandResult<i32>
 #[tauri::command]
 pub async fn set_character_age(state: State<'_, AppState>, age: i32) -> CommandResult<i32> {
     let mut session = state.session.write();
+    session.record_history(format!("Set age to {age}"), Some("identity:age"));
     let character = session
         .character
         .as_mut()
@@ -139,6 +148,7 @@ pub async fn get_experience_points(state: State<'_, AppState>) -> CommandResult<
 #[tauri::command]
 pub async fn set_experience_points(state: State<'_, AppState>, xp: i32) -> CommandResult<i32> {
     let mut session = state.session.write();
+    session.record_history(format!("Set experience to {xp}"), Some("identity:xp"));
     let character = session
         .character
         .as_mut()
@@ -169,6 +179,7 @@ pub async fn set_alignment(
     good_evil: Option<i32>,
 ) -> CommandResult<Alignment> {
     let mut session = state.session.write();
+    session.record_history("Set alignment", None);
     let character = session
         .character
         .as_mut()
@@ -195,6 +206,7 @@ pub async fn get_deity(state: State<'_, AppState>) -> CommandResult<String> {
 #[tauri::command]
 pub async fn set_deity(state: State<'_, AppState>, deity: String) -> CommandResult<String> {
     let mut session = state.session.write();
+    session.record_history(format!("Set deity to {deity}"), Some("identity:deity"));
     let character = session
         .character
         .as_mut()
@@ -228,6 +240,7 @@ pub async fn set_biography(
     description: String,
 ) -> CommandResult<String> {
     let mut session = state.session.write();
+    session.record_history("Update biography", Some("identity:biography"));
     let character = session
         .character
         .as_mut()
@@ -342,6 +355,10 @@ pub async fn set_attribute(
 ) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    session.record_history(
+        format!("Set {ability:?} to {value}"),
+        Some(&format!("ability:{ability:?}")),
+    );
     let character = session
         .character
         .as_mut()
@@ -362,6 +379,13 @@ pub async fn update_hit_points(
     max: Option<i32>,
 ) -> CommandResult<HitPoints> {
     let mut session = state.session.write();
+    let label = match (current, max) {
+        (Some(c), Some(m)) => format!("Set HP to {c}/{m}"),
+        (Some(c), None) => format!("Set HP to {c}/{c}"),
+        (None, Some(m)) => format!("Set HP to {m}/{m}"),
+        (None, None) => "Set HP".to_string(),
+    };
+    session.record_history(label, Some("hp"));
     let character = session
         .character
         .as_mut()
@@ -382,6 +406,39 @@ pub async fn set_all_ability_scores(
 ) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    if let Some(current) = session.character.as_ref() {
+        let changes: Vec<(&str, i32)> = [
+            ("Strength", AbilityIndex::STR, scores.str_),
+            ("Dexterity", AbilityIndex::DEX, scores.dex),
+            ("Constitution", AbilityIndex::CON, scores.con),
+            ("Intelligence", AbilityIndex::INT, scores.int),
+            ("Wisdom", AbilityIndex::WIS, scores.wis),
+            ("Charisma", AbilityIndex::CHA, scores.cha),
+        ]
+        .into_iter()
+        .filter(|(_, idx, val)| current.base_ability(*idx) != *val)
+        .map(|(name, _, val)| (name, val))
+        .collect();
+        let (label, coalesce_key) = match changes.as_slice() {
+            [] => ("Update abilities".to_string(), None),
+            [(name, value)] => (
+                format!("Set {name} to {value}"),
+                Some(format!("ability:{name}")),
+            ),
+            multi => (
+                format!(
+                    "Set {}",
+                    multi
+                        .iter()
+                        .map(|(n, v)| format!("{n} to {v}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None,
+            ),
+        };
+        session.record_history(label, coalesce_key.as_deref());
+    }
     let character = session
         .character
         .as_mut()
@@ -542,8 +599,16 @@ pub async fn change_race(
     race_id: i32,
     subrace: Option<String>,
 ) -> CommandResult<RaceChangedEvent> {
-    let mut session = state.session.write();
     let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    let race_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_race_name_by_id(race_id, &game_data)
+    };
+    session.record_history(format!("Change race to {race_label}"), None);
     let character = session
         .character
         .as_mut()

@@ -1784,6 +1784,16 @@ impl Character {
         row_str(&feat_data, "label").unwrap_or_else(|| format!("Feat {}", feat_id.0))
     }
 
+    pub fn get_domain_name(&self, domain_id: DomainId, game_data: &GameData) -> String {
+        let Some(domains_table) = game_data.get_table("domains") else {
+            return format!("#{}", domain_id.0);
+        };
+        let Some(domain_data) = domains_table.get_by_id(domain_id.0) else {
+            return format!("#{}", domain_id.0);
+        };
+        Self::resolve_domain_name(&domain_data, game_data)
+    }
+
     // ========== BONUS CALCULATION FROM FEAT DESCRIPTIONS ==========
 
     pub fn get_feat_save_bonuses(&self, game_data: &GameData) -> SaveBonuses {

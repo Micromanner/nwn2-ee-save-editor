@@ -2542,6 +2542,16 @@ impl super::Character {
 
         None
     }
+
+    pub fn get_base_item_name(&self, base_item_id: i32, game_data: &GameData) -> String {
+        let Some(table) = game_data.get_table("baseitems") else {
+            return format!("#{base_item_id}");
+        };
+        let Some(row) = table.get_by_id(base_item_id) else {
+            return format!("#{base_item_id}");
+        };
+        resolve_base_item_name(&row, base_item_id, game_data)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]

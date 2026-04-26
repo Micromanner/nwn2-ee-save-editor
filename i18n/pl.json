@@ -80,7 +80,11 @@
     "launchGame": "Uruchom Grę",
     "launching": "Uruchamianie...",
     "stayInEditor": "Zostań w Edytorze",
-    "closeEditorAfterLaunch": "Zamknij edytor po uruchomieniu gry"
+    "closeEditorAfterLaunch": "Zamknij edytor po uruchomieniu gry",
+    "undo": "Cofnij",
+    "redo": "Ponów",
+    "undoLabel": "Cofnij: {action}",
+    "redoLabel": "Ponów: {action}"
   },
   "character": {
     "noCharacter": "Brak Postaci",

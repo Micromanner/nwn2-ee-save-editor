@@ -13,6 +13,7 @@ import type {
   ClassesState,
   SpellsState,
   FullInventorySummary,
+  HistoryState,
 } from '@/lib/bindings';
 
 // Re-export the Rust types as our subsystem data types
@@ -147,6 +148,11 @@ interface CharacterContextState {
   setTotalFeats: (count: number) => void;
   setTotalSpells: (count: number) => void;
   
+  // History
+  historyState: HistoryState | null;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string, playerIndex?: number) => Promise<void>;
@@ -239,6 +245,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [allFeatsCache, setAllFeatsCache] = useState<LegitimateFeatsResponse | null>(null);
   const [allSpellsCache, setAllSpellsCache] = useState<LegitimateSpellsResponse | null>(null);
   const [itemEditorMetadata, setItemEditorMetadata] = useState<ItemEditorMetadataResponse | null>(null);
+  const [historyState, setHistoryState] = useState<HistoryState | null>(null);
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -354,6 +361,15 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const refreshHistoryState = useCallback(async () => {
+    try {
+      const state = await CharacterStateAPI.getHistoryState();
+      setHistoryState(state);
+    } catch {
+      // No character loaded or history not available — ignore silently
+    }
+  }, []);
+
   // Invalidate and silently refresh multiple subsystems
   const invalidateSubsystems = useCallback(async (subsystems: SubsystemType[]) => {
     if (!characterId) return;
@@ -365,7 +381,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     );
 
     await Promise.all(refreshPromises);
-  }, [characterId, loadSubsystem]);
+    void refreshHistoryState();
+  }, [characterId, loadSubsystem, refreshHistoryState]);
 
   // Clear character data and close backend session
   const clearCharacter = useCallback(async () => {
@@ -378,7 +395,32 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setAllFeatsCache(null);
     setAllSpellsCache(null);
     setItemEditorMetadata(null);
+    setHistoryState(null);
   }, []);
+
+  const allSubsystems: SubsystemType[] = ['feats', 'spells', 'skills', 'inventory', 'abilityScores', 'combat', 'saves', 'classes', 'appearance'];
+
+  const undo = useCallback(async () => {
+    try {
+      const result = await CharacterStateAPI.undo();
+      if (result.applied) {
+        await invalidateSubsystems(allSubsystems);
+      }
+    } catch (err) {
+      console.error('Undo failed:', err);
+    }
+  }, [invalidateSubsystems]);
+
+  const redo = useCallback(async () => {
+    try {
+      const result = await CharacterStateAPI.redo();
+      if (result.applied) {
+        await invalidateSubsystems(allSubsystems);
+      }
+    } catch (err) {
+      console.error('Redo failed:', err);
+    }
+  }, [invalidateSubsystems]);
 
   const loadMetadataInternal = useCallback(async (_id: number) => {
     setIsMetadataLoading(true);
@@ -442,6 +484,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
       // Reset subsystems when loading new character
       setSubsystems(initializeSubsystems());
+      setHistoryState(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load character';
       setError(errorMessage);
@@ -477,6 +520,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       
       // Reset subsystems
       setSubsystems(initializeSubsystems());
+      setHistoryState(null);
 
       // Load metadata and preload game data in background (non-blocking)
       loadMetadataInternal(newCharacterId);
@@ -526,6 +570,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     allFeatsCache,
     allSpellsCache,
     itemEditorMetadata,
+    historyState,
+    undo,
+    redo,
     loadCharacter,
     importCharacter,
     loadSubsystem,

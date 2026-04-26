@@ -867,6 +867,20 @@ export interface SessionInfo {
   dirty: boolean;
 }
 
+export interface UndoResult {
+  applied: boolean;
+  label: string | null;
+  can_undo: boolean;
+  can_redo: boolean;
+}
+
+export interface HistoryState {
+  can_undo: boolean;
+  can_redo: boolean;
+  undo_label: string | null;
+  redo_label: string | null;
+}
+
 // =============================================================================
 // Error Handling
 // =============================================================================

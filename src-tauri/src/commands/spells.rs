@@ -204,7 +204,22 @@ pub async fn add_known_spell(
     spell_level: i32,
     spell_id: i32,
 ) -> CommandResult<SpellChangeResult> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let (spell_label, class_label) = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        let spell_label = character.get_spell_name(SpellId(spell_id), &game_data);
+        let class_label = character
+            .class_entries()
+            .get(class_index)
+            .map(|e| character.get_class_name(e.class_id, &game_data))
+            .unwrap_or_else(|| format!("#{class_index}"));
+        (spell_label, class_label)
+    };
+    session.record_history(format!("Learn {spell_label} ({class_label})"), None);
     let character = session
         .character
         .as_mut()
@@ -233,7 +248,22 @@ pub async fn remove_known_spell(
     spell_level: i32,
     spell_id: i32,
 ) -> CommandResult<SpellChangeResult> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let (spell_label, class_label) = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        let spell_label = character.get_spell_name(SpellId(spell_id), &game_data);
+        let class_label = character
+            .class_entries()
+            .get(class_index)
+            .map(|e| character.get_class_name(e.class_id, &game_data))
+            .unwrap_or_else(|| format!("#{class_index}"));
+        (spell_label, class_label)
+    };
+    session.record_history(format!("Forget {spell_label} ({class_label})"), None);
     let character = session
         .character
         .as_mut()
@@ -264,7 +294,16 @@ pub async fn prepare_spell(
     metamagic: u8,
     ready: bool,
 ) -> CommandResult<SpellChangeResult> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let spell_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_spell_name(SpellId(spell_id), &game_data)
+    };
+    session.record_history(format!("Prepare {spell_label}"), None);
     let character = session
         .character
         .as_mut()
@@ -299,7 +338,20 @@ pub async fn clear_memorized_spells(
     class_index: usize,
     spell_level: Option<i32>,
 ) -> CommandResult<()> {
+    let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let class_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character
+            .class_entries()
+            .get(class_index)
+            .map(|e| character.get_class_name(e.class_id, &game_data))
+            .unwrap_or_else(|| format!("#{class_index}"))
+    };
+    session.record_history(format!("Clear prepared spells: {class_label}"), None);
     let character = session
         .character
         .as_mut()

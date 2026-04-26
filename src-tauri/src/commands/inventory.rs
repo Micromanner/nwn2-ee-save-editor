@@ -131,6 +131,7 @@ pub async fn get_gold(state: State<'_, AppState>) -> CommandResult<u32> {
 #[tauri::command]
 pub async fn set_gold(state: State<'_, AppState>, amount: u32) -> CommandResult<u32> {
     let mut session = state.session.write();
+    session.record_history(format!("Set gold to {amount}"), Some("gold"));
     let character = session
         .character
         .as_mut()
@@ -142,6 +143,7 @@ pub async fn set_gold(state: State<'_, AppState>, amount: u32) -> CommandResult<
 #[tauri::command]
 pub async fn add_gold(state: State<'_, AppState>, amount: i32) -> CommandResult<u32> {
     let mut session = state.session.write();
+    session.record_history(format!("Add {amount} gold"), Some("gold"));
     let character = session
         .character
         .as_mut()
@@ -202,6 +204,7 @@ pub async fn equip_item(
 ) -> CommandResult<EquipResult> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    session.record_history(format!("Equip item to {slot:?}"), None);
     let character = session
         .character
         .as_mut()
@@ -215,6 +218,7 @@ pub async fn unequip_item(
     slot: EquipmentSlot,
 ) -> CommandResult<UnequipResult> {
     let mut session = state.session.write();
+    session.record_history(format!("Unequip {slot:?}"), None);
     let character = session
         .character
         .as_mut()
@@ -247,6 +251,14 @@ pub async fn add_to_inventory(
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    let item_label = {
+        let character = session
+            .character
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        character.get_base_item_name(base_item_id, &game_data)
+    };
+    session.record_history(format!("Add {item_label} (x{stack_size})"), None);
     let character = session
         .character
         .as_mut()
@@ -260,6 +272,7 @@ pub async fn remove_from_inventory(
     index: usize,
 ) -> CommandResult<RemoveItemResult> {
     let mut session = state.session.write();
+    session.record_history(format!("Remove item from slot {index}"), None);
     let character = session
         .character
         .as_mut()
@@ -587,9 +600,22 @@ pub async fn add_item_from_template(
             .map_err(|e| CommandError::Internal(format!("Failed to load item template: {e}")))?
     };
 
+    let item_label = item_fields
+        .get("LocalizedName")
+        .and_then(|v| {
+            if let crate::parsers::gff::GffValue::LocString(ls) = v {
+                ls.substrings.first().map(|s| s.string.to_string())
+            } else {
+                None
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| resref.clone());
+
     // Now acquire sync locks and add item
     let game_data = state.game_data.read();
     let mut session = state.session.write();
+    session.record_history(format!("Add {item_label} from template"), None);
     let character = session
         .character
         .as_mut()
@@ -865,6 +891,12 @@ pub async fn update_item(
     request: UpdateItemRequest,
 ) -> CommandResult<UpdateItemResponse> {
     let mut session = state.session.write();
+    let label = match (&request.slot, request.item_index) {
+        (Some(slot), _) => format!("Update item at slot {slot}"),
+        (None, Some(idx)) => format!("Update item at slot {idx}"),
+        _ => "Update item".to_string(),
+    };
+    session.record_history(label, None);
     let character = session
         .character
         .as_mut()

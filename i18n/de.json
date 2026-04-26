@@ -78,7 +78,11 @@
     "launchGame": "Spiel starten",
     "launching": "Wird gestartet...",
     "stayInEditor": "Im Editor bleiben",
-    "closeEditorAfterLaunch": "Editor nach Spielstart schließen"
+    "closeEditorAfterLaunch": "Editor nach Spielstart schließen",
+    "undo": "Rückgängig",
+    "redo": "Wiederholen",
+    "undoLabel": "Rückgängig: {action}",
+    "redoLabel": "Wiederholen: {action}"
   },
   "character": {
     "noCharacter": "Kein Charakter",
