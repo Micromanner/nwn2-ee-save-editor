@@ -129,6 +129,7 @@ fn save_graph_degrades_without_campaign() {
         player_index: 0,
         current_module: &module_info,
         current_module_vars: &module_vars,
+        progress: None,
     })
     .expect("save_graph::build should degrade, not error");
 

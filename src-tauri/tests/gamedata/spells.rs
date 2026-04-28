@@ -114,7 +114,7 @@ async fn test_spell_schools() {
 
     println!("\n=== Spell Schools ===");
     let mut school_vec: Vec<_> = schools.into_iter().collect();
-    school_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    school_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     for (school, count) in school_vec {
         println!("  {school}: {count} spells");
