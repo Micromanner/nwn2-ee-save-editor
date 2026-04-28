@@ -3,7 +3,8 @@ import { Icon } from '@blueprintjs/core';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
-import type { ConvoFunctor, QuestSummary, TransitionNode } from './types';
+import type { AggregatedModule, ConvoFunctor, QuestSummary, TransitionNode } from './types';
+import { useModuleNameResolver } from './useModuleNameResolver';
 
 function formatParam(param: unknown): string {
   if (param == null) return 'null';
@@ -68,11 +69,12 @@ interface SubGroup {
 }
 
 function TransitionGroup({
-  group, isFirst, tlk,
+  group, isFirst, tlk, resolveModule,
 }: {
   group: SubGroup;
   isFirst: boolean;
   tlk: TlkResolver;
+  resolveModule: (id: string) => string;
 }) {
   const t = useTranslations();
   const [expanded, setExpanded] = useState(false);
@@ -83,8 +85,9 @@ function TransitionGroup({
   return (
     <div style={{ padding: '8px 10px', borderTop: isFirst ? 'none' : `1px dashed ${T.borderLight}` }}>
       {!isMulti && (
-        <div className="t-mono" style={{ color: T.textMuted }}>
-          {rep.module} / {rep.dlg} / {rep.node}
+        <div style={{ color: T.textMuted }} title={`${rep.module} / ${rep.dlg} / ${rep.node}`}>
+          {resolveModule(rep.module)}
+          <span className="t-mono"> / {rep.dlg} / {rep.node}</span>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginTop: isMulti ? 0 : 2 }}>
@@ -127,10 +130,11 @@ function TransitionGroup({
               {group.members.map((m, i) => (
                 <div
                   key={`${m.module}-${m.dlg}-${m.node}-${i}`}
-                  className="t-mono"
                   style={{ color: T.textMuted }}
+                  title={`${m.module} / ${m.dlg} / ${m.node}`}
                 >
-                  {m.module} / {m.dlg} / {m.node}
+                  {resolveModule(m.module)}
+                  <span className="t-mono"> / {m.dlg} / {m.node}</span>
                 </div>
               ))}
             </div>
@@ -142,13 +146,16 @@ function TransitionGroup({
 }
 
 export function TransitionsList({
-  quest, transitions, tlk,
+  quest, transitions, tlk, modules,
 }: {
   quest: QuestSummary;
   transitions: TransitionNode[];
   tlk: TlkResolver;
+  modules: AggregatedModule[];
 }) {
   const t = useTranslations();
+
+  const { resolve: resolveModule } = useModuleNameResolver(modules);
 
   const groups = useMemo(() => {
     const byState = new Map<number, TransitionNode[]>();
@@ -210,6 +217,7 @@ export function TransitionsList({
               group={sub}
               isFirst={i === 0}
               tlk={tlk}
+              resolveModule={resolveModule}
             />
           ))}
         </div>

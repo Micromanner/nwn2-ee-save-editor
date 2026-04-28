@@ -126,6 +126,7 @@ export function QuestsTab() {
           <div style={{ flex: 3, minWidth: 360, borderRight: `1px solid ${T.borderLight}`, overflowY: 'auto' }}>
             <QuestList
               quests={graph.quests}
+              modules={graph.modules}
               selectedTag={effectiveTag}
               onSelect={setSelectedTag}
             />

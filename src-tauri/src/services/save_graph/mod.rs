@@ -7,6 +7,7 @@
 
 mod aggregator;
 mod journal_reader;
+mod module_name;
 mod types;
 
 pub use aggregator::{BuildContext, build};

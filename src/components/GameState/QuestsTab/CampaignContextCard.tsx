@@ -29,6 +29,11 @@ export function CampaignContextCard({
   const t = useTranslations();
   const hasCampaign = campaign.campaign_path !== null;
 
+  const currentModule = modules.find(m => m.is_current);
+  const currentModuleLabel = currentModule?.display_name
+    || campaign.current_module_id
+    || '-';
+
   return (
     <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
       <div style={{ padding: '10px 16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px 16px' }}>
@@ -42,7 +47,11 @@ export function CampaignContextCard({
         />
         <KVRow
           label={t('gameState.quests.campaignContext.currentModule')}
-          value={<span className="t-mono">{campaign.current_module_id || '-'}</span>}
+          value={
+            <span title={campaign.current_module_id || undefined}>
+              {currentModuleLabel}
+            </span>
+          }
         />
       </div>
 
@@ -54,7 +63,7 @@ export function CampaignContextCard({
           {modules.map(m => (
             <span
               key={m.name}
-              className="t-mono"
+              title={m.name}
               style={{
                 padding: '2px 8px',
                 borderRadius: 3,
@@ -66,7 +75,7 @@ export function CampaignContextCard({
                 gap: 4,
               }}
             >
-              {m.name}
+              {m.display_name || m.name}
               {m.is_current && <span className="t-semibold" style={{ color: T.accent }}>({t('gameState.quests.campaignContext.current')})</span>}
               {m.resolution_kind === 'unresolved' && (
                 <span style={{ color: T.negative }}>({t('gameState.quests.campaignContext.unresolved')})</span>

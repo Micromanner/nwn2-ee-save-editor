@@ -7,6 +7,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useTlkResolver } from '@/hooks/useTlkResolver';
 import type { QuestTransitionsResolver } from '@/hooks/useQuestTransitions';
 import type { QuestSummary, SaveGraph, TransitionNode } from './types';
+import { useModuleNameResolver } from './useModuleNameResolver';
 import { effectiveSource, selectedRowStyle } from './utils';
 import { TransitionsList } from './TransitionsList';
 import { LiveOverlay } from './LiveOverlay';
@@ -57,6 +58,9 @@ export function QuestDetail({
     : null;
   const source = effectiveSource(quest);
 
+  const { resolveMany } = useModuleNameResolver(graph.modules);
+  const resolvedDefinedIn = quest.defined_in.length === 0 ? '-' : resolveMany(quest.defined_in);
+
   return (
     <div>
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
@@ -79,7 +83,7 @@ export function QuestDetail({
             {t(`gameState.quests.sourceBadge.${source}`)}
           </span>
           <span style={{ color: T.textMuted }}>{t('gameState.quests.list.definedIn')}</span>
-          <span className="t-semibold" style={{ color: T.text }}>{quest.defined_in.length > 0 ? quest.defined_in.join(', ') : '-'}</span>
+          <span className="t-semibold" title={quest.defined_in.join(', ')} style={{ color: T.text }}>{resolvedDefinedIn}</span>
 
           <span style={{ color: T.textMuted }}>{t('gameState.quests.list.live')}</span>
           <span className="t-semibold" style={{ gridColumn: '2 / -1', color: T.text }}>
@@ -171,5 +175,5 @@ function renderTransitionsSection(
       </div>
     );
   }
-  return <TransitionsList quest={quest} transitions={loaded ?? []} tlk={tlk} />;
+  return <TransitionsList quest={quest} transitions={loaded ?? []} tlk={tlk} modules={graph.modules} />;
 }

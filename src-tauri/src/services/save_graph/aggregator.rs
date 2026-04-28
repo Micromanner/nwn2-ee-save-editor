@@ -16,6 +16,7 @@ use crate::services::toolset_bridge::{
 };
 
 use super::journal_reader::read_live_journal;
+use super::module_name::read_module_display_name;
 use super::types::{
     AggregatedModule, CampaignSummary, LiveModuleVar, ModuleVarValue, OrphanKind, OrphanNote,
     QuestAggregate, QuestGraphProgress, SaveGraph, TransitionNode,
@@ -130,10 +131,21 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
         } else {
             5.0 + ((idx + 1) as f32 / module_total as f32) * 80.0
         };
+
+        let display_name = if entry.resolution_kind == ResolutionKind::Unresolved {
+            String::new()
+        } else {
+            read_module_display_name(std::path::Path::new(&entry.resolved_path)).unwrap_or_default()
+        };
+        let label = if display_name.is_empty() {
+            entry.name.as_str()
+        } else {
+            display_name.as_str()
+        };
         report(
             "modules",
             module_progress,
-            format!("Loading {} ({} of {})", entry.name, idx + 1, module_total),
+            format!("Loading {} ({} of {})", label, idx + 1, module_total),
         );
         if entry.resolution_kind == ResolutionKind::Unresolved {
             orphans.push(OrphanNote {
@@ -145,6 +157,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             });
             modules_out.push(AggregatedModule {
                 name: entry.name.clone(),
+                display_name,
                 resolved_path: entry.resolved_path.clone(),
                 resolution_kind: entry.resolution_kind,
                 is_current: names_match(&entry.name, &current_module_id),
@@ -166,6 +179,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 });
                 modules_out.push(AggregatedModule {
                     name: entry.name.clone(),
+                    display_name,
                     resolved_path: entry.resolved_path.clone(),
                     resolution_kind: entry.resolution_kind,
                     is_current: names_match(&entry.name, &current_module_id),
@@ -189,6 +203,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
 
         modules_out.push(AggregatedModule {
             name: entry.name.clone(),
+            display_name,
             resolved_path: entry.resolved_path.clone(),
             resolution_kind: entry.resolution_kind,
             is_current: names_match(&entry.name, &current_module_id),

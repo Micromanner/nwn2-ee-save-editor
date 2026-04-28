@@ -60,6 +60,7 @@ export interface QuestSummary {
 
 export interface AggregatedModule {
   name: string;
+  display_name: string;
   resolved_path: string;
   resolution_kind: ResolutionKind;
   is_current: boolean;

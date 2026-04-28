@@ -76,6 +76,9 @@ pub struct CampaignSummary {
 #[derive(Debug, Clone, Serialize)]
 pub struct AggregatedModule {
     pub name: String,
+    /// `Mod_Name` from the module's `module.ifo` (e.g. "Samarach Overland").
+    /// Empty when the module is unresolved or `Mod_Name` could not be read.
+    pub display_name: String,
     pub resolved_path: String,
     pub resolution_kind: ResolutionKind,
     pub is_current: bool,

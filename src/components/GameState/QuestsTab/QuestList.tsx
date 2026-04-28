@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Button, HTMLTable, InputGroup, Menu, MenuItem, Popover } from '@blueprintjs/core';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
-import type { QuestSummary } from './types';
+import type { AggregatedModule, QuestSummary } from './types';
+import { useModuleNameResolver } from './useModuleNameResolver';
 import { effectiveSource, selectedRowStyle, type QuestSource } from './utils';
 
 type StatusFilter = 'all' | 'active' | 'complete' | 'untouched';
@@ -23,9 +24,10 @@ function EmptyRow({ message }: { message: string }) {
 }
 
 export function QuestList({
-  quests, selectedTag, onSelect,
+  quests, modules, selectedTag, onSelect,
 }: {
   quests: QuestSummary[];
+  modules: AggregatedModule[];
   selectedTag: string | null;
   onSelect: (tag: string) => void;
 }) {
@@ -35,6 +37,8 @@ export function QuestList({
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const { resolveMany } = useModuleNameResolver(modules);
 
   const rows = useMemo(() => {
     const needle = search.toLowerCase();
@@ -142,7 +146,7 @@ export function QuestList({
           </td>
           <td style={{ textAlign: 'right' }}>{q.transition_count}</td>
           <td title={q.defined_in.join(', ')} style={{ color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {q.defined_in.join(', ') || '-'}
+            {q.defined_in.length === 0 ? '-' : resolveMany(q.defined_in)}
           </td>
         </tr>
       );
