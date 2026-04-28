@@ -440,7 +440,80 @@
     "tabs": {
       "companionInfluence": "Influencia de Compañeros",
       "moduleAndVariables": "Módulo y Variables",
-      "campaignAndVariables": "Campaña y Variables"
+      "campaignAndVariables": "Campaña y Variables",
+      "quests": "Misiones"
+    },
+    "quests": {
+      "title": "Misiones",
+      "campaignContext": {
+        "campaign": "Campaña",
+        "campaignId": "ID de Campaña",
+        "currentModule": "Módulo Actual",
+        "modules": "Módulos",
+        "orphans": "Notas de Agregación",
+        "current": "actual",
+        "unresolved": "sin resolver",
+        "noCampaign": "Sin campaña resuelta — vista de un solo módulo"
+      },
+      "list": {
+        "tag": "Etiqueta",
+        "name": "Nombre",
+        "priority": "Prioridad",
+        "xp": "PX",
+        "live": "Activo",
+        "source": "Fuente",
+        "transitions": "Trans.",
+        "definedIn": "Definido en",
+        "searchPlaceholder": "Buscar etiqueta o nombre",
+        "statusAll": "Todos los estados",
+        "statusActive": "Activa",
+        "statusComplete": "Completa",
+        "statusUntouched": "Sin tocar",
+        "sourceAll": "Todas las fuentes",
+        "sourceNormal": "Normal",
+        "sourceLiveOnly": "Sólo activa",
+        "sourceTransitionOnly": "Sólo transición",
+        "emptyFiltered": "Ninguna misión coincide con el filtro",
+        "emptyAll": "Esta partida no tiene misiones que mostrar"
+      },
+      "detail": {
+        "notStarted": "No iniciada",
+        "final": "final",
+        "noText": "(sin texto)",
+        "noTransitionsLiveOnly": "Sin transiciones — etiqueta sólo activa",
+        "loadingTransitions": "Cargando transiciones…",
+        "transitionsFailed": "Error al cargar transiciones",
+        "noEntries": "Sin entradas de diario declaradas",
+        "header": "Resumen",
+        "entries": "Entradas de diario",
+        "transitions": "Transiciones",
+        "liveOverlay": "Capa activa",
+        "groupPrefix": "al estado",
+        "coGlobals": "Globales coescritas",
+        "coLocals": "Locales coescritas",
+        "gatingConditions": "Condiciones de bloqueo",
+        "none": "Ninguna",
+        "selectQuest": "Selecciona una misión a la izquierda para ver detalles",
+        "liveOverlayGlobals": "Globales",
+        "liveOverlayLocals": "Locales del módulo",
+        "unset": "(sin definir)",
+        "expected": "esperado",
+        "showSources": "Mostrar {count} fuentes",
+        "hideSources": "Ocultar fuentes"
+      },
+      "sourceBadge": {
+        "normal": "normal",
+        "live_only": "sólo activa",
+        "transition_only": "sólo transición"
+      },
+      "orphanKind": {
+        "unresolved_campaign": "Campaña sin resolver",
+        "unresolved_module": "Módulo sin resolver",
+        "graph_failed": "Error en el grafo",
+        "journal_read_failed": "Error al leer diario"
+      },
+      "failedToLoad": "Error al cargar grafo de misiones",
+      "loadingTitle": "Cargando datos de misiones"
     },
     "companions": {
       "failedToLoad": "Error al cargar compañeros",

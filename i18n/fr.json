@@ -439,7 +439,80 @@
     "tabs": {
       "companionInfluence": "Influence Compagnons",
       "moduleAndVariables": "Module & Variables",
-      "campaignAndVariables": "Campagne & Variables"
+      "campaignAndVariables": "Campagne & Variables",
+      "quests": "Quêtes"
+    },
+    "quests": {
+      "title": "Quêtes",
+      "campaignContext": {
+        "campaign": "Campagne",
+        "campaignId": "ID de Campagne",
+        "currentModule": "Module actuel",
+        "modules": "Modules",
+        "orphans": "Notes d'agrégation",
+        "current": "actuel",
+        "unresolved": "non résolu",
+        "noCampaign": "Aucune campagne résolue — vue module unique"
+      },
+      "list": {
+        "tag": "Tag",
+        "name": "Nom",
+        "priority": "Priorité",
+        "xp": "XP",
+        "live": "Actif",
+        "source": "Source",
+        "transitions": "Trans.",
+        "definedIn": "Défini dans",
+        "searchPlaceholder": "Rechercher tag ou nom",
+        "statusAll": "Tous les statuts",
+        "statusActive": "Active",
+        "statusComplete": "Terminée",
+        "statusUntouched": "Intacte",
+        "sourceAll": "Toutes les sources",
+        "sourceNormal": "Normale",
+        "sourceLiveOnly": "Uniquement actif",
+        "sourceTransitionOnly": "Uniquement transition",
+        "emptyFiltered": "Aucune quête ne correspond au filtre",
+        "emptyAll": "Cette sauvegarde ne contient aucune quête"
+      },
+      "detail": {
+        "notStarted": "Non commencée",
+        "final": "final",
+        "noText": "(aucun texte)",
+        "noTransitionsLiveOnly": "Aucune transition — tag actif uniquement",
+        "loadingTransitions": "Chargement des transitions…",
+        "transitionsFailed": "Échec du chargement des transitions",
+        "noEntries": "Aucune entrée de journal déclarée",
+        "header": "Aperçu",
+        "entries": "Entrées de journal",
+        "transitions": "Transitions",
+        "liveOverlay": "Couche active",
+        "groupPrefix": "vers l'état",
+        "coGlobals": "Globales co-écrites",
+        "coLocals": "Locales co-écrites",
+        "gatingConditions": "Conditions de blocage",
+        "none": "Aucune",
+        "selectQuest": "Sélectionnez une quête à gauche pour voir les détails",
+        "liveOverlayGlobals": "Globales",
+        "liveOverlayLocals": "Locales du module",
+        "unset": "(non défini)",
+        "expected": "attendu",
+        "showSources": "Afficher {count} sources",
+        "hideSources": "Masquer les sources"
+      },
+      "sourceBadge": {
+        "normal": "normale",
+        "live_only": "actif uniquement",
+        "transition_only": "transition uniquement"
+      },
+      "orphanKind": {
+        "unresolved_campaign": "Campagne non résolue",
+        "unresolved_module": "Module non résolu",
+        "graph_failed": "Échec du graphe",
+        "journal_read_failed": "Échec de lecture du journal"
+      },
+      "failedToLoad": "Échec du chargement du graphe de quêtes",
+      "loadingTitle": "Chargement des données de quêtes"
     },
     "companions": {
       "failedToLoad": "Échec du chargement des compagnons",

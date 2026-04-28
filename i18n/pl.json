@@ -441,7 +441,80 @@
     "tabs": {
       "companionInfluence": "Wpływ na Towarzyszy",
       "moduleAndVariables": "Moduł i Zmienne",
-      "campaignAndVariables": "Kampania i Zmienne"
+      "campaignAndVariables": "Kampania i Zmienne",
+      "quests": "Zadania"
+    },
+    "quests": {
+      "title": "Zadania",
+      "campaignContext": {
+        "campaign": "Kampania",
+        "campaignId": "ID Kampanii",
+        "currentModule": "Obecny moduł",
+        "modules": "Moduły",
+        "orphans": "Uwagi agregacji",
+        "current": "obecny",
+        "unresolved": "nierozwiązany",
+        "noCampaign": "Brak rozwiązanej kampanii — widok pojedynczego modułu"
+      },
+      "list": {
+        "tag": "Tag",
+        "name": "Nazwa",
+        "priority": "Priorytet",
+        "xp": "PD",
+        "live": "Aktywny",
+        "source": "Źródło",
+        "transitions": "Przejścia",
+        "definedIn": "Zdefiniowane w",
+        "searchPlaceholder": "Szukaj tagu lub nazwy",
+        "statusAll": "Wszystkie statusy",
+        "statusActive": "Aktywne",
+        "statusComplete": "Ukończone",
+        "statusUntouched": "Nietknięte",
+        "sourceAll": "Wszystkie źródła",
+        "sourceNormal": "Normalne",
+        "sourceLiveOnly": "Tylko aktywne",
+        "sourceTransitionOnly": "Tylko przejście",
+        "emptyFiltered": "Żadne zadanie nie pasuje do filtra",
+        "emptyAll": "Ten zapis nie zawiera zadań do wyświetlenia"
+      },
+      "detail": {
+        "notStarted": "Nierozpoczęte",
+        "final": "końcowy",
+        "noText": "(brak tekstu)",
+        "noTransitionsLiveOnly": "Brak przejść — tylko aktywny tag",
+        "loadingTransitions": "Wczytywanie przejść…",
+        "transitionsFailed": "Nie udało się wczytać przejść",
+        "noEntries": "Brak zadeklarowanych wpisów dziennika",
+        "header": "Przegląd",
+        "entries": "Wpisy dziennika",
+        "transitions": "Przejścia",
+        "liveOverlay": "Warstwa aktywna",
+        "groupPrefix": "do stanu",
+        "coGlobals": "Współtworzone globalne",
+        "coLocals": "Współtworzone lokalne",
+        "gatingConditions": "Warunki blokady",
+        "none": "Brak",
+        "selectQuest": "Wybierz zadanie po lewej, aby zobaczyć szczegóły",
+        "liveOverlayGlobals": "Globalne",
+        "liveOverlayLocals": "Lokalne modułu",
+        "unset": "(nieustawione)",
+        "expected": "oczekiwane",
+        "showSources": "Pokaż {count} źródeł",
+        "hideSources": "Ukryj źródła"
+      },
+      "sourceBadge": {
+        "normal": "normalne",
+        "live_only": "tylko aktywne",
+        "transition_only": "tylko przejście"
+      },
+      "orphanKind": {
+        "unresolved_campaign": "Kampania nierozwiązana",
+        "unresolved_module": "Moduł nierozwiązany",
+        "graph_failed": "Błąd grafu",
+        "journal_read_failed": "Błąd odczytu dziennika"
+      },
+      "failedToLoad": "Nie udało się wczytać grafu zadań",
+      "loadingTitle": "Wczytywanie danych zadań"
     },
     "companions": {
       "failedToLoad": "Nie udało się wczytać towarzyszy",

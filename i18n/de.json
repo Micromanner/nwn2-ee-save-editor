@@ -439,7 +439,80 @@
     "tabs": {
       "companionInfluence": "Gefährteneinfluss",
       "moduleAndVariables": "Modul & Variablen",
-      "campaignAndVariables": "Kampagne & Variablen"
+      "campaignAndVariables": "Kampagne & Variablen",
+      "quests": "Quests"
+    },
+    "quests": {
+      "title": "Quests",
+      "campaignContext": {
+        "campaign": "Kampagne",
+        "campaignId": "Kampagnen-ID",
+        "currentModule": "Aktuelles Modul",
+        "modules": "Module",
+        "orphans": "Aggregations-Hinweise",
+        "current": "aktuell",
+        "unresolved": "nicht aufgelöst",
+        "noCampaign": "Keine Kampagne aufgelöst — nur Einzelmodul-Ansicht"
+      },
+      "list": {
+        "tag": "Tag",
+        "name": "Name",
+        "priority": "Priorität",
+        "xp": "EP",
+        "live": "Aktiv",
+        "source": "Quelle",
+        "transitions": "Übergänge",
+        "definedIn": "Definiert in",
+        "searchPlaceholder": "Tag oder Name suchen",
+        "statusAll": "Alle Status",
+        "statusActive": "Aktiv",
+        "statusComplete": "Abgeschlossen",
+        "statusUntouched": "Unberührt",
+        "sourceAll": "Alle Quellen",
+        "sourceNormal": "Normal",
+        "sourceLiveOnly": "Nur aktiv",
+        "sourceTransitionOnly": "Nur Übergang",
+        "emptyFiltered": "Keine Quests passen zum Filter",
+        "emptyAll": "Dieser Spielstand enthält keine Quests"
+      },
+      "detail": {
+        "notStarted": "Nicht begonnen",
+        "final": "endgültig",
+        "noText": "(kein Text)",
+        "noTransitionsLiveOnly": "Keine Übergänge — nur aktiver Tag",
+        "loadingTransitions": "Übergänge werden geladen…",
+        "transitionsFailed": "Übergänge konnten nicht geladen werden",
+        "noEntries": "Keine Tagebucheinträge deklariert",
+        "header": "Übersicht",
+        "entries": "Tagebucheinträge",
+        "transitions": "Übergänge",
+        "liveOverlay": "Live-Overlay",
+        "groupPrefix": "zu Status",
+        "coGlobals": "Mitwirkende Globale",
+        "coLocals": "Mitwirkende Lokale",
+        "gatingConditions": "Bedingungen",
+        "none": "Keine",
+        "selectQuest": "Quest links auswählen, um Details anzuzeigen",
+        "liveOverlayGlobals": "Globale",
+        "liveOverlayLocals": "Modul-Lokale",
+        "unset": "(nicht gesetzt)",
+        "expected": "erwartet",
+        "showSources": "{count} Quellen anzeigen",
+        "hideSources": "Quellen ausblenden"
+      },
+      "sourceBadge": {
+        "normal": "normal",
+        "live_only": "nur aktiv",
+        "transition_only": "nur Übergang"
+      },
+      "orphanKind": {
+        "unresolved_campaign": "Kampagne nicht aufgelöst",
+        "unresolved_module": "Modul nicht aufgelöst",
+        "graph_failed": "Graph fehlgeschlagen",
+        "journal_read_failed": "Tagebuch-Lesefehler"
+      },
+      "failedToLoad": "Quest-Graph konnte nicht geladen werden",
+      "loadingTitle": "Quest-Daten werden geladen"
     },
     "companions": {
       "failedToLoad": "Gefährten konnten nicht geladen werden",

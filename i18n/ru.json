@@ -439,7 +439,80 @@
     "tabs": {
       "companionInfluence": "Влияние на спутников",
       "moduleAndVariables": "Модуль и переменные",
-      "campaignAndVariables": "Кампания и переменные"
+      "campaignAndVariables": "Кампания и переменные",
+      "quests": "Квесты"
+    },
+    "quests": {
+      "title": "Квесты",
+      "campaignContext": {
+        "campaign": "Кампания",
+        "campaignId": "ID кампании",
+        "currentModule": "Текущий модуль",
+        "modules": "Модули",
+        "orphans": "Заметки агрегации",
+        "current": "текущий",
+        "unresolved": "не разрешено",
+        "noCampaign": "Кампания не определена — режим отдельного модуля"
+      },
+      "list": {
+        "tag": "Тег",
+        "name": "Название",
+        "priority": "Приоритет",
+        "xp": "Опыт",
+        "live": "Активно",
+        "source": "Источник",
+        "transitions": "Переходы",
+        "definedIn": "Определено в",
+        "searchPlaceholder": "Поиск по тегу или названию",
+        "statusAll": "Все статусы",
+        "statusActive": "Активные",
+        "statusComplete": "Завершённые",
+        "statusUntouched": "Не начатые",
+        "sourceAll": "Все источники",
+        "sourceNormal": "Обычный",
+        "sourceLiveOnly": "Только активный",
+        "sourceTransitionOnly": "Только переход",
+        "emptyFiltered": "Нет квестов, соответствующих фильтру",
+        "emptyAll": "В этом сохранении нет квестов"
+      },
+      "detail": {
+        "notStarted": "Не начат",
+        "final": "финальный",
+        "noText": "(нет текста)",
+        "noTransitionsLiveOnly": "Нет переходов — только активный тег",
+        "loadingTransitions": "Загрузка переходов…",
+        "transitionsFailed": "Не удалось загрузить переходы",
+        "noEntries": "Записи журнала не объявлены",
+        "header": "Обзор",
+        "entries": "Записи журнала",
+        "transitions": "Переходы",
+        "liveOverlay": "Активный слой",
+        "groupPrefix": "к состоянию",
+        "coGlobals": "Соавторские глобальные",
+        "coLocals": "Соавторские локальные",
+        "gatingConditions": "Условия перехода",
+        "none": "Нет",
+        "selectQuest": "Выберите квест слева, чтобы увидеть подробности",
+        "liveOverlayGlobals": "Глобальные",
+        "liveOverlayLocals": "Локальные модуля",
+        "unset": "(не задано)",
+        "expected": "ожидается",
+        "showSources": "Показать источников: {count}",
+        "hideSources": "Скрыть источники"
+      },
+      "sourceBadge": {
+        "normal": "обычный",
+        "live_only": "только активный",
+        "transition_only": "только переход"
+      },
+      "orphanKind": {
+        "unresolved_campaign": "Кампания не разрешена",
+        "unresolved_module": "Модуль не разрешён",
+        "graph_failed": "Ошибка графа",
+        "journal_read_failed": "Ошибка чтения журнала"
+      },
+      "failedToLoad": "Не удалось загрузить граф квестов",
+      "loadingTitle": "Загрузка данных квестов"
     },
     "companions": {
       "failedToLoad": "Ошибка загрузки спутников",
