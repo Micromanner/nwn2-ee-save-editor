@@ -662,6 +662,15 @@
       "exporting": "Eksportowanie...",
       "exportSuccess": "Logi zapisane w:",
       "exportError": "Nie udało się wyeksportować logów"
+    },
+    "updates": {
+      "title": "Aktualizacje",
+      "checkButton": "Sprawdź aktualizacje",
+      "checking": "Sprawdzanie...",
+      "upToDate": "Masz najnowszą wersję (v{current}).",
+      "newAvailable": "Dostępna aktualizacja: v{current} -> v{latest}",
+      "openRelease": "Otwórz stronę wydania",
+      "error": "Nie można połączyć z GitHub. Spróbuj później."
     }
   },
   "spells": {
@@ -713,13 +722,6 @@
     "restore": "Przywróć",
     "close": "Zamknij",
     "about": "O Programie"
-  },
-  "update": {
-    "available": "Dostępna jest nowa wersja",
-    "current": "Zainstalowana v{current}",
-    "latest": "Najnowsza v{latest}",
-    "download": "Pobierz",
-    "dismiss": "Odrzuć"
   },
   "about": {
     "title": "O Programie",

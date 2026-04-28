@@ -758,6 +758,15 @@
       "exporting": "Exporting...",
       "exportSuccess": "Debug log saved to:",
       "exportError": "Failed to export debug log"
+    },
+    "updates": {
+      "title": "Updates",
+      "checkButton": "Check for updates",
+      "checking": "Checking...",
+      "upToDate": "You are on the latest version (v{current}).",
+      "newAvailable": "Update available: v{current} -> v{latest}",
+      "openRelease": "Open release page",
+      "error": "Could not reach GitHub. Try again later."
     }
   },
   "startup": {
@@ -817,13 +826,6 @@
     "restore": "Restore",
     "close": "Close",
     "about": "About"
-  },
-  "update": {
-    "available": "A new version is available",
-    "current": "Installed v{current}",
-    "latest": "Latest v{latest}",
-    "download": "Download",
-    "dismiss": "Dismiss"
   },
   "about": {
     "title": "About",

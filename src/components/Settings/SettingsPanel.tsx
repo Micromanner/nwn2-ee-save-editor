@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Button, Menu, MenuItem, Popover, Switch, Tab, Tabs, Tag,
+  AnchorButton, Button, Menu, MenuItem, Popover, Switch, Tab, Tabs, Tag,
 } from '@blueprintjs/core';
 import { GiFullFolder, GiCheckMark, GiBrokenShield } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
@@ -10,6 +10,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useLocale } from '@/providers/LocaleProvider';
 import { useFontSize } from '@/providers/FontSizeProvider';
 import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
+import { useUpdateCheck } from '@/hooks/useUpdateCheck';
 import { pathService, PathConfig } from '@/lib/api/paths';
 import { T } from '../theme';
 import { KVRow, ParchmentDialog } from '../shared';
@@ -259,6 +260,53 @@ function GeneralTab() {
             {debugResult.message}
           </div>
         )}
+      </div>
+
+      <UpdatesSection />
+    </div>
+  );
+}
+
+function UpdatesSection() {
+  const t = useTranslations();
+  const { result, checkNow } = useUpdateCheck();
+  const checking = result.kind === 'checking';
+
+  return (
+    <div>
+      <SectionHeader title={t('settings.updates.title')} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Button
+            outlined
+            text={checking ? t('settings.updates.checking') : t('settings.updates.checkButton')}
+            disabled={checking}
+            onClick={checkNow}
+          />
+          {result.kind === 'upToDate' && (
+            <span style={{ color: T.positive }}>
+              {t('settings.updates.upToDate', { current: result.current })}
+            </span>
+          )}
+          {result.kind === 'available' && (
+            <>
+              <span style={{ color: T.accent }}>
+                {t('settings.updates.newAvailable', { current: result.current, latest: result.latest })}
+              </span>
+              <AnchorButton
+                small
+                intent="primary"
+                href={result.htmlUrl}
+                target="_blank"
+                rel="noreferrer"
+                text={t('settings.updates.openRelease')}
+              />
+            </>
+          )}
+          {result.kind === 'error' && (
+            <span style={{ color: T.negative }}>{t('settings.updates.error')}</span>
+          )}
+        </div>
       </div>
     </div>
   );

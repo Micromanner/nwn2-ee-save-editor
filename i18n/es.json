@@ -661,6 +661,15 @@
       "exporting": "Exportando...",
       "exportSuccess": "Log guardado en:",
       "exportError": "Error al exportar log"
+    },
+    "updates": {
+      "title": "Actualizaciones",
+      "checkButton": "Buscar actualizaciones",
+      "checking": "Buscando...",
+      "upToDate": "Estás en la última versión (v{current}).",
+      "newAvailable": "Actualización disponible: v{current} -> v{latest}",
+      "openRelease": "Abrir página de la versión",
+      "error": "No se pudo conectar con GitHub. Inténtalo más tarde."
     }
   },
   "spells": {
@@ -713,13 +722,6 @@
     "restore": "Restaurar",
     "close": "Cerrar",
     "about": "Acerca de"
-  },
-  "update": {
-    "available": "Hay una nueva versión disponible",
-    "current": "Instalada v{current}",
-    "latest": "Última v{latest}",
-    "download": "Descargar",
-    "dismiss": "Descartar"
   },
   "about": {
     "title": "Acerca de",

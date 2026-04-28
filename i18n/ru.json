@@ -660,6 +660,15 @@
       "exporting": "Экспорт...",
       "exportSuccess": "Лог сохранен в:",
       "exportError": "Ошибка при экспорте лога"
+    },
+    "updates": {
+      "title": "Обновления",
+      "checkButton": "Проверить обновления",
+      "checking": "Проверка...",
+      "upToDate": "У вас установлена последняя версия (v{current}).",
+      "newAvailable": "Доступно обновление: v{current} -> v{latest}",
+      "openRelease": "Открыть страницу релиза",
+      "error": "Не удалось подключиться к GitHub. Попробуйте позже."
     }
   },
   "spells": {
@@ -712,13 +721,6 @@
     "restore": "Восстановить",
     "close": "Закрыть",
     "about": "О программе"
-  },
-  "update": {
-    "available": "Доступна новая версия",
-    "current": "Установлено v{current}",
-    "latest": "Последняя v{latest}",
-    "download": "Скачать",
-    "dismiss": "Закрыть"
   },
   "about": {
     "title": "О программе",

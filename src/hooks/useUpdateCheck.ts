@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { fetch } from '@tauri-apps/plugin-http';
 
 const RELEASES_API = 'https://api.github.com/repos/Micromanner/nwn2-ee-save-editor/releases/latest';
-const DISMISSED_KEY = 'nwn2ee.dismissedUpdateVersion';
 
-export interface UpdateInfo {
-  current: string;
-  latest: string;
-  htmlUrl: string;
-}
+export type UpdateCheckResult =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'upToDate'; current: string }
+  | { kind: 'available'; current: string; latest: string; htmlUrl: string }
+  | { kind: 'error' };
 
 function parseVersion(v: string): number[] {
   return v.replace(/^v/, '').split('.').map(n => {
@@ -30,39 +30,37 @@ function isNewer(latest: string, current: string): boolean {
 }
 
 export function useUpdateCheck() {
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [result, setResult] = useState<UpdateCheckResult>({ kind: 'idle' });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const [current, res] = await Promise.all([
-          getVersion(),
-          fetch(RELEASES_API, {
-            method: 'GET',
-            headers: { Accept: 'application/vnd.github+json' },
-          }),
-        ]);
-        if (!res.ok) return;
-        const data = await res.json() as { tag_name?: string; html_url?: string };
-        const latest = data.tag_name?.replace(/^v/, '');
-        if (!latest || !data.html_url) return;
-        if (!isNewer(latest, current)) return;
-        if (sessionStorage.getItem(DISMISSED_KEY) === latest) return;
-        if (!cancelled) setInfo({ current, latest, htmlUrl: data.html_url });
-      } catch {
-        // offline, rate-limited, or blocked — silently skip
+  const checkNow = useCallback(async () => {
+    setResult({ kind: 'checking' });
+    try {
+      const [current, res] = await Promise.all([
+        getVersion(),
+        fetch(RELEASES_API, {
+          method: 'GET',
+          headers: { Accept: 'application/vnd.github+json' },
+        }),
+      ]);
+      if (!res.ok) {
+        setResult({ kind: 'error' });
+        return;
       }
-    })();
-
-    return () => { cancelled = true; };
+      const data = await res.json() as { tag_name?: string; html_url?: string };
+      const latest = data.tag_name?.replace(/^v/, '');
+      if (!latest || !data.html_url) {
+        setResult({ kind: 'error' });
+        return;
+      }
+      if (isNewer(latest, current)) {
+        setResult({ kind: 'available', current, latest, htmlUrl: data.html_url });
+      } else {
+        setResult({ kind: 'upToDate', current });
+      }
+    } catch {
+      setResult({ kind: 'error' });
+    }
   }, []);
 
-  const dismiss = () => {
-    if (info) sessionStorage.setItem(DISMISSED_KEY, info.latest);
-    setInfo(null);
-  };
-
-  return { info, dismiss };
+  return { result, checkNow };
 }

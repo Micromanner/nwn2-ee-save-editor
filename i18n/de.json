@@ -660,6 +660,15 @@
       "exporting": "Wird exportiert...",
       "exportSuccess": "Debug-Log gespeichert unter:",
       "exportError": "Debug-Log konnte nicht exportiert werden"
+    },
+    "updates": {
+      "title": "Aktualisierungen",
+      "checkButton": "Nach Updates suchen",
+      "checking": "Suche...",
+      "upToDate": "Sie verwenden die neueste Version (v{current}).",
+      "newAvailable": "Update verfügbar: v{current} -> v{latest}",
+      "openRelease": "Release-Seite öffnen",
+      "error": "GitHub konnte nicht erreicht werden. Bitte später erneut versuchen."
     }
   },
   "spells": {
@@ -712,13 +721,6 @@
     "restore": "Wiederherstellen",
     "close": "Schließen",
     "about": "Über"
-  },
-  "update": {
-    "available": "Eine neue Version ist verfügbar",
-    "current": "Installiert v{current}",
-    "latest": "Neueste v{latest}",
-    "download": "Herunterladen",
-    "dismiss": "Schließen"
   },
   "about": {
     "title": "Über",
