@@ -70,7 +70,6 @@ tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-http = "2"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json"] }
 image = { version = "0.25", default-features = false, features = ["tga", "webp", "png"] }
 texture2ddecoder = "0.1"
 base64 = "0.22"
