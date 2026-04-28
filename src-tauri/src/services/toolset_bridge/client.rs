@@ -204,6 +204,13 @@ impl BridgeClient {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
         debug!(?cmd, "spawning bridge serve process");
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take().expect("piped stdin just set");
