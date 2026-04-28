@@ -158,15 +158,17 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
-          mkdir -p "portable-staging/resources"
+          # Mirror the NSIS installer layout exactly: Tauri rewrites the
+          # `../toolset-bridge/dist/...` resources entries as `_up_/toolset-bridge/dist/...`
+          # next to the main exe, and `resource_dir()` returns the exe's directory.
+          # The resolver joins `_up_/toolset-bridge/dist/toolset-bridge.exe` onto that,
+          # so the portable bundle must use the same layout.
+          mkdir -p "portable-staging/_up_/toolset-bridge/dist"
           cp "src-tauri/target/release/nwn2ee-save-editor.exe" "portable-staging/NWN2EE Save Editor.exe"
-          # Mirror the NSIS installer layout: the bridge + its MIT-licensed runtime deps
-          # live under resources/ next to the main exe, so runtime path resolution is the
-          # same in portable and installed modes.
-          cp toolset-bridge/dist/toolset-bridge.exe portable-staging/resources/
-          cp toolset-bridge/dist/toolset-bridge.exe.config portable-staging/resources/
-          cp toolset-bridge/dist/Newtonsoft.Json.dll portable-staging/resources/
-          cp toolset-bridge/dist/0Harmony.dll portable-staging/resources/
+          cp toolset-bridge/dist/toolset-bridge.exe portable-staging/_up_/toolset-bridge/dist/
+          cp toolset-bridge/dist/toolset-bridge.exe.config portable-staging/_up_/toolset-bridge/dist/
+          cp toolset-bridge/dist/Newtonsoft.Json.dll portable-staging/_up_/toolset-bridge/dist/
+          cp toolset-bridge/dist/0Harmony.dll portable-staging/_up_/toolset-bridge/dist/
           7z a "NWN2EE-Save-Editor-${VERSION}-Windows-Portable.zip" ./portable-staging/*
 
       - name: Upload Windows Assets to Release
