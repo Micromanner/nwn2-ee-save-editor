@@ -110,5 +110,4 @@ Requires:
 
 - Companion editing (view, edit, and manage party companions)
 - Full equipment rendering in the 3D character preview (some equipped items don't yet display correctly)
-- Quest journal editor — browse each quest with its branches and outcomes, see current progress, and jump to any state (today the Game State tab shows the raw values, but not what they mean)
-- Custom item icons — pick a different icon for any item in the inventory
+- Quest journal editor — browse each quest with its branches and outcomes, see current progress, and jump to any state (currently read-only, Windows only)
