@@ -60,9 +60,9 @@ export function CampaignContextCard({
           <span className="t-semibold" style={{ color: T.textMuted, marginRight: 4 }}>
             {t('gameState.quests.campaignContext.modules')}:
           </span>
-          {modules.map(m => (
+          {modules.map((m, i) => (
             <span
-              key={m.name}
+              key={`${m.name}-${i}`}
               title={m.name}
               style={{
                 padding: '2px 8px',

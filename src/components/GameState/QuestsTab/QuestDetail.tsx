@@ -6,7 +6,7 @@ import { GameIcon } from '../../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTlkResolver } from '@/hooks/useTlkResolver';
 import type { QuestTransitionsResolver } from '@/hooks/useQuestTransitions';
-import type { QuestSummary, SaveGraph, TransitionNode } from './types';
+import type { AggregatedModule, QuestSummary, SaveGraph, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { effectiveSource, selectedRowStyle } from './utils';
 import { TransitionsList } from './TransitionsList';
@@ -141,7 +141,7 @@ export function QuestDetail({
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.transitions')}
         </div>
-        {renderTransitionsSection(entry, quest, loadedTransitions, tlk, t)}
+        {renderTransitionsSection(entry, quest, loadedTransitions, tlk, t, graph.modules)}
       </div>
 
       <div style={{ padding: '12px 16px' }}>
@@ -160,6 +160,7 @@ function renderTransitionsSection(
   loaded: TransitionNode[] | null,
   tlk: ReturnType<typeof useTlkResolver>,
   t: ReturnType<typeof useTranslations>,
+  modules: AggregatedModule[],
 ) {
   if (!entry || entry.state === 'pending') {
     return (
@@ -175,5 +176,5 @@ function renderTransitionsSection(
       </div>
     );
   }
-  return <TransitionsList quest={quest} transitions={loaded ?? []} tlk={tlk} modules={graph.modules} />;
+  return <TransitionsList quest={quest} transitions={loaded ?? []} tlk={tlk} modules={modules} />;
 }
