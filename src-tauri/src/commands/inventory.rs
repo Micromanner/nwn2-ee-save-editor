@@ -368,15 +368,22 @@ pub async fn get_available_templates(
     let zip_read_start = Instant::now();
 
     let mut grouped: HashMap<PathBuf, Vec<(String, String, String)>> = HashMap::new();
+    let mut directory_files: Vec<(String, PathBuf, String)> = Vec::new();
     for (resref, info) in &templates {
-        if let crate::services::resource_manager::ContainerType::Zip = &info.container_type
-            && let Some(internal_path) = &info.internal_path
-        {
-            let source = format!("{:?}", info.source);
-            grouped
-                .entry(info.container_path.clone())
-                .or_default()
-                .push((resref.clone(), internal_path.clone(), source));
+        let source = info.source.display_name().to_string();
+        match &info.container_type {
+            crate::services::resource_manager::ContainerType::Zip => {
+                if let Some(internal_path) = &info.internal_path {
+                    grouped
+                        .entry(info.container_path.clone())
+                        .or_default()
+                        .push((resref.clone(), internal_path.clone(), source));
+                }
+            }
+            crate::services::resource_manager::ContainerType::Directory => {
+                directory_files.push((resref.clone(), info.container_path.clone(), source));
+            }
+            crate::services::resource_manager::ContainerType::Erf => {}
         }
     }
 
@@ -442,7 +449,7 @@ pub async fn get_available_templates(
 
     let decomp_start = Instant::now();
 
-    let raw_data: Vec<(String, Vec<u8>, String)> = jobs
+    let mut raw_data: Vec<(String, Vec<u8>, String)> = jobs
         .par_iter()
         .filter_map(|job| {
             let zip_data = zip_buffers.get(&job.zip_path)?;
@@ -474,6 +481,23 @@ pub async fn get_available_templates(
         decomp_start.elapsed(),
         raw_data.len()
     );
+
+    let dir_read_start = Instant::now();
+    let dir_count = directory_files.len();
+    let dir_raw: Vec<(String, Vec<u8>, String)> = directory_files
+        .par_iter()
+        .filter_map(|(resref, path, source)| {
+            let bytes = std::fs::read(path).ok()?;
+            Some((resref.clone(), bytes, source.clone()))
+        })
+        .collect();
+    tracing::info!(
+        "Directory template read: {:?}, requested: {}, loaded: {}",
+        dir_read_start.elapsed(),
+        dir_count,
+        dir_raw.len()
+    );
+    raw_data.extend(dir_raw);
 
     let parse_start = Instant::now();
 

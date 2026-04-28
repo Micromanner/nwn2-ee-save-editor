@@ -375,7 +375,14 @@ impl ResourceManager {
             self.file_mod_tracker.track(file.path.clone(), file.mtime);
 
             let location = ResourceLocation::from_file(source.clone(), file.path, file.mtime);
-            self.resource_index.entry(key).or_default().push(location);
+            self.resource_index
+                .entry(key)
+                .or_default()
+                .push(location.clone());
+
+            if file.extension == "uti" {
+                self.template_locations.insert(file.stem, location);
+            }
         }
     }
 
