@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { HTMLSelect, HTMLTable, InputGroup } from '@blueprintjs/core';
+import { Button, HTMLTable, InputGroup, Menu, MenuItem, Popover } from '@blueprintjs/core';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { QuestSummary } from './types';
@@ -73,6 +73,48 @@ export function QuestList({
     return sortDir === 'asc' ? ' ▲' : ' ▼';
   };
 
+  const statusOptions: { value: StatusFilter; labelKey: string }[] = [
+    { value: 'all', labelKey: 'gameState.quests.list.statusAll' },
+    { value: 'active', labelKey: 'gameState.quests.list.statusActive' },
+    { value: 'complete', labelKey: 'gameState.quests.list.statusComplete' },
+    { value: 'untouched', labelKey: 'gameState.quests.list.statusUntouched' },
+  ];
+  const sourceOptions: { value: SourceFilter; labelKey: string }[] = [
+    { value: 'all', labelKey: 'gameState.quests.list.sourceAll' },
+    { value: 'normal', labelKey: 'gameState.quests.list.sourceNormal' },
+    { value: 'live_only', labelKey: 'gameState.quests.list.sourceLiveOnly' },
+    { value: 'transition_only', labelKey: 'gameState.quests.list.sourceTransitionOnly' },
+  ];
+
+  const statusMenu = (
+    <Menu>
+      {statusOptions.map(o => (
+        <MenuItem
+          key={o.value}
+          text={t(o.labelKey)}
+          active={statusFilter === o.value}
+          onClick={() => setStatusFilter(o.value)}
+        />
+      ))}
+    </Menu>
+  );
+
+  const sourceMenu = (
+    <Menu>
+      {sourceOptions.map(o => (
+        <MenuItem
+          key={o.value}
+          text={t(o.labelKey)}
+          active={sourceFilter === o.value}
+          onClick={() => setSourceFilter(o.value)}
+        />
+      ))}
+    </Menu>
+  );
+
+  const statusLabel = t(statusOptions.find(o => o.value === statusFilter)!.labelKey);
+  const sourceLabel = t(sourceOptions.find(o => o.value === sourceFilter)!.labelKey);
+
   const renderBody = () => {
     if (quests.length === 0) return <EmptyRow message={t('gameState.quests.list.emptyAll')} />;
     if (rows.length === 0) return <EmptyRow message={t('gameState.quests.list.emptyFiltered')} />;
@@ -118,24 +160,12 @@ export function QuestList({
           onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, minWidth: 140 }}
         />
-        <HTMLSelect
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-        >
-          <option value="all">{t('gameState.quests.list.statusAll')}</option>
-          <option value="active">{t('gameState.quests.list.statusActive')}</option>
-          <option value="complete">{t('gameState.quests.list.statusComplete')}</option>
-          <option value="untouched">{t('gameState.quests.list.statusUntouched')}</option>
-        </HTMLSelect>
-        <HTMLSelect
-          value={sourceFilter}
-          onChange={e => setSourceFilter(e.target.value as SourceFilter)}
-        >
-          <option value="all">{t('gameState.quests.list.sourceAll')}</option>
-          <option value="normal">{t('gameState.quests.list.sourceNormal')}</option>
-          <option value="live_only">{t('gameState.quests.list.sourceLiveOnly')}</option>
-          <option value="transition_only">{t('gameState.quests.list.sourceTransitionOnly')}</option>
-        </HTMLSelect>
+        <Popover content={statusMenu} placement="bottom-start" minimal>
+          <Button minimal rightIcon="caret-down" text={statusLabel} />
+        </Popover>
+        <Popover content={sourceMenu} placement="bottom-start" minimal>
+          <Button minimal rightIcon="caret-down" text={sourceLabel} />
+        </Popover>
       </div>
 
       <HTMLTable compact striped style={{ width: '100%', tableLayout: 'fixed' }}>

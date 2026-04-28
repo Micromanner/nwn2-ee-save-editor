@@ -97,7 +97,7 @@ export function LiveOverlay({
             <span style={{ color: mismatches ? T.negative : T.text }}>{liveStr}</span>
           )}
           {mismatches && (
-            <span style={{ color: T.textMuted, marginLeft: 6, fontSize: 12 }}>
+            <span style={{ color: T.textMuted, marginLeft: 6 }}>
               ({t('gameState.quests.detail.expected')}: {ref.declared.map(String).join(', ')})
             </span>
           )}

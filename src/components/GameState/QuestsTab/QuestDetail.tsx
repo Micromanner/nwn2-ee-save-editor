@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { HTMLTable, NonIdealState, Spinner } from '@blueprintjs/core';
 import { GiScrollQuill } from 'react-icons/gi';
 import { T } from '../../theme';
-import { KVRow } from '../../shared';
 import { GameIcon } from '../../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTlkResolver } from '@/hooks/useTlkResolver';
@@ -64,35 +63,36 @@ export function QuestDetail({
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.header')}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 16px' }}>
-          <KVRow label={t('gameState.quests.list.tag')} value={<span className="t-mono">{quest.tag}</span>} />
-          <KVRow label={t('gameState.quests.list.name')} value={quest.category.name || quest.tag} />
-          <KVRow label={t('gameState.quests.list.priority')} value={quest.category.priority || '-'} />
-          <KVRow label={t('gameState.quests.list.xp')} value={String(quest.category.xp || 0)} />
-          <KVRow
-            label={t('gameState.quests.list.live')}
-            value={quest.live_state == null ? (
+        <div className="t-md" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 16, rowGap: 4, alignItems: 'baseline' }}>
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.tag')}</span>
+          <span className="t-semibold t-mono" style={{ color: T.text }}>{quest.tag}</span>
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.name')}</span>
+          <span className="t-semibold" style={{ color: T.text }}>{quest.category.name || quest.tag}</span>
+
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.priority')}</span>
+          <span className="t-semibold" style={{ color: T.text }}>{quest.category.priority || '-'}</span>
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.xp')}</span>
+          <span className="t-semibold" style={{ color: T.text }}>{String(quest.category.xp || 0)}</span>
+
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.source')}</span>
+          <span className="t-semibold" style={{ color: source !== 'normal' ? T.negative : T.text }}>
+            {t(`gameState.quests.sourceBadge.${source}`)}
+          </span>
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.definedIn')}</span>
+          <span className="t-semibold" style={{ color: T.text }}>{quest.defined_in.length > 0 ? quest.defined_in.join(', ') : '-'}</span>
+
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.live')}</span>
+          <span className="t-semibold" style={{ gridColumn: '2 / -1', color: T.text }}>
+            {quest.live_state == null ? (
               <span style={{ color: T.textMuted }}>{t('gameState.quests.detail.notStarted')}</span>
             ) : (
-              <span>
+              <>
                 <span className="t-mono">{quest.live_state}</span>
                 {matchingEntry && <> &mdash; {matchingEntry.text}</>}
                 {matchingEntry?.final && <span style={{ color: T.positive, marginLeft: 6 }}>({t('gameState.quests.detail.final')})</span>}
-              </span>
+              </>
             )}
-          />
-          <KVRow
-            label={t('gameState.quests.list.source')}
-            value={
-              <span style={{ color: source !== 'normal' ? T.negative : T.textMuted }}>
-                {t(`gameState.quests.sourceBadge.${source}`)}
-              </span>
-            }
-          />
-          <KVRow
-            label={t('gameState.quests.list.definedIn')}
-            value={quest.defined_in.length > 0 ? quest.defined_in.join(', ') : '-'}
-          />
+          </span>
         </div>
       </div>
 

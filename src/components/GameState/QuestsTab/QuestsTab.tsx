@@ -61,14 +61,14 @@ export function QuestsTab() {
 
       <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
         <div style={{ display: 'flex', minHeight: 480, maxHeight: 'calc(100vh - 280px)' }}>
-          <div style={{ width: '40%', minWidth: 360, borderRight: `1px solid ${T.borderLight}`, overflowY: 'auto' }}>
+          <div style={{ flex: 3, minWidth: 360, borderRight: `1px solid ${T.borderLight}`, overflowY: 'auto' }}>
             <QuestList
               quests={graph.quests}
               selectedTag={effectiveTag}
               onSelect={setSelectedTag}
             />
           </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ flex: 2, minWidth: 360, overflowY: 'auto' }}>
             <QuestDetail quest={selectedQuest} graph={graph} transitions={transitions} />
           </div>
         </div>

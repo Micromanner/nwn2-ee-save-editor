@@ -520,7 +520,9 @@
         "liveOverlayGlobals": "Globals",
         "liveOverlayLocals": "Module locals",
         "unset": "(unset)",
-        "expected": "expected"
+        "expected": "expected",
+        "showSources": "Show {count} sources",
+        "hideSources": "Hide sources"
       },
       "sourceBadge": {
         "normal": "normal",
