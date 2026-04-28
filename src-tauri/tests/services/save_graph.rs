@@ -54,6 +54,7 @@ fn save_graph_builds_on_classic_campaign() {
         player_index: 0,
         current_module: &module_info,
         current_module_vars: &module_vars,
+        progress: None,
     })
     .expect("save_graph::build");
 
@@ -180,6 +181,7 @@ fn save_graph_transitions_carry_text_strref() {
         player_index: 0,
         current_module: &module_info,
         current_module_vars: &module_vars,
+        progress: None,
     })
     .expect("save_graph::build");
 

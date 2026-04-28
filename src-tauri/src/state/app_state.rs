@@ -7,6 +7,7 @@ use crate::commands::models::ModelEntry;
 use crate::config::{AppConfig, NWN2Paths};
 use crate::loaders::GameData;
 use crate::services::resource_manager::ResourceManager;
+use crate::services::save_graph::QuestGraphProgress;
 use crate::services::toolset_bridge::BridgeClient;
 use crate::state::session_state::SessionState;
 
@@ -34,6 +35,7 @@ pub struct AppState {
     pub game_data: Arc<RwLock<GameData>>,
     pub session: Arc<RwLock<SessionState>>,
     pub init_status: Arc<RwLock<InitStatus>>,
+    pub quest_graph_progress: Arc<RwLock<QuestGraphProgress>>,
     pub model_list_cache: Mutex<Option<Vec<ModelEntry>>>,
     /// Shared long-lived toolset-bridge client. Spawned lazily on first use so
     /// startup doesn't pay for it unless/until a Quests-tab or toolset command
@@ -82,6 +84,7 @@ impl AppState {
             game_data,
             session: Arc::new(RwLock::new(session)),
             init_status: Arc::new(RwLock::new(InitStatus::default())),
+            quest_graph_progress: Arc::new(RwLock::new(QuestGraphProgress::default())),
             model_list_cache: Mutex::new(None),
             bridge_client: Mutex::new(None),
         }

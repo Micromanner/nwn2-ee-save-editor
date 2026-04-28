@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Card, Elevation, NonIdealState, Spinner } from '@blueprintjs/core';
+import { Card, Elevation, NonIdealState, ProgressBar } from '@blueprintjs/core';
 import { GiBrokenShield } from 'react-icons/gi';
 import { GameIcon } from '../../shared/GameIcon';
 import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useQuestTransitions } from '@/hooks/useQuestTransitions';
-import { gameStateAPI } from '@/services/gameStateApi';
+import { gameStateAPI, type QuestGraphProgress } from '@/services/gameStateApi';
 import type { SaveGraph } from './types';
 import { CampaignContextCard } from './CampaignContextCard';
 import { QuestList } from './QuestList';
 import { QuestDetail } from './QuestDetail';
+
+const POLL_INTERVAL_MS = 100;
+const INITIAL_PROGRESS: QuestGraphProgress = {
+  step: 'starting',
+  progress: 0,
+  message: '',
+};
 
 export function QuestsTab() {
   const t = useTranslations();
@@ -19,11 +26,38 @@ export function QuestsTab() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [progress, setProgress] = useState<QuestGraphProgress>(INITIAL_PROGRESS);
   const transitions = useQuestTransitions();
 
   useEffect(() => {
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const snapshot = await gameStateAPI.getQuestGraphProgress();
+        if (cancelled) return;
+        setProgress(prev =>
+          prev.step === snapshot.step
+          && prev.progress === snapshot.progress
+          && prev.message === snapshot.message
+            ? prev
+            : snapshot,
+        );
+      } catch (err) {
+        console.debug('[QuestsTab] progress poll failed:', err);
+      }
+      if (!cancelled) {
+        pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+      }
+    };
+
     setIsLoading(true);
     setError(null);
+    setProgress(INITIAL_PROGRESS);
+    poll();
+
     gameStateAPI.getSaveQuestGraph()
       .then(setGraph)
       .catch(err => {
@@ -31,11 +65,39 @@ export function QuestsTab() {
         setError(msg);
         handleError(err);
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        cancelled = true;
+        if (pollTimer) clearTimeout(pollTimer);
+        setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
   }, [handleError]);
 
   if (isLoading && !graph) {
-    return <div style={{ padding: 48, textAlign: 'center' }}><Spinner size={32} /></div>;
+    const isAnimated = progress.step !== 'ready' && progress.step !== 'error';
+    return (
+      <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: 360, textAlign: 'center' }}>
+          <div className="t-md t-bold" style={{ color: T.accent, marginBottom: 12 }}>
+            {t('gameState.quests.loadingTitle')}
+          </div>
+          <ProgressBar
+            value={progress.progress / 100}
+            intent="primary"
+            animate={isAnimated}
+            stripes={false}
+            style={{ marginBottom: 8 }}
+          />
+          <div className="t-sm" style={{ color: T.textMuted, minHeight: 18 }}>
+            {progress.message}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error && !graph) {

@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::config::NWN2Paths;
 use crate::parsers::xml::XmlData;
@@ -18,7 +18,7 @@ use crate::services::toolset_bridge::{
 use super::journal_reader::read_live_journal;
 use super::types::{
     AggregatedModule, CampaignSummary, LiveModuleVar, ModuleVarValue, OrphanKind, OrphanNote,
-    QuestAggregate, SaveGraph, TransitionNode,
+    QuestAggregate, QuestGraphProgress, SaveGraph, TransitionNode,
 };
 
 /// Synthetic functor script name the bridge emits for `NWN2ConversationConnector.Quest`
@@ -39,11 +39,28 @@ pub struct BuildContext<'a> {
     pub player_index: usize,
     pub current_module: &'a ModuleInfo,
     pub current_module_vars: &'a ModuleVariables,
+    /// Optional sink invoked at each build milestone. The command layer wires
+    /// this into a shared `Arc<RwLock<QuestGraphProgress>>` so the Quests tab
+    /// can poll it. `None` for tests and headless callers.
+    pub progress: Option<&'a dyn Fn(QuestGraphProgress)>,
 }
 
 pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
     let current_module_id = ctx.current_module.current_module.clone();
     let campaign_id = ctx.current_module.campaign_id.clone();
+
+    let report = |step: &str, progress: f32, message: String| {
+        debug!("save_graph progress: step={step} progress={progress:.1} message={message}");
+        if let Some(sink) = ctx.progress {
+            sink(QuestGraphProgress {
+                step: step.to_string(),
+                progress,
+                message,
+            });
+        }
+    };
+
+    report("starting", 0.0, "Resolving campaign…".to_string());
 
     let mut orphans = Vec::new();
 
@@ -101,10 +118,23 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
         ),
     };
 
+    report("campaign", 5.0, "Listing modules…".to_string());
+
     let mut quests: HashMap<String, QuestAggregate> = HashMap::new();
     let mut modules_out: Vec<AggregatedModule> = Vec::with_capacity(module_entries.len());
 
-    for entry in &module_entries {
+    let module_total = module_entries.len();
+    for (idx, entry) in module_entries.iter().enumerate() {
+        let module_progress = if module_total == 0 {
+            85.0
+        } else {
+            5.0 + ((idx + 1) as f32 / module_total as f32) * 80.0
+        };
+        report(
+            "modules",
+            module_progress,
+            format!("Loading {} ({} of {})", entry.name, idx + 1, module_total),
+        );
         if entry.resolution_kind == ResolutionKind::Unresolved {
             orphans.push(OrphanNote {
                 kind: OrphanKind::UnresolvedModule,
@@ -166,6 +196,8 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
         });
     }
 
+    report("journal", 90.0, "Reading live journal…".to_string());
+
     let live = match read_live_journal(ctx.handler, ctx.player_index) {
         Ok(entries) => entries,
         Err(e) => {
@@ -190,6 +222,8 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             });
     }
 
+    report("globals", 95.0, "Reading campaign globals…".to_string());
+
     let globals = CampaignManager::get_campaign_variables(ctx.handler).unwrap_or_else(|e| {
         warn!("globals.xml overlay unavailable: {e}");
         orphans.push(OrphanNote {
@@ -210,6 +244,8 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
         quests_out.len(),
         live.len()
     );
+
+    report("ready", 100.0, "Done".to_string());
 
     Ok(SaveGraph {
         campaign: campaign_summary,

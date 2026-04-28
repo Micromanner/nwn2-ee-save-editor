@@ -320,6 +320,12 @@ export interface UpdateModuleVariableResponse {
   has_unsaved_changes: boolean;
 }
 
+export interface QuestGraphProgress {
+  step: 'idle' | 'starting' | 'campaign' | 'modules' | 'journal' | 'globals' | 'ready' | 'error';
+  progress: number;
+  message: string;
+}
+
 export class GameStateAPI {
   async getCompanionInfluence(characterId: number): Promise<CompanionInfluenceResponse> {
     const companions = await invoke<Record<string, CompanionInfluenceData>>('get_companion_influence');
@@ -662,6 +668,10 @@ export class GameStateAPI {
 
   async getSaveQuestTransitions(tag: string): Promise<TransitionNode[]> {
     return invoke<TransitionNode[]>('save_get_quest_transitions', { tag });
+  }
+
+  async getQuestGraphProgress(): Promise<QuestGraphProgress> {
+    return invoke<QuestGraphProgress>('save_get_quest_graph_progress');
   }
 
   async getTlkStrings(strRefs: number[]): Promise<Record<number, string>> {

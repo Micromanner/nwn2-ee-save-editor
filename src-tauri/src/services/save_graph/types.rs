@@ -143,3 +143,24 @@ pub enum OrphanKind {
     GraphFailed,
     JournalReadFailed,
 }
+
+/// Progress reported by the aggregator while building a `SaveGraph`. Stored on
+/// `AppState` and polled by the Quests tab so the user sees which module is
+/// currently being graphed (the dominant per-module loop in `build`). Field
+/// names mirror `InitStatus` for frontend symmetry.
+#[derive(Debug, Clone, Serialize)]
+pub struct QuestGraphProgress {
+    pub step: String,
+    pub progress: f32,
+    pub message: String,
+}
+
+impl Default for QuestGraphProgress {
+    fn default() -> Self {
+        Self {
+            step: "idle".to_string(),
+            progress: 0.0,
+            message: String::new(),
+        }
+    }
+}

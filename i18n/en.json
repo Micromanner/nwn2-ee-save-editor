@@ -535,7 +535,8 @@
         "graph_failed": "Graph failed",
         "journal_read_failed": "Journal read failed"
       },
-      "failedToLoad": "Failed to load quest graph"
+      "failedToLoad": "Failed to load quest graph",
+      "loadingTitle": "Loading quest data"
     },
     "companions": {
       "failedToLoad": "Failed to load companions",

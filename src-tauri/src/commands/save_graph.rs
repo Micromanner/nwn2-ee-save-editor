@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
+use parking_lot::RwLock;
 use tauri::{AppHandle, State};
 
 use crate::commands::campaign::cached_module_info;
 use crate::commands::{CommandError, CommandResult};
 use crate::services::save_graph::{
-    self, BuildContext, SaveGraph, SaveGraphSummary, TransitionNode,
+    self, BuildContext, QuestGraphProgress, SaveGraph, SaveGraphSummary, TransitionNode,
 };
 use crate::services::toolset_bridge;
 use crate::state::AppState;
@@ -40,6 +41,13 @@ pub async fn save_get_quest_transitions(
     Ok(transitions)
 }
 
+/// Snapshot of the current (or most recent) `save_get_quest_graph` build progress.
+/// Polled by the Quests-tab loading UI.
+#[tauri::command]
+pub fn save_get_quest_graph_progress(state: State<'_, AppState>) -> QuestGraphProgress {
+    state.quest_graph_progress.read().clone()
+}
+
 fn ensure_quest_graph(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -54,7 +62,17 @@ fn ensure_quest_graph(
 
     let client = toolset_bridge::build_client(app, state).map_err(CommandError::from)?;
 
-    let graph = {
+    let progress_handle: Arc<RwLock<QuestGraphProgress>> = state.quest_graph_progress.clone();
+    *progress_handle.write() = QuestGraphProgress {
+        step: "starting".to_string(),
+        progress: 0.0,
+        message: "Resolving campaign…".to_string(),
+    };
+    let progress_sink = |snapshot: QuestGraphProgress| {
+        *progress_handle.write() = snapshot;
+    };
+
+    let graph_result = {
         let session = state.session.read();
         let handler = session
             .savegame_handler
@@ -72,8 +90,20 @@ fn ensure_quest_graph(
             player_index,
             current_module: &module_info,
             current_module_vars: &module_vars,
+            progress: Some(&progress_sink),
         })
-        .map_err(CommandError::from)?
+    };
+
+    let graph = match graph_result {
+        Ok(g) => g,
+        Err(e) => {
+            *state.quest_graph_progress.write() = QuestGraphProgress {
+                step: "error".to_string(),
+                progress: 0.0,
+                message: e.clone(),
+            };
+            return Err(CommandError::from(e));
+        }
     };
 
     let shared = Arc::new(graph);
