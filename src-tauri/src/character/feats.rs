@@ -271,7 +271,7 @@ pub struct DomainInfo {
     pub name: String,
     pub description: String,
     pub granted_feat: Option<FeatId>,
-    pub castable_feat: Option<FeatId>,
+    pub is_castable: bool,
     pub epithet_feat: Option<FeatId>,
     pub has_domain: bool,
 }
@@ -478,6 +478,12 @@ static INITIATIVE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 static FEAT_PROGRESSION_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(.*?)[\s_]?(\d+)$").unwrap());
 
+/// Matches NWN2 EE epithet feat labels like `FEAT_EPITHET_STRENGTH_DOMAIN` whose
+/// domain row in `domains.2da` left `epithetfeat` blank. Captures the domain label.
+static DOMAIN_EPITHET_LABEL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?i)FEAT_EPITHET_(.+?)_DOMAIN$").expect("Invalid domain epithet regex")
+});
+
 const SAVE_CONDITIONAL_KEYWORDS: &[&str] = &[
     "against",
     "vs ",
@@ -554,14 +560,12 @@ pub fn build_domain_feat_sets(game_data: &GameData) -> (HashSet<i32>, HashSet<i3
             continue;
         };
 
-        for field in ["grantedfeat", "castablefeat"] {
-            if let Some(feat_id) = domain_data
-                .get(field)
-                .and_then(|s| s.as_ref()?.parse::<i32>().ok())
-                .filter(|&id| id >= 0)
-            {
-                all_domain_feats.insert(feat_id);
-            }
+        if let Some(feat_id) = domain_data
+            .get("grantedfeat")
+            .and_then(|s| s.as_ref()?.parse::<i32>().ok())
+            .filter(|&id| id >= 0)
+        {
+            all_domain_feats.insert(feat_id);
         }
 
         if let Some(feat_id) = domain_data
@@ -970,9 +974,6 @@ impl Character {
                     .get("grantedfeat")
                     .and_then(|s| s.as_ref()?.parse::<i32>().ok()),
                 domain_data
-                    .get("castablefeat")
-                    .and_then(|s| s.as_ref()?.parse::<i32>().ok()),
-                domain_data
                     .get("epithetfeat")
                     .and_then(|s| s.as_ref()?.parse::<i32>().ok()),
             ];
@@ -989,6 +990,38 @@ impl Character {
 
     pub fn is_domain_epithet_feat(&self, feat_id: FeatId, game_data: &GameData) -> bool {
         self.find_domain_for_feat(feat_id, game_data).is_some()
+    }
+
+    /// Resolves the epithet feat for a domain, falling back to a `feat.2da` label
+    /// search when `domains.2da` left `epithetfeat` blank (Strength, Death, Evil,
+    /// Healing, Protection, Sun, Fury).
+    fn resolve_domain_epithet_feat(
+        domain_data: &ahash::AHashMap<String, Option<String>>,
+        game_data: &GameData,
+    ) -> Option<FeatId> {
+        if let Some(feat_id) = domain_data
+            .get("epithetfeat")
+            .and_then(|s| s.as_ref()?.parse::<i32>().ok())
+            .filter(|&id| id >= 0)
+        {
+            return Some(FeatId(feat_id));
+        }
+
+        let domain_label = row_str(domain_data, "label")?;
+        let feat_table = game_data.get_table("feat")?;
+        let expected = format!("FEAT_EPITHET_{}_DOMAIN", domain_label.to_ascii_uppercase());
+        for row_id in 0..feat_table.row_count() {
+            let Some(feat_data) = feat_table.get_by_id(row_id as i32) else {
+                continue;
+            };
+            let Some(label) = feat_data.get("label").and_then(|s| s.as_ref()) else {
+                continue;
+            };
+            if label.eq_ignore_ascii_case(&expected) {
+                return Some(FeatId(row_id as i32));
+            }
+        }
+        None
     }
 
     pub fn add_domain(
@@ -1015,23 +1048,10 @@ impl Character {
             .filter(|&id| id >= 0)
             .map(FeatId);
 
-        let castable_feat = domain_data
-            .get("castablefeat")
-            .and_then(|s| s.as_ref()?.parse::<i32>().ok())
-            .filter(|&id| id >= 0)
-            .map(FeatId);
-
-        let epithet_feat = domain_data
-            .get("epithetfeat")
-            .and_then(|s| s.as_ref()?.parse::<i32>().ok())
-            .filter(|&id| id >= 0)
-            .map(FeatId);
+        let epithet_feat = Self::resolve_domain_epithet_feat(&domain_data, game_data);
 
         let mut added_feats = Vec::new();
-        for feat_id in [granted_feat, castable_feat, epithet_feat]
-            .into_iter()
-            .flatten()
-        {
+        for feat_id in [granted_feat, epithet_feat].into_iter().flatten() {
             if !self.has_feat(feat_id) {
                 self.add_feat_with_source(feat_id, FeatSource::Domain)?;
                 added_feats.push(feat_id);
@@ -1068,23 +1088,10 @@ impl Character {
             .filter(|&id| id >= 0)
             .map(FeatId);
 
-        let castable_feat = domain_data
-            .get("castablefeat")
-            .and_then(|s| s.as_ref()?.parse::<i32>().ok())
-            .filter(|&id| id >= 0)
-            .map(FeatId);
-
-        let epithet_feat = domain_data
-            .get("epithetfeat")
-            .and_then(|s| s.as_ref()?.parse::<i32>().ok())
-            .filter(|&id| id >= 0)
-            .map(FeatId);
+        let epithet_feat = Self::resolve_domain_epithet_feat(&domain_data, game_data);
 
         let mut removed_feats = Vec::new();
-        for feat_id in [granted_feat, castable_feat, epithet_feat]
-            .into_iter()
-            .flatten()
-        {
+        for feat_id in [granted_feat, epithet_feat].into_iter().flatten() {
             if self.has_feat(feat_id) {
                 self.remove_feat(feat_id)?;
                 removed_feats.push(feat_id);
@@ -1117,8 +1124,38 @@ impl Character {
             .map(|(i, _)| i)
             .unwrap_or(0);
 
+        let stale1 = {
+            let class_list = self
+                .get_list("ClassList")
+                .ok_or(CharacterError::FieldMissing { field: "ClassList" })?;
+            let entry = &class_list[idx];
+            let d1 = entry
+                .get("Domain1")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(-1);
+            d1 >= 0 && self.domain_slot_is_stale(d1, game_data)
+        };
+        let stale2 = {
+            let class_list = self
+                .get_list("ClassList")
+                .ok_or(CharacterError::FieldMissing { field: "ClassList" })?;
+            let entry = &class_list[idx];
+            let d2 = entry
+                .get("Domain2")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(-1);
+            d2 >= 0 && self.domain_slot_is_stale(d2, game_data)
+        };
+
         let class_list = self.get_list_mut("ClassList").unwrap();
         let entry = &mut class_list[idx];
+
+        if stale1 {
+            entry.shift_remove("Domain1");
+        }
+        if stale2 {
+            entry.shift_remove("Domain2");
+        }
 
         let d1 = entry
             .get("Domain1")
@@ -1148,6 +1185,22 @@ impl Character {
         Ok(())
     }
 
+    /// A slot is "stale" when it points to a domain whose epithet feat is no longer
+    /// in `FeatList`. This happens when an earlier editor version removed the feat
+    /// without clearing `Domain1`/`Domain2`, leaving the slot orphaned.
+    fn domain_slot_is_stale(&self, slot_domain_id: i32, game_data: &GameData) -> bool {
+        let Some(domains_table) = game_data.get_table("domains") else {
+            return false;
+        };
+        let Some(domain_data) = domains_table.get_by_id(slot_domain_id) else {
+            return true;
+        };
+        let Some(epithet) = Self::resolve_domain_epithet_feat(&domain_data, game_data) else {
+            return false;
+        };
+        !self.has_feat(epithet)
+    }
+
     fn clear_domain_slot(&mut self, domain_id: DomainId) {
         let Some(class_list) = self.get_list_mut("ClassList") else {
             return;
@@ -1167,6 +1220,11 @@ impl Character {
     /// uniquely identify a domain - granted/castable feats are frequently general-purpose feats
     /// (e.g. Iron Will granted by LAW, Improved Initiative granted by Time) that would otherwise
     /// hijack plain feat adds/removes.
+    ///
+    /// Several stock domains (Strength, Death, Evil, Healing, Protection, Sun, Fury) leave the
+    /// `epithetfeat` column blank even though `feat.2da` ships matching `FEAT_EPITHET_<NAME>_DOMAIN`
+    /// rows. We fall back to a label match so the UI feat-remove path still routes through
+    /// `remove_domain` and clears `Domain1`/`Domain2`.
     pub fn find_domain_for_feat(&self, feat_id: FeatId, game_data: &GameData) -> Option<DomainId> {
         let domains_table = game_data.get_table("domains")?;
         for row_id in 0..domains_table.row_count() {
@@ -1178,6 +1236,28 @@ impl Character {
                 return Some(DomainId(row_id as i32));
             }
         }
+
+        let feat_table = game_data.get_table("feat")?;
+        let feat_data = feat_table.get_by_id(feat_id.0)?;
+        let feat_label = feat_data.get("label").and_then(|s| s.as_ref())?;
+        let captures = DOMAIN_EPITHET_LABEL_PATTERN.captures(feat_label)?;
+        let target_label = captures.get(1)?.as_str().to_ascii_uppercase();
+
+        for row_id in 0..domains_table.row_count() {
+            let Some(domain_data) = domains_table.get_by_id(row_id as i32) else {
+                continue;
+            };
+            if row_int(&domain_data, "epithetfeat", -1) >= 0 {
+                continue;
+            }
+            let Some(domain_label) = row_str(&domain_data, "label") else {
+                continue;
+            };
+            if domain_label.eq_ignore_ascii_case(&target_label) {
+                return Some(DomainId(row_id as i32));
+            }
+        }
+
         None
     }
 
@@ -1197,9 +1277,6 @@ impl Character {
             let feats = [
                 domain_data
                     .get("grantedfeat")
-                    .and_then(|s| s.as_ref()?.parse::<i32>().ok()),
-                domain_data
-                    .get("castablefeat")
                     .and_then(|s| s.as_ref()?.parse::<i32>().ok()),
                 domain_data
                     .get("epithetfeat")
@@ -2728,11 +2805,10 @@ impl Character {
                 .filter(|&id| id >= 0)
                 .map(FeatId);
 
-            let castable_feat = domain_data
+            let is_castable = domain_data
                 .get("castablefeat")
                 .and_then(|s| s.as_ref()?.parse::<i32>().ok())
-                .filter(|&id| id >= 0)
-                .map(FeatId);
+                .is_some_and(|v| v != 0);
 
             let epithet_feat = domain_data
                 .get("epithetfeat")
@@ -2754,7 +2830,7 @@ impl Character {
                 name,
                 description,
                 granted_feat,
-                castable_feat,
+                is_castable,
                 epithet_feat,
                 has_domain,
             });

@@ -772,6 +772,155 @@ async fn test_add_domain_and_feats() {
     }
 }
 
+/// Stock NWN2 EE 2DA leaves `epithetfeat` blank for several domains (Strength,
+/// Death, Evil, Healing, Protection, Sun, Fury) even though `feat.2da` ships
+/// matching `FEAT_EPITHET_<NAME>_DOMAIN` rows. Without the label fallback the
+/// UI remove-feat path bypasses `remove_domain` and leaves `Domain1`/`Domain2`
+/// occupied, which then blocks any subsequent domain add.
+#[tokio::test]
+async fn test_find_domain_for_unwired_epithet_feat() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let character = load_character("sagemelchior/sagemelchior4.bic");
+
+    let strength_via_epithet = character.find_domain_for_feat(FeatId(1847), game_data);
+    assert_eq!(
+        strength_via_epithet,
+        Some(DomainId(16)),
+        "Strength domain epithet feat 1847 should resolve via label fallback"
+    );
+
+    let animal_via_epithet = character.find_domain_for_feat(FeatId(1835), game_data);
+    assert_eq!(
+        animal_via_epithet,
+        Some(DomainId(1)),
+        "Animal domain epithet feat 1835 should resolve via 2DA epithetfeat column"
+    );
+}
+
+fn clear_all_domains(character: &mut Character, game_data: &app_lib::loaders::GameData) {
+    let existing = character.get_character_domains();
+    for domain_id in existing {
+        let _ = character.remove_domain(domain_id, game_data);
+    }
+}
+
+/// `castablefeat` is a 0/1 flag (passive vs active granted feat), not a feat ID.
+/// An earlier version of `add_domain` parsed it as a feat ID and injected
+/// `FeatId(1)` (the deleted Ambidexterity feat) on every domain operation.
+#[tokio::test]
+async fn test_add_domain_does_not_inject_castable_boolean_as_feat() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let mut character = load_character("sagemelchior/sagemelchior4.bic");
+    clear_all_domains(&mut character, game_data);
+    let had_feat_one_before = character.has_feat(FeatId(1));
+    let had_feat_zero_before = character.has_feat(FeatId(0));
+
+    let strength = DomainId(16);
+    let added = character
+        .add_domain(strength, game_data)
+        .expect("add Strength domain");
+
+    assert!(
+        !added.contains(&FeatId(1)),
+        "add_domain must not add FeatId(1) (DEL_Ambidex) from castablefeat=1"
+    );
+    assert!(
+        !added.contains(&FeatId(0)),
+        "add_domain must not add FeatId(0) from castablefeat=0"
+    );
+    if !had_feat_one_before {
+        assert!(
+            !character.has_feat(FeatId(1)),
+            "FeatId(1) must not appear in FeatList after add_domain"
+        );
+    }
+    if !had_feat_zero_before {
+        assert!(
+            !character.has_feat(FeatId(0)),
+            "FeatId(0) must not appear in FeatList after add_domain"
+        );
+    }
+}
+
+/// Reproduce the user-reported bug: a Cleric with an unwired-epithet domain
+/// (e.g. Strength) in `Domain1`. Removing the epithet feat must clear the slot
+/// so the next domain add can succeed.
+#[tokio::test]
+async fn test_remove_unwired_domain_frees_slot() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let mut character = load_character("sagemelchior/sagemelchior4.bic");
+    clear_all_domains(&mut character, game_data);
+
+    let strength = DomainId(16);
+    character
+        .add_domain(strength, game_data)
+        .expect("add Strength domain");
+    assert!(
+        character.get_character_domains().contains(&strength),
+        "Strength should be in the character's domain list after add"
+    );
+
+    let resolved = character.find_domain_for_feat(FeatId(1847), game_data);
+    assert_eq!(resolved, Some(strength));
+
+    let removed_feats = character
+        .remove_domain(strength, game_data)
+        .expect("remove Strength domain");
+    assert!(removed_feats.contains(&FeatId(1847)));
+
+    assert!(
+        !character.get_character_domains().contains(&strength),
+        "Strength must be cleared from Domain1/Domain2 after remove"
+    );
+}
+
+/// Defense-in-depth: a character file already corrupted by an earlier editor
+/// version may carry `Domain1`/`Domain2` values whose epithet feat is no longer
+/// in `FeatList`. Adding a new domain must succeed by reclaiming the stale slot.
+#[tokio::test]
+async fn test_stale_domain_slot_is_reclaimed() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let mut character = load_character("sagemelchior/sagemelchior4.bic");
+    clear_all_domains(&mut character, game_data);
+
+    character
+        .add_domain(DomainId(16), game_data)
+        .expect("add Strength domain");
+    character
+        .add_domain(DomainId(1), game_data)
+        .expect("add Animal domain");
+
+    character
+        .remove_feat(FeatId(1847))
+        .expect("remove Strength epithet feat directly to simulate stale state");
+
+    let domains_before = character.get_character_domains();
+    assert!(
+        domains_before.contains(&DomainId(16)),
+        "Domain1=Strength should still be present (slot is stale until reclaimed)"
+    );
+
+    let mysticism = DomainId(37);
+    character
+        .add_domain(mysticism, game_data)
+        .expect("adding Mysticism must reclaim the stale Strength slot");
+
+    let domains_after = character.get_character_domains();
+    assert!(domains_after.contains(&mysticism));
+    assert!(
+        !domains_after.contains(&DomainId(16)),
+        "Stale Strength slot must be cleared once reclaimed"
+    );
+}
+
 #[tokio::test]
 async fn test_feat_name_resolution() {
     let ctx = create_test_context().await;
