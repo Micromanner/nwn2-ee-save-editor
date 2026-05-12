@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -157,10 +156,6 @@ fn build_candidate_paths_from_roots(roots: Vec<PathBuf>) -> Vec<PathBuf> {
         add_steam_library_candidates(library_root, &mut candidates);
     }
 
-    for install_path in get_epic_manifest_install_paths() {
-        candidates.insert(install_path);
-    }
-
     let mut candidate_paths: Vec<_> = candidates.into_iter().collect();
     candidate_paths.sort();
     candidate_paths
@@ -177,17 +172,23 @@ fn add_root_candidates(
     for subdir in [
         root.to_path_buf(),
         root.join("Games"),
-        root.join("Epic Games"),
         root.join("GOG Games"),
-        root.join("Program Files").join("Epic Games"),
         root.join("Program Files").join("GOG Games"),
-        root.join("Program Files (x86)").join("Epic Games"),
         root.join("Program Files (x86)").join("GOG Games"),
     ] {
         add_named_install_candidates(&subdir, candidates);
     }
 
-    for steam_root in [
+    for steam_root in steam_root_candidates(root) {
+        steam_roots.insert(steam_root.clone());
+        if steam_root.join("steamapps").exists() {
+            steam_library_roots.insert(steam_root);
+        }
+    }
+}
+
+fn steam_root_candidates(root: &Path) -> Vec<PathBuf> {
+    vec![
         root.to_path_buf(),
         root.join("Steam"),
         root.join("SteamLibrary"),
@@ -196,15 +197,7 @@ fn add_root_candidates(
         root.join(".steam").join("steam"),
         root.join(".steam").join("root"),
         root.join(".local").join("share").join("Steam"),
-        root.join("Library")
-            .join("Application Support")
-            .join("Steam"),
-    ] {
-        steam_roots.insert(steam_root.clone());
-        if steam_root.join("steamapps").exists() {
-            steam_library_roots.insert(steam_root);
-        }
-    }
+    ]
 }
 
 fn add_steam_root_candidates(
@@ -303,21 +296,6 @@ fn get_default_search_roots() -> Vec<PathBuf> {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        roots.insert(PathBuf::from("/Applications"));
-
-        if let Some(home) = dirs::home_dir() {
-            roots.insert(home.join("Applications"));
-            roots.insert(
-                home.join("Library")
-                    .join("Application Support")
-                    .join("Steam"),
-            );
-            roots.insert(home.join("Games"));
-        }
-    }
-
     #[cfg(target_os = "linux")]
     {
         if let Some(home) = dirs::home_dir() {
@@ -332,7 +310,7 @@ fn get_default_search_roots() -> Vec<PathBuf> {
         }
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
         if let Some(home) = dirs::home_dir() {
             roots.insert(home.join("Games"));
@@ -377,6 +355,47 @@ fn get_wsl_windows_drive_roots() -> Vec<PathBuf> {
     drive_roots
 }
 
+pub fn find_steam_workshop_for_app(app_id: &str) -> Option<PathBuf> {
+    find_steam_workshop_for_app_with_roots(app_id, get_default_search_roots())
+}
+
+fn find_steam_workshop_for_app_with_roots(
+    app_id: &str,
+    search_roots: Vec<PathBuf>,
+) -> Option<PathBuf> {
+    for library_root in discover_steam_library_roots(search_roots) {
+        let workshop = library_root
+            .join("steamapps")
+            .join("workshop")
+            .join("content")
+            .join(app_id);
+        if workshop.is_dir() {
+            return Some(workshop);
+        }
+    }
+    None
+}
+
+fn discover_steam_library_roots(search_roots: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut library_roots = HashSet::new();
+
+    for root in search_roots {
+        for steam_root in steam_root_candidates(&root) {
+            if steam_root.join("steamapps").exists() {
+                library_roots.insert(steam_root.clone());
+            }
+            let vdf = steam_root.join("steamapps").join("libraryfolders.vdf");
+            for lib in parse_steam_libraryfolders(&vdf) {
+                library_roots.insert(lib);
+            }
+        }
+    }
+
+    let mut sorted: Vec<_> = library_roots.into_iter().collect();
+    sorted.sort();
+    sorted
+}
+
 fn parse_steam_libraryfolders(vdf_path: &Path) -> Vec<PathBuf> {
     let Ok(content) = std::fs::read_to_string(vdf_path) else {
         return Vec::new();
@@ -403,85 +422,6 @@ fn parse_vdf_key_value(line: &str, key: &str) -> Option<String> {
     }
 
     None
-}
-
-fn get_epic_manifest_install_paths() -> Vec<PathBuf> {
-    get_epic_manifest_install_paths_from_dirs(epic_manifest_dirs())
-}
-
-fn get_epic_manifest_install_paths_from_dirs(manifest_dirs: Vec<PathBuf>) -> Vec<PathBuf> {
-    let mut install_paths = Vec::new();
-
-    for manifest_dir in manifest_dirs {
-        let Ok(entries) = std::fs::read_dir(manifest_dir) else {
-            continue;
-        };
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("item") {
-                continue;
-            }
-
-            let Ok(content) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let Ok(manifest) = serde_json::from_str::<Value>(&content) else {
-                continue;
-            };
-            let Some(install_location) = manifest.get("InstallLocation").and_then(Value::as_str)
-            else {
-                continue;
-            };
-
-            install_paths.push(PathBuf::from(install_location));
-        }
-    }
-
-    install_paths
-}
-
-fn epic_manifest_dirs() -> Vec<PathBuf> {
-    let mut manifest_dirs = HashSet::new();
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(program_data) = std::env::var("ProgramData") {
-            manifest_dirs.insert(
-                PathBuf::from(program_data)
-                    .join("Epic")
-                    .join("EpicGamesLauncher")
-                    .join("Data")
-                    .join("Manifests"),
-            );
-        } else {
-            manifest_dirs.insert(
-                PathBuf::from("C:/ProgramData")
-                    .join("Epic")
-                    .join("EpicGamesLauncher")
-                    .join("Data")
-                    .join("Manifests"),
-            );
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        for drive_root in get_wsl_windows_drive_roots() {
-            manifest_dirs.insert(
-                drive_root
-                    .join("ProgramData")
-                    .join("Epic")
-                    .join("EpicGamesLauncher")
-                    .join("Data")
-                    .join("Manifests"),
-            );
-        }
-    }
-
-    let mut manifest_paths: Vec<_> = manifest_dirs.into_iter().collect();
-    manifest_paths.sort();
-    manifest_paths
 }
 
 #[cfg(target_os = "windows")]
@@ -538,8 +478,8 @@ fn is_nwn2_installation(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        KNOWN_GAME_FOLDER_NAMES, build_candidate_paths_from_roots,
-        find_steam_installs_via_appmanifest, get_epic_manifest_install_paths_from_dirs,
+        KNOWN_GAME_FOLDER_NAMES, build_candidate_paths_from_roots, discover_steam_library_roots,
+        find_steam_installs_via_appmanifest, find_steam_workshop_for_app_with_roots,
         parse_acf_installdir, parse_steam_libraryfolders,
     };
     use std::fs;
@@ -593,35 +533,6 @@ mod tests {
             candidates.contains(&expected),
             "steam libraryfolders path should produce a direct candidate"
         );
-    }
-
-    #[test]
-    fn test_epic_manifest_detection_reads_install_locations() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let manifest_dir = temp_dir.path().join("Manifests");
-        fs::create_dir_all(&manifest_dir).expect("manifest dir");
-
-        let install_path = temp_dir.path().join("Epic Games").join("NWN2EE");
-        fs::write(
-            manifest_dir.join("nwn2ee.item"),
-            serde_json::json!({
-                "AppName": "NWN2EE",
-                "DisplayName": "Neverwinter Nights 2 Enhanced Edition",
-                "InstallLocation": install_path,
-            })
-            .to_string(),
-        )
-        .expect("write manifest");
-        fs::write(
-            manifest_dir.join("ignored.txt"),
-            serde_json::json!({ "InstallLocation": temp_dir.path().join("ignored") }).to_string(),
-        )
-        .expect("write non-item manifest");
-        fs::write(manifest_dir.join("broken.item"), "{not json").expect("write broken manifest");
-
-        let install_paths = get_epic_manifest_install_paths_from_dirs(vec![manifest_dir]);
-
-        assert_eq!(install_paths, vec![install_path]);
     }
 
     #[test]
@@ -694,6 +605,74 @@ mod tests {
             candidates.contains(&expected),
             "appmanifest install dir should be a candidate even when folder is renamed"
         );
+    }
+
+    #[test]
+    fn test_discover_steam_library_roots_includes_libraryfolders_entries() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let steam_root = temp_dir.path().join("Steam");
+        let steamapps_dir = steam_root.join("steamapps");
+        fs::create_dir_all(&steamapps_dir).expect("steamapps dir");
+
+        let alt_library = temp_dir.path().join("AltLibrary");
+        fs::create_dir_all(alt_library.join("steamapps")).expect("alt library steamapps");
+
+        let vdf_path = steamapps_dir.join("libraryfolders.vdf");
+        fs::write(
+            &vdf_path,
+            format!(
+                "\"libraryfolders\"\n{{\n    \"0\"\n    {{\n        \"path\"        \"{}\"\n    }}\n}}\n",
+                alt_library.to_string_lossy().replace('\\', "\\\\")
+            ),
+        )
+        .expect("write vdf");
+
+        let roots = discover_steam_library_roots(vec![temp_dir.path().to_path_buf()]);
+
+        assert!(roots.contains(&steam_root), "primary Steam root detected");
+        assert!(
+            roots.contains(&alt_library),
+            "alt library from VDF detected"
+        );
+    }
+
+    #[test]
+    fn test_find_steam_workshop_for_app_discovers_workshop_in_alt_library() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let steam_root = temp_dir.path().join("Steam");
+        let steamapps_dir = steam_root.join("steamapps");
+        fs::create_dir_all(&steamapps_dir).expect("steamapps dir");
+
+        let alt_library = temp_dir.path().join("AltLibrary");
+        let workshop_dir = alt_library
+            .join("steamapps")
+            .join("workshop")
+            .join("content")
+            .join("2738630");
+        fs::create_dir_all(&workshop_dir).expect("workshop dir");
+
+        let vdf_path = steamapps_dir.join("libraryfolders.vdf");
+        fs::write(
+            &vdf_path,
+            format!(
+                "\"libraryfolders\"\n{{\n    \"0\"\n    {{\n        \"path\"        \"{}\"\n    }}\n}}\n",
+                alt_library.to_string_lossy().replace('\\', "\\\\")
+            ),
+        )
+        .expect("write vdf");
+
+        let found =
+            find_steam_workshop_for_app_with_roots("2738630", vec![temp_dir.path().to_path_buf()]);
+
+        assert_eq!(found, Some(workshop_dir));
+    }
+
+    #[test]
+    fn test_find_steam_workshop_for_app_returns_none_when_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let found =
+            find_steam_workshop_for_app_with_roots("2738630", vec![temp_dir.path().to_path_buf()]);
+        assert_eq!(found, None);
     }
 
     #[test]

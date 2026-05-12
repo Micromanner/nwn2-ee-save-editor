@@ -183,7 +183,7 @@ impl NWN2Paths {
                 }
             }
 
-            if self.steam_workshop_folder.is_none() && !result.steam_paths.is_empty() {
+            if self.steam_workshop_folder.is_none() {
                 self.steam_workshop_folder = find_steam_workshop();
                 if self.steam_workshop_folder.is_some() {
                     self.steam_workshop_folder_source = PathSource::Discovery;
@@ -308,36 +308,7 @@ impl NWN2Paths {
     }
 
     fn find_steam_workshop() -> Option<PathBuf> {
-        #[cfg(windows)]
-        {
-            let program_files =
-                std::env::var("ProgramFiles").unwrap_or_else(|_| "C:/Program Files".to_string());
-            let program_files_x86 = std::env::var("ProgramFiles(x86)")
-                .unwrap_or_else(|_| "C:/Program Files (x86)".to_string());
-
-            let candidates = [
-                PathBuf::from(&program_files).join("Steam/steamapps/workshop/content/2738630"),
-                PathBuf::from(&program_files_x86).join("Steam/steamapps/workshop/content/2738630"),
-            ];
-
-            for path in candidates {
-                if path.exists() && path.is_dir() {
-                    return Some(path);
-                }
-            }
-        }
-
-        #[cfg(not(windows))]
-        {
-            if let Some(home) = dirs::home_dir() {
-                let path = home.join(".steam/steam/steamapps/workshop/content/2738630");
-                if path.exists() && path.is_dir() {
-                    return Some(path);
-                }
-            }
-        }
-
-        None
+        crate::utils::path_discovery::find_steam_workshop_for_app("2738630")
     }
 
     pub fn game_folder(&self) -> Option<&PathBuf> {
