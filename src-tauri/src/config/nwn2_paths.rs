@@ -251,6 +251,13 @@ impl NWN2Paths {
     fn find_documents_folder() -> Option<PathBuf> {
         #[cfg(windows)]
         {
+            // Resolves OneDrive-redirected Documents via SHGetKnownFolderPath
+            if let Some(docs_root) = dirs::document_dir() {
+                let docs = docs_root.join("Neverwinter Nights 2");
+                if docs.exists() {
+                    return Some(docs);
+                }
+            }
             if let Ok(userprofile) = std::env::var("USERPROFILE") {
                 let docs = PathBuf::from(&userprofile)
                     .join("Documents")
