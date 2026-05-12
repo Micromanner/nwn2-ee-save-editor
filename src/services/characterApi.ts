@@ -647,7 +647,7 @@ export class CharacterAPI {
 
     } catch (error) {
       console.error("Error fetching character state:", error);
-      throw new Error(String(error));
+      throw error;
     }
   }
 
@@ -665,7 +665,7 @@ export class CharacterAPI {
       return await invoke<SaveCharacterOption[]>('list_save_characters', { filePath: savePath });
     } catch (error) {
       console.error('Error listing save characters:', error);
-      throw new Error(String(error));
+      throw error;
     }
   }
 
@@ -679,7 +679,7 @@ export class CharacterAPI {
       };
     } catch (error) {
       console.error("Error importing character:", error);
-      throw new Error(String(error));
+      throw error;
     }
   }
 
@@ -712,7 +712,7 @@ export class CharacterAPI {
       return this.getCharacterState(characterId);
     } catch (error) {
       console.error("Error updating character:", error);
-      throw new Error(String(error));
+      throw error;
     }
   }
 
@@ -734,7 +734,7 @@ export class CharacterAPI {
       };
     } catch (error) {
       console.error("Error saving character:", error);
-      throw new Error(String(error));
+      throw error;
     }
   }
 
@@ -756,7 +756,7 @@ export class CharacterAPI {
             recommended_feats: []
         };
     } catch (error) {
-        throw new Error(String(error));
+        throw error;
     }
   }
 
@@ -824,7 +824,7 @@ export class CharacterAPI {
             auto_modified_abilities: result.auto_modified_abilities || [],
         };
     } catch (error) {
-        throw new Error(String(error));
+        throw error;
     }
   }
 
@@ -837,7 +837,7 @@ export class CharacterAPI {
             message: result.message || "Feat removed"
         };
     } catch (error) {
-        throw new Error(String(error));
+        throw error;
     }
   }
 
@@ -940,7 +940,7 @@ export class CharacterAPI {
             has_unsaved_changes: true
         };
       } catch (error) {
-          throw new Error(String(error));
+          throw error;
       }
   }
 
@@ -967,7 +967,7 @@ export class CharacterAPI {
             skill_points: { available: state.total_available - state.spent_points, spent: state.spent_points }
         };
     } catch (error) {
-        throw new Error(String(error));
+        throw error;
     }
   }
 
@@ -982,7 +982,7 @@ export class CharacterAPI {
                available_points: 0
            };
       } catch (error) {
-          throw new Error(String(error));
+          throw error;
       }
   }
 
