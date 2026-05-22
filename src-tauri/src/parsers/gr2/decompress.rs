@@ -1,4 +1,5 @@
-//! Oodle1 decompression for GR2 sections. Ported from nwn2mdk/xoreos-tools.
+//! Oodle1 decompression for GR2 sections. Ported from nwn2mdk's
+//! `gr2_decompress.cpp` (originally written by berenm, Boost Software License 1.0).
 
 use super::error::{Gr2Error, Gr2Result};
 

@@ -195,11 +195,23 @@ Original copyright notices and full license texts are reproduced below.
 
 ---
 
-## xoreos-tools (via nwn2mdk)
+## Oodle1 decompression (via nwn2mdk)
 
-- Source: https://github.com/xoreos/xoreos-tools
+- Source: https://github.com/Arbos/nwn2mdk/blob/master/nwn2mdk-lib/gr2_decompress.cpp
 - License: Boost Software License, Version 1.0
 - Used for: Oodle1 decompression algorithm (GR2 compressed sections, ported to Rust)
+
+The `gr2_decompress.cpp` file inside nwn2mdk carries its own license header,
+separate from nwn2mdk's overall Apache 2.0 license. Its header reads:
+
+> Derived from https://github.com/berenm/xoreos-tools/blob/wip/granny-decoder/src/decompress.cpp
+> Distributed under the Boost Software License, Version 1.0.
+
+The referenced source was a WIP branch on a personal fork of xoreos-tools by
+berenm; that fork has since been deleted and the Oodle/Granny decoder was
+never merged into the upstream xoreos-tools project (which is GPLv3+, not
+Boost). The Boost license below therefore applies only to this specific
+decompression code, not to xoreos-tools or nwn2mdk as a whole.
 
 ### Boost Software License, Version 1.0
 

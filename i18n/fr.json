@@ -812,8 +812,7 @@
     "fanContent": "Projet non-officiel par des fans.",
     "notAffiliated": "Ce projet n'est pas affilié à Aspyr Media.",
     "scripterronCredit": "Pour NWN2 GFF Tools.",
-    "nwn2mdkCredit": "Pour NWN2 Model Development Kit.",
-    "xoreosCredit": "Pour xoreos-tools.",
+    "nwn2mdkCredit": "Pour NWN2 Model Development Kit (Apache 2.0) et l'algorithme de décompression Oodle1 inclus (Boost 1.0, écrit à l'origine par berenm).",
     "thirdParty": "Bibliothèques tierces",
     "copyVersion": "Copier la version"
   },
