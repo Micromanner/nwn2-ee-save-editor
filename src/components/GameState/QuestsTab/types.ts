@@ -4,7 +4,8 @@ export type OrphanKind =
   | 'unresolved_campaign'
   | 'unresolved_module'
   | 'graph_failed'
-  | 'journal_read_failed';
+  | 'journal_read_failed'
+  | 'bridge_unavailable';
 
 export type FunctorKind =
   | 'journal'

@@ -533,7 +533,8 @@
         "unresolved_campaign": "Campaign unresolved",
         "unresolved_module": "Module unresolved",
         "graph_failed": "Graph failed",
-        "journal_read_failed": "Journal read failed"
+        "journal_read_failed": "Journal read failed",
+        "bridge_unavailable": "Toolset bridge unavailable"
       },
       "failedToLoad": "Failed to load quest graph",
       "loadingTitle": "Loading quest data"

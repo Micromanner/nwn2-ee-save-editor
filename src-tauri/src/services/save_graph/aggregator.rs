@@ -418,3 +418,35 @@ fn flatten_module_vars(module_id: &str, vars: &ModuleVariables) -> Vec<LiveModul
         })
         .collect()
 }
+
+/// Build a degraded `SaveGraph` for environments where the toolset bridge can't
+/// run — original NWN2 installs (32-bit toolset DLLs that our 64-bit
+/// bridge can't load) and non-Windows platforms. The graph keeps the live
+/// state we can read without the bridge (globals.xml, current module variables)
+/// and emits a single `BridgeUnavailable` orphan note explaining the gap.
+pub fn build_without_bridge(
+    handler: &SaveGameHandler,
+    current_module: &ModuleInfo,
+    current_module_vars: &ModuleVariables,
+    explanation: String,
+) -> SaveGraph {
+    let current_module_id = current_module.current_module.clone();
+    let campaign_id = current_module.campaign_id.clone();
+
+    let globals = CampaignManager::get_campaign_variables(handler).unwrap_or_else(|e| {
+        warn!("globals.xml overlay unavailable: {e}");
+        XmlData::default()
+    });
+
+    SaveGraph {
+        campaign: single_module_fallback(&campaign_id, &current_module_id),
+        modules: Vec::new(),
+        quests: Vec::new(),
+        globals,
+        current_module_variables: flatten_module_vars(&current_module_id, current_module_vars),
+        orphans: vec![OrphanNote {
+            kind: OrphanKind::BridgeUnavailable,
+            message: explanation,
+        }],
+    }
+}

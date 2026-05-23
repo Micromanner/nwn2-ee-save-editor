@@ -9,6 +9,64 @@ use crate::services::playerinfo::PlayerInfo;
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
 
+/// Return true if the directory looks like a valid NWN2 save in either format.
+///
+/// EE saves contain `resgff.zip`; original-NWN2 saves have loose `player.bic` and
+/// `playerlist.ifo` at the root. Matches `SaveFormat::detect` but doesn't
+/// allocate a handler — used as a cheap discovery filter.
+pub fn is_save_dir(path: &std::path::Path) -> bool {
+    if path.join("resgff.zip").exists() {
+        return true;
+    }
+    path.join("player.bic").exists() && path.join("playerlist.ifo").exists()
+}
+
+/// Return the display name for a save folder.
+///
+/// Prefers EE's `savename.txt` (plain text). Falls back to original NWN2's `savenfo.txt`
+/// formatted as `{strref}name` — strips the optional `{...}` prefix rather than
+/// resolving the TLK ID. Returns `fallback` if neither file exists.
+pub fn read_save_display_name(save_dir: &std::path::Path, fallback: &str) -> String {
+    if let Ok(content) = std::fs::read_to_string(save_dir.join("savename.txt")) {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if let Ok(content) = std::fs::read_to_string(save_dir.join("savenfo.txt")) {
+        let trimmed = content.trim();
+        let stripped = strip_strref_prefix(trimmed);
+        if !stripped.is_empty() {
+            return stripped.to_string();
+        }
+    }
+    fallback.to_string()
+}
+
+fn strip_strref_prefix(s: &str) -> &str {
+    if let Some(rest) = s.strip_prefix('{')
+        && let Some(end) = rest.find('}')
+    {
+        return rest[end + 1..].trim();
+    }
+    s
+}
+
+/// Return the path to a thumbnail image inside the save folder, if any exists.
+/// EE writes `screen.tga`; original NWN2 writes `screen.jpg`. EE takes precedence when
+/// both are present (a converted save).
+pub fn find_save_thumbnail(save_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let tga = save_dir.join("screen.tga");
+    if tga.exists() {
+        return Some(tga);
+    }
+    let jpg = save_dir.join("screen.jpg");
+    if jpg.exists() {
+        return Some(jpg);
+    }
+    None
+}
+
 fn read_save_character_name(save_path: &std::path::Path) -> Option<String> {
     // playerinfo.bin is NWN2's own load-menu metadata file - cheap flat read.
     // Only fall back to parsing player.bic out of the zip when it's missing.
@@ -67,39 +125,25 @@ pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String>
 
     let name = match &dir_path {
         tauri_plugin_dialog::FilePath::Path(p) => {
-            // Try to read actual save name from savename.txt
-            match std::fs::read_to_string(p.join("savename.txt")) {
-                Ok(content) => content.trim().to_string(),
-                Err(_) => {
-                    // Fallback to folder name
-                    p.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("Unknown")
-                        .to_string()
-                }
-            }
+            let fallback = p.file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
+            read_save_display_name(p, fallback)
         }
         _ => "Unknown".to_string(),
     };
 
     let save_path = PathBuf::from(&path_str);
-    let resgff_path = save_path.join("resgff.zip");
-    if !resgff_path.exists() {
-        log::error!("[Rust] Validation failed: selected directory is missing resgff.zip");
+    if !is_save_dir(&save_path) {
+        log::error!(
+            "[Rust] Validation failed: selected directory is not a valid NWN2 save (no resgff.zip and no loose player.bic+playerlist.ifo)"
+        );
         return Err(
-            "Selected directory doesn't appear to be a valid NWN2 save (missing resgff.zip)"
+            "Selected directory doesn't appear to be a valid NWN2 save (no resgff.zip and no loose player.bic+playerlist.ifo)"
                 .to_string(),
         );
     }
 
     log::info!("[Rust] Save file validated. Returning path to frontend.");
-    // Check for thumbnail in selected save
-    let thumbnail_path = save_path.join("screen.tga");
-    let thumbnail = if thumbnail_path.exists() {
-        Some(thumbnail_path.to_string_lossy().to_string())
-    } else {
-        None
-    };
+    let thumbnail = find_save_thumbnail(&save_path).map(|p| p.to_string_lossy().to_string());
 
     let modified = save_path
         .metadata()
@@ -166,7 +210,7 @@ pub async fn find_nwn2_saves(
         // Collect save directory entries for sorting
         let mut save_entries: Vec<_> = entries
             .flatten()
-            .filter(|entry| entry.path().is_dir() && entry.path().join("resgff.zip").exists())
+            .filter(|entry| entry.path().is_dir() && is_save_dir(&entry.path()))
             .collect();
 
         // Sort by directory modification time (newest first)
@@ -188,19 +232,9 @@ pub async fn find_nwn2_saves(
             let folder_name = entry.file_name().to_string_lossy().to_string();
             let save_path = entry.path().to_string_lossy().to_string();
 
-            // Try to read actual save name from savename.txt
-            let save_name = match std::fs::read_to_string(entry.path().join("savename.txt")) {
-                Ok(content) => content.trim().to_string(),
-                Err(_) => folder_name, // Fallback to folder name if savename.txt doesn't exist
-            };
-
-            // Check for thumbnail
-            let thumbnail_path = entry.path().join("screen.tga");
-            let thumbnail = if thumbnail_path.exists() {
-                Some(thumbnail_path.to_string_lossy().to_string())
-            } else {
-                None
-            };
+            let save_name = read_save_display_name(&entry.path(), &folder_name);
+            let thumbnail =
+                find_save_thumbnail(&entry.path()).map(|p| p.to_string_lossy().to_string());
 
             let modified = entry
                 .path()
@@ -279,13 +313,13 @@ pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String
 
     // Open and decode TGA file
     log::debug!(
-        "[Rust] Attempting to decode TGA file at: {}",
+        "[Rust] Attempting to decode thumbnail at: {}",
         path.display()
     );
 
     let dynamic_image = image::open(&path).map_err(|e| {
         log::error!(
-            "Failed to open/decode TGA file at '{}': {}",
+            "Failed to open/decode thumbnail at '{}': {}",
             path.display(),
             e
         );
@@ -293,7 +327,7 @@ pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String
     })?;
 
     log::debug!(
-        "[Rust] TGA decoded successfully: {}x{}",
+        "[Rust] Thumbnail decoded successfully: {}x{}",
         dynamic_image.width(),
         dynamic_image.height()
     );
@@ -309,7 +343,7 @@ pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String
     let webp_data = webp_memory.to_vec();
 
     log::debug!(
-        "[Rust] Successfully converted TGA to WebP ({} bytes)",
+        "[Rust] Successfully converted thumbnail to WebP ({} bytes)",
         webp_data.len()
     );
 
@@ -528,7 +562,7 @@ pub async fn browse_saves(
             continue;
         }
 
-        if !entry_path.join("resgff.zip").exists() {
+        if !is_save_dir(&entry_path) {
             continue;
         }
 
@@ -554,18 +588,18 @@ pub async fn browse_saves(
             }
         }
 
-        let save_name = std::fs::read_to_string(entry_path.join("savename.txt"))
-            .ok()
-            .map(|s| s.trim().to_string());
+        // Pass an empty fallback so save_name stays None when neither file exists
+        // (preserves the existing Option<String> contract for this endpoint).
+        let save_name_raw = read_save_display_name(&entry_path, "");
+        let save_name = if save_name_raw.is_empty() {
+            None
+        } else {
+            Some(save_name_raw)
+        };
 
         let character_name = read_save_character_name(&entry_path);
 
-        let thumbnail_path = entry_path.join("screen.tga");
-        let thumbnail = if thumbnail_path.exists() {
-            Some(thumbnail_path.to_string_lossy().to_string())
-        } else {
-            None
-        };
+        let thumbnail = find_save_thumbnail(&entry_path).map(|p| p.to_string_lossy().to_string());
 
         files_list.push(BrowseSaveEntry {
             name,
@@ -750,9 +784,12 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
                     }
                 }
                 let character_name = PlayerInfo::get_player_name(src.join("playerinfo.bin")).ok();
-                let save_name = std::fs::read_to_string(src.join("savename.txt"))
-                    .ok()
-                    .map(|s| s.trim().to_string());
+                let save_name_raw = read_save_display_name(src, "");
+                let save_name = if save_name_raw.is_empty() {
+                    None
+                } else {
+                    Some(save_name_raw)
+                };
                 (size, character_name, save_name)
             }
             None => (0u64, None, None),
@@ -890,4 +927,95 @@ pub async fn get_default_localvault_path(state: State<'_, AppState>) -> Result<S
         .localvault()
         .ok_or("Could not determine NWN2 localvault path")?;
     Ok(vault_path.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_save_dir_accepts_ee_layout() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("resgff.zip"), b"dummy").unwrap();
+        assert!(is_save_dir(tmp.path()));
+    }
+
+    #[test]
+    fn test_is_save_dir_accepts_original_layout() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        assert!(is_save_dir(tmp.path()));
+    }
+
+    #[test]
+    fn test_is_save_dir_rejects_empty_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!is_save_dir(tmp.path()));
+    }
+
+    #[test]
+    fn test_is_save_dir_rejects_partial_original_layout() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        assert!(!is_save_dir(tmp.path()));
+    }
+
+    #[test]
+    fn test_read_save_display_name_prefers_savename_txt() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("savename.txt"), "EE Save Name\n").unwrap();
+        std::fs::write(tmp.path().join("savenfo.txt"), "{1234}Old Name\n").unwrap();
+        assert_eq!(
+            read_save_display_name(tmp.path(), "fallback"),
+            "EE Save Name"
+        );
+    }
+
+    #[test]
+    fn test_read_save_display_name_falls_back_to_savenfo_and_strips_strref() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("savenfo.txt"), "{1111}Farlong House, L2\n").unwrap();
+        assert_eq!(
+            read_save_display_name(tmp.path(), "fallback"),
+            "Farlong House, L2"
+        );
+    }
+
+    #[test]
+    fn test_read_save_display_name_handles_savenfo_without_strref_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("savenfo.txt"), "Just A Name\n").unwrap();
+        assert_eq!(
+            read_save_display_name(tmp.path(), "fallback"),
+            "Just A Name"
+        );
+    }
+
+    #[test]
+    fn test_read_save_display_name_fallback_when_no_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(
+            read_save_display_name(tmp.path(), "folder_name"),
+            "folder_name"
+        );
+    }
+
+    #[test]
+    fn test_find_save_thumbnail_prefers_tga_then_jpg() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(find_save_thumbnail(tmp.path()).is_none());
+
+        std::fs::write(tmp.path().join("screen.jpg"), b"jpg").unwrap();
+        assert_eq!(
+            find_save_thumbnail(tmp.path()).unwrap(),
+            tmp.path().join("screen.jpg")
+        );
+
+        std::fs::write(tmp.path().join("screen.tga"), b"tga").unwrap();
+        assert_eq!(
+            find_save_thumbnail(tmp.path()).unwrap(),
+            tmp.path().join("screen.tga")
+        );
+    }
 }

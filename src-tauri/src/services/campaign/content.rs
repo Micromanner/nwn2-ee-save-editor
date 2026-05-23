@@ -18,6 +18,13 @@ use crate::config::NWN2Paths;
 use crate::services::campaign::backup::backup_module_z;
 use crate::services::savegame_handler::SaveGameHandler;
 
+/// True if the path's extension is `z` regardless of case.
+/// EE saves use lowercase `.z` (LZMA); original-NWN2 saves use uppercase `.Z` (PK zip).
+fn has_z_extension(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("z"))
+}
+
 /// Write a `VarTable` entry's Type/Value, preserving the existing `Value`
 /// variant when updating an int (real `module.ifo` files mix `Int` and `Dword`
 /// for integer values; the engine cares which one).
@@ -90,7 +97,7 @@ pub fn extract_module_info(
     if let Ok(entries) = fs::read_dir(save_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|e| e == "z") {
+            if path.is_file() && has_z_extension(&path) {
                 z_files.push(path);
             }
         }
@@ -160,7 +167,7 @@ pub fn list_modules(
     if let Ok(entries) = fs::read_dir(save_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|e| e == "z") {
+            if path.is_file() && has_z_extension(&path) {
                 let file_stem = path
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
@@ -456,7 +463,7 @@ fn update_module_variable_inner(
         .to_bytes()
         .map_err(|e| format!("Failed to serialize ERF: {e}"))?;
 
-    let compressed = compress_lzma_for_nwn2(&erf_bytes)?;
+    let compressed = compress_z_matching_existing(&erf_bytes, &z_path)?;
 
     info!(
         "Compressed {} -> {} bytes, writing to {:?}",
@@ -576,7 +583,7 @@ pub fn batch_update_module_variables(
         .to_bytes()
         .map_err(|e| format!("Failed to serialize ERF: {e}"))?;
 
-    let compressed = compress_lzma_for_nwn2(&erf_bytes)?;
+    let compressed = compress_z_matching_existing(&erf_bytes, &z_path)?;
 
     info!(
         "Compressed {} -> {} bytes, writing to {:?}",
@@ -600,6 +607,25 @@ pub fn batch_update_module_variables(
 }
 
 fn decompress_z_file(path: &Path) -> Result<Vec<u8>, String> {
+    // EE saves use LZMA-alone compression for .z; original NWN2 saves
+    // wrap the same ERF payload in a PK zip (.Z) instead. Sniff the first 4
+    // bytes and dispatch — the ERF parser sees the same bytes either way.
+    let mut header = [0u8; 4];
+    {
+        let mut file = fs::File::open(path).map_err(|e| format!("Failed to open .z file: {e}"))?;
+        // Short reads (< 4 bytes) leave the rest zero; either branch below
+        // will then fail with a clearer error than a silent truncation.
+        let _ = file.read(&mut header);
+    }
+
+    if &header == b"PK\x03\x04" {
+        decompress_z_file_zip(path)
+    } else {
+        decompress_z_file_lzma(path)
+    }
+}
+
+fn decompress_z_file_lzma(path: &Path) -> Result<Vec<u8>, String> {
     let file = fs::File::open(path).map_err(|e| format!("Failed to open .z file: {e}"))?;
     let stream = Stream::new_lzma_decoder(u64::MAX)
         .map_err(|e| format!("Failed to create LZMA decoder: {e}"))?;
@@ -607,7 +633,25 @@ fn decompress_z_file(path: &Path) -> Result<Vec<u8>, String> {
     let mut decompressed = Vec::new();
     decoder
         .read_to_end(&mut decompressed)
-        .map_err(|e| format!("Failed to decompress .z file: {e}"))?;
+        .map_err(|e| format!("Failed to decompress .z file (LZMA): {e}"))?;
+    Ok(decompressed)
+}
+
+fn decompress_z_file_zip(path: &Path) -> Result<Vec<u8>, String> {
+    let file = fs::File::open(path).map_err(|e| format!("Failed to open .Z file: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Failed to open .Z file as zip: {e}"))?;
+    if archive.is_empty() {
+        return Err("Original-NWN2 .Z zip is empty".to_string());
+    }
+    // Original-NWN2 .Z files contain exactly one (unnamed) entry: the ERF payload.
+    let mut entry = archive
+        .by_index(0)
+        .map_err(|e| format!("Failed to read first entry of .Z zip: {e}"))?;
+    let mut decompressed = Vec::with_capacity(entry.size() as usize);
+    entry
+        .read_to_end(&mut decompressed)
+        .map_err(|e| format!("Failed to inflate .Z entry: {e}"))?;
     Ok(decompressed)
 }
 
@@ -627,12 +671,52 @@ fn compress_lzma_for_nwn2(data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
+/// Wrap an ERF payload in the original-NWN2 PK zip envelope (single unnamed entry).
+fn compress_zip_for_original(data: &[u8]) -> Result<Vec<u8>, String> {
+    use std::io::Cursor;
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipWriter};
+
+    let mut buf = Vec::new();
+    {
+        let mut writer = ZipWriter::new(Cursor::new(&mut buf));
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        // Original NWN2's .Z entries have empty filenames — match the observed layout.
+        writer
+            .start_file::<&str, ()>("", options)
+            .map_err(|e| format!("Failed to start zip entry: {e}"))?;
+        use std::io::Write;
+        writer
+            .write_all(data)
+            .map_err(|e| format!("Failed to write zip entry: {e}"))?;
+        writer
+            .finish()
+            .map_err(|e| format!("Failed to finish zip: {e}"))?;
+    }
+    Ok(buf)
+}
+
+/// Compress an ERF payload to match the format of `existing_path`. If the file
+/// currently uses the original-NWN2 PK-zip envelope, produce a PK zip; otherwise produce
+/// LZMA-alone. Writing the wrong format would break the engine's loader.
+fn compress_z_matching_existing(data: &[u8], existing_path: &Path) -> Result<Vec<u8>, String> {
+    let mut header = [0u8; 4];
+    if let Ok(mut file) = fs::File::open(existing_path) {
+        let _ = file.read(&mut header);
+    }
+    if &header == b"PK\x03\x04" {
+        compress_zip_for_original(data)
+    } else {
+        compress_lzma_for_nwn2(data)
+    }
+}
+
 fn find_module_z_file(save_dir: &Path, module_id: &str) -> Result<PathBuf, String> {
     if let Ok(entries) = fs::read_dir(save_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_file()
-                && path.extension().is_some_and(|e| e == "z")
+                && has_z_extension(&path)
                 && path
                     .file_stem()
                     .is_some_and(|s| s.to_string_lossy() == module_id)

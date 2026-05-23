@@ -509,7 +509,8 @@
         "unresolved_campaign": "Кампания не разрешена",
         "unresolved_module": "Модуль не разрешён",
         "graph_failed": "Ошибка графа",
-        "journal_read_failed": "Ошибка чтения журнала"
+        "journal_read_failed": "Ошибка чтения журнала",
+        "bridge_unavailable": "Мост к тулсету недоступен"
       },
       "failedToLoad": "Не удалось загрузить граф квестов",
       "loadingTitle": "Загрузка данных квестов"

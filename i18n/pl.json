@@ -511,7 +511,8 @@
         "unresolved_campaign": "Kampania nierozwiązana",
         "unresolved_module": "Moduł nierozwiązany",
         "graph_failed": "Błąd grafu",
-        "journal_read_failed": "Błąd odczytu dziennika"
+        "journal_read_failed": "Błąd odczytu dziennika",
+        "bridge_unavailable": "Mostek narzędziowy niedostępny"
       },
       "failedToLoad": "Nie udało się wczytać grafu zadań",
       "loadingTitle": "Wczytywanie danych zadań"

@@ -254,7 +254,11 @@ pub fn restore_modules_from_backup(
     for entry in fs::read_dir(backup_path)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() && path.extension().is_some_and(|e| e == "z") {
+        if path.is_file()
+            && path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("z"))
+        {
             let filename = path.file_name().unwrap();
             let dest = save_dir.join(filename);
             fs::copy(&path, &dest)?;

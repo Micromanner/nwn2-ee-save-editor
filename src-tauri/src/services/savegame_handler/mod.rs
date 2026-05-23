@@ -38,6 +38,30 @@ const FILE_HEADERS: &[(&str, &[u8; 4])] = &[
     (".ute", b"UTE "),
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveFormat {
+    /// Enhanced Edition (2025+): player files bundled inside `resgff.zip`.
+    Ee,
+    /// Original NWN2 (2006-2024, pre-Enhanced Edition — includes the Gold and
+    /// Complete bundles): player files loose at the save root.
+    Original,
+}
+
+impl SaveFormat {
+    pub fn detect(save_dir: &Path) -> SaveGameResult<Self> {
+        if save_dir.join(RESGFF_ZIP).exists() {
+            return Ok(Self::Ee);
+        }
+        if save_dir.join(PLAYERLIST_IFO).exists() && save_dir.join(PLAYER_BIC).exists() {
+            return Ok(Self::Original);
+        }
+        Err(SaveGameError::InvalidStructure(format!(
+            "No save marker found in {} (expected {RESGFF_ZIP} or loose {PLAYER_BIC}+{PLAYERLIST_IFO})",
+            save_dir.display()
+        )))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileInfo {
     pub name: String,
@@ -96,6 +120,7 @@ fn read_archive_entry<R: Read + std::io::Seek>(
 pub struct SaveGameHandler {
     save_dir: PathBuf,
     zip_path: PathBuf,
+    format: SaveFormat,
     validate: bool,
     temp_files: Vec<PathBuf>,
 }
@@ -123,9 +148,7 @@ impl SaveGameHandler {
             )));
         };
 
-        if !zip_path.exists() {
-            return Err(SaveGameError::NotFound { path: zip_path });
-        }
+        let format = SaveFormat::detect(&save_dir)?;
 
         if create_load_backup && !backup::has_backup_been_created(&save_dir) {
             backup::create_backup(&save_dir)?;
@@ -134,14 +157,18 @@ impl SaveGameHandler {
         Ok(Self {
             save_dir,
             zip_path,
+            format,
             validate,
             temp_files: Vec::new(),
         })
     }
 
+    pub fn format(&self) -> SaveFormat {
+        self.format
+    }
+
     pub fn extract_file(&self, filename: &str) -> SaveGameResult<Vec<u8>> {
-        // Only these root files are stored on disk (not in ZIP) for directory-mode saves.
-        // Other files always come from ZIP to prevent stale disk files from overriding.
+        // Root-level loose files exist in both formats and always live on disk.
         let is_disk_root_file =
             filename == GLOBALS_XML || filename == MODULE_IFO || filename == CURRENTMODULE_TXT;
 
@@ -152,17 +179,27 @@ impl SaveGameHandler {
             }
         }
 
-        let file = File::open(&self.zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
-
-        let mut zip_file = archive
-            .by_name(filename)
-            .map_err(|_| SaveGameError::FileNotInSave {
-                filename: filename.into(),
-            })?;
-
-        let mut contents = Vec::with_capacity(zip_file.size() as usize);
-        zip_file.read_to_end(&mut contents)?;
+        let contents = match self.format {
+            SaveFormat::Ee => {
+                let file = File::open(&self.zip_path)?;
+                let mut archive = ZipArchive::new(file)?;
+                let mut zip_file =
+                    archive
+                        .by_name(filename)
+                        .map_err(|_| SaveGameError::FileNotInSave {
+                            filename: filename.into(),
+                        })?;
+                let mut buf = Vec::with_capacity(zip_file.size() as usize);
+                zip_file.read_to_end(&mut buf)?;
+                buf
+            }
+            SaveFormat::Original => {
+                let disk_path = self.save_dir.join(filename);
+                fs::read(&disk_path).map_err(|_| SaveGameError::FileNotInSave {
+                    filename: filename.into(),
+                })?
+            }
+        };
 
         if self.validate {
             self.validate_file_content(filename, &contents)?;
@@ -190,10 +227,25 @@ impl SaveGameHandler {
             format!("{companion_name}.ros")
         };
 
-        self.extract_file(&filename)
+        match self.extract_file(&filename) {
+            Ok(bytes) => Ok(bytes),
+            Err(SaveGameError::FileNotInSave { .. }) if self.format == SaveFormat::Original => {
+                // 2006-era original-NWN2 saves prefix companion files with "ROS-".
+                let prefixed = format!("ROS-{filename}");
+                self.extract_file(&prefixed)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub fn batch_read_character_files(&self) -> SaveGameResult<HashMap<String, Vec<u8>>> {
+        match self.format {
+            SaveFormat::Ee => self.batch_read_character_files_ee(),
+            SaveFormat::Original => self.batch_read_character_files_original(),
+        }
+    }
+
+    fn batch_read_character_files_ee(&self) -> SaveGameResult<HashMap<String, Vec<u8>>> {
         let file = File::open(&self.zip_path)?;
         let mut archive = ZipArchive::new(file)?;
 
@@ -234,6 +286,30 @@ impl SaveGameHandler {
             .collect();
 
         Ok(results.into_iter().collect())
+    }
+
+    fn batch_read_character_files_original(&self) -> SaveGameResult<HashMap<String, Vec<u8>>> {
+        let mut out: HashMap<String, Vec<u8>> = HashMap::new();
+        for entry in fs::read_dir(&self.save_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let lower = name.to_lowercase();
+            let is_character_file =
+                lower == PLAYERLIST_IFO || lower == PLAYER_BIC || lower.ends_with(".ros");
+            if !is_character_file {
+                continue;
+            }
+            let contents = fs::read(&path)?;
+            if self.validate {
+                Self::validate_file_header(&name, &contents)?;
+            }
+            out.insert(name, contents);
+        }
+        Ok(out)
     }
 
     fn validate_file_header(filename: &str, content: &[u8]) -> SaveGameResult<()> {
@@ -295,13 +371,15 @@ impl SaveGameHandler {
             self.validate_file_content(filename, content)?;
         }
 
-        // Check if file should be written to disk (root files)
         let disk_path = self.save_dir.join(filename);
-        if filename == GLOBALS_XML
+
+        // Always-loose files (both formats) and Original format write straight to disk.
+        let force_disk = filename == GLOBALS_XML
             || filename == MODULE_IFO
             || filename == CURRENTMODULE_TXT
-            || disk_path.exists()
-        {
+            || disk_path.exists();
+
+        if self.format == SaveFormat::Original || force_disk {
             fs::write(&disk_path, content)?;
             debug!("Updated file on disk: {}", filename);
             return Ok(());
@@ -359,6 +437,16 @@ impl SaveGameHandler {
     /// unchanged - used for multiplayer non-primary-slot writes where the primary
     /// player's BIC must stay intact.
     pub fn rewrite_player_files<F>(&mut self, transform: F) -> SaveGameResult<()>
+    where
+        F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
+    {
+        match self.format {
+            SaveFormat::Ee => self.rewrite_player_files_ee(transform),
+            SaveFormat::Original => self.rewrite_player_files_original(transform),
+        }
+    }
+
+    fn rewrite_player_files_ee<F>(&mut self, transform: F) -> SaveGameResult<()>
     where
         F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
     {
@@ -421,7 +509,45 @@ impl SaveGameHandler {
         drop(src_archive);
         fs::rename(&temp_path, &self.zip_path)?;
 
-        info!("Updated player files in save");
+        info!("Updated player files in save (EE)");
+        Ok(())
+    }
+
+    fn rewrite_player_files_original<F>(&mut self, transform: F) -> SaveGameResult<()>
+    where
+        F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
+    {
+        let playerlist_path = self.save_dir.join(PLAYERLIST_IFO);
+        let player_bic_path = self.save_dir.join(PLAYER_BIC);
+
+        let playerlist_src = fs::read(&playerlist_path)?;
+        let player_bic_src = if player_bic_path.exists() {
+            Some(fs::read(&player_bic_path)?)
+        } else {
+            None
+        };
+
+        let outputs = transform(PlayerSources {
+            playerlist: &playerlist_src,
+            player_bic: player_bic_src.as_deref(),
+        })
+        .map_err(SaveGameError::Transform)?;
+
+        // Write to .tmp first then rename, so a crash mid-write doesn't leave
+        // a half-written playerlist.ifo behind.
+        let pl_tmp = playerlist_path.with_extension("ifo.tmp");
+        fs::write(&pl_tmp, &outputs.playerlist)?;
+        fs::rename(&pl_tmp, &playerlist_path)?;
+
+        if let Some(bytes) = outputs.player_bic {
+            let bic_tmp = player_bic_path.with_extension("bic.tmp");
+            fs::write(&bic_tmp, &bytes)?;
+            fs::rename(&bic_tmp, &player_bic_path)?;
+        }
+        // Transform returned None: caller asked to preserve the original; it's
+        // already on disk untouched.
+
+        info!("Updated player files in save (Original)");
         Ok(())
     }
 
@@ -462,44 +588,83 @@ impl SaveGameHandler {
     }
 
     pub fn list_files(&self) -> SaveGameResult<Vec<FileInfo>> {
-        let file = File::open(&self.zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
         let mut files = Vec::new();
 
-        for i in 0..archive.len() {
-            let entry = archive.by_index(i)?;
-            files.push(FileInfo {
-                name: entry.name().to_string(),
-                size: entry.size(),
-                compressed_size: entry.compressed_size(),
-                compression: format!("{:?}", entry.compression()),
-            });
+        match self.format {
+            SaveFormat::Ee => {
+                let file = File::open(&self.zip_path)?;
+                let mut archive = ZipArchive::new(file)?;
+                for i in 0..archive.len() {
+                    let entry = archive.by_index(i)?;
+                    files.push(FileInfo {
+                        name: entry.name().to_string(),
+                        size: entry.size(),
+                        compressed_size: entry.compressed_size(),
+                        compression: format!("{:?}", entry.compression()),
+                    });
+                }
+            }
+            SaveFormat::Original => {
+                for entry in fs::read_dir(&self.save_dir)? {
+                    let entry = entry?;
+                    if !entry.path().is_file() {
+                        continue;
+                    }
+                    let meta = entry.metadata()?;
+                    files.push(FileInfo {
+                        name: entry.file_name().to_string_lossy().to_string(),
+                        size: meta.len(),
+                        compressed_size: meta.len(),
+                        compression: "Stored".to_string(),
+                    });
+                }
+            }
         }
 
         Ok(files)
     }
 
     pub fn list_companions(&self) -> SaveGameResult<Vec<String>> {
-        let file = File::open(&self.zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
         let mut companions = Vec::new();
 
-        for i in 0..archive.len() {
-            let entry = archive.by_index(i)?;
-            let name = entry.name();
-            if name.to_lowercase().ends_with(".ros") {
-                let companion_name = name
-                    .strip_suffix(".ros")
-                    .or_else(|| name.strip_suffix(".ROS"))
-                    .unwrap_or(name);
-                companions.push(companion_name.to_string());
+        let names: Vec<String> = match self.format {
+            SaveFormat::Ee => {
+                let file = File::open(&self.zip_path)?;
+                let mut archive = ZipArchive::new(file)?;
+                (0..archive.len())
+                    .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
+                    .collect()
             }
+            SaveFormat::Original => fs::read_dir(&self.save_dir)?
+                .filter_map(Result::ok)
+                .filter(|e| e.path().is_file())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect(),
+        };
+
+        for name in names {
+            if !name.to_lowercase().ends_with(".ros") {
+                continue;
+            }
+            let stem = name
+                .strip_suffix(".ros")
+                .or_else(|| name.strip_suffix(".ROS"))
+                .unwrap_or(&name);
+            // Strip 2006-era "ROS-" prefix so the canonical companion key matches
+            // what callers (and modern original-NWN2 saves) use.
+            let canonical = stem.strip_prefix("ROS-").unwrap_or(stem);
+            companions.push(canonical.to_string());
         }
 
         Ok(companions)
     }
 
     pub fn extract_for_editing(&mut self, temp_dir: &Path) -> SaveGameResult<PathBuf> {
+        if self.format != SaveFormat::Ee {
+            return Err(SaveGameError::InvalidStructure(
+                "extract_for_editing is only supported for EE-format saves".into(),
+            ));
+        }
         fs::create_dir_all(temp_dir)?;
 
         let file = File::open(&self.zip_path)?;
@@ -534,6 +699,11 @@ impl SaveGameHandler {
     }
 
     pub fn repack_from_directory(&mut self, source_dir: &Path) -> SaveGameResult<()> {
+        if self.format != SaveFormat::Ee {
+            return Err(SaveGameError::InvalidStructure(
+                "repack_from_directory is only supported for EE-format saves".into(),
+            ));
+        }
         let temp_path = self.zip_path.with_extension("zip.tmp");
 
         {
@@ -631,17 +801,33 @@ impl SaveGameHandler {
     }
 
     pub fn get_file_info(&self, filename: &str) -> SaveGameResult<Option<FileInfo>> {
-        let file = File::open(&self.zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
-
-        match archive.by_name(filename) {
-            Ok(entry) => Ok(Some(FileInfo {
-                name: entry.name().to_string(),
-                size: entry.size(),
-                compressed_size: entry.compressed_size(),
-                compression: format!("{:?}", entry.compression()),
-            })),
-            Err(_) => Ok(None),
+        match self.format {
+            SaveFormat::Ee => {
+                let file = File::open(&self.zip_path)?;
+                let mut archive = ZipArchive::new(file)?;
+                match archive.by_name(filename) {
+                    Ok(entry) => Ok(Some(FileInfo {
+                        name: entry.name().to_string(),
+                        size: entry.size(),
+                        compressed_size: entry.compressed_size(),
+                        compression: format!("{:?}", entry.compression()),
+                    })),
+                    Err(_) => Ok(None),
+                }
+            }
+            SaveFormat::Original => {
+                let path = self.save_dir.join(filename);
+                if !path.is_file() {
+                    return Ok(None);
+                }
+                let meta = fs::metadata(&path)?;
+                Ok(Some(FileInfo {
+                    name: filename.to_string(),
+                    size: meta.len(),
+                    compressed_size: meta.len(),
+                    compression: "Stored".to_string(),
+                }))
+            }
         }
     }
 
@@ -728,6 +914,7 @@ mod tests {
         let handler = SaveGameHandler {
             save_dir: PathBuf::from("/test"),
             zip_path: PathBuf::from("/test/resgff.zip"),
+            format: SaveFormat::Ee,
             validate: true,
             temp_files: Vec::new(),
         };
@@ -741,5 +928,250 @@ mod tests {
                 .validate_file_content("test.bic", invalid_bic)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn test_detect_format_ee_when_resgff_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("resgff.zip"), b"dummy").unwrap();
+        assert_eq!(SaveFormat::detect(tmp.path()).unwrap(), SaveFormat::Ee);
+    }
+
+    #[test]
+    fn test_detect_format_original_when_loose_player_files_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        assert_eq!(
+            SaveFormat::detect(tmp.path()).unwrap(),
+            SaveFormat::Original
+        );
+    }
+
+    #[test]
+    fn test_detect_format_errors_when_neither_marker_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            SaveFormat::detect(tmp.path()),
+            Err(SaveGameError::InvalidStructure(_))
+        ));
+    }
+
+    #[test]
+    fn test_detect_format_prefers_ee_when_both_markers_present() {
+        // An original-NWN2 save opened once in EE will gain a resgff.zip; treat as EE.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("resgff.zip"), b"dummy").unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        assert_eq!(SaveFormat::detect(tmp.path()).unwrap(), SaveFormat::Ee);
+    }
+
+    #[test]
+    fn test_handler_new_accepts_original_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false)
+            .expect("Original-format save directory must be accepted");
+        assert_eq!(handler.format(), SaveFormat::Original);
+        assert_eq!(handler.save_dir(), tmp.path());
+    }
+
+    #[test]
+    fn test_extract_file_reads_loose_for_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC dummy bic payload").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy ifo payload").unwrap();
+        std::fs::write(tmp.path().join("companion.ros"), b"ROS dummy ros payload").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+
+        assert_eq!(
+            handler.extract_file("player.bic").unwrap(),
+            b"BIC dummy bic payload"
+        );
+        assert_eq!(
+            handler.extract_file("playerlist.ifo").unwrap(),
+            b"IFO dummy ifo payload"
+        );
+        assert_eq!(
+            handler.extract_file("companion.ros").unwrap(),
+            b"ROS dummy ros payload"
+        );
+    }
+
+    #[test]
+    fn test_extract_companion_with_ros_prefix_fallback() {
+        // 2006-era original-NWN2 saves prefix companion files with "ROS-".
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"ROS khelgar bytes").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+
+        assert_eq!(
+            handler.extract_companion("khelgar").unwrap(),
+            b"ROS khelgar bytes"
+        );
+    }
+
+    #[test]
+    fn test_list_companions_original_strips_ros_prefix() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"K").unwrap();
+        std::fs::write(tmp.path().join("neeshka.ros"), b"N").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let mut companions = handler.list_companions().unwrap();
+        companions.sort();
+        assert_eq!(
+            companions,
+            vec!["khelgar".to_string(), "neeshka".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_list_files_returns_loose_for_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        std::fs::write(tmp.path().join("globals.xml"), b"<xml/>").unwrap();
+        std::fs::write(tmp.path().join("khelgar.ros"), b"K").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let files = handler.list_files().unwrap();
+        let names: std::collections::HashSet<String> = files.into_iter().map(|f| f.name).collect();
+        assert!(names.contains("player.bic"));
+        assert!(names.contains("playerlist.ifo"));
+        assert!(names.contains("globals.xml"));
+        assert!(names.contains("khelgar.ros"));
+    }
+
+    #[test]
+    fn test_get_file_info_returns_loose_for_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC payload").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let info = handler
+            .get_file_info("player.bic")
+            .unwrap()
+            .expect("present");
+        assert_eq!(info.name, "player.bic");
+        assert_eq!(info.size, b"BIC payload".len() as u64);
+    }
+
+    #[test]
+    fn test_update_file_writes_loose_for_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC original").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO original").unwrap();
+
+        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+
+        handler
+            .update_file("player.bic", b"BIC rewritten")
+            .expect("update_file must succeed on Original");
+
+        assert_eq!(
+            std::fs::read(tmp.path().join("player.bic")).unwrap(),
+            b"BIC rewritten"
+        );
+        assert!(
+            !tmp.path().join("resgff.zip").exists(),
+            "Original-format writes must not synthesize a resgff.zip"
+        );
+    }
+
+    #[test]
+    fn test_rewrite_player_files_writes_loose_for_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC old").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO old").unwrap();
+
+        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        handler
+            .rewrite_player_files(|src| {
+                assert_eq!(src.playerlist, b"IFO old");
+                assert_eq!(src.player_bic, Some(&b"BIC old"[..]));
+                Ok(PlayerOutputs {
+                    playerlist: b"IFO new".to_vec(),
+                    player_bic: Some(b"BIC new".to_vec()),
+                })
+            })
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(tmp.path().join("playerlist.ifo")).unwrap(),
+            b"IFO new"
+        );
+        assert_eq!(
+            std::fs::read(tmp.path().join("player.bic")).unwrap(),
+            b"BIC new"
+        );
+    }
+
+    #[test]
+    fn test_rewrite_player_files_preserves_bic_when_transform_returns_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC keep me").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO old").unwrap();
+
+        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        handler
+            .rewrite_player_files(|_| {
+                Ok(PlayerOutputs {
+                    playerlist: b"IFO new".to_vec(),
+                    player_bic: None,
+                })
+            })
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(tmp.path().join("player.bic")).unwrap(),
+            b"BIC keep me"
+        );
+        assert_eq!(
+            std::fs::read(tmp.path().join("playerlist.ifo")).unwrap(),
+            b"IFO new"
+        );
+    }
+
+    #[test]
+    fn test_batch_read_character_files_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
+        std::fs::write(tmp.path().join("neeshka.ros"), b"NEESHKA").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let map = handler.batch_read_character_files().unwrap();
+        assert!(map.contains_key("player.bic"));
+        assert!(map.contains_key("playerlist.ifo"));
+        assert!(map.contains_key("neeshka.ros"));
+        assert_eq!(map.get("neeshka.ros").unwrap(), b"NEESHKA");
+    }
+
+    #[test]
+    fn test_handler_new_accepts_ee_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("resgff.zip");
+        let file = std::fs::File::create(&zip_path).unwrap();
+        let mut zw = zip::ZipWriter::new(file);
+        zw.start_file("playerlist.ifo", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        use std::io::Write;
+        zw.write_all(b"IFO ").unwrap();
+        zw.finish().unwrap();
+
+        let handler =
+            SaveGameHandler::new(tmp.path(), false, false).expect("EE save must be accepted");
+        assert_eq!(handler.format(), SaveFormat::Ee);
     }
 }

@@ -10,7 +10,7 @@ mod journal_reader;
 mod module_name;
 mod types;
 
-pub use aggregator::{BuildContext, build};
+pub use aggregator::{BuildContext, build, build_without_bridge};
 pub use types::{
     AggregatedModule, CampaignSummary, LiveModuleVar, ModuleVarValue, OrphanKind, OrphanNote,
     QuestAggregate, QuestGraphProgress, QuestSummary, SaveGraph, SaveGraphSummary, TransitionNode,

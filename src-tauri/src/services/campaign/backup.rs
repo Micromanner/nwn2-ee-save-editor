@@ -62,21 +62,30 @@ pub fn restore_campaign_variable_backup(
 
 pub fn backup_module_z(handler: &SaveGameHandler, module_id: &str) -> Result<(), String> {
     let save_dir = handler.save_dir();
-    let source = save_dir.join(format!("{module_id}.z"));
 
-    if !source.exists() {
-        return Ok(());
-    }
+    // Try both casings: EE uses `.z`, original NWN2 uses `.Z`. Preserve whichever the
+    // game wrote so a restored backup matches what the engine expects.
+    let (source, ext) = {
+        let lower = save_dir.join(format!("{module_id}.z"));
+        let upper = save_dir.join(format!("{module_id}.Z"));
+        if lower.exists() {
+            (lower, "z")
+        } else if upper.exists() {
+            (upper, "Z")
+        } else {
+            return Ok(());
+        }
+    };
 
     let backup_dir = get_module_backup_dir(save_dir);
     fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
 
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("{module_id}_{timestamp}.z");
+    let filename = format!("{module_id}_{timestamp}.{ext}");
     let dest = backup_dir.join(&filename);
 
-    fs::copy(&source, &dest).map_err(|e| format!("Failed to backup {module_id}.z: {e}"))?;
-    info!("Created module .z backup at {:?}", dest);
+    fs::copy(&source, &dest).map_err(|e| format!("Failed to backup {module_id}.{ext}: {e}"))?;
+    info!("Created module .{} backup at {:?}", ext, dest);
     Ok(())
 }
 
@@ -112,9 +121,19 @@ pub fn restore_module_backup(handler: &SaveGameHandler, backup_path: &str) -> Re
         ));
     };
 
-    let dest = handler.save_dir().join(format!("{module_id}.z"));
-    fs::copy(&backup, &dest).map_err(|e| format!("Failed to restore {module_id}.z backup: {e}"))?;
-    info!("Restored {}.z from backup: {}", module_id, backup.display());
+    // Preserve the on-disk casing: restore to .Z if an original-NWN2-style file exists,
+    // otherwise .z (EE default, or new save).
+    let upper = handler.save_dir().join(format!("{module_id}.Z"));
+    let ext = if upper.exists() { "Z" } else { "z" };
+    let dest = handler.save_dir().join(format!("{module_id}.{ext}"));
+    fs::copy(&backup, &dest)
+        .map_err(|e| format!("Failed to restore {module_id}.{ext} backup: {e}"))?;
+    info!(
+        "Restored {}.{} from backup: {}",
+        module_id,
+        ext,
+        backup.display()
+    );
     Ok(())
 }
 
@@ -125,7 +144,11 @@ fn collect_backups(dir: &Path, extension: &str) -> Result<Vec<CampaignBackupInfo
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
 
-        if path.is_file() && path.extension().is_some_and(|e| e == extension) {
+        if path.is_file()
+            && path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case(extension))
+        {
             let filename = path
                 .file_name()
                 .and_then(|n| n.to_str())

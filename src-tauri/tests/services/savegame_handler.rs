@@ -1,6 +1,6 @@
 use app_lib::character::Character;
 use app_lib::parsers::gff::{GffParser, GffValue, GffWriter};
-use app_lib::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
+use app_lib::services::savegame_handler::{PlayerOutputs, SaveFormat, SaveGameHandler};
 use indexmap::IndexMap;
 use tempfile::TempDir;
 
@@ -482,4 +482,131 @@ fn value_to_i32(value: &GffValue<'_>) -> Option<i32> {
         GffValue::Int(value) => Some(*value),
         _ => None,
     }
+}
+
+#[test]
+fn original_handler_detects_format_for_2006_fixture() {
+    let fixture_path = common::fixtures_path().join("saves/neverwinter_save_gold/000002 - matt");
+    let temp_dir = TempDir::new().unwrap();
+    let save_path = temp_dir.path().join("original_2006");
+    common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
+
+    let handler =
+        SaveGameHandler::new(&save_path, false, false).expect("open original-format save");
+    assert_eq!(handler.format(), SaveFormat::Original);
+}
+
+#[test]
+fn original_handler_reads_player_files_for_2006_fixture() {
+    let fixture_path = common::fixtures_path().join("saves/neverwinter_save_gold/000002 - matt");
+    let temp_dir = TempDir::new().unwrap();
+    let save_path = temp_dir.path().join("original_2006_read");
+    common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
+
+    let handler = SaveGameHandler::new(&save_path, false, false).unwrap();
+
+    let ifo = handler.extract_player_data().expect("read playerlist.ifo");
+    assert!(
+        ifo.starts_with(b"IFO "),
+        "playerlist.ifo must have IFO header"
+    );
+
+    let bic = handler
+        .extract_player_bic()
+        .expect("read player.bic")
+        .expect("player.bic present");
+    assert!(bic.starts_with(b"BIC "), "player.bic must have BIC header");
+}
+
+#[test]
+fn original_handler_lists_companions_with_ros_prefix_stripped() {
+    let fixture_path = common::fixtures_path().join("saves/neverwinter_save_gold/000002 - matt");
+    let temp_dir = TempDir::new().unwrap();
+    let save_path = temp_dir.path().join("original_2006_companions");
+    common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
+
+    let handler = SaveGameHandler::new(&save_path, false, false).unwrap();
+    let companions = handler.list_companions().unwrap();
+    assert!(
+        companions.iter().any(|c| c == "khelgar"),
+        "expected khelgar in {companions:?}"
+    );
+    assert!(
+        !companions.iter().any(|c| c.starts_with("ROS-")),
+        "ROS- prefix must be stripped: {companions:?}"
+    );
+}
+
+#[test]
+fn original_handler_lists_companions_for_modern_fixture() {
+    let fixture_path = common::fixtures_path().join("saves/000055 - SAVE GAME COMPLETE");
+    let temp_dir = TempDir::new().unwrap();
+    let save_path = temp_dir.path().join("original_modern_companions");
+    common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
+
+    let handler = SaveGameHandler::new(&save_path, false, false).unwrap();
+    let companions = handler.list_companions().unwrap();
+    assert!(
+        companions.iter().any(|c| c == "khelgar"),
+        "expected khelgar in {companions:?}"
+    );
+}
+
+#[test]
+fn original_handler_extract_companion_works_for_both_prefix_styles() {
+    let old_src = common::fixtures_path().join("saves/neverwinter_save_gold/000002 - matt");
+    let old_tmp = TempDir::new().unwrap();
+    let old_dst = old_tmp.path().join("original_old");
+    common::copy_dir_recursive(&old_src, &old_dst).expect("copy old fixture");
+    let old_handler = SaveGameHandler::new(&old_dst, false, false).unwrap();
+    let khelgar_old = old_handler
+        .extract_companion("khelgar")
+        .expect("ROS- prefix fallback should find khelgar");
+    assert!(khelgar_old.starts_with(b"ROS "));
+
+    let new_src = common::fixtures_path().join("saves/000055 - SAVE GAME COMPLETE");
+    let new_tmp = TempDir::new().unwrap();
+    let new_dst = new_tmp.path().join("original_new");
+    common::copy_dir_recursive(&new_src, &new_dst).expect("copy new fixture");
+    let new_handler = SaveGameHandler::new(&new_dst, false, false).unwrap();
+    let khelgar_new = new_handler
+        .extract_companion("khelgar")
+        .expect("direct read should find khelgar");
+    assert!(khelgar_new.starts_with(b"ROS "));
+}
+
+#[test]
+fn original_handler_round_trips_player_files_without_creating_zip() {
+    let fixture_path = common::fixtures_path().join("saves/000055 - SAVE GAME COMPLETE");
+    let temp_dir = TempDir::new().unwrap();
+    let save_path = temp_dir.path().join("original_modern_roundtrip");
+    common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
+
+    let original_ifo = std::fs::read(save_path.join("playerlist.ifo")).unwrap();
+    let original_bic = std::fs::read(save_path.join("player.bic")).unwrap();
+
+    let mut handler = SaveGameHandler::new(&save_path, false, false).unwrap();
+    handler
+        .rewrite_player_files(|src| {
+            Ok(PlayerOutputs {
+                playerlist: src.playerlist.to_vec(),
+                player_bic: src.player_bic.map(|b| b.to_vec()),
+            })
+        })
+        .expect("rewrite player files");
+
+    assert_eq!(
+        std::fs::read(save_path.join("playerlist.ifo")).unwrap(),
+        original_ifo,
+        "identity transform must preserve playerlist.ifo bytes"
+    );
+    assert_eq!(
+        std::fs::read(save_path.join("player.bic")).unwrap(),
+        original_bic,
+        "identity transform must preserve player.bic bytes"
+    );
+    assert!(
+        !save_path.join("resgff.zip").exists(),
+        "Original-format write must not create resgff.zip"
+    );
 }

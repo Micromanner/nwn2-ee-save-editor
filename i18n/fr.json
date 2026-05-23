@@ -509,7 +509,8 @@
         "unresolved_campaign": "Campagne non résolue",
         "unresolved_module": "Module non résolu",
         "graph_failed": "Échec du graphe",
-        "journal_read_failed": "Échec de lecture du journal"
+        "journal_read_failed": "Échec de lecture du journal",
+        "bridge_unavailable": "Pont du toolset indisponible"
       },
       "failedToLoad": "Échec du chargement du graphe de quêtes",
       "loadingTitle": "Chargement des données de quêtes"

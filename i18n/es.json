@@ -510,7 +510,8 @@
         "unresolved_campaign": "Campaña sin resolver",
         "unresolved_module": "Módulo sin resolver",
         "graph_failed": "Error en el grafo",
-        "journal_read_failed": "Error al leer diario"
+        "journal_read_failed": "Error al leer diario",
+        "bridge_unavailable": "Puente del toolset no disponible"
       },
       "failedToLoad": "Error al cargar grafo de misiones",
       "loadingTitle": "Cargando datos de misiones"
