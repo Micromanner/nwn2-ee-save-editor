@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Button, InputGroup, Menu, MenuItem, Popover, Spinner, Tab, Tabs } from '@blueprintjs/core';
+import { Button, ButtonGroup, InputGroup, Menu, MenuItem, Popover, Spinner, Tab, Tabs } from '@blueprintjs/core';
 import { GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { FixedSizeList as List } from 'react-window';
@@ -9,13 +9,14 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useInventoryManagement } from '@/hooks/useInventoryManagement';
-import { inventoryAPI, BaseItem, ItemTemplate, ITEM_CATEGORIES, CATEGORIES_WITH_SUBS, SUB_CATEGORY_LABELS } from '@/services/inventoryApi';
+import { inventoryAPI, BaseItem, ItemTemplate, ITEM_CATEGORIES, CATEGORIES_WITH_SUBS, SUB_CATEGORY_LABELS, isVanillaSource } from '@/services/inventoryApi';
 import { display } from '@/utils/dataHelpers';
 
 const LIST_HEIGHT = 380;
 const ROW_HEIGHT = 46;
 
 type TabId = 'base' | 'template';
+type SourceFilter = 'all' | 'vanilla' | 'override';
 
 interface AddItemDialogProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('all');
   const [subCategory, setSubCategory] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [selectedBaseId, setSelectedBaseId] = useState<number | null>(null);
   const [selectedResref, setSelectedResref] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -78,6 +80,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
     setSearch('');
     setCategory('all');
     setSubCategory(null);
+    setSourceFilter('all');
     setSelectedBaseId(null);
     setSelectedResref(null);
     setTab('base');
@@ -89,9 +92,10 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
     setSearch('');
     setCategory('all');
     setSubCategory(null);
+    setSourceFilter('all');
   }, []);
 
-  const hasFilters = search.length > 0 || category !== 'all';
+  const hasFilters = search.length > 0 || category !== 'all' || sourceFilter !== 'all';
 
   const baseCategories = useMemo(() => {
     const present = new Set(baseItems.map(i => i.category));
@@ -158,12 +162,30 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
       });
     }
     if (subCategory) items = items.filter(i => i.sub_category === subCategory);
+    if (sourceFilter !== 'all') {
+      const wantVanilla = sourceFilter === 'vanilla';
+      items = items.filter(i => isVanillaSource(i.source) === wantVanilla);
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter(i => i.name.toLowerCase().includes(q) || i.resref.toLowerCase().includes(q));
     }
     return items;
-  }, [templates, search, category, subCategory]);
+  }, [templates, search, category, subCategory, sourceFilter]);
+
+  const sourceCounts = useMemo(() => {
+    let scoped = templates;
+    if (category !== 'all') {
+      scoped = scoped.filter(i => {
+        const name = ITEM_CATEGORIES[i.category as keyof typeof ITEM_CATEGORIES] || 'Miscellaneous';
+        return name === category;
+      });
+    }
+    if (subCategory) scoped = scoped.filter(i => i.sub_category === subCategory);
+    let vanilla = 0;
+    for (const i of scoped) if (isVanillaSource(i.source)) vanilla++;
+    return { all: scoped.length, vanilla, override: scoped.length - vanilla };
+  }, [templates, category, subCategory]);
 
   const canAdd = tab === 'base' ? selectedBaseId !== null : selectedResref !== null;
 
@@ -309,6 +331,32 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
           />
           <Button minimal icon={<GameIcon icon={GiFunnel} size={14} />} text={t('inventory.filterClear')} onClick={clearFilters} disabled={!hasFilters} />
         </div>
+
+        {tab === 'template' && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, padding: '6px 0', borderBottom: `1px solid ${T.borderLight}`, flexShrink: 0 }}>
+            <ButtonGroup minimal>
+              <Button
+                small
+                intent={sourceFilter === 'all' ? 'primary' : 'none'}
+                onClick={() => setSourceFilter('all')}
+                text={`${t('inventory.source.all')} (${sourceCounts.all})`}
+              />
+              <Button
+                small
+                intent={sourceFilter === 'vanilla' ? 'primary' : 'none'}
+                onClick={() => setSourceFilter('vanilla')}
+                text={`${t('inventory.source.vanilla')} (${sourceCounts.vanilla})`}
+              />
+              <Button
+                small
+                intent={sourceFilter === 'override' ? 'primary' : 'none'}
+                disabled={sourceCounts.override === 0}
+                onClick={() => setSourceFilter('override')}
+                text={`${t('inventory.source.override')} (${sourceCounts.override})`}
+              />
+            </ButtonGroup>
+          </div>
+        )}
 
         {activeSubCategories.length > 1 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 0', borderBottom: `1px solid ${T.borderLight}`, flexShrink: 0 }}>

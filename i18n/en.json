@@ -277,6 +277,11 @@
     "loadingTemplates": "Loading templates...",
     "loadingBaseItems": "Loading base items...",
     "selectedId": "Selected ID",
+    "source": {
+      "all": "All",
+      "vanilla": "Vanilla",
+      "override": "Override"
+    },
     "subcategories": {
       "swords": "Swords",
       "axes": "Axes",
