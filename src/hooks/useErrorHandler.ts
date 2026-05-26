@@ -52,7 +52,7 @@ export function useErrorHandler(options?: UseErrorHandlerOptions) {
         showToast(
           translated.message,
           toastType,
-          undefined,
+          0,
           translated.recovery ?? undefined
         );
       }

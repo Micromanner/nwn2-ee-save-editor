@@ -259,6 +259,11 @@ pub async fn add_override_folder(
                 CommandError::NotFound {
                     item: format!("Path: {path}"),
                 }
+            } else if e.contains("already scanned") {
+                CommandError::ValidationError {
+                    field: "override_folder".to_string(),
+                    reason: "This folder is already scanned automatically as the built-in Override directory. Custom folders are only needed for additional override directories outside the standard location.".to_string(),
+                }
             } else {
                 CommandError::OperationFailed {
                     operation: "add_override_folder".to_string(),
@@ -320,6 +325,11 @@ pub async fn add_hak_folder(
             if e.contains("does not exist") {
                 CommandError::NotFound {
                     item: format!("Path: {path}"),
+                }
+            } else if e.contains("already scanned") {
+                CommandError::ValidationError {
+                    field: "hak_folder".to_string(),
+                    reason: "This folder is already scanned automatically as the built-in HAK directory. Custom folders are only needed for additional HAK directories outside the standard location.".to_string(),
                 }
             } else {
                 CommandError::OperationFailed {

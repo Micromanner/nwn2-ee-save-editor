@@ -687,7 +687,7 @@
       "noCharacterLoaded": "Load a save file from the dashboard to get started.",
       "noGameDataLoaded": "Check your NWN2 installation path in Settings.",
       "characterNotFound": "The save file may have been moved or deleted. Try loading a different save.",
-      "validationError": "Check the value and try again.",
+      "validationError": "",
       "invalidValue": "Correct the value to match the expected format.",
       "fileError": "Check that the file exists and is not in use by another program.",
       "parseError": "The file may be corrupted. Try loading a backup or a different save.",

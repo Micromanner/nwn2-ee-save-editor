@@ -10,6 +10,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useLocale } from '@/providers/LocaleProvider';
 import { useFontSize } from '@/providers/FontSizeProvider';
 import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useUpdateCheck } from '@/hooks/useUpdateCheck';
 import { pathService, PathConfig } from '@/lib/api/paths';
 import { T } from '../theme';
@@ -330,9 +331,11 @@ function PathsTab() {
     } catch { return null; }
   };
 
+  const { handleError } = useErrorHandler();
+
   const runBusy = async (key: string, action: () => Promise<unknown>) => {
     setBusyKey(key);
-    try { await action(); } catch { /* ignore */ }
+    try { await action(); } catch (error) { handleError(error); }
     finally { setBusyKey(null); }
   };
 

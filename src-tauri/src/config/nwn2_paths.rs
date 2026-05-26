@@ -140,6 +140,29 @@ impl NWN2Paths {
         {
             self.auto_discover_missing();
         }
+
+        self.remove_builtin_from_custom();
+    }
+
+    fn remove_builtin_from_custom(&mut self) {
+        let reserved: Vec<PathBuf> = [
+            self.documents_folder.clone(),
+            self.game_folder.clone(),
+            self.override_dir(),
+            self.hak_dir(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        let is_reserved = |p: &Path| {
+            reserved
+                .iter()
+                .any(|r| paths_equivalent(p, r) || path_contains(r, p) || path_contains(p, r))
+        };
+
+        self.custom_override_folders.retain(|p| !is_reserved(p));
+        self.custom_hak_folders.retain(|p| !is_reserved(p));
     }
 
     #[instrument(name = "NWN2Paths::auto_discover_missing", skip(self))]
@@ -523,11 +546,40 @@ impl NWN2Paths {
         self.documents_folder.as_ref().map(|d| d.join("tlk"))
     }
 
+    fn reject_builtin_path(&self, path: &Path, kind: &str) -> Result<(), String> {
+        let builtin = match kind {
+            "override" => self.override_dir(),
+            "hak" => self.hak_dir(),
+            _ => None,
+        };
+
+        let reserved: Vec<PathBuf> = [
+            self.documents_folder.clone(),
+            self.game_folder.clone(),
+            builtin,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        for reserved_path in &reserved {
+            if paths_equivalent(path, reserved_path)
+                || path_contains(reserved_path, path)
+                || path_contains(path, reserved_path)
+            {
+                return Err("already scanned automatically".to_string());
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn add_custom_override_folder(&mut self, path: impl AsRef<Path>) -> Result<(), String> {
         let path = path.as_ref().to_path_buf();
         if !path.exists() {
             return Err(format!("Path does not exist: {}", path.display()));
         }
+        self.reject_builtin_path(&path, "override")?;
         if !self.custom_override_folders.contains(&path) {
             self.custom_override_folders.push(path);
             self.save_settings().map_err(|e| e.to_string())?;
@@ -591,6 +643,7 @@ impl NWN2Paths {
         if !path.exists() {
             return Err(format!("Path does not exist: {}", path.display()));
         }
+        self.reject_builtin_path(&path, "hak")?;
         if !self.custom_hak_folders.contains(&path) {
             self.custom_hak_folders.push(path);
             self.save_settings().map_err(|e| e.to_string())?;
@@ -653,6 +706,34 @@ fn windows_profile_to_wsl_home(userprofile: &str) -> Option<PathBuf> {
         drive.to_ascii_lowercase(),
         remainder
     )))
+}
+
+fn canonicalize_or_normalize(p: &Path) -> PathBuf {
+    p.canonicalize().unwrap_or_else(|_| {
+        let s = p.to_string_lossy();
+        #[cfg(windows)]
+        {
+            PathBuf::from(
+                s.to_ascii_lowercase()
+                    .replace('/', "\\")
+                    .trim_end_matches('\\'),
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            PathBuf::from(s.trim_end_matches('/'))
+        }
+    })
+}
+
+fn paths_equivalent(a: &Path, b: &Path) -> bool {
+    canonicalize_or_normalize(a) == canonicalize_or_normalize(b)
+}
+
+fn path_contains(parent: &Path, child: &Path) -> bool {
+    let parent = canonicalize_or_normalize(parent);
+    let child = canonicalize_or_normalize(child);
+    child.starts_with(&parent) && child != parent
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -790,6 +871,97 @@ mod tests {
         assert_eq!(
             windows_profile_to_wsl_home("D:/Users/foo"),
             Some(PathBuf::from("/mnt/d/Users/foo"))
+        );
+    }
+
+    #[test]
+    fn test_add_custom_override_rejects_builtin_override_dir() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let docs = temp_dir.path().join("Documents");
+        let override_dir = docs.join("override");
+        std::fs::create_dir_all(&override_dir).unwrap();
+
+        let mut paths = paths_for_discovery_test(None, Some(docs.clone()), None);
+
+        assert_eq!(paths.override_dir(), Some(override_dir.clone()));
+
+        let result = paths.add_custom_override_folder(&override_dir);
+        assert!(
+            result.is_err(),
+            "Should reject builtin override dir, but got Ok"
+        );
+        assert!(
+            result.unwrap_err().contains("already scanned"),
+            "Error should mention already scanned"
+        );
+    }
+
+    #[test]
+    fn test_add_custom_override_rejects_documents_folder() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let docs = temp_dir.path().join("Documents");
+        let override_dir = docs.join("override");
+        std::fs::create_dir_all(&override_dir).unwrap();
+
+        let mut paths = paths_for_discovery_test(None, Some(docs.clone()), None);
+
+        let result = paths.add_custom_override_folder(&docs);
+        assert!(
+            result.is_err(),
+            "Should reject documents folder as custom override, but got Ok"
+        );
+    }
+
+    #[test]
+    fn test_add_custom_override_rejects_game_folder() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let game = temp_dir.path().join("Game");
+        let docs = temp_dir.path().join("Documents");
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::create_dir_all(&docs.join("override")).unwrap();
+
+        let mut paths = paths_for_discovery_test(Some(game.clone()), Some(docs), None);
+
+        let result = paths.add_custom_override_folder(&game);
+        assert!(
+            result.is_err(),
+            "Should reject game folder as custom override, but got Ok"
+        );
+    }
+
+    #[test]
+    fn test_remove_builtin_cleans_documents_folder_from_custom() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let docs = temp_dir.path().join("Documents");
+        std::fs::create_dir_all(&docs.join("override")).unwrap();
+        std::fs::create_dir_all(&docs.join("hak")).unwrap();
+
+        let mut paths = paths_for_discovery_test(None, Some(docs.clone()), None);
+        paths.custom_override_folders.push(docs.clone());
+        paths.custom_hak_folders.push(docs.clone());
+
+        paths.remove_builtin_from_custom();
+
+        assert!(paths.custom_override_folders.is_empty());
+        assert!(paths.custom_hak_folders.is_empty());
+    }
+
+    #[test]
+    fn test_add_custom_hak_rejects_builtin_hak_dir() {
+        let temp_dir = TempDir::new().expect("failed to create temp dir");
+        let docs = temp_dir.path().join("Documents");
+        let hak_dir = docs.join("hak");
+        std::fs::create_dir_all(&hak_dir).unwrap();
+
+        let mut paths = paths_for_discovery_test(None, Some(docs.clone()), None);
+
+        assert_eq!(paths.hak_dir(), Some(hak_dir.clone()));
+
+        let result = paths.add_custom_hak_folder(&hak_dir);
+        assert!(result.is_err(), "Should reject builtin hak dir, but got Ok");
+        assert!(
+            result.unwrap_err().contains("already scanned"),
+            "Error should mention already scanned"
         );
     }
 
