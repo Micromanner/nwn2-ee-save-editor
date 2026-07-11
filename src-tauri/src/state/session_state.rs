@@ -27,6 +27,18 @@ pub struct HistoryEntry {
     modified_snapshot: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CharacterSource {
+    Player,
+    Companion { ros_name: String },
+}
+
+pub struct RosterListing {
+    pub ros_name: String,
+    pub char_name: String,
+    pub classes: Vec<(i32, i32)>,
+}
+
 pub struct SessionState {
     pub current_file_path: Option<PathBuf>,
     pub save_dir: Option<PathBuf>,
@@ -45,6 +57,7 @@ pub struct SessionState {
     pub quest_graph_cache: Option<Arc<SaveGraph>>,
     pub undo_stack: VecDeque<HistoryEntry>,
     pub redo_stack: Vec<HistoryEntry>,
+    pub character_source: CharacterSource,
 }
 
 impl SessionState {
@@ -71,6 +84,7 @@ impl SessionState {
             quest_graph_cache: None,
             undo_stack: VecDeque::new(),
             redo_stack: Vec::new(),
+            character_source: CharacterSource::Player,
         }
     }
 
@@ -217,6 +231,7 @@ impl SessionState {
         self.quest_graph_cache = None;
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
+        self.character_source = CharacterSource::Player;
         self.clear_history();
 
         info!("Character loaded successfully");
@@ -288,6 +303,7 @@ impl SessionState {
         self.feat_cache = None;
         self.module_info_cache = None;
         self.quest_graph_cache = None;
+        self.character_source = CharacterSource::Player;
         self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
@@ -397,6 +413,83 @@ impl SessionState {
 
     pub fn character_mut(&mut self) -> Option<&mut Character> {
         self.character.as_mut()
+    }
+
+    pub fn load_companion(&mut self, ros_name: &str, force: bool) -> Result<(), String> {
+        if !force && self.has_unsaved_changes() {
+            return Err(
+                "Unsaved changes present; save or discard before switching characters".into(),
+            );
+        }
+        let handler = self
+            .savegame_handler
+            .as_ref()
+            .ok_or("No active save handler")?;
+        let bytes = handler
+            .extract_companion(ros_name)
+            .map_err(|e| format!("Failed to extract companion '{ros_name}': {e}"))?;
+        let gff = GffParser::from_bytes(bytes)
+            .map_err(|e| format!("Failed to parse companion file: {e}"))?;
+        let fields: IndexMap<String, GffValue<'static>> = gff
+            .read_struct_fields(0)
+            .map_err(|e| format!("Failed to read companion fields: {e}"))?
+            .into_iter()
+            .map(|(k, v)| (k, v.force_owned()))
+            .collect();
+
+        let character = Character::from_gff(fields);
+        info!(
+            "Companion loaded: {} ({ros_name}, level {})",
+            character.full_name(),
+            character.total_level()
+        );
+        self.character = Some(character);
+        self.character_source = CharacterSource::Companion {
+            ros_name: ros_name.to_string(),
+        };
+        // Same save, so module/quest caches stay; character-scoped cache does not.
+        self.feat_cache = None;
+        self.clear_history();
+        Ok(())
+    }
+
+    pub fn list_roster(&self) -> Result<Vec<RosterListing>, String> {
+        let handler = self
+            .savegame_handler
+            .as_ref()
+            .ok_or("No active save handler")?;
+        let Some((_, bytes)) = handler
+            .extract_roster()
+            .map_err(|e| format!("Failed to read roster: {e}"))?
+        else {
+            warn!("No roster file found in save; companion list empty");
+            return Ok(Vec::new());
+        };
+        let members = match crate::services::roster::parse_roster_members(bytes) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Roster file unparseable, treating as empty: {e}");
+                return Ok(Vec::new());
+            }
+        };
+        let companion_files = handler
+            .list_companions()
+            .map_err(|e| format!("Failed to list companions: {e}"))?;
+
+        Ok(members
+            .into_iter()
+            .filter(|m| {
+                (m.available || m.campaign_npc)
+                    && companion_files
+                        .iter()
+                        .any(|c| c.eq_ignore_ascii_case(&m.ros_name))
+            })
+            .map(|m| RosterListing {
+                ros_name: m.ros_name,
+                char_name: m.char_name,
+                classes: m.classes,
+            })
+            .collect())
     }
 
     fn write_playerinfo(&self, game_data: &GameData) -> Result<(), String> {
