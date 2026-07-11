@@ -7,7 +7,7 @@ use app_lib::services::savegame_handler::SaveGameHandler;
 use indexmap::IndexMap;
 use serde_json::Value as JsonValue;
 
-fn output_dir() -> PathBuf {
+pub(crate) fn output_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gff_dump")
 }
 
@@ -322,13 +322,13 @@ fn bic_field_groups() -> BTreeMap<&'static str, &'static str> {
     map
 }
 
-fn write_json(path: &std::path::Path, value: &JsonValue) {
+pub(crate) fn write_json(path: &std::path::Path, value: &JsonValue) {
     let json = serde_json::to_string_pretty(value).expect("Failed to pretty-print JSON");
     fs::write(path, &json).expect("Failed to write JSON file");
     println!("  Wrote: {} ({} bytes)", path.display(), json.len());
 }
 
-fn gff_type_name(v: &GffValue<'_>) -> &'static str {
+pub(crate) fn gff_type_name(v: &GffValue<'_>) -> &'static str {
     match v {
         GffValue::Byte(_) => "Byte",
         GffValue::Char(_) => "Char",
@@ -349,7 +349,10 @@ fn gff_type_name(v: &GffValue<'_>) -> &'static str {
     }
 }
 
-fn dump_character_fields(fields: &IndexMap<String, GffValue<'static>>, dir: &std::path::Path) {
+pub(crate) fn dump_character_fields(
+    fields: &IndexMap<String, GffValue<'static>>,
+    dir: &std::path::Path,
+) {
     fs::create_dir_all(dir).expect("Failed to create dir");
 
     let field_groups = bic_field_groups();
