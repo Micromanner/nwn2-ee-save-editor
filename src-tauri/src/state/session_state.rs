@@ -250,7 +250,11 @@ impl SessionState {
                     selected_player_index,
                 )?;
                 let player_bic = if update_primary_player_files {
-                    Some(serialize_player_bic_bytes(src.player_bic, &char_fields)?)
+                    Some(crate::parsers::gff::merge_fields_into_gff(
+                        src.player_bic,
+                        &char_fields,
+                        "BIC ",
+                    )?)
                 } else {
                     None
                 };
@@ -627,47 +631,6 @@ pub(crate) fn resolve_primary_player_index(
             None
         }
     }
-}
-
-fn serialize_player_bic_bytes(
-    player_bic_data: Option<&[u8]>,
-    character_fields: &IndexMap<String, GffValue<'static>>,
-) -> Result<Vec<u8>, String> {
-    let Some(player_bic_data) = player_bic_data else {
-        return GffWriter::new("BIC ", "V3.2")
-            .write(character_fields.clone())
-            .map_err(|e| format!("player.bic serialization error: {e}"));
-    };
-
-    let gff = GffParser::from_bytes(player_bic_data.to_vec())
-        .map_err(|e| format!("player.bic parse error: {e}"))?;
-    let file_type = gff.file_type.clone();
-    let file_version = gff.file_version.clone();
-    let root_struct_id = gff
-        .get_struct_id(0)
-        .map_err(|e| format!("Failed to read player.bic root struct_id: {e}"))?;
-    let bic_fields = gff
-        .read_struct_fields(0)
-        .map_err(|e| format!("Failed to read player.bic fields: {e}"))?;
-
-    // Merge character_fields into existing BIC: overwrite keys that BIC already has,
-    // preserve BIC-only keys, skip GFF-internal metadata.
-    let mut merged: IndexMap<String, GffValue<'static>> = bic_fields
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
-    for (key, value) in character_fields {
-        if key.starts_with("__") {
-            continue;
-        }
-        if merged.contains_key(key) {
-            merged.insert(key.clone(), value.clone());
-        }
-    }
-
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(merged, root_struct_id)
-        .map_err(|e| format!("player.bic serialization error: {e}"))
 }
 
 #[cfg(test)]
