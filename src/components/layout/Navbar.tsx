@@ -9,6 +9,7 @@ import { T } from '../theme';
 import { SettingsDialog } from '../Settings/SettingsPanel';
 import { GameLaunchDialog } from '../shared';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
+import type { SaveCharacterResult } from '@/lib/api/character-state';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useToast } from '@/contexts/ToastContext';
@@ -22,7 +23,7 @@ export function Navbar({ onBack }: NavbarProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
-  const { character, historyState, undo, redo } = useCharacterContext();
+  const { character, historyState, undo, redo, activeSource, refreshRoster } = useCharacterContext();
   const [showSettings, setShowSettings] = useState(false);
   const [showGameLaunch, setShowGameLaunch] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -31,7 +32,14 @@ export function Navbar({ onBack }: NavbarProps) {
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      await invoke('save_character', { filePath: null });
+      const result = await invoke<SaveCharacterResult>('save_character', { filePath: null });
+      if (result.warning) {
+        console.warn(result.warning);
+        showToast(t('roster.syncWarning'), 'warning');
+      }
+      if (activeSource.kind === 'companion') {
+        refreshRoster();
+      }
       showToast(t('actions.saveSuccess'), 'success');
       const config = await invoke<{ show_launch_dialog: boolean }>('get_app_config');
       if (config.show_launch_dialog) {
@@ -42,7 +50,7 @@ export function Navbar({ onBack }: NavbarProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [showToast, t, handleError]);
+  }, [showToast, t, handleError, activeSource, refreshRoster]);
 
   const handleExport = async () => {
     setIsExporting(true);

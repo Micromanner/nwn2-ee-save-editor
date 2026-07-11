@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { CharacterAPI, CharacterData, LegitimateFeatsResponse, LegitimateSpellsResponse } from '@/services/characterApi';
 import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/inventoryApi';
 import { CharacterStateAPI } from '@/lib/api/character-state';
+import type { RosterEntryInfo } from '@/lib/api/character-state';
 import type {
   AbilitiesState,
   AppearanceState,
@@ -26,6 +27,8 @@ export type ClassesData = ClassesState;
 export type SpellsData = SpellsState;
 export type InventoryData = FullInventorySummary;
 export type AppearanceData = AppearanceState;
+
+export type ActiveSource = { kind: 'player' } | { kind: 'companion'; rosName: string };
 
 // Add metadata interfaces for classes
 export interface ClassInfo {
@@ -153,6 +156,13 @@ interface CharacterContextState {
   undo: () => Promise<void>;
   redo: () => Promise<void>;
 
+  // Roster / active source (player vs. companion)
+  roster: RosterEntryInfo[];
+  activeSource: ActiveSource;
+  refreshRoster: () => Promise<void>;
+  switchToCompanion: (rosName: string, force: boolean) => Promise<void>;
+  switchToPlayer: (force: boolean) => Promise<void>;
+
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string, playerIndex?: number) => Promise<void>;
@@ -246,6 +256,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [allSpellsCache, setAllSpellsCache] = useState<LegitimateSpellsResponse | null>(null);
   const [itemEditorMetadata, setItemEditorMetadata] = useState<ItemEditorMetadataResponse | null>(null);
   const [historyState, setHistoryState] = useState<HistoryState | null>(null);
+  const [roster, setRoster] = useState<RosterEntryInfo[]>([]);
+  const [activeSource, setActiveSource] = useState<ActiveSource>({ kind: 'player' });
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -497,6 +509,27 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     preloadGameData(id);
   }, [loadMetadataInternal, preloadGameData]);
 
+  const refreshRoster = useCallback(async () => {
+    try {
+      setRoster(await CharacterStateAPI.listRoster());
+    } catch (err) {
+      console.error('Failed to load roster:', err);
+      setRoster([]);
+    }
+  }, []);
+
+  const switchToCompanion = useCallback(async (rosName: string, force: boolean) => {
+    await CharacterStateAPI.loadCompanion(rosName, force);
+    setActiveSource({ kind: 'companion', rosName });
+    if (characterId) await loadCharacter(characterId);
+  }, [characterId, loadCharacter]);
+
+  const switchToPlayer = useCallback(async (force: boolean) => {
+    await CharacterStateAPI.loadPlayer(force);
+    setActiveSource({ kind: 'player' });
+    if (characterId) await loadCharacter(characterId);
+  }, [characterId, loadCharacter]);
+
   // Import character from save
   const importCharacter = useCallback(async (savePath: string, playerIndex?: number) => {
     setIsLoading(true);
@@ -521,6 +554,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       // Reset subsystems
       setSubsystems(initializeSubsystems());
       setHistoryState(null);
+      setActiveSource({ kind: 'player' });
+      refreshRoster();
 
       // Load metadata and preload game data in background (non-blocking)
       loadMetadataInternal(newCharacterId);
@@ -531,7 +566,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [loadMetadataInternal, preloadGameData]);
+  }, [loadMetadataInternal, preloadGameData, refreshRoster]);
 
   const refreshAll = useCallback(async () => {
     if (!characterId) return;
@@ -573,6 +608,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     historyState,
     undo,
     redo,
+    roster,
+    activeSource,
+    refreshRoster,
+    switchToCompanion,
+    switchToPlayer,
     loadCharacter,
     importCharacter,
     loadSubsystem,
