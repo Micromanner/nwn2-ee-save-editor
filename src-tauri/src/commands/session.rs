@@ -175,20 +175,29 @@ pub async fn list_save_characters(
         .collect())
 }
 
+#[derive(Clone, serde::Serialize, specta::Type)]
+pub struct SaveCharacterResult {
+    pub saved: bool,
+    pub warning: Option<String>,
+}
+
 #[tauri::command]
 #[instrument(name = "save_character_command", skip(state))]
 pub async fn save_character(
     state: State<'_, AppState>,
     _file_path: Option<String>,
-) -> CommandResult<bool> {
+) -> CommandResult<SaveCharacterResult> {
     info!("Save character command invoked");
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
     match session.save_character(&game_data) {
-        Ok(()) => {
+        Ok(warning) => {
             info!("Character saved successfully via command");
-            Ok(true)
+            Ok(SaveCharacterResult {
+                saved: true,
+                warning,
+            })
         }
         Err(e) => {
             error!("Failed to save character: {}", e);

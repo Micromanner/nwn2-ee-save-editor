@@ -238,7 +238,12 @@ impl SessionState {
         Ok(())
     }
 
-    pub fn save_character(&mut self, game_data: &GameData) -> Result<(), String> {
+    pub fn save_character(&mut self, game_data: &GameData) -> Result<Option<String>, String> {
+        if let CharacterSource::Companion { ros_name } = &self.character_source {
+            let ros_name = ros_name.clone();
+            return self.save_companion_inner(&ros_name);
+        }
+
         let handler = self
             .savegame_handler
             .as_mut()
@@ -250,7 +255,7 @@ impl SessionState {
 
         if !character.is_modified() {
             info!("No changes to save");
-            return Ok(());
+            return Ok(None);
         }
 
         let char_fields = character.clone_gff();
@@ -290,7 +295,62 @@ impl SessionState {
             "Character saved successfully (player.bic_updated={})",
             update_primary_player_files
         );
-        Ok(())
+        Ok(None)
+    }
+
+    pub fn save_companion(&mut self) -> Result<Option<String>, String> {
+        let CharacterSource::Companion { ros_name } = &self.character_source else {
+            return Err("Active character is not a companion".into());
+        };
+        let ros_name = ros_name.clone();
+        self.save_companion_inner(&ros_name)
+    }
+
+    fn save_companion_inner(&mut self, ros_name: &str) -> Result<Option<String>, String> {
+        let handler = self
+            .savegame_handler
+            .as_mut()
+            .ok_or("No active save handler")?;
+        let character = self.character.as_ref().ok_or("No character loaded")?;
+
+        if !character.is_modified() {
+            info!("No changes to save");
+            return Ok(None);
+        }
+
+        let stored_name = handler
+            .companion_stored_name(ros_name)
+            .map_err(|e| format!("Failed to locate companion file: {e}"))?;
+        let original = handler
+            .extract_file(&stored_name)
+            .map_err(|e| format!("Failed to read companion file: {e}"))?;
+        let bytes = crate::parsers::gff::merge_fields_into_gff(
+            Some(&original),
+            &character.clone_gff(),
+            "ROS ",
+        )?;
+        handler
+            .update_file(&stored_name, &bytes)
+            .map_err(|e| format!("Failed to write companion file: {e}"))?;
+
+        let classes: Vec<(i32, i32)> = character
+            .class_entries()
+            .into_iter()
+            .map(|e| (e.class_id.0, e.level))
+            .collect();
+        let warning = match sync_roster(handler, ros_name, &classes) {
+            Ok(()) => None,
+            Err(e) => {
+                warn!("Roster sync failed after companion save: {e}");
+                Some(format!(
+                    "Companion saved, but updating the party roster failed: {e}"
+                ))
+            }
+        };
+
+        self.character.as_mut().unwrap().mark_saved();
+        info!("Companion saved: {stored_name}");
+        Ok(warning)
     }
 
     pub fn close_character(&mut self) {
@@ -503,6 +563,10 @@ impl SessionState {
         &self,
         paths: &crate::config::nwn2_paths::NWN2Paths,
     ) -> Result<String, String> {
+        if self.character_source != CharacterSource::Player {
+            return Err("Export to local vault is only available for the player character".into());
+        }
+
         let handler = self
             .savegame_handler
             .as_ref()
@@ -580,6 +644,22 @@ fn write_playerinfo_for_character(
         .map_err(|e| format!("Failed to write playerinfo.bin: {e}"))?;
 
     Ok(())
+}
+
+fn sync_roster(
+    handler: &mut SaveGameHandler,
+    ros_name: &str,
+    classes: &[(i32, i32)],
+) -> Result<(), String> {
+    let Some((stored_name, bytes)) = handler.extract_roster().map_err(|e| e.to_string())? else {
+        return Err("no roster file in save".into());
+    };
+    match crate::services::roster::sync_member_classes(bytes, ros_name, classes)? {
+        Some(new_bytes) => handler
+            .update_file(&stored_name, &new_bytes)
+            .map_err(|e| e.to_string()),
+        None => Err(format!("no roster entry named '{ros_name}'")),
+    }
 }
 
 fn serialize_playerlist_bytes(

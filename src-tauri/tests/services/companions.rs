@@ -142,3 +142,92 @@ fn list_roster_excludes_available_members_without_ros_file() {
     );
     assert!(names.contains(&"khelgar"));
 }
+
+fn temp_save_copy(save: &str) -> (tempfile::TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dst = tmp.path().join("save");
+    crate::common::copy_dir_recursive(&saves_dir().join(save), &dst).expect("copy save");
+    (tmp, dst)
+}
+
+#[test]
+fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+
+    let mut session = make_session();
+    let mut report = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session
+        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .expect("load save");
+    session
+        .load_companion("ammon_jerro", false)
+        .expect("load companion");
+
+    session
+        .character_mut()
+        .expect("character")
+        .set_ability(app_lib::character::AbilityIndex::STR, 18)
+        .expect("set str");
+    assert!(session.has_unsaved_changes());
+
+    // Dirty-switch guard (spec requirement): switching while dirty must fail
+    // without force.
+    assert!(session.load_companion("bishop", false).is_err());
+
+    let warning = session.save_companion().expect("save companion");
+    assert!(warning.is_none(), "roster sync should succeed: {warning:?}");
+    assert!(!session.has_unsaved_changes());
+
+    // Fresh session sees the persisted edit.
+    let mut session2 = make_session();
+    let mut report2 = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session2
+        .load_character(&save_path.to_string_lossy(), None, &mut report2)
+        .expect("reload save");
+    session2
+        .load_companion("ammon_jerro", false)
+        .expect("reload companion");
+    assert_eq!(
+        session2
+            .character()
+            .unwrap()
+            .base_ability(app_lib::character::AbilityIndex::STR),
+        18
+    );
+
+    // Roster cache reflects the companion's classes after sync.
+    let roster = session2.list_roster().expect("roster");
+    let ammon_jerro = roster.iter().find(|r| r.ros_name == "ammon_jerro").unwrap();
+    let classes: Vec<(i32, i32)> = session2
+        .character()
+        .unwrap()
+        .class_entries()
+        .into_iter()
+        .map(|e| (e.class_id.0, e.level))
+        .collect();
+    assert_eq!(ammon_jerro.classes, classes);
+}
+
+#[test]
+fn export_to_localvault_rejected_for_companion() {
+    let mut session = make_session();
+    load_save(&mut session, "Classic_Campaign");
+    session
+        .load_companion("khelgar", false)
+        .expect("load companion");
+
+    let paths = app_lib::config::NWN2Paths::new();
+    assert!(session.export_to_localvault(&paths).is_err());
+}
