@@ -5,6 +5,7 @@ import { T } from '../theme';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { useToast } from '@/contexts/ToastContext';
 import { CharacterStateAPI } from '@/lib/api/character-state';
 
 type SwitchTarget = { kind: 'player' } | { kind: 'companion'; rosName: string };
@@ -42,6 +43,7 @@ interface RosterSectionProps {
 export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
+  const { showToast } = useToast();
   const { character, roster, activeSource, switchToCompanion, switchToPlayer, refreshRoster } =
     useCharacterContext();
   const [pendingTarget, setPendingTarget] = useState<SwitchTarget | null>(null);
@@ -105,7 +107,11 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
     if (!target) return;
     setIsSwitching(true);
     try {
-      await CharacterStateAPI.saveCharacter();
+      const result = await CharacterStateAPI.saveCharacter();
+      if (result.warning) {
+        console.warn(result.warning);
+        showToast(t('roster.syncWarning'), 'warning');
+      }
       await refreshRoster();
       await doSwitch(target, false);
     } catch (error) {
@@ -113,7 +119,7 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
     } finally {
       setIsSwitching(false);
     }
-  }, [pendingTarget, doSwitch, refreshRoster, handleError]);
+  }, [pendingTarget, doSwitch, refreshRoster, handleError, showToast, t]);
 
   const confirmDiscard = useCallback(async () => {
     const target = pendingTarget;

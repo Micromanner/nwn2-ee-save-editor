@@ -274,6 +274,7 @@ impl SessionState {
                         src.player_bic,
                         &char_fields,
                         "BIC ",
+                        false,
                     )?)
                 } else {
                     None
@@ -328,6 +329,7 @@ impl SessionState {
             Some(&original),
             &character.clone_gff(),
             "ROS ",
+            true,
         )?;
         handler
             .update_file(&stored_name, &bytes)
