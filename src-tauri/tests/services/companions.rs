@@ -29,10 +29,12 @@ fn load_save(session: &mut SessionState, save: &str) {
         .expect("load save");
 }
 
-// Fixture reality (verified with --nocapture): this save's roster.rst marks
-// all 12 recruited companions (including shandra/zhjaeve) as
-// available/campaign_npc, each with a matching .ros file; only the non-party
-// NPCs npc_bevil and 0_amie are unavailable and excluded.
+// Fixture reality (verified with --nocapture): this save's globals.xml has no
+// `*_Joined`/influence vars at all, so `list_roster` falls back to the
+// roster.rst availability flags. Under that fallback, all 12 recruited
+// companions (including shandra/zhjaeve) are marked available/campaign_npc,
+// each with a matching .ros file; only the non-party NPCs npc_bevil and
+// 0_amie are unavailable and excluded.
 #[test]
 fn list_roster_filters_party_members_with_files_original_format() {
     let mut session = make_session();
@@ -53,22 +55,25 @@ fn list_roster_filters_party_members_with_files_original_format() {
     assert_eq!(khelgar.classes, vec![(4, 2)]);
 }
 
-// Fixture reality: in this save state khelgar is recruited (has a .ros file)
-// but currently unavailable/not a campaign NPC, so the filter correctly
-// excludes him even though his file exists; ammon_jerro is active.
+// Fixture reality (verified with --nocapture): this save's globals.xml only
+// has `00_b*_Joined = 1` for Khelgar, Neeshka, Elanee and Qara — none of the
+// other companions' joined_var (per get_companion_definitions, e.g.
+// 00_bAmmon_Joined) is present, so ammon_jerro is not recruited even though
+// his .ros file exists. `list_roster` now filters by the recruited set from
+// globals.xml, so exactly those 4 are listed.
 #[test]
 fn list_roster_works_on_ee_zip_format() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");
 
     let roster = session.list_roster().expect("list roster");
-    let names: Vec<&str> = roster.iter().map(|r| r.ros_name.as_str()).collect();
-    assert!(names.contains(&"ammon_jerro"));
+    let mut names: Vec<&str> = roster.iter().map(|r| r.ros_name.as_str()).collect();
+    names.sort_unstable();
+    assert_eq!(names, vec!["elanee", "khelgar", "neeshka", "qara"]);
     assert!(
-        !names.contains(&"khelgar"),
-        "khelgar is not active in this save state"
+        !names.contains(&"ammon_jerro"),
+        "ammon_jerro has no *_Joined var set in this save's globals.xml"
     );
-    assert!(roster.len() >= 10);
 }
 
 #[test]
@@ -165,8 +170,11 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
     session
         .load_character(&save_path.to_string_lossy(), None, &mut report)
         .expect("load save");
+    // khelgar is recruited (00_bKhelgar_Joined = 1) in this fixture's
+    // globals.xml, so he still shows up in list_roster after the new
+    // recruited-status filter below.
     session
-        .load_companion("ammon_jerro", false)
+        .load_companion("khelgar", false)
         .expect("load companion");
 
     session
@@ -197,7 +205,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         .load_character(&save_path.to_string_lossy(), None, &mut report2)
         .expect("reload save");
     session2
-        .load_companion("ammon_jerro", false)
+        .load_companion("khelgar", false)
         .expect("reload companion");
     assert_eq!(
         session2
@@ -209,7 +217,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
 
     // Roster cache reflects the companion's classes after sync.
     let roster = session2.list_roster().expect("roster");
-    let ammon_jerro = roster.iter().find(|r| r.ros_name == "ammon_jerro").unwrap();
+    let khelgar = roster.iter().find(|r| r.ros_name == "khelgar").unwrap();
     let classes: Vec<(i32, i32)> = session2
         .character()
         .unwrap()
@@ -217,7 +225,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         .into_iter()
         .map(|e| (e.class_id.0, e.level))
         .collect();
-    assert_eq!(ammon_jerro.classes, classes);
+    assert_eq!(khelgar.classes, classes);
 }
 
 #[test]

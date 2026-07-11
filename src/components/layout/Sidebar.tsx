@@ -50,7 +50,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   const visibleItems = activeSource.kind === 'player'
     ? NAV_ITEMS
-    : NAV_ITEMS.filter(item => item.id !== 'appearance' && item.id !== 'models');
+    : NAV_ITEMS.filter(item => item.id !== 'appearance' && item.id !== 'models' && item.id !== 'gamestate');
 
   return (
     <div style={{

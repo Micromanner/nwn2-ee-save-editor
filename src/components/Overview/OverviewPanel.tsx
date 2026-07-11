@@ -313,7 +313,7 @@ export function OverviewPanel() {
               </ButtonGroup>
             } />
             <KVRow label={t('character.age')} value={
-              <StepInput value={age} onValueChange={handleAgeChange} min={0} max={9999} width={88} />
+              <StepInput value={age} onValueChange={handleAgeChange} min={0} max={9999} width={88} zeroDisplay={display(null)} />
             } />
             <KVRow label={t('character.alignment')} value={t(ALIGNMENT_GRID[getAlignmentIndex(lawChaos, goodEvil)]?.labelKey) || display(character.alignment)} />
             <KVRow label={t('overview.deity')} value={

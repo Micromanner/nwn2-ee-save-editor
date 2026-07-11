@@ -76,7 +76,7 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
       } else {
         await switchToCompanion(target.rosName, force);
       }
-      if (activeTab === 'appearance' || activeTab === 'models') {
+      if (activeTab === 'appearance' || activeTab === 'models' || activeTab === 'gamestate') {
         onTabChange('overview');
       }
     } catch (error) {
