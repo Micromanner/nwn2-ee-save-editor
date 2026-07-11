@@ -624,23 +624,58 @@ impl SaveGameHandler {
         Ok(files)
     }
 
-    pub fn list_companions(&self) -> SaveGameResult<Vec<String>> {
-        let mut companions = Vec::new();
-
-        let names: Vec<String> = match self.format {
+    fn entry_names(&self) -> SaveGameResult<Vec<String>> {
+        match self.format {
             SaveFormat::Ee => {
                 let file = File::open(&self.zip_path)?;
                 let mut archive = ZipArchive::new(file)?;
-                (0..archive.len())
+                Ok((0..archive.len())
                     .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
-                    .collect()
+                    .collect())
             }
-            SaveFormat::Original => fs::read_dir(&self.save_dir)?
+            SaveFormat::Original => Ok(fs::read_dir(&self.save_dir)?
                 .filter_map(Result::ok)
                 .filter(|e| e.path().is_file())
                 .map(|e| e.file_name().to_string_lossy().to_string())
-                .collect(),
-        };
+                .collect()),
+        }
+    }
+
+    pub fn extract_roster(&self) -> SaveGameResult<Option<(String, Vec<u8>)>> {
+        let name = self
+            .entry_names()?
+            .into_iter()
+            .find(|n| n.to_lowercase().ends_with(".rst"));
+        match name {
+            Some(n) => {
+                let bytes = self.extract_file(&n)?;
+                Ok(Some((n, bytes)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn companion_stored_name(&self, ros_name: &str) -> SaveGameResult<String> {
+        self.entry_names()?
+            .into_iter()
+            .find(|n| {
+                let lower = n.to_lowercase();
+                if !lower.ends_with(".ros") {
+                    return false;
+                }
+                let stem = &n[..n.len() - 4];
+                let stem = stem.strip_prefix("ROS-").unwrap_or(stem);
+                stem.eq_ignore_ascii_case(ros_name)
+            })
+            .ok_or_else(|| SaveGameError::FileNotInSave {
+                filename: format!("{ros_name}.ros"),
+            })
+    }
+
+    pub fn list_companions(&self) -> SaveGameResult<Vec<String>> {
+        let mut companions = Vec::new();
+
+        let names = self.entry_names()?;
 
         for name in names {
             if !name.to_lowercase().ends_with(".ros") {
@@ -1156,6 +1191,49 @@ mod tests {
         assert!(map.contains_key("playerlist.ifo"));
         assert!(map.contains_key("neeshka.ros"));
         assert_eq!(map.get("neeshka.ros").unwrap(), b"NEESHKA");
+    }
+
+    #[test]
+    fn test_extract_roster_finds_uppercase_original() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy").unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
+        std::fs::write(tmp.path().join("ROSTER.rst"), b"RST dummy roster").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let (name, bytes) = handler.extract_roster().unwrap().expect("roster present");
+        assert_eq!(name, "ROSTER.rst");
+        assert_eq!(bytes, b"RST dummy roster");
+    }
+
+    #[test]
+    fn test_extract_roster_absent_returns_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy").unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        assert!(handler.extract_roster().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_companion_stored_name_resolves_prefix_and_case() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy").unwrap();
+        std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
+        std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"K").unwrap();
+        std::fs::write(tmp.path().join("neeshka.ros"), b"N").unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        assert_eq!(
+            handler.companion_stored_name("khelgar").unwrap(),
+            "ROS-khelgar.ros"
+        );
+        assert_eq!(
+            handler.companion_stored_name("NEESHKA").unwrap(),
+            "neeshka.ros"
+        );
+        assert!(handler.companion_stored_name("missing").is_err());
     }
 
     #[test]
