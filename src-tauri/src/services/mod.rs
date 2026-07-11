@@ -6,6 +6,7 @@ pub mod load_diagnostics;
 pub mod model_loader;
 pub mod playerinfo;
 pub mod resource_manager;
+pub mod roster;
 pub mod rule_detector;
 pub mod save_graph;
 pub mod savegame_handler;
