@@ -36,3 +36,9 @@ mod dump_gff_reference;
 
 #[path = "debugging/diff_class_edits.rs"]
 mod diff_class_edits;
+
+#[path = "debugging/investigate_saves.rs"]
+mod investigate_saves;
+
+#[path = "debugging/diagnose_linux_user.rs"]
+mod diagnose_linux_user;
