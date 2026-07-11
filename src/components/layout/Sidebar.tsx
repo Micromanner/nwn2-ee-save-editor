@@ -5,6 +5,8 @@ import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useIcon, fetchIcon } from '@/hooks/useIcon';
 import { GameIcon } from '../shared/GameIcon';
+import { RosterSection } from './RosterSection';
+import { useCharacterContext } from '@/contexts/CharacterContext';
 
 const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey: string }[] = [
   { id: 'overview', icon: GiVisoredHelm, gameIcon: 'ia_character', labelKey: 'navigation.overview' },
@@ -40,10 +42,16 @@ export function preloadSidebarIcons() {
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const t = useTranslations();
+  const { activeSource } = useCharacterContext();
 
   useEffect(() => {
     preloadSidebarIcons();
   }, []);
+
+  const visibleItems = activeSource.kind === 'player'
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter(item => item.id !== 'appearance' && item.id !== 'models');
+
   return (
     <div style={{
       width: 200, flexShrink: 0,
@@ -53,7 +61,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       padding: '8px 0',
       position: 'relative', zIndex: 5,
     }}>
-      {NAV_ITEMS.map(item => {
+      {visibleItems.map(item => {
         const active = activeTab === item.id;
         return (
           <button
@@ -76,6 +84,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </button>
         );
       })}
+      <RosterSection activeTab={activeTab} onTabChange={onTabChange} />
     </div>
   );
 }

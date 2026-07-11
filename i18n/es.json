@@ -890,5 +890,16 @@
     "equipment": "Equipo",
     "showHelmet": "Ver Casco",
     "noFacialHair": "Sin vello facial para esta cabeza"
+  },
+  "roster": {
+    "party": "Grupo",
+    "player": "Jugador",
+    "levelLine": "Nivel {level}",
+    "unsavedTitle": "Cambios sin guardar",
+    "unsavedMessage": "{name} tiene cambios sin guardar. ¿Guardar antes de cambiar?",
+    "saveAndSwitch": "Guardar y cambiar",
+    "discardChanges": "Descartar cambios",
+    "cancel": "Cancelar",
+    "syncWarning": "Compañero guardado, pero no se pudo actualizar la caché del grupo."
   }
 }

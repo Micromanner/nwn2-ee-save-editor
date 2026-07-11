@@ -888,5 +888,16 @@
     "equipment": "Équipement",
     "showHelmet": "Afficher Casque",
     "noFacialHair": "Pas de barbe pour cette tête"
+  },
+  "roster": {
+    "party": "Groupe",
+    "player": "Joueur",
+    "levelLine": "Niveau {level}",
+    "unsavedTitle": "Modifications non enregistrées",
+    "unsavedMessage": "{name} a des modifications non enregistrées. Enregistrer avant de changer ?",
+    "saveAndSwitch": "Enregistrer et changer",
+    "discardChanges": "Abandonner les modifications",
+    "cancel": "Annuler",
+    "syncWarning": "Compagnon enregistré, mais le cache du groupe n'a pas pu être mis à jour."
   }
 }
