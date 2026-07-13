@@ -44,8 +44,10 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
-  const { character, roster, activeSource, switchToCompanion, switchToPlayer, refreshRoster } =
-    useCharacterContext();
+  const {
+    character, roster, activeSource, playerName: storedPlayerName,
+    isPreloading, isMetadataLoading, switchToCompanion, switchToPlayer, refreshRoster,
+  } = useCharacterContext();
   const [pendingTarget, setPendingTarget] = useState<SwitchTarget | null>(null);
   const [classNames, setClassNames] = useState<Record<number, string>>({});
   const [isSwitching, setIsSwitching] = useState(false);
@@ -147,8 +149,14 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
     transition: 'all 0.15s',
   });
 
+  // Lock switching while a switch is in flight OR while background preloads
+  // are still running — a switch mid-preload lets stale data through.
+  const switchLocked = isSwitching || isPreloading || isMetadataLoading;
+
   const playerActive = activeSource.kind === 'player';
-  const playerName = character.name || t('roster.player');
+  // The player's own name, independent of which character is currently
+  // loaded — `character.name` would show the active companion's name here.
+  const playerName = storedPlayerName || t('roster.player');
 
   // Name of the character that is CURRENTLY active (i.e. the one with the
   // unsaved changes the dialog is warning about), not the switch target.
@@ -157,7 +165,7 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
     : roster.find(r => r.ros_name === activeSource.rosName)?.char_name ?? playerName;
 
   return (
-    <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+    <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div
         className="t-sm"
         style={{ padding: '4px 16px', color: T.sidebarText, opacity: 0.6, textTransform: 'uppercase' }}
@@ -165,50 +173,52 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
         {t('roster.party')}
       </div>
 
-      <button
-        style={rowStyle(playerActive, isSwitching)}
-        disabled={isSwitching}
-        onClick={() => !playerActive && !isSwitching && requestSwitch({ kind: 'player' })}
-      >
-        <Avatar name={playerName} active={playerActive} />
-        <div style={{ minWidth: 0 }}>
-          <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {playerName}
-          </div>
-        </div>
-      </button>
-
-      {roster.map(entry => {
-        const active = activeSource.kind === 'companion' && activeSource.rosName === entry.ros_name;
-        const subtitle = entry.classes.length > 0
-          ? entry.classes
-              .map(c => {
-                const className = classNames[c.class_id];
-                return className ? `${className} ${c.level}` : t('roster.levelLine', { level: c.level });
-              })
-              .join(' / ')
-          : '';
-        return (
-          <button
-            key={entry.ros_name}
-            style={rowStyle(active, isSwitching)}
-            disabled={isSwitching}
-            onClick={() => !active && !isSwitching && requestSwitch({ kind: 'companion', rosName: entry.ros_name })}
-          >
-            <Avatar name={entry.char_name} active={active} />
-            <div style={{ minWidth: 0 }}>
-              <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {entry.char_name}
-              </div>
-              {subtitle && (
-                <div className="t-sm" style={{ opacity: 0.6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {subtitle}
-                </div>
-              )}
+      <div className="sidebar-scroll" style={{ overflowY: 'auto', minHeight: 0 }}>
+        <button
+          style={rowStyle(playerActive, switchLocked)}
+          disabled={switchLocked}
+          onClick={() => !playerActive && !switchLocked && requestSwitch({ kind: 'player' })}
+        >
+          <Avatar name={playerName} active={playerActive} />
+          <div style={{ minWidth: 0 }}>
+            <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {playerName}
             </div>
-          </button>
-        );
-      })}
+          </div>
+        </button>
+
+        {roster.map(entry => {
+          const active = activeSource.kind === 'companion' && activeSource.rosName === entry.ros_name;
+          const subtitle = entry.classes.length > 0
+            ? entry.classes
+                .map(c => {
+                  const className = classNames[c.class_id];
+                  return className ? `${className} ${c.level}` : t('roster.levelLine', { level: c.level });
+                })
+                .join(' / ')
+            : '';
+          return (
+            <button
+              key={entry.ros_name}
+              style={rowStyle(active, switchLocked)}
+              disabled={switchLocked}
+              onClick={() => !active && !switchLocked && requestSwitch({ kind: 'companion', rosName: entry.ros_name })}
+            >
+              <Avatar name={entry.char_name} active={active} />
+              <div style={{ minWidth: 0 }}>
+                <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {entry.char_name}
+                </div>
+                {subtitle && (
+                  <div className="t-sm" style={{ opacity: 0.6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {subtitle}
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       <Dialog
         isOpen={pendingTarget !== null}

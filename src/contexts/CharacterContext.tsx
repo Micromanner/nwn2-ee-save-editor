@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CharacterAPI, CharacterData, LegitimateFeatsResponse, LegitimateSpellsResponse } from '@/services/characterApi';
 import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/inventoryApi';
@@ -159,6 +159,8 @@ interface CharacterContextState {
   // Roster / active source (player vs. companion)
   roster: RosterEntryInfo[];
   activeSource: ActiveSource;
+  playerName: string | null;
+  isPreloading: boolean;
   refreshRoster: () => Promise<void>;
   switchToCompanion: (rosName: string, force: boolean) => Promise<void>;
   switchToPlayer: (force: boolean) => Promise<void>;
@@ -258,6 +260,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [historyState, setHistoryState] = useState<HistoryState | null>(null);
   const [roster, setRoster] = useState<RosterEntryInfo[]>([]);
   const [activeSource, setActiveSource] = useState<ActiveSource>({ kind: 'player' });
+  const [playerName, setPlayerName] = useState<string | null>(null);
+  const [isPreloading, setIsPreloading] = useState(false);
+  const preloadToken = useRef(0);
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -408,6 +413,9 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setAllSpellsCache(null);
     setItemEditorMetadata(null);
     setHistoryState(null);
+    setRoster([]);
+    setActiveSource({ kind: 'player' });
+    setPlayerName(null);
   }, []);
 
   const allSubsystems: SubsystemType[] = ['feats', 'spells', 'skills', 'inventory', 'abilityScores', 'combat', 'saves', 'classes', 'appearance'];
@@ -454,15 +462,23 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   }, [characterId, loadMetadataInternal]);
 
   const preloadGameData = useCallback((id: number) => {
-    CharacterAPI.getLegitimateFeats(id, { page: 1, limit: 10000 })
-      .then(setAllFeatsCache)
-      .catch(err => console.error('Background preload failed for all feats:', err));
-    CharacterAPI.getLegitimateSpells(id, { page: 1, limit: 10000 })
-      .then(setAllSpellsCache)
-      .catch(err => console.error('Background preload failed for all spells:', err));
-    inventoryAPI.getEditorMetadata(id)
-      .then(setItemEditorMetadata)
-      .catch(err => console.error('Background preload failed for item editor metadata:', err));
+    // Track completion so character switching stays locked until every
+    // background fetch has landed (a switch mid-preload would let stale
+    // subsystem data from the previous character overwrite the new one).
+    const token = ++preloadToken.current;
+    setIsPreloading(true);
+
+    const tasks: Promise<unknown>[] = [
+      CharacterAPI.getLegitimateFeats(id, { page: 1, limit: 10000 })
+        .then(setAllFeatsCache)
+        .catch(err => console.error('Background preload failed for all feats:', err)),
+      CharacterAPI.getLegitimateSpells(id, { page: 1, limit: 10000 })
+        .then(setAllSpellsCache)
+        .catch(err => console.error('Background preload failed for all spells:', err)),
+      inventoryAPI.getEditorMetadata(id)
+        .then(setItemEditorMetadata)
+        .catch(err => console.error('Background preload failed for item editor metadata:', err)),
+    ];
 
     // Preload all subsystems so tabs open instantly
     const subsystemPreloads: [SubsystemType, () => Promise<unknown>][] = [
@@ -476,13 +492,19 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       ['classes', CharacterStateAPI.getClasses],
     ];
     for (const [key, fetcher] of subsystemPreloads) {
-      fetcher()
-        .then(data => setSubsystems(prev => ({
-          ...prev,
-          [key]: { data, isLoading: false, error: null, lastFetched: new Date() }
-        })))
-        .catch(err => console.error(`Background preload failed for ${key}:`, err));
+      tasks.push(
+        fetcher()
+          .then(data => setSubsystems(prev => ({
+            ...prev,
+            [key]: { data, isLoading: false, error: null, lastFetched: new Date() }
+          })))
+          .catch(err => console.error(`Background preload failed for ${key}:`, err))
+      );
     }
+
+    Promise.all(tasks).finally(() => {
+      if (preloadToken.current === token) setIsPreloading(false);
+    });
   }, []);
 
   const loadCharacter = useCallback(async (id: number) => {
@@ -550,6 +572,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       // Step 3: Populate frontend context with complete data
       setCharacter(characterData);
       setCharacterId(newCharacterId);
+      setPlayerName(characterData.name ?? null);
       
       // Reset subsystems
       setSubsystems(initializeSubsystems());
@@ -592,7 +615,10 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
   const updateCharacterPartial = useCallback((data: Partial<CharacterData>) => {
     setCharacter(prev => prev ? { ...prev, ...data } : null);
-  }, []);
+    if (activeSource.kind === 'player' && data.name !== undefined) {
+      setPlayerName(data.name ?? null);
+    }
+  }, [activeSource]);
 
   const value: CharacterContextState = {
     character,
@@ -610,6 +636,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     redo,
     roster,
     activeSource,
+    playerName,
+    isPreloading,
     refreshRoster,
     switchToCompanion,
     switchToPlayer,

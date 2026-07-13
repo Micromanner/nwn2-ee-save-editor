@@ -23,7 +23,7 @@ export function Navbar({ onBack }: NavbarProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
-  const { character, historyState, undo, redo, activeSource, refreshRoster } = useCharacterContext();
+  const { character, playerName, historyState, undo, redo, activeSource, refreshRoster } = useCharacterContext();
   const [showSettings, setShowSettings] = useState(false);
   const [showGameLaunch, setShowGameLaunch] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -121,7 +121,7 @@ export function Navbar({ onBack }: NavbarProps) {
         isOpen={showGameLaunch}
         onClose={() => setShowGameLaunch(false)}
         onLaunch={handleLaunchGame}
-        saveName={character?.name}
+        saveName={playerName ?? character?.name}
       />
     </>
   );
