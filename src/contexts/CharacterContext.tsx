@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CharacterAPI, CharacterData, LegitimateFeatsResponse, LegitimateSpellsResponse } from '@/services/characterApi';
 import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/inventoryApi';
@@ -160,6 +160,7 @@ interface CharacterContextState {
   roster: RosterEntryInfo[];
   activeSource: ActiveSource;
   playerName: string | null;
+  playerClassId: number | null;
   isPreloading: boolean;
   refreshRoster: () => Promise<void>;
   switchToCompanion: (rosName: string, force: boolean) => Promise<void>;
@@ -261,8 +262,18 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [roster, setRoster] = useState<RosterEntryInfo[]>([]);
   const [activeSource, setActiveSource] = useState<ActiveSource>({ kind: 'player' });
   const [playerName, setPlayerName] = useState<string | null>(null);
+  const [playerClassId, setPlayerClassId] = useState<number | null>(null);
   const [isPreloading, setIsPreloading] = useState(false);
   const preloadToken = useRef(0);
+
+  // Keep the player's identity snapshot in sync while the player is the
+  // active character, so the sidebar can show it while a companion is loaded.
+  useEffect(() => {
+    if (activeSource.kind === 'player' && character) {
+      setPlayerName(character.name ?? null);
+      setPlayerClassId(character.classes?.[0]?.class_id ?? null);
+    }
+  }, [character, activeSource]);
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -416,6 +427,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setRoster([]);
     setActiveSource({ kind: 'player' });
     setPlayerName(null);
+    setPlayerClassId(null);
   }, []);
 
   const allSubsystems: SubsystemType[] = ['feats', 'spells', 'skills', 'inventory', 'abilityScores', 'combat', 'saves', 'classes', 'appearance'];
@@ -572,7 +584,6 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       // Step 3: Populate frontend context with complete data
       setCharacter(characterData);
       setCharacterId(newCharacterId);
-      setPlayerName(characterData.name ?? null);
       
       // Reset subsystems
       setSubsystems(initializeSubsystems());
@@ -615,10 +626,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
   const updateCharacterPartial = useCallback((data: Partial<CharacterData>) => {
     setCharacter(prev => prev ? { ...prev, ...data } : null);
-    if (activeSource.kind === 'player' && data.name !== undefined) {
-      setPlayerName(data.name ?? null);
-    }
-  }, [activeSource]);
+  }, []);
 
   const value: CharacterContextState = {
     character,
@@ -637,6 +645,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     roster,
     activeSource,
     playerName,
+    playerClassId,
     isPreloading,
     refreshRoster,
     switchToCompanion,

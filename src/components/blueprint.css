@@ -19,6 +19,7 @@
   --font-2xl: 18px;
   --font-3xl: 20px;
   --font-4xl: 28px;
+  --icon-nav: 24px;
 }
 
 html.font-size-small .bp-app {
@@ -32,6 +33,7 @@ html.font-size-small .bp-app {
   --font-2xl: 15px;
   --font-3xl: 17px;
   --font-4xl: 24px;
+  --icon-nav: 21px;
 }
 
 html.font-size-large .bp-app {
@@ -45,6 +47,7 @@ html.font-size-large .bp-app {
   --font-2xl: 21px;
   --font-3xl: 24px;
   --font-4xl: 34px;
+  --icon-nav: 27px;
 }
 
 /* ── Typography utility classes ── */

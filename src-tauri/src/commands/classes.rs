@@ -68,6 +68,20 @@ pub async fn get_class_name(state: State<'_, AppState>, class_id: i32) -> Comman
     Ok(character.get_class_name(ClassId(class_id), &game_data))
 }
 
+/// Icon resref from classes.2da (e.g. "ic_b_fighter"); None when the column
+/// is empty, so the frontend can fall back to an initials avatar.
+#[tauri::command]
+pub async fn get_class_icon(
+    state: State<'_, AppState>,
+    class_id: i32,
+) -> CommandResult<Option<String>> {
+    let game_data = state.game_data.read();
+    Ok(game_data
+        .get_table("classes")
+        .and_then(|table| table.get_by_id(class_id))
+        .and_then(|row| row.get("icon").cloned().flatten()))
+}
+
 #[tauri::command]
 pub async fn get_xp_progress(state: State<'_, AppState>) -> CommandResult<XpProgress> {
     let session = state.session.read();

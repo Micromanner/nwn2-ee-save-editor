@@ -21,12 +21,13 @@ const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey
   { id: 'models', icon: GiCube, gameIcon: 'is_trueseeing', labelKey: 'navigation.models' },
 ];
 
-function NavIcon({ gameIcon, fallback, size }: { gameIcon: string | null; fallback: IconType; size: number }) {
+function NavIcon({ gameIcon, fallback }: { gameIcon: string | null; fallback: IconType }) {
   const iconUrl = useIcon(gameIcon);
+  const sizeStyle = { width: 'var(--icon-nav)', height: 'var(--icon-nav)' } as const;
   if (iconUrl) {
-    return <img src={iconUrl} alt="" width={size} height={size} style={{ borderRadius: 2, flexShrink: 0 }} />;
+    return <img src={iconUrl} alt="" style={{ ...sizeStyle, borderRadius: 2, flexShrink: 0 }} />;
   }
-  return <GameIcon icon={fallback} size={size} />;
+  return <GameIcon icon={fallback} style={{ ...sizeStyle, flexShrink: 0 }} />;
 }
 
 interface SidebarProps {
@@ -79,7 +80,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               transition: 'all 0.15s',
             }}
           >
-            <NavIcon gameIcon={item.gameIcon} fallback={item.icon} size={24} />
+            <NavIcon gameIcon={item.gameIcon} fallback={item.icon} />
             {t(item.labelKey)}
           </button>
         );

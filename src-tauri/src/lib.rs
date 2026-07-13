@@ -155,6 +155,7 @@ pub fn run() {
             crate::commands::classes::get_class_level,
             crate::commands::classes::get_class_summary,
             crate::commands::classes::get_class_name,
+            crate::commands::classes::get_class_icon,
             crate::commands::classes::get_xp_progress,
             crate::commands::classes::get_level_history,
             crate::commands::classes::set_experience,

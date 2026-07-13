@@ -3,6 +3,7 @@ import { Button, Dialog, DialogBody, DialogFooter } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
 import { useCharacterContext } from '@/contexts/CharacterContext';
+import { useIcon } from '@/hooks/useIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useToast } from '@/contexts/ToastContext';
@@ -19,15 +20,28 @@ function initials(name: string): string {
     .join('');
 }
 
-function Avatar({ name, active }: { name: string; active: boolean }) {
+function Avatar({ name, icon, active }: { name: string; icon?: string | null; active: boolean }) {
+  const iconUrl = useIcon(icon);
+  if (iconUrl) {
+    return (
+      <img
+        src={iconUrl}
+        alt=""
+        style={{
+          width: 'var(--icon-nav)', height: 'var(--icon-nav)',
+          borderRadius: 4, flexShrink: 0, opacity: active ? 1 : 0.85,
+        }}
+      />
+    );
+  }
   return (
     <div
       style={{
-        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+        width: 'var(--icon-nav)', height: 'var(--icon-nav)', borderRadius: 4, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: active ? 'rgba(160,82,45,0.35)' : 'rgba(255,255,255,0.08)',
         color: active ? T.sidebarAccent : T.sidebarText,
-        fontSize: 11, fontWeight: 600,
+        fontSize: 'var(--font-sm)', fontWeight: 600,
       }}
     >
       {initials(name)}
@@ -45,11 +59,12 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
   const {
-    character, roster, activeSource, playerName: storedPlayerName,
+    character, roster, activeSource, playerName: storedPlayerName, playerClassId,
     isPreloading, isMetadataLoading, switchToCompanion, switchToPlayer, refreshRoster,
   } = useCharacterContext();
   const [pendingTarget, setPendingTarget] = useState<SwitchTarget | null>(null);
   const [classNames, setClassNames] = useState<Record<number, string>>({});
+  const [classIcons, setClassIcons] = useState<Record<number, string | null>>({});
   const [isSwitching, setIsSwitching] = useState(false);
 
   useEffect(() => {
@@ -70,6 +85,25 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
       }
     });
   }, [roster, classNames]);
+
+  useEffect(() => {
+    const ids = [...new Set([
+      ...roster.flatMap(r => r.classes.map(c => c.class_id)),
+      ...(playerClassId != null ? [playerClassId] : []),
+    ])];
+    const missing = ids.filter(id => !(id in classIcons));
+    if (missing.length === 0) return;
+    Promise.allSettled(
+      missing.map(async id => [id, await invoke<string | null>('get_class_icon', { classId: id })] as const),
+    ).then(results => {
+      // Failed lookups are stored as null so they are not refetched forever;
+      // null falls back to the initials avatar.
+      const entries = results.map((result, i) =>
+        result.status === 'fulfilled' ? result.value : ([missing[i]!, null] as const),
+      );
+      setClassIcons(prev => ({ ...prev, ...Object.fromEntries(entries) }));
+    });
+  }, [roster, playerClassId, classIcons]);
 
   const doSwitch = useCallback(async (target: SwitchTarget, force: boolean) => {
     try {
@@ -179,7 +213,11 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
           disabled={switchLocked}
           onClick={() => !playerActive && !switchLocked && requestSwitch({ kind: 'player' })}
         >
-          <Avatar name={playerName} active={playerActive} />
+          <Avatar
+            name={playerName}
+            icon={playerClassId != null ? classIcons[playerClassId] : null}
+            active={playerActive}
+          />
           <div style={{ minWidth: 0 }}>
             <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {playerName}
@@ -204,7 +242,11 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
               disabled={switchLocked}
               onClick={() => !active && !switchLocked && requestSwitch({ kind: 'companion', rosName: entry.ros_name })}
             >
-              <Avatar name={entry.char_name} active={active} />
+              <Avatar
+                name={entry.char_name}
+                icon={entry.classes[0] ? classIcons[entry.classes[0].class_id] : null}
+                active={active}
+              />
               <div style={{ minWidth: 0 }}>
                 <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {entry.char_name}
