@@ -597,6 +597,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';
       setError(errorMessage);
+      throw err;
     } finally {
       setIsLoading(false);
     }

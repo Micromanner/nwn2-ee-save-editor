@@ -187,6 +187,8 @@ export default function DashboardPanel() {
 
   const handleImportVaultFile = async (file: FileInfo) => {
     setShowVaultBrowser(false);
+    const confirmed = await confirmSwitch(file.character_name || file.name);
+    if (!confirmed) return;
     setIsImporting(true);
     try {
       await importCharacter(file.path);
