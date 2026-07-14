@@ -189,9 +189,10 @@ pub async fn save_character(
 ) -> CommandResult<SaveCharacterResult> {
     info!("Save character command invoked");
 
+    let backup_keep_count = state.config.read().backup_count as usize;
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    match session.save_character(&game_data) {
+    match session.save_character(&game_data, backup_keep_count) {
         Ok(warning) => {
             info!("Character saved successfully via command");
             Ok(SaveCharacterResult {

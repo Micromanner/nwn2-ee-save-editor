@@ -8,4 +8,5 @@ mod resource_manager;
 mod rule_detector;
 mod save_graph;
 mod savegame_handler;
+mod standalone_bic;
 mod toolset_bridge;

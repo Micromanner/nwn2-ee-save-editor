@@ -15,6 +15,7 @@ use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
 use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
+use crate::state::standalone_bic;
 
 const HISTORY_LIMIT: usize = 100;
 const COALESCE_WINDOW: Duration = Duration::from_millis(500);
@@ -31,6 +32,7 @@ pub struct HistoryEntry {
 pub enum CharacterSource {
     Player,
     Companion { ros_name: String },
+    Standalone,
 }
 
 pub struct RosterListing {
@@ -58,6 +60,7 @@ pub struct SessionState {
     pub undo_stack: VecDeque<HistoryEntry>,
     pub redo_stack: Vec<HistoryEntry>,
     pub character_source: CharacterSource,
+    pub standalone_backup_done: bool,
 }
 
 impl SessionState {
@@ -85,6 +88,7 @@ impl SessionState {
             undo_stack: VecDeque::new(),
             redo_stack: Vec::new(),
             character_source: CharacterSource::Player,
+            standalone_backup_done: false,
         }
     }
 
@@ -97,6 +101,14 @@ impl SessionState {
     ) -> Result<(), LoadError> {
         info!("Loading character from save file");
         let path = PathBuf::from(file_path);
+
+        if path.is_file()
+            && path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("bic"))
+        {
+            return self.load_standalone_bic(&path, report);
+        }
 
         crate::services::savegame_handler::backup::clear_backup_tracking();
 
@@ -238,10 +250,61 @@ impl SessionState {
         Ok(())
     }
 
-    pub fn save_character(&mut self, game_data: &GameData) -> Result<Option<String>, String> {
+    #[instrument(name = "SessionState::load_standalone_bic", skip(self, report), fields(path = %path.display()))]
+    fn load_standalone_bic(
+        &mut self,
+        path: &Path,
+        report: &mut LoadReport,
+    ) -> Result<(), LoadError> {
+        info!("Loading standalone character file");
+        crate::services::savegame_handler::backup::clear_backup_tracking();
+
+        let fields = standalone_bic::load_fields(path).map_err(|message| {
+            warn!("{message}");
+            let context = serde_json::json!({ "file_path": path.display().to_string() });
+            report.set_fatal(LoadStage::Bic, message.clone(), context.clone());
+            LoadError {
+                stage: LoadStage::Bic,
+                message,
+                context,
+            }
+        })?;
+
+        let character = Character::from_gff(fields);
+        info!(
+            "Standalone character created: {} (Level {})",
+            character.full_name(),
+            character.total_level()
+        );
+
+        self.character = Some(character);
+        self.savegame_handler = None;
+        self.current_file_path = Some(path.to_path_buf());
+        self.save_dir = None;
+        self.feat_cache = None;
+        self.module_info_cache = None;
+        self.quest_graph_cache = None;
+        self.selected_player_index = 0;
+        self.primary_player_index = None;
+        self.character_source = CharacterSource::Standalone;
+        self.standalone_backup_done = false;
+        self.clear_history();
+
+        info!("Standalone character loaded successfully");
+        Ok(())
+    }
+
+    pub fn save_character(
+        &mut self,
+        game_data: &GameData,
+        backup_keep_count: usize,
+    ) -> Result<Option<String>, String> {
         if let CharacterSource::Companion { ros_name } = &self.character_source {
             let ros_name = ros_name.clone();
             return self.save_companion_inner(&ros_name);
+        }
+        if self.character_source == CharacterSource::Standalone {
+            return self.save_standalone_inner(backup_keep_count);
         }
 
         let handler = self
@@ -307,6 +370,32 @@ impl SessionState {
         self.save_companion_inner(&ros_name)
     }
 
+    fn save_standalone_inner(
+        &mut self,
+        backup_keep_count: usize,
+    ) -> Result<Option<String>, String> {
+        let path = self
+            .current_file_path
+            .clone()
+            .ok_or("No character file loaded")?;
+        let character = self.character.as_ref().ok_or("No character loaded")?;
+
+        if !character.is_modified() {
+            info!("No changes to save");
+            return Ok(None);
+        }
+
+        standalone_bic::save(
+            &path,
+            &character.clone_gff(),
+            backup_keep_count,
+            !self.standalone_backup_done,
+        )?;
+        self.standalone_backup_done = true;
+        self.character.as_mut().unwrap().mark_saved();
+        Ok(None)
+    }
+
     fn save_companion_inner(&mut self, ros_name: &str) -> Result<Option<String>, String> {
         let handler = self
             .savegame_handler
@@ -366,6 +455,7 @@ impl SessionState {
         self.module_info_cache = None;
         self.quest_graph_cache = None;
         self.character_source = CharacterSource::Player;
+        self.standalone_backup_done = false;
         self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
