@@ -3,6 +3,7 @@ pub mod campaign;
 pub mod character;
 pub mod classes;
 pub mod combat;
+pub mod companions;
 pub mod config;
 pub mod debug;
 pub mod error;

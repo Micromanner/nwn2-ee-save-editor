@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -27,6 +27,18 @@ pub struct HistoryEntry {
     modified_snapshot: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CharacterSource {
+    Player,
+    Companion { ros_name: String },
+}
+
+pub struct RosterListing {
+    pub ros_name: String,
+    pub char_name: String,
+    pub classes: Vec<(i32, i32)>,
+}
+
 pub struct SessionState {
     pub current_file_path: Option<PathBuf>,
     pub save_dir: Option<PathBuf>,
@@ -45,6 +57,7 @@ pub struct SessionState {
     pub quest_graph_cache: Option<Arc<SaveGraph>>,
     pub undo_stack: VecDeque<HistoryEntry>,
     pub redo_stack: Vec<HistoryEntry>,
+    pub character_source: CharacterSource,
 }
 
 impl SessionState {
@@ -71,6 +84,7 @@ impl SessionState {
             quest_graph_cache: None,
             undo_stack: VecDeque::new(),
             redo_stack: Vec::new(),
+            character_source: CharacterSource::Player,
         }
     }
 
@@ -217,13 +231,19 @@ impl SessionState {
         self.quest_graph_cache = None;
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
+        self.character_source = CharacterSource::Player;
         self.clear_history();
 
         info!("Character loaded successfully");
         Ok(())
     }
 
-    pub fn save_character(&mut self, game_data: &GameData) -> Result<(), String> {
+    pub fn save_character(&mut self, game_data: &GameData) -> Result<Option<String>, String> {
+        if let CharacterSource::Companion { ros_name } = &self.character_source {
+            let ros_name = ros_name.clone();
+            return self.save_companion_inner(&ros_name);
+        }
+
         let handler = self
             .savegame_handler
             .as_mut()
@@ -235,7 +255,7 @@ impl SessionState {
 
         if !character.is_modified() {
             info!("No changes to save");
-            return Ok(());
+            return Ok(None);
         }
 
         let char_fields = character.clone_gff();
@@ -250,7 +270,12 @@ impl SessionState {
                     selected_player_index,
                 )?;
                 let player_bic = if update_primary_player_files {
-                    Some(serialize_player_bic_bytes(src.player_bic, &char_fields)?)
+                    Some(crate::parsers::gff::merge_fields_into_gff(
+                        src.player_bic,
+                        &char_fields,
+                        "BIC ",
+                        false,
+                    )?)
                 } else {
                     None
                 };
@@ -271,7 +296,63 @@ impl SessionState {
             "Character saved successfully (player.bic_updated={})",
             update_primary_player_files
         );
-        Ok(())
+        Ok(None)
+    }
+
+    pub fn save_companion(&mut self) -> Result<Option<String>, String> {
+        let CharacterSource::Companion { ros_name } = &self.character_source else {
+            return Err("Active character is not a companion".into());
+        };
+        let ros_name = ros_name.clone();
+        self.save_companion_inner(&ros_name)
+    }
+
+    fn save_companion_inner(&mut self, ros_name: &str) -> Result<Option<String>, String> {
+        let handler = self
+            .savegame_handler
+            .as_mut()
+            .ok_or("No active save handler")?;
+        let character = self.character.as_ref().ok_or("No character loaded")?;
+
+        if !character.is_modified() {
+            info!("No changes to save");
+            return Ok(None);
+        }
+
+        let stored_name = handler
+            .companion_stored_name(ros_name)
+            .map_err(|e| format!("Failed to locate companion file: {e}"))?;
+        let original = handler
+            .extract_file(&stored_name)
+            .map_err(|e| format!("Failed to read companion file: {e}"))?;
+        let bytes = crate::parsers::gff::merge_fields_into_gff(
+            Some(&original),
+            &character.clone_gff(),
+            "ROS ",
+            true,
+        )?;
+        handler
+            .update_file(&stored_name, &bytes)
+            .map_err(|e| format!("Failed to write companion file: {e}"))?;
+
+        let classes: Vec<(i32, i32)> = character
+            .class_entries()
+            .into_iter()
+            .map(|e| (e.class_id.0, e.level))
+            .collect();
+        let warning = match sync_roster(handler, ros_name, &classes) {
+            Ok(()) => None,
+            Err(e) => {
+                warn!("Roster sync failed after companion save: {e}");
+                Some(format!(
+                    "Companion saved, but updating the party roster failed: {e}"
+                ))
+            }
+        };
+
+        self.character.as_mut().unwrap().mark_saved();
+        info!("Companion saved: {stored_name}");
+        Ok(warning)
     }
 
     pub fn close_character(&mut self) {
@@ -284,6 +365,7 @@ impl SessionState {
         self.feat_cache = None;
         self.module_info_cache = None;
         self.quest_graph_cache = None;
+        self.character_source = CharacterSource::Player;
         self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
@@ -395,6 +477,101 @@ impl SessionState {
         self.character.as_mut()
     }
 
+    pub fn load_companion(&mut self, ros_name: &str, force: bool) -> Result<(), String> {
+        if !force && self.has_unsaved_changes() {
+            return Err(
+                "Unsaved changes present; save or discard before switching characters".into(),
+            );
+        }
+        let handler = self
+            .savegame_handler
+            .as_ref()
+            .ok_or("No active save handler")?;
+        let bytes = handler
+            .extract_companion(ros_name)
+            .map_err(|e| format!("Failed to extract companion '{ros_name}': {e}"))?;
+        let gff = GffParser::from_bytes(bytes)
+            .map_err(|e| format!("Failed to parse companion file: {e}"))?;
+        let fields: IndexMap<String, GffValue<'static>> = gff
+            .read_struct_fields(0)
+            .map_err(|e| format!("Failed to read companion fields: {e}"))?
+            .into_iter()
+            .map(|(k, v)| (k, v.force_owned()))
+            .collect();
+
+        let character = Character::from_gff(fields);
+        info!(
+            "Companion loaded: {} ({ros_name}, level {})",
+            character.full_name(),
+            character.total_level()
+        );
+        self.character = Some(character);
+        self.character_source = CharacterSource::Companion {
+            ros_name: ros_name.to_string(),
+        };
+        // Same save, so module/quest caches stay; character-scoped cache does not.
+        self.feat_cache = None;
+        self.clear_history();
+        Ok(())
+    }
+
+    pub fn list_roster(&self) -> Result<Vec<RosterListing>, String> {
+        let handler = self
+            .savegame_handler
+            .as_ref()
+            .ok_or("No active save handler")?;
+        let Some((_, bytes)) = handler
+            .extract_roster()
+            .map_err(|e| format!("Failed to read roster: {e}"))?
+        else {
+            warn!("No roster file found in save; companion list empty");
+            return Ok(Vec::new());
+        };
+        let members = match crate::services::roster::parse_roster_members(bytes) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Roster file unparseable, treating as empty: {e}");
+                return Ok(Vec::new());
+            }
+        };
+        let companion_files = handler
+            .list_companions()
+            .map_err(|e| format!("Failed to list companions: {e}"))?;
+
+        let recruited = recruited_ros_names(handler);
+        if let Some(set) = &recruited {
+            debug!(
+                "list_roster: filtering by {} recruited companion(s) from globals.xml",
+                set.len()
+            );
+        } else {
+            debug!(
+                "list_roster: no recruited companions found in globals.xml; falling back to roster availability flags"
+            );
+        }
+
+        Ok(members
+            .into_iter()
+            .filter(|m| {
+                let has_file = companion_files
+                    .iter()
+                    .any(|c| c.eq_ignore_ascii_case(&m.ros_name));
+                if !has_file {
+                    return false;
+                }
+                match &recruited {
+                    Some(set) => set.contains(&normalize_ros_name(&m.ros_name)),
+                    None => m.available || m.campaign_npc,
+                }
+            })
+            .map(|m| RosterListing {
+                ros_name: m.ros_name,
+                char_name: m.char_name,
+                classes: m.classes,
+            })
+            .collect())
+    }
+
     fn write_playerinfo(&self, game_data: &GameData) -> Result<(), String> {
         let character = self.character.as_ref().ok_or("No character loaded")?;
         let save_dir = self.save_dir.as_ref().ok_or("No current save path")?;
@@ -406,6 +583,10 @@ impl SessionState {
         &self,
         paths: &crate::config::nwn2_paths::NWN2Paths,
     ) -> Result<String, String> {
+        if self.character_source != CharacterSource::Player {
+            return Err("Export to local vault is only available for the player character".into());
+        }
+
         let handler = self
             .savegame_handler
             .as_ref()
@@ -483,6 +664,61 @@ fn write_playerinfo_for_character(
         .map_err(|e| format!("Failed to write playerinfo.bin: {e}"))?;
 
     Ok(())
+}
+
+/// Companions the player has actually recruited, keyed by normalized `RosName`,
+/// derived from `globals.xml`'s `*_Joined` variables. `None` when the save has
+/// no known companion vars (custom campaign, or globals.xml unreadable) —
+/// callers should fall back to the roster file's availability flags in that case.
+fn recruited_ros_names(handler: &SaveGameHandler) -> Option<HashSet<String>> {
+    let xml = handler.extract_globals_xml().ok()?;
+    let parser = crate::parsers::xml::RustXmlParser::from_string(&xml).ok()?;
+    let statuses = parser.get_companion_status();
+    let defs = crate::parsers::xml::get_companion_definitions();
+
+    let recruited: HashSet<String> = statuses
+        .iter()
+        .filter(|(_, status)| status.recruitment == "recruited")
+        .map(|(comp_id, _)| {
+            let ros_name = defs
+                .get(comp_id.as_str())
+                .and_then(|def| def.ros_name)
+                .unwrap_or(comp_id.as_str());
+            normalize_ros_name(ros_name)
+        })
+        .collect();
+
+    if recruited.is_empty() {
+        None
+    } else {
+        Some(recruited)
+    }
+}
+
+/// Normalize a companion identifier (comp_id or `RosName`) to lowercase
+/// alphanumerics so naming variants like `ammon_jerro`/`ammon_jerro` or
+/// `one_of_many`/`oneofmany` compare equal.
+fn normalize_ros_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn sync_roster(
+    handler: &mut SaveGameHandler,
+    ros_name: &str,
+    classes: &[(i32, i32)],
+) -> Result<(), String> {
+    let Some((stored_name, bytes)) = handler.extract_roster().map_err(|e| e.to_string())? else {
+        return Err("no roster file in save".into());
+    };
+    match crate::services::roster::sync_member_classes(bytes, ros_name, classes)? {
+        Some(new_bytes) => handler
+            .update_file(&stored_name, &new_bytes)
+            .map_err(|e| e.to_string()),
+        None => Err(format!("no roster entry named '{ros_name}'")),
+    }
 }
 
 fn serialize_playerlist_bytes(
@@ -629,47 +865,6 @@ pub(crate) fn resolve_primary_player_index(
     }
 }
 
-fn serialize_player_bic_bytes(
-    player_bic_data: Option<&[u8]>,
-    character_fields: &IndexMap<String, GffValue<'static>>,
-) -> Result<Vec<u8>, String> {
-    let Some(player_bic_data) = player_bic_data else {
-        return GffWriter::new("BIC ", "V3.2")
-            .write(character_fields.clone())
-            .map_err(|e| format!("player.bic serialization error: {e}"));
-    };
-
-    let gff = GffParser::from_bytes(player_bic_data.to_vec())
-        .map_err(|e| format!("player.bic parse error: {e}"))?;
-    let file_type = gff.file_type.clone();
-    let file_version = gff.file_version.clone();
-    let root_struct_id = gff
-        .get_struct_id(0)
-        .map_err(|e| format!("Failed to read player.bic root struct_id: {e}"))?;
-    let bic_fields = gff
-        .read_struct_fields(0)
-        .map_err(|e| format!("Failed to read player.bic fields: {e}"))?;
-
-    // Merge character_fields into existing BIC: overwrite keys that BIC already has,
-    // preserve BIC-only keys, skip GFF-internal metadata.
-    let mut merged: IndexMap<String, GffValue<'static>> = bic_fields
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
-    for (key, value) in character_fields {
-        if key.starts_with("__") {
-            continue;
-        }
-        if merged.contains_key(key) {
-            merged.insert(key.clone(), value.clone());
-        }
-    }
-
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(merged, root_struct_id)
-        .map_err(|e| format!("player.bic serialization error: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,6 +957,40 @@ mod tests {
 
         assert!(session.undo_stack.is_empty());
         assert!(session.redo_stack.is_empty());
+    }
+
+    #[test]
+    fn normalize_ros_name_lowercases_and_strips_separators() {
+        assert_eq!(normalize_ros_name("khelgar"), "khelgar");
+        assert_eq!(normalize_ros_name("ammon_jerro"), "ammonjerro");
+        assert_eq!(normalize_ros_name("one_of_many"), "oneofmany");
+        assert_eq!(normalize_ros_name("Khelgar"), "khelgar");
+    }
+
+    #[test]
+    fn normalize_ros_name_matches_across_comp_id_and_ros_name_variants() {
+        assert_eq!(
+            normalize_ros_name("ammon_jerro"),
+            normalize_ros_name("ammon_jerro")
+        );
+        assert_eq!(
+            normalize_ros_name("one_of_many"),
+            normalize_ros_name("oneofmany")
+        );
+    }
+
+    #[test]
+    fn kaelyn_comp_id_normalizes_differently_from_dove_ros_name() {
+        // Without the explicit alias these would not match; the alias in
+        // CompanionDefinition::ros_name is what bridges the two.
+        assert_ne!(normalize_ros_name("kaelyn"), normalize_ros_name("dove"));
+
+        let defs = crate::parsers::xml::get_companion_definitions();
+        let kaelyn_ros_name = defs.get("kaelyn").and_then(|d| d.ros_name).unwrap();
+        assert_eq!(
+            normalize_ros_name(kaelyn_ros_name),
+            normalize_ros_name("dove")
+        );
     }
 
     #[test]

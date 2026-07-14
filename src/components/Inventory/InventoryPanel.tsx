@@ -117,7 +117,8 @@ function EquipSlot({ slot, equippedItem, selected, onSelect }: EquipSlotProps) {
 export function InventoryPanel() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
-  const { character, characterId, itemEditorMetadata } = useCharacterContext();
+  const { character, characterId, itemEditorMetadata, activeSource } = useCharacterContext();
+  const isCompanion = activeSource.kind === 'companion';
   const inventorySubsystem = useSubsystem('inventory');
   const { equipItem, unequipItem, deleteItem } = useInventoryManagement();
 
@@ -369,19 +370,22 @@ export function InventoryPanel() {
               </div>
               <span style={{ color: T.textMuted }}>{totalItems} items</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="t-semibold">{t('inventory.gold')}</span>
-              <input
-                type="text"
-                value={goldInput}
-                onChange={(e) => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setGoldInput(e.target.value); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleGoldSubmit(); if (e.key === 'Escape') handleGoldReset(); }}
-                className="bp6-input"
-                style={{ width: 100, textAlign: 'center', padding: '2px 8px', height: 24 }}
-              />
-              <Button minimal icon="tick" intent="success" onClick={handleGoldSubmit} disabled={!goldDirty} style={{ opacity: goldDirty ? 1 : 0.3 }} />
-              <Button minimal icon="cross" onClick={handleGoldReset} disabled={!goldDirty} style={{ opacity: goldDirty ? 1 : 0.3 }} />
-            </div>
+            {/* Party gold lives on the player; the companion .ros gold field is unused */}
+            {!isCompanion && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="t-semibold">{t('inventory.gold')}</span>
+                <input
+                  type="text"
+                  value={goldInput}
+                  onChange={(e) => { if (e.target.value === '' || /^\d+$/.test(e.target.value)) setGoldInput(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleGoldSubmit(); if (e.key === 'Escape') handleGoldReset(); }}
+                  className="bp6-input"
+                  style={{ width: 100, textAlign: 'center', padding: '2px 8px', height: 24 }}
+                />
+                <Button minimal icon="tick" intent="success" onClick={handleGoldSubmit} disabled={!goldDirty} style={{ opacity: goldDirty ? 1 : 0.3 }} />
+                <Button minimal icon="cross" onClick={handleGoldReset} disabled={!goldDirty} style={{ opacity: goldDirty ? 1 : 0.3 }} />
+              </div>
+            )}
           </div>
         </div>
 

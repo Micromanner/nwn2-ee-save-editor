@@ -43,7 +43,8 @@ const ABILITY_DEFS = [
 export function OverviewPanel() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
-  const { character, characterId, isLoading, updateCharacterPartial, refreshAll, refreshCharacter } = useCharacterContext();
+  const { character, characterId, isLoading, updateCharacterPartial, refreshAll, refreshCharacter, activeSource } = useCharacterContext();
+  const isCompanion = activeSource.kind === 'companion';
 
   useEffect(() => {
     if (characterId) {
@@ -76,15 +77,23 @@ export function OverviewPanel() {
   const [alignmentSaving, setAlignmentSaving] = useState(false);
 
 
+  // Close edit modes when switching between player and companions so the
+  // resync below can't be skipped with another character's text in the inputs.
   useEffect(() => {
-    if (!character) return;
+    setIsEditingName(false);
+    setIsEditingBio(false);
+  }, [activeSource]);
+
+  useEffect(() => {
+    if (!character || isEditingName || isEditingBio) return;
     setFirstName(character.first_name ?? '');
     setLastName(character.last_name ?? '');
     const bio = character.biography ?? '';
     setBiography(bio);
     setSavedBiography(bio);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character?.id]);
+  // Keyed on the character object: switching player/companion reuses the same
+  // session id, so `character?.id` never changes and would leave stale state.
+  }, [character, isEditingName, isEditingBio]);
 
   useEffect(() => {
     if (!character) return;
@@ -97,14 +106,14 @@ export function OverviewPanel() {
     if (!character) return;
     setAge(character.age ?? 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character?.id]);
+  }, [character]);
 
   useEffect(() => {
     if (!character?.alignmentValues) return;
     setLawChaos(character.alignmentValues.law_chaos);
     setGoodEvil(character.alignmentValues.good_evil);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character?.id]);
+  }, [character]);
 
 
   const handleNameSave = useCallback(async () => {
@@ -279,7 +288,13 @@ export function OverviewPanel() {
       <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
 
         <div style={{ padding: '14px 16px 12px' }}>
-          {isEditingName ? (
+          {isCompanion ? (
+            // Companion names stay read-only: dialogue and scripts display them
+            // and the .ros often only carries a TLK strref, not a literal.
+            <div style={{ marginBottom: 4 }}>
+              <H4 style={{ margin: 0, color: T.text }}>{display([firstName, lastName].filter(Boolean).join(' '))}</H4>
+            </div>
+          ) : isEditingName ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <InputGroup small value={firstName} onChange={e => setFirstName(e.target.value)} placeholder={t('overview.firstName')} style={{ width: 160 }} />
               <InputGroup small value={lastName} onChange={e => setLastName(e.target.value)} placeholder={t('overview.lastName')} style={{ width: 160 }} />
@@ -313,7 +328,7 @@ export function OverviewPanel() {
               </ButtonGroup>
             } />
             <KVRow label={t('character.age')} value={
-              <StepInput value={age} onValueChange={handleAgeChange} min={0} max={9999} width={88} />
+              <StepInput value={age} onValueChange={handleAgeChange} min={0} max={9999} width={88} zeroDisplay={display(null)} />
             } />
             <KVRow label={t('character.alignment')} value={t(ALIGNMENT_GRID[getAlignmentIndex(lawChaos, goodEvil)]?.labelKey) || display(character.alignment)} />
             <KVRow label={t('overview.deity')} value={
@@ -324,7 +339,8 @@ export function OverviewPanel() {
             } />
             <KVRow label={t('overview.background')} value={display(character.background?.name)} />
             <KVRow label={t('character.experience')} value={formatNumber(character.experience)} />
-            <KVRow label={t('inventory.gold')} value={formatNumber(character.gold)} color={T.gold} />
+            {/* Party gold lives on the player; the companion .ros gold field is unused */}
+            {!isCompanion && <KVRow label={t('inventory.gold')} value={formatNumber(character.gold)} color={T.gold} />}
           </div>
 
           {domains.length > 0 && (

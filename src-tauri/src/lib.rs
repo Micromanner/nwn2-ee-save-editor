@@ -108,6 +108,10 @@ pub fn run() {
             crate::commands::session::undo,
             crate::commands::session::redo,
             crate::commands::session::get_history_state,
+            // Companions
+            crate::commands::companions::list_roster,
+            crate::commands::companions::load_companion,
+            crate::commands::companions::load_player,
             // Character - Identity
             crate::commands::character::get_character_name,
             crate::commands::character::get_first_name,
@@ -151,6 +155,7 @@ pub fn run() {
             crate::commands::classes::get_class_level,
             crate::commands::classes::get_class_summary,
             crate::commands::classes::get_class_name,
+            crate::commands::classes::get_class_icon,
             crate::commands::classes::get_xp_progress,
             crate::commands::classes::get_level_history,
             crate::commands::classes::set_experience,

@@ -75,6 +75,9 @@ pub struct CompanionDefinition {
     pub influence_var: &'static str,
     pub joined_var: &'static str,
     pub met_var: Option<&'static str>,
+    /// Explicit roster `RosName` alias for companions whose comp_id doesn't
+    /// normalize to a match (e.g. kaelyn's roster entry is "dove").
+    pub ros_name: Option<&'static str>,
 }
 
 pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition> {
@@ -86,6 +89,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceneeshka",
             joined_var: "00_bNeeshka_Joined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -95,6 +99,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencekhelgar",
             joined_var: "00_bKhelgar_Joined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -104,6 +109,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceelanee",
             joined_var: "00_bElanee_Joined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -113,6 +119,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceqara",
             joined_var: "00_bQaraJoined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -122,6 +129,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencecasavir",
             joined_var: "00_bCasavir_Joined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -131,6 +139,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencegrobnar",
             joined_var: "00_bGrobnar_Joined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -140,6 +149,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencesand",
             joined_var: "00_bSand_Joined",
             met_var: Some("SandIntroDone"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -149,6 +159,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencebishop",
             joined_var: "00_bBishop_Joined",
             met_var: None,
+            ros_name: None,
         },
     );
     map.insert(
@@ -158,6 +169,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceshandra",
             joined_var: "00_bShandra_Joined",
             met_var: Some("bShandraMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -167,6 +179,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceammon",
             joined_var: "00_bAmmon_Joined",
             met_var: Some("bAmmonMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -176,6 +189,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencezhjaeve",
             joined_var: "00_bZhjaeve_Joined",
             met_var: Some("bZhjaeveMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -185,6 +199,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceconstruct",
             joined_var: "00_bConstruct_Joined",
             met_var: Some("bConstructMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -194,6 +209,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencesafiya",
             joined_var: "00_bSafiya_Joined",
             met_var: Some("bSafiyaMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -203,6 +219,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencegann",
             joined_var: "00_bGann_Joined",
             met_var: Some("bGannMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -212,6 +229,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluencekaelyn",
             joined_var: "00_bKaelyn_Joined",
             met_var: Some("bKaelynMet"),
+            ros_name: Some("dove"),
         },
     );
     map.insert(
@@ -221,6 +239,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceokku",
             joined_var: "00_bOkku_Joined",
             met_var: Some("bOkkuMet"),
+            ros_name: None,
         },
     );
     map.insert(
@@ -230,6 +249,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             influence_var: "00_nInfluenceoneofmany",
             joined_var: "00_bOneOfMany_Joined",
             met_var: Some("bOneOfManyMet"),
+            ros_name: None,
         },
     );
     map

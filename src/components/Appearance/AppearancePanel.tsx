@@ -55,9 +55,17 @@ export function AppearancePanel() {
         appearanceSubsystem.load();
       }
     }
-    setShowHelmetInViewer(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [character?.id]);
+
+  const dataNeverDrawHelmet = appearanceSubsystem.data?.never_draw_helmet;
+  useEffect(() => {
+    console.log("AppearancePanel mount/update. dataNeverDrawHelmet:", dataNeverDrawHelmet);
+    if (dataNeverDrawHelmet !== undefined) {
+      console.log("Setting showHelmetInViewer to", !dataNeverDrawHelmet);
+      setShowHelmetInViewer(!dataNeverDrawHelmet);
+    }
+  }, [dataNeverDrawHelmet]);
 
   useEffect(() => {
     async function loadOptions() {

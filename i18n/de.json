@@ -889,5 +889,16 @@
     "equipment": "Ausrüstung",
     "showHelmet": "Helm anzeigen",
     "noFacialHair": "Kein Bart für diesen Kopf verfügbar"
+  },
+  "roster": {
+    "party": "Gruppe",
+    "player": "Spieler",
+    "levelLine": "Stufe {level}",
+    "unsavedTitle": "Ungespeicherte Änderungen",
+    "unsavedMessage": "{name} hat ungespeicherte Änderungen. Vor dem Wechsel speichern?",
+    "saveAndSwitch": "Speichern & Wechseln",
+    "discardChanges": "Änderungen verwerfen",
+    "cancel": "Abbrechen",
+    "syncWarning": "Begleiter gespeichert, aber der Gruppen-Cache konnte nicht aktualisiert werden."
   }
 }

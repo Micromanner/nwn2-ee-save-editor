@@ -113,6 +113,24 @@ impl Character {
         format!("{first} {last}").trim().to_string()
     }
 
+    /// StrRef backing `FirstName`, present when the field has no literal
+    /// substring (e.g. companion `.ros` files, which only carry a TLK
+    /// reference). `None` when the field has a literal substring already or
+    /// no valid strref.
+    pub fn first_name_strref(&self) -> Option<i32> {
+        self.localized_string_ref("FirstName")
+    }
+
+    /// StrRef backing `LastName`. See [`Character::first_name_strref`].
+    pub fn last_name_strref(&self) -> Option<i32> {
+        self.localized_string_ref("LastName")
+    }
+
+    fn localized_string_ref(&self, field: &str) -> Option<i32> {
+        let ls = self.get_localized_string(field)?;
+        (ls.string_ref >= 0).then_some(ls.string_ref)
+    }
+
     pub fn set_first_name(&mut self, name: String) {
         self.set_localized_string("FirstName", name);
     }
@@ -238,6 +256,20 @@ impl Character {
 
         name.or_else(|| row.get("label").and_then(|s| s.clone()))
     }
+}
+
+/// Resolve a localized name field for display, falling back to the TLK
+/// string when the GFF value has no literal substring (companion `.ros`
+/// files store `FirstName`/`LastName` as a bare strref). Does not touch the
+/// GFF data — the resolved value is never written back, so saving a
+/// companion never bakes a TLK-derived name over the strref.
+pub fn resolve_localized_name(value: String, strref: Option<i32>, game_data: &GameData) -> String {
+    if !value.is_empty() {
+        return value;
+    }
+    strref
+        .and_then(|r| game_data.get_string(r))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -548,6 +580,94 @@ mod tests {
         assert_eq!(Alignment::new(50, 31).alignment_string(), "True Neutral");
         assert_eq!(Alignment::new(50, 69).alignment_string(), "True Neutral");
         assert_eq!(Alignment::new(50, 70).alignment_string(), "Neutral Good");
+    }
+
+    fn create_strref_only_character() -> Character {
+        let mut fields = IndexMap::new();
+        fields.insert(
+            "FirstName".to_string(),
+            GffValue::LocString(LocalizedString {
+                string_ref: 126460,
+                substrings: vec![],
+            }),
+        );
+        fields.insert(
+            "LastName".to_string(),
+            GffValue::LocString(LocalizedString {
+                string_ref: -1,
+                substrings: vec![],
+            }),
+        );
+        fields.insert("Age".to_string(), GffValue::Byte(0));
+        Character::from_gff(fields)
+    }
+
+    #[test]
+    fn first_name_strref_exposes_ref_when_no_substring() {
+        let character = create_strref_only_character();
+        assert_eq!(character.first_name(), "");
+        assert_eq!(character.first_name_strref(), Some(126460));
+    }
+
+    #[test]
+    fn last_name_strref_none_when_ref_is_negative() {
+        let character = create_strref_only_character();
+        assert_eq!(character.last_name_strref(), None);
+    }
+
+    #[test]
+    fn strref_absent_when_literal_substring_present() {
+        let character = create_test_character();
+        assert_eq!(character.first_name_strref(), None);
+    }
+
+    #[test]
+    fn resolve_localized_name_prefers_literal_value() {
+        let game_data = create_test_game_data();
+        assert_eq!(
+            resolve_localized_name("Khelgar".to_string(), Some(999), &game_data),
+            "Khelgar"
+        );
+    }
+
+    #[test]
+    fn resolve_localized_name_falls_back_to_tlk_strref() {
+        use crate::parsers::tlk::TLKStringEntry;
+        use crate::parsers::tlk::types::CachedString;
+
+        let mut tlk = TLKParser::default();
+        tlk.entries.push(TLKStringEntry {
+            flags: 1,
+            sound_resref: None,
+            volume_variance: 0,
+            pitch_variance: 0,
+            data_offset: 0,
+            string_size: 0,
+        });
+        let symbol = tlk.interner.get_or_intern("Khelgar Ironfist");
+        tlk.string_cache.insert(
+            0,
+            CachedString {
+                symbol,
+                byte_length: 0,
+            },
+        );
+        let game_data = GameData::new(Arc::new(RwLock::new(tlk)));
+
+        assert_eq!(
+            resolve_localized_name(String::new(), Some(0), &game_data),
+            "Khelgar Ironfist"
+        );
+    }
+
+    #[test]
+    fn resolve_localized_name_empty_when_strref_unresolvable() {
+        let game_data = create_test_game_data();
+        assert_eq!(resolve_localized_name(String::new(), None, &game_data), "");
+        assert_eq!(
+            resolve_localized_name(String::new(), Some(9999), &game_data),
+            ""
+        );
     }
 
     #[test]

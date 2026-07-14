@@ -34,5 +34,14 @@ mod armor_debug_dump;
 #[path = "debugging/dump_gff_reference.rs"]
 mod dump_gff_reference;
 
+#[path = "debugging/dump_ros_reference.rs"]
+mod dump_ros_reference;
+
 #[path = "debugging/diff_class_edits.rs"]
 mod diff_class_edits;
+
+#[path = "debugging/investigate_saves.rs"]
+mod investigate_saves;
+
+#[path = "debugging/diagnose_linux_user.rs"]
+mod diagnose_linux_user;

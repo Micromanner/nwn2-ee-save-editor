@@ -34,6 +34,7 @@ export interface CharacterSaves {
 }
 
 export interface CharacterClass {
+  class_id?: number;
   name: string;
   level: number;
 }
@@ -632,7 +633,7 @@ export class CharacterAPI {
           day: overview.campaign_info.game_day,
           hour: overview.campaign_info.game_hour,
         } : undefined,
-        classes: overview.classes.map(c => ({ name: c.name, level: c.level })),
+        classes: overview.classes.map(c => ({ class_id: c.class_id, name: c.name, level: c.level })),
         derived_stats: {
           armor_class: overview.armor_class,
           current_hit_points: overview.hit_points.current,

@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CharacterAPI, CharacterData, LegitimateFeatsResponse, LegitimateSpellsResponse } from '@/services/characterApi';
 import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/inventoryApi';
 import { CharacterStateAPI } from '@/lib/api/character-state';
+import type { RosterEntryInfo } from '@/lib/api/character-state';
 import type {
   AbilitiesState,
   AppearanceState,
@@ -26,6 +27,8 @@ export type ClassesData = ClassesState;
 export type SpellsData = SpellsState;
 export type InventoryData = FullInventorySummary;
 export type AppearanceData = AppearanceState;
+
+export type ActiveSource = { kind: 'player' } | { kind: 'companion'; rosName: string };
 
 // Add metadata interfaces for classes
 export interface ClassInfo {
@@ -153,6 +156,16 @@ interface CharacterContextState {
   undo: () => Promise<void>;
   redo: () => Promise<void>;
 
+  // Roster / active source (player vs. companion)
+  roster: RosterEntryInfo[];
+  activeSource: ActiveSource;
+  playerName: string | null;
+  playerClassId: number | null;
+  isPreloading: boolean;
+  refreshRoster: () => Promise<void>;
+  switchToCompanion: (rosName: string, force: boolean) => Promise<void>;
+  switchToPlayer: (force: boolean) => Promise<void>;
+
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string, playerIndex?: number) => Promise<void>;
@@ -246,6 +259,21 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [allSpellsCache, setAllSpellsCache] = useState<LegitimateSpellsResponse | null>(null);
   const [itemEditorMetadata, setItemEditorMetadata] = useState<ItemEditorMetadataResponse | null>(null);
   const [historyState, setHistoryState] = useState<HistoryState | null>(null);
+  const [roster, setRoster] = useState<RosterEntryInfo[]>([]);
+  const [activeSource, setActiveSource] = useState<ActiveSource>({ kind: 'player' });
+  const [playerName, setPlayerName] = useState<string | null>(null);
+  const [playerClassId, setPlayerClassId] = useState<number | null>(null);
+  const [isPreloading, setIsPreloading] = useState(false);
+  const preloadToken = useRef(0);
+
+  // Keep the player's identity snapshot in sync while the player is the
+  // active character, so the sidebar can show it while a companion is loaded.
+  useEffect(() => {
+    if (activeSource.kind === 'player' && character) {
+      setPlayerName(character.name ?? null);
+      setPlayerClassId(character.classes?.[0]?.class_id ?? null);
+    }
+  }, [character, activeSource]);
 
   // Generic subsystem loader - always fetch fresh, no caching
   const loadSubsystem = useCallback(async (
@@ -396,6 +424,10 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setAllSpellsCache(null);
     setItemEditorMetadata(null);
     setHistoryState(null);
+    setRoster([]);
+    setActiveSource({ kind: 'player' });
+    setPlayerName(null);
+    setPlayerClassId(null);
   }, []);
 
   const allSubsystems: SubsystemType[] = ['feats', 'spells', 'skills', 'inventory', 'abilityScores', 'combat', 'saves', 'classes', 'appearance'];
@@ -442,15 +474,23 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   }, [characterId, loadMetadataInternal]);
 
   const preloadGameData = useCallback((id: number) => {
-    CharacterAPI.getLegitimateFeats(id, { page: 1, limit: 10000 })
-      .then(setAllFeatsCache)
-      .catch(err => console.error('Background preload failed for all feats:', err));
-    CharacterAPI.getLegitimateSpells(id, { page: 1, limit: 10000 })
-      .then(setAllSpellsCache)
-      .catch(err => console.error('Background preload failed for all spells:', err));
-    inventoryAPI.getEditorMetadata(id)
-      .then(setItemEditorMetadata)
-      .catch(err => console.error('Background preload failed for item editor metadata:', err));
+    // Track completion so character switching stays locked until every
+    // background fetch has landed (a switch mid-preload would let stale
+    // subsystem data from the previous character overwrite the new one).
+    const token = ++preloadToken.current;
+    setIsPreloading(true);
+
+    const tasks: Promise<unknown>[] = [
+      CharacterAPI.getLegitimateFeats(id, { page: 1, limit: 10000 })
+        .then(setAllFeatsCache)
+        .catch(err => console.error('Background preload failed for all feats:', err)),
+      CharacterAPI.getLegitimateSpells(id, { page: 1, limit: 10000 })
+        .then(setAllSpellsCache)
+        .catch(err => console.error('Background preload failed for all spells:', err)),
+      inventoryAPI.getEditorMetadata(id)
+        .then(setItemEditorMetadata)
+        .catch(err => console.error('Background preload failed for item editor metadata:', err)),
+    ];
 
     // Preload all subsystems so tabs open instantly
     const subsystemPreloads: [SubsystemType, () => Promise<unknown>][] = [
@@ -464,13 +504,19 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       ['classes', CharacterStateAPI.getClasses],
     ];
     for (const [key, fetcher] of subsystemPreloads) {
-      fetcher()
-        .then(data => setSubsystems(prev => ({
-          ...prev,
-          [key]: { data, isLoading: false, error: null, lastFetched: new Date() }
-        })))
-        .catch(err => console.error(`Background preload failed for ${key}:`, err));
+      tasks.push(
+        fetcher()
+          .then(data => setSubsystems(prev => ({
+            ...prev,
+            [key]: { data, isLoading: false, error: null, lastFetched: new Date() }
+          })))
+          .catch(err => console.error(`Background preload failed for ${key}:`, err))
+      );
     }
+
+    Promise.all(tasks).finally(() => {
+      if (preloadToken.current === token) setIsPreloading(false);
+    });
   }, []);
 
   const loadCharacter = useCallback(async (id: number) => {
@@ -497,6 +543,27 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     preloadGameData(id);
   }, [loadMetadataInternal, preloadGameData]);
 
+  const refreshRoster = useCallback(async () => {
+    try {
+      setRoster(await CharacterStateAPI.listRoster());
+    } catch (err) {
+      console.error('Failed to load roster:', err);
+      setRoster([]);
+    }
+  }, []);
+
+  const switchToCompanion = useCallback(async (rosName: string, force: boolean) => {
+    await CharacterStateAPI.loadCompanion(rosName, force);
+    setActiveSource({ kind: 'companion', rosName });
+    if (characterId) await loadCharacter(characterId);
+  }, [characterId, loadCharacter]);
+
+  const switchToPlayer = useCallback(async (force: boolean) => {
+    await CharacterStateAPI.loadPlayer(force);
+    setActiveSource({ kind: 'player' });
+    if (characterId) await loadCharacter(characterId);
+  }, [characterId, loadCharacter]);
+
   // Import character from save
   const importCharacter = useCallback(async (savePath: string, playerIndex?: number) => {
     setIsLoading(true);
@@ -521,6 +588,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       // Reset subsystems
       setSubsystems(initializeSubsystems());
       setHistoryState(null);
+      setActiveSource({ kind: 'player' });
+      refreshRoster();
 
       // Load metadata and preload game data in background (non-blocking)
       loadMetadataInternal(newCharacterId);
@@ -531,7 +600,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [loadMetadataInternal, preloadGameData]);
+  }, [loadMetadataInternal, preloadGameData, refreshRoster]);
 
   const refreshAll = useCallback(async () => {
     if (!characterId) return;
@@ -573,6 +642,14 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     historyState,
     undo,
     redo,
+    roster,
+    activeSource,
+    playerName,
+    playerClassId,
+    isPreloading,
+    refreshRoster,
+    switchToCompanion,
+    switchToPlayer,
     loadCharacter,
     importCharacter,
     loadSubsystem,

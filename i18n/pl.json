@@ -890,5 +890,16 @@
     "equipment": "Ekwipunek",
     "showHelmet": "Pokaż Hełm",
     "noFacialHair": "Brak zarostu dla tej głowy"
+  },
+  "roster": {
+    "party": "Drużyna",
+    "player": "Gracz",
+    "levelLine": "Poziom {level}",
+    "unsavedTitle": "Niezapisane zmiany",
+    "unsavedMessage": "{name} ma niezapisane zmiany. Zapisać przed przełączeniem?",
+    "saveAndSwitch": "Zapisz i przełącz",
+    "discardChanges": "Odrzuć zmiany",
+    "cancel": "Anuluj",
+    "syncWarning": "Towarzysz zapisany, ale nie udało się zaktualizować pamięci podręcznej drużyny."
   }
 }

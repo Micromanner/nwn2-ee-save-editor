@@ -5,6 +5,8 @@ import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useIcon, fetchIcon } from '@/hooks/useIcon';
 import { GameIcon } from '../shared/GameIcon';
+import { RosterSection } from './RosterSection';
+import { useCharacterContext } from '@/contexts/CharacterContext';
 
 const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey: string }[] = [
   { id: 'overview', icon: GiVisoredHelm, gameIcon: 'ia_character', labelKey: 'navigation.overview' },
@@ -19,12 +21,13 @@ const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey
   { id: 'models', icon: GiCube, gameIcon: 'is_trueseeing', labelKey: 'navigation.models' },
 ];
 
-function NavIcon({ gameIcon, fallback, size }: { gameIcon: string | null; fallback: IconType; size: number }) {
+function NavIcon({ gameIcon, fallback }: { gameIcon: string | null; fallback: IconType }) {
   const iconUrl = useIcon(gameIcon);
+  const sizeStyle = { width: 'var(--icon-nav)', height: 'var(--icon-nav)' } as const;
   if (iconUrl) {
-    return <img src={iconUrl} alt="" width={size} height={size} style={{ borderRadius: 2, flexShrink: 0 }} />;
+    return <img src={iconUrl} alt="" style={{ ...sizeStyle, borderRadius: 2, flexShrink: 0 }} />;
   }
-  return <GameIcon icon={fallback} size={size} />;
+  return <GameIcon icon={fallback} style={{ ...sizeStyle, flexShrink: 0 }} />;
 }
 
 interface SidebarProps {
@@ -40,10 +43,16 @@ export function preloadSidebarIcons() {
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const t = useTranslations();
+  const { activeSource } = useCharacterContext();
 
   useEffect(() => {
     preloadSidebarIcons();
   }, []);
+
+  const visibleItems = activeSource.kind === 'player'
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter(item => item.id !== 'appearance' && item.id !== 'models' && item.id !== 'gamestate');
+
   return (
     <div style={{
       width: 200, flexShrink: 0,
@@ -53,7 +62,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       padding: '8px 0',
       position: 'relative', zIndex: 5,
     }}>
-      {NAV_ITEMS.map(item => {
+      {visibleItems.map(item => {
         const active = activeTab === item.id;
         return (
           <button
@@ -71,11 +80,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
               transition: 'all 0.15s',
             }}
           >
-            <NavIcon gameIcon={item.gameIcon} fallback={item.icon} size={24} />
+            <NavIcon gameIcon={item.gameIcon} fallback={item.icon} />
             {t(item.labelKey)}
           </button>
         );
       })}
+      <RosterSection activeTab={activeTab} onTabChange={onTabChange} />
     </div>
   );
 }

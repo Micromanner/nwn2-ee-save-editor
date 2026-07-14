@@ -1,8 +1,37 @@
-use crate::character::{AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, HitPoints};
+use crate::character::{
+    AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, Character, HitPoints,
+    resolve_localized_name,
+};
 use crate::commands::{CommandError, CommandResult};
+use crate::loaders::GameData;
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+
+/// Resolve `character`'s first/last name, falling back to the TLK-backed
+/// strref when the GFF field has no literal substring (companion `.ros`
+/// files only carry a strref). Read-path only — never written back.
+fn resolved_first_name(character: &Character, game_data: &GameData) -> String {
+    resolve_localized_name(
+        character.first_name(),
+        character.first_name_strref(),
+        game_data,
+    )
+}
+
+fn resolved_last_name(character: &Character, game_data: &GameData) -> String {
+    resolve_localized_name(
+        character.last_name(),
+        character.last_name_strref(),
+        game_data,
+    )
+}
+
+fn resolved_full_name(character: &Character, game_data: &GameData) -> String {
+    let first = resolved_first_name(character, game_data);
+    let last = resolved_last_name(character, game_data);
+    format!("{first} {last}").trim().to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncumbranceLimits {
@@ -51,31 +80,34 @@ pub struct CharacterValidation {
 #[tauri::command]
 pub async fn get_character_name(state: State<'_, AppState>) -> CommandResult<String> {
     let session = state.session.read();
+    let game_data = state.game_data.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.full_name())
+    Ok(resolved_full_name(character, &game_data))
 }
 
 #[tauri::command]
 pub async fn get_first_name(state: State<'_, AppState>) -> CommandResult<String> {
     let session = state.session.read();
+    let game_data = state.game_data.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.first_name())
+    Ok(resolved_first_name(character, &game_data))
 }
 
 #[tauri::command]
 pub async fn get_last_name(state: State<'_, AppState>) -> CommandResult<String> {
     let session = state.session.read();
+    let game_data = state.game_data.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.last_name())
+    Ok(resolved_last_name(character, &game_data))
 }
 
 #[tauri::command]
@@ -224,9 +256,9 @@ pub async fn get_biography(state: State<'_, AppState>) -> CommandResult<Biograph
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(Biography {
-        first_name: character.first_name(),
-        last_name: character.last_name(),
-        full_name: character.full_name(),
+        first_name: resolved_first_name(character, &game_data),
+        last_name: resolved_last_name(character, &game_data),
+        full_name: resolved_full_name(character, &game_data),
         age: character.age(),
         description: character.description(),
         background: character.background(&game_data),
@@ -340,11 +372,12 @@ pub async fn get_base_ability_scores(state: State<'_, AppState>) -> CommandResul
 #[tauri::command]
 pub async fn get_full_name(state: State<'_, AppState>) -> CommandResult<String> {
     let session = state.session.read();
+    let game_data = state.game_data.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.full_name())
+    Ok(resolved_full_name(character, &game_data))
 }
 
 #[tauri::command]

@@ -115,10 +115,22 @@ impl Character {
         let total_scores = self.get_total_abilities(game_data, decoder);
         let ability_modifiers = AbilityModifiers::from_scores(&total_scores);
 
+        let first_name = super::identity::resolve_localized_name(
+            self.first_name(),
+            self.first_name_strref(),
+            game_data,
+        );
+        let last_name = super::identity::resolve_localized_name(
+            self.last_name(),
+            self.last_name_strref(),
+            game_data,
+        );
+        let full_name = format!("{first_name} {last_name}").trim().to_string();
+
         OverviewState {
-            first_name: self.first_name(),
-            last_name: self.last_name(),
-            full_name: self.full_name(),
+            first_name,
+            last_name,
+            full_name,
             race_id: self.race_id().0,
             race_name: self.race_name(game_data),
             subrace: self.subrace(),

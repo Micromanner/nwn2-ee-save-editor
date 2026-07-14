@@ -9,6 +9,8 @@ interface StepInputProps {
   step?: number;
   width?: number;
   disabled?: boolean;
+  /** Text shown instead of the raw number when `value` is 0 (e.g. '-' for an unset field). */
+  zeroDisplay?: string;
 }
 
 export function StepInput({
@@ -19,6 +21,7 @@ export function StepInput({
   step = 1,
   width = 88,
   disabled = false,
+  zeroDisplay,
 }: StepInputProps) {
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
 
@@ -28,6 +31,8 @@ export function StepInput({
     const parsed = Number(raw);
     if (!isNaN(parsed)) onValueChange(clamp(parsed));
   };
+
+  const displayValue = value === 0 && zeroDisplay !== undefined ? zeroDisplay : value;
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0, width }}>
@@ -43,7 +48,7 @@ export function StepInput({
       <input
         type="text"
         inputMode="numeric"
-        value={value}
+        value={displayValue}
         onChange={handleChange}
         disabled={disabled}
         className="t-lg t-semibold"

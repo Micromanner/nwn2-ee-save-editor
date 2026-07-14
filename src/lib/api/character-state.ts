@@ -43,6 +43,22 @@ import type {
   HistoryState,
 } from '../bindings';
 
+export interface RosterClassInfo {
+  class_id: number;
+  level: number;
+}
+
+export interface RosterEntryInfo {
+  ros_name: string;
+  char_name: string;
+  classes: RosterClassInfo[];
+}
+
+export interface SaveCharacterResult {
+  saved: boolean;
+  warning: string | null;
+}
+
 /**
  * Character State API - uses aggregated state commands
  */
@@ -161,7 +177,23 @@ export const CharacterStateAPI = {
    * Save the current character.
    */
   saveCharacter: (filePath?: string) =>
-    invoke<boolean>('save_character', { filePath }),
+    invoke<SaveCharacterResult>('save_character', { filePath }),
+
+  /**
+   * List all roster (companion) entries available for the loaded module.
+   */
+  listRoster: () => invoke<RosterEntryInfo[]>('list_roster'),
+
+  /**
+   * Load a companion from the roster into the active editor session.
+   */
+  loadCompanion: (rosName: string, force: boolean) =>
+    invoke<boolean>('load_companion', { rosName, force }),
+
+  /**
+   * Load the player character back into the active editor session.
+   */
+  loadPlayer: (force: boolean) => invoke<boolean>('load_player', { force }),
 
   /**
    * Close the current character.
