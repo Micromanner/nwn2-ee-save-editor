@@ -159,6 +159,7 @@ interface CharacterContextState {
   // Roster / active source (player vs. companion)
   roster: RosterEntryInfo[];
   activeSource: ActiveSource;
+  sessionKind: 'save' | 'vault';
   playerName: string | null;
   playerClassId: number | null;
   isPreloading: boolean;
@@ -261,6 +262,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const [historyState, setHistoryState] = useState<HistoryState | null>(null);
   const [roster, setRoster] = useState<RosterEntryInfo[]>([]);
   const [activeSource, setActiveSource] = useState<ActiveSource>({ kind: 'player' });
+  const [sessionKind, setSessionKind] = useState<'save' | 'vault'>('save');
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [playerClassId, setPlayerClassId] = useState<number | null>(null);
   const [isPreloading, setIsPreloading] = useState(false);
@@ -426,6 +428,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setHistoryState(null);
     setRoster([]);
     setActiveSource({ kind: 'player' });
+    setSessionKind('save');
     setPlayerName(null);
     setPlayerClassId(null);
   }, []);
@@ -585,11 +588,18 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       setCharacter(characterData);
       setCharacterId(newCharacterId);
       
+      const isVault = savePath.toLowerCase().endsWith('.bic');
+      setSessionKind(isVault ? 'vault' : 'save');
+
       // Reset subsystems
       setSubsystems(initializeSubsystems());
       setHistoryState(null);
       setActiveSource({ kind: 'player' });
-      refreshRoster();
+      if (isVault) {
+        setRoster([]);
+      } else {
+        refreshRoster();
+      }
 
       // Load metadata and preload game data in background (non-blocking)
       loadMetadataInternal(newCharacterId);
@@ -645,6 +655,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     redo,
     roster,
     activeSource,
+    sessionKind,
     playerName,
     playerClassId,
     isPreloading,

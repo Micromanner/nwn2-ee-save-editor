@@ -11,7 +11,7 @@ import { T, PATTERN_BG } from '../theme';
 import '../blueprint.css';
 import { TitleBar } from './TitleBar';
 import { Navbar } from './Navbar';
-import { Sidebar, preloadSidebarIcons } from './Sidebar';
+import { Sidebar, preloadSidebarIcons, getHiddenTabs } from './Sidebar';
 import { OverviewPanel } from '../Overview/OverviewPanel';
 import { AbilitiesPanel } from '../AbilityScores/AbilitiesPanel';
 import { ClassesPanel } from '../ClassesLevel/ClassesPanel';
@@ -45,13 +45,19 @@ function ShellContent() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAbout, setShowAbout] = useState(false);
   const [viewMode, setViewMode] = useState<'dashboard' | 'editor'>('dashboard');
-  const { character, isLoading, clearCharacter } = useCharacterContext();
+  const { character, isLoading, clearCharacter, activeSource, sessionKind } = useCharacterContext();
   const t = useTranslations();
   const Panel = PANELS[activeTab];
 
   useEffect(() => {
     preloadSidebarIcons();
   }, []);
+
+  useEffect(() => {
+    if (getHiddenTabs(activeSource, sessionKind).has(activeTab)) {
+      setActiveTab('overview');
+    }
+  }, [activeSource, sessionKind, activeTab]);
 
   useEffect(() => {
     if (character && !isLoading && viewMode === 'dashboard') {

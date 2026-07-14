@@ -374,7 +374,7 @@ export function FileBrowserDialog({
           style={{ background: T.accent }}
         />
       )}
-      {(mode === 'load-saves' || (mode === 'manage-backups' && !isBackupRoot && canRestore)) && (
+      {(mode === 'load-saves' || mode === 'load-vault' || (mode === 'manage-backups' && !isBackupRoot && canRestore)) && (
         <Button
           intent="primary"
           text={actionLabel}
@@ -414,7 +414,7 @@ export function FileBrowserDialog({
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}>
-              {display(currentPath) || t('fileBrowser.defaultLocation')}
+              {currentPath || t('fileBrowser.defaultLocation')}
             </span>
             {mode === 'manage-backups' && !isBackupRoot && (
               <Button

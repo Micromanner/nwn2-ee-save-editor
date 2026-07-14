@@ -23,7 +23,7 @@ export function Navbar({ onBack }: NavbarProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
-  const { character, playerName, historyState, undo, redo, activeSource, refreshRoster } = useCharacterContext();
+  const { character, playerName, historyState, undo, redo, activeSource, sessionKind, refreshRoster } = useCharacterContext();
   const [showSettings, setShowSettings] = useState(false);
   const [showGameLaunch, setShowGameLaunch] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -110,7 +110,7 @@ export function Navbar({ onBack }: NavbarProps) {
             <Button icon={<GameIcon icon={GiClockwiseRotation} size={14} color={T.sidebarText} />} text={t('actions.redo')} small minimal disabled={!historyState?.can_redo} style={{ color: T.sidebarText }} onClick={() => void redo()} />
           </Tooltip>
           <NavbarDivider />
-          {activeSource.kind === 'player' && (
+          {activeSource.kind === 'player' && sessionKind === 'save' && (
             <Button icon={<GameIcon icon={GiScrollUnfurled} size={14} color={T.sidebarText} />} text={t('actions.exportCharacter')} small minimal loading={isExporting} style={{ color: T.sidebarText }} onClick={handleExport} />
           )}
           <Button icon={<GameIcon icon={GiTiedScroll} size={14} color={T.sidebarText} />} text={isSaving ? t('actions.saving') : t('actions.save')} small minimal loading={isSaving} style={{ color: T.sidebarText }} onClick={handleSave} />

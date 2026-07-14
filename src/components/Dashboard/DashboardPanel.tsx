@@ -41,6 +41,7 @@ export default function DashboardPanel() {
 
   const [showVaultBrowser, setShowVaultBrowser] = useState(false);
   const [showBackupBrowser, setShowBackupBrowser] = useState(false);
+  const [vaultPath, setVaultPath] = useState('');
   const [backupPath, setBackupPath] = useState('');
   const [backupRefreshKey, setBackupRefreshKey] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
@@ -192,6 +193,8 @@ export default function DashboardPanel() {
     setIsImporting(true);
     try {
       await importCharacter(file.path);
+      setLoadedSavePath(null);
+      setLoadedPlayerIndex(null);
     } catch (err) {
       handleError(err);
     } finally {
@@ -342,6 +345,8 @@ export default function DashboardPanel() {
         isOpen={showVaultBrowser}
         onClose={() => setShowVaultBrowser(false)}
         mode="load-vault"
+        currentPath={vaultPath}
+        onPathChange={setVaultPath}
         onSelectFile={handleImportVaultFile}
       />
 

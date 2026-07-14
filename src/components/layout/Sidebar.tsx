@@ -6,7 +6,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useIcon, fetchIcon } from '@/hooks/useIcon';
 import { GameIcon } from '../shared/GameIcon';
 import { RosterSection } from './RosterSection';
-import { useCharacterContext } from '@/contexts/CharacterContext';
+import { useCharacterContext, type ActiveSource } from '@/contexts/CharacterContext';
 
 const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey: string }[] = [
   { id: 'overview', icon: GiVisoredHelm, gameIcon: 'ia_character', labelKey: 'navigation.overview' },
@@ -41,17 +41,24 @@ export function preloadSidebarIcons() {
   });
 }
 
+export function getHiddenTabs(activeSource: ActiveSource, sessionKind: 'save' | 'vault'): Set<string> {
+  const hidden = new Set<string>(
+    activeSource.kind === 'player' ? [] : ['appearance', 'models', 'gamestate'],
+  );
+  if (sessionKind === 'vault') hidden.add('gamestate');
+  return hidden;
+}
+
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const t = useTranslations();
-  const { activeSource } = useCharacterContext();
+  const { activeSource, sessionKind } = useCharacterContext();
 
   useEffect(() => {
     preloadSidebarIcons();
   }, []);
 
-  const visibleItems = activeSource.kind === 'player'
-    ? NAV_ITEMS
-    : NAV_ITEMS.filter(item => item.id !== 'appearance' && item.id !== 'models' && item.id !== 'gamestate');
+  const hidden = getHiddenTabs(activeSource, sessionKind);
+  const visibleItems = NAV_ITEMS.filter(item => !hidden.has(item.id));
 
   return (
     <div style={{
