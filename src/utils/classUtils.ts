@@ -1,5 +1,9 @@
 const MAX_XP = 1_770_000;
 
+// Game-verified limit: the NWN2 character-selection screen hides local-vault
+// characters whose experience exceeds this value.
+export const VAULT_MAX_VISIBLE_XP = 561_000;
+
 export function capXP(xp: number): number {
   if (xp < 0) return 0;
   return Math.min(xp, MAX_XP);

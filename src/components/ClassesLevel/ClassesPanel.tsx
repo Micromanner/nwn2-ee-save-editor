@@ -5,11 +5,11 @@ import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
 import { StepInput } from '../shared';
 import { ClassSelectorDialog } from './ClassSelectorDialog';
-import { useSubsystem } from '@/contexts/CharacterContext';
+import { useSubsystem, useCharacterContext } from '@/contexts/CharacterContext';
 import { useClassesLevel, type ClassesData, type ClassInfo } from '@/hooks/useClassesLevel';
 import { useTranslations } from '@/hooks/useTranslations';
 import { formatModifier, formatNumber } from '@/utils/dataHelpers';
-import { capXP, aggregateClassStats, hasLevelMismatch } from '@/utils/classUtils';
+import { capXP, aggregateClassStats, hasLevelMismatch, VAULT_MAX_VISIBLE_XP } from '@/utils/classUtils';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 function SectionLabel({ children, right }: { children: string; right?: React.ReactNode }) {
@@ -26,6 +26,7 @@ function SectionLabel({ children, right }: { children: string; right?: React.Rea
 export function ClassesPanel() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
+  const { sessionKind } = useCharacterContext();
 
   const classesSubsystem = useSubsystem('classes');
   const {
@@ -81,6 +82,9 @@ export function ClassesPanel() {
   const currentXP = xpProgress?.current_xp ?? 0;
   const xpDirty = xpInput !== currentXP.toString();
   const levelMismatch = hasLevelMismatch(xpProgress, totalLevel);
+  const inputXp = parseInt(xpInput, 10);
+  const showVaultXpWarning =
+    sessionKind === 'vault' && (isNaN(inputXp) ? currentXP : inputXp) > VAULT_MAX_VISIBLE_XP;
   const { totalBAB, totalFort, totalRef, totalWill } = useMemo(
     () => aggregateClassStats(
       classes.map(c => ({
@@ -249,6 +253,14 @@ export function ClassesPanel() {
             </Tag>
           )}
         </div>
+
+        {showVaultXpWarning && (
+          <div style={{ padding: '6px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
+            <Tag minimal round intent="warning" icon={<GameIcon icon={GiHazardSign} size={12} />}>
+              {t('classes.vaultExpWarning')}
+            </Tag>
+          </div>
+        )}
 
         {/* Classes Table */}
         <div style={{ padding: '12px 16px 16px' }}>

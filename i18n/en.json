@@ -447,6 +447,7 @@
     "lvl": "Lvl",
     "experience": "Experience",
     "xpToNextLevel": "XP to Next Level",
+    "vaultExpWarning": "Experience exceeds 561,000 - the game's character selection will hide this character",
     "xpLevelMismatchWarning": "Your XP level ({xpLevel}) differs from your class levels ({classLevel}). When you load this save in-game, you will be prompted to level up.",
     "retry": "Retry"
   },
