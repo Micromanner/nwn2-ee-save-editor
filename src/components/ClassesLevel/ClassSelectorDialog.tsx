@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Button, InputGroup, Tabs, Tab, NonIdealState, Spinner } from '@blueprintjs/core';
 import { GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
@@ -23,6 +24,12 @@ interface ClassSelectorDialogProps {
   currentClassCount: number;
 }
 
+interface PrestigeClassOption {
+  id: number;
+  can_take: boolean;
+  reason: string;
+}
+
 function checkCanSelect(
   cls: ClassInfo,
   currentClassIds: number[],
@@ -31,11 +38,17 @@ function checkCanSelect(
   maxLevel: number,
   maxClasses: number,
   currentClassCount: number,
-): { ok: boolean; reason?: string } {
+  prestigeEligibility: Map<number, PrestigeClassOption> | null,
+  requirementsNotMetLabel: string,
+): { ok: boolean; reason?: string; prestigeBlocked?: boolean } {
   const hasClass = currentClassIds.includes(cls.id);
   if (hasClass && !isChanging) return { ok: false, reason: 'Already have this class' };
   if (!isChanging && currentClassCount >= maxClasses) return { ok: false, reason: `Max ${maxClasses} classes` };
   if (!isChanging && totalLevel >= maxLevel) return { ok: false, reason: 'At max level' };
+  const eligibility = prestigeEligibility?.get(cls.id);
+  if (eligibility && !eligibility.can_take && !hasClass) {
+    return { ok: false, reason: requirementsNotMetLabel, prestigeBlocked: true };
+  }
   return { ok: true };
 }
 
@@ -47,6 +60,25 @@ export function ClassSelectorDialog({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<string>('base');
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
+  const [prestigeEligibility, setPrestigeEligibility] = useState<Map<number, PrestigeClassOption> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPrestigeEligibility(null);
+      return;
+    }
+    const ctrl = { cancelled: false };
+    invoke<PrestigeClassOption[]>('get_available_prestige_classes')
+      .then((options) => {
+        if (!ctrl.cancelled) {
+          setPrestigeEligibility(new Map(options.map(o => [o.id, o])));
+        }
+      })
+      .catch((err) => {
+        console.error('get_available_prestige_classes failed:', err);
+      });
+    return () => { ctrl.cancelled = true; };
+  }, [isOpen]);
 
   const buildSections = useCallback((groups: Record<string, ClassInfo[]>): ListSection<ClassInfo>[] => {
     return Object.entries(groups).flatMap(([focusKey, classList]) => {
@@ -80,13 +112,15 @@ export function ClassSelectorDialog({
     return buildSections(groups);
   }, [categorizedClasses, search, tab, allClasses, buildSections]);
 
+  const requirementsNotMetLabel = t('classes.requirementsNotMet');
+
   const selectedValidity = useMemo(() => {
     if (!selectedClass) return { ok: false };
-    return checkCanSelect(selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount);
-  }, [selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount]);
+    return checkCanSelect(selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel);
+  }, [selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel]);
 
   const renderClassItem = useCallback((cls: ClassInfo, selected: boolean) => {
-    const { ok, reason } = checkCanSelect(cls, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount);
+    const { ok, reason } = checkCanSelect(cls, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel);
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: ok ? 1 : 0.5 }}>
         <span className={selected ? 't-semibold' : undefined} style={{
@@ -100,7 +134,7 @@ export function ClassSelectorDialog({
         )}
       </div>
     );
-  }, [currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount]);
+  }, [currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel]);
 
   const totalClasses = allClasses.length;
 
@@ -176,7 +210,9 @@ export function ClassSelectorDialog({
             <ClassDetail
               cls={selectedClass}
               canSelect={selectedValidity.ok}
-              selectReason={selectedValidity.reason}
+              selectReason={selectedValidity.prestigeBlocked
+                ? t('classes.prestigeCrashWarning')
+                : selectedValidity.reason}
             />
           </div>
         </div>

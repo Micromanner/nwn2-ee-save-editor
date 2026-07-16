@@ -421,7 +421,9 @@
     "xpToNextLevel": "PX para Siguiente Nivel",
     "vaultExpWarning": "La experiencia supera 561.000 - la selección de personajes del juego ocultará este personaje",
     "xpLevelMismatchWarning": "Su nivel de PX ({xpLevel}) difiere de sus niveles de clase ({classLevel}). Subirá de nivel al cargar el juego.",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "requirementsNotMet": "Requisitos no cumplidos",
+    "prestigeCrashWarning": "Requisitos no cumplidos - el juego se bloqueará al subir de nivel si se añade esta clase"
   },
   "skills": {
     "searchSkills": "Buscar habilidades...",

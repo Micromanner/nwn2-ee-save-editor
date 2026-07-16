@@ -420,7 +420,9 @@
     "xpToNextLevel": "XP pour Prochain Niveau",
     "vaultExpWarning": "L'expérience dépasse 561 000 - la sélection de personnage du jeu masquera ce personnage",
     "xpLevelMismatchWarning": "Votre niveau d'XP ({xpLevel}) diffère de vos niveaux de classe ({classLevel}). Un passage de niveau sera requis en jeu.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "requirementsNotMet": "Conditions non remplies",
+    "prestigeCrashWarning": "Conditions non remplies - le jeu plantera lors du passage de niveau si cette classe est ajoutée"
   },
   "skills": {
     "searchSkills": "Chercher compétences...",

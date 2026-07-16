@@ -3,9 +3,7 @@ use crate::character::classes::{
     PrestigeClassValidation, PrestigeRequirements, ResolvedLevelHistoryEntry,
     get_class_progression,
 };
-use crate::character::{
-    Character, ClassEntry, ClassId, ClassSummaryEntry, FeatId, SkillId, XpProgress,
-};
+use crate::character::{Character, ClassEntry, ClassId, ClassSummaryEntry, XpProgress};
 use crate::commands::{CommandError, CommandResult};
 use crate::services::class_categorizer::{CategorizedClasses, get_categorized_classes};
 use crate::state::AppState;
@@ -462,87 +460,21 @@ pub async fn get_class_detail(
 
     let requirements = Character::get_prestige_requirements(&class_data, &game_data);
 
-    let mut prerequisite_status = Vec::new();
-
-    if let Some(character) = session.character.as_ref() {
-        if let Some(min_bab) = requirements.base_attack_bonus {
-            let current_bab = character.calculate_bab(&game_data);
-            prerequisite_status.push(PrerequisiteCheck {
-                label: format!("Base Attack Bonus +{min_bab}"),
-                met: current_bab >= min_bab,
-                current_value: Some(format!("+{current_bab}")),
-            });
-        }
-
-        for (skill_name, min_ranks) in &requirements.skills {
-            let current_ranks = game_data
-                .get_table("skills")
-                .and_then(|t| {
-                    for row_idx in 0..t.row_count() {
-                        let Ok(row) = t.get_row(row_idx) else {
-                            continue;
-                        };
-                        let resolved = row
-                            .get("name")
-                            .and_then(|v| v.as_deref())
-                            .and_then(|s| s.trim().parse::<i32>().ok())
-                            .and_then(|strref| game_data.get_string(strref));
-                        if resolved.as_deref() == Some(skill_name.as_str()) {
-                            return Some(character.skill_rank(SkillId(row_idx as i32)));
-                        }
-                    }
-                    None
+    let prerequisite_status: Vec<PrerequisiteCheck> = session
+        .character
+        .as_ref()
+        .map(|character| {
+            character
+                .prestige_prerequisite_status(ClassId(class_id), &game_data)
+                .into_iter()
+                .map(|status| PrerequisiteCheck {
+                    label: status.label,
+                    met: status.met,
+                    current_value: status.current_value,
                 })
-                .unwrap_or(0);
-
-            prerequisite_status.push(PrerequisiteCheck {
-                label: format!("{skill_name} {min_ranks} ranks"),
-                met: current_ranks >= *min_ranks,
-                current_value: Some(format!("{current_ranks} ranks")),
-            });
-        }
-
-        for feat_name in &requirements.feats {
-            let has_feat = game_data
-                .get_table("feat")
-                .map(|t| {
-                    for row_idx in 0..t.row_count() {
-                        let Ok(row) = t.get_row(row_idx) else {
-                            continue;
-                        };
-                        let resolved = row
-                            .get("feat")
-                            .and_then(|v| v.as_deref())
-                            .and_then(|s| s.trim().parse::<i32>().ok())
-                            .and_then(|strref| game_data.get_string(strref));
-                        if resolved.as_deref() == Some(feat_name.as_str()) {
-                            return character.has_feat(FeatId(row_idx as i32));
-                        }
-                    }
-                    false
-                })
-                .unwrap_or(false);
-
-            prerequisite_status.push(PrerequisiteCheck {
-                label: feat_name.clone(),
-                met: has_feat,
-                current_value: None,
-            });
-        }
-
-        if align_restrict > 0 {
-            let restriction = AlignmentRestriction(align_restrict);
-            let alignment = character.alignment();
-            let met = restriction.check_alignment(&alignment);
-            if let Some(text) = restriction.decode_to_string() {
-                prerequisite_status.push(PrerequisiteCheck {
-                    label: format!("Alignment: {text}"),
-                    met,
-                    current_value: Some(character.alignment().alignment_string()),
-                });
-            }
-        }
-    }
+                .collect()
+        })
+        .unwrap_or_default();
 
     let spell_type = if has_arcane {
         Some("arcane".to_string())

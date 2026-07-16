@@ -422,7 +422,9 @@
     "xpToNextLevel": "PD do Następnego Poziomu",
     "vaultExpWarning": "Doświadczenie przekracza 561 000 - ekran wyboru postaci w grze ukryje tę postać",
     "xpLevelMismatchWarning": "Twój poziom PD ({xpLevel}) różni się od poziomu klas ({classLevel}). Gra poprosi o awansowanie po wczytaniu zapisu.",
-    "retry": "Ponów"
+    "retry": "Ponów",
+    "requirementsNotMet": "Wymagania niespełnione",
+    "prestigeCrashWarning": "Wymagania niespełnione - gra zawiesi się przy awansie, jeśli ta klasa zostanie dodana"
   },
   "skills": {
     "searchSkills": "Szukaj umiejętności...",

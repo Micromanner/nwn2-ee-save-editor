@@ -296,6 +296,33 @@ pub struct PrestigeClassOption {
     pub requirements: PrestigeRequirements,
 }
 
+/// A single prestige-class prerequisite in evaluable form, parsed from
+/// classes.2da columns and cls_pres_* rows.
+#[derive(Debug, Clone)]
+enum PrereqCheck {
+    Bab(i32),
+    /// Met when the character has at least one of the listed feats.
+    AnyFeat(Vec<FeatId>),
+    Skill(SkillId, i32),
+    ArcaneCasterLevel(i32),
+    DivineCasterLevel(i32),
+    ArcaneSpellLevel(i32),
+    DivineSpellLevel(i32),
+    AnySpellLevel(i32),
+    /// Met when any listed class is at or above the given level.
+    AnyClassLevel(Vec<ClassId>, i32),
+    /// (save type: 1=Fort, 2=Ref, 3=Will), minimum value.
+    BaseSave(i32, i32),
+    Alignment(AlignmentRestriction),
+}
+
+#[derive(Debug, Clone)]
+pub struct PrestigePrereqStatus {
+    pub label: String,
+    pub met: bool,
+    pub current_value: Option<String>,
+}
+
 impl Default for XpProgress {
     fn default() -> Self {
         Self {
@@ -1646,6 +1673,390 @@ impl Character {
         requirements
     }
 
+    /// Parse a class's prestige prerequisites into evaluable checks.
+    fn collect_prestige_prereq_checks(
+        class_data: &AHashMap<String, Option<String>>,
+        game_data: &GameData,
+    ) -> Vec<PrereqCheck> {
+        let mut checks = Vec::new();
+        let mut min_bab: Option<i32> = None;
+
+        let bab = row_int(class_data, "minattackbonus", 0);
+        if bab > 0 {
+            min_bab = Some(bab);
+        }
+
+        if let Some(skill_str) = row_str(class_data, "reqskill") {
+            let min_ranks = row_int(class_data, "reqskillminranks", 0);
+            if min_ranks > 0
+                && let Ok(skill_id) = skill_str.trim().parse::<i32>()
+            {
+                checks.push(PrereqCheck::Skill(SkillId(skill_id), min_ranks));
+            }
+        }
+
+        if let Some(feat_str) = row_str(class_data, "prereqfeat1")
+            && let Ok(feat_id) = feat_str.trim().parse::<i32>()
+        {
+            checks.push(PrereqCheck::AnyFeat(vec![FeatId(feat_id)]));
+        }
+
+        let align_restrict = row_int(class_data, "alignrestrict", 0);
+        if align_restrict > 0 {
+            checks.push(PrereqCheck::Alignment(AlignmentRestriction(align_restrict)));
+        }
+
+        if let Some(prereq_table_name) = row_str(class_data, "prereqtable")
+            && let Some(prereq_table) = game_data.get_table(&prereq_table_name.to_lowercase())
+        {
+            let mut rows_parsed: Vec<(String, String, String)> = Vec::new();
+            for row_idx in 0..prereq_table.row_count() {
+                let Ok(row) = prereq_table.get_row(row_idx) else {
+                    continue;
+                };
+                rows_parsed.push((
+                    row_str(&row, "reqtype").unwrap_or_default().to_uppercase(),
+                    row_str(&row, "reqparam1").unwrap_or_default(),
+                    row_str(&row, "reqparam2").unwrap_or_default(),
+                ));
+            }
+
+            let mut i = 0;
+            while i < rows_parsed.len() {
+                let (ref req_type, ref param1, ref param2) = rows_parsed[i];
+                match req_type.as_str() {
+                    "FEAT" => {
+                        if let Ok(id) = param1.trim().parse::<i32>() {
+                            checks.push(PrereqCheck::AnyFeat(vec![FeatId(id)]));
+                        }
+                    }
+                    "FEATOR" => {
+                        let mut ids = Vec::new();
+                        if let Ok(id) = param1.trim().parse::<i32>() {
+                            ids.push(FeatId(id));
+                        }
+                        while i + 1 < rows_parsed.len() && rows_parsed[i + 1].0 == "FEATOR" {
+                            i += 1;
+                            if let Ok(id) = rows_parsed[i].1.trim().parse::<i32>() {
+                                ids.push(FeatId(id));
+                            }
+                        }
+                        if !ids.is_empty() {
+                            checks.push(PrereqCheck::AnyFeat(ids));
+                        }
+                    }
+                    "SKILL" => {
+                        if let Ok(id) = param1.trim().parse::<i32>() {
+                            let min_ranks = param2.trim().parse::<i32>().unwrap_or(1);
+                            checks.push(PrereqCheck::Skill(SkillId(id), min_ranks));
+                        }
+                    }
+                    "BAB" => {
+                        if let Ok(bab) = param1.trim().parse::<i32>() {
+                            min_bab = Some(min_bab.unwrap_or(0).max(bab));
+                        }
+                    }
+                    "ARCANE" => checks.push(PrereqCheck::ArcaneCasterLevel(
+                        param1.trim().parse().unwrap_or(1),
+                    )),
+                    "DIVINE" => checks.push(PrereqCheck::DivineCasterLevel(
+                        param1.trim().parse().unwrap_or(1),
+                    )),
+                    "ARCSPELL" => checks.push(PrereqCheck::ArcaneSpellLevel(
+                        param1.trim().parse().unwrap_or(1),
+                    )),
+                    "DIVSPELL" => checks.push(PrereqCheck::DivineSpellLevel(
+                        param1.trim().parse().unwrap_or(1),
+                    )),
+                    "SPELLLVL" => checks.push(PrereqCheck::AnySpellLevel(
+                        param1.trim().parse().unwrap_or(1),
+                    )),
+                    "CLASSLEVEL" => {
+                        if let Ok(id) = param1.trim().parse::<i32>() {
+                            let level = param2.trim().parse::<i32>().unwrap_or(1);
+                            checks.push(PrereqCheck::AnyClassLevel(vec![ClassId(id)], level));
+                        }
+                    }
+                    "CLASSOR" => {
+                        let level = param2.trim().parse::<i32>().unwrap_or(1);
+                        let mut ids = Vec::new();
+                        if let Ok(id) = param1.trim().parse::<i32>() {
+                            ids.push(ClassId(id));
+                        }
+                        while i + 1 < rows_parsed.len() && rows_parsed[i + 1].0 == "CLASSOR" {
+                            i += 1;
+                            if let Ok(id) = rows_parsed[i].1.trim().parse::<i32>() {
+                                ids.push(ClassId(id));
+                            }
+                        }
+                        if !ids.is_empty() {
+                            checks.push(PrereqCheck::AnyClassLevel(ids, level));
+                        }
+                    }
+                    "SAVE" => {
+                        let value = param1.trim().parse::<i32>().unwrap_or(0);
+                        let save_type = param2.trim().parse::<i32>().unwrap_or(0);
+                        checks.push(PrereqCheck::BaseSave(save_type, value));
+                    }
+                    "VAR" => {}
+                    other => {
+                        tracing::debug!("Skipping unknown prereqtable reqtype: {other}");
+                    }
+                }
+                i += 1;
+            }
+        }
+
+        if let Some(bab) = min_bab {
+            checks.push(PrereqCheck::Bab(bab));
+        }
+
+        checks
+    }
+
+    /// Highest caster level among the character's spellcasting classes of the
+    /// requested type (true = arcane, false = divine, None = any).
+    fn caster_level(&self, want_arcane: Option<bool>, game_data: &GameData) -> i32 {
+        let Some(classes_table) = game_data.get_table("classes") else {
+            return 0;
+        };
+        let Some(class_list) = self.get_list("ClassList") else {
+            return 0;
+        };
+
+        let mut best = 0;
+        for entry in class_list {
+            let Some(class_id) = entry.get("Class").and_then(gff_value_to_i32) else {
+                continue;
+            };
+            let class_level = entry
+                .get("ClassLevel")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0);
+            let caster_level = entry
+                .get("SpellCasterLevel")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0)
+                .max(class_level);
+            let Some(class_row) = classes_table.get_by_id(class_id) else {
+                continue;
+            };
+            if !row_bool(&class_row, "spellcaster", false) {
+                continue;
+            }
+            let type_matches = match want_arcane {
+                Some(true) => row_bool(&class_row, "hasarcane", false),
+                Some(false) => row_bool(&class_row, "hasdivine", false),
+                None => true,
+            };
+            if type_matches {
+                best = best.max(caster_level);
+            }
+        }
+        best
+    }
+
+    /// Highest spell level the character can cast, from each casting class's
+    /// spell gain table at its current caster level.
+    fn max_castable_spell_level(&self, want_arcane: Option<bool>, game_data: &GameData) -> i32 {
+        let Some(classes_table) = game_data.get_table("classes") else {
+            return 0;
+        };
+        let Some(class_list) = self.get_list("ClassList") else {
+            return 0;
+        };
+
+        let mut max_spell_level = 0;
+        for entry in class_list {
+            let Some(class_id) = entry.get("Class").and_then(gff_value_to_i32) else {
+                continue;
+            };
+            let class_level = entry
+                .get("ClassLevel")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0);
+            let caster_level = entry
+                .get("SpellCasterLevel")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0)
+                .max(class_level);
+            if caster_level <= 0 {
+                continue;
+            }
+            let Some(class_row) = classes_table.get_by_id(class_id) else {
+                continue;
+            };
+            let type_matches = match want_arcane {
+                Some(true) => row_bool(&class_row, "hasarcane", false),
+                Some(false) => row_bool(&class_row, "hasdivine", false),
+                None => {
+                    row_bool(&class_row, "hasarcane", false)
+                        || row_bool(&class_row, "hasdivine", false)
+                }
+            };
+            if !type_matches {
+                continue;
+            }
+            let Some(gain_table_name) = row_str(&class_row, "spellgaintable") else {
+                continue;
+            };
+            let Some(gain_table) = game_data.get_table(&gain_table_name.to_lowercase()) else {
+                continue;
+            };
+            if gain_table.row_count() == 0 {
+                continue;
+            }
+            let row_idx = (caster_level as usize).min(gain_table.row_count()) - 1;
+            for spell_level in (0..=9).rev() {
+                if gain_table
+                    .get_cell(row_idx, &format!("SpellLevel{spell_level}"))
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    max_spell_level = max_spell_level.max(spell_level);
+                    break;
+                }
+            }
+        }
+        max_spell_level
+    }
+
+    fn evaluate_prereq_check(
+        &self,
+        check: &PrereqCheck,
+        game_data: &GameData,
+    ) -> PrestigePrereqStatus {
+        match check {
+            PrereqCheck::Bab(min) => {
+                let current = self.calculate_bab(game_data);
+                PrestigePrereqStatus {
+                    label: format!("Base Attack Bonus +{min}"),
+                    met: current >= *min,
+                    current_value: Some(format!("+{current}")),
+                }
+            }
+            PrereqCheck::AnyFeat(ids) => {
+                let names: Vec<String> = ids
+                    .iter()
+                    .map(|id| self.get_feat_name(*id, game_data))
+                    .collect();
+                PrestigePrereqStatus {
+                    label: names.join(" or "),
+                    met: ids.iter().any(|id| self.has_feat(*id)),
+                    current_value: None,
+                }
+            }
+            PrereqCheck::Skill(skill_id, min_ranks) => {
+                let current = self.skill_rank(*skill_id);
+                PrestigePrereqStatus {
+                    label: format!(
+                        "{} {min_ranks} ranks",
+                        self.get_skill_name(*skill_id, game_data)
+                    ),
+                    met: current >= *min_ranks,
+                    current_value: Some(format!("{current} ranks")),
+                }
+            }
+            PrereqCheck::ArcaneCasterLevel(min) => {
+                let current = self.caster_level(Some(true), game_data);
+                PrestigePrereqStatus {
+                    label: format!("Arcane Caster Level {min}"),
+                    met: current >= *min,
+                    current_value: Some(format!("level {current}")),
+                }
+            }
+            PrereqCheck::DivineCasterLevel(min) => {
+                let current = self.caster_level(Some(false), game_data);
+                PrestigePrereqStatus {
+                    label: format!("Divine Caster Level {min}"),
+                    met: current >= *min,
+                    current_value: Some(format!("level {current}")),
+                }
+            }
+            PrereqCheck::ArcaneSpellLevel(min) => {
+                let current = self.max_castable_spell_level(Some(true), game_data);
+                PrestigePrereqStatus {
+                    label: format!("Able to cast level {min} arcane spells"),
+                    met: current >= *min,
+                    current_value: Some(format!("can cast level {current}")),
+                }
+            }
+            PrereqCheck::DivineSpellLevel(min) => {
+                let current = self.max_castable_spell_level(Some(false), game_data);
+                PrestigePrereqStatus {
+                    label: format!("Able to cast level {min} divine spells"),
+                    met: current >= *min,
+                    current_value: Some(format!("can cast level {current}")),
+                }
+            }
+            PrereqCheck::AnySpellLevel(min) => {
+                let current = self.max_castable_spell_level(None, game_data);
+                PrestigePrereqStatus {
+                    label: format!("Able to cast level {min} spells"),
+                    met: current >= *min,
+                    current_value: Some(format!("can cast level {current}")),
+                }
+            }
+            PrereqCheck::AnyClassLevel(ids, min_level) => {
+                let names: Vec<String> = ids
+                    .iter()
+                    .map(|id| self.get_class_name(*id, game_data))
+                    .collect();
+                PrestigePrereqStatus {
+                    label: format!("{} Level {min_level}", names.join(" or ")),
+                    met: ids.iter().any(|id| self.class_level(*id) >= *min_level),
+                    current_value: None,
+                }
+            }
+            PrereqCheck::BaseSave(save_type, min) => {
+                let saves = self.calculate_base_saves(game_data);
+                let (name, current) = match save_type {
+                    1 => ("Fortitude", saves.fortitude),
+                    2 => ("Reflex", saves.reflex),
+                    3 => ("Will", saves.will),
+                    _ => ("Base", saves.fortitude.max(saves.reflex).max(saves.will)),
+                };
+                PrestigePrereqStatus {
+                    label: format!("{name} Save +{min}"),
+                    met: current >= *min,
+                    current_value: Some(format!("+{current}")),
+                }
+            }
+            PrereqCheck::Alignment(restriction) => {
+                let alignment = self.alignment();
+                PrestigePrereqStatus {
+                    label: format!(
+                        "Alignment: {}",
+                        restriction
+                            .decode_to_string()
+                            .unwrap_or_else(|| "Any".to_string())
+                    ),
+                    met: restriction.check_alignment(&alignment),
+                    current_value: Some(alignment.alignment_string()),
+                }
+            }
+        }
+    }
+
+    /// Evaluate every prerequisite of a prestige class against this character.
+    pub fn prestige_prerequisite_status(
+        &self,
+        class_id: ClassId,
+        game_data: &GameData,
+    ) -> Vec<PrestigePrereqStatus> {
+        let Some(classes_table) = game_data.get_table("classes") else {
+            return vec![];
+        };
+        let Some(class_data) = classes_table.get_by_id(class_id.0) else {
+            return vec![];
+        };
+        Self::collect_prestige_prereq_checks(&class_data, game_data)
+            .iter()
+            .map(|check| self.evaluate_prereq_check(check, game_data))
+            .collect()
+    }
+
     pub fn validate_prestige_class_requirements(
         &self,
         class_id: ClassId,
@@ -1660,78 +2071,15 @@ impl Character {
         };
 
         let requirements = Self::get_prestige_requirements(&class_data, game_data);
-        let mut missing = Vec::new();
-
-        if let Some(min_bab) = requirements.base_attack_bonus {
-            let current_bab = self.calculate_bab(game_data);
-            if current_bab < min_bab {
-                missing.push(format!(
-                    "Base Attack Bonus +{min_bab} (have +{current_bab})"
-                ));
-            }
-        }
-
-        for (skill_name, min_ranks) in &requirements.skills {
-            let skill_id = game_data.get_table("skills").and_then(|t| {
-                for row_idx in 0..t.row_count() {
-                    if let Ok(row) = t.get_row(row_idx)
-                        && let Some(name) = row
-                            .get("name")
-                            .and_then(|v| v.as_deref())
-                            .and_then(|s| s.trim().parse::<i32>().ok())
-                            .and_then(|strref| game_data.get_string(strref))
-                        && name == *skill_name
-                    {
-                        return Some(SkillId(row_idx as i32));
-                    }
-                }
-                None
-            });
-
-            if let Some(sid) = skill_id {
-                let current_ranks = self.skill_rank(sid);
-                if current_ranks < *min_ranks {
-                    missing.push(format!(
-                        "{skill_name} {min_ranks} ranks (have {current_ranks})"
-                    ));
-                }
-            }
-        }
-
-        for feat_name in &requirements.feats {
-            let feat_id = game_data.get_table("feat").and_then(|t| {
-                for row_idx in 0..t.row_count() {
-                    if let Ok(row) = t.get_row(row_idx)
-                        && let Some(name) = row
-                            .get("feat")
-                            .and_then(|v| v.as_deref())
-                            .and_then(|s| s.trim().parse::<i32>().ok())
-                            .and_then(|strref| game_data.get_string(strref))
-                        && name == *feat_name
-                    {
-                        return Some(FeatId(row_idx as i32));
-                    }
-                }
-                None
-            });
-
-            if let Some(fid) = feat_id
-                && !self.has_feat(fid)
-            {
-                missing.push(format!("Feat: {feat_name}"));
-            }
-        }
-
-        let align_restrict = row_int(&class_data, "alignrestrict", 0);
-        if align_restrict > 0 {
-            let restriction = AlignmentRestriction(align_restrict);
-            let alignment = self.alignment();
-            if !restriction.check_alignment(&alignment)
-                && let Some(text) = restriction.decode_to_string()
-            {
-                missing.push(format!("Alignment: must be {text}"));
-            }
-        }
+        let missing: Vec<String> = self
+            .prestige_prerequisite_status(class_id, game_data)
+            .into_iter()
+            .filter(|status| !status.met)
+            .map(|status| match status.current_value {
+                Some(current) => format!("{} (have {current})", status.label),
+                None => status.label,
+            })
+            .collect();
 
         PrestigeClassValidation {
             can_take: missing.is_empty(),
@@ -1828,6 +2176,19 @@ impl Character {
                 return Err(CharacterError::ValidationFailed {
                     field: "ClassLevel",
                     message: format!("Cannot exceed max level {max_lvl} for class {class_id:?}"),
+                });
+            }
+        }
+
+        if self.class_level(class_id) == 0 && row_bool(&class_data, "isprestige", false) {
+            let validation = self.validate_prestige_class_requirements(class_id, game_data);
+            if !validation.can_take {
+                return Err(CharacterError::ValidationFailed {
+                    field: "PrestigeRequirements",
+                    message: format!(
+                        "Prestige class requirements not met: {}",
+                        validation.missing_requirements.join("; ")
+                    ),
                 });
             }
         }
@@ -3188,6 +3549,185 @@ mod tests {
             CharacterError::TableNotFound(table) => assert_eq!(table, "classes"),
             _ => panic!("Expected TableNotFound error"),
         }
+    }
+
+    fn insert_mock_table(game_data: &mut GameData, name: &str, content: &str) {
+        use crate::loaders::LoadedTable;
+        use crate::parsers::tda::TDAParser;
+        use std::sync::Arc;
+
+        let mut parser = TDAParser::new();
+        parser.parse_from_bytes(content.as_bytes()).unwrap();
+        game_data.tables.insert(
+            name.to_string(),
+            LoadedTable::new(name.to_string(), Arc::new(parser)),
+        );
+    }
+
+    fn create_game_data_with_prestige_classes() -> GameData {
+        use crate::parsers::tlk::TLKParser;
+        use std::sync::{Arc, RwLock};
+
+        let mut game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
+
+        // Row 1: prestige requiring BAB +6; row 2: no requirements;
+        // row 3: requires casting level 3 arcane spells; row 4: requires one of feats 10/11;
+        // row 5: arcane caster base class
+        let classes_content = "2DA V2.0
+
+   Label          IsPrestige   MinAttackBonus   MaxLevel   HitDie   SkillPointBase   PreReqTable    HasArcane   SpellCaster   SpellGainTable
+0  Fighter        0            ****             ****       10       2                ****           0           0             ****
+1  HardPrestige   1            6                10         8        2                ****           0           0             ****
+2  FreePrestige   1            ****             10         8        2                ****           0           0             ****
+3  SpellPrestige  1            ****             10         6        2                CLS_PRES_ARC   0           0             ****
+4  FeatPrestige   1            ****             10         8        2                CLS_PRES_OR    0           0             ****
+5  Wizard         0            ****             ****       4        2                ****           1           1             CLS_SPGN_TWIZ
+";
+        insert_mock_table(&mut game_data, "classes", classes_content);
+
+        insert_mock_table(
+            &mut game_data,
+            "cls_pres_arc",
+            "2DA V2.0
+
+   LABEL   ReqType    ReqParam1   ReqParam2
+0  arc     ARCSPELL   3           ****
+",
+        );
+
+        insert_mock_table(
+            &mut game_data,
+            "cls_pres_or",
+            "2DA V2.0
+
+   LABEL   ReqType   ReqParam1   ReqParam2
+0  f1      FEATOR    10          ****
+1  f2      FEATOR    11          ****
+",
+        );
+
+        insert_mock_table(
+            &mut game_data,
+            "cls_spgn_twiz",
+            "2DA V2.0
+
+   Level   SpellLevel0   SpellLevel1   SpellLevel2   SpellLevel3
+0  1       3             1             ****          ****
+1  2       4             2             ****          ****
+2  3       4             2             1             ****
+3  4       4             3             2             ****
+4  5       4             3             2             1
+",
+        );
+
+        game_data
+    }
+
+    #[test]
+    fn test_level_up_prestige_blocked_when_requirements_unmet() {
+        // Test character is level 8 with no attack bonus tables loaded, so
+        // calculate_bab falls back to level/2 per class = +3, below the +6 requirement.
+        let mut character = create_test_character();
+        let game_data = create_game_data_with_prestige_classes();
+
+        let result = character.level_up(ClassId(1), &game_data);
+
+        match result.unwrap_err() {
+            CharacterError::ValidationFailed { field, message } => {
+                assert_eq!(field, "PrestigeRequirements");
+                assert!(message.contains("Base Attack Bonus"), "message: {message}");
+            }
+            other => panic!("Expected ValidationFailed, got {other:?}"),
+        }
+        assert!(!character.has_class(ClassId(1)));
+        assert_eq!(character.total_level(), 8);
+    }
+
+    #[test]
+    fn test_level_up_prestige_allowed_when_requirements_met() {
+        let mut character = create_test_character();
+        let game_data = create_game_data_with_prestige_classes();
+
+        character.level_up(ClassId(2), &game_data).unwrap();
+
+        assert_eq!(character.class_level(ClassId(2)), 1);
+        assert_eq!(character.total_level(), 9);
+    }
+
+    #[test]
+    fn test_prestige_feator_group_blocks_when_no_feat_owned() {
+        let character = create_test_character();
+        let game_data = create_game_data_with_prestige_classes();
+
+        let validation = character.validate_prestige_class_requirements(ClassId(4), &game_data);
+
+        assert!(!validation.can_take);
+        assert!(!validation.missing_requirements.is_empty());
+    }
+
+    #[test]
+    fn test_prestige_feator_group_met_with_one_feat() {
+        let mut character = create_test_character();
+        character.add_feat(FeatId(11)).unwrap();
+        let game_data = create_game_data_with_prestige_classes();
+
+        let validation = character.validate_prestige_class_requirements(ClassId(4), &game_data);
+
+        assert!(
+            validation.can_take,
+            "missing: {:?}",
+            validation.missing_requirements
+        );
+    }
+
+    #[test]
+    fn test_prestige_arcane_spell_requirement_blocks_noncaster() {
+        let character = create_test_character();
+        let game_data = create_game_data_with_prestige_classes();
+
+        let validation = character.validate_prestige_class_requirements(ClassId(3), &game_data);
+
+        assert!(!validation.can_take);
+        assert!(
+            validation
+                .missing_requirements
+                .iter()
+                .any(|m| m.contains("arcane")),
+            "missing: {:?}",
+            validation.missing_requirements
+        );
+    }
+
+    #[test]
+    fn test_prestige_arcane_spell_requirement_met_by_caster() {
+        let mut fields = IndexMap::new();
+        let mut wizard = IndexMap::new();
+        wizard.insert("Class".to_string(), GffValue::Byte(5));
+        wizard.insert("ClassLevel".to_string(), GffValue::Short(5));
+        fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![wizard]));
+        let character = Character::from_gff(fields);
+        let game_data = create_game_data_with_prestige_classes();
+
+        let validation = character.validate_prestige_class_requirements(ClassId(3), &game_data);
+
+        assert!(
+            validation.can_take,
+            "missing: {:?}",
+            validation.missing_requirements
+        );
+    }
+
+    #[test]
+    fn test_level_up_existing_prestige_class_skips_validation() {
+        // A character that already legitimately has the prestige class must be
+        // able to keep leveling it even if our recomputed requirements fail.
+        let mut character = create_test_character();
+        character.add_class_entry(ClassId(1), 1).unwrap();
+        let game_data = create_game_data_with_prestige_classes();
+
+        character.level_up(ClassId(1), &game_data).unwrap();
+
+        assert_eq!(character.class_level(ClassId(1)), 2);
     }
 
     fn create_character_with_history() -> Character {

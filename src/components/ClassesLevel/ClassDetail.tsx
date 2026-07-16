@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Spinner } from '@blueprintjs/core';
-import { GiCancel, GiCheckMark, GiHazardSign } from 'react-icons/gi';
+import { GiCancel, GiCheckMark } from 'react-icons/gi';
 import { T } from '../theme';
 import { GameIcon } from '../shared/GameIcon';
 import { display } from '@/utils/dataHelpers';
@@ -163,7 +163,6 @@ export function ClassDetail({ cls, canSelect, selectReason }: ClassDetailProps) 
         <span className="t-bold" style={{ color: T.text }}>{display(cls.name)}</span>
         {!canSelect && selectReason && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.negative, marginTop: 4 }}>
-            <GameIcon icon={GiHazardSign} size={12} />
             {selectReason}
           </div>
         )}

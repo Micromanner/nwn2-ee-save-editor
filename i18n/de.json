@@ -420,7 +420,9 @@
     "xpToNextLevel": "EP zur nächsten Stufe",
     "vaultExpWarning": "Erfahrung über 561.000 - die Charakterauswahl des Spiels blendet diesen Charakter aus",
     "xpLevelMismatchWarning": "Ihre EP-Stufe ({xpLevel}) weicht von Ihren Klassenstufen ({classLevel}) ab. Wenn Sie diesen Spielstand laden, werden Sie zum Stufenaufstieg aufgefordert.",
-    "retry": "Wiederholen"
+    "retry": "Wiederholen",
+    "requirementsNotMet": "Voraussetzungen nicht erfüllt",
+    "prestigeCrashWarning": "Voraussetzungen nicht erfüllt - das Spiel stürzt beim Stufenaufstieg ab, wenn diese Klasse hinzugefügt wird"
   },
   "skills": {
     "searchSkills": "Fertigkeiten suchen...",
