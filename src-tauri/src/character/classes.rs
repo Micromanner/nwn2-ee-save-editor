@@ -2236,10 +2236,6 @@ impl Character {
 
         self.set_list("ClassList", class_list);
 
-        if self.class_count() == 1 {
-            self.set_byte("Class", class_id.0 as u8);
-        }
-
         let hit_die = row_int(&class_data, "hitdie", 6);
         let con_mod = self.ability_modifier(AbilityIndex::CON);
 
@@ -3154,9 +3150,6 @@ impl Character {
         class_list[0].insert("Class".to_string(), GffValue::Int(new_class_id.0));
         self.set_list("ClassList", class_list);
 
-        // Update 'Class' field
-        self.set_byte("Class", new_class_id.0 as u8);
-
         // Update History
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
         let mut updated = false;
@@ -3812,9 +3805,6 @@ mod tests {
         fields.insert("MaxHitPoints".to_string(), GffValue::Int(28));
         fields.insert("CurrentHitPoints".to_string(), GffValue::Int(28));
 
-        // Class byte
-        fields.insert("Class".to_string(), GffValue::Byte(0));
-
         Character::from_gff(fields)
     }
 
@@ -3828,6 +3818,35 @@ mod tests {
         // Without classes table, should fail
         let result = character.change_primary_class(ClassId(1), &game_data);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_level_up_does_not_write_root_class_field() {
+        let mut character = create_character_with_history();
+        let game_data = create_game_data_with_prestige_classes();
+        assert_eq!(character.class_count(), 1);
+
+        character.level_up(ClassId(0), &game_data).unwrap();
+
+        assert!(
+            !character.has_field("Class"),
+            "root-level Class is not part of the game's creature schema"
+        );
+    }
+
+    #[test]
+    fn test_change_primary_class_does_not_write_root_class_field() {
+        let mut character = create_character_with_history();
+        let game_data = create_game_data_with_prestige_classes();
+
+        character
+            .change_primary_class(ClassId(5), &game_data)
+            .unwrap();
+
+        assert!(
+            !character.has_field("Class"),
+            "root-level Class is not part of the game's creature schema"
+        );
     }
 
     #[test]
