@@ -45,3 +45,6 @@ mod investigate_saves;
 
 #[path = "debugging/diagnose_linux_user.rs"]
 mod diagnose_linux_user;
+
+#[path = "debugging/diagnose_hair_tint_roundtrip.rs"]
+mod diagnose_hair_tint_roundtrip;
