@@ -2350,7 +2350,8 @@ impl Character {
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
         let mut new_hist = IndexMap::new();
         new_hist.insert("LvlStatClass".to_string(), GffValue::Byte(class_id.0 as u8));
-        new_hist.insert("LvlStatHitDie".to_string(), GffValue::Byte(hp_gained as u8));
+        // Store only the die roll: the engine (and our revert logic) adds CON dynamically.
+        new_hist.insert("LvlStatHitDie".to_string(), GffValue::Byte(hit_die as u8));
         new_hist.insert(
             "SkillPoints".to_string(),
             GffValue::Word(sp_gained.max(0) as u16),
@@ -3728,6 +3729,40 @@ mod tests {
         character.level_up(ClassId(1), &game_data).unwrap();
 
         assert_eq!(character.class_level(ClassId(1)), 2);
+    }
+
+    #[test]
+    fn test_level_up_stores_die_roll_without_con_in_history() {
+        // LvlStatHitDie must hold only the hit-die roll (game convention);
+        // CON is applied dynamically by the engine and by our revert logic.
+        let mut character = create_test_character(); // CON 14 -> +2
+        let game_data = create_game_data_with_prestige_classes(); // Fighter d10
+
+        character.level_up(ClassId(0), &game_data).unwrap();
+
+        let history = character.level_history();
+        let last = history.last().unwrap();
+        assert_eq!(
+            last.hp_gained, 10,
+            "LvlStatHitDie must store the die roll only, not roll + CON"
+        );
+    }
+
+    #[test]
+    fn test_level_up_then_level_down_restores_max_hp() {
+        let mut character = create_test_character(); // CON 14 -> +2, 60 max HP
+        let game_data = create_game_data_with_prestige_classes(); // Fighter d10
+        let max_hp_before = character.max_hp();
+
+        character.level_up(ClassId(0), &game_data).unwrap();
+        assert_eq!(character.max_hp(), max_hp_before + 12); // d10 + 2 CON
+
+        character.level_down(ClassId(0), &game_data).unwrap();
+        assert_eq!(
+            character.max_hp(),
+            max_hp_before,
+            "level_down must subtract exactly what level_up added"
+        );
     }
 
     fn create_character_with_history() -> Character {
