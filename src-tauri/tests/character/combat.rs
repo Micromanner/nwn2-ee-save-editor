@@ -259,14 +259,12 @@ async fn test_initiative_calculation() {
         let character = load_character(path);
         let initiative = character.calculate_initiative(game_data);
         let dex_mod = character.ability_modifier(app_lib::character::types::AbilityIndex::DEX);
-        let init_bonus = character.initiative_bonus();
 
-        println!("{name:<15}: Initiative={initiative:>2} (DEX mod={dex_mod} + bonus={init_bonus})");
+        println!("{name:<15}: Initiative={initiative:>2} (DEX mod={dex_mod})");
 
         assert_eq!(
-            initiative,
-            dex_mod + init_bonus,
-            "{name} initiative should equal DEX mod + init bonus"
+            initiative, dex_mod,
+            "{name} initiative should equal DEX mod"
         );
     }
 }
@@ -674,11 +672,11 @@ async fn test_initiative_breakdown() {
         let init = character.get_initiative_breakdown(game_data, &decoder);
 
         println!(
-            "{:<15}: Total={:>2} (Dex={}, Feat={}, Misc={})",
-            name, init.total, init.dex, init.feat, init.misc
+            "{:<15}: Total={:>2} (Dex={}, Feat={})",
+            name, init.total, init.dex, init.feat
         );
 
-        let expected_total = init.dex + init.feat + init.misc;
+        let expected_total = init.dex + init.feat;
         assert_eq!(
             init.total, expected_total,
             "{name} initiative should match breakdown"

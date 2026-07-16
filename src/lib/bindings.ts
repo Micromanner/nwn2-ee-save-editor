@@ -539,7 +539,7 @@ export interface AttackBonuses {
 export interface Initiative {
   total: number;
   dex: number;
-  misc: number;
+  feat: number;
 }
 
 export interface DamageReduction {
@@ -596,11 +596,6 @@ export interface SaveSummary {
 }
 
 export interface NaturalArmorChange {
-  old_value: number;
-  new_value: number;
-}
-
-export interface InitiativeChange {
   old_value: number;
   new_value: number;
 }
@@ -794,7 +789,6 @@ export interface AbilitiesUpdates {
 
 export interface CombatUpdates {
   natural_armor?: number;
-  initiative_misc?: number;
   fortitude_misc?: number;
   reflex_misc?: number;
   will_misc?: number;

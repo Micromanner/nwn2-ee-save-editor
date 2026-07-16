@@ -7,8 +7,6 @@ use specta::Type;
 
 const NATURAL_AC_MIN: i32 = 0;
 const NATURAL_AC_MAX: i32 = 255;
-const INIT_BONUS_MIN: i32 = -128;
-const INIT_BONUS_MAX: i32 = 127;
 
 const CLASS_ID_BARBARIAN: i32 = 0;
 
@@ -123,10 +121,7 @@ impl Character {
     }
 
     pub fn calculate_initiative(&self, _game_data: &GameData) -> i32 {
-        let dex_mod = self.ability_modifier(AbilityIndex::DEX);
-        let misc_bonus = self.get_i32("initbonus").unwrap_or(0);
-
-        dex_mod + misc_bonus
+        self.ability_modifier(AbilityIndex::DEX)
     }
 
     pub fn size_modifier(&self) -> i32 {
@@ -219,23 +214,6 @@ impl Character {
 
     pub fn set_base_attack_bonus(&mut self, bab: i32) {
         self.set_i32("BAB", bab);
-    }
-
-    pub fn initiative_bonus(&self) -> i32 {
-        self.get_i32("initbonus").unwrap_or(0)
-    }
-
-    pub fn set_initiative_bonus(&mut self, value: i32) -> Result<(), CharacterError> {
-        if !(INIT_BONUS_MIN..=INIT_BONUS_MAX).contains(&value) {
-            return Err(CharacterError::OutOfRange {
-                field: "initbonus",
-                value,
-                min: INIT_BONUS_MIN,
-                max: INIT_BONUS_MAX,
-            });
-        }
-        self.set_i32("initbonus", value);
-        Ok(())
     }
 
     pub fn current_hit_points(&self) -> i32 {
@@ -521,33 +499,6 @@ mod tests {
         fields.insert("CreatureSize".to_string(), GffValue::Int(5));
         let character = Character::from_gff(fields.clone());
         assert_eq!(character.size_modifier(), -2);
-    }
-
-    #[test]
-    fn test_initiative_bonus_default() {
-        let character = Character::from_gff(IndexMap::new());
-        assert_eq!(character.initiative_bonus(), 0);
-    }
-
-    #[test]
-    fn test_set_initiative_bonus() {
-        let mut character = create_test_character();
-        character.set_initiative_bonus(4).unwrap();
-        assert_eq!(character.initiative_bonus(), 4);
-    }
-
-    #[test]
-    fn test_set_initiative_bonus_negative() {
-        let mut character = create_test_character();
-        character.set_initiative_bonus(-5).unwrap();
-        assert_eq!(character.initiative_bonus(), -5);
-    }
-
-    #[test]
-    fn test_set_initiative_bonus_out_of_range() {
-        let mut character = create_test_character();
-        assert!(character.set_initiative_bonus(200).is_err());
-        assert!(character.set_initiative_bonus(-200).is_err());
     }
 
     #[test]

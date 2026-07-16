@@ -55,7 +55,6 @@ pub struct Initiative {
     pub total: i32,
     pub dex: i32,
     pub feat: i32,
-    pub misc: i32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -82,12 +81,6 @@ pub struct DamageReduction {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct NaturalArmorChange {
-    pub old_value: i32,
-    pub new_value: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct InitiativeChange {
     pub old_value: i32,
     pub new_value: i32,
 }
@@ -317,13 +310,11 @@ impl Character {
         let dex_mod =
             calculate_modifier(self.base_ability(AbilityIndex::DEX) + item_bonuses.dex_bonus);
         let feat_bonus = self.get_feat_initiative_bonus(game_data);
-        let misc = self.get_i32("initbonus").unwrap_or(0);
 
         Initiative {
-            total: dex_mod + feat_bonus + misc,
+            total: dex_mod + feat_bonus,
             dex: dex_mod,
             feat: feat_bonus,
-            misc,
         }
     }
 
@@ -402,7 +393,6 @@ mod tests {
         fields.insert("Dex".to_string(), GffValue::Byte(14));
         fields.insert("NaturalAC".to_string(), GffValue::Byte(2));
         fields.insert("CreatureSize".to_string(), GffValue::Int(3)); // 3 = Medium in NWN2
-        fields.insert("initbonus".to_string(), GffValue::Int(0));
         Character::from_gff(fields)
     }
 
@@ -454,7 +444,7 @@ mod tests {
         let init = character.get_initiative_breakdown(&game_data, &decoder);
 
         assert_eq!(init.dex, 2);
-        assert_eq!(init.misc, 0);
+        assert_eq!(init.feat, 0);
         assert_eq!(init.total, 2);
     }
 

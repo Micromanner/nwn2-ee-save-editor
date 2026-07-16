@@ -918,7 +918,7 @@ mod tests {
         let game = temp_dir.path().join("Game");
         let docs = temp_dir.path().join("Documents");
         std::fs::create_dir_all(&game).unwrap();
-        std::fs::create_dir_all(&docs.join("override")).unwrap();
+        std::fs::create_dir_all(docs.join("override")).unwrap();
 
         let mut paths = paths_for_discovery_test(Some(game.clone()), Some(docs), None);
 
@@ -933,8 +933,8 @@ mod tests {
     fn test_remove_builtin_cleans_documents_folder_from_custom() {
         let temp_dir = TempDir::new().expect("failed to create temp dir");
         let docs = temp_dir.path().join("Documents");
-        std::fs::create_dir_all(&docs.join("override")).unwrap();
-        std::fs::create_dir_all(&docs.join("hak")).unwrap();
+        std::fs::create_dir_all(docs.join("override")).unwrap();
+        std::fs::create_dir_all(docs.join("hak")).unwrap();
 
         let mut paths = paths_for_discovery_test(None, Some(docs.clone()), None);
         paths.custom_override_folders.push(docs.clone());

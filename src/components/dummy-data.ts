@@ -87,7 +87,6 @@ export const VITAL_STATS = {
   hitPoints: 142,
   maxHitPoints: 168,
   initiative: {
-    base: 0,
     total: 3,
     dexMod: 3,
     feats: 0,

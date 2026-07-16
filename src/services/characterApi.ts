@@ -1005,7 +1005,7 @@ export class CharacterAPI {
              invoke<{
                 base_attack_bonus: number,
                 armor_class: {total: number, breakdown: {natural: number, dex: number, armor: number, shield: number}},
-                initiative: {total: number, dex: number, feat: number, misc: number}
+                initiative: {total: number, dex: number, feat: number}
              }>('get_combat_summary'),
              invoke<{total_points: number, available_points: number}>('get_ability_points_summary').catch(() => ({ total_points: 0, available_points: 0 })),
              invoke<AbilityScores>('get_base_ability_scores')
@@ -1053,7 +1053,6 @@ export class CharacterAPI {
                 initiative: {
                     total: combat.initiative.total,
                     dex_modifier: combat.initiative.dex,
-                    misc_bonus: combat.initiative.misc,
                     improved_initiative: combat.initiative.feat
                 }
             },
@@ -1156,15 +1155,6 @@ export class CharacterAPI {
     try {
         await invoke('update_natural_armor', { value: naturalAC });
         return { success: true, updated_value: naturalAC, message: "AC Updated" };
-    } catch (e) {
-        throw new Error(String(e));
-    }
-  }
-
-  static async updateInitiativeBonus(characterId: number, initiativeBonus: number): Promise<CombatUpdateResponse> {
-     try {
-        await invoke('update_initiative_bonus', { value: initiativeBonus });
-        return { success: true, updated_value: initiativeBonus };
     } catch (e) {
         throw new Error(String(e));
     }

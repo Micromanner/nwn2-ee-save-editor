@@ -38,7 +38,7 @@ pub use classes::{
 pub use combat::{CombatStats, DamageBonuses};
 pub use combat_summary::{
     ACBreakdown, ArmorClass, AttackBonuses, AttackBreakdown, CombatManeuverBonus, CombatSummary,
-    DamageReduction, Initiative, InitiativeChange, MovementSpeed, NaturalArmorChange,
+    DamageReduction, Initiative, MovementSpeed, NaturalArmorChange,
 };
 pub use error::CharacterError;
 pub use feats::{

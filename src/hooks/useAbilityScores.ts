@@ -32,7 +32,6 @@ export interface CharacterStats {
     equipment?: number;
   };
   initiative: {
-    base: number;
     total: number;
     dexMod?: number;
     feats?: number;
@@ -234,7 +233,7 @@ export function useAbilityScores(
       fortitude: { base: 0, total: 0 },
       reflex: { base: 0, total: 0 },
       will: { base: 0, total: 0 },
-      initiative: { base: 0, total: 0 },
+      initiative: { total: 0 },
     };
 
     if (!abilityScoreData) {
@@ -259,10 +258,9 @@ export function useAbilityScores(
       if (!combat?.initiative) return defaultStats.initiative;
       const init = combat.initiative;
       return {
-        base: localStatsOverrides.initiative?.base ?? init.misc ?? 0,
         total: init.total ?? 0,
         dexMod: init.dex ?? 0,
-        feats: 0
+        feats: init.feat ?? 0
       };
     };
 
@@ -370,10 +368,6 @@ export function useAbilityScores(
         await CharacterAPI.updateArmorClass(characterId, updates.armorClass.base);
       }
       
-      if (updates.initiative?.base !== undefined) {
-        await CharacterAPI.updateInitiativeBonus(characterId, updates.initiative.base);
-      }
-
       const saveUpdates: Record<string, number> = {};
       if (updates.fortitude?.base !== undefined) saveUpdates.fortitude = updates.fortitude.base;
       if (updates.reflex?.base !== undefined) saveUpdates.reflex = updates.reflex.base;

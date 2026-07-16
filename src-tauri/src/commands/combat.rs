@@ -1,6 +1,6 @@
 use crate::character::{
-    ArmorClass, AttackBonuses, CombatSummary, DamageReduction, Initiative, InitiativeChange,
-    NaturalArmorChange, SaveChange, SaveCheck, SaveSummary, SaveType, SavingThrows,
+    ArmorClass, AttackBonuses, CombatSummary, DamageReduction, Initiative, NaturalArmorChange,
+    SaveChange, SaveCheck, SaveSummary, SaveType, SavingThrows,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::state::AppState;
@@ -73,30 +73,6 @@ pub async fn update_natural_armor(
     character.set_natural_ac(value)?;
 
     Ok(NaturalArmorChange {
-        old_value,
-        new_value: value,
-    })
-}
-
-#[tauri::command]
-pub async fn update_initiative_bonus(
-    state: State<'_, AppState>,
-    value: i32,
-) -> CommandResult<InitiativeChange> {
-    let mut session = state.session.write();
-    session.record_history(
-        format!("Set initiative bonus to {value}"),
-        Some("combat:initiative"),
-    );
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    let old_value = character.get_i32("initbonus").unwrap_or(0);
-    character.set_i32("initbonus", value);
-
-    Ok(InitiativeChange {
         old_value,
         new_value: value,
     })

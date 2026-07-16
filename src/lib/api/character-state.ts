@@ -32,7 +32,6 @@ import type {
   AddItemResult,
   RemoveItemResult,
   NaturalArmorChange,
-  InitiativeChange,
   SaveChange,
   HitPoints,
   EquipmentSlot,
@@ -237,8 +236,6 @@ export const CharacterStateAPI = {
   updateNaturalArmor: (value: number) =>
     invoke<NaturalArmorChange>('update_natural_armor', { value }),
 
-  updateInitiativeBonus: (value: number) =>
-    invoke<InitiativeChange>('update_initiative_bonus', { value }),
 
   setMiscSaveBonus: (saveType: number, value: number) =>
     invoke<SaveChange>('set_misc_save_bonus', { saveType, value }),

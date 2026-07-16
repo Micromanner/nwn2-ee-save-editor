@@ -127,7 +127,7 @@ export function AbilitiesPanel() {
   ];
 
   const initDex = combatData?.initiative?.dex ?? stats.initiative.dexMod ?? 0;
-  const initMisc = combatData?.initiative?.misc ?? stats.initiative.base ?? 0;
+  const initFeat = combatData?.initiative?.feat ?? stats.initiative.feats ?? 0;
   const initTotal = combatData?.initiative?.total ?? stats.initiative.total ?? 0;
 
   const handleAbilityChange = async (index: number, value: number) => {
@@ -141,14 +141,6 @@ export function AbilitiesPanel() {
   const handleSaveMiscChange = async (saveKey: 'fortitude' | 'reflex' | 'will', value: number) => {
     try {
       await updateStats({ [saveKey]: { ...stats[saveKey], base: value } });
-    } catch (err) {
-      handleError(err);
-    }
-  };
-
-  const handleInitiativeMiscChange = async (value: number) => {
-    try {
-      await updateStats({ initiative: { ...stats.initiative, base: value } });
     } catch (err) {
       handleError(err);
     }
@@ -344,15 +336,9 @@ export function AbilitiesPanel() {
               <td />
               <td style={{ textAlign: 'center' }}><ModCell value={initDex} /></td>
               <td />
+              <td style={{ textAlign: 'center' }}><ModCell value={initFeat} /></td>
               <td />
               <td />
-              <td style={{ textAlign: 'center' }}>
-                <StepInput
-                  value={stats.initiative.base}
-                  onValueChange={handleInitiativeMiscChange}
-                  min={-128} max={127} width={88}
-                />
-              </td>
               <td style={{ textAlign: 'center' }}>
                 <strong className="t-xl" style={{ color: T.text }}>{mod(initTotal)}</strong>
               </td>

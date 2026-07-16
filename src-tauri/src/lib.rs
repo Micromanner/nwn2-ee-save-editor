@@ -247,7 +247,6 @@ pub fn run() {
             crate::commands::combat::get_attack_sequence,
             crate::commands::combat::get_damage_reduction,
             crate::commands::combat::update_natural_armor,
-            crate::commands::combat::update_initiative_bonus,
             crate::commands::combat::get_save_summary,
             crate::commands::combat::set_misc_save_bonus,
             crate::commands::combat::check_save,
