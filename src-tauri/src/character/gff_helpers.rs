@@ -176,6 +176,14 @@ impl super::Character {
         self.modified = true;
     }
 
+    /// Set an integer field forcing the GFF Int type, converting a previously mistyped
+    /// value. For the few creature fields the game schema stores as Int (e.g.
+    /// NeverDrawHelmet) where the type-strict engine ignores other variants.
+    pub fn set_int(&mut self, field: &str, value: i32) {
+        self.gff.insert(field.to_string(), GffValue::Int(value));
+        self.modified = true;
+    }
+
     /// Set an integer field, preserving the existing GFF type (Byte/Short/Word/Dword/Int64/Dword64).
     /// The game engine can be strict about schema types (e.g. alignment resets to 0 if stored as
     /// Int instead of Byte). New fields default to Int.

@@ -191,7 +191,7 @@ impl Character {
     }
 
     pub fn set_never_draw_helmet(&mut self, value: bool) {
-        self.set_byte("NeverDrawHelmet", u8::from(value));
+        self.set_int("NeverDrawHelmet", i32::from(value));
     }
 
     pub fn body_part_value(&self, gff_field: &str) -> i32 {
@@ -1091,6 +1091,28 @@ mod tests {
         character.set_appearance_head(7);
         assert_eq!(character.appearance_head(), 7);
         assert!(character.is_modified());
+    }
+
+    #[test]
+    fn test_set_never_draw_helmet_writes_int_type() {
+        let mut character = create_test_character();
+        character.set_never_draw_helmet(true);
+        match character.gff.get("NeverDrawHelmet") {
+            Some(GffValue::Int(v)) => assert_eq!(*v, 1),
+            other => panic!("NeverDrawHelmet must be Int, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_set_never_draw_helmet_repairs_byte_type() {
+        let mut fields = IndexMap::new();
+        fields.insert("NeverDrawHelmet".to_string(), GffValue::Byte(1));
+        let mut character = Character::from_gff(fields);
+        character.set_never_draw_helmet(false);
+        match character.gff.get("NeverDrawHelmet") {
+            Some(GffValue::Int(v)) => assert_eq!(*v, 0),
+            other => panic!("NeverDrawHelmet must be Int, got {other:?}"),
+        }
     }
 
     #[test]
