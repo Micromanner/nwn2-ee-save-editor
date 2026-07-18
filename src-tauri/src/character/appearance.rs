@@ -12,7 +12,8 @@ use crate::parsers::gff::GffValue;
 use crate::utils::parsing::row_str;
 
 use super::appearance_helpers::{
-    TintChannels, build_nested_tint, read_tint_from_tintable, resolve_armor_prefix, swap_tint_2_3,
+    TintChannels, build_nested_tint, build_tintable_struct, read_tint_from_tintable,
+    resolve_armor_prefix, swap_tint_2_3,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -30,6 +31,7 @@ pub struct AppearanceState {
 
     pub tint_head: TintChannels,
     pub tint_hair: TintChannels,
+    pub tint_body: TintChannels,
 
     pub color_tattoo1: i32,
     pub color_tattoo2: i32,
@@ -51,6 +53,7 @@ pub struct AppearanceState {
     pub never_draw_helmet: bool,
     pub cloak_tint: Option<TintChannels>,
     pub armor_tint: Option<TintChannels>,
+    pub color_capabilities: crate::services::tint_analysis::ColorCapabilities,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -216,9 +219,10 @@ impl Character {
         read_tint_from_tintable(&tintable)
     }
 
-    /// GFF head tint stores channels 2/3 as (eyebrows, eyes). Swap on both
-    /// read and write so our TintChannels matches the "Eyes"/"Eyebrows"
-    /// ordering the UI and viewer assume. Hair doesn't need this.
+    /// GFF head tint stores channels as (skin, eyes, eyebrows). Our in-memory
+    /// TintChannels is (skin, eyebrows, eyes) — the order the UI pickers and
+    /// viewer masks use — so swap 2/3 on both read and write. Hair needs no
+    /// swap. External refs: DragonCoast character-modification guide, NWN2Wiki.
     pub fn tint_head(&self) -> TintChannels {
         swap_tint_2_3(&self.read_tint_channels_nested("Tint_Head"))
     }
@@ -237,6 +241,32 @@ impl Character {
     pub fn set_tint_hair(&mut self, tints: &TintChannels) {
         let nested = build_nested_tint(tints);
         self.set_struct("Tint_Hair", nested);
+    }
+
+    /// Root-level body tint (`Tintable → Tint → 1/2/3`). The engine tints
+    /// TAIL and WING models (and the naked body) with this layer; the game
+    /// leaves it white. Raw GFF channel order — no 2/3 swap.
+    pub fn tint_body(&self) -> TintChannels {
+        let Some(tintable) = self.get_struct_owned("Tintable") else {
+            return TintChannels::default();
+        };
+        read_tint_from_tintable(&tintable)
+    }
+
+    pub fn set_tint_body(&mut self, tints: &TintChannels) {
+        self.set_struct("Tintable", build_tintable_struct(tints));
+    }
+
+    /// Copy the raw `Tint_Head` tint subtree into the root `Tintable` —
+    /// byte-identical to the proven community workflow for skin-tone tails
+    /// (Wings N Tails EX). No-op when the character has no `Tint_Head`.
+    pub fn set_tint_body_from_head(&mut self) {
+        if self.get_struct_owned("Tint_Head").is_none() {
+            warn!("set_tint_body_from_head: character has no Tint_Head, skipping");
+            return;
+        }
+        let raw_head = self.read_tint_channels_nested("Tint_Head");
+        self.set_tint_body(&raw_head);
     }
 
     // -- ModelScale (height = z, girth = x synced with y) --
@@ -359,6 +389,7 @@ impl Character {
 
             tint_head: self.tint_head(),
             tint_hair: self.tint_hair(),
+            tint_body: self.tint_body(),
 
             color_tattoo1: self.color_tattoo1(),
             color_tattoo2: self.color_tattoo2(),
@@ -380,6 +411,7 @@ impl Character {
             never_draw_helmet: self.never_draw_helmet(),
             cloak_tint,
             armor_tint,
+            color_capabilities: crate::services::tint_analysis::ColorCapabilities::default(),
         }
     }
 
@@ -1268,5 +1300,97 @@ mod tests {
         character.set_body_part_value("BodyPart_Torso", 5);
         assert_eq!(character.body_part_value("BodyPart_Torso"), 5);
         assert!(character.is_modified());
+    }
+
+    #[test]
+    fn test_tint_body_default_when_missing() {
+        let character = create_test_character();
+        let tint = character.tint_body();
+        assert_eq!(tint.channel1.r, 0);
+    }
+
+    #[test]
+    fn test_set_tint_body_roundtrip_and_shape() {
+        let mut character = create_test_character();
+        let tints = TintChannels {
+            channel1: TintChannel {
+                r: 255,
+                g: 219,
+                b: 212,
+                a: 0,
+            },
+            channel2: TintChannel {
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 0,
+            },
+            channel3: TintChannel {
+                r: 4,
+                g: 5,
+                b: 6,
+                a: 0,
+            },
+        };
+        character.set_tint_body(&tints);
+
+        let read_back = character.tint_body();
+        assert_eq!(read_back.channel1.r, 255);
+        assert_eq!(read_back.channel2.g, 2);
+        assert_eq!(read_back.channel3.b, 6);
+        assert!(character.is_modified());
+
+        // Root field IS the Tintable struct: Tintable -> Tint -> "1".r as Byte
+        let Some(GffValue::StructOwned(tintable)) = character.gff.get("Tintable") else {
+            panic!("Tintable must be a struct");
+        };
+        let Some(GffValue::StructOwned(tint)) = tintable.get("Tint") else {
+            panic!("Tintable.Tint must be a struct");
+        };
+        let Some(GffValue::StructOwned(ch1)) = tint.get("1") else {
+            panic!("Tint.1 must be a struct");
+        };
+        assert!(matches!(ch1.get("r"), Some(GffValue::Byte(255))));
+    }
+
+    #[test]
+    fn test_set_tint_body_from_head_copies_raw_gff_order() {
+        let mut character = create_test_character();
+        let head_ui = TintChannels {
+            channel1: TintChannel {
+                r: 200,
+                g: 180,
+                b: 160,
+                a: 0,
+            }, // skin
+            channel2: TintChannel {
+                r: 10,
+                g: 20,
+                b: 30,
+                a: 0,
+            }, // eyebrows (UI)
+            channel3: TintChannel {
+                r: 40,
+                g: 50,
+                b: 60,
+                a: 0,
+            }, // eyes (UI)
+        };
+        character.set_tint_head(&head_ui);
+        character.set_tint_body_from_head();
+
+        // Body copies the RAW GFF subtree = swap of the UI representation
+        let body = character.tint_body();
+        let expected = crate::character::appearance_helpers::swap_tint_2_3(&head_ui);
+        assert_eq!(body.channel1.r, expected.channel1.r);
+        assert_eq!(body.channel2.r, expected.channel2.r);
+        assert_eq!(body.channel3.r, expected.channel3.r);
+    }
+
+    #[test]
+    fn test_set_tint_body_from_head_noop_without_head() {
+        let mut character = create_test_character();
+        character.set_tint_body_from_head();
+        assert!(character.gff.get("Tintable").is_none());
     }
 }

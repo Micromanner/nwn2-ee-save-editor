@@ -8,7 +8,7 @@ import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { CharacterStateAPI } from '@/lib/api/character-state';
 import { T } from '../theme';
 import { KVRow } from '../shared';
-import type { AppearanceOption, AppearanceUpdates, AvailableRace, AvailableSubrace, TintChannel, TintChannels, VoiceSetInfo } from '@/lib/bindings';
+import type { AppearanceOption, AppearanceUpdates, AvailableRace, AvailableSubrace, PartTintCapability, TintChannel, TintChannels, VoiceSetInfo } from '@/lib/bindings';
 import { invoke } from '@tauri-apps/api/core';
 import { CharacterViewer3D } from './CharacterViewer3D';
 import { VariantStepper } from './VariantStepper';
@@ -42,7 +42,8 @@ export function AppearancePanel() {
   const [voiceFilter, setVoiceFilter] = useState('');
   const [playingResref, setPlayingResref] = useState<string | null>(null);
   const [pendingVoiceId, setPendingVoiceId] = useState<number | null>(null);
-  const [pendingTints, setPendingTints] = useState<{ tint_head: TintChannels; tint_hair: TintChannels } | null>(null);
+  const [pendingTints, setPendingTints] = useState<{ tint_head?: TintChannels; tint_hair?: TintChannels } | null>(null);
+  const [pendingBodyTint, setPendingBodyTint] = useState<TintChannels | null>(null);
   const [pendingSize, setPendingSize] = useState<{ height: number; girth: number } | null>(null);
   const [showHelmetInViewer, setShowHelmetInViewer] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -114,8 +115,9 @@ export function AppearancePanel() {
         const data = appearanceSubsystem.data;
         if (!data) return;
         setPendingTints(prev => {
-          const base = prev ?? { tint_head: { ...data.tint_head }, tint_hair: { ...data.tint_hair } };
-          return { ...base, [group]: { ...base[group], [channelKey]: value } };
+          const base = prev ?? {};
+          const groupValue = base[group] ?? { ...data[group] };
+          return { ...base, [group]: { ...groupValue, [channelKey]: value } };
         });
       },
     [appearanceSubsystem.data]
@@ -123,12 +125,40 @@ export function AppearancePanel() {
 
   const confirmTints = useCallback(() => {
     if (!pendingTints) return;
-    updateField({ tint_head: pendingTints.tint_head, tint_hair: pendingTints.tint_hair });
+    const updates: AppearanceUpdates = {};
+    if (pendingTints.tint_head) updates.tint_head = pendingTints.tint_head;
+    if (pendingTints.tint_hair) updates.tint_hair = pendingTints.tint_hair;
+    updateField(updates);
     setPendingTints(null);
   }, [pendingTints, updateField]);
 
   const cancelTints = useCallback(() => {
     setPendingTints(null);
+  }, []);
+
+  // Tail/wing body tint has its own pending + apply, separate from the head/hair
+  // Colors card, so its Apply/Cancel sits next to the pickers that armed it.
+  const updateBodyTintChannel = useCallback(
+    (channelKey: 'channel1' | 'channel2' | 'channel3') =>
+      (value: TintChannel) => {
+        const data = appearanceSubsystem.data;
+        if (!data) return;
+        setPendingBodyTint(prev => {
+          const base = prev ?? { ...data.tint_body };
+          return { ...base, [channelKey]: value };
+        });
+      },
+    [appearanceSubsystem.data]
+  );
+
+  const confirmBodyTint = useCallback(() => {
+    if (!pendingBodyTint) return;
+    updateField({ tint_body: pendingBodyTint });
+    setPendingBodyTint(null);
+  }, [pendingBodyTint, updateField]);
+
+  const cancelBodyTint = useCallback(() => {
+    setPendingBodyTint(null);
   }, []);
 
   const confirmSize = useCallback(() => {
@@ -292,6 +322,14 @@ export function AppearancePanel() {
 
   const data = appearanceSubsystem.data;
 
+  const caps = data.color_capabilities;
+  const capProps = (cap: PartTintCapability | null | undefined, ch: 0 | 1 | 2) => {
+    if (!cap) return {};
+    if (!cap.has_tint_map) return { disabled: true, disabledReason: t('appearance.tintNoTintMap') };
+    if (!cap.channels[ch]) return { disabled: true, disabledReason: t('appearance.tintChannelUnused') };
+    return {};
+  };
+
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {/* Left: Controls */}
@@ -365,12 +403,12 @@ export function AppearancePanel() {
         <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
           <SectionHeader label={t('appearance.colors')} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <ColorPicker label={t('appearance.skin')} value={(pendingTints ?? data).tint_head.channel1} onChange={updateTintChannel('tint_head', 'channel1')} />
-            <ColorPicker label={t('appearance.eyebrows')} value={(pendingTints ?? data).tint_head.channel2} onChange={updateTintChannel('tint_head', 'channel2')} />
-            <ColorPicker label={t('appearance.eyes')} value={(pendingTints ?? data).tint_head.channel3} onChange={updateTintChannel('tint_head', 'channel3')} />
-            <ColorPicker label={t('appearance.hairBase')} value={(pendingTints ?? data).tint_hair.channel1} onChange={updateTintChannel('tint_hair', 'channel1')} />
-            <ColorPicker label={t('appearance.hairHighlight')} value={(pendingTints ?? data).tint_hair.channel2} onChange={updateTintChannel('tint_hair', 'channel2')} />
-            <ColorPicker label={t('appearance.hairAccessory')} value={(pendingTints ?? data).tint_hair.channel3} onChange={updateTintChannel('tint_hair', 'channel3')} />
+            <ColorPicker label={t('appearance.skin')} value={(pendingTints?.tint_head ?? data.tint_head).channel1} onChange={updateTintChannel('tint_head', 'channel1')} {...capProps(caps.head, 0)} />
+            <ColorPicker label={t('appearance.eyebrows')} value={(pendingTints?.tint_head ?? data.tint_head).channel2} onChange={updateTintChannel('tint_head', 'channel2')} {...capProps(caps.head, 1)} />
+            <ColorPicker label={t('appearance.eyes')} value={(pendingTints?.tint_head ?? data.tint_head).channel3} onChange={updateTintChannel('tint_head', 'channel3')} {...capProps(caps.head, 2)} />
+            <ColorPicker label={t('appearance.hairBase')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel1} onChange={updateTintChannel('tint_hair', 'channel1')} {...capProps(caps.hair, 0)} />
+            <ColorPicker label={t('appearance.hairHighlight')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel2} onChange={updateTintChannel('tint_hair', 'channel2')} {...capProps(caps.hair, 1)} />
+            <ColorPicker label={t('appearance.hairAccessory')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel3} onChange={updateTintChannel('tint_hair', 'channel3')} {...capProps(caps.hair, 2)} />
           </div>
           {pendingTints !== null && (
             <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
@@ -650,6 +688,45 @@ export function AppearancePanel() {
                 </Popover>
               }
             />
+            {data.tail > 0 || data.wings > 0 ? (() => {
+              const tailCap = data.tail > 0 ? caps.tail : null;
+              const wingsCap = data.wings > 0 ? caps.wings : null;
+              const merged: PartTintCapability | undefined = (tailCap || wingsCap)
+                ? {
+                    has_tint_map: Boolean(tailCap?.has_tint_map || wingsCap?.has_tint_map),
+                    channels: [0, 1, 2].map(i =>
+                      Boolean(tailCap?.channels[i] || wingsCap?.channels[i])
+                    ) as [boolean, boolean, boolean],
+                  }
+                : undefined;
+              return (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="t-base t-semibold" style={{ color: T.textMuted }}>{t('appearance.bodyTint')}</div>
+                  {([1, 2, 3] as const).map(n => (
+                    <ColorPicker
+                      key={n}
+                      label={t('appearance.bodyTintChannel', { n })}
+                      value={(pendingBodyTint ?? data.tint_body)[`channel${n}`]}
+                      onChange={updateBodyTintChannel(`channel${n}`)}
+                      {...capProps(merged, (n - 1) as 0 | 1 | 2)}
+                    />
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                    <Button
+                      small
+                      text={t('appearance.matchSkinTone')}
+                      onClick={() => { setPendingBodyTint(null); updateField({ tint_body_match_skin: true }); }}
+                    />
+                    {pendingBodyTint !== null && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Button small text={t('common.cancel')} onClick={cancelBodyTint} />
+                        <Button small intent="primary" text={t('actions.apply')} onClick={confirmBodyTint} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })() : null}
           </div>
         </Card>
       </div>
@@ -661,6 +738,7 @@ export function AppearancePanel() {
           refreshPart={partRefresh}
           tintHead={pendingTints?.tint_head ?? data.tint_head}
           tintHair={pendingTints?.tint_hair ?? data.tint_hair}
+          tintBody={pendingBodyTint ?? data.tint_body}
           tintCloak={data.cloak_tint}
           tintArmor={data.armor_tint}
           height={liveHeight}

@@ -136,6 +136,12 @@ fn diagnose_hair_tint_roundtrip() {
     };
     character.set_tint_hair(&hair);
     character.set_tint_head(&head);
+    let body = TintChannels {
+        channel1: ch(200, 150, 100),
+        channel2: ch(0, 0, 0),
+        channel3: ch(0, 0, 0),
+    };
+    character.set_tint_body(&body);
 
     writeln!(out, "\n=== IN-MEMORY read-back after set ===").unwrap();
     let h = character.tint_hair();

@@ -41,6 +41,7 @@ pub struct AppState {
     /// startup doesn't pay for it unless/until a Quests-tab or toolset command
     /// fires; kept across commands to amortize ~1s of bridge init.
     pub bridge_client: Mutex<Option<Arc<BridgeClient>>>,
+    pub tint_capability_cache: crate::services::tint_analysis::TintCapabilityCache,
 }
 
 impl AppState {
@@ -87,6 +88,7 @@ impl AppState {
             quest_graph_progress: Arc::new(RwLock::new(QuestGraphProgress::default())),
             model_list_cache: Mutex::new(None),
             bridge_client: Mutex::new(None),
+            tint_capability_cache: Mutex::new(std::collections::HashMap::new()),
         }
     }
 }

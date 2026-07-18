@@ -119,6 +119,7 @@ pub fn decode_dds_rgba(dds_bytes: &[u8]) -> Result<DecodedTexture, String> {
     })
 }
 
+/// texture2ddecoder outputs BGRA packed in u32; convert to RGBA byte array.
 fn rgba_from_u32(buf: &[u32]) -> Vec<u8> {
     buf.iter()
         .flat_map(|&pixel| {

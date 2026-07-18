@@ -81,16 +81,20 @@ pub fn build_tint_struct(tints: &TintChannels) -> IndexMap<String, GffValue<'sta
     tint_map
 }
 
-pub fn build_nested_tint(tints: &TintChannels) -> IndexMap<String, GffValue<'static>> {
+pub fn build_tintable_struct(tints: &TintChannels) -> IndexMap<String, GffValue<'static>> {
     let mut tintable = IndexMap::new();
     tintable.insert(
         "Tint".to_string(),
         GffValue::StructOwned(Box::new(build_tint_struct(tints))),
     );
+    tintable
+}
+
+pub fn build_nested_tint(tints: &TintChannels) -> IndexMap<String, GffValue<'static>> {
     let mut outer = IndexMap::new();
     outer.insert(
         "Tintable".to_string(),
-        GffValue::StructOwned(Box::new(tintable)),
+        GffValue::StructOwned(Box::new(build_tintable_struct(tints))),
     );
     outer
 }

@@ -11,6 +11,7 @@ pub mod rule_detector;
 pub mod save_graph;
 pub mod savegame_handler;
 pub mod texture_decode;
+pub mod tint_analysis;
 pub mod toolset_bridge;
 
 pub use resource_manager::{

@@ -11,8 +11,10 @@ import { Spinner } from '@blueprintjs/core';
 
 type PartType = 'head' | 'hair' | 'fhair' | 'wings' | 'tail' | 'helm' | 'body' | 'cloak';
 
-// Head/armor tint masks invert G and B relative to hair and glove/boot masks
-// (the latter are pre-swapped on the Rust side via swap_tint_2_3).
+// The shader G/B swap cancels data-order differences, not a mask property:
+// head tints arrive in UI order (eyebrows/eyes swapped vs the GFF), and
+// armor/item tints use the item convention (verified vs Darksteel Full
+// Plate). Raw-GFF-order tints (hair, body tint for tail/wings) need no swap.
 function needsShaderGBSwap(group: string): boolean {
   return group === 'head' || group === 'body' || group === 'cloak' || group === 'helm';
 }
@@ -22,6 +24,7 @@ interface CharacterViewer3DProps {
   refreshPart: { parts: PartType[]; key: number } | null;
   tintHead: TintChannels;
   tintHair: TintChannels;
+  tintBody: TintChannels;
   tintCloak?: TintChannels | null;
   tintArmor?: TintChannels | null;
   height: number;
@@ -29,7 +32,7 @@ interface CharacterViewer3DProps {
   showHelmet: boolean;
 }
 
-export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair, tintCloak, tintArmor, height, girth, showHelmet }: CharacterViewer3DProps) {
+export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair, tintBody, tintCloak, tintArmor, height, girth, showHelmet }: CharacterViewer3DProps) {
   const t = useTranslations();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
 
   const tintHeadRef = useRef(tintHead);
   const tintHairRef = useRef(tintHair);
+  const tintBodyRef = useRef(tintBody);
   const tintCloakRef = useRef(tintCloak);
   const tintArmorRef = useRef(tintArmor);
   const heightRef = useRef(height);
@@ -50,6 +54,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
   const showHelmetRef = useRef(showHelmet);
   tintHeadRef.current = tintHead;
   tintHairRef.current = tintHair;
+  tintBodyRef.current = tintBody;
   tintCloakRef.current = tintCloak;
   tintArmorRef.current = tintArmor;
   heightRef.current = height;
@@ -84,11 +89,12 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
   function getTintColors(): Record<string, TintColors> {
     const headColors = tintChannelsToColors(tintHeadRef.current);
     const hairColors = tintChannelsToColors(tintHairRef.current);
+    const bodyTintColors = tintChannelsToColors(tintBodyRef.current);
     const white: TintColors = { channel1: [1, 1, 1], channel2: [1, 1, 1], channel3: [1, 1, 1] };
     const fhairColors: TintColors = { channel1: hairColors.channel1, channel2: [1, 1, 1], channel3: [1, 1, 1] };
     const cloakColors = tintCloakRef.current ? tintChannelsToColors(tintCloakRef.current) : white;
     const armorColors = tintArmorRef.current ? tintChannelsToColors(tintArmorRef.current) : white;
-    return { head: headColors, hair: hairColors, fhair: fhairColors, body: armorColors, cloak: cloakColors };
+    return { head: headColors, hair: hairColors, fhair: fhairColors, body: armorColors, cloak: cloakColors, tail: bodyTintColors, wings: bodyTintColors };
   }
 
   const partGroupName = (part: string) => `__part_${part}`;
@@ -447,11 +453,14 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
     if (!scene) return;
     const headColors = tintChannelsToColors(tintHead);
     const hairColors = tintChannelsToColors(tintHair);
+    const bodyTintColors = tintChannelsToColors(tintBody);
     const fhairColors: TintColors = { channel1: hairColors.channel1, channel2: [1, 1, 1], channel3: [1, 1, 1] };
     updateTintUniforms(scene, 'head', headColors);
     updateTintUniforms(scene, 'hair', hairColors);
     updateTintUniforms(scene, 'fhair', fhairColors);
-  }, [tintHead, tintHair, sceneRef]);
+    updateTintUniforms(scene, 'tail', bodyTintColors);
+    updateTintUniforms(scene, 'wings', bodyTintColors);
+  }, [tintHead, tintHair, tintBody, sceneRef]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 400 }}>

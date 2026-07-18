@@ -23,9 +23,11 @@ fn load_attached_part(
     skeleton_resref: Option<&str>,
     attach_bone: &str,
 ) -> Option<AttachedPart> {
+    // tint_group must match the viewer's tint map keys ("tail"/"wings") so the
+    // root Tintable colors bind and update; "none" leaves the mesh untinted.
     let result = match skeleton_resref {
-        Some(skel) => model_loader::load_model_with_skeleton(rm, resref, skel, name, "none"),
-        None => model_loader::load_model(rm, resref, name, "none"),
+        Some(skel) => model_loader::load_model_with_skeleton(rm, resref, skel, name, name),
+        None => model_loader::load_model(rm, resref, name, name),
     };
     match result {
         Ok(data) => Some(AttachedPart {
@@ -50,6 +52,8 @@ pub struct AppearanceUpdates {
     pub appearance_fhair: Option<i32>,
     pub tint_head: Option<TintChannels>,
     pub tint_hair: Option<TintChannels>,
+    pub tint_body: Option<TintChannels>,
+    pub tint_body_match_skin: Option<bool>,
     pub color_tattoo1: Option<i32>,
     pub color_tattoo2: Option<i32>,
     pub height: Option<f32>,
@@ -79,7 +83,15 @@ pub fn get_appearance_state(state: State<'_, AppState>) -> CommandResult<Appeara
         .ok_or(CommandError::NoCharacterLoaded)?;
     let game_data = state.game_data.read();
 
-    Ok(character.get_appearance_state(&game_data, &rm))
+    let mut appearance_state = character.get_appearance_state(&game_data, &rm);
+    if let Some(parts) = character.resolve_model_parts(&game_data, &rm) {
+        appearance_state.color_capabilities = crate::services::tint_analysis::color_capabilities(
+            &rm,
+            &state.tint_capability_cache,
+            &parts,
+        );
+    }
+    Ok(appearance_state)
 }
 
 #[tauri::command]
@@ -113,6 +125,12 @@ pub fn update_appearance(
     }
     if let Some(ref tints) = updates.tint_hair {
         character.set_tint_hair(tints);
+    }
+    if let Some(ref tints) = updates.tint_body {
+        character.set_tint_body(tints);
+    }
+    if updates.tint_body_match_skin == Some(true) {
+        character.set_tint_body_from_head();
     }
     if let Some(v) = updates.color_tattoo1 {
         character.set_color_tattoo1(v);
@@ -162,6 +180,14 @@ pub fn update_appearance(
             character.set_appearance_hair(first);
             appearance_state.appearance_hair = first;
         }
+    }
+
+    if let Some(parts) = character.resolve_model_parts(&game_data, &rm) {
+        appearance_state.color_capabilities = crate::services::tint_analysis::color_capabilities(
+            &rm,
+            &state.tint_capability_cache,
+            &parts,
+        );
     }
 
     Ok(appearance_state)

@@ -87,6 +87,18 @@ export interface TintChannels {
   channel3: TintChannel;
 }
 
+export interface PartTintCapability {
+  has_tint_map: boolean;
+  channels: [boolean, boolean, boolean];
+}
+
+export interface ColorCapabilities {
+  head: PartTintCapability;
+  hair: PartTintCapability;
+  tail: PartTintCapability | null;
+  wings: PartTintCapability | null;
+}
+
 export interface NestedArmorPart {
   armor_visual_type: number | null;
   variation: number;
@@ -119,6 +131,7 @@ export interface AppearanceState {
   appearance_fhair: number;
   tint_head: TintChannels;
   tint_hair: TintChannels;
+  tint_body: TintChannels;
   color_tattoo1: number;
   color_tattoo2: number;
   height: number;
@@ -135,6 +148,7 @@ export interface AppearanceState {
   never_draw_helmet: boolean;
   cloak_tint: TintChannels | null;
   armor_tint: TintChannels | null;
+  color_capabilities: ColorCapabilities;
 }
 
 export interface AppearanceOption {
@@ -157,6 +171,8 @@ export interface AppearanceUpdates {
   appearance_fhair?: number;
   tint_head?: TintChannels;
   tint_hair?: TintChannels;
+  tint_body?: TintChannels;
+  tint_body_match_skin?: boolean;
   color_tattoo1?: number;
   color_tattoo2?: number;
   height?: number;
