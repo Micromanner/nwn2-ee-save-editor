@@ -404,11 +404,11 @@ export function AppearancePanel() {
           <SectionHeader label={t('appearance.colors')} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <ColorPicker label={t('appearance.skin')} value={(pendingTints?.tint_head ?? data.tint_head).channel1} onChange={updateTintChannel('tint_head', 'channel1')} {...capProps(caps.head, 0)} />
-            <ColorPicker label={t('appearance.eyebrows')} value={(pendingTints?.tint_head ?? data.tint_head).channel2} onChange={updateTintChannel('tint_head', 'channel2')} {...capProps(caps.head, 1)} />
-            <ColorPicker label={t('appearance.eyes')} value={(pendingTints?.tint_head ?? data.tint_head).channel3} onChange={updateTintChannel('tint_head', 'channel3')} {...capProps(caps.head, 2)} />
-            <ColorPicker label={t('appearance.hairBase')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel1} onChange={updateTintChannel('tint_hair', 'channel1')} {...capProps(caps.hair, 0)} />
+            <ColorPicker label={t('appearance.eyeColor')} value={(pendingTints?.tint_head ?? data.tint_head).channel3} onChange={updateTintChannel('tint_head', 'channel3')} {...capProps(caps.head, 2)} />
+            <ColorPicker label={t('appearance.eyebrowColor')} value={(pendingTints?.tint_head ?? data.tint_head).channel2} onChange={updateTintChannel('tint_head', 'channel2')} {...capProps(caps.head, 1)} />
+            <ColorPicker label={t('appearance.hairColor')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel3} onChange={updateTintChannel('tint_hair', 'channel3')} {...capProps(caps.hair, 2)} />
             <ColorPicker label={t('appearance.hairHighlight')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel2} onChange={updateTintChannel('tint_hair', 'channel2')} {...capProps(caps.hair, 1)} />
-            <ColorPicker label={t('appearance.hairAccessory')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel3} onChange={updateTintChannel('tint_hair', 'channel3')} {...capProps(caps.hair, 2)} />
+            <ColorPicker label={t('appearance.hairAccessory')} value={(pendingTints?.tint_hair ?? data.tint_hair).channel1} onChange={updateTintChannel('tint_hair', 'channel1')} {...capProps(caps.hair, 0)} />
           </div>
           {pendingTints !== null && (
             <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
