@@ -69,6 +69,15 @@ function injectTintShader(
   const ch2 = swapGB ? 'b' : 'g';
   const ch3 = swapGB ? 'g' : 'b';
 
+  // three.js does NOT include onBeforeCompile changes in its shader-program
+  // cache key. Without this, two tint materials that differ ONLY in swapGB
+  // (e.g. the swap=false hair mesh and the swap=true head/face mesh, both with
+  // DXT5 masks) collide on the same key and the second silently reuses the
+  // first's compiled program — so the face renders with the hair's swap and
+  // the eyebrows get driven by the eye channel. Keying on swapGB keeps the two
+  // channel orderings in separate programs.
+  mat.customProgramCacheKey = () => `nwn2tint_${swapGB ? 'gb' : 'rgb'}`;
+
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tintMap = uniforms.tintMap;
     shader.uniforms.tintColor1 = uniforms.tintColor1;
