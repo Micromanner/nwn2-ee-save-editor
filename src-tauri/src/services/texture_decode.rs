@@ -4,6 +4,7 @@ const DDS_MAGIC: u32 = 0x2053_4444;
 const DDS_HEADER_SIZE: usize = 128;
 const DDS_DX10_HEADER_SIZE: usize = 148;
 const DDPF_FOURCC: u32 = 0x4;
+const DDPF_RGB: u32 = 0x40;
 
 const DXGI_FORMAT_BC1_UNORM: u32 = 71;
 const DXGI_FORMAT_BC1_UNORM_SRGB: u32 = 72;
@@ -41,6 +42,7 @@ pub fn decode_dds_rgba(dds_bytes: &[u8]) -> Result<DecodedTexture, String> {
     let width = u32::from_le_bytes(dds_bytes[16..20].try_into().unwrap()) as usize;
     let pf_flags = u32::from_le_bytes(dds_bytes[80..84].try_into().unwrap());
     let fourcc = &dds_bytes[84..88];
+    let rgb_bit_count = u32::from_le_bytes(dds_bytes[88..92].try_into().unwrap());
 
     let has_fourcc = pf_flags & DDPF_FOURCC != 0;
 
@@ -108,6 +110,20 @@ pub fn decode_dds_rgba(dds_bytes: &[u8]) -> Result<DecodedTexture, String> {
                 return Err(format!("Unsupported FourCC: {cc}"));
             }
         }
+    } else if pf_flags & DDPF_RGB != 0 && rgb_bit_count == 32 {
+        // Uncompressed A8R8G8B8: on-disk byte order is B,G,R,A. Reorder to
+        // RGBA (matches three.js DDSLoader loadARGBMip) so backend capability
+        // detection agrees with what the frontend renders.
+        let pixel_data = &dds_bytes[DDS_HEADER_SIZE..];
+        let n = width * height;
+        if pixel_data.len() < n * 4 {
+            return Err("Uncompressed DDS truncated".into());
+        }
+        let mut out = Vec::with_capacity(n * 4);
+        for px in pixel_data[..n * 4].chunks_exact(4) {
+            out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        }
+        out
     } else {
         return Err("Unsupported DDS format: no FourCC".into());
     };
@@ -152,6 +168,24 @@ mod tests {
         d
     }
 
+    /// Minimal uncompressed A8R8G8B8 DDS: 128-byte header, DDPF_RGB, 32bpp,
+    /// 4x4 with the first pixel B=10,G=20,R=30,A=255. Backend must reorder
+    /// on-disk BGRA to RGBA (matching three.js loadARGBMip).
+    fn synthetic_argb8() -> Vec<u8> {
+        let mut d = vec![0u8; 128 + 4 * 16];
+        d[0..4].copy_from_slice(b"DDS ");
+        d[4..8].copy_from_slice(&124u32.to_le_bytes());
+        d[12..16].copy_from_slice(&4u32.to_le_bytes()); // height
+        d[16..20].copy_from_slice(&4u32.to_le_bytes()); // width
+        d[80..84].copy_from_slice(&0x40u32.to_le_bytes()); // DDPF_RGB
+        d[88..92].copy_from_slice(&32u32.to_le_bytes()); // rgbBitCount
+        d[128] = 10; // First pixel on disk: B, G, R, A
+        d[129] = 20;
+        d[130] = 30;
+        d[131] = 255;
+        d
+    }
+
     #[test]
     fn decodes_dxt1_to_rgba() {
         let tex = decode_dds_rgba(&synthetic_dxt1_red()).expect("decode");
@@ -163,6 +197,16 @@ mod tests {
         assert_eq!(tex.rgba[1], 0);
         assert_eq!(tex.rgba[2], 0);
         assert_eq!(tex.rgba[3], 255);
+    }
+
+    #[test]
+    fn decodes_uncompressed_argb8_to_rgba() {
+        let tex = decode_dds_rgba(&synthetic_argb8()).expect("decode");
+        assert_eq!(tex.width, 4);
+        assert_eq!(tex.height, 4);
+        assert_eq!(tex.rgba.len(), 4 * 4 * 4);
+        // First pixel: R=30, G=20, B=10, A=255
+        assert_eq!(&tex.rgba[0..4], &[30, 20, 10, 255]);
     }
 
     #[test]
