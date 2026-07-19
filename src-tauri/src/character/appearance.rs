@@ -243,6 +243,13 @@ impl Character {
         self.set_struct("Tint_Hair", nested);
     }
 
+    /// Write Tint_Head from raw GFF-order channels (no UI 2/3 swap). Used by
+    /// the calibration diagnostic to probe engine channel -> region mapping.
+    pub fn write_raw_tint_head(&mut self, tints: &TintChannels) {
+        let nested = build_nested_tint(tints);
+        self.set_struct("Tint_Head", nested);
+    }
+
     /// Root-level body tint (`Tintable → Tint → 1/2/3`). The engine tints
     /// TAIL and WING models (and the naked body) with this layer; the game
     /// leaves it white. Raw GFF channel order — no 2/3 swap.

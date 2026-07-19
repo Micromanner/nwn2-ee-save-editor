@@ -48,3 +48,9 @@ mod diagnose_linux_user;
 
 #[path = "debugging/diagnose_hair_tint_roundtrip.rs"]
 mod diagnose_hair_tint_roundtrip;
+
+#[path = "debugging/diagnose_head_hair_mask_format.rs"]
+mod diagnose_head_hair_mask_format;
+
+#[path = "debugging/make_tint_sentinel_save.rs"]
+mod make_tint_sentinel_save;
