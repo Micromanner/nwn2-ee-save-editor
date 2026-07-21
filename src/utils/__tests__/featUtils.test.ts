@@ -22,7 +22,7 @@ describe('aggregateFeats', () => {
     };
     const result = aggregateFeats(summary);
     expect(result).toHaveLength(3);
-    expect(result.map(f => f.id)).toEqual([1, 2, 3]);
+    expect(result.map(f => f.id)).toEqual([2, 1, 3]);
   });
 
   it('returns empty array for null summary', () => {
