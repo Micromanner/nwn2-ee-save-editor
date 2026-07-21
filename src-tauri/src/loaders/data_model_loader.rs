@@ -11,19 +11,14 @@ use crate::services::resource_manager::ResourceManager;
 
 use super::constants::{PRIORITY_TABLES, is_priority_table, should_load_table};
 use super::error::{LoaderError, LoaderResult};
-use super::relationship_validator::RelationshipValidator;
-use super::types::{
-    GameData, LoadedTable, LoadingProgress, LoadingStats, TableMetadata, ValidationReport,
-};
+use super::types::{GameData, LoadedTable, LoadingProgress, LoadingStats, TableMetadata};
 
 type ProgressCallback = Box<dyn Fn(&str, f32) + Send + Sync>;
 
 pub struct DataModelLoader {
     resource_manager: Arc<RwLock<ResourceManager>>,
     rule_detector: RuleDetector,
-    relationship_validator: RelationshipValidator,
     progress: LoadingProgress,
-    validate_relationships: bool,
     priority_only: bool,
 }
 
@@ -32,24 +27,19 @@ impl DataModelLoader {
         Self {
             resource_manager,
             rule_detector: RuleDetector::new(),
-            relationship_validator: RelationshipValidator::new(),
             progress: LoadingProgress::default(),
-            validate_relationships: true,
             priority_only: false,
         }
     }
 
     pub fn with_options(
         resource_manager: Arc<RwLock<ResourceManager>>,
-        validate_relationships: bool,
         priority_only: bool,
     ) -> Self {
         Self {
             resource_manager,
             rule_detector: RuleDetector::new(),
-            relationship_validator: RelationshipValidator::new(),
             progress: LoadingProgress::default(),
-            validate_relationships,
             priority_only,
         }
     }
@@ -68,8 +58,8 @@ impl DataModelLoader {
         self.progress.update("Scanning 2DA files...", 5.0);
         let tables_to_load = self.scan_2da_files().await?;
 
-        self.progress.update("Sorting by dependencies...", 10.0);
-        let sorted_tables = self.sort_by_dependency_order(&tables_to_load);
+        self.progress.update("Sorting tables...", 10.0);
+        let sorted_tables = Self::sort_priority_first(&tables_to_load);
 
         self.progress.update("Loading table data...", 15.0);
         let mut loaded_tables = HashMap::new();
@@ -106,12 +96,6 @@ impl DataModelLoader {
         game_data.tables = loaded_tables;
         game_data.rule_detector = Some(self.rule_detector.clone());
         game_data.priority_tables = PRIORITY_TABLES.iter().map(|s| (*s).to_string()).collect();
-
-        if self.validate_relationships {
-            self.progress.update("Validating relationships...", 90.0);
-            game_data.relationships = self.validate_relationships(&game_data.tables);
-            stats.relationships_detected = game_data.relationships.total_relationships;
-        }
 
         stats.load_time_ms = start_time.elapsed().as_secs_f64() * 1000.0;
         self.progress.update("Loading complete", 100.0);
@@ -159,38 +143,13 @@ impl DataModelLoader {
         Ok(tables)
     }
 
-    fn sort_by_dependency_order(&mut self, tables: &[TableMetadata]) -> Vec<TableMetadata> {
-        let temp_loaded: HashMap<String, LoadedTable> = HashMap::new();
-        let load_order = self
-            .relationship_validator
-            .calculate_load_order(&temp_loaded);
-
-        let mut sorted = Vec::with_capacity(tables.len());
-        let mut remaining: Vec<_> = tables.to_vec();
-
-        for table_name in &load_order {
-            if let Some(pos) = remaining.iter().position(|t| &t.name == table_name) {
-                sorted.push(remaining.remove(pos));
-            }
-        }
-
-        let mut priority_remaining: Vec<_> = remaining
-            .iter()
-            .filter(|t| is_priority_table(&t.name))
-            .cloned()
-            .collect();
-        priority_remaining.sort_by(|a, b| a.name.cmp(&b.name));
-
-        let mut other_remaining: Vec<_> = remaining
-            .iter()
-            .filter(|t| !is_priority_table(&t.name))
-            .cloned()
-            .collect();
-        other_remaining.sort_by(|a, b| a.name.cmp(&b.name));
-
-        sorted.extend(priority_remaining);
-        sorted.extend(other_remaining);
-
+    fn sort_priority_first(tables: &[TableMetadata]) -> Vec<TableMetadata> {
+        let mut sorted: Vec<_> = tables.to_vec();
+        sorted.sort_by(|a, b| {
+            is_priority_table(&b.name)
+                .cmp(&is_priority_table(&a.name))
+                .then_with(|| a.name.cmp(&b.name))
+        });
         sorted
     }
 
@@ -202,15 +161,6 @@ impl DataModelLoader {
             .map_err(|e| LoaderError::Parse(format!("Failed to get 2DA {name}: {e}")))?;
 
         Ok(LoadedTable::new(name.to_string(), parser))
-    }
-
-    fn validate_relationships(
-        &mut self,
-        tables: &HashMap<String, LoadedTable>,
-    ) -> ValidationReport {
-        self.relationship_validator.detect_relationships(tables);
-        self.relationship_validator
-            .validate_relationships(tables, false)
     }
 
     pub fn get_stats(&self) -> LoadingStats {

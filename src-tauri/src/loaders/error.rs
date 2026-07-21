@@ -17,26 +17,6 @@ pub enum LoaderError {
     #[error("Invalid table filter configuration: {0}")]
     FilterConfigError(String),
 
-    #[error("Relationship validation failed: {0}")]
-    ValidationError(String),
-
-    #[error("Circular dependency detected in tables: {tables}")]
-    CircularDependency { tables: String },
-
-    #[error("Missing dependency: {table} requires {dependency}")]
-    MissingDependency { table: String, dependency: String },
-
-    #[error(
-        "Invalid foreign key in {table}.{column}: row {row} references non-existent {target_table} ID {target_id}"
-    )]
-    BrokenReference {
-        table: String,
-        column: String,
-        row: usize,
-        target_table: String,
-        target_id: i32,
-    },
-
     #[error("Loading interrupted: {0}")]
     LoadingInterrupted(String),
 

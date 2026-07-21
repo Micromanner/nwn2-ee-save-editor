@@ -78,7 +78,6 @@ pub struct GameData {
     pub tables: HashMap<String, LoadedTable>,
     pub strings: Arc<std::sync::RwLock<TLKParser>>,
     pub rule_detector: Option<RuleDetector>,
-    pub relationships: ValidationReport,
     pub priority_tables: Vec<String>,
 }
 
@@ -88,7 +87,6 @@ impl GameData {
             tables: HashMap::new(),
             strings,
             rule_detector: None,
-            relationships: ValidationReport::default(),
             priority_tables: Vec::new(),
         }
     }
@@ -108,7 +106,6 @@ impl GameData {
     pub fn clear(&mut self) {
         self.tables.clear();
         self.rule_detector = None;
-        self.relationships = ValidationReport::default();
         self.priority_tables.clear();
     }
 
@@ -158,118 +155,6 @@ impl TableMetadata {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ValidationReport {
-    pub total_relationships: usize,
-    pub valid_relationships: usize,
-    pub broken_references: Vec<BrokenReference>,
-    pub missing_tables: Vec<String>,
-    pub dependency_order: Vec<String>,
-}
-
-impl ValidationReport {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add_broken_reference(&mut self, reference: BrokenReference) {
-        self.broken_references.push(reference);
-    }
-
-    pub fn add_missing_table(&mut self, table: String) {
-        if !self.missing_tables.contains(&table) {
-            self.missing_tables.push(table);
-        }
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.broken_references.is_empty() && self.missing_tables.is_empty()
-    }
-
-    pub fn summary(&self) -> String {
-        format!(
-            "Validation: {}/{} relationships valid, {} broken references, {} missing tables",
-            self.valid_relationships,
-            self.total_relationships,
-            self.broken_references.len(),
-            self.missing_tables.len()
-        )
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BrokenReference {
-    pub source_table: String,
-    pub source_column: String,
-    pub source_row: usize,
-    pub target_table: String,
-    pub target_id: i32,
-    pub error: String,
-}
-
-impl BrokenReference {
-    pub fn new(
-        source_table: String,
-        source_column: String,
-        source_row: usize,
-        target_table: String,
-        target_id: i32,
-    ) -> Self {
-        let error = format!(
-            "Row {source_row} in {source_table}.{source_column} references non-existent {target_table} ID {target_id}"
-        );
-        Self {
-            source_table,
-            source_column,
-            source_row,
-            target_table,
-            target_id,
-            error,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum RelationshipType {
-    Lookup,
-    TableReference,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct RelationshipDefinition {
-    pub source_table: String,
-    pub source_column: String,
-    pub target_table: String,
-    pub relationship_type: RelationshipType,
-    pub is_nullable: bool,
-}
-
-impl RelationshipDefinition {
-    pub fn new_lookup(source_table: String, source_column: String, target_table: String) -> Self {
-        Self {
-            source_table,
-            source_column,
-            target_table,
-            relationship_type: RelationshipType::Lookup,
-            is_nullable: true,
-        }
-    }
-
-    pub fn new_table_reference(
-        source_table: String,
-        source_column: String,
-        target_table: String,
-    ) -> Self {
-        Self {
-            source_table,
-            source_column,
-            target_table,
-            relationship_type: RelationshipType::TableReference,
-            is_nullable: true,
-        }
-    }
-}
-
 pub type ProgressCallback = Box<dyn Fn(&str, f32) + Send + Sync>;
 
 pub struct LoadingProgress {
@@ -310,23 +195,10 @@ impl Default for LoadingProgress {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LoadingStats {
     pub tables_loaded: usize,
     pub total_rows: usize,
     pub load_time_ms: f64,
     pub priority_tables_loaded: usize,
-    pub relationships_detected: usize,
-}
-
-impl Default for LoadingStats {
-    fn default() -> Self {
-        Self {
-            tables_loaded: 0,
-            total_rows: 0,
-            load_time_ms: 0.0,
-            priority_tables_loaded: 0,
-            relationships_detected: 0,
-        }
-    }
 }

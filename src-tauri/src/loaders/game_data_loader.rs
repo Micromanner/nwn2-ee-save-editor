@@ -9,7 +9,7 @@ use crate::services::resource_manager::ResourceManager;
 
 use super::data_model_loader::DataModelLoader;
 use super::error::{LoaderError, LoaderResult};
-use super::types::{GameData, LoadedTable, LoadingStats, ValidationReport};
+use super::types::{GameData, LoadedTable, LoadingStats};
 
 pub struct GameDataLoader {
     resource_manager: Arc<RwLock<ResourceManager>>,
@@ -39,11 +39,8 @@ impl GameDataLoader {
     ) -> LoaderResult<()> {
         self.tlk_parser = Some(Arc::clone(&tlk_parser));
 
-        let mut loader = DataModelLoader::with_options(
-            Arc::clone(&self.resource_manager),
-            !priority_only,
-            priority_only,
-        );
+        let mut loader =
+            DataModelLoader::with_options(Arc::clone(&self.resource_manager), priority_only);
 
         match loader.load_game_data(tlk_parser).await {
             Ok(data) => {
@@ -74,8 +71,7 @@ impl GameDataLoader {
             return Err(LoaderError::LoadingInterrupted("TLK parser not set".into()));
         };
 
-        let mut loader =
-            DataModelLoader::with_options(Arc::clone(&self.resource_manager), true, false);
+        let mut loader = DataModelLoader::with_options(Arc::clone(&self.resource_manager), false);
 
         match loader.load_game_data(Arc::clone(tlk)).await {
             Ok(new_data) => {
@@ -83,7 +79,6 @@ impl GameDataLoader {
                     for (name, table) in new_data.tables {
                         existing.tables.entry(name).or_insert(table);
                     }
-                    existing.relationships = new_data.relationships;
                     info!(
                         "Loaded remaining tables, total now: {}",
                         existing.tables.len()
@@ -144,10 +139,6 @@ impl GameDataLoader {
         self.game_data.as_ref()?.get_string(str_ref)
     }
 
-    pub fn get_validation_report(&self) -> Option<&ValidationReport> {
-        self.game_data.as_ref().map(|d| &d.relationships)
-    }
-
     pub fn get_stats(&self) -> LoadingStats {
         if let Some(ref data) = self.game_data {
             let total_rows: usize = data
@@ -160,7 +151,6 @@ impl GameDataLoader {
                 total_rows,
                 load_time_ms: 0.0,
                 priority_tables_loaded: data.priority_tables.len(),
-                relationships_detected: data.relationships.total_relationships,
             }
         } else {
             LoadingStats::default()

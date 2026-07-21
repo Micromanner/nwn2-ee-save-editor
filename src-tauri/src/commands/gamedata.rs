@@ -303,8 +303,7 @@ pub(crate) async fn load_game_data_impl(state: &AppState) -> CommandResult<bool>
     };
 
     update_init_status(state, "initializing", 5.0, "Loading 2DA tables...");
-    let mut loader =
-        DataModelLoader::with_options(Arc::clone(&state.resource_manager), true, false);
+    let mut loader = DataModelLoader::with_options(Arc::clone(&state.resource_manager), false);
 
     let status_handle = Arc::clone(&state.init_status);
     loader.set_progress_callback(Box::new(move |msg, progress| {
@@ -332,7 +331,6 @@ pub(crate) async fn load_game_data_impl(state: &AppState) -> CommandResult<bool>
         game_data.tables = loaded_data.tables;
         game_data.strings = tlk_parser;
         game_data.rule_detector = loaded_data.rule_detector;
-        game_data.relationships = loaded_data.relationships;
         game_data.priority_tables = loaded_data.priority_tables;
     }
 

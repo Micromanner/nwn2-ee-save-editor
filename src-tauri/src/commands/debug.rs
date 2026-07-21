@@ -90,30 +90,10 @@ pub struct ResourcesDebug {
 }
 
 #[derive(Debug, Serialize, Type)]
-pub struct BrokenReferenceDebug {
-    pub source_table: String,
-    pub source_column: String,
-    pub source_row: usize,
-    pub target_table: String,
-    pub target_id: i32,
-    pub error: String,
-}
-
-#[derive(Debug, Serialize, Type)]
-pub struct ValidationDebug {
-    pub total_relationships: usize,
-    pub valid_relationships: usize,
-    pub broken_reference_count: usize,
-    pub broken_references_sample: Vec<BrokenReferenceDebug>,
-    pub missing_tables: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Type)]
 pub struct GameDataDebug {
     pub table_count: usize,
     pub priority_tables: Vec<String>,
     pub summary: String,
-    pub validation: ValidationDebug,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -184,7 +164,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
         character_summary,
         table_count,
         priority_tables,
-        validation,
     ) = {
         let paths = state.paths.read();
         let config = state.config.read();
@@ -316,26 +295,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
 
         let table_count = game_data.table_count();
         let priority_tables = game_data.priority_tables.clone();
-        let validation = ValidationDebug {
-            total_relationships: game_data.relationships.total_relationships,
-            valid_relationships: game_data.relationships.valid_relationships,
-            broken_reference_count: game_data.relationships.broken_references.len(),
-            broken_references_sample: game_data
-                .relationships
-                .broken_references
-                .iter()
-                .take(10)
-                .map(|b| BrokenReferenceDebug {
-                    source_table: b.source_table.clone(),
-                    source_column: b.source_column.clone(),
-                    source_row: b.source_row,
-                    target_table: b.target_table.clone(),
-                    target_id: b.target_id,
-                    error: b.error.clone(),
-                })
-                .collect(),
-            missing_tables: game_data.relationships.missing_tables.clone(),
-        };
 
         (
             paths_debug,
@@ -345,7 +304,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
             character_summary,
             table_count,
             priority_tables,
-            validation,
         )
     };
     // All sync locks dropped here
@@ -420,7 +378,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
         table_count,
         priority_tables,
         summary,
-        validation,
     };
 
     DebugLog {
