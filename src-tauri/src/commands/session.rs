@@ -20,7 +20,7 @@ pub async fn load_character(
 
     let file_size = std::fs::metadata(&file_path).ok().map(|m| m.len());
     let mut report = LoadReport::new(LoadInput {
-        file_path: file_path.clone(),
+        file_path: crate::commands::debug::redact(&file_path),
         player_index,
         file_size,
     });

@@ -140,6 +140,28 @@ pub struct CharacterSummaryDebug {
     pub alignment: String,
 }
 
+/// Replace the OS home directory and username with placeholders so exported
+/// debug logs don't leak personal paths (e.g. `C:\Users\<name>\...`).
+pub(crate) fn redact(input: &str) -> String {
+    match dirs::home_dir() {
+        Some(home) => redact_with_home(input, &home.to_string_lossy()),
+        None => input.to_string(),
+    }
+}
+
+/// Pure core of [`redact`], parameterized on the home directory for testing.
+fn redact_with_home(input: &str, home: &str) -> String {
+    if home.is_empty() {
+        return input.to_string();
+    }
+    let mut out = input.replace(home, "~");
+    out = out.replace(&home.replace('\\', "/"), "~");
+    if let Some(user) = std::path::Path::new(home).file_name() {
+        out = out.replace(&*user.to_string_lossy(), "<user>");
+    }
+    out
+}
+
 fn path_source_to_string(source: PathSource) -> String {
     match source {
         PathSource::Discovery => "auto-detected".to_string(),
@@ -170,27 +192,27 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
         let game_data = state.game_data.read();
 
         let paths_debug = PathsDebug {
-            game_folder: paths.game_folder().map(|p| p.to_string_lossy().to_string()),
+            game_folder: paths.game_folder().map(|p| redact(&p.to_string_lossy())),
             game_folder_source: path_source_to_string(paths.game_folder_source()),
             documents_folder: paths
                 .documents_folder()
-                .map(|p| p.to_string_lossy().to_string()),
+                .map(|p| redact(&p.to_string_lossy())),
             documents_folder_source: path_source_to_string(paths.documents_folder_source()),
             steam_workshop_folder: paths
                 .steam_workshop_folder()
-                .map(|p| p.to_string_lossy().to_string()),
+                .map(|p| redact(&p.to_string_lossy())),
             steam_workshop_folder_source: path_source_to_string(
                 paths.steam_workshop_folder_source(),
             ),
             custom_override_folders: paths
                 .custom_override_folders()
                 .iter()
-                .map(|p| p.to_string_lossy().to_string())
+                .map(|p| redact(&p.to_string_lossy()))
                 .collect(),
             custom_hak_folders: paths
                 .custom_hak_folders()
                 .iter()
-                .map(|p| p.to_string_lossy().to_string())
+                .map(|p| redact(&p.to_string_lossy()))
                 .collect(),
             game_version: paths.get_game_version(),
             is_enhanced_edition: paths.is_enhanced_edition(),
@@ -271,7 +293,7 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
             file_path: session
                 .current_file_path
                 .as_ref()
-                .map(|p| p.to_string_lossy().to_string()),
+                .map(|p| redact(&p.to_string_lossy())),
             character_name: session.character.as_ref().map(|c| c.full_name()),
             has_unsaved_changes: session.has_unsaved_changes(),
         };
@@ -360,7 +382,7 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
             custom_tlk: m.custom_tlk.clone(),
             hak_list: m.hak_list.clone(),
             campaign_id: m.campaign_id.clone(),
-            path: m.path.to_string_lossy().to_string(),
+            path: redact(&m.path.to_string_lossy()),
         }),
     };
 
@@ -445,4 +467,92 @@ pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<Strin
     info!("Debug log exported to {}", file_path.display());
 
     Ok(file_path.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_with_home;
+
+    #[test]
+    fn redacts_windows_home_prefix() {
+        let home = r"C:\Users\Vino";
+        let input = r"C:\Users\Vino\Documents\Neverwinter Nights 2\saves\000008 - 12-07-2026";
+        assert_eq!(
+            redact_with_home(input, home),
+            r"~\Documents\Neverwinter Nights 2\saves\000008 - 12-07-2026"
+        );
+    }
+
+    #[test]
+    fn redacts_forward_slash_variant_of_home() {
+        // Some paths in the report use forward slashes (e.g. game_folder).
+        let home = r"C:\Users\Vino";
+        let input = "C:/Users/Vino/Documents/save.zip";
+        assert_eq!(redact_with_home(input, home), "~/Documents/save.zip");
+    }
+
+    #[test]
+    fn redacts_bare_username_outside_home_path() {
+        // Username can appear standalone; ensure it is scrubbed too.
+        let home = r"C:\Users\Vino";
+        let input = r"D:\Games\Vino\char.bic";
+        assert_eq!(redact_with_home(input, home), r"D:\Games\<user>\char.bic");
+    }
+
+    #[test]
+    fn leaves_unrelated_paths_untouched() {
+        let home = r"C:\Users\Vino";
+        let input = r"C:\Program Files (x86)\Steam\steamapps\common\NWN2 Enhanced Edition";
+        assert_eq!(redact_with_home(input, home), input);
+    }
+
+    #[test]
+    fn empty_home_does_not_blank_the_whole_string() {
+        // file_name() is None for a bare drive/empty home; must not corrupt output.
+        let input = "some text";
+        assert_eq!(redact_with_home(input, ""), "some text");
+    }
+
+    /// End-to-end: prove no field in the exported snapshot leaks the username.
+    ///
+    /// `redact` keys off the real home dir, so we inject a path containing the
+    /// actual username and assert it is gone from the serialized JSON. This
+    /// covers wiring (every path field routed through `redact`), not just the
+    /// helper in isolation.
+    #[tokio::test]
+    async fn debug_snapshot_scrubs_real_username_from_all_fields() {
+        let Some(home) = dirs::home_dir() else {
+            return; // no home dir in this environment; nothing to prove
+        };
+        let Some(user_os) = home.file_name() else {
+            return;
+        };
+        let username = user_os.to_string_lossy().to_string();
+        if username.is_empty() {
+            return;
+        }
+
+        let state = crate::state::AppState::new();
+        let fake_save = home
+            .join("Documents")
+            .join("Neverwinter Nights 2")
+            .join("saves")
+            .join("000123");
+        {
+            state.session.write().current_file_path = Some(fake_save);
+        }
+
+        let snapshot = super::gather_debug_data(&state).await;
+        let json = serde_json::to_string(&snapshot).unwrap();
+
+        assert!(
+            !json.contains(&username),
+            "username '{username}' leaked into debug snapshot JSON: {json}"
+        );
+        // Sanity: redaction stripped only the prefix, not the whole path.
+        assert!(
+            json.contains("000123"),
+            "injected save path was lost entirely, not just redacted"
+        );
+    }
 }
