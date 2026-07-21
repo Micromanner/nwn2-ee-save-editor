@@ -87,6 +87,7 @@ pub struct CharacterModelParts {
     pub gloves_candidates: Vec<String>,
     pub boots_tint: Option<TintChannels>,
     pub gloves_tint: Option<TintChannels>,
+    pub helm_tint: Option<TintChannels>,
     pub cloak_resref: Option<String>,
     pub cloak_tint: Option<TintChannels>,
     pub armor_tint: Option<TintChannels>,
@@ -111,6 +112,7 @@ struct EquippedVisuals {
     armor_tint: Option<TintChannels>,
     boots_tint: Option<TintChannels>,
     gloves_tint: Option<TintChannels>,
+    helm_tint: Option<TintChannels>,
     chest_accessories: super::item_appearance::ArmorAccessories,
 }
 
@@ -720,6 +722,7 @@ impl Character {
             gloves_candidates,
             boots_tint: equip_visuals.boots_tint,
             gloves_tint: equip_visuals.gloves_tint,
+            helm_tint: equip_visuals.helm_tint,
             cloak_resref,
             cloak_tint: equip_visuals.cloak_tint,
             armor_tint: equip_visuals.armor_tint,
@@ -806,6 +809,7 @@ impl Character {
             armor_tint: None,
             boots_tint: None,
             gloves_tint: None,
+            helm_tint: None,
             chest_accessories: super::item_appearance::ArmorAccessories::default(),
         };
 
@@ -960,6 +964,8 @@ impl Character {
             }
 
             if is_head {
+                result.helm_tint =
+                    Self::read_item_tint_with_fallback(item_struct, resource_manager);
                 let visual_type = item_struct
                     .get("ArmorVisualType")
                     .and_then(gff_value_to_i32)

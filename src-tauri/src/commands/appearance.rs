@@ -387,8 +387,14 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
 
     // Helm
     if parts.show_helmet {
+        let helm_tint = parts.helm_tint.as_ref().map(swap_tint_2_3);
         for helm_resref in &parts.helm_candidates {
-            if let Ok(meshes) = load_part(helm_resref, "helm", "body") {
+            if let Ok(mut meshes) = load_part(helm_resref, "helm", "body") {
+                if let Some(t) = &helm_tint {
+                    for m in &mut meshes {
+                        m.override_tints = Some(t.clone());
+                    }
+                }
                 all_meshes.extend(meshes);
                 break;
             }
@@ -634,8 +640,14 @@ pub fn load_character_part(state: State<'_, AppState>, part: String) -> CommandR
         }
         "helm" => {
             if parts.show_helmet {
+                let helm_tint = parts.helm_tint.as_ref().map(swap_tint_2_3);
                 for resref in &parts.helm_candidates {
-                    if let Ok(helm_meshes) = load_with_skel(resref, "helm", "body") {
+                    if let Ok(mut helm_meshes) = load_with_skel(resref, "helm", "body") {
+                        if let Some(t) = &helm_tint {
+                            for m in &mut helm_meshes {
+                                m.override_tints = Some(t.clone());
+                            }
+                        }
                         meshes.extend(helm_meshes);
                         break;
                     }
