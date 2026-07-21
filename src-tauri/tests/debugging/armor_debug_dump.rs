@@ -370,9 +370,13 @@ fn detect_slot(equip_slots: u32) -> Option<String> {
 fn dump_armor_debug_data() -> Result<()> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixtures = manifest.join("tests").join("fixtures");
-    let save_dir = fixtures
-        .join("armor_debug")
-        .join("000064 - 18-04-2026-17-23");
+    let save_dir = std::env::var("ARMOR_DEBUG_SAVE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            fixtures
+                .join("armor_debug")
+                .join("000064 - 18-04-2026-17-23")
+        });
     let game_dir = std::env::var("NWN2_GAME_FOLDER")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
