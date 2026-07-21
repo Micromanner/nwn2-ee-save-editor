@@ -207,6 +207,9 @@ mod tests {
         assert!(usage[2] < 1e-6);
     }
 
+    // Empty input yields exactly [0.0; 3] by construction (no arithmetic), so an
+    // exact array comparison is correct here.
+    #[allow(clippy::float_cmp)]
     #[test]
     fn channel_usage_empty_buffer_is_zero() {
         assert_eq!(channel_usage(&[]), [0.0; 3]);
