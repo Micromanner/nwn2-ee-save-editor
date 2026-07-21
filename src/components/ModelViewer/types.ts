@@ -4,6 +4,10 @@ export interface MaterialData {
   tint_map: string;
   glow_map: string;
   flags: number;
+  diffuse_color: [number, number, number];
+  specular_color: [number, number, number];
+  specular_level: number;
+  specular_power: number;
 }
 
 export interface MeshData {

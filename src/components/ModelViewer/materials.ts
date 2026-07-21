@@ -76,7 +76,7 @@ function injectTintShader(
   // first's compiled program — so the face renders with the hair's swap and
   // the eyebrows get driven by the eye channel. Keying on swapGB keeps the two
   // channel orderings in separate programs.
-  mat.customProgramCacheKey = () => `nwn2tint_${swapGB ? 'gb' : 'rgb'}`;
+  mat.customProgramCacheKey = () => `nwn2tint_${swapGB ? 'gb' : 'rgb'}_${mat.type}`;
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tintMap = uniforms.tintMap;
@@ -137,17 +137,68 @@ export function updateTintUniforms(
   });
 }
 
+// Calibration constants for MDB specular mapping. Values are tuned against
+// in-game reference screenshots — edit ONLY this block during calibration.
+export const SPECULAR = {
+  INTENSITY_SCALE: 18.0,
+  // three.js dielectric F0 is 0.04 * specularIntensity; NWN2's phong steel
+  // needs far more than the physical intensity=1 ceiling.
+  INTENSITY_MAX: 24.0,
+  ROUGHNESS_MIN: 0.05,
+  ROUGHNESS_MAX: 1.0,
+  ENV_MAP_INTENSITY: 6.0,
+  // 0x08 "mirroring" renders as an albedo-tinted metal reflection (gold trim
+  // reflects gold, steel reflects silver).
+  ENV_MAP_METALNESS: 0.85,
+  // The engine multiplies the diffuse map by the MDB diffuse_color (plate
+  // uses values down to 0.14). A/B toggle for calibration.
+  DIFFUSE_COLOR_ENABLED: true,
+};
+
+// Blinn-Phong exponent → GGX roughness. Non-finite/absent power falls back
+// to 1, which maps to ~0.82 — close to the viewer's previous flat default.
+function powerToRoughness(power: number | undefined): number {
+  const p = power !== undefined && Number.isFinite(power) && power > 0 ? power : 1;
+  return THREE.MathUtils.clamp(
+    Math.sqrt(2 / (p + 2)),
+    SPECULAR.ROUGHNESS_MIN,
+    SPECULAR.ROUGHNESS_MAX,
+  );
+}
+
 export async function createMaterial(
-  materialData: { diffuse_map: string; normal_map: string; tint_map?: string; glow_map: string; flags: number },
+  materialData: {
+    diffuse_map: string;
+    normal_map: string;
+    tint_map?: string;
+    glow_map: string;
+    flags: number;
+    diffuse_color?: [number, number, number];
+    specular_color?: [number, number, number];
+    specular_level?: number;
+    specular_power?: number;
+  },
   tintColors?: TintColors,
   swapGB: boolean = false,
+  envMap: THREE.Texture | null = null,
 ): Promise<THREE.MeshStandardMaterial> {
-  const mat = new THREE.MeshStandardMaterial({
+  const rawLevel = materialData.specular_level;
+  const specLevel = rawLevel !== undefined && Number.isFinite(rawLevel) ? Math.max(rawLevel, 0) : 0;
+  const mat = new THREE.MeshPhysicalMaterial({
     side: THREE.DoubleSide,
-    roughness: 0.85,
+    roughness: powerToRoughness(materialData.specular_power),
     metalness: 0.0,
     envMapIntensity: 0.0001,
+    specularColor: new THREE.Color(...(materialData.specular_color ?? [1, 1, 1])),
+    specularIntensity: THREE.MathUtils.clamp(
+      specLevel * SPECULAR.INTENSITY_SCALE,
+      0,
+      SPECULAR.INTENSITY_MAX,
+    ),
   });
+  if (SPECULAR.DIFFUSE_COLOR_ENABLED && materialData.diffuse_color) {
+    mat.color = new THREE.Color(...materialData.diffuse_color);
+  }
 
   const needGlow = !!(materialData.flags & 0x20);
 
@@ -175,6 +226,10 @@ export async function createMaterial(
 
   if (normal) {
     mat.normalMap = normal;
+    // NWN2 stores the gloss mask in the normal map's alpha channel (verified
+    // against P_HHF_PF_Body01_n: alpha is the worn-steel pattern). three.js
+    // multiplies this texture's alpha against specularIntensity.
+    mat.specularIntensityMap = normal;
   }
 
   if (materialData.flags & 0x01) {
@@ -185,6 +240,12 @@ export async function createMaterial(
   if (glow) {
     mat.emissiveMap = glow;
     mat.emissive = new THREE.Color(1, 1, 1);
+  }
+
+  if (envMap && materialData.flags & 0x08) {
+    mat.envMap = envMap;
+    mat.envMapIntensity = SPECULAR.ENV_MAP_INTENSITY;
+    mat.metalness = SPECULAR.ENV_MAP_METALNESS;
   }
 
   return mat;

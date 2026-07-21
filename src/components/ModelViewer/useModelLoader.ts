@@ -34,7 +34,12 @@ export function useModelLoader() {
       group.name = '__model';
       for (const meshData of data.meshes) {
         if (/_L\d+$/i.test(meshData.name)) continue;
-        const material = await createMaterial(meshData.material);
+        const material = await createMaterial(
+          meshData.material,
+          undefined,
+          false,
+          (scene.userData.envMap as THREE.Texture | undefined) ?? null,
+        );
         const obj = buildMesh(meshData, material, skeleton, rootBone);
         group.add(obj);
       }

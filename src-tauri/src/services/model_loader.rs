@@ -165,6 +165,10 @@ pub struct MaterialData {
     pub tint_map: String,
     pub glow_map: String,
     pub flags: u32,
+    pub diffuse_color: [f32; 3],
+    pub specular_color: [f32; 3],
+    pub specular_level: f32,
+    pub specular_power: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -658,6 +662,10 @@ fn convert_material(m: &Material) -> MaterialData {
         tint_map: m.tint_map_name.clone(),
         glow_map: m.glow_map_name.clone(),
         flags: m.flags,
+        diffuse_color: m.diffuse_color,
+        specular_color: m.specular_color,
+        specular_level: m.specular_level,
+        specular_power: m.specular_power,
     }
 }
 
@@ -868,6 +876,31 @@ fn flatten_skin_mesh(sm: &SkinMeshPacket, part: &str, tint_group: &str) -> MeshD
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_convert_material_forwards_specular_record() {
+        use crate::parsers::mdb::types::{Material, material_flags};
+
+        let m = Material {
+            diffuse_map_name: "d".into(),
+            normal_map_name: "n".into(),
+            tint_map_name: "t".into(),
+            glow_map_name: "g".into(),
+            diffuse_color: [0.1, 0.2, 0.3],
+            specular_color: [0.4, 0.5, 0.6],
+            specular_level: 0.7,
+            specular_power: 32.0,
+            flags: material_flags::ENVIRONMENT_MAPPING,
+        };
+
+        let md = convert_material(&m);
+        assert_eq!(md.diffuse_color, [0.1, 0.2, 0.3]);
+        assert_eq!(md.specular_color, [0.4, 0.5, 0.6]);
+        assert_eq!(md.specular_level, 0.7);
+        assert_eq!(md.specular_power, 32.0);
+        assert_eq!(md.flags, material_flags::ENVIRONMENT_MAPPING);
+    }
 
     fn bone(name: &str, parent: i32) -> BoneData {
         BoneData {

@@ -56,6 +56,22 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Prefiltered sky env map for ENVIRONMENT_MAPPING (0x08) materials.
+    // Hung on scene.userData (NOT scene.environment) so only flagged meshes
+    // reflect; textiles must stay reflection-free.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    let envRT: THREE.WebGLRenderTarget | null = null;
+    try {
+      const envScene = new THREE.Scene();
+      envScene.add(createSkyObject());
+      envRT = pmrem.fromScene(envScene, 0, 0.1, 20000);
+      scene.userData.envMap = envRT.texture;
+    } catch (err) {
+      console.warn('[envmap] PMREM sky build failed; 0x08 meshes render without reflections', err);
+    } finally {
+      pmrem.dispose();
+    }
+
     // -- Controls --
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -78,7 +94,7 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     sun.shadow.normalBias = 0.02;
     scene.add(sun);
 
-    const fillLight = new THREE.DirectionalLight(0x6baed6, 0.5);
+    const fillLight = new THREE.DirectionalLight(0x6baed6, 0.0);
     fillLight.position.set(-100, 50, -100);
     scene.add(fillLight);
 
@@ -86,7 +102,7 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     rimLight.position.set(0, 100, -200);
     scene.add(rimLight);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.0);
     scene.add(ambientLight);
 
     // -- Ground plane for shadow receiving --
@@ -126,6 +142,8 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     return () => {
       resizeObserver.disconnect();
       cancelAnimationFrame(frameRef.current);
+      envRT?.dispose();
+      delete scene.userData.envMap;
       renderer.dispose();
       controls.dispose();
       if (renderer.domElement && container.contains(renderer.domElement)) {

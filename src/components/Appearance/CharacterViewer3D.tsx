@@ -119,7 +119,12 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
         ? tintChannelsToColors(meshData.override_tints)
         : tintMap[meshData.tint_group];
       const swapGB = needsShaderGBSwap(meshData.tint_group);
-      const material = await createMaterial(meshData.material, colors, swapGB);
+      const material = await createMaterial(
+        meshData.material,
+        colors,
+        swapGB,
+        (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null,
+      );
       const bound = overrideSkeleton ?? getSkeletonFor(meshData.skeleton_ref);
       const obj = buildMesh(meshData, material, bound?.skeleton, bound?.rootBone);
       if (meshData.attach_bone && bound?.rootBone) {
@@ -311,7 +316,12 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
           ? tintChannelsToColors(meshData.override_tints)
           : tintMap[meshData.tint_group];
         const swapGB = needsShaderGBSwap(meshData.tint_group);
-        return createMaterial(meshData.material, colors, swapGB);
+        return createMaterial(
+          meshData.material,
+          colors,
+          swapGB,
+          (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null,
+        );
       });
       const allMaterials = await Promise.all(materialPromises);
 

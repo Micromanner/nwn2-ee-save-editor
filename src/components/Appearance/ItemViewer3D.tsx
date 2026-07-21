@@ -46,12 +46,13 @@ async function buildPartGroup(
   tintColors: TintColors,
   skeleton?: THREE.Skeleton,
   rootBone?: THREE.Bone,
+  envMap: THREE.Texture | null = null,
 ): Promise<THREE.Group> {
   const group = new THREE.Group();
   group.name = partGroupName(letter);
   const visible = meshes.filter(m => !/_L\d+$/i.test(m.name));
   const materials = await Promise.all(
-    visible.map(m => createMaterial(m.material, m.override_tints ? tintChannelsToColors(m.override_tints) : tintColors, true))
+    visible.map(m => createMaterial(m.material, m.override_tints ? tintChannelsToColors(m.override_tints) : tintColors, true, envMap))
   );
   for (let i = 0; i < visible.length; i++) {
     const m = visible[i];
@@ -153,7 +154,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
       const groups = await Promise.all(
         Object.entries(buckets).map(([letter, meshes]) =>
-          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone),
+          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone,
+            (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null),
         ),
       );
 
@@ -227,7 +229,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         variant,
       });
       const tintColors = tintChannelsToColors(swapItemTints(appearanceRef.current.tints));
-      const newGroup = await buildPartGroup(data.meshes, letter, tintColors);
+      const newGroup = await buildPartGroup(data.meshes, letter, tintColors, undefined, undefined,
+        (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null);
 
       const old = model.getObjectByName(partGroupName(letter));
       if (old) model.remove(old);
