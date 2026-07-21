@@ -44,6 +44,7 @@
 - **Appearance** - Customize body parts, phenotype, wings, tails, and colors with live 3D preview
 - **Identity** - Name, biography, alignment, deity, age and gender
 - **Combat Stats** - View attack bonuses, armor class, saving throws, and initiative
+- **Companions** - View and edit party companions
 
 ### Game State
 - **Campaign Variables and Settings** - Edit global campaign settings and variables
@@ -108,6 +109,5 @@ Requires:
 
 ## Roadmap
 
-- Companion editing (view, edit, and manage party companions)
 - Full equipment rendering in the 3D character preview (some equipped items don't yet display correctly)
 - Quest journal editor — browse each quest with its branches and outcomes, see current progress, and jump to any state (currently read-only, Windows only)
