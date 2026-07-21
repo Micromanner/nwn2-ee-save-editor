@@ -136,8 +136,12 @@ fn redact_with_home(input: &str, home: &str) -> String {
     }
     let mut out = input.replace(home, "~");
     out = out.replace(&home.replace('\\', "/"), "~");
-    if let Some(user) = std::path::Path::new(home).file_name() {
-        out = out.replace(&*user.to_string_lossy(), "<user>");
+    // Split manually: Path::file_name() is platform-dependent and does not
+    // treat `\` as a separator on Unix (breaks tests on Linux CI).
+    if let Some(user) = home.rsplit(['\\', '/']).next()
+        && !user.is_empty()
+    {
+        out = out.replace(user, "<user>");
     }
     out
 }
