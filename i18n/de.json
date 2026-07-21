@@ -896,6 +896,7 @@
     "wingsAndTail": "Flügel & Schwanz",
     "wings": "Flügel",
     "tail": "Schwanz",
+    "nonHumanoidPartNote": "Dieses Aussehen ist für einen anderen Körper gebaut und lässt sich möglicherweise nicht korrekt an deinem Charakter befestigen.",
     "none": "Keine",
     "equipment": "Ausrüstung",
     "showHelmet": "Helm anzeigen",

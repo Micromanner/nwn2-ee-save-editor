@@ -897,6 +897,7 @@
     "wingsAndTail": "Alas y Cola",
     "wings": "Alas",
     "tail": "Cola",
+    "nonHumanoidPartNote": "Esta apariencia está diseñada para otro cuerpo y puede no encajar correctamente en tu personaje.",
     "none": "Ninguna",
     "equipment": "Equipo",
     "showHelmet": "Ver Casco",

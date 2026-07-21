@@ -200,10 +200,16 @@ pub async fn get_available_wings(
 ) -> CommandResult<Vec<AppearanceOption>> {
     let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
+    let session = state.session.read();
+    let body_skel = session
+        .character
+        .as_ref()
+        .and_then(|c| c.body_skeleton_resref(&game_data));
     Ok(Character::get_available_model_options(
         &game_data,
         &rm,
         "wingmodel",
+        body_skel.as_deref(),
     ))
 }
 
@@ -213,10 +219,16 @@ pub async fn get_available_tails(
 ) -> CommandResult<Vec<AppearanceOption>> {
     let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
+    let session = state.session.read();
+    let body_skel = session
+        .character
+        .as_ref()
+        .and_then(|c| c.body_skeleton_resref(&game_data));
     Ok(Character::get_available_model_options(
         &game_data,
         &rm,
         "tailmodel",
+        body_skel.as_deref(),
     ))
 }
 

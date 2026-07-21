@@ -60,6 +60,11 @@ pub struct AppearanceState {
 pub struct AppearanceOption {
     pub id: i32,
     pub name: String,
+    /// False for non-humanoid creature parts (dragon tails, gargoyle/solar
+    /// wings, etc.) whose base-anim set differs from the body's. These are
+    /// rigged for their own creature body and do not attach cleanly to a
+    /// player character; the UI surfaces a note when one is selected.
+    pub fits_humanoid: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -470,6 +475,7 @@ impl Character {
         game_data: &GameData,
         resource_manager: &crate::services::resource_manager::ResourceManager,
         table_name: &str,
+        body_skeleton_resref: Option<&str>,
     ) -> Vec<AppearanceOption> {
         let Some(table) = game_data.get_table(table_name) else {
             return Vec::new();
@@ -485,7 +491,11 @@ impl Character {
                 continue;
             };
             if id == 0 {
-                options.push(AppearanceOption { id, name: label });
+                options.push(AppearanceOption {
+                    id,
+                    name: label,
+                    fits_humanoid: true,
+                });
                 continue;
             }
             let Some(model) = row_str(&row, "model") else {
@@ -494,7 +504,18 @@ impl Character {
             if !resource_manager.has_resource(&model, "mdb") {
                 continue;
             }
-            options.push(AppearanceOption { id, name: label });
+            let base_anims = row_str(&row, "nwn2_baseanims");
+            let fits_humanoid = match body_skeleton_resref {
+                Some(skel) => {
+                    crate::services::model_loader::is_synced_base_anims(skel, base_anims.as_deref())
+                }
+                None => true,
+            };
+            options.push(AppearanceOption {
+                id,
+                name: label,
+                fits_humanoid,
+            });
         }
         options
     }
@@ -515,6 +536,21 @@ impl Character {
         let gender_letter = row_str(&gender_row, "gender").unwrap_or_else(|| "M".to_string());
         let body_template = row_str(&row, "nwn2_model_body")?;
         Some(body_template.replace('?', &gender_letter))
+    }
+
+    /// Resolve this character's body skeleton resref (e.g. `P_HHF_skel`), the
+    /// same value `resolve_model_parts` derives. Used to decide whether a
+    /// tail/wing appearance's base-anim set matches the body (fits a humanoid).
+    pub fn body_skeleton_resref(&self, game_data: &GameData) -> Option<String> {
+        let appearance_id = self.appearance_type();
+        let row = game_data
+            .get_table("appearance")?
+            .get_by_id(appearance_id)?;
+        let gender_id = self.gender();
+        let gender_row = game_data.get_table("gender")?.get_by_id(gender_id)?;
+        let gender_letter = row_str(&gender_row, "gender").unwrap_or_else(|| "M".to_string());
+        let skel_template = row_str(&row, "nwn2_skeleton_file")?;
+        Some(skel_template.replace('?', &gender_letter))
     }
 
     pub fn resolve_model_parts(

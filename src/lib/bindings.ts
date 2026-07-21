@@ -154,6 +154,7 @@ export interface AppearanceState {
 export interface AppearanceOption {
   id: number;
   name: string;
+  fits_humanoid: boolean;
 }
 
 export interface VoiceSetInfo {

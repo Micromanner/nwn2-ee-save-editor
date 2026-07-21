@@ -895,6 +895,7 @@
     "wingsAndTail": "Ailes & Queue",
     "wings": "Ailes",
     "tail": "Queue",
+    "nonHumanoidPartNote": "Cette apparence est conçue pour un autre corps et peut ne pas s'attacher correctement à votre personnage.",
     "none": "Aucun",
     "equipment": "Équipement",
     "showHelmet": "Afficher Casque",

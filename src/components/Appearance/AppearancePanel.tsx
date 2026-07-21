@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Button, Card, Elevation, InputGroup, Menu, MenuItem, NonIdealState, Popover, Slider, Spinner, Switch } from '@blueprintjs/core';
+import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuItem, NonIdealState, Popover, Slider, Spinner, Switch } from '@blueprintjs/core';
 import { GiMirrorMirror, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -643,6 +643,7 @@ export function AppearancePanel() {
                           key={opt.id}
                           text={opt.name}
                           active={data.wings === opt.id}
+                          labelElement={!opt.fits_humanoid ? <Icon icon="warning-sign" size={12} intent="warning" /> : undefined}
                           onClick={() => updateField({ wings: Number(opt.id) }, 'wings')}
                         />
                       ))}
@@ -653,6 +654,7 @@ export function AppearancePanel() {
                 >
                   <Button
                     minimal
+                    icon={data.wings > 0 && wingOptions.find(o => o.id === data.wings)?.fits_humanoid === false ? <Icon icon="warning-sign" size={14} intent="warning" /> : undefined}
                     rightIcon="caret-down"
                     text={wingOptions.find(o => o.id === data.wings)?.name ?? `#${data.wings}`}
                     className="t-semibold"
@@ -671,6 +673,7 @@ export function AppearancePanel() {
                           key={opt.id}
                           text={opt.name}
                           active={data.tail === opt.id}
+                          labelElement={!opt.fits_humanoid ? <Icon icon="warning-sign" size={12} intent="warning" /> : undefined}
                           onClick={() => updateField({ tail: Number(opt.id) }, 'tail')}
                         />
                       ))}
@@ -681,6 +684,7 @@ export function AppearancePanel() {
                 >
                   <Button
                     minimal
+                    icon={data.tail > 0 && tailOptions.find(o => o.id === data.tail)?.fits_humanoid === false ? <Icon icon="warning-sign" size={14} intent="warning" /> : undefined}
                     rightIcon="caret-down"
                     text={tailOptions.find(o => o.id === data.tail)?.name ?? `#${data.tail}`}
                     className="t-semibold"
@@ -688,6 +692,18 @@ export function AppearancePanel() {
                 </Popover>
               }
             />
+            {(() => {
+              const wingsOpt = wingOptions.find(o => o.id === data.wings);
+              const tailOpt = tailOptions.find(o => o.id === data.tail);
+              const showNote =
+                (data.wings > 0 && wingsOpt && !wingsOpt.fits_humanoid) ||
+                (data.tail > 0 && tailOpt && !tailOpt.fits_humanoid);
+              return showNote ? (
+                <div className="t-sm" style={{ marginTop: 8, color: T.textMuted }}>
+                  {t('appearance.nonHumanoidPartNote')}
+                </div>
+              ) : null;
+            })()}
             {data.tail > 0 || data.wings > 0 ? (() => {
               const tailCap = data.tail > 0 ? caps.tail : null;
               const wingsCap = data.wings > 0 ? caps.wings : null;

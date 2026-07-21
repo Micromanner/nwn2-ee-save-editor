@@ -934,6 +934,7 @@
     "wingsAndTail": "Wings & Tail",
     "wings": "Wings",
     "tail": "Tail",
+    "nonHumanoidPartNote": "This appearance is built for a different body and may not attach correctly to your character.",
     "none": "None",
     "equipment": "Equipment",
     "showHelmet": "Show Helmet In-Game",
