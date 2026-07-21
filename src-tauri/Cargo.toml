@@ -55,6 +55,10 @@ name = "utils"
 path = "tests/utils.rs"
 required-features = ["integration-tests"]
 
+[[test]]
+name = "appearance_anim_routing"
+path = "tests/appearance_anim_routing.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.5.3", features = [] }
 

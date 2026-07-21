@@ -335,21 +335,22 @@ pub fn load_cloak(
     Ok((data.meshes, None))
 }
 
-fn remap_cloak_bone_indices(meshes: &mut [MeshData], cape_palette: &[usize], bone_count: usize) {
+fn remap_secondary_bone_indices(
+    meshes: &mut [MeshData],
+    palette: &[usize],
+    bone_count: usize,
+    skeleton_ref: &str,
+) {
     for mesh in meshes.iter_mut() {
         if let Some(ref mut indices) = mesh.bone_indices {
             for idx in indices.iter_mut() {
                 let i = *idx as usize;
-                let skel_idx = if i < cape_palette.len() {
-                    cape_palette[i]
-                } else {
-                    i
-                };
+                let skel_idx = if i < palette.len() { palette[i] } else { i };
                 *idx = skel_idx as u8;
             }
         }
         if mesh.mesh_type == "skin" {
-            mesh.skeleton_ref = Some("cape".to_string());
+            mesh.skeleton_ref = Some(skeleton_ref.to_string());
         }
     }
 
@@ -358,12 +359,44 @@ fn remap_cloak_bone_indices(meshes: &mut [MeshData], cape_palette: &[usize], bon
             let max = indices.iter().copied().max().unwrap_or(0) as usize;
             if max >= bone_count {
                 warn!(
-                    "Cloak mesh '{}' has bone index {} >= cape skeleton bone count {}",
+                    "Secondary mesh '{}' has bone index {} >= skeleton bone count {}",
                     mesh.name, max, bone_count
                 );
             }
         }
     }
+}
+
+fn remap_cloak_bone_indices(meshes: &mut [MeshData], cape_palette: &[usize], bone_count: usize) {
+    remap_secondary_bone_indices(meshes, cape_palette, bone_count, "cape");
+}
+
+/// Load a synced tail/wing MDB (base-anim set == body's) and deliver it as a
+/// secondary skeleton, exactly like a cape. The part's own skeleton is loaded,
+/// its skin meshes are remapped into that skeleton's bone space and tagged with
+/// `skeleton_ref`/`tint_group` = `part_name` so the viewer binds them and the
+/// shared body idle/fidget tracks animate them.
+pub fn load_synced_part(
+    rm: &ResourceManager,
+    resref: &str,
+    skeleton_resref: &str,
+    part_name: &str,
+) -> Result<(Vec<MeshData>, NamedSkeleton), String> {
+    let (mut data, _mdb) = parse_mdb(rm, resref, part_name, part_name)?;
+
+    let skeleton = load_skeleton(rm, skeleton_resref)
+        .ok_or_else(|| format!("Synced part skeleton not found: {skeleton_resref}"))?;
+
+    let palette = build_cape_bone_palette(&skeleton);
+    remap_secondary_bone_indices(&mut data.meshes, &palette, skeleton.bones.len(), part_name);
+
+    Ok((
+        data.meshes,
+        NamedSkeleton {
+            name: part_name.to_string(),
+            skeleton,
+        },
+    ))
 }
 
 fn parse_mdb(
@@ -485,6 +518,20 @@ pub fn load_skeleton(
     }
 }
 
+/// A tail/wing part is "synced" when its `NWN2_BaseAnims` set matches the body's
+/// own animation set — the body idle clips already carry its bone tracks, so it
+/// rides the body mixer like the cape. Otherwise it uses its own creature idle set.
+pub fn is_synced_base_anims(body_skeleton_resref: &str, base_anims: Option<&str>) -> bool {
+    let Some(base) = base_anims else {
+        return false;
+    };
+    let body_prefix = body_skeleton_resref
+        .strip_suffix("_skel")
+        .or_else(|| body_skeleton_resref.strip_suffix("_Skel"))
+        .unwrap_or(body_skeleton_resref);
+    body_prefix.eq_ignore_ascii_case(base)
+}
+
 pub fn load_idle_animations(
     resource_manager: &ResourceManager,
     skeleton_name: &str,
@@ -493,12 +540,18 @@ pub fn load_idle_animations(
         .strip_suffix("_skel")
         .or_else(|| skeleton_name.strip_suffix("_Skel"))
         .unwrap_or(skeleton_name);
+    load_idle_animations_for_prefix(resource_manager, prefix)
+}
 
+pub fn load_idle_animations_for_prefix(
+    resource_manager: &ResourceManager,
+    anim_prefix: &str,
+) -> Vec<AnimationData> {
     let idle_suffixes = ["_idle", "_idlefidgetnervous"];
 
     let mut animations = Vec::new();
     for suffix in &idle_suffixes {
-        let resref = format!("{prefix}{suffix}");
+        let resref = format!("{anim_prefix}{suffix}");
         let bytes = match resource_manager.get_resource_bytes(&resref, "gr2") {
             Ok(b) => {
                 info!("Found {resref}.gr2 ({} bytes)", b.len());
@@ -515,13 +568,6 @@ pub fn load_idle_animations(
                 info!("Parsed {resref}: {} animations", gr2_anims.len());
                 for anim in &gr2_anims {
                     let tag = format!("{resref} [{}]", anim.name);
-                    info!(
-                        "  '{}' -> '{}': {:.2}s, {} tracks",
-                        anim.name,
-                        tag,
-                        anim.duration,
-                        anim.tracks.len()
-                    );
                     let mut converted = convert_animation(anim);
                     converted.name = tag;
                     animations.push(converted);

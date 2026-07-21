@@ -72,8 +72,10 @@ pub struct CharacterModelParts {
     pub skeleton_resref: String,
     pub wings_resref: Option<String>,
     pub wings_skeleton_resref: Option<String>,
+    pub wings_base_anims: Option<String>,
     pub tail_resref: Option<String>,
     pub tail_skeleton_resref: Option<String>,
+    pub tail_base_anims: Option<String>,
     pub helm_candidates: Vec<String>,
     pub show_helmet: bool,
     pub boots_candidates: Vec<String>,
@@ -597,26 +599,28 @@ impl Character {
 
         let show_fhair = self.appearance_fhair() > 0;
 
-        let (wings_resref, wings_skeleton_resref) = if self.wings() > 0 {
+        let (wings_resref, wings_skeleton_resref, wings_base_anims) = if self.wings() > 0 {
             let row = game_data
                 .get_table("wingmodel")
                 .and_then(|t| t.get_by_id(self.wings()));
             let model = row.as_ref().and_then(|r| row_str(r, "model"));
-            let skel = row.as_ref().and_then(|r| row_str(r, "NWN2_Skeleton_File"));
-            (model, skel)
+            let skel = row.as_ref().and_then(|r| row_str(r, "nwn2_skeleton_file"));
+            let anims = row.as_ref().and_then(|r| row_str(r, "nwn2_baseanims"));
+            (model, skel, anims)
         } else {
-            (None, None)
+            (None, None, None)
         };
 
-        let (tail_resref, tail_skeleton_resref) = if self.tail() > 0 {
+        let (tail_resref, tail_skeleton_resref, tail_base_anims) = if self.tail() > 0 {
             let row = game_data
                 .get_table("tailmodel")
                 .and_then(|t| t.get_by_id(self.tail()));
             let model = row.as_ref().and_then(|r| row_str(r, "model"));
-            let skel = row.as_ref().and_then(|r| row_str(r, "NWN2_Skeleton_File"));
-            (model, skel)
+            let skel = row.as_ref().and_then(|r| row_str(r, "nwn2_skeleton_file"));
+            let anims = row.as_ref().and_then(|r| row_str(r, "nwn2_baseanims"));
+            (model, skel, anims)
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         let build_helm_candidates = |prefixes: &[String], var: i32| -> Vec<String> {
@@ -670,8 +674,10 @@ impl Character {
             skeleton_resref,
             wings_resref,
             wings_skeleton_resref,
+            wings_base_anims,
             tail_resref,
             tail_skeleton_resref,
+            tail_base_anims,
             helm_candidates,
             show_helmet,
             boots_candidates,

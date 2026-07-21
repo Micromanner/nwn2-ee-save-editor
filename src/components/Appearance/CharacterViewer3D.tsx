@@ -39,6 +39,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
 
   const skeletonsRef = useRef<Map<string, { skeleton: THREE.Skeleton; rootBone: THREE.Bone }>>(new Map());
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const animationsRef = useRef<ModelData['animations']>([]);
   const attachedMixersRef = useRef<Map<string, THREE.AnimationMixer>>(new Map());
   const playNextRef = useRef<(() => void) | null>(null);
   const timerRef = useRef<THREE.Timer>(new THREE.Timer());
@@ -136,7 +137,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
   async function buildAttachedPart(
     attached: AttachedPart,
     tintMap: Record<string, TintColors>,
-  ): Promise<{ group: THREE.Group; mixer: THREE.AnimationMixer | null } | null> {
+  ): Promise<{ group: THREE.Group; mixer: THREE.AnimationMixer | null; attachBone: string | null } | null> {
     if (!attached.skeleton) return null;
     const built = buildSkeleton(attached.skeleton);
     const group = await buildPartGroup(attached.meshes, attached.name, tintMap, built);
@@ -153,7 +154,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
         action.play();
       }
     }
-    return { group, mixer };
+    return { group, mixer, attachBone: attached.attach_bone ?? null };
   }
 
   function disposeAttachedMixer(partName: string) {
@@ -162,6 +163,99 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       mixer.stopAllAction();
       attachedMixersRef.current.delete(partName);
     }
+  }
+
+  // Build (or rebuild) the body idle/fidget mixer. Clips are filtered to the
+  // bones currently registered in skeletonsRef, so this MUST run again whenever a
+  // secondary skeleton (cape/tail/wings) is added or changed after the initial
+  // load — otherwise the freshly added part's tracks aren't in the running clips
+  // and it renders static until a full reload. Reads the body animation set
+  // cached in animationsRef (load_character_part does not return animations).
+  function setupBodyAnimation(modelGroup: THREE.Object3D) {
+    if (mixerRef.current) {
+      mixerRef.current.stopAllAction();
+      mixerRef.current = null;
+    }
+    playNextRef.current = null;
+
+    const animations = animationsRef.current;
+    if (!animations || animations.length === 0 || skeletonsRef.current.size === 0) return;
+
+    const boneNames = new Set<string>();
+    for (const entry of skeletonsRef.current.values()) {
+      for (const b of entry.skeleton.bones) {
+        boneNames.add(b.name);
+      }
+    }
+
+    const clips = buildAnimationClips(animations, boneNames);
+    if (clips.length === 0) return;
+
+    const mixer = new THREE.AnimationMixer(modelGroup);
+    mixerRef.current = mixer;
+    timerRef.current = new THREE.Timer();
+
+    const idleClips = clips.filter((c) => {
+      const n = c.name.toLowerCase();
+      const isFidget = n.includes('fidget') || n.includes('fid_');
+      return n.includes('idle') && !isFidget;
+    });
+    const fidgetClips = clips.filter((c) => {
+      const n = c.name.toLowerCase();
+      return n.includes('fidget') || n.includes('fid_');
+    });
+
+    if (idleClips.length === 0 && clips.length > 0) {
+      // If no clear idle found, use the first clip that isn't a fidget,
+      // or just the first clip if all are fidgets.
+      const fallback = clips.find((c) => !(c.name.toLowerCase().includes('fidget') || c.name.toLowerCase().includes('fid_'))) || clips[0];
+      idleClips.push(fallback);
+    }
+
+    const actions = idleClips.map((c) => {
+      const a = mixer.clipAction(c);
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      return a;
+    });
+    const fidgetActions = fidgetClips.map((c) => {
+      const a = mixer.clipAction(c);
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      return a;
+    });
+
+    let currentAction: THREE.AnimationAction | null = null;
+    let lastFidgetIdx = -1;
+    let lastWasFidget = false;
+    const playNext = () => {
+      const useFidget = !lastWasFidget && Math.random() < 0.1 && fidgetActions.length > 0;
+      const pool = useFidget ? fidgetActions : actions;
+
+      let idx = Math.floor(Math.random() * pool.length);
+      if (useFidget && fidgetActions.length > 1 && idx === lastFidgetIdx) {
+        idx = (idx + 1) % fidgetActions.length;
+      }
+      if (useFidget) lastFidgetIdx = idx;
+
+      const next = pool[idx];
+      lastWasFidget = useFidget;
+
+      if (currentAction && currentAction !== next) {
+        currentAction.crossFadeTo(next, 0.3, true);
+      }
+      next.reset().play();
+      currentAction = next;
+    };
+
+    mixer.addEventListener('finished', (e: any) => {
+      if (e.action === currentAction) {
+        playNext();
+      }
+    });
+
+    playNextRef.current = playNext;
+    playNext();
   }
 
   const loadCharacter = useCallback(async () => {
@@ -262,7 +356,11 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       for (const attached of data.attached_parts ?? []) {
         const built = await buildAttachedPart(attached, tintMap);
         if (!built) continue;
-        modelGroup.add(built.group);
+        const primary = skeletonsRef.current.get('primary');
+        const bone = built.attachBone
+          ? primary?.rootBone.getObjectByName(built.attachBone)
+          : null;
+        (bone ?? modelGroup).add(built.group);
         if (built.mixer) attachedMixersRef.current.set(attached.name, built.mixer);
       }
 
@@ -270,84 +368,11 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       applyHelmetVisibility();
       frameBounds(camera, controls, scene, modelGroup);
 
-      // Set up idle animation with fidget rotation
-      if (data.animations && data.animations.length > 0 && skeletonsRef.current.size > 0) {
-        const boneNames = new Set<string>();
-        for (const entry of skeletonsRef.current.values()) {
-          for (const b of entry.skeleton.bones) {
-            boneNames.add(b.name);
-          }
-        }
-
-        const clips = buildAnimationClips(data.animations, boneNames);
-        if (clips.length > 0) {
-          const mixer = new THREE.AnimationMixer(modelGroup);
-          mixerRef.current = mixer;
-          timerRef.current = new THREE.Timer();
-
-          const idleClips = clips.filter((c) => {
-            const n = c.name.toLowerCase();
-            const isFidget = n.includes('fidget') || n.includes('fid_');
-            return n.includes('idle') && !isFidget;
-          });
-          const fidgetClips = clips.filter((c) => {
-             const n = c.name.toLowerCase();
-             return n.includes('fidget') || n.includes('fid_');
-          });
-
-          if (idleClips.length === 0 && clips.length > 0) {
-            // If no clear idle found, use the first clip that isn't a fidget, 
-            // or just the first clip if all are fidgets.
-            const fallback = clips.find(c => !(c.name.toLowerCase().includes('fidget') || c.name.toLowerCase().includes('fid_'))) || clips[0];
-            idleClips.push(fallback);
-          }
-
-          const actions = idleClips.map((c) => {
-            const a = mixer.clipAction(c);
-            a.setLoop(THREE.LoopOnce, 1);
-            a.clampWhenFinished = true;
-            return a;
-          });
-          const fidgetActions = fidgetClips.map((c) => {
-            const a = mixer.clipAction(c);
-            a.setLoop(THREE.LoopOnce, 1);
-            a.clampWhenFinished = true;
-            return a;
-          });
-
-          let currentAction: THREE.AnimationAction | null = null;
-          let lastFidgetIdx = -1;
-          let lastWasFidget = false;
-          const playNext = () => {
-            const useFidget = !lastWasFidget && Math.random() < 0.1 && fidgetActions.length > 0;
-            const pool = useFidget ? fidgetActions : actions;
-            
-            let idx = Math.floor(Math.random() * pool.length);
-            if (useFidget && fidgetActions.length > 1 && idx === lastFidgetIdx) {
-              idx = (idx + 1) % fidgetActions.length;
-            }
-            if (useFidget) lastFidgetIdx = idx;
-
-            const next = pool[idx];
-            lastWasFidget = useFidget;
-
-            if (currentAction && currentAction !== next) {
-              currentAction.crossFadeTo(next, 0.3, true);
-            }
-            next.reset().play();
-            currentAction = next;
-          };
-
-          mixer.addEventListener('finished', (e: any) => {
-            if (e.action === currentAction) {
-              playNext();
-            }
-          });
-
-          playNextRef.current = playNext;
-          playNext();
-        }
-      }
+      // Cache the body animation set so replacePart can rebuild the mixer when a
+      // secondary skeleton (cape/tail/wings) is added later, then set up the
+      // idle/fidget mixer for the bones present at initial load.
+      animationsRef.current = data.animations ?? [];
+      setupBodyAnimation(modelGroup);
 
 
     } catch (err) {
@@ -370,37 +395,40 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       const tintMap = getTintColors();
 
       const old = modelGroup.getObjectByName(partGroupName(part));
-      if (old) modelGroup.remove(old);
+      if (old) old.removeFromParent();
       disposeAttachedMixer(part);
 
-      // Reconcile cape skeleton when swapping the cloak. Body/head/etc. never
-      // change their skeleton mid-session, so only the 'cloak' part path
-      // touches secondary skeletons.
-      let capeTopologyChanged = false;
-      if (part === 'cloak') {
-        const newCape = (data.secondary_skeletons ?? []).find((s) => s.name === 'cape') ?? null;
-        const existingCape = skeletonsRef.current.get('cape') ?? null;
+      // Reconcile the secondary skeleton for parts that ride the body mixer
+      // (cape via 'cloak', synced tail/wings). Body/head/etc. never change
+      // their skeleton mid-session, so only these parts touch secondary skeletons.
+      let secondaryTopologyChanged = false;
+      const secondaryName =
+        part === 'cloak' ? 'cape' : part === 'tail' ? 'tail' : part === 'wings' ? 'wings' : null;
+      if (secondaryName) {
+        const incoming =
+          (data.secondary_skeletons ?? []).find((s) => s.name === secondaryName) ?? null;
+        const existing = skeletonsRef.current.get(secondaryName) ?? null;
 
-        if (newCape && !existingCape) {
-          const built = buildSkeleton(newCape.skeleton);
-          skeletonsRef.current.set('cape', built);
+        if (incoming && !existing) {
+          const built = buildSkeleton(incoming.skeleton);
+          skeletonsRef.current.set(secondaryName, built);
           if (!built.rootBone.parent) modelGroup.add(built.rootBone);
-          capeTopologyChanged = true;
-        } else if (!newCape && existingCape) {
-          existingCape.rootBone.parent?.remove(existingCape.rootBone);
-          skeletonsRef.current.delete('cape');
-          capeTopologyChanged = true;
-        } else if (newCape && existingCape) {
-          const sameCount = newCape.skeleton.bones.length === existingCape.skeleton.bones.length;
-          const sameNames = sameCount && newCape.skeleton.bones.every(
-            (b, i) => b.name === existingCape.skeleton.bones[i].name,
+          secondaryTopologyChanged = true;
+        } else if (!incoming && existing) {
+          existing.rootBone.parent?.remove(existing.rootBone);
+          skeletonsRef.current.delete(secondaryName);
+          secondaryTopologyChanged = true;
+        } else if (incoming && existing) {
+          const sameCount = incoming.skeleton.bones.length === existing.skeleton.bones.length;
+          const sameNames = sameCount && incoming.skeleton.bones.every(
+            (b, i) => b.name === existing.skeleton.bones[i].name,
           );
           if (!sameNames) {
-            existingCape.rootBone.parent?.remove(existingCape.rootBone);
-            const built = buildSkeleton(newCape.skeleton);
-            skeletonsRef.current.set('cape', built);
+            existing.rootBone.parent?.remove(existing.rootBone);
+            const built = buildSkeleton(incoming.skeleton);
+            skeletonsRef.current.set(secondaryName, built);
             if (!built.rootBone.parent) modelGroup.add(built.rootBone);
-            capeTopologyChanged = true;
+            secondaryTopologyChanged = true;
           }
         }
       }
@@ -409,7 +437,11 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       if (attached) {
         const built = await buildAttachedPart(attached, tintMap);
         if (built) {
-          modelGroup.add(built.group);
+          const primary = skeletonsRef.current.get('primary');
+          const bone = built.attachBone
+            ? primary?.rootBone.getObjectByName(built.attachBone)
+            : null;
+          (bone ?? modelGroup).add(built.group);
           if (built.mixer) attachedMixersRef.current.set(part, built.mixer);
         }
       } else if (data.meshes.length > 0) {
@@ -421,8 +453,12 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
         applyHelmetVisibility();
       }
 
-      if (capeTopologyChanged && playNextRef.current) {
-        playNextRef.current();
+      // A cape/tail/wings was added, removed, or re-skeletoned: rebuild the body
+      // mixer so its clips include (or drop) that part's bone tracks. Just
+      // restarting the old clips would leave a newly added synced part static
+      // until a full reload.
+      if (secondaryTopologyChanged) {
+        setupBodyAnimation(modelGroup);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : typeof err === 'object' ? JSON.stringify(err) : String(err));

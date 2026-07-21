@@ -22,6 +22,7 @@ fn load_attached_part(
     resref: &str,
     skeleton_resref: Option<&str>,
     attach_bone: &str,
+    base_anims_prefix: &str,
 ) -> Option<AttachedPart> {
     // tint_group must match the viewer's tint map keys ("tail"/"wings") so the
     // root Tintable colors bind and update; "none" leaves the mesh untinted.
@@ -34,7 +35,7 @@ fn load_attached_part(
             name: name.to_string(),
             meshes: data.meshes,
             skeleton: data.skeleton,
-            animations: data.animations,
+            animations: model_loader::load_idle_animations_for_prefix(rm, base_anims_prefix),
             attach_bone: Some(attach_bone.to_string()),
         }),
         Err(e) => {
@@ -306,23 +307,70 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
     }
 
     let mut attached_parts: Vec<AttachedPart> = Vec::new();
+    let mut secondary_skeletons: Vec<NamedSkeleton> = Vec::new();
     if let Some(ref resref) = parts.wings_resref {
-        attached_parts.extend(load_attached_part(
-            &rm,
-            "wings",
-            resref,
-            parts.wings_skeleton_resref.as_deref(),
-            "ap_wings",
-        ));
+        if model_loader::is_synced_base_anims(
+            &parts.skeleton_resref,
+            parts.wings_base_anims.as_deref(),
+        ) {
+            if let (true, Some(skel_resref)) =
+                (skeleton.is_some(), parts.wings_skeleton_resref.as_deref())
+            {
+                match model_loader::load_synced_part(&rm, resref, skel_resref, "wings") {
+                    Ok((meshes, ns)) => {
+                        all_meshes.extend(meshes);
+                        secondary_skeletons.push(ns);
+                    }
+                    Err(e) => warn!("Failed to load synced wings '{}': {}", resref, e),
+                }
+            } else {
+                warn!(
+                    "Synced wings '{}' skipped: body or wing skeleton missing",
+                    resref
+                );
+            }
+        } else {
+            attached_parts.extend(load_attached_part(
+                &rm,
+                "wings",
+                resref,
+                parts.wings_skeleton_resref.as_deref(),
+                "ap_wings",
+                parts.wings_base_anims.as_deref().unwrap_or_default(),
+            ));
+        }
     }
     if let Some(ref resref) = parts.tail_resref {
-        attached_parts.extend(load_attached_part(
-            &rm,
-            "tail",
-            resref,
-            parts.tail_skeleton_resref.as_deref(),
-            "ap_tail",
-        ));
+        if model_loader::is_synced_base_anims(
+            &parts.skeleton_resref,
+            parts.tail_base_anims.as_deref(),
+        ) {
+            if let (true, Some(skel_resref)) =
+                (skeleton.is_some(), parts.tail_skeleton_resref.as_deref())
+            {
+                match model_loader::load_synced_part(&rm, resref, skel_resref, "tail") {
+                    Ok((meshes, ns)) => {
+                        all_meshes.extend(meshes);
+                        secondary_skeletons.push(ns);
+                    }
+                    Err(e) => warn!("Failed to load synced tail '{}': {}", resref, e),
+                }
+            } else {
+                warn!(
+                    "Synced tail '{}' skipped: body or tail skeleton missing",
+                    resref
+                );
+            }
+        } else {
+            attached_parts.extend(load_attached_part(
+                &rm,
+                "tail",
+                resref,
+                parts.tail_skeleton_resref.as_deref(),
+                "ap_tail",
+                parts.tail_base_anims.as_deref().unwrap_or_default(),
+            ));
+        }
     }
 
     // Helm
@@ -409,7 +457,6 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
         }
     }
 
-    let mut secondary_skeletons: Vec<NamedSkeleton> = Vec::new();
     if let (Some(cloak_resref), Some(body_skel), Some(body_pal)) =
         (&parts.cloak_resref, skeleton.as_ref(), palettes.as_ref())
     {
@@ -507,24 +554,70 @@ pub fn load_character_part(state: State<'_, AppState>, part: String) -> CommandR
         }
         "wings" => {
             if let Some(ref resref) = parts.wings_resref {
-                attached_parts.extend(load_attached_part(
-                    &rm,
-                    "wings",
-                    resref,
-                    parts.wings_skeleton_resref.as_deref(),
-                    "ap_wings",
-                ));
+                if model_loader::is_synced_base_anims(
+                    &parts.skeleton_resref,
+                    parts.wings_base_anims.as_deref(),
+                ) {
+                    if let (true, Some(skel_resref)) =
+                        (skeleton.is_some(), parts.wings_skeleton_resref.as_deref())
+                    {
+                        match model_loader::load_synced_part(&rm, resref, skel_resref, "wings") {
+                            Ok((ms, ns)) => {
+                                meshes.extend(ms);
+                                secondary_skeletons.push(ns);
+                            }
+                            Err(e) => warn!("Failed to load synced wings '{}': {}", resref, e),
+                        }
+                    } else {
+                        warn!(
+                            "Synced wings '{}' skipped: body or wing skeleton missing",
+                            resref
+                        );
+                    }
+                } else {
+                    attached_parts.extend(load_attached_part(
+                        &rm,
+                        "wings",
+                        resref,
+                        parts.wings_skeleton_resref.as_deref(),
+                        "ap_wings",
+                        parts.wings_base_anims.as_deref().unwrap_or_default(),
+                    ));
+                }
             }
         }
         "tail" => {
             if let Some(ref resref) = parts.tail_resref {
-                attached_parts.extend(load_attached_part(
-                    &rm,
-                    "tail",
-                    resref,
-                    parts.tail_skeleton_resref.as_deref(),
-                    "ap_tail",
-                ));
+                if model_loader::is_synced_base_anims(
+                    &parts.skeleton_resref,
+                    parts.tail_base_anims.as_deref(),
+                ) {
+                    if let (true, Some(skel_resref)) =
+                        (skeleton.is_some(), parts.tail_skeleton_resref.as_deref())
+                    {
+                        match model_loader::load_synced_part(&rm, resref, skel_resref, "tail") {
+                            Ok((ms, ns)) => {
+                                meshes.extend(ms);
+                                secondary_skeletons.push(ns);
+                            }
+                            Err(e) => warn!("Failed to load synced tail '{}': {}", resref, e),
+                        }
+                    } else {
+                        warn!(
+                            "Synced tail '{}' skipped: body or tail skeleton missing",
+                            resref
+                        );
+                    }
+                } else {
+                    attached_parts.extend(load_attached_part(
+                        &rm,
+                        "tail",
+                        resref,
+                        parts.tail_skeleton_resref.as_deref(),
+                        "ap_tail",
+                        parts.tail_base_anims.as_deref().unwrap_or_default(),
+                    ));
+                }
             }
         }
         "helm" => {
