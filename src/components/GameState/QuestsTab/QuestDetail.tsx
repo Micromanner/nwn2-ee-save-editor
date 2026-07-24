@@ -21,6 +21,7 @@ export function QuestDetail({
 }) {
   const t = useTranslations();
   const tlk = useTlkResolver();
+  const { resolveMany } = useModuleNameResolver(graph.modules);
 
   const entry = quest ? transitions.get(quest.tag) : undefined;
   const loadedTransitions: TransitionNode[] | null =
@@ -58,7 +59,6 @@ export function QuestDetail({
     : null;
   const source = effectiveSource(quest);
 
-  const { resolveMany } = useModuleNameResolver(graph.modules);
   const resolvedDefinedIn = quest.defined_in.length === 0 ? '-' : resolveMany(quest.defined_in);
 
   return (

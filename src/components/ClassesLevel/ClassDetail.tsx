@@ -4,6 +4,7 @@ import { GiCancel, GiCheckMark } from 'react-icons/gi';
 import { T } from '../theme';
 import { GameIcon } from '../shared/GameIcon';
 import { display } from '@/utils/dataHelpers';
+import { nwn2ToHtml } from '@/utils/nwn2Markup';
 import type { ClassInfo } from '@/hooks/useClassesLevel';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useIcon } from '@/hooks/useIcon';
@@ -45,19 +46,15 @@ interface ClassDetailProps {
   selectReason?: string;
 }
 
-function formatDescription(raw: string, className: string): string {
-  let html = raw;
+function formatDescription(raw: string): string {
+  let text = raw;
   // Remove the first line that just repeats the class name (e.g. <color=Gold><b>Bard</b></color>)
-  html = html.replace(/^<color=\w+><b>[^<]*<\/b><\/color>\s*/i, '');
+  text = text.replace(/^<color=\w+><b>[^<]*<\/b><\/color>\s*/i, '');
   // Remove prestige class preamble
-  html = html.replace(/\(PRESTIGE CLASS:.*?\)\s*/i, '');
-  // Convert NWN2 color tags — use our accent color instead of Gold
-  html = html.replace(/<color=Gold>/gi, `<span style="color:${T.accent}">`);
-  html = html.replace(/<color=(\w+)>/gi, '<span style="color:$1">');
-  html = html.replace(/<\/color>/gi, '</span>');
-  // Convert newlines to <br>
-  html = html.replace(/\n/g, '<br/>');
-  return html;
+  text = text.replace(/\(PRESTIGE CLASS:.*?\)\s*/i, '');
+  // Use our accent color instead of Gold, then escape/tokenize via nwn2ToHtml
+  text = text.replace(/<color=Gold>/gi, `<color=${T.accent}>`);
+  return nwn2ToHtml(text);
 }
 
 // --- COMMENTED OUT: structured data sections ---
@@ -200,7 +197,7 @@ export function ClassDetail({ cls, canSelect, selectReason }: ClassDetailProps) 
       {detail?.description && (
         <div
           style={{ color: T.text }}
-          dangerouslySetInnerHTML={{ __html: formatDescription(detail.description, detail.name) }}
+          dangerouslySetInnerHTML={{ __html: formatDescription(detail.description) }}
         />
       )}
 

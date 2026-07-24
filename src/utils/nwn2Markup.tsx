@@ -109,7 +109,11 @@ function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 export function nwn2ToHtml(text: string): string {
@@ -138,7 +142,7 @@ export function nwn2ToHtml(text: string): string {
           result += '<i>';
         } else if (tagPart.startsWith('color')) {
           const colorValue = openMatch[2] || '';
-          result += `<span style="color:${resolveColor(colorValue)}" data-nwn2-color="${escapeHtml(colorValue)}">`;
+          result += `<span style="color:${escapeHtml(resolveColor(colorValue))}" data-nwn2-color="${escapeHtml(colorValue)}">`;
         }
         cursor += openMatch[0].length;
         continue;
