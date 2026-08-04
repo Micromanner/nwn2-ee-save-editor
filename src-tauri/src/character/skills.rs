@@ -1126,6 +1126,18 @@ mod tests {
     }
 
     #[test]
+    fn test_cost_aware_total_exceeds_rank_sum_for_cross_class() {
+        let character = create_test_character();
+        let game_data = create_mock_game_data();
+
+        // Ranks 5 + 3 + 0 + 10 = 18. With no cls_skill table every skill is
+        // cross-class, so the real cost is double the rank sum. Callers
+        // reporting points spent must use the cost-aware total, not the ranks.
+        assert_eq!(character.total_skill_points_spent(), 18);
+        assert_eq!(character.calculate_total_spent_with_costs(&game_data), 36);
+    }
+
+    #[test]
     fn test_reset_all_skills_uses_earned_budget_not_refund() {
         let mut character = create_level2_rogue_with_injected_ranks();
         let game_data = game_data_with_rogue_class();
