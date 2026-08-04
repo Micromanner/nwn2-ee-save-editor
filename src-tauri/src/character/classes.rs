@@ -28,14 +28,6 @@ use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
 use crate::utils::parsing::{row_bool, row_int, row_str};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
-pub struct SkillPointsSummary {
-    pub theoretical_total: i32,
-    pub actual_spent: i32,
-    pub current_unspent: i32,
-    pub mismatch: i32,
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
 pub struct ClassEntry {
     pub class_id: ClassId,
@@ -203,7 +195,6 @@ pub struct ClassesState {
     pub entries: Vec<ClassSummaryEntry>,
     pub xp_progress: XpProgress,
     pub level_history: Vec<ResolvedLevelHistoryEntry>,
-    pub skill_points_summary: SkillPointsSummary,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Type)]
@@ -1368,7 +1359,6 @@ impl Character {
             entries: self.get_class_summary(game_data),
             xp_progress: self.get_xp_progress(game_data),
             level_history: self.level_history_resolved(game_data),
-            skill_points_summary: self.get_skill_points_summary(game_data),
         }
     }
 
@@ -2846,32 +2836,6 @@ impl Character {
         }
 
         class_points
-    }
-
-    /// Get a summary of skill points (theoretical vs actual).
-    pub fn get_skill_points_summary(&self, game_data: &GameData) -> SkillPointsSummary {
-        let theoretical_map = self.get_theoretical_skill_points(game_data);
-        let theoretical_total: i32 = theoretical_map.values().sum();
-        let actual_spent = self.total_skill_points_spent();
-        let current_unspent = self.get_available_skill_points();
-
-        let mismatch = theoretical_total - (actual_spent + current_unspent);
-
-        SkillPointsSummary {
-            theoretical_total,
-            actual_spent,
-            current_unspent,
-            mismatch,
-        }
-    }
-
-    /// Reconcile unspent skill points with theoretical gains.
-    pub fn normalize_skill_points(&mut self, game_data: &GameData) {
-        let summary = self.get_skill_points_summary(game_data);
-        if summary.mismatch != 0 {
-            let new_unspent = (summary.current_unspent + summary.mismatch).max(0);
-            self.set_available_skill_points(new_unspent);
-        }
     }
 }
 

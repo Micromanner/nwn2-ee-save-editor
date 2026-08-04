@@ -335,7 +335,6 @@ export interface ClassesState {
   entries: ClassSummaryEntry[];
   xp_progress: XpProgress;
   level_history: LevelHistoryEntry[];
-  skill_points_summary: SkillPointsSummary;
 }
 
 // =============================================================================
