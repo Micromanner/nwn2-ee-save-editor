@@ -25,6 +25,7 @@ use crate::utils::parsing::{row_bool, row_int};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use tracing::warn;
 
 const MAX_SKILL_RANK: i32 = 127;
 pub const ABLE_LEARNER_FEAT_ID: i32 = 406;
@@ -627,14 +628,27 @@ impl Character {
         Ok(net_cost)
     }
 
-    /// Reset all skill ranks to 0 and refund spent points.
+    /// Reset all skill ranks to 0 and restore the character's earned point pool.
     ///
-    /// Calculates total refund based on class/cross-class costs per skill,
-    /// then clears all ranks and adds refund to available points.
+    /// With every rank cleared, the unspent pool must equal the points the
+    /// character actually earned across their level history, so it is
+    /// recomputed from class/race/INT rather than refunding the cost of the
+    /// ranks currently present. Refunding would mint points out of nothing for
+    /// ranks another editor injected without paying for them.
     ///
-    /// Returns the total points refunded.
+    /// Falls back to a cost refund when there is no level history to derive a
+    /// budget from, since assigning zero would silently destroy the pool.
+    ///
+    /// Returns the resulting number of available skill points.
     pub fn reset_all_skills(&mut self, game_data: &GameData) -> i32 {
-        let total_refund = self.calculate_total_spent_with_costs(game_data);
+        let earned: i32 = self.get_theoretical_skill_points(game_data).values().sum();
+
+        let available = if earned > 0 {
+            earned
+        } else {
+            warn!("No level history to derive a skill point budget from; refunding spent points");
+            self.get_available_skill_points() + self.calculate_total_spent_with_costs(game_data)
+        };
 
         let mut skill_list = self.get_list_owned("SkillList").unwrap_or_default();
         for entry in &mut skill_list {
@@ -642,10 +656,9 @@ impl Character {
         }
         self.set_list("SkillList", skill_list);
 
-        let current_available = self.get_available_skill_points();
-        self.set_available_skill_points(current_available + total_refund);
+        self.set_available_skill_points(available);
 
-        total_refund
+        available
     }
 
     /// Calculate total skill points spent, factoring in class/cross-class costs.
@@ -1050,6 +1063,116 @@ mod tests {
         assert_eq!(
             mod_with_equip, 7,
             "With equipment, modifier should be rank + total_ability_mod"
+        );
+    }
+
+    /// Level 2 rogue (skillpointbase 8) with Int 14 (+2):
+    /// level 1 grants (8 + 2) * 4 = 40, level 2 grants 10, for 50 earned.
+    fn create_level2_rogue_with_injected_ranks() -> Character {
+        let mut fields = IndexMap::new();
+        fields.insert("Int".to_string(), GffValue::Byte(14));
+        fields.insert("Race".to_string(), GffValue::Byte(0));
+        fields.insert("SkillPoints".to_string(), GffValue::Word(0));
+
+        let mut class1 = IndexMap::new();
+        class1.insert("Class".to_string(), GffValue::Byte(0));
+        class1.insert("ClassLevel".to_string(), GffValue::Short(2));
+        fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![class1]));
+
+        let mut lvl_stats = Vec::new();
+        for _ in 0..2 {
+            let mut entry = IndexMap::new();
+            entry.insert("LvlStatClass".to_string(), GffValue::Byte(0));
+            lvl_stats.push(entry);
+        }
+        fields.insert("LvlStatList".to_string(), GffValue::ListOwned(lvl_stats));
+
+        // Ranks another editor injected without paying from the pool.
+        let injected = (0..4)
+            .map(|_| {
+                let mut skill = IndexMap::new();
+                skill.insert("Rank".to_string(), GffValue::Byte(40));
+                skill
+            })
+            .collect();
+        fields.insert("SkillList".to_string(), GffValue::ListOwned(injected));
+
+        Character::from_gff(fields)
+    }
+
+    fn game_data_with_rogue_class() -> crate::loaders::GameData {
+        use crate::loaders::LoadedTable;
+        use crate::parsers::tda::TDAParser;
+
+        let mut game_data = create_mock_game_data();
+
+        let mut parser = TDAParser::new();
+        parser
+            .parse_from_bytes(
+                b"2DA V2.0
+
+   Label    SkillPointBase
+0  Rogue    8
+",
+            )
+            .unwrap();
+
+        game_data.tables.insert(
+            "classes".to_string(),
+            LoadedTable::new("classes.2da".to_string(), std::sync::Arc::new(parser)),
+        );
+
+        game_data
+    }
+
+    #[test]
+    fn test_reset_all_skills_uses_earned_budget_not_refund() {
+        let mut character = create_level2_rogue_with_injected_ranks();
+        let game_data = game_data_with_rogue_class();
+
+        let available = character.reset_all_skills(&game_data);
+
+        // Refunding the 160 injected ranks would have minted at least 160
+        // points onto a level 2 character; only the 50 earned are legitimate.
+        assert_eq!(available, 50);
+        assert_eq!(character.get_available_skill_points(), 50);
+    }
+
+    #[test]
+    fn test_reset_all_skills_clears_every_rank() {
+        let mut character = create_level2_rogue_with_injected_ranks();
+        let game_data = game_data_with_rogue_class();
+
+        character.reset_all_skills(&game_data);
+
+        for skill_id in 0..4 {
+            assert_eq!(character.skill_rank(SkillId(skill_id)), 0);
+        }
+    }
+
+    #[test]
+    fn test_reset_all_skills_is_idempotent() {
+        let mut character = create_level2_rogue_with_injected_ranks();
+        let game_data = game_data_with_rogue_class();
+
+        let first = character.reset_all_skills(&game_data);
+        let second = character.reset_all_skills(&game_data);
+
+        assert_eq!(first, second, "Repeated resets must not accumulate points");
+    }
+
+    #[test]
+    fn test_reset_all_skills_without_level_history_preserves_points() {
+        let mut character = create_test_character();
+        character.set_available_skill_points(7);
+        let game_data = game_data_with_rogue_class();
+
+        // No LvlStatList means no derivable budget; the pool must not be zeroed.
+        let available = character.reset_all_skills(&game_data);
+
+        assert!(
+            available >= 7,
+            "Fallback must not destroy existing points, got {available}"
         );
     }
 }
