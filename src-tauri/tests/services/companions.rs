@@ -103,6 +103,32 @@ fn load_companion_swaps_session_character_and_source() {
     assert!(!session.has_unsaved_changes());
 }
 
+// Fixture reality (Classic_Campaign resgff.zip): bishop.ros stores
+// CompanionName "Karnwyr" / CompanionType 1 (wolf) and carries no Familiar*
+// fields at all, while qara.ros stores FamiliarName "Carel" / FamiliarType 4
+// (weasel) and no Companion* fields - the game only writes the pair the
+// creature actually uses.
+#[test]
+fn companion_pet_fields_read_from_ros() {
+    let mut session = make_session();
+    load_save(&mut session, "Classic_Campaign");
+
+    session
+        .load_companion("bishop", false)
+        .expect("load bishop");
+    let bishop = session.character().expect("character loaded");
+    assert_eq!(bishop.animal_companion_name(), "Karnwyr");
+    assert_eq!(bishop.animal_companion_type(), 1);
+    assert_eq!(bishop.familiar_name(), "");
+    assert_eq!(bishop.familiar_type(), -1);
+
+    session.load_companion("qara", false).expect("load qara");
+    let qara = session.character().expect("character loaded");
+    assert_eq!(qara.familiar_name(), "Carel");
+    assert_eq!(qara.familiar_type(), 4);
+    assert_eq!(qara.animal_companion_type(), -1);
+}
+
 #[test]
 fn load_companion_rejects_unknown_name() {
     let mut session = make_session();
@@ -226,6 +252,66 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         .map(|e| (e.class_id.0, e.level))
         .collect();
     assert_eq!(khelgar.classes, classes);
+}
+
+// The repair case behind the user report: khelgar.ros carries none of the four
+// pet fields, so setting a familiar has to create them - and the type-strict
+// engine only honors them as CExoString/Int.
+#[test]
+fn companion_save_roundtrip_creates_missing_familiar_fields() {
+    use app_lib::parsers::gff::GffValue;
+
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+
+    let mut session = make_session();
+    let mut report = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session
+        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .expect("load save");
+    session
+        .load_companion("khelgar", false)
+        .expect("load companion");
+
+    {
+        let character = session.character_mut().expect("character");
+        assert_eq!(character.familiar_type(), -1, "fixture has no Familiar*");
+        character.set_familiar_name("Whiskers".to_string());
+        character.set_familiar_type(1);
+    }
+    assert!(session.save_companion().expect("save companion").is_none());
+
+    let mut session2 = make_session();
+    let mut report2 = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session2
+        .load_character(&save_path.to_string_lossy(), None, &mut report2)
+        .expect("reload save");
+    session2
+        .load_companion("khelgar", false)
+        .expect("reload companion");
+
+    let character = session2.character().expect("character");
+    assert_eq!(character.familiar_name(), "Whiskers");
+    assert_eq!(character.familiar_type(), 1);
+    assert!(matches!(
+        character.gff().get("FamiliarName"),
+        Some(GffValue::String(_))
+    ));
+    assert!(matches!(
+        character.gff().get("FamiliarType"),
+        Some(GffValue::Int(1))
+    ));
 }
 
 #[test]

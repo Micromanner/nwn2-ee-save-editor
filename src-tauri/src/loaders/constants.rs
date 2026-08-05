@@ -53,6 +53,9 @@ pub const CHARACTER_PREFIXES: &[&str] = &[
     "exptable",
     "feat",
     "gender",
+    // Animal companion / familiar choices stored on the creature
+    "hen_companion",
+    "hen_familiar",
     "iprp_",
     "itemprop",
     "itemtypes",
@@ -121,7 +124,6 @@ pub const IGNORE_PREFIXES: &[&str] = &[
     "gamespy",
     "genericdoors",
     "grass",
-    "hen_",
     "henchspells",
     "inventorysnds",
     "itm_rand_",
@@ -225,6 +227,13 @@ mod tests {
         assert!(is_character_table("cls_feat_fighter.2da"));
         assert!(is_character_table("iprp_abilities.2da"));
         assert!(!is_character_table("ambientmusic.2da"));
+    }
+
+    #[test]
+    fn test_pet_tables_load() {
+        assert!(should_load_table("hen_companion.2da"));
+        assert!(should_load_table("hen_familiar.2da"));
+        assert!(!should_load_table("henchspells.2da"));
     }
 
     #[test]

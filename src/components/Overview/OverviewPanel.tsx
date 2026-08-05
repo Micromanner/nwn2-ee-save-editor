@@ -8,6 +8,7 @@ import { T } from '../theme';
 import { KVRow, mod, StepInput } from '../shared';
 import { DeityDialog } from './DeityDialog';
 import { RaceDialog } from './RaceDialog';
+import { PetsSection } from './PetsSection';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
 import { display, formatModifier, formatNumber } from '@/utils/dataHelpers';
@@ -358,6 +359,8 @@ export function OverviewPanel() {
             <KVRow label={t('character.knownSpells')} value={display(knownSpells)} />
           </div>
         </div>
+
+        <PetsSection />
 
         <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '12px 16px' }}>
           <div style={{ marginBottom: 8 }}>

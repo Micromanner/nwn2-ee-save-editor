@@ -136,6 +136,16 @@
     "background": "Historique",
     "domains": "Domaines",
     "progression": "Progression",
+    "pets": {
+      "title": "Compagnon animal et familier",
+      "animalCompanion": "Compagnon animal",
+      "familiar": "Familier",
+      "none": "Aucun",
+      "namePlaceholder": "Nom",
+      "noAnimalCompanionFeat": "Pas de don Compagnon animal : le jeu n'a rien à invoquer.",
+      "noFamiliarFeat": "Pas de don Familier : le jeu n'a rien à invoquer.",
+      "resummonHint": "S'applique à la prochaine invocation de la créature."
+    },
     "biography": "Biographie",
     "noBiography": "Aucune biographie rédigée",
     "campaign": "Campagne",

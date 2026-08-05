@@ -143,6 +143,16 @@
     "background": "Background",
     "domains": "Domains",
     "progression": "Progression",
+    "pets": {
+      "title": "Animal Companion & Familiar",
+      "animalCompanion": "Animal Companion",
+      "familiar": "Familiar",
+      "none": "None",
+      "namePlaceholder": "Name",
+      "noAnimalCompanionFeat": "No Animal Companion feat - the game has nothing to summon.",
+      "noFamiliarFeat": "No Familiar feat - the game has nothing to summon.",
+      "resummonHint": "Applies the next time the creature is summoned."
+    },
     "biography": "Biography",
     "noBiography": "No biography written",
     "campaign": "Campaign",

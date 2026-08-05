@@ -2,6 +2,7 @@ mod campaign;
 mod classes;
 mod feats;
 mod items;
+mod pets;
 mod player;
 mod races;
 mod skills;

@@ -20,6 +20,7 @@ mod identity;
 mod inventory;
 mod item_appearance;
 pub mod overview;
+pub mod pets;
 mod race;
 pub mod save_summary;
 pub mod saves;
@@ -57,6 +58,7 @@ pub use item_appearance::{
 };
 pub(crate) use item_appearance::{detect_armor_slot, is_bracer_label, parse_equip_slots};
 pub use overview::OverviewState;
+pub use pets::{PetSlot, PetTypeOption, PetsState};
 pub use race::{SizeCategory, SubraceInfo};
 pub use save_summary::{SaveBreakdown, SaveChange, SaveCheck, SaveSummary, SaveType, SavingThrows};
 pub use saves::SaveBonuses;

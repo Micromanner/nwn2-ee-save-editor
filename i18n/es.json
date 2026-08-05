@@ -136,6 +136,16 @@
     "background": "Trasfondo",
     "domains": "Dominios",
     "progression": "Progresión",
+    "pets": {
+      "title": "Compañero animal y familiar",
+      "animalCompanion": "Compañero animal",
+      "familiar": "Familiar",
+      "none": "Ninguno",
+      "namePlaceholder": "Nombre",
+      "noAnimalCompanionFeat": "Sin la dote Compañero animal: el juego no tiene nada que invocar.",
+      "noFamiliarFeat": "Sin la dote Familiar: el juego no tiene nada que invocar.",
+      "resummonHint": "Se aplica la próxima vez que se invoque a la criatura."
+    },
     "biography": "Biografía",
     "noBiography": "Sin biografía escrita",
     "campaign": "Campaña",

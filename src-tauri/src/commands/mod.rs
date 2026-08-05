@@ -14,6 +14,7 @@ pub mod item_appearance;
 pub mod models;
 pub mod overview;
 pub mod paths;
+pub mod pets;
 pub mod save_graph;
 pub mod savegame;
 pub mod session;

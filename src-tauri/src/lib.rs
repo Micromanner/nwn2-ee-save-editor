@@ -131,6 +131,10 @@ pub fn run() {
             crate::commands::character::get_biography,
             crate::commands::character::get_background,
             crate::commands::character::get_domains,
+            // Character - Animal companion / familiar
+            crate::commands::pets::get_pets,
+            crate::commands::pets::set_animal_companion,
+            crate::commands::pets::set_familiar,
             // Character - Abilities
             crate::commands::character::set_attribute,
             crate::commands::character::get_ability_scores,

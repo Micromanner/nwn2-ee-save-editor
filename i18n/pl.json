@@ -138,6 +138,16 @@
     "background": "Pochodzenie",
     "domains": "Domeny",
     "progression": "Postęp",
+    "pets": {
+      "title": "Zwierzęcy towarzysz i chowaniec",
+      "animalCompanion": "Zwierzęcy towarzysz",
+      "familiar": "Chowaniec",
+      "none": "Brak",
+      "namePlaceholder": "Imię",
+      "noAnimalCompanionFeat": "Brak atutu Zwierzęcy towarzysz - gra nie ma czego przywołać.",
+      "noFamiliarFeat": "Brak atutu Chowaniec - gra nie ma czego przywołać.",
+      "resummonHint": "Zadziała przy następnym przywołaniu stworzenia."
+    },
     "biography": "Biografia",
     "noBiography": "Brak opisu biograficznego",
     "campaign": "Kampania",

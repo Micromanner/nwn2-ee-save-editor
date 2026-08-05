@@ -225,6 +225,28 @@ export interface OverviewState {
 }
 
 // =============================================================================
+// Animal Companion / Familiar
+// =============================================================================
+
+export interface PetTypeOption {
+  id: number;
+  name: string;
+}
+
+export interface PetSlot {
+  name: string;
+  type_id: number;
+  type_name: string | null;
+  has_feat: boolean;
+  options: PetTypeOption[];
+}
+
+export interface PetsState {
+  animal_companion: PetSlot;
+  familiar: PetSlot;
+}
+
+// =============================================================================
 // Abilities State (Aggregated)
 // =============================================================================
 
