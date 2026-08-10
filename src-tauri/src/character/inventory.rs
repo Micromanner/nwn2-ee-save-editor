@@ -1,5 +1,5 @@
 use crate::character::CharacterError;
-use crate::character::gff_helpers::gff_value_to_i32;
+use crate::character::gff_helpers::{extract_list_from_map, gff_value_to_i32, gff_value_to_string};
 use crate::character::item_appearance::ItemAppearance;
 use crate::character::types::BaseItemId;
 use crate::loaders::GameData;
@@ -136,6 +136,12 @@ pub struct AddItemResult {
 pub struct RemoveItemResult {
     pub success: bool,
     pub removed_item: Option<InventoryItem>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct TransformResult {
+    pub success: bool,
     pub message: String,
 }
 
@@ -1466,12 +1472,7 @@ impl super::Character {
             let mut inv_list = self.get_list_owned("ItemList").unwrap_or_default();
 
             for (index, item_struct) in inv_list.iter_mut().enumerate() {
-                let existing_base_item = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                if existing_base_item == base_item_id {
+                if item_stack_identity_matches(item_struct, base_item_id, "", &[]) {
                     let current_stack = item_struct
                         .get("StackSize")
                         .and_then(gff_value_to_i32)
@@ -1599,6 +1600,89 @@ impl super::Character {
                 identified: info.identified,
             }),
             message: "Item removed from inventory".to_string(),
+        })
+    }
+
+    /// Replaces the item at `index` with `new_item` (already-loaded template
+    /// fields, the same shape `add_item_from_template` produces). A clean swap:
+    /// nothing from the old item is preserved except its list position.
+    pub fn transform_inventory_item(
+        &mut self,
+        index: usize,
+        new_item: IndexMap<String, GffValue<'static>>,
+    ) -> Result<TransformResult, CharacterError> {
+        let mut inv_list = self
+            .get_list_owned("ItemList")
+            .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
+
+        if index >= inv_list.len() {
+            return Err(CharacterError::ValidationFailed {
+                field: "index",
+                message: format!("Index {index} out of bounds"),
+            });
+        }
+
+        inv_list[index] = new_item;
+        self.set_list("ItemList", inv_list);
+
+        Ok(TransformResult {
+            success: true,
+            message: "Item transformed".to_string(),
+        })
+    }
+
+    /// Replaces the item equipped in `slot` with `new_item`, keeping only the
+    /// slot itself. Rejects (success: false, like equip_item) when the new
+    /// item's BaseItem can't legally occupy the slot, so a transform never
+    /// silently relocates an item.
+    pub fn transform_equipped_item(
+        &mut self,
+        slot: EquipmentSlot,
+        new_item: IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
+    ) -> Result<TransformResult, CharacterError> {
+        let base_item_id = new_item
+            .get("BaseItem")
+            .and_then(gff_value_to_i32)
+            .unwrap_or(0);
+        if !self.can_item_equip_in_slot(base_item_id, slot, game_data) {
+            return Ok(TransformResult {
+                success: false,
+                message: format!(
+                    "New item cannot be equipped in {} slot",
+                    slot.display_name()
+                ),
+            });
+        }
+
+        let mut equip_list =
+            self.get_list_owned("Equip_ItemList")
+                .ok_or(CharacterError::FieldMissing {
+                    field: "Equip_ItemList",
+                })?;
+
+        let slot_bitmask = slot.to_bitmask();
+        let Some(pos) = equip_list.iter().position(|item_struct| {
+            item_struct
+                .get("__struct_id__")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0) as u32
+                == slot_bitmask
+        }) else {
+            return Ok(TransformResult {
+                success: false,
+                message: format!("No item equipped in {} slot", slot.display_name()),
+            });
+        };
+
+        let mut replacement = new_item;
+        replacement.insert("__struct_id__".to_string(), GffValue::Dword(slot_bitmask));
+        equip_list[pos] = replacement;
+        self.set_list("Equip_ItemList", equip_list);
+
+        Ok(TransformResult {
+            success: true,
+            message: format!("Transformed item in {}", slot.display_name()),
         })
     }
 
@@ -2446,12 +2530,7 @@ impl super::Character {
 
         let stack_size = item
             .get("StackSize")
-            .and_then(|v| match v {
-                GffValue::Short(s) => Some(i32::from(*s)),
-                GffValue::Int(i) => Some(*i),
-                GffValue::Byte(b) => Some(i32::from(*b)),
-                _ => None,
-            })
+            .and_then(gff_value_to_i32)
             .unwrap_or(1);
 
         let max_stack = self
@@ -2463,16 +2542,13 @@ impl super::Character {
         }
 
         if max_stack > 1 {
+            let properties = extract_list_from_map(&item, "PropertiesList").unwrap_or_default();
             let inv_list = self
                 .get_list_mut("ItemList")
                 .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
 
             for (index, existing) in inv_list.iter_mut().enumerate() {
-                let existing_base = existing
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-                if existing_base != base_item_id {
+                if !item_stack_identity_matches(existing, base_item_id, &tag, &properties) {
                     continue;
                 }
 
@@ -2976,6 +3052,65 @@ fn normalize_item_property_entry(prop: &mut IndexMap<String, GffValue<'static>>)
     }
 }
 
+/// Identity tuple for the GFF fields that define what an item property "is"
+/// (excludes ChanceAppear/Useable/UsesPerDay, which are usage metadata, not
+/// identity).
+fn property_identity(prop: &IndexMap<String, GffValue<'static>>) -> (i32, i32, i32, i32, i32, i32) {
+    let get = |key: &str| prop.get(key).and_then(gff_value_to_i32).unwrap_or(-1);
+    (
+        get("PropertyName"),
+        get("Subtype"),
+        get("CostTable"),
+        get("CostValue"),
+        get("Param1"),
+        get("Param1Value"),
+    )
+}
+
+fn property_lists_match(
+    a: &[IndexMap<String, GffValue<'static>>],
+    b: &[IndexMap<String, GffValue<'static>>],
+) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut a_ids: Vec<_> = a.iter().map(property_identity).collect();
+    let mut b_ids: Vec<_> = b.iter().map(property_identity).collect();
+    a_ids.sort_unstable();
+    b_ids.sort_unstable();
+    a_ids == b_ids
+}
+
+/// Strict stack-merge identity: same BaseItem, same Tag (empty matches empty),
+/// and equivalent PropertiesList. Many unrelated consumables share a BaseItem
+/// row (all potions/drinks are one row, all crafting essences another), so
+/// matching on BaseItem alone would merge a healing potion onto an ale stack.
+fn item_stack_identity_matches(
+    existing: &IndexMap<String, GffValue<'static>>,
+    base_item_id: i32,
+    tag: &str,
+    properties: &[IndexMap<String, GffValue<'static>>],
+) -> bool {
+    let existing_base = existing
+        .get("BaseItem")
+        .and_then(gff_value_to_i32)
+        .unwrap_or(0);
+    if existing_base != base_item_id {
+        return false;
+    }
+
+    let existing_tag = existing
+        .get("Tag")
+        .and_then(gff_value_to_string)
+        .unwrap_or_default();
+    if existing_tag != tag {
+        return false;
+    }
+
+    let existing_props = extract_list_from_map(existing, "PropertiesList").unwrap_or_default();
+    property_lists_match(&existing_props, properties)
+}
+
 fn merge_json_into_gff_struct(
     existing: &mut IndexMap<String, GffValue<'static>>,
     updates: &HashMap<String, JsonValue>,
@@ -3433,5 +3568,238 @@ mod tests {
                 .iter()
                 .any(|r| r.feat_id == Some(100) && !r.met)
         );
+    }
+
+    /// GameData whose baseitems row 0 allows stacks of 10, so the stack-merge
+    /// branch in add_item/add_item_from_struct is reachable.
+    fn game_data_with_stackable_baseitem() -> GameData {
+        use crate::loaders::types::LoadedTable;
+        use crate::parsers::tda::TDAParser;
+        use crate::parsers::tlk::TLKParser;
+        use std::sync::{Arc, RwLock};
+
+        let mut game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
+        let content = "2DA V2.0
+
+   Label    Stacking  EquipableSlots
+0  Potion   10        0x0010
+";
+        let mut parser = TDAParser::new();
+        parser.parse_from_bytes(content.as_bytes()).unwrap();
+        game_data.tables.insert(
+            "baseitems".to_string(),
+            LoadedTable::new("baseitems".to_string(), Arc::new(parser)),
+        );
+        game_data
+    }
+
+    fn stackable_item(
+        tag: &str,
+        stack: i16,
+        props: &[(u16, u16)],
+    ) -> IndexMap<String, GffValue<'static>> {
+        let mut item = IndexMap::new();
+        item.insert("BaseItem".to_string(), GffValue::Int(0));
+        item.insert(
+            "Tag".to_string(),
+            GffValue::String(Cow::Owned(tag.to_string())),
+        );
+        item.insert("StackSize".to_string(), GffValue::Short(stack));
+        if !props.is_empty() {
+            let list: Vec<_> = props
+                .iter()
+                .map(|(name, subtype)| {
+                    let mut p = IndexMap::new();
+                    p.insert("PropertyName".to_string(), GffValue::Word(*name));
+                    p.insert("Subtype".to_string(), GffValue::Word(*subtype));
+                    p
+                })
+                .collect();
+            item.insert("PropertiesList".to_string(), GffValue::ListOwned(list));
+        }
+        item
+    }
+
+    fn character_with_items(items: Vec<IndexMap<String, GffValue<'static>>>) -> Character {
+        let mut fields = IndexMap::new();
+        fields.insert("ItemList".to_string(), GffValue::ListOwned(items));
+        Character::from_gff(fields)
+    }
+
+    fn stack_size_at(character: &Character, index: usize) -> i32 {
+        let item = character.get_inventory_item_at(index).unwrap();
+        item.get("StackSize").and_then(gff_value_to_i32).unwrap()
+    }
+
+    #[test]
+    fn test_add_item_does_not_stack_onto_tagged_item() {
+        // Regression for user issue 2: adding a fresh base-type item must not
+        // merge onto an unrelated tagged item sharing the same BaseItem row.
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![stackable_item("ale", 3, &[])]);
+
+        let result = character.add_item(0, 1, None, &game_data).unwrap();
+
+        assert!(!result.stacked);
+        assert_eq!(character.inventory_count(), 2);
+        assert_eq!(stack_size_at(&character, 0), 3);
+    }
+
+    #[test]
+    fn test_add_item_stacks_onto_matching_untagged_item() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut untagged = stackable_item("", 3, &[]);
+        untagged.shift_remove("Tag");
+        let mut character = character_with_items(vec![untagged]);
+
+        let result = character.add_item(0, 2, None, &game_data).unwrap();
+
+        assert!(result.stacked);
+        assert_eq!(character.inventory_count(), 1);
+        assert_eq!(stack_size_at(&character, 0), 5);
+    }
+
+    #[test]
+    fn test_add_item_from_struct_does_not_stack_across_tags() {
+        // The ale/healing-potion scenario: same BaseItem row, different blueprints.
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![stackable_item("ale", 3, &[])]);
+
+        let result = character
+            .add_item_from_struct(stackable_item("healing_potion", 1, &[]), &game_data)
+            .unwrap();
+
+        assert!(!result.stacked);
+        assert_eq!(character.inventory_count(), 2);
+        assert_eq!(stack_size_at(&character, 0), 3);
+    }
+
+    #[test]
+    fn test_add_item_from_struct_stacks_on_identical_tag_and_properties() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character =
+            character_with_items(vec![stackable_item("cft_ess_fire4", 2, &[(52, 21)])]);
+
+        let result = character
+            .add_item_from_struct(stackable_item("cft_ess_fire4", 1, &[(52, 21)]), &game_data)
+            .unwrap();
+
+        assert!(result.stacked);
+        assert_eq!(character.inventory_count(), 1);
+        assert_eq!(stack_size_at(&character, 0), 3);
+    }
+
+    #[test]
+    fn test_add_item_from_struct_does_not_stack_on_differing_properties() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![stackable_item("ring", 1, &[(52, 21)])]);
+
+        let result = character
+            .add_item_from_struct(stackable_item("ring", 1, &[(52, 22)]), &game_data)
+            .unwrap();
+
+        assert!(!result.stacked);
+        assert_eq!(character.inventory_count(), 2);
+    }
+
+    #[test]
+    fn test_property_lists_match_is_order_independent() {
+        let a = stackable_item("x", 1, &[(52, 21), (53, 1)]);
+        let b = stackable_item("x", 1, &[(53, 1), (52, 21)]);
+        let props_a = extract_list_from_map(&a, "PropertiesList").unwrap();
+        let props_b = extract_list_from_map(&b, "PropertiesList").unwrap();
+        assert!(property_lists_match(&props_a, &props_b));
+    }
+
+    #[test]
+    fn test_transform_inventory_item_replaces_struct_cleanly() {
+        let mut character = Character::from_gff(create_test_fields());
+
+        let result = character
+            .transform_inventory_item(0, stackable_item("new_item", 1, &[(52, 21)]))
+            .unwrap();
+
+        assert!(result.success);
+        assert_eq!(character.inventory_count(), 2);
+        let item = character.get_inventory_item_at(0).unwrap();
+        assert_eq!(
+            item.get("Tag").and_then(gff_value_to_string).unwrap(),
+            "new_item"
+        );
+        assert!(item.get("Identified").is_none());
+    }
+
+    #[test]
+    fn test_transform_inventory_item_out_of_bounds_errors() {
+        let mut character = Character::from_gff(create_test_fields());
+        let result = character.transform_inventory_item(99, stackable_item("x", 1, &[]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_transform_equipped_item_preserves_slot_bitmask() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = Character::from_gff(create_test_fields());
+
+        let result = character
+            .transform_equipped_item(
+                EquipmentSlot::RightHand,
+                stackable_item("new_blade", 1, &[]),
+                &game_data,
+            )
+            .unwrap();
+
+        assert!(result.success);
+        let item = character
+            .get_equipped_item_raw(EquipmentSlot::RightHand)
+            .unwrap();
+        assert_eq!(
+            item.get("Tag").and_then(gff_value_to_string).unwrap(),
+            "new_blade"
+        );
+        assert_eq!(
+            item.get("__struct_id__")
+                .and_then(gff_value_to_i32)
+                .unwrap() as u32,
+            EquipmentSlot::RightHand.to_bitmask()
+        );
+    }
+
+    #[test]
+    fn test_transform_equipped_item_rejects_illegal_slot() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = Character::from_gff(create_test_fields());
+
+        let result = character
+            .transform_equipped_item(
+                EquipmentSlot::Boots,
+                stackable_item("new_boots", 1, &[]),
+                &game_data,
+            )
+            .unwrap();
+
+        assert!(!result.success);
+        let unchanged = character
+            .get_equipped_item_raw(EquipmentSlot::RightHand)
+            .unwrap();
+        assert_eq!(
+            unchanged.get("Tag").and_then(gff_value_to_string).unwrap(),
+            "equipped_sword"
+        );
+    }
+
+    #[test]
+    fn test_add_item_from_struct_reads_word_stack_size() {
+        // .uti templates store StackSize as a GFF Word; it must not fall back to 1.
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![]);
+
+        let mut item = stackable_item("bundle", 1, &[]);
+        item.insert("StackSize".to_string(), GffValue::Word(5));
+        let result = character.add_item_from_struct(item, &game_data).unwrap();
+
+        assert!(!result.stacked);
+        assert_eq!(result.item.unwrap().stack_size, 5);
+        assert_eq!(stack_size_at(&character, 0), 5);
     }
 }

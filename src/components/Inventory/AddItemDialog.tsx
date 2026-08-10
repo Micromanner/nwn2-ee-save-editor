@@ -8,6 +8,7 @@ import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext } from '@/contexts/CharacterContext';
+import { useToast } from '@/contexts/ToastContext';
 import { useInventoryManagement } from '@/hooks/useInventoryManagement';
 import { inventoryAPI, BaseItem, ItemTemplate, ITEM_CATEGORIES, CATEGORIES_WITH_SUBS, SUB_CATEGORY_LABELS, isVanillaSource } from '@/services/inventoryApi';
 import { display } from '@/utils/dataHelpers';
@@ -22,15 +23,20 @@ interface AddItemDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onItemAdded?: (itemIndex: number) => void;
+  /** When set, the dialog replaces this item with the chosen template instead of adding. */
+  transformTarget?: { itemIndex?: number; slot?: string } | null;
+  onItemTransformed?: () => void;
 }
 
 const CATEGORY_ORDER = ['Weapons', 'Armor & Clothing', 'Magic Items', 'Miscellaneous'];
 
-export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogProps) {
+export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, onItemTransformed }: AddItemDialogProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
+  const { showToast } = useToast();
   const { characterId } = useCharacterContext();
-  const { addItemByBaseType, addItemFromTemplate } = useInventoryManagement();
+  const { addItemByBaseType, addItemFromTemplate, transformItem } = useInventoryManagement();
+  const isTransform = !!transformTarget;
 
   const [tab, setTab] = useState<TabId>('base');
   const [search, setSearch] = useState('');
@@ -48,6 +54,12 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
   const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
   const [listWidth, setListWidth] = useState(680);
   const [listHeight, setListHeight] = useState(LIST_HEIGHT);
+
+  // Transforming always targets an existing template; a bare base type has no
+  // name/model to become.
+  useEffect(() => {
+    if (isOpen && isTransform) setTab('template');
+  }, [isOpen, isTransform]);
 
   useEffect(() => {
     if (!isOpen || !characterId) return;
@@ -193,6 +205,18 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
     if (isAdding) return;
     setIsAdding(true);
     try {
+      if (isTransform && transformTarget && selectedResref) {
+        const response = await transformItem(transformTarget, selectedResref);
+        if (!response.success) {
+          // Slot-legality reject from the backend, not an error: keep the
+          // dialog open so the user can pick a fitting template.
+          showToast(response.message, 'warning');
+          return;
+        }
+        onClose();
+        onItemTransformed?.();
+        return;
+      }
       let itemIndex: number | undefined;
       if (tab === 'base' && selectedBaseId !== null) {
         const iconTemplate = templates.find(t => t.base_item === selectedBaseId);
@@ -289,13 +313,15 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
       isOpen={isOpen}
       onClose={onClose}
       onClosed={handleReset}
-      title={t('inventory.addItem')}
+      title={isTransform ? t('inventory.transformDialogTitle') : t('inventory.addItem')}
       width={720}
       minHeight={560}
       footerActions={
         <Button
           intent="primary"
-          text={isAdding ? t('inventory.addingItem') : t('inventory.addItem')}
+          text={isTransform
+            ? (isAdding ? t('inventory.changingItem') : t('inventory.transformConfirm'))
+            : (isAdding ? t('inventory.addingItem') : t('inventory.addItem'))}
           disabled={!canAdd || isAdding}
           loading={isAdding}
           onClick={handleAdd}
@@ -315,7 +341,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded }: AddItemDialogPro
             onChange={(id) => { setTab(id as TabId); clearFilters(); setSelectedBaseId(null); setSelectedResref(null); }}
             renderActiveTabPanelOnly
           >
-            <Tab id="base" title={`${t('inventory.createNewBaseType')} (${totalBase})`} />
+            {!isTransform && <Tab id="base" title={`${t('inventory.createNewBaseType')} (${totalBase})`} />}
             <Tab id="template" title={`${t('inventory.addExistingTemplate')} (${totalTemplates})`} />
           </Tabs>
           <Popover content={categoryMenu} placement="bottom-start" minimal>

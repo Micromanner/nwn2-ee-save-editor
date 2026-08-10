@@ -126,6 +126,8 @@ export function InventoryPanel() {
   const [goldInput, setGoldInput] = useState('0');
   const [gold, setGold] = useState(0);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  const [transformOpen, setTransformOpen] = useState(false);
+  const [transformTarget, setTransformTarget] = useState<{ itemIndex?: number; slot?: string } | null>(null);
   const [pendingEditIndex, setPendingEditIndex] = useState<number | null>(null);
   const [editItemOpen, setEditItemOpen] = useState(false);
   const [editItemData, setEditItemData] = useState<Record<string, unknown> | null>(null);
@@ -417,11 +419,23 @@ export function InventoryPanel() {
             onEquip={handleEquip}
             onUnequip={handleUnequip}
             onDelete={handleDelete}
+            onTransform={() => {
+              if (!selectedItem) return;
+              setTransformTarget(selectedItem._kind === 'equipped'
+                ? { slot: selectedItem.slot }
+                : { itemIndex: (selectedItem as FullInventoryItem).index });
+              setTransformOpen(true);
+            }}
           />
         </div>
       </Card>
 
       <AddItemDialog isOpen={addItemOpen} onClose={() => setAddItemOpen(false)} onItemAdded={(index) => setPendingEditIndex(index)} />
+      <AddItemDialog
+        isOpen={transformOpen}
+        onClose={() => { setTransformOpen(false); setTransformTarget(null); }}
+        transformTarget={transformTarget}
+      />
       <EditItemDialog
         isOpen={editItemOpen}
         onClose={() => setEditItemOpen(false)}

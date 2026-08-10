@@ -775,6 +775,17 @@ export interface RemoveItemResult {
   message: string;
 }
 
+export interface TransformItemRequest {
+  item_index: number | null;
+  slot: string | null;
+  target_resref: string;
+}
+
+export interface TransformResult {
+  success: boolean;
+  message: string;
+}
+
 export interface ItemBonuses {
   str_bonus: number;
   dex_bonus: number;

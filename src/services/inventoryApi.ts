@@ -127,6 +127,17 @@ export interface AddItemFromTemplateResponse {
     item_index?: number;
 }
 
+export interface TransformItemRequest {
+    item_index?: number;
+    slot?: string;
+    target_resref: string;
+}
+
+export interface TransformItemResponse {
+    success: boolean;
+    message: string;
+}
+
 interface AvailableBaseItem {
     id: number;
     name: string;
@@ -203,68 +214,49 @@ export class InventoryAPI {
     if (request.inventory_index === undefined) {
          throw new Error("Inventory index required for Rust backend");
     }
-    
-    // Map string slot to Rust enum equivalent (likely handled by serde if string matches)
-    // or we pass enum variant index.
-    // Assuming check logic in frontend or rust accepts string. 
-    // Rust expects `EquipmentSlot` enum.
-    try {
-        const result = await invoke<any>('equip_item', { 
-            inventoryIndex: request.inventory_index, 
-            slot: request.slot 
-        });
-        return {
-            success: result.success,
-            warnings: result.warnings || [],
-            message: result.message || "Item equipped",
-            has_unsaved_changes: true
-        };
-    } catch (e) {
-        throw new Error(String(e));
-    }
+
+    // Errors propagate as raw CommandError objects so useErrorHandler can
+    // classify them; wrapping in new Error(String(e)) loses the error shape.
+    const result = await invoke<any>('equip_item', {
+        inventoryIndex: request.inventory_index,
+        slot: request.slot
+    });
+    return {
+        success: result.success,
+        warnings: result.warnings || [],
+        message: result.message || "Item equipped",
+        has_unsaved_changes: true
+    };
   }
 
   async unequipItem(characterId: number, request: UnequipItemRequest): Promise<UnequipItemResponse> {
-    try {
-        const result = await invoke<any>('unequip_item', { slot: request.slot });
-        return {
-            success: result.success,
-            item_data: null, // Rust doesn't return item data on unequip usually? check return type
-            message: result.message || "Item unequipped",
-            has_unsaved_changes: true
-        };
-    } catch (e) {
-        throw new Error(String(e));
-    }
+    const result = await invoke<any>('unequip_item', { slot: request.slot });
+    return {
+        success: result.success,
+        item_data: null,
+        message: result.message || "Item unequipped",
+        has_unsaved_changes: true
+    };
   }
 
   async updateGold(characterId: number, gold: number): Promise<UpdateGoldResponse> {
-      try {
-          // set_gold returns new total
-          const newTotal = await invoke<number>('set_gold', { amount: gold });
-          return {
-              success: true,
-              gold: newTotal,
-              message: "Gold updated",
-              has_unsaved_changes: true
-          };
-      } catch (e) {
-             throw new Error(String(e));
-      }
+      const newTotal = await invoke<number>('set_gold', { amount: gold });
+      return {
+          success: true,
+          gold: newTotal,
+          message: "Gold updated",
+          has_unsaved_changes: true
+      };
   }
 
   async deleteItem(characterId: number, itemIndex: number): Promise<DeleteItemResponse> {
-      try {
-          await invoke('remove_from_inventory', { index: itemIndex });
-          return {
-              success: true,
-              item_data: null,
-              message: "Item removed",
-              has_unsaved_changes: true
-          };
-      } catch (e) {
-          throw new Error(String(e));
-      }
+      await invoke('remove_from_inventory', { index: itemIndex });
+      return {
+          success: true,
+          item_data: null,
+          message: "Item removed",
+          has_unsaved_changes: true
+      };
   }
 
   async getEditorMetadata(_characterId: number): Promise<ItemEditorMetadataResponse> {
@@ -282,21 +274,17 @@ export class InventoryAPI {
   }
 
   async addItemByBaseType(characterId: number, request: AddItemByBaseTypeRequest): Promise<AddToInventoryResponse> {
-      try {
-          const result = await invoke<any>('add_to_inventory', {
-              baseItemId: request.base_item_id,
-              stackSize: 1,
-              iconTemplateResref: request.icon_template_resref ?? null,
-          });
-          return {
-              success: result.success,
-              message: result.message || "Item added",
-              has_unsaved_changes: true,
-              item_index: result.inventory_index
-          };
-      } catch (e) {
-          throw new Error(String(e));
-      }
+      const result = await invoke<any>('add_to_inventory', {
+          baseItemId: request.base_item_id,
+          stackSize: 1,
+          iconTemplateResref: request.icon_template_resref ?? null,
+      });
+      return {
+          success: result.success,
+          message: result.message || "Item added",
+          has_unsaved_changes: true,
+          item_index: result.inventory_index
+      };
   }
 
   async updateItem(characterId: number, request: UpdateItemRequest): Promise<UpdateItemResponse> {
@@ -335,18 +323,17 @@ export class InventoryAPI {
   }
 
   async addItemFromTemplate(_characterId: number, resref: string): Promise<AddItemFromTemplateResponse> {
-      try {
-          const result = await invoke<AddItemResult>('add_item_from_template', { resref });
-          return {
-              success: result.success,
-              message: result.message || 'Item added',
-              new_item: {},
-              item_index: result.inventory_index
-          };
-      } catch (e) {
-          console.error('Failed to add item from template:', e);
-          return { success: false, message: String(e), new_item: {} };
-      }
+      const result = await invoke<AddItemResult>('add_item_from_template', { resref });
+      return {
+          success: result.success,
+          message: result.message || 'Item added',
+          new_item: {},
+          item_index: result.inventory_index
+      };
+  }
+
+  async transformItem(_characterId: number, request: TransformItemRequest): Promise<TransformItemResponse> {
+      return invoke<TransformItemResponse>('transform_item', { request });
   }
 }
 

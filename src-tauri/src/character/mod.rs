@@ -50,7 +50,8 @@ pub use identity::{Alignment, resolve_localized_name};
 pub use inventory::{
     AddItemResult, BasicItemInfo, EncumbranceInfo, EquipResult, EquipmentSlot, EquipmentSummary,
     FullEncumbrance, FullEquippedItem, FullInventoryItem, FullInventorySummary, InventoryItem,
-    ItemProficiencyInfo, ProficiencyRequirement, RemoveItemResult, UnequipResult, WeightStatus,
+    ItemProficiencyInfo, ProficiencyRequirement, RemoveItemResult, TransformResult, UnequipResult,
+    WeightStatus,
 };
 pub use item_appearance::{
     AccessorySlot, AccessorySlotData, ArmorAccessories, ItemAppearance, ItemAppearanceOptions,

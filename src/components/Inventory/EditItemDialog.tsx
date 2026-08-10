@@ -293,7 +293,7 @@ export function EditItemDialog({
       ) : (
         <Tabs id="edit-item-tab" selectedTabId={tab} onChange={(id) => setTab(id as string)}>
           <Tab id="basic" title={t('inventory.basicInfoTab')} panel={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4, maxHeight: '58vh', overflowY: 'auto', paddingRight: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div
                   style={{
@@ -431,7 +431,7 @@ export function EditItemDialog({
                 <Button small icon="add" intent="primary" text={t('inventory.addProperty')} onClick={handleAddProperty} disabled={!preloadedMetadata} />
               </div>
 
-              <div style={{ flex: 1, overflowY: 'auto' }}>
+              <div style={{ maxHeight: '54vh', overflowY: 'auto', paddingRight: 8 }}>
                 {properties.map((prop, i) => {
                   const propMeta = getPropMeta(prop.PropertyName as number);
                   const subtypeOptions = getSubtypeOptions(prop.PropertyName as number);
@@ -508,7 +508,7 @@ export function EditItemDialog({
           } />
 
           <Tab id="appearance" title={t('appearance.title')} panel={
-            <div style={{ paddingTop: 4 }}>
+            <div style={{ paddingTop: 4, maxHeight: '58vh', overflowY: 'auto', paddingRight: 8 }}>
               {localAppearance && localData && (
                 <ItemAppearanceTab 
                   appearance={localAppearance}

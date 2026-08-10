@@ -32,12 +32,13 @@ interface ItemDetailsProps {
   onEquip?: (index: number, slot: string) => void;
   onUnequip?: (slot: string) => void;
   onDelete?: (index: number) => void;
+  onTransform?: () => void;
 }
 
-export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDelete }: ItemDetailsProps) {
+export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDelete, onTransform }: ItemDetailsProps) {
   const t = useTranslations();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [editPlotWarnOpen, setEditPlotWarnOpen] = useState(false);
+  const [pendingPlotAction, setPendingPlotAction] = useState<'edit' | 'transform' | null>(null);
   const iconUrl = useIcon(item?.icon);
 
   const isPlot = item && !isEquippedItem(item) && (item as FullInventoryItem).plot;
@@ -87,6 +88,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
           {equipped && (
             <ButtonGroup minimal>
               <Button icon={<GameIcon icon={GiQuillInk} size={14} />} small text={t('common.edit')} style={{ color: T.textMuted }} onClick={onEdit} />
+              <Button icon="exchange" small text={t('inventory.transformItem')} style={{ color: T.textMuted }} onClick={onTransform} />
               <Button
                 icon={<GameIcon icon={GiArmorUpgrade} size={14} />}
                 small
@@ -100,7 +102,10 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
           {!equipped && (
             <ButtonGroup minimal>
               <Button icon={<GameIcon icon={GiQuillInk} size={14} />} small text={t('common.edit')} style={{ color: T.textMuted }}
-                onClick={() => isPlot ? setEditPlotWarnOpen(true) : onEdit?.()}
+                onClick={() => isPlot ? setPendingPlotAction('edit') : onEdit?.()}
+              />
+              <Button icon="exchange" small text={t('inventory.transformItem')} style={{ color: T.textMuted }}
+                onClick={() => isPlot ? setPendingPlotAction('transform') : onTransform?.()}
               />
               {canEquip && (
                 <Button
@@ -221,12 +226,17 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
       </Alert>
 
       <Alert
-        isOpen={editPlotWarnOpen}
-        onClose={() => setEditPlotWarnOpen(false)}
-        onConfirm={() => { setEditPlotWarnOpen(false); onEdit?.(); }}
+        isOpen={pendingPlotAction !== null}
+        onClose={() => setPendingPlotAction(null)}
+        onConfirm={() => {
+          const action = pendingPlotAction;
+          setPendingPlotAction(null);
+          if (action === 'edit') onEdit?.();
+          else if (action === 'transform') onTransform?.();
+        }}
         intent="warning"
         icon={<GameIcon icon={GiHazardSign} size={40} />}
-        confirmButtonText={t('common.edit')}
+        confirmButtonText={pendingPlotAction === 'transform' ? t('inventory.transformItem') : t('common.edit')}
         cancelButtonText={t('actions.cancel')}
       >
         <p><strong>{name}</strong></p>

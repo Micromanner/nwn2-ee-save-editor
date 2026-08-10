@@ -1,6 +1,7 @@
 use crate::character::{
     AddItemResult, BaseItemId, BasicItemInfo, EncumbranceInfo, EquipResult, EquipmentSlot,
-    FullInventorySummary, InventoryItem, ItemProficiencyInfo, RemoveItemResult, UnequipResult,
+    FullInventorySummary, InventoryItem, ItemProficiencyInfo, RemoveItemResult, TransformResult,
+    UnequipResult,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::services::item_property_decoder::{
@@ -604,25 +605,29 @@ pub async fn get_available_templates(
     Ok(indexed)
 }
 
-#[tauri::command]
-pub async fn add_item_from_template(
-    state: State<'_, AppState>,
-    resref: String,
-) -> CommandResult<AddItemResult> {
-    // Load template first (async operation)
-    let item_fields = {
-        let rm = state.resource_manager.read().await;
-        let templates = rm.get_all_item_templates();
-        let template_info =
-            templates
-                .get(&resref)
-                .cloned()
-                .ok_or_else(|| CommandError::NotFound {
-                    item: format!("Item template '{resref}'"),
-                })?;
-        rm.get_item_template_fields(&template_info)
-            .map_err(|e| CommandError::Internal(format!("Failed to load item template: {e}")))?
-    };
+/// Loads a .uti template's GFF fields plus a display label for history entries.
+/// Holds the resource-manager read lock only for the duration of the load.
+async fn load_item_template(
+    state: &State<'_, AppState>,
+    resref: &str,
+) -> Result<
+    (
+        indexmap::IndexMap<String, crate::parsers::gff::GffValue<'static>>,
+        String,
+    ),
+    CommandError,
+> {
+    let rm = state.resource_manager.read().await;
+    let templates = rm.get_all_item_templates();
+    let template_info = templates
+        .get(resref)
+        .cloned()
+        .ok_or_else(|| CommandError::NotFound {
+            item: format!("Item template '{resref}'"),
+        })?;
+    let item_fields = rm
+        .get_item_template_fields(&template_info)
+        .map_err(|e| CommandError::Internal(format!("Failed to load item template: {e}")))?;
 
     let item_label = item_fields
         .get("LocalizedName")
@@ -634,9 +639,18 @@ pub async fn add_item_from_template(
             }
         })
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| resref.clone());
+        .unwrap_or_else(|| resref.to_string());
 
-    // Now acquire sync locks and add item
+    Ok((item_fields, item_label))
+}
+
+#[tauri::command]
+pub async fn add_item_from_template(
+    state: State<'_, AppState>,
+    resref: String,
+) -> CommandResult<AddItemResult> {
+    let (item_fields, item_label) = load_item_template(&state, &resref).await?;
+
     let game_data = state.game_data.read();
     let mut session = state.session.write();
     session.record_history(format!("Add {item_label} from template"), None);
@@ -953,6 +967,46 @@ pub async fn update_item(
             message: "Updated inventory item".to_string(),
             has_unsaved_changes: true,
         })
+    } else {
+        Err(CommandError::InvalidValue {
+            field: "request".to_string(),
+            expected: "either slot or item_index".to_string(),
+            actual: "neither provided".to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TransformItemRequest {
+    pub item_index: Option<usize>,
+    pub slot: Option<String>,
+    pub target_resref: String,
+}
+
+#[tauri::command]
+pub async fn transform_item(
+    state: State<'_, AppState>,
+    request: TransformItemRequest,
+) -> CommandResult<TransformResult> {
+    let (item_fields, item_label) = load_item_template(&state, &request.target_resref).await?;
+
+    let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    session.record_history(format!("Transform item into {item_label}"), None);
+    let character = session
+        .character
+        .as_mut()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+
+    if let Some(slot_str) = &request.slot {
+        let slot = parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
+            field: "slot".to_string(),
+            expected: "valid equipment slot".to_string(),
+            actual: slot_str.clone(),
+        })?;
+        Ok(character.transform_equipped_item(slot, item_fields, &game_data)?)
+    } else if let Some(index) = request.item_index {
+        Ok(character.transform_inventory_item(index, item_fields)?)
     } else {
         Err(CommandError::InvalidValue {
             field: "request".to_string(),

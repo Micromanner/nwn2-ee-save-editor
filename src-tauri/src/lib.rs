@@ -240,6 +240,7 @@ pub fn run() {
             crate::commands::inventory::add_item_from_template,
             crate::commands::inventory::get_editor_metadata,
             crate::commands::inventory::update_item,
+            crate::commands::inventory::transform_item,
             // Item Appearance
             crate::commands::item_appearance::get_item_appearance_options,
             crate::commands::item_appearance::list_armor_mesh_candidates,
