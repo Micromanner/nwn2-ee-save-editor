@@ -43,7 +43,7 @@ export function preloadSidebarIcons() {
 
 export function getHiddenTabs(activeSource: ActiveSource, sessionKind: 'save' | 'vault'): Set<string> {
   const hidden = new Set<string>(
-    activeSource.kind === 'player' ? [] : ['appearance', 'models', 'gamestate'],
+    activeSource.kind === 'player' ? [] : ['gamestate'],
   );
   if (sessionKind === 'vault') hidden.add('gamestate');
   return hidden;

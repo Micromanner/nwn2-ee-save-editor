@@ -445,7 +445,11 @@ impl SessionState {
             .into_iter()
             .map(|e| (e.class_id.0, e.level))
             .collect();
-        let warning = match sync_roster(handler, ros_name, &classes) {
+        let identity = crate::services::roster::RosterIdentity {
+            gender: character.gender(),
+            subrace: character.subrace_index().unwrap_or(0),
+        };
+        let warning = match sync_roster(handler, ros_name, &classes, identity) {
             Ok(()) => None,
             Err(e) => {
                 warn!("Roster sync failed after companion save: {e}");
@@ -760,11 +764,12 @@ fn sync_roster(
     handler: &mut SaveGameHandler,
     ros_name: &str,
     classes: &[(i32, i32)],
+    identity: crate::services::roster::RosterIdentity,
 ) -> Result<(), String> {
     let Some((stored_name, bytes)) = handler.extract_roster().map_err(|e| e.to_string())? else {
         return Err("no roster file in save".into());
     };
-    match crate::services::roster::sync_member_classes(bytes, ros_name, classes)? {
+    match crate::services::roster::sync_member(bytes, ros_name, classes, identity)? {
         Some(new_bytes) => handler
             .update_file(&stored_name, &new_bytes)
             .map_err(|e| e.to_string()),

@@ -81,10 +81,19 @@ pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String>
 
 /// Rewrite the cached class/level pairs for `ros_name`. `Ok(None)` means the
 /// roster has no matching member; callers surface that as a warning, not an error.
-pub fn sync_member_classes(
+/// Fields the roster caches from a member's `.ros` and shows in the party-selection UI.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RosterIdentity {
+    pub gender: i32,
+    /// `RosRace` mirrors the creature's `Subrace` byte (a `racialsubtypes.2da` row), not `Race`.
+    pub subrace: i32,
+}
+
+pub fn sync_member(
     bytes: Vec<u8>,
     ros_name: &str,
     classes: &[(i32, i32)],
+    identity: RosterIdentity,
 ) -> Result<Option<Vec<u8>>, String> {
     let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
     let file_type = parser.file_type.clone();
@@ -118,6 +127,8 @@ pub fn sync_member_classes(
             set_int_preserving_type(entry, &format!("RosClass{i}"), i64::from(class_id));
             set_int_preserving_type(entry, &format!("RosLevel{i}"), i64::from(level));
         }
+        set_int_preserving_type(entry, "RosGender", i64::from(identity.gender));
+        set_int_preserving_type(entry, "RosRace", i64::from(identity.subrace));
         break;
     }
     if !found {
@@ -177,6 +188,8 @@ mod tests {
             m.insert(format!("RosClass{i}"), GffValue::Dword(class));
             m.insert(format!("RosLevel{i}"), GffValue::Int(level));
         }
+        m.insert("RosGender".into(), GffValue::Byte(0));
+        m.insert("RosRace".into(), GffValue::Byte(2));
         m.insert("RosAvailable".into(), GffValue::Byte(available));
         m.insert("RosCampaignNPC".into(), GffValue::Byte(campaign_npc));
         m
@@ -211,7 +224,11 @@ mod tests {
     #[test]
     fn sync_updates_classes_preserving_gff_types() {
         let bytes = build_roster(vec![member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1)]);
-        let synced = sync_member_classes(bytes, "khelgar", &[(4, 9), (23, 1)])
+        let identity = RosterIdentity {
+            gender: 1,
+            subrace: 14,
+        };
+        let synced = sync_member(bytes, "khelgar", &[(4, 9), (23, 1)], identity)
             .expect("sync")
             .expect("member found");
 
@@ -228,12 +245,15 @@ mod tests {
         assert!(matches!(entry.get("RosClass0"), Some(GffValue::Dword(4))));
         assert!(matches!(entry.get("RosLevel0"), Some(GffValue::Int(9))));
         assert!(matches!(entry.get("RosClass1"), Some(GffValue::Dword(23))));
+        assert!(matches!(entry.get("RosGender"), Some(GffValue::Byte(1))));
+        assert!(matches!(entry.get("RosRace"), Some(GffValue::Byte(14))));
     }
 
     #[test]
     fn sync_unknown_member_returns_none() {
         let bytes = build_roster(vec![member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1)]);
-        let result = sync_member_classes(bytes, "nonexistent", &[(1, 1)]).expect("sync");
+        let result =
+            sync_member(bytes, "nonexistent", &[(1, 1)], RosterIdentity::default()).expect("sync");
         assert!(result.is_none());
     }
 }

@@ -255,15 +255,12 @@ impl Character {
         self.get_race_name_by_id(self.race_id().0, game_data)
     }
 
-    pub fn set_subrace(&mut self, subrace: Option<String>) {
-        match subrace {
-            Some(name) if !name.is_empty() => {
-                self.set_string("Subrace", name);
-            }
-            _ => {
-                self.set_string("Subrace", String::new());
-            }
-        }
+    /// `Subrace` is a Byte row index into `racialsubtypes.2da` in every save the
+    /// game writes (.bic and .ros); 0 means none. Writing a string here made the
+    /// type-strict engine ignore the field.
+    pub fn set_subrace_index(&mut self, index: Option<i32>) {
+        let value = index.filter(|&i| i > 0).unwrap_or(0);
+        self.set_byte("Subrace", value.clamp(0, i32::from(u8::MAX)) as u8);
     }
 
     pub fn creature_size(&self) -> i32 {
@@ -670,7 +667,11 @@ impl Character {
         }
 
         self.set_race(RaceId(new_race_id));
-        self.set_subrace(new_subrace.clone());
+        let new_subrace_index = new_subrace
+            .as_deref()
+            .and_then(|name| self.get_subrace_data(name, game_data))
+            .map(|data| data.id);
+        self.set_subrace_index(new_subrace_index);
 
         let new_racial_mods = self.get_racial_ability_modifiers_for_race(new_race_id, game_data);
         self.apply_ability_modifier_changes(&new_racial_mods, true, "race", &mut result);
@@ -1115,18 +1116,26 @@ mod tests {
     }
 
     #[test]
-    fn test_set_subrace() {
+    fn test_set_subrace_index_writes_byte() {
         let mut character = create_test_character();
-        character.set_subrace(Some("Sun Elf".to_string()));
-        assert_eq!(character.subrace(), Some("Sun Elf".to_string()));
+        character.set_subrace_index(Some(14));
+        assert_eq!(character.subrace_index(), Some(14));
+        assert!(matches!(
+            character.gff().get("Subrace"),
+            Some(GffValue::Byte(14))
+        ));
         assert!(character.is_modified());
     }
 
     #[test]
-    fn test_set_subrace_none() {
+    fn test_set_subrace_index_none_writes_zero_byte() {
         let mut character = create_test_character();
-        character.set_subrace(None);
-        assert_eq!(character.subrace(), None);
+        character.set_subrace_index(None);
+        assert_eq!(character.subrace_index(), None);
+        assert!(matches!(
+            character.gff().get("Subrace"),
+            Some(GffValue::Byte(0))
+        ));
         assert!(character.is_modified());
     }
 
