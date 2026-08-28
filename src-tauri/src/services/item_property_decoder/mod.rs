@@ -257,8 +257,11 @@ impl ItemPropertyDecoder {
         );
     }
 
+    /// Every table here is read WITH overrides (override/, workshop, HAKs), the
+    /// same view `GameData` and the cost calculator use, so a modded
+    /// `itempropdef` is named, decoded and priced from one and the same file.
     fn load_property_definitions_from_rm(&mut self, rm: &ResourceManager) {
-        let itempropdef = match rm.get_2da("itempropdef") {
+        let itempropdef = match rm.get_2da_with_overrides("itempropdef") {
             Ok(parser) => parser,
             Err(e) => {
                 warn!("Failed to load itempropdef.2da: {}", e);
@@ -864,7 +867,7 @@ fn normalize_ability_name(name: &str) -> &str {
 /// where the engine honours the property on that class.
 pub fn load_itemprops_columns_from_rm(rm: &ResourceManager) -> HashMap<u32, Vec<u32>> {
     let mut allowed = HashMap::new();
-    let Ok(table) = rm.get_2da("itemprops") else {
+    let Ok(table) = rm.get_2da_with_overrides("itemprops") else {
         warn!("itemprops.2da not available; property/base-item compatibility unknown");
         return allowed;
     };
@@ -900,7 +903,7 @@ pub fn load_itemprops_columns_from_rm(rm: &ResourceManager) -> HashMap<u32, Vec<
 
 pub fn load_2da_options_from_rm(rm: &ResourceManager, table_name: &str) -> HashMap<u32, String> {
     let mut options = HashMap::new();
-    let Ok(table) = rm.get_2da(table_name) else {
+    let Ok(table) = rm.get_2da_with_overrides(table_name) else {
         return options;
     };
 
@@ -954,7 +957,7 @@ pub fn load_2da_options_from_rm(rm: &ResourceManager, table_name: &str) -> HashM
 /// the treasure generator, not a value a finished item can carry.
 fn load_cost_table_from_rm(rm: &ResourceManager, table_name: &str) -> CostTableData {
     let mut data = CostTableData::default();
-    let Ok(table) = rm.get_2da(table_name) else {
+    let Ok(table) = rm.get_2da_with_overrides(table_name) else {
         return data;
     };
 
@@ -1000,14 +1003,14 @@ fn load_cost_table_from_rm(rm: &ResourceManager, table_name: &str) -> CostTableD
 
 fn resolve_cost_table_from_rm(rm: &ResourceManager, cost_table_idx: &str) -> Option<String> {
     let idx: usize = cost_table_idx.parse().ok()?;
-    let mapping = rm.get_2da("iprp_costtable").ok()?;
+    let mapping = rm.get_2da_with_overrides("iprp_costtable").ok()?;
     let row = mapping.get_row_dict(idx).ok()?;
     row_str(&row, "name")
 }
 
 fn resolve_param_table_from_rm(rm: &ResourceManager, param_idx: &str) -> Option<String> {
     let idx: usize = param_idx.parse().ok()?;
-    let mapping = rm.get_2da("iprp_paramtable").ok()?;
+    let mapping = rm.get_2da_with_overrides("iprp_paramtable").ok()?;
     let row = mapping.get_row_dict(idx).ok()?;
     row_str(&row, "tableresref")
 }
