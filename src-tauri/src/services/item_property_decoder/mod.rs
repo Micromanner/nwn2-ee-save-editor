@@ -71,6 +71,7 @@ fn get_subtype_context_key(subtype_ref: &str) -> Option<&'static str> {
         | "damageracialgroup"
         | "attackbonusracialgroup"
         | "damageracialtype" => Some("racial_groups"),
+        "iprp_acmodtype" | "acmodtype" | "decreaseac" => Some("ac_types"),
         "armoralignmentgroup"
         | "damagealignmentgroup"
         | "enhancementalignmentgroup"
@@ -117,9 +118,20 @@ const PROPERTY_ID_FREEDOM_OF_MOVEMENT: u32 = 75;
 const PROPERTY_ID_WEIGHT_MODIFIER: u32 = 81;
 const PROPERTY_ID_DAMAGE_REDUCTION: u32 = 90;
 
+/// One `iprp_*cost` table: the display label per row plus the numeric column some
+/// of those tables carry (`Amount` in `iprp_resistcost`, `Value` in
+/// `iprp_damvulcost`/`iprp_bonuscost`/...).
+#[derive(Debug, Clone, Default)]
+pub struct CostTableData {
+    pub labels: HashMap<u32, String>,
+    pub amounts: HashMap<u32, i32>,
+}
+
 pub struct ItemPropertyDecoder {
     rm: Arc<tokio::sync::RwLock<ResourceManager>>,
     property_cache: HashMap<u32, PropertyDefinition>,
+    /// Keyed by `iprp_costtable.2da` row, i.e. `PropertyDefinition::cost_table_ref`.
+    cost_tables: HashMap<u32, CostTableData>,
     initialized: bool,
     skills: HashMap<u32, String>,
     classes: HashMap<u32, String>,
@@ -141,6 +153,7 @@ impl ItemPropertyDecoder {
         Self {
             rm,
             property_cache: HashMap::new(),
+            cost_tables: HashMap::new(),
             initialized: false,
             skills: HashMap::new(),
             classes: HashMap::new(),
@@ -201,27 +214,13 @@ impl ItemPropertyDecoder {
             || !self.spells.is_empty()
     }
 
-    pub async fn initialize(&mut self) -> ItemPropertyResult<()> {
-        if self.initialized {
-            return Ok(());
-        }
-
-        self.load_property_definitions().await?;
-        self.initialized = true;
-        debug!(
-            "ItemPropertyDecoder initialized with {} property definitions",
-            self.property_cache.len()
-        );
-
-        Ok(())
-    }
-
     pub fn initialize_with_rm(&mut self, rm: &ResourceManager) {
         if self.initialized {
             return;
         }
 
         self.load_property_definitions_from_rm(rm);
+        self.load_cost_tables_from_rm(rm);
         self.abilities = load_2da_options_from_rm(rm, "iprp_abilities");
         self.damage_types = load_2da_options_from_rm(rm, "iprp_damagetype");
         self.immunity_types = load_2da_options_from_rm(rm, "iprp_immunity");
@@ -275,9 +274,18 @@ impl ItemPropertyDecoder {
                     String::new()
                 };
 
-                let display_label = get_property_label_override(id)
-                    .map(std::string::ToString::to_string)
-                    .unwrap_or_else(|| clean_label(&label));
+                // The Name strref carries the property name the game itself shows
+                // ("AC Bonus vs. Damage Type"), which beats deriving one from the
+                // engineer-facing label column ("ArmorDamageType").
+                let name_str_ref = row_int(&row, "name", -1);
+                let raw_name = if name_str_ref > 0 && !ignores_2da_name(id) {
+                    let s = rm.get_string(name_str_ref);
+                    if s.is_empty() { None } else { Some(s) }
+                } else {
+                    None
+                };
+
+                let display_label = raw_name.clone().unwrap_or_else(|| clean_label(&label));
 
                 self.property_cache.insert(
                     id,
@@ -290,75 +298,61 @@ impl ItemPropertyDecoder {
                         description,
                         game_str_ref,
                         raw_label: label,
-                        raw_name: None,
+                        raw_name,
                     },
                 );
             }
         }
     }
 
-    async fn load_property_definitions(&mut self) -> ItemPropertyResult<()> {
-        let rm = self.rm.read().await;
+    /// Preload every cost table referenced by `itempropdef.2da` so both decoding
+    /// and the editor read values from the same 2DA-backed source.
+    fn load_cost_tables_from_rm(&mut self, rm: &ResourceManager) {
+        let refs: Vec<u32> = self
+            .property_cache
+            .values()
+            .filter_map(|def| def.cost_table_ref.as_ref())
+            .filter_map(|r| r.parse::<u32>().ok())
+            .collect();
 
-        let itempropdef = match rm.get_2da("itempropdef") {
-            Ok(parser) => parser,
-            Err(e) => {
-                warn!("Failed to load itempropdef.2da: {}", e);
-                return Ok(());
+        for table_idx in refs {
+            if self.cost_tables.contains_key(&table_idx) {
+                continue;
             }
-        };
-
-        for row_idx in 0..itempropdef.row_count() {
-            if let Ok(row) = itempropdef.get_row_dict(row_idx) {
-                let id = row_idx as u32;
-
-                let label = row_str(&row, "label").unwrap_or_default();
-
-                if label.is_empty() || is_invalid_label(&label) {
-                    continue;
-                }
-
-                let subtype_ref = row_str(&row, "subtyperesref").filter(|s| s != "****");
-
-                let cost_table_ref = row_str(&row, "costtableresref").filter(|s| s != "****");
-
-                let param1_ref = row_str(&row, "param1resref").filter(|s| s != "****");
-
-                let game_str_ref_val = row_int(&row, "gamestrref", -1);
-                let game_str_ref = if game_str_ref_val >= 0 {
-                    Some(game_str_ref_val)
-                } else {
-                    None
-                };
-
-                let description = if let Some(str_ref) = game_str_ref {
-                    rm.get_string(str_ref)
-                } else {
-                    String::new()
-                };
-
-                let display_label = get_property_label_override(id)
-                    .map(std::string::ToString::to_string)
-                    .unwrap_or_else(|| clean_label(&label));
-
-                self.property_cache.insert(
-                    id,
-                    PropertyDefinition {
-                        id,
-                        label: display_label,
-                        subtype_ref,
-                        cost_table_ref,
-                        param1_ref,
-                        description,
-                        game_str_ref,
-                        raw_label: label,
-                        raw_name: None,
-                    },
-                );
-            }
+            let Some(table_name) = resolve_cost_table_from_rm(rm, &table_idx.to_string()) else {
+                continue;
+            };
+            self.cost_tables
+                .insert(table_idx, load_cost_table_from_rm(rm, &table_name));
         }
+    }
 
-        Ok(())
+    fn cost_table_for(&self, property_id: u32) -> Option<&CostTableData> {
+        let idx = self
+            .property_cache
+            .get(&property_id)?
+            .cost_table_ref
+            .as_ref()?
+            .parse::<u32>()
+            .ok()?;
+        self.cost_tables.get(&idx)
+    }
+
+    /// Display text for a property's cost value ("1d4", "+3", "25%"), straight
+    /// from the property's own cost table.
+    fn cost_label(&self, property_id: u32, cost_value: u32) -> Option<&str> {
+        self.cost_table_for(property_id)?
+            .labels
+            .get(&cost_value)
+            .map(String::as_str)
+    }
+
+    /// Numeric column of a property's cost value, where its table has one.
+    fn cost_amount(&self, property_id: u32, cost_value: u32) -> Option<i32> {
+        self.cost_table_for(property_id)?
+            .amounts
+            .get(&cost_value)
+            .copied()
     }
 
     fn resolve_lookup(&self, context_key: &str, subtype: u32) -> Option<String> {
@@ -400,25 +394,31 @@ impl ItemPropertyDecoder {
                 let name = self.abilities.get(&subtype).map_or("Unknown", |s| s);
                 property_types::decode_ability_penalty(name, cost_value, raw_data)
             }
-            PROPERTY_ID_AC_BONUS => {
-                let name = self.ac_types.get(&subtype).map_or("Unknown", |s| s);
-                property_types::decode_ac_bonus(name, cost_value, raw_data)
-            }
+            PROPERTY_ID_AC_BONUS => property_types::decode_ac_bonus(cost_value as i32, raw_data),
             PROPERTY_ID_ENHANCEMENT => {
                 property_types::decode_enhancement_bonus(cost_value, raw_data)
             }
             PROPERTY_ID_ATTACK_BONUS => property_types::decode_attack_bonus(cost_value, raw_data),
             PROPERTY_ID_DAMAGE_BONUS => {
                 let name = self.damage_types.get(&subtype).map_or("Unknown", |s| s);
-                property_types::decode_damage_bonus(name, cost_value, raw_data)
+                let dice = self
+                    .cost_label(property_id, cost_value)
+                    .map_or_else(|| cost_value.to_string(), str::to_string);
+                property_types::decode_damage_bonus(name, &dice, raw_data)
             }
             PROPERTY_ID_DAMAGE_RESISTANCE => {
                 let name = self.damage_types.get(&subtype).map_or("Unknown", |s| s);
-                property_types::decode_damage_resistance(name, cost_value, raw_data)
+                let amount = self
+                    .cost_amount(property_id, cost_value)
+                    .unwrap_or(cost_value as i32);
+                property_types::decode_damage_resistance(name, amount, raw_data)
             }
             PROPERTY_ID_DAMAGE_VULNERABILITY => {
                 let name = self.damage_types.get(&subtype).map_or("Unknown", |s| s);
-                property_types::decode_damage_vulnerability(name, cost_value, raw_data)
+                let percent = self
+                    .cost_amount(property_id, cost_value)
+                    .unwrap_or(cost_value as i32);
+                property_types::decode_damage_vulnerability(name, percent, raw_data)
             }
             PROPERTY_ID_SAVING_THROW_BONUS => {
                 let name = self.save_types.get(&subtype).map_or("Unknown", |s| s);
@@ -494,7 +494,7 @@ impl ItemPropertyDecoder {
                     property_id,
                     &label,
                     subtype_name.as_deref(),
-                    cost_value,
+                    self.cost_label(property_id, cost_value),
                     raw_data,
                 )
             }
@@ -553,17 +553,17 @@ impl ItemPropertyDecoder {
                     }
                 }
                 "ac" => {
-                    if let (Some(ac_type), Some(value)) = (&prop.ac_type, prop.bonus_value) {
-                        match ac_type.as_str() {
-                            "Armor" => bonuses.ac_armor_bonus += value,
-                            "Shield" => bonuses.ac_shield_bonus += value,
-                            "Natural" => bonuses.ac_natural_bonus += value,
-                            "Deflection" => bonuses.ac_deflection_bonus += value,
-                            "Dodge" => bonuses.ac_dodge_bonus += value,
-                            _ => bonuses.ac_bonus += value,
+                    if let Some(value) = prop.bonus_value {
+                        // AC Bonus carries no AC type of its own; the engine picks
+                        // one from the item: armor enchantment on armor, shield
+                        // enchantment on shields, deflection everywhere else.
+                        if is_armor {
+                            bonuses.ac_armor_bonus += value;
+                        } else if is_shield {
+                            bonuses.ac_shield_bonus += value;
+                        } else {
+                            bonuses.ac_deflection_bonus += value;
                         }
-                    } else if let Some(value) = prop.bonus_value {
-                        bonuses.ac_bonus += value;
                     }
                 }
                 "enhancement" => {
@@ -641,164 +641,12 @@ impl ItemPropertyDecoder {
         bonuses
     }
 
-    /// Load options from a 2DA table, mirroring Python `_get_iprp_table_options()`.
-    /// Handles TLK string resolution and label cleanup.
-    pub async fn load_2da_options(&self, ref_name: &str) -> HashMap<u32, String> {
-        let rm = self.rm.read().await;
-        let mut options = HashMap::new();
-
-        let Ok(table) = rm.get_2da(ref_name) else {
-            return options;
-        };
-
-        for row_idx in 0..table.row_count() {
-            let Ok(row) = table.get_row_dict(row_idx) else {
-                continue;
-            };
-
-            let name_str_ref = row_int(&row, "name", -1);
-            let name = if name_str_ref > 100 {
-                let s = rm.get_string(name_str_ref);
-                if s.is_empty() || s.chars().all(|c| c.is_ascii_digit()) {
-                    None
-                } else {
-                    Some(s)
-                }
-            } else {
-                None
-            };
-
-            let game_str = name.clone().or_else(|| {
-                let sr = row_int(&row, "gamestring", -1);
-                if sr < 0 {
-                    return None;
-                }
-                let s = rm.get_string(sr);
-                if s.is_empty() || s.chars().all(|c| c.is_ascii_digit()) {
-                    None
-                } else {
-                    Some(s)
-                }
-            });
-
-            let label = game_str.or_else(|| row_str(&row, "label").filter(|s| s != "****"));
-
-            if let Some(display_name) = label
-                && !is_invalid_label(&display_name)
-            {
-                options.insert(row_idx as u32, clean_label(&display_name));
-            }
-        }
-        options
-    }
-
-    /// Resolve indirect cost table reference via iprp_costtable.2da.
-    async fn resolve_cost_table(&self, cost_table_idx: &str) -> Option<String> {
-        let idx: usize = cost_table_idx.parse().ok()?;
-        let rm = self.rm.read().await;
-        let mapping = rm.get_2da("iprp_costtable").ok()?;
-        let row = mapping.get_row_dict(idx).ok()?;
-        row_str(&row, "name")
-    }
-
-    /// Resolve indirect param table reference via iprp_paramtable.2da.
-    async fn resolve_param_table(&self, param_idx: &str) -> Option<String> {
-        let idx: usize = param_idx.parse().ok()?;
-        let rm = self.rm.read().await;
-        let mapping = rm.get_2da("iprp_paramtable").ok()?;
-        let row = mapping.get_row_dict(idx).ok()?;
-        row_str(&row, "tableresref")
-    }
-
-    /// Get editor property metadata with context-based option population.
-    /// Mirrors Python item_property_decoder.get_editor_property_metadata().
-    pub async fn get_editor_property_metadata(
-        &self,
-        context: &EditorContext,
-    ) -> Vec<PropertyMetadata> {
-        let mut metadata = Vec::new();
-
-        for (id, def) in &self.property_cache {
-            if is_hidden_property(*id) {
-                continue;
-            }
-
-            let mut meta = PropertyMetadata {
-                id: *id,
-                label: def.label.clone(),
-                original_label: def.raw_label.clone(),
-                description: def.description.clone(),
-                ..Default::default()
-            };
-
-            // Resolve subtype options (Python lines 816-832)
-            if let Some(ref subtype_ref) = def.subtype_ref {
-                let mapping_key = get_subtype_context_key(subtype_ref);
-
-                meta.subtype_options = if let Some(key) = mapping_key {
-                    match key {
-                        "abilities" => context.abilities.clone(),
-                        "skills" => context.skills.clone(),
-                        "spells" => context.spells.clone(),
-                        "damage_types" => context.damage_types.clone(),
-                        "immunity_types" => context.immunity_types.clone(),
-                        "saving_throws" => context.saving_throws.clone(),
-                        "save_elements" => context.save_elements.clone(),
-                        "classes" => context.classes.clone(),
-                        "racial_groups" => context.racial_groups.clone(),
-                        "alignment_groups" => context.alignment_groups.clone(),
-                        "alignments" => context.alignments.clone(),
-                        "light" => context.light.clone(),
-                        "feats" => context.feats.clone(),
-                        _ => self.load_2da_options(subtype_ref).await,
-                    }
-                } else {
-                    self.load_2da_options(subtype_ref).await
-                };
-
-                meta.has_subtype = !meta.subtype_options.is_empty();
-            }
-
-            // Resolve cost table options via iprp_costtable indirection
-            if let Some(ref cost_ref) = def.cost_table_ref
-                && let Some(table_name) = self.resolve_cost_table(cost_ref).await
-            {
-                meta.cost_table_options = self.load_2da_options(&table_name).await;
-                meta.has_cost_table = !meta.cost_table_options.is_empty();
-            }
-
-            // Resolve param1 options via iprp_paramtable indirection
-            if let Some(ref param_ref) = def.param1_ref
-                && let Some(table_name) = self.resolve_param_table(param_ref).await
-            {
-                // Some param tables map to context types
-                let param_key = get_subtype_context_key(&table_name);
-                meta.param1_options = if let Some(key) = param_key {
-                    match key {
-                        "racial_groups" => context.racial_groups.clone(),
-                        "classes" => context.classes.clone(),
-                        _ => self.load_2da_options(&table_name).await,
-                    }
-                } else {
-                    self.load_2da_options(&table_name).await
-                };
-                meta.has_param1 = !meta.param1_options.is_empty();
-            }
-
-            meta.is_flat = !meta.has_subtype && !meta.has_cost_table && !meta.has_param1;
-            metadata.push(meta);
-        }
-
-        metadata.sort_by(|a, b| a.label.cmp(&b.label));
-        metadata
-    }
-
     pub fn get_property_definition(&self, id: u32) -> Option<&PropertyDefinition> {
         self.property_cache.get(&id)
     }
 
-    /// Synchronous version of get_editor_property_metadata that takes a ResourceManager
-    /// reference for full 2DA resolution (subtypes, cost tables, param tables).
+    /// Editor property metadata with full 2DA resolution (subtypes, cost tables,
+    /// param tables).
     pub fn get_editor_property_metadata_with_rm(
         &self,
         context: &EditorContext,
@@ -846,16 +694,22 @@ impl ItemPropertyDecoder {
                 meta.has_subtype = !meta.subtype_options.is_empty();
             }
 
-            if let Some(ref cost_ref) = def.cost_table_ref
-                && let Some(table_name) = resolve_cost_table_from_rm(rm, cost_ref)
+            if let Some(cost_idx) = def
+                .cost_table_ref
+                .as_ref()
+                .and_then(|r| r.parse::<u32>().ok())
             {
-                meta.cost_table_options = load_2da_options_from_rm(rm, &table_name);
-                meta.has_cost_table = !meta.cost_table_options.is_empty();
+                meta.cost_table_idx = Some(cost_idx);
+                if let Some(table) = self.cost_tables.get(&cost_idx) {
+                    meta.cost_table_options = table.labels.clone();
+                    meta.has_cost_table = !meta.cost_table_options.is_empty();
+                }
             }
 
             if let Some(ref param_ref) = def.param1_ref
                 && let Some(table_name) = resolve_param_table_from_rm(rm, param_ref)
             {
+                meta.param1_idx = param_ref.parse::<u32>().ok();
                 let param_key = get_subtype_context_key(&table_name);
                 meta.param1_options = if let Some(key) = param_key {
                     match key {
@@ -959,6 +813,59 @@ pub fn load_2da_options_from_rm(rm: &ResourceManager, table_name: &str) -> HashM
         }
     }
     options
+}
+
+/// Load one `iprp_*cost` table.
+///
+/// Rows without a resolvable `Name` strref are dropped. The engine builds an item
+/// property's description from that strref, so a row it cannot resolve renders as
+/// "Bad StrRef" on the item in game - which is exactly what row 0 ("Random", Name
+/// `****`) of every cost table does. Random is an authoring-time instruction for
+/// the treasure generator, not a value a finished item can carry.
+fn load_cost_table_from_rm(rm: &ResourceManager, table_name: &str) -> CostTableData {
+    let mut data = CostTableData::default();
+    let Ok(table) = rm.get_2da(table_name) else {
+        return data;
+    };
+
+    for row_idx in 0..table.row_count() {
+        let Ok(row) = table.get_row_dict(row_idx) else {
+            continue;
+        };
+
+        let name_str_ref = row_int(&row, "name", -1);
+        if name_str_ref <= 100 {
+            continue;
+        }
+
+        let resolved = rm.get_string(name_str_ref);
+        if resolved.is_empty() {
+            continue;
+        }
+
+        // Purely numeric strings ("1", "5") read better from the label column,
+        // which clean_label turns into "+1"/"+5".
+        let display = if resolved.chars().all(|c| c.is_ascii_digit()) {
+            row_str(&row, "label").filter(|s| s != "****")
+        } else {
+            Some(resolved)
+        };
+
+        let Some(display) = display.filter(|s| !is_invalid_label(s)) else {
+            continue;
+        };
+
+        data.labels.insert(row_idx as u32, clean_label(&display));
+
+        for column in ["amount", "value"] {
+            if let Some(amount) = row_str(&row, column).and_then(|s| s.parse::<i32>().ok()) {
+                data.amounts.insert(row_idx as u32, amount);
+                break;
+            }
+        }
+    }
+
+    data
 }
 
 fn resolve_cost_table_from_rm(rm: &ResourceManager, cost_table_idx: &str) -> Option<String> {

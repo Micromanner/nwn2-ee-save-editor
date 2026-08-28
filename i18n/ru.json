@@ -329,7 +329,10 @@
     "propertyType": "Свойство",
     "propertySubtype": "Подтип",
     "propertyValue": "Значение",
+    "propertyValueInvalid": "Недопустимо",
+    "propertiesOverMax": "выше предела для этого типа предмета",
     "stackSize": "Размер стопки",
+    "notStackable": "Этот тип предмета не складывается в стопки.",
     "save": "Сохранить",
     "editItem": "Правка"
   },

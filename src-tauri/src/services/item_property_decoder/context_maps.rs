@@ -77,28 +77,12 @@ pub static HIDDEN_PROPERTY_IDS: LazyLock<HashSet<u32>> = LazyLock::new(|| {
     s
 });
 
-pub static PROPERTY_LABEL_OVERRIDES: LazyLock<HashMap<u32, &'static str>> = LazyLock::new(|| {
-    let mut m = HashMap::new();
-    m.insert(15, "Cast Spell");
-    m.insert(16, "Damage Bonus");
-    m.insert(17, "Damage Bonus vs. Racial Group");
-    m.insert(18, "Damage Bonus vs. Alignment Group");
-    m.insert(19, "Damage Bonus vs. Specific Alignment");
-    m.insert(23, "Damage Resistance");
-    m.insert(24, "Damage Vulnerability");
-    m.insert(36, "Improved Evasion");
-    m.insert(43, "Keen");
-    m.insert(48, "On Hit Cast Spell");
-    m.insert(49, "On Hit Properties");
-    m.insert(53, "Spell Immunity (Specific)");
-    m.insert(55, "Thieves' Tools");
-    m.insert(74, "On Monster Hit");
-    m.insert(78, "Massive Criticals");
-    m.insert(81, "Weight Modifier (Lbs)");
-    m.insert(85, "Extra Melee Damage Type");
-    m.insert(86, "Extra Ranged Damage Type");
-    m
-});
+/// `itempropdef.2da` rows whose `Name` strref points at another property's text in
+/// vanilla data (85 ArrowCatching -> "Turn Resistance", 86 Bashing -> "Trap",
+/// 87 Animated -> "On Hit", 88 Wild and 89 Etherealness -> "Thieves' Tools").
+/// These fall back to the cleaned label column instead.
+pub static IGNORED_NAME_STRREF_IDS: LazyLock<HashSet<u32>> =
+    LazyLock::new(|| HashSet::from([85, 86, 87, 88, 89]));
 
 pub fn is_invalid_label(label: &str) -> bool {
     let label_upper = label.to_uppercase();
@@ -146,8 +130,8 @@ pub fn is_hidden_property(id: u32) -> bool {
     HIDDEN_PROPERTY_IDS.contains(&id)
 }
 
-pub fn get_property_label_override(id: u32) -> Option<&'static str> {
-    PROPERTY_LABEL_OVERRIDES.get(&id).copied()
+pub fn ignores_2da_name(id: u32) -> bool {
+    IGNORED_NAME_STRREF_IDS.contains(&id)
 }
 
 #[cfg(test)]

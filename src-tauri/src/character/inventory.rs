@@ -170,6 +170,9 @@ pub struct BaseItemData {
     pub weight: f32,
     pub base_ac: i32,
     pub max_stack: i32,
+    /// `baseitems.MaxProps` - how many item properties this base type is meant to
+    /// carry. 0 when the row leaves it blank.
+    pub max_props: i32,
     pub num_dice: i32,
     pub die_to_roll: i32,
     pub crit_threat: i32,
@@ -241,6 +244,11 @@ pub struct FullInventoryItem {
     pub cursed: bool,
     pub stolen: bool,
     pub base_ac: Option<i32>,
+    /// `baseitems.Stacking` - the largest stack the engine handles for this base
+    /// type. Above it the game shows a single item with the whole stack's weight.
+    pub max_stack: i32,
+    /// `baseitems.MaxProps` - property count this base type is meant to carry.
+    pub max_props: i32,
     pub category: String,
     pub equippable_slots: Vec<String>,
     pub default_slot: Option<String>,
@@ -270,6 +278,9 @@ pub struct FullEquippedItem {
     pub value: i32,
     pub item_data: RawItemData,
     pub base_ac: Option<i32>,
+    /// See [`FullInventoryItem::max_stack`] / [`FullInventoryItem::max_props`].
+    pub max_stack: i32,
+    pub max_props: i32,
     pub decoded_properties: Vec<DecodedPropertyInfo>,
     pub appearance: ItemAppearance,
 }
@@ -587,6 +598,8 @@ impl super::Character {
 
         let max_stack = row_int(&row, "stacking", 1);
 
+        let max_props = row_int(&row, "maxprops", 0);
+
         let num_dice = row_int(&row, "numdice", 0);
 
         let die_to_roll = row_int(&row, "dietoroll", 0);
@@ -612,6 +625,7 @@ impl super::Character {
             weight,
             base_ac,
             max_stack,
+            max_props,
             num_dice,
             die_to_roll,
             crit_threat,
@@ -808,6 +822,8 @@ impl super::Character {
                     cursed,
                     stolen,
                     base_ac,
+                    max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack),
+                    max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
                     category,
                     equippable_slots,
                     default_slot,
@@ -899,6 +915,8 @@ impl super::Character {
                     value,
                     item_data: RawItemData(item_data),
                     base_ac,
+                    max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack),
+                    max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
                     decoded_properties,
                     appearance: {
                         let mut a = ItemAppearance::from_gff(item_struct);
@@ -2337,6 +2355,7 @@ impl super::Character {
         &mut self,
         index: usize,
         updated_data: &HashMap<String, JsonValue>,
+        game_data: &GameData,
     ) -> Result<(), CharacterError> {
         let mut inv_list = self
             .get_list_owned("ItemList")
@@ -2350,14 +2369,58 @@ impl super::Character {
 
         merge_json_into_gff_struct(&mut inv_list[index], updated_data);
         normalize_item_properties_list(&mut inv_list[index]);
+        self.clamp_stack_size(&mut inv_list[index], game_data);
         self.set_list("ItemList", inv_list);
         Ok(())
+    }
+
+    /// Hold `StackSize` to `baseitems.Stacking`. The engine renders a single item
+    /// for a non-stackable base type (a cloak is Stacking=1) but still multiplies
+    /// encumbrance by the stack, so an over-sized stack reads as one cloak that
+    /// weighs ten.
+    fn clamp_stack_size(
+        &self,
+        item: &mut IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
+    ) {
+        let Some(stack_size) = item.get("StackSize").and_then(gff_value_to_i32) else {
+            return;
+        };
+
+        let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
+        let max_stack = self
+            .get_base_item_data(base_item_id, game_data)
+            .map_or(1, |d| d.max_stack)
+            .max(1);
+
+        let clamped = stack_size.clamp(1, max_stack);
+        if clamped == stack_size {
+            return;
+        }
+
+        tracing::debug!(
+            base_item_id,
+            stack_size,
+            max_stack,
+            "Clamped StackSize to baseitems.Stacking"
+        );
+
+        // Keep the field's own GFF type; the engine is type-strict, and real .uti
+        // items store StackSize as a Word.
+        let new_value = match item.get("StackSize") {
+            Some(GffValue::Byte(_)) => GffValue::Byte(clamped as u8),
+            Some(GffValue::Short(_)) => GffValue::Short(clamped as i16),
+            Some(GffValue::Int(_)) => GffValue::Int(clamped),
+            _ => GffValue::Word(clamped as u16),
+        };
+        item.insert("StackSize".to_string(), new_value);
     }
 
     pub fn update_equipped_item(
         &mut self,
         slot: EquipmentSlot,
         updated_data: &HashMap<String, JsonValue>,
+        game_data: &GameData,
     ) -> Result<(), CharacterError> {
         let mut equip_list =
             self.get_list_owned("Equip_ItemList")
@@ -2381,6 +2444,7 @@ impl super::Character {
 
         merge_json_into_gff_struct(&mut equip_list[item_idx], updated_data);
         normalize_item_properties_list(&mut equip_list[item_idx]);
+        self.clamp_stack_size(&mut equip_list[item_idx], game_data);
         self.set_list("Equip_ItemList", equip_list);
         Ok(())
     }

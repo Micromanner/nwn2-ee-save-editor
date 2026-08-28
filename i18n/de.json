@@ -329,7 +329,10 @@
     "propertyType": "Eigenschaft",
     "propertySubtype": "Untertyp",
     "propertyValue": "Wert",
+    "propertyValueInvalid": "Ungültig",
+    "propertiesOverMax": "über dem Limit dieses Gegenstandstyps",
     "stackSize": "Stapelgröße",
+    "notStackable": "Dieser Gegenstandstyp ist nicht stapelbar.",
     "save": "Speichern",
     "editItem": "Bearbeiten"
   },

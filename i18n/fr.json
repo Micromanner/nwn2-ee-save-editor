@@ -329,7 +329,10 @@
     "propertyType": "Propriété",
     "propertySubtype": "Sous-type",
     "propertyValue": "Valeur",
+    "propertyValueInvalid": "Invalide",
+    "propertiesOverMax": "au-delà de la limite de ce type d'objet",
     "stackSize": "Taille de Pile",
+    "notStackable": "Ce type d'objet ne s'empile pas.",
     "save": "Enregistrer",
     "editItem": "Éditer"
   },

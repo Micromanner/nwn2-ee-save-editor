@@ -183,9 +183,15 @@ pub struct PropertyMetadata {
     pub has_cost_table: bool,
     pub cost_table_label: String,
     pub cost_table_options: HashMap<u32, String>,
+    /// `iprp_costtable.2da` row this property's values come from. Written to the
+    /// item's `CostTable` field; the engine and `ItemCostCalculator` resolve the
+    /// table from `itempropdef.2da` instead, but real game items store it.
+    pub cost_table_idx: Option<u32>,
     pub has_param1: bool,
     pub param1_label: String,
     pub param1_options: HashMap<u32, String>,
+    /// `iprp_paramtable.2da` row, written to the item's `Param1` field.
+    pub param1_idx: Option<u32>,
     pub is_flat: bool,
 }
 
@@ -202,9 +208,11 @@ impl Default for PropertyMetadata {
             has_cost_table: false,
             cost_table_label: "Value".to_string(),
             cost_table_options: HashMap::new(),
+            cost_table_idx: None,
             has_param1: false,
             param1_label: "Parameter".to_string(),
             param1_options: HashMap::new(),
+            param1_idx: None,
             is_flat: true,
         }
     }
@@ -250,20 +258,19 @@ pub fn decode_ability_penalty(
     }
 }
 
+/// AC Bonus (`itempropdef` row 1) has no subtype in NWN2 - the engine derives the
+/// AC type from the item itself (armor enchantment on armor, shield enchantment on
+/// shields, deflection on everything else), so no `iprp_acmodtype` row applies here.
 pub fn decode_ac_bonus(
-    ac_type: &str,
-    cost_value: u32,
+    bonus: i32,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
-    let bonus = cost_value as i32;
-
     DecodedProperty {
         property_id: 1,
-        label: format!("AC {ac_type} +{bonus}"),
-        description: format!("Armor Class Bonus: {ac_type} +{bonus}"),
+        label: format!("AC Bonus +{bonus}"),
+        description: format!("Armor Class Bonus: +{bonus}"),
         bonus_type: "ac".to_string(),
         decoded: true,
-        ac_type: Some(ac_type.to_string()),
         bonus_value: Some(bonus),
         raw_data,
         ..Default::default()
@@ -306,39 +313,13 @@ pub fn decode_attack_bonus(
     }
 }
 
-fn cost_value_to_damage_dice(cost_value: u32) -> &'static str {
-    match cost_value {
-        1 => "1d4",
-        2 => "1d6",
-        3 => "1d8",
-        4 => "1d10",
-        5 => "2d6",
-        6 => "2d8",
-        7 => "2d10",
-        8 => "1d12",
-        9 => "2d4",
-        10 => "2d12",
-        11 => "3d6",
-        12 => "+1",
-        13 => "+2",
-        14 => "+3",
-        15 => "+4",
-        16 => "+5",
-        17 => "+1d4",
-        18 => "+1d6",
-        19 => "+1d8",
-        20 => "+1d10",
-        _ => "Unknown",
-    }
-}
-
+/// `damage_dice` is the label of the property's `iprp_damagecost.2da` row
+/// ("1d4", "2d6", "+3", ...), resolved by the caller from the cost table.
 pub fn decode_damage_bonus(
     damage_type: &str,
-    cost_value: u32,
+    damage_dice: &str,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
-    let damage_dice = cost_value_to_damage_dice(cost_value);
-
     DecodedProperty {
         property_id: 16,
         label: format!("{damage_type} Damage {damage_dice}"),
@@ -352,21 +333,12 @@ pub fn decode_damage_bonus(
     }
 }
 
+/// `resistance` is the `Amount` column of the property's `iprp_resistcost.2da` row.
 pub fn decode_damage_resistance(
     damage_type: &str,
-    cost_value: u32,
+    resistance: i32,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
-    let resistance = match cost_value {
-        1 => 5,
-        2 => 10,
-        3 => 15,
-        4 => 20,
-        5 => 25,
-        6 => 30,
-        _ => cost_value as i32 * 5,
-    };
-
     DecodedProperty {
         property_id: 23,
         label: format!("Resist {damage_type} {resistance}"),
@@ -380,19 +352,13 @@ pub fn decode_damage_resistance(
     }
 }
 
+/// `vulnerability` is the `Value` column of the property's `iprp_damvulcost.2da`
+/// row (5, 10, 25, 50, 75, 90 or 100 percent).
 pub fn decode_damage_vulnerability(
     damage_type: &str,
-    cost_value: u32,
+    vulnerability: i32,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
-    let vulnerability = match cost_value {
-        1 => 25,
-        2 => 50,
-        3 => 75,
-        4 => 100,
-        _ => cost_value as i32 * 25,
-    };
-
     DecodedProperty {
         property_id: 24,
         label: format!("Vulnerable {damage_type} {vulnerability}%"),
@@ -658,18 +624,20 @@ pub fn decode_generic(
     }
 }
 
+/// `cost_label` is the property's cost-table row label, or None when the property
+/// is flat or its stored value has no row (e.g. the strref-less "Random" row 0).
 pub fn decode_generic_with_context(
     property_id: u32,
     label: &str,
     subtype_name: Option<&str>,
-    cost_value: u32,
+    cost_label: Option<&str>,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
-    let description = match (subtype_name, cost_value) {
-        (Some(sub), v) if v > 0 => format!("{label}: {sub} +{v}"),
-        (Some(sub), _) => format!("{label}: {sub}"),
-        (None, v) if v > 0 => format!("{label} +{v}"),
-        _ => label.to_string(),
+    let description = match (subtype_name, cost_label) {
+        (Some(sub), Some(v)) => format!("{label}: {sub} {v}"),
+        (Some(sub), None) => format!("{label}: {sub}"),
+        (None, Some(v)) => format!("{label} {v}"),
+        (None, None) => label.to_string(),
     };
 
     DecodedProperty {
@@ -699,23 +667,32 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_ac_bonus() {
+    fn test_decode_ac_bonus_has_no_subtype() {
         let raw = HashMap::new();
-        let decoded = decode_ac_bonus("Natural", 3, raw);
+        let decoded = decode_ac_bonus(3, raw);
 
-        assert_eq!(decoded.label, "AC Natural +3");
-        assert_eq!(decoded.ac_type, Some("Natural".to_string()));
+        assert_eq!(decoded.label, "AC Bonus +3");
+        assert_eq!(decoded.ac_type, None);
         assert_eq!(decoded.bonus_value, Some(3));
     }
 
     #[test]
     fn test_decode_damage_resistance() {
         let raw = HashMap::new();
-        let decoded = decode_damage_resistance("Acid", 2, raw);
+        let decoded = decode_damage_resistance("Acid", 10, raw);
 
         assert_eq!(decoded.label, "Resist Acid 10");
         assert_eq!(decoded.damage_type, Some("Acid".to_string()));
         assert_eq!(decoded.resistance_value, Some(10));
+    }
+
+    #[test]
+    fn test_decode_damage_bonus_uses_cost_table_label() {
+        let raw = HashMap::new();
+        let decoded = decode_damage_bonus("Fire", "1d4", raw);
+
+        assert_eq!(decoded.label, "Fire Damage 1d4");
+        assert_eq!(decoded.damage_dice, Some("1d4".to_string()));
     }
 
     #[test]

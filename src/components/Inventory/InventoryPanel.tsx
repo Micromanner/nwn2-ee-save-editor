@@ -134,6 +134,7 @@ export function InventoryPanel() {
   const [editItemIndex, setEditItemIndex] = useState<number | null>(null);
   const [editItemSlot, setEditItemSlot] = useState<string | null>(null);
   const [editAppearance, setEditAppearance] = useState<ItemAppearance | null>(null);
+  const [editBaseLimits, setEditBaseLimits] = useState<{ maxStack: number; maxProps: number }>({ maxStack: 1, maxProps: 0 });
   const [editResolvedName, setEditResolvedName] = useState<string | undefined>(undefined);
   const [editResolvedDescription, setEditResolvedDescription] = useState<string | undefined>(undefined);
   const [editResolvedIcon, setEditResolvedIcon] = useState<string | undefined>(undefined);
@@ -165,6 +166,7 @@ export function InventoryPanel() {
       setEditItemIndex(newItem.index);
       setEditItemSlot(null);
       setEditAppearance(newItem.appearance);
+      setEditBaseLimits({ maxStack: newItem.max_stack, maxProps: newItem.max_props });
       setEditResolvedName(newItem.name || undefined);
       setEditResolvedDescription(newItem.description || undefined);
       setEditResolvedIcon(newItem.icon || undefined);
@@ -411,6 +413,7 @@ export function InventoryPanel() {
                 setEditItemSlot(null);
                 setEditAppearance((selectedItem as FullInventoryItem).appearance);
               }
+              setEditBaseLimits({ maxStack: selectedItem.max_stack, maxProps: selectedItem.max_props });
               setEditResolvedName(selectedItem.name || undefined);
               setEditResolvedDescription(selectedItem.description || undefined);
               setEditResolvedIcon(selectedItem.icon || undefined);
@@ -447,6 +450,8 @@ export function InventoryPanel() {
         resolvedIcon={editResolvedIcon}
         preloadedMetadata={itemEditorMetadata}
         appearance={editAppearance}
+        maxStack={editBaseLimits.maxStack}
+        maxProps={editBaseLimits.maxProps}
       />
     </div>
   );

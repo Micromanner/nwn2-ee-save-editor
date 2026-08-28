@@ -67,18 +67,25 @@ export interface AddToInventoryResponse {
   item_index?: number;
 }
 
+// Mirrors the Rust `PropertyMetadata` (services/item_property_decoder/property_types.rs).
+// Nothing generates these types, so keep the two in step by hand.
 export interface PropertyMetadata {
   id: number;
   label: string;
+  original_label: string;
   description: string;
   has_subtype: boolean;
+  subtype_label: string;
+  subtype_options: Record<number, string>;
   has_cost_table: boolean;
+  cost_table_label: string;
+  cost_table_options: Record<number, string>;
+  cost_table_idx: number | null;
   has_param1: boolean;
-  cost_table_idx?: number;
-  param1_idx?: number;
-  subtype_options?: Record<number, string>;
-  cost_table_options?: Record<number, string>;
-  param1_options?: Record<number, string>;
+  param1_label: string;
+  param1_options: Record<number, string>;
+  param1_idx: number | null;
+  is_flat: boolean;
 }
 
 export interface ItemEditorMetadataResponse {

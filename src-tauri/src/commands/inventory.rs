@@ -940,15 +940,16 @@ pub async fn update_item(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
+    let game_data = state.game_data.read();
+
     if let Some(slot_str) = &request.slot {
         let slot = parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
             field: "slot".to_string(),
             expected: "valid equipment slot".to_string(),
             actual: slot_str.clone(),
         })?;
-        character.update_equipped_item(slot, &request.item_data)?;
+        character.update_equipped_item(slot, &request.item_data, &game_data)?;
         if let Some(appearance) = &request.appearance {
-            let game_data = state.game_data.read();
             character.apply_equipped_item_appearance(slot, appearance, &game_data)?;
         }
         Ok(UpdateItemResponse {
@@ -957,9 +958,8 @@ pub async fn update_item(
             has_unsaved_changes: true,
         })
     } else if let Some(index) = request.item_index {
-        character.update_inventory_item(index, &request.item_data)?;
+        character.update_inventory_item(index, &request.item_data, &game_data)?;
         if let Some(appearance) = &request.appearance {
-            let game_data = state.game_data.read();
             character.apply_inventory_item_appearance(index, appearance, &game_data)?;
         }
         Ok(UpdateItemResponse {

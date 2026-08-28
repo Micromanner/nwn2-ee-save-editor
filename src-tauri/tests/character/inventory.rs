@@ -399,3 +399,64 @@ async fn test_classic_campaign_inventory_equip() {
         println!("No equipable items found in inventory, skipping equip test");
     }
 }
+
+/// `baseitems.Stacking` is 1 for a cloak (apparel does not stack) and 99 for
+/// arrows. Over-sized stacks make the game render one item that carries the whole
+/// stack's weight, so the edit path has to clamp what the UI sends.
+#[tokio::test]
+async fn test_stack_size_clamped_to_base_item_stacking() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let data = load_test_gff(TEST_CHAR_FILE);
+    let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");
+    let fields = parser
+        .read_struct_fields(0)
+        .expect("Failed to read top level struct");
+    let mut character = app_lib::character::Character::from_gff(fields);
+
+    const CLOAK: i32 = 80;
+    const ARROW: i32 = 20;
+
+    let cloak_index = character
+        .add_item(CLOAK, 1, None, game_data)
+        .expect("add cloak")
+        .inventory_index
+        .expect("cloak index");
+
+    let updates = |stack: i32| {
+        std::collections::HashMap::from([("StackSize".to_string(), serde_json::Value::from(stack))])
+    };
+
+    character
+        .update_inventory_item(cloak_index, &updates(10), game_data)
+        .expect("update cloak");
+
+    let items = character.get_full_inventory_summary(game_data, &ctx.decoder, None);
+    let cloak = items
+        .inventory
+        .iter()
+        .find(|i| i.index == cloak_index)
+        .expect("cloak still present");
+    assert_eq!(cloak.max_stack, 1, "cloak is not stackable");
+    assert_eq!(cloak.stack_size, 1, "cloak stack should be clamped to 1");
+
+    let arrow_index = character
+        .add_item(ARROW, 1, None, game_data)
+        .expect("add arrows")
+        .inventory_index
+        .expect("arrow index");
+
+    character
+        .update_inventory_item(arrow_index, &updates(99), game_data)
+        .expect("update arrows");
+
+    let items = character.get_full_inventory_summary(game_data, &ctx.decoder, None);
+    let arrows = items
+        .inventory
+        .iter()
+        .find(|i| i.index == arrow_index)
+        .expect("arrows still present");
+    assert_eq!(arrows.max_stack, 99);
+    assert_eq!(arrows.stack_size, 99, "arrows stack up to 99");
+}

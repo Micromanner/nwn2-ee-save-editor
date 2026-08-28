@@ -32,12 +32,21 @@ function sortCostTableEntries(entries: [string, string][]): [string, string][] {
   });
 }
 
-function DropdownSelect({ label, value, items, onChange, disabled }: {
+// Lowest option a cost table offers. Row 0 of every cost table is "Random",
+// which has no TLK strref and makes the game print "Bad StrRef" on the item, so
+// the backend drops it - never fall back to 0 here.
+function defaultCostValue(meta: PropertyMetadata | undefined): number {
+  const keys = Object.keys(meta?.cost_table_options ?? {}).map(Number).filter(n => !Number.isNaN(n));
+  return keys.length ? Math.min(...keys) : 0;
+}
+
+function DropdownSelect({ label, value, items, onChange, disabled, valueColor }: {
   label: string;
   value: string;
   items: { id: string | number; label: string }[];
   onChange: (id: number) => void;
   disabled?: boolean;
+  valueColor?: string;
 }) {
   const menu = (
     <Menu style={{ maxHeight: 300, overflowY: 'auto' }}>
@@ -51,7 +60,7 @@ function DropdownSelect({ label, value, items, onChange, disabled }: {
       <div className="t-semibold t-sm" style={{ color: T.textMuted, marginBottom: 3 }}>{label}</div>
       <Popover content={menu} placement="bottom-start" minimal fill disabled={disabled}>
         <Button minimal rightIcon="caret-down" text={value} fill
-          style={{ textAlign: 'left', border: `1px solid ${T.border}`, background: T.surface }}
+          style={{ textAlign: 'left', border: `1px solid ${T.border}`, background: T.surface, color: valueColor }}
           disabled={disabled}
         />
       </Popover>
@@ -71,6 +80,9 @@ export interface EditItemDialogProps {
   resolvedIcon?: string;
   preloadedMetadata?: ItemEditorMetadataResponse | null;
   appearance?: ItemAppearance | null;
+  // baseitems.Stacking / baseitems.MaxProps for this item's base type.
+  maxStack?: number;
+  maxProps?: number;
 }
 
 export function EditItemDialog({
@@ -85,6 +97,8 @@ export function EditItemDialog({
   resolvedIcon,
   preloadedMetadata,
   appearance,
+  maxStack,
+  maxProps,
 }: EditItemDialogProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
@@ -186,7 +200,7 @@ export function EditItemDialog({
       PropertyName: firstProp.id,
       Subtype: 0,
       CostTable: firstProp.cost_table_idx ?? 0,
-      CostValue: 0,
+      CostValue: defaultCostValue(firstProp),
       Param1: firstProp.param1_idx ?? 255,
       Param1Value: 0,
       ChanceAppear: 100,
@@ -215,7 +229,7 @@ export function EditItemDialog({
         if (propMeta) {
           property.Subtype = 0;
           property.CostTable = propMeta.cost_table_idx ?? 0;
-          property.CostValue = 0;
+          property.CostValue = defaultCostValue(propMeta);
           property.Param1 = propMeta.param1_idx ?? 255;
           property.Param1Value = 0;
         }
@@ -260,6 +274,8 @@ export function EditItemDialog({
 
   const properties = (localData?.PropertiesList as Record<string, unknown>[] | undefined) || [];
   const itemName = stripNwn2Tags(getLocalizedValue('LocalizedName'));
+  const stackLimit = Math.max(1, maxStack ?? 1);
+  const propsOverCap = Boolean(maxProps && maxProps > 0 && properties.length > maxProps);
 
   return (
     <>
@@ -368,8 +384,14 @@ export function EditItemDialog({
                   <StepInput
                     value={(localData.StackSize as number | undefined) ?? 1}
                     onValueChange={(v) => handleBasicChange('StackSize', v)}
-                    min={1} max={99} width={120}
+                    min={1} max={stackLimit} width={120}
+                    disabled={stackLimit <= 1}
                   />
+                  {stackLimit <= 1 && (
+                    <div className="t-sm" style={{ color: T.textMuted, marginTop: 3 }}>
+                      {t('inventory.notStackable')}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="t-semibold" style={{ color: T.textMuted, display: 'block', marginBottom: 4 }}>{t('inventory.charges')}</label>
@@ -427,7 +449,14 @@ export function EditItemDialog({
           <Tab id="properties" title={t('inventory.propertiesTab')} panel={
             <div style={{ paddingTop: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span className="t-semibold" style={{ color: T.text }}>{t('inventory.enchantments')} ({properties.length})</span>
+                <span className="t-semibold" style={{ color: T.text }}>
+                  {t('inventory.enchantments')} ({maxProps && maxProps > 0 ? `${properties.length} / ${maxProps}` : properties.length})
+                  {propsOverCap && (
+                    <span className="t-sm" style={{ color: T.negative, marginLeft: 8 }}>
+                      {t('inventory.propertiesOverMax')}
+                    </span>
+                  )}
+                </span>
                 <Button small icon="add" intent="primary" text={t('inventory.addProperty')} onClick={handleAddProperty} disabled={!preloadedMetadata} />
               </div>
 
@@ -449,7 +478,12 @@ export function EditItemDialog({
 
                   const propLabel = propertyItems.find(p => p.id === prop.PropertyName)?.label || String(prop.PropertyName);
                   const subtypeLabel = subtypeItems.find(s => String(s.id) === String(prop.Subtype ?? 0))?.label || String(prop.Subtype ?? 0);
-                  const costLabel = costItems.find(c => String(c.id) === String(prop.CostValue ?? 0))?.label || String(prop.CostValue ?? 0);
+                  // A value with no row in the cost table cannot be described by the
+                  // game - typically CostValue 0 ("Random") written by an older build.
+                  const costEntry = costItems.find(c => String(c.id) === String(prop.CostValue ?? 0));
+                  const costInvalid = Boolean(propMeta?.has_cost_table) && !costEntry;
+                  const costLabel = costEntry?.label
+                    ?? `${t('inventory.propertyValueInvalid')} (${prop.CostValue ?? 0})`;
                   const param1Label = param1Items.find(p => String(p.id) === String(prop.Param1Value ?? 0))?.label || String(prop.Param1Value ?? 0);
 
                   const colCount = (propMeta?.has_subtype ? 1 : 0) + (propMeta?.has_cost_table ? 1 : 0) + (propMeta?.has_param1 ? 1 : 0);
@@ -477,9 +511,10 @@ export function EditItemDialog({
                       )}
                       {propMeta?.has_cost_table && (
                         <DropdownSelect
-                          label={propMeta.has_param1 ? t('inventory.propertyValue') : t('inventory.propertyValue')}
+                          label={t('inventory.propertyValue')}
                           value={costLabel}
                           items={costItems}
+                          valueColor={costInvalid ? T.negative : undefined}
                           onChange={(id) => handlePropertyChange(i, 'CostValue', id)}
                         />
                       )}

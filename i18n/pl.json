@@ -331,7 +331,10 @@
     "propertyType": "Właściwość",
     "propertySubtype": "Podtyp",
     "propertyValue": "Wartość",
+    "propertyValueInvalid": "Nieprawidłowa",
+    "propertiesOverMax": "powyżej limitu tego typu przedmiotu",
     "stackSize": "Wielkość Stosu",
+    "notStackable": "Ten typ przedmiotu nie układa się w stosy.",
     "save": "Zapisz",
     "editItem": "Edytuj"
   },

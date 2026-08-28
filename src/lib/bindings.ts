@@ -703,6 +703,8 @@ export interface FullInventoryItem {
   cursed: boolean;
   stolen: boolean;
   base_ac: number | null;
+  max_stack: number;
+  max_props: number;
   category: string;
   equippable_slots: string[];
   default_slot: string | null;
@@ -722,6 +724,8 @@ export interface FullEquippedItem {
   value: number;
   item_data: Record<string, unknown>;
   base_ac: number | null;
+  max_stack: number;
+  max_props: number;
   decoded_properties: DecodedPropertyInfo[];
   appearance: ItemAppearance;
 }
