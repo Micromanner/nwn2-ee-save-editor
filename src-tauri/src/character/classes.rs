@@ -805,6 +805,7 @@ impl Character {
         let mut feats_to_keep: HashSet<i32> = HashSet::new();
         let mut ability_reductions: Vec<u8> = Vec::new();
         let mut skill_ranks_to_remove: HashMap<usize, i32> = HashMap::new();
+        let granted_per_level = self.skill_points_granted_per_level(game_data);
 
         // Collect info from all entries for this class
         for (idx, entry) in lvl_stat_list.iter().enumerate() {
@@ -820,12 +821,11 @@ impl Character {
                 let con_mod = self.ability_modifier(AbilityIndex::CON);
                 total_hp_reduction += (hp + con_mod).max(1);
 
-                // Skill points to remove
-                let sp = entry
-                    .get("SkillPoints")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-                total_sp_reduction += sp;
+                total_sp_reduction += self.unspent_skill_points_of_level(
+                    granted_per_level.get(idx).copied().unwrap_or(0),
+                    entry,
+                    game_data,
+                );
 
                 // Ability increase to revert
                 if let Some(ability_idx) = entry.get("LvlStatAbility").and_then(gff_value_to_i32)
@@ -1051,7 +1051,6 @@ impl Character {
 
         let mut class_level_counts: HashMap<i32, i32> = HashMap::new();
         let mut result = Vec::with_capacity(lvl_stat_list.len());
-        let mut cumulative_sp: i32 = 0;
 
         for (idx, entry) in lvl_stat_list.iter().enumerate() {
             let character_level = (idx + 1) as i32;
@@ -1073,12 +1072,10 @@ impl Character {
             let feats_gained = Self::extract_feat_list(entry, "FeatList");
             let skills_gained = Self::extract_skill_list(entry);
 
-            let sp_granted = entry
+            let skill_points_remaining = entry
                 .get("SkillPoints")
                 .and_then(gff_value_to_i32)
                 .unwrap_or(0);
-            cumulative_sp += sp_granted;
-            let skill_points_remaining = cumulative_sp;
 
             let ability_raw = entry
                 .get("LvlStatAbility")
@@ -2241,11 +2238,7 @@ impl Character {
 
         // 5. Skill Points
         let int_mod = self.ability_modifier(AbilityIndex::INT);
-        let race_id = self.race_id();
-        let race_bonus = game_data
-            .get_table("racialtypes")
-            .and_then(|t| t.get_by_id(race_id.0))
-            .map_or(0, |row| row_int(&row, "skillpointmodifier", 0));
+        let race_bonus = self.racial_skill_point_bonus();
 
         let skill_base = row_int(&class_data, "skillpointbase", 2);
 
@@ -2338,9 +2331,10 @@ impl Character {
         new_hist.insert("LvlStatClass".to_string(), GffValue::Byte(class_id.0 as u8));
         // Store only the die roll: the engine (and our revert logic) adds CON dynamically.
         new_hist.insert("LvlStatHitDie".to_string(), GffValue::Byte(hit_die as u8));
+        // The game records the pool remainder after this level-up, not the grant.
         new_hist.insert(
             "SkillPoints".to_string(),
-            GffValue::Word(sp_gained.max(0) as u16),
+            GffValue::Word(self.get_available_skill_points().max(0) as u16),
         );
         new_hist.insert("LvlStatAbility".to_string(), GffValue::Byte(255));
         new_hist.insert("FeatList".to_string(), GffValue::ListOwned(vec![]));
@@ -2430,6 +2424,12 @@ impl Character {
         };
 
         let entry = lvl_stat_list.remove(idx);
+        let granted = self
+            .skill_points_granted_per_level(game_data)
+            .get(idx)
+            .copied()
+            .unwrap_or(0);
+        let sp_to_revert = self.unspent_skill_points_of_level(granted, &entry, game_data);
 
         // 1. Revert Ability Increase (Must happen before HP to match Python/Engine logic)
         if let Some(ability_idx) = entry.get("LvlStatAbility").and_then(gff_value_to_i32)
@@ -2462,12 +2462,8 @@ impl Character {
         self.set_i32("HitPoints", (hit_points - hp_reduction).max(1));
 
         // 3. Revert Skill Points
-        let sp_gained = entry
-            .get("SkillPoints")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0);
         let current_sp = self.get_available_skill_points();
-        self.set_available_skill_points((current_sp - sp_gained).max(0));
+        self.set_available_skill_points((current_sp - sp_to_revert).max(0));
 
         // 4. Refund Skill Ranks (Direct edit to avoid history side-effect)
         if let Some(skills) = super::gff_helpers::extract_list_from_map(&entry, "SkillList") {
@@ -2795,25 +2791,21 @@ impl Character {
         Ok(())
     }
 
-    /// Skill points the character earned over their level history, per class.
+    /// Skill points the engine granted at each `LvlStatList` level.
     ///
-    /// The engine grants points with the INT modifier in effect at each
-    /// level-up and never retroactively, so the level-up ability increases
-    /// recorded in `LvlStatAbility` are replayed: the current base INT is
-    /// rolled back by the number of INT increases and re-applied level by
-    /// level (an increase counts from the level it was taken).
-    pub fn get_theoretical_skill_points(&self, game_data: &GameData) -> HashMap<ClassId, i32> {
-        let mut class_points = HashMap::new();
-
-        let race_id = self.race_id();
-        let race_bonus = game_data
-            .get_table("racialtypes")
-            .and_then(|t| t.get_by_id(race_id.0))
-            .map_or(0, |row| row_int(&row, "skillpointmodifier", 0));
-
+    /// Class `SkillPointBase` + racial bonus + INT modifier (minimum 1),
+    /// quadrupled at level 1. The engine grants points with the INT modifier
+    /// in effect at each level-up and never retroactively, so the level-up
+    /// ability increases recorded in `LvlStatAbility` are replayed: the
+    /// current base INT is rolled back by the number of INT increases and
+    /// re-applied level by level (an increase counts from the level it was
+    /// taken). Entries without a class grant 0.
+    pub fn skill_points_granted_per_level(&self, game_data: &GameData) -> Vec<i32> {
         let Some(lvl_stat_list) = self.get_list("LvlStatList") else {
-            return class_points;
+            return Vec::new();
         };
+
+        let race_bonus = self.racial_skill_point_bonus();
 
         let is_int_increase = |entry: &IndexMap<String, GffValue>| {
             entry.get("LvlStatAbility").and_then(gff_value_to_i32)
@@ -2824,34 +2816,89 @@ impl Character {
 
         let classes_table = game_data.get_table("classes");
 
-        for (idx, entry) in lvl_stat_list.iter().enumerate() {
-            if is_int_increase(entry) {
-                int_score += 1;
+        lvl_stat_list
+            .iter()
+            .enumerate()
+            .map(|(idx, entry)| {
+                if is_int_increase(entry) {
+                    int_score += 1;
+                }
+                let int_mod = crate::character::types::calculate_modifier(int_score);
+
+                let Some(class_id) = entry
+                    .get("LvlStatClass")
+                    .and_then(gff_value_to_i32)
+                    .filter(|id| *id != -1)
+                else {
+                    return 0;
+                };
+
+                let class_base = classes_table
+                    .as_ref()
+                    .and_then(|t| t.get_by_id(class_id))
+                    .map_or(2, |c_data| row_int(&c_data, "skillpointbase", 2));
+
+                let points = std::cmp::max(1, class_base + int_mod + race_bonus);
+                if idx == 0 { points * 4 } else { points }
+            })
+            .collect()
+    }
+
+    /// Skill points the character earned over their level history, per class.
+    pub fn get_theoretical_skill_points(&self, game_data: &GameData) -> HashMap<ClassId, i32> {
+        let mut class_points = HashMap::new();
+        let Some(lvl_stat_list) = self.get_list("LvlStatList") else {
+            return class_points;
+        };
+
+        for (entry, points) in lvl_stat_list
+            .iter()
+            .zip(self.skill_points_granted_per_level(game_data))
+        {
+            if let Some(class_id) = entry.get("LvlStatClass").and_then(gff_value_to_i32) {
+                *class_points.entry(ClassId(class_id)).or_insert(0) += points;
             }
-            let int_mod = crate::character::types::calculate_modifier(int_score);
-
-            let class_id = entry
-                .get("LvlStatClass")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(-1);
-            if class_id == -1 {
-                continue;
-            }
-
-            let class_base = classes_table
-                .as_ref()
-                .and_then(|t| t.get_by_id(class_id))
-                .map_or(2, |c_data| row_int(&c_data, "skillpointbase", 2));
-
-            let mut points = std::cmp::max(1, class_base + int_mod + race_bonus);
-            if idx == 0 {
-                points *= 4;
-            }
-
-            *class_points.entry(ClassId(class_id)).or_insert(0) += points;
         }
 
         class_points
+    }
+
+    /// Unspent skill points a level-history entry contributed to the pool:
+    /// what the level granted minus the cost of the ranks it recorded, costed
+    /// against the class taken at that level the way the engine does.
+    ///
+    /// Removing the level takes exactly this much back from the pool; the
+    /// ranks themselves are refunded separately. A level whose recorded ranks
+    /// cost more than it granted (injected ranks) contributed nothing, never
+    /// a negative amount, so the overdraw must not be credited to the pool.
+    /// `LvlStatList.SkillPoints` cannot be used here: it is the pool
+    /// remainder after that level-up, not the grant.
+    fn unspent_skill_points_of_level(
+        &self,
+        granted: i32,
+        entry: &IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
+    ) -> i32 {
+        let has_able_learner = self.has_feat(FeatId(super::skills::ABLE_LEARNER_FEAT_ID));
+        let class_id = ClassId(
+            entry
+                .get("LvlStatClass")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(-1),
+        );
+        let spent: i32 = Self::extract_skill_list(entry)
+            .iter()
+            .map(|s| {
+                self.skill_cost_for_class(
+                    class_id,
+                    s.skill_id,
+                    s.ranks,
+                    has_able_learner,
+                    game_data,
+                )
+            })
+            .sum();
+        (granted - spent).max(0)
     }
 }
 
@@ -3719,6 +3766,125 @@ mod tests {
             last.hp_gained, 10,
             "LvlStatHitDie must store the die roll only, not roll + CON"
         );
+    }
+
+    fn set_last_level_ranks(character: &mut Character, ranks: &[(usize, u8)]) {
+        let mut history = character.get_list_owned("LvlStatList").unwrap();
+        let entry = history.last_mut().unwrap();
+        let mut list: Vec<IndexMap<String, GffValue>> = Vec::new();
+        for (skill_idx, rank) in ranks {
+            while list.len() <= *skill_idx {
+                let mut skill = IndexMap::new();
+                skill.insert("Rank".to_string(), GffValue::Byte(0));
+                list.push(skill);
+            }
+            list[*skill_idx].insert("Rank".to_string(), GffValue::Byte(*rank));
+        }
+        entry.insert("SkillList".to_string(), GffValue::ListOwned(list));
+        character.set_list("LvlStatList", history);
+    }
+
+    /// `LvlStatList.SkillPoints` is the pool remainder after each level-up;
+    /// the history must report it as stored, not as a running sum.
+    #[test]
+    fn level_history_reports_stored_pool_remainder() {
+        let character = create_test_character();
+        let remaining: Vec<i32> = character
+            .level_history()
+            .iter()
+            .map(|e| e.skill_points_remaining)
+            .collect();
+        assert_eq!(remaining, vec![4; 8]);
+    }
+
+    /// Fighter (SkillPointBase 2), INT 10, no racial bonus: 8 at level 1, then
+    /// 2 per level. `FEAT_SKILLED` adds 1 per level (4 at level 1).
+    #[test]
+    fn skill_points_granted_per_level_applies_skilled_feat() {
+        let mut character = create_test_character();
+        let game_data = create_game_data_with_prestige_classes();
+
+        assert_eq!(
+            character.skill_points_granted_per_level(&game_data),
+            vec![8, 2, 2, 2, 2, 2, 2, 2]
+        );
+
+        let mut feat = IndexMap::new();
+        feat.insert(
+            "Feat".to_string(),
+            GffValue::Word(super::super::skills::SKILLED_FEAT_ID as u16),
+        );
+        character.set_list("FeatList", vec![feat]);
+        assert_eq!(
+            character.skill_points_granted_per_level(&game_data),
+            vec![12, 3, 3, 3, 3, 3, 3, 3]
+        );
+    }
+
+    /// A level whose 2 granted points were fully spent (1 cross-class rank
+    /// costs 2) contributed nothing to the pool, so removing it leaves the
+    /// pool alone; an unspent level takes its 2 points back.
+    #[test]
+    fn level_down_takes_back_only_the_unspent_points_of_that_level() {
+        let game_data = create_game_data_with_prestige_classes();
+
+        let mut spent = create_test_character();
+        spent.set_available_skill_points(10);
+        set_last_level_ranks(&mut spent, &[(0, 1)]);
+        spent.level_down(ClassId(3), &game_data).unwrap();
+        assert_eq!(spent.get_available_skill_points(), 10);
+        assert_eq!(spent.skill_rank(SkillId(0)), 0, "rank refunded");
+
+        let mut banked = create_test_character();
+        banked.set_available_skill_points(10);
+        banked.level_down(ClassId(3), &game_data).unwrap();
+        assert_eq!(banked.get_available_skill_points(), 8);
+    }
+
+    /// A level that recorded more rank cost than it granted (injected ranks)
+    /// must not credit the overdraw to the pool when removed.
+    #[test]
+    fn level_down_never_credits_overdrawn_ranks_to_the_pool() {
+        let game_data = create_game_data_with_prestige_classes();
+        let mut character = create_test_character();
+        character.set_available_skill_points(10);
+        set_last_level_ranks(&mut character, &[(0, 5), (1, 5)]);
+
+        character.level_down(ClassId(3), &game_data).unwrap();
+
+        assert_eq!(character.get_available_skill_points(), 10);
+    }
+
+    /// Removing a class takes back the unspent points of every one of its
+    /// levels: three unspent levels at 2 points each.
+    #[test]
+    fn remove_class_takes_back_unspent_points_of_all_its_levels() {
+        let game_data = create_game_data_with_prestige_classes();
+        let mut character = create_test_character();
+        character.set_available_skill_points(10);
+        set_last_level_ranks(&mut character, &[(0, 1)]);
+
+        character.remove_class(ClassId(3), &game_data).unwrap();
+
+        assert_eq!(character.get_available_skill_points(), 10 - 2 - 2);
+    }
+
+    /// The history entry written by level_up carries the pool remainder, the
+    /// way the game writes it, so a later level_down reads it consistently.
+    #[test]
+    fn level_up_records_pool_remainder_in_history() {
+        let game_data = create_game_data_with_prestige_classes();
+        let mut character = create_test_character();
+        character.set_available_skill_points(5);
+
+        character.level_up(ClassId(0), &game_data).unwrap();
+
+        assert_eq!(character.get_available_skill_points(), 7);
+        let last = character.level_history().pop().unwrap();
+        assert_eq!(last.skill_points_remaining, 7);
+
+        character.level_down(ClassId(0), &game_data).unwrap();
+        assert_eq!(character.get_available_skill_points(), 5);
     }
 
     #[test]

@@ -240,3 +240,109 @@ async fn test_skill_costs_and_points() {
         }
     }
 }
+
+/// Ground truth for the level-history skill point fields, checked over every
+/// fixture character with real game data.
+///
+/// `LvlStatList[n].SkillPoints` is the pool remainder after that level-up,
+/// so between consecutive levels `field[n] - field[n-1] == granted[n] -
+/// cost(ranks recorded at n)`, with `granted` recomputed from class/feats/INT
+/// and ranks costed against the class taken at that level.
+/// Deltas start at level 3: toolset-built companions carry their creation
+/// ranks in `SkillList` only and their level 1 field is uninitialised
+/// garbage (5376, 24430, 12391). The last remainder must equal the
+/// character's `SkillPoints` pool.
+///
+/// Excluded fixtures: `qaraofblacklake2-4` (INT raised 12 -> 14 without a
+/// `LvlStatAbility` record, so the grant cannot be replayed; every level is
+/// consistent with INT 12) and `sagemelchior2-4` (spends more per level than
+/// any grant allows - ranks were injected). Proven by the rest: NWN2 has no
+/// race skill-point column, humans get +1 via `FEAT_SKILLED` (1773), and a
+/// rank is costed against the class being levelled (Occidio pays 2 for Heal
+/// during Divine Champion levels although Paladin lists it).
+#[tokio::test]
+async fn level_history_skill_points_are_pool_remainders() {
+    let ctx = common::create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let fixtures = [
+        "player.bic",
+        "occidiooctavon/occidiooctavon1.bic",
+        "occidiooctavon/occidiooctavon2.bic",
+        "occidiooctavon/occidiooctavon3.bic",
+        "occidiooctavon/occidiooctavon4.bic",
+        "qaraofblacklake/qaraofblacklake1.bic",
+        "ryathstrongarm/ryathstrongarm1.bic",
+        "ryathstrongarm/ryathstrongarm2.bic",
+        "ryathstrongarm/ryathstrongarm3.bic",
+        "ryathstrongarm/ryathstrongarm4.bic",
+        "sagemelchior/sagemelchior1.bic",
+        "oneofmany/oneofmany1.bic",
+        "oneofmany/oneofmany2.bic",
+        "oneofmany/oneofmany3.bic",
+        "oneofmany/oneofmany4.bic",
+        "okkugodofbears/okkugodofbears1.bic",
+        "okkugodofbears/okkugodofbears4.bic",
+        "theconstruct/theconstruct1.bic",
+        "theconstruct/theconstruct4.bic",
+    ];
+
+    let mut mismatches = Vec::new();
+    let mut levels_checked = 0;
+
+    for path in fixtures {
+        let parser = GffParser::from_bytes(common::load_test_gff(path)).expect("parse GFF");
+        let character = Character::from_gff(parser.read_struct_fields(0).expect("root"));
+
+        let granted = character.skill_points_granted_per_level(game_data);
+        let history = character.level_history();
+        assert_eq!(granted.len(), history.len(), "{path}: one grant per level");
+
+        let able_learner = character.has_feat(app_lib::character::FeatId(406));
+        let spent_at = |entry: &app_lib::character::LevelHistoryEntry| -> i32 {
+            entry
+                .skills_gained
+                .iter()
+                .map(|s| {
+                    character.skill_cost_for_class(
+                        entry.class_id,
+                        s.skill_id,
+                        s.ranks,
+                        able_learner,
+                        game_data,
+                    )
+                })
+                .sum()
+        };
+
+        for (n, (entry, granted)) in history.iter().zip(&granted).enumerate().skip(2) {
+            let delta = entry.skill_points_remaining - history[n - 1].skill_points_remaining;
+            let spent = spent_at(entry);
+            levels_checked += 1;
+            if delta != granted - spent {
+                mismatches.push(format!(
+                    "{path} level {}: field delta {delta} vs granted {granted} - spent {spent}",
+                    entry.character_level
+                ));
+            }
+        }
+
+        if let Some(last) = history.last()
+            && character.get_available_skill_points() != last.skill_points_remaining
+        {
+            mismatches.push(format!(
+                "{path}: pool {} vs last remainder {}",
+                character.get_available_skill_points(),
+                last.skill_points_remaining
+            ));
+        }
+    }
+
+    println!("levels checked: {levels_checked}");
+    assert!(
+        mismatches.is_empty(),
+        "{} mismatches:\n{}",
+        mismatches.len(),
+        mismatches.join("\n")
+    );
+}

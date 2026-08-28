@@ -29,6 +29,10 @@ use tracing::warn;
 
 const MAX_SKILL_RANK: i32 = 127;
 pub const ABLE_LEARNER_FEAT_ID: i32 = 406;
+/// `FEAT_SKILLED` from `race_feat_human.2da`: the engine grants +1 skill point
+/// per level (x4 at level 1) to whoever has it. NWN2 has no race skill-point
+/// column; this feat is the only source of the human bonus.
+pub const SKILLED_FEAT_ID: i32 = 1773;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct SkillPointsSummary {
@@ -55,64 +59,72 @@ pub struct SkillSummaryEntry {
 impl Character {
     /// Check if a skill is a class skill for this character.
     ///
-    /// Checks all classes the character has and determines if any of them
-    /// has the specified skill as a class skill.
+    /// True when any of the character's classes lists it as a class skill.
+    /// Note the engine costs a rank against the class being levelled
+    /// (`is_class_skill_for`), not this union.
     pub fn is_class_skill(&self, skill_id: SkillId, game_data: &GameData) -> bool {
-        let class_entries = self.class_entries();
-        if class_entries.is_empty() {
-            return false;
-        }
+        self.class_entries()
+            .iter()
+            .any(|entry| self.is_class_skill_for(entry.class_id, skill_id, game_data))
+    }
 
+    /// Check if a skill is a class skill of one class (`classes.SkillsTable`).
+    pub fn is_class_skill_for(
+        &self,
+        class_id: super::ClassId,
+        skill_id: SkillId,
+        game_data: &GameData,
+    ) -> bool {
         let Some(classes_table) = game_data.get_table("classes") else {
             return false;
         };
+        let Some(class_data) = classes_table.get_by_id(class_id.0) else {
+            return false;
+        };
 
-        for class_entry in class_entries {
-            let Some(class_data) = classes_table.get_by_id(class_entry.class_id.0) else {
-                continue;
-            };
-
-            let skills_table_name = class_data
-                .get("skillstable")
-                .and_then(|opt| opt.as_deref())
-                .unwrap_or("");
-
-            if skills_table_name.is_empty() {
-                continue;
-            }
-
-            let Some(class_skills_table) = game_data.get_table(&skills_table_name.to_lowercase())
-            else {
-                continue;
-            };
-
-            // The table is NOT indexed by SkillId. It is a list of skills.
-            // We must iterate to find the row where SkillIndex == skill_id.
-            let mut found = false;
-            for i in 0..class_skills_table.row_count() {
-                if let Some(row) = class_skills_table.get_by_id(i as i32) {
-                    let row_skill_idx = row
-                        .get("skillindex")
-                        .and_then(|v| v.as_deref())
-                        .and_then(|v| v.parse::<i32>().ok());
-
-                    if row_skill_idx == Some(skill_id.0) {
-                        let is_class_skill = row_bool(&row, "classskill", false);
-
-                        if is_class_skill {
-                            found = true;
-                        }
-                        break; // Found the entry for this skill
-                    }
-                }
-            }
-
-            if found {
-                return true;
-            }
+        let skills_table_name = class_data
+            .get("skillstable")
+            .and_then(|opt| opt.as_deref())
+            .unwrap_or("");
+        if skills_table_name.is_empty() {
+            return false;
         }
 
-        false
+        let Some(class_skills_table) = game_data.get_table(&skills_table_name.to_lowercase())
+        else {
+            return false;
+        };
+
+        // The table is a list of skills, not indexed by SkillId.
+        (0..class_skills_table.row_count())
+            .filter_map(|i| class_skills_table.get_by_id(i as i32))
+            .find(|row| {
+                row.get("skillindex")
+                    .and_then(|v| v.as_deref())
+                    .and_then(|v| v.parse::<i32>().ok())
+                    == Some(skill_id.0)
+            })
+            .is_some_and(|row| row_bool(&row, "classskill", false))
+    }
+
+    /// Cost of `ranks` bought while levelling `class_id`: 1 per rank for that
+    /// class's skills or with Able Learner, 2 otherwise.
+    pub fn skill_cost_for_class(
+        &self,
+        class_id: super::ClassId,
+        skill_id: SkillId,
+        ranks: i32,
+        has_able_learner: bool,
+        game_data: &GameData,
+    ) -> i32 {
+        if ranks <= 0 {
+            return 0;
+        }
+        if has_able_learner || self.is_class_skill_for(class_id, skill_id, game_data) {
+            ranks
+        } else {
+            ranks * 2
+        }
     }
 
     /// Get the maximum skill ranks allowed for a skill.
@@ -126,6 +138,11 @@ impl Character {
         } else {
             i32::midpoint(total_level, 3)
         }
+    }
+
+    /// Extra skill points per level from racial feats (`FEAT_SKILLED`).
+    pub fn racial_skill_point_bonus(&self) -> i32 {
+        i32::from(self.has_feat(super::FeatId(SKILLED_FEAT_ID)))
     }
 
     /// Calculate the cost in skill points for a given number of ranks.
@@ -390,15 +407,7 @@ impl Character {
                 message: format!("Class {class_id} missing SkillPointBase"),
             })?;
 
-        // Racial Bonus
-        let race_id = self.race_id();
-        let racial_bonus = if let Some(racial_table) = game_data.get_table("racialtypes")
-            && let Some(race_data) = racial_table.get_by_id(race_id.0)
-        {
-            row_int(&race_data, "skillpointmodifier", 0)
-        } else {
-            0
-        };
+        let racial_bonus = self.racial_skill_point_bonus();
 
         let mut points = base_points + int_modifier + racial_bonus;
         // Minimum 1 point per level, even with negative modifiers
