@@ -324,6 +324,10 @@ impl SessionState {
         let char_fields = character.clone_gff();
         let selected_player_index = self.selected_player_index;
         let update_primary_player_files = self.primary_player_index == Some(selected_player_index);
+        let companion_prefix = crate::character::pets::companion_blueprint_prefix(
+            character.animal_companion_type(),
+            game_data,
+        );
 
         handler
             .rewrite_player_files(|src| {
@@ -331,6 +335,7 @@ impl SessionState {
                     src.playerlist,
                     &char_fields,
                     selected_player_index,
+                    companion_prefix.as_deref(),
                 )?;
                 let player_bic = if update_primary_player_files {
                     Some(crate::parsers::gff::merge_fields_into_gff(
@@ -815,6 +820,7 @@ fn serialize_playerlist_bytes(
     playerlist_data: &[u8],
     character_fields: &IndexMap<String, GffValue<'static>>,
     player_index: usize,
+    companion_prefix: Option<&str>,
 ) -> Result<Vec<u8>, String> {
     let gff = GffParser::from_bytes(playerlist_data.to_vec())
         .map_err(|e| format!("playerlist.ifo parse error: {e}"))?;
@@ -843,6 +849,9 @@ fn serialize_playerlist_bytes(
     let mut merged = player_entry.clone();
     for (key, value) in character_fields {
         merged.insert(key.clone(), value.clone());
+    }
+    if let Some(prefix) = companion_prefix {
+        crate::character::pets::sync_mod_companion_variable(&mut merged, prefix);
     }
     *player_entry = merged;
 

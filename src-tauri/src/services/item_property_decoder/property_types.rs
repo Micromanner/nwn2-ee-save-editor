@@ -193,6 +193,10 @@ pub struct PropertyMetadata {
     /// `iprp_paramtable.2da` row, written to the item's `Param1` field.
     pub param1_idx: Option<u32>,
     pub is_flat: bool,
+    /// `itemprops.2da` columns (= `baseitems.PropColumn` values) on which the
+    /// engine honours this property. A property added to a base item outside
+    /// this list is stored but neither shown nor applied in-game.
+    pub allowed_columns: Vec<u32>,
 }
 
 impl Default for PropertyMetadata {
@@ -214,6 +218,7 @@ impl Default for PropertyMetadata {
             param1_options: HashMap::new(),
             param1_idx: None,
             is_flat: true,
+            allowed_columns: Vec::new(),
         }
     }
 }
@@ -448,27 +453,28 @@ pub fn decode_immunity(
     }
 }
 
+/// Cast Spell (`itempropdef` row 15): the spell name comes from `iprp_spells`
+/// (whose Name already carries the caster level, "Acid Fog (11)") and the cost
+/// value is an `iprp_chargecost` row ("4 Uses/Day"), so the game prints
+/// `Use: Acid Fog (11) 4 Uses/Day`.
 pub fn decode_cast_spell(
+    prefix: &str,
     spell_name: &str,
-    caster_level: u32,
-    charges: u32,
+    uses_label: Option<&str>,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
-    let label = if charges > 0 {
-        format!("Cast {spell_name} ({charges} charges)")
-    } else {
-        format!("Cast {spell_name} (unlimited)")
+    let description = match uses_label {
+        Some(uses) => format!("{prefix} {spell_name} {uses}"),
+        None => format!("{prefix} {spell_name}"),
     };
 
     DecodedProperty {
         property_id: 15,
-        label,
-        description: format!("Cast Spell: {spell_name} at caster level {caster_level}"),
+        label: description.clone(),
+        description,
         bonus_type: "cast_spell".to_string(),
         decoded: true,
         spell_name: Some(spell_name.to_string()),
-        caster_level: Some(caster_level),
-        charges: Some(charges),
         raw_data,
         ..Default::default()
     }
@@ -626,18 +632,21 @@ pub fn decode_generic(
 
 /// `cost_label` is the property's cost-table row label, or None when the property
 /// is flat or its stored value has no row (e.g. the strref-less "Random" row 0).
+/// `prefix` is the property's GameStrRef text, the words the game itself puts
+/// before the subtype and value on the item ("Armor Bonus vs.").
 pub fn decode_generic_with_context(
     property_id: u32,
     label: &str,
+    prefix: &str,
     subtype_name: Option<&str>,
     cost_label: Option<&str>,
     raw_data: HashMap<String, serde_json::Value>,
 ) -> DecodedProperty {
     let description = match (subtype_name, cost_label) {
-        (Some(sub), Some(v)) => format!("{label}: {sub} {v}"),
-        (Some(sub), None) => format!("{label}: {sub}"),
-        (None, Some(v)) => format!("{label} {v}"),
-        (None, None) => label.to_string(),
+        (Some(sub), Some(v)) => format!("{prefix} {sub} {v}"),
+        (Some(sub), None) => format!("{prefix} {sub}"),
+        (None, Some(v)) => format!("{prefix} {v}"),
+        (None, None) => prefix.to_string(),
     };
 
     DecodedProperty {
@@ -698,10 +707,9 @@ mod tests {
     #[test]
     fn test_decode_cast_spell() {
         let raw = HashMap::new();
-        let decoded = decode_cast_spell("Fireball", 10, 5, raw);
+        let decoded = decode_cast_spell("Use:", "Fireball (10)", Some("5 Charges/Use"), raw);
 
-        assert!(decoded.label.contains("Fireball"));
-        assert!(decoded.label.contains("5 charges"));
-        assert_eq!(decoded.caster_level, Some(10));
+        assert_eq!(decoded.description, "Use: Fireball (10) 5 Charges/Use");
+        assert_eq!(decoded.spell_name.as_deref(), Some("Fireball (10)"));
     }
 }

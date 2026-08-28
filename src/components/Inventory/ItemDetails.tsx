@@ -7,6 +7,7 @@ import { T } from '../theme';
 import { fmtNum } from '../shared';
 import type { FullEquippedItem, FullInventoryItem } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
+import { nwn2ToHtml } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
 
 export type AnyItem =
@@ -197,7 +198,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
       {description && (
         <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '10px 16px' }}>
           <div className="t-bold" style={{ color: T.accent, marginBottom: 8 }}>{t('inventory.description')}</div>
-          <p className="t-body" style={{ margin: 0, color: T.textMuted }}>{description}</p>
+          <div className="t-body" style={{ margin: 0, color: T.textMuted }} dangerouslySetInnerHTML={{ __html: nwn2ToHtml(description) }} />
         </div>
       )}
 

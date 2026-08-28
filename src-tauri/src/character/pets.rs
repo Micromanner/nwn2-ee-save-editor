@@ -15,8 +15,12 @@
 use super::Character;
 use super::types::FeatId;
 use crate::loaders::GameData;
+use crate::parsers::gff::GffValue;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::borrow::Cow;
+use tracing::info;
 
 /// `feat.2da` row 199 (AnimalCompanion) - granted to druids at 1 and rangers at 4.
 pub const FEAT_ANIMAL_COMPANION: FeatId = FeatId(199);
@@ -78,6 +82,55 @@ fn pet_options(game_data: &GameData, table_name: &str) -> Vec<PetTypeOption> {
             Some(PetTypeOption { id, name })
         })
         .collect()
+}
+
+/// `baseresref_prefix` of a `hen_companion.2da` row; the summoned creature's
+/// blueprint is this prefix plus a level tier suffix (`c_ancom_boar1`).
+pub fn companion_blueprint_prefix(type_id: i32, game_data: &GameData) -> Option<String> {
+    let row = game_data.get_table("hen_companion")?.get_by_id(type_id)?;
+    row.get("baseresref_prefix")?
+        .clone()
+        .filter(|s| s != "****" && !s.is_empty())
+}
+
+/// Script local variable in which the Clangeddin Utilities workshop mod's
+/// replacement `nw_s2_animalcom` caches the companion blueprint. Its summon
+/// script reads this instead of `CompanionType` once it is set, so a type
+/// change in the editor would otherwise keep summoning the old creature.
+const MOD_COMPANION_VAR: &str = "cmi_animcomp";
+
+/// Points the mod's cached companion blueprint at `prefix`, keeping its level
+/// tier suffix. No-op when the variable is absent or already matches.
+pub fn sync_mod_companion_variable(
+    player_entry: &mut IndexMap<String, GffValue<'static>>,
+    prefix: &str,
+) {
+    let Some(GffValue::ListOwned(vars)) = player_entry.get_mut("VarTable") else {
+        return;
+    };
+    for var in vars.iter_mut() {
+        let is_target =
+            matches!(var.get("Name"), Some(GffValue::String(n)) if n == MOD_COMPANION_VAR);
+        if !is_target {
+            continue;
+        }
+        let Some(GffValue::String(value)) = var.get("Value") else {
+            continue;
+        };
+        let suffix_start = value
+            .rfind(|c: char| !c.is_ascii_digit())
+            .map_or(value.len(), |i| i + 1);
+        let (old_prefix, suffix) = value.split_at(suffix_start);
+        if old_prefix.eq_ignore_ascii_case(prefix) || suffix.is_empty() {
+            return;
+        }
+        let new_value = format!("{prefix}{suffix}");
+        info!(
+            "Retargeting {MOD_COMPANION_VAR} from '{value}' to '{new_value}' to follow CompanionType"
+        );
+        var.insert("Value".to_string(), GffValue::String(Cow::Owned(new_value)));
+        return;
+    }
 }
 
 impl Character {
@@ -149,9 +202,63 @@ fn option_name(options: &[PetTypeOption], type_id: i32) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsers::gff::GffValue;
-    use indexmap::IndexMap;
-    use std::borrow::Cow;
+
+    fn var(name: &str, value: &str) -> IndexMap<String, GffValue<'static>> {
+        let mut v = IndexMap::new();
+        v.insert(
+            "Name".to_string(),
+            GffValue::String(Cow::Owned(name.to_string())),
+        );
+        v.insert("Type".to_string(), GffValue::Dword(3));
+        v.insert(
+            "Value".to_string(),
+            GffValue::String(Cow::Owned(value.to_string())),
+        );
+        v
+    }
+
+    fn var_value(entry: &IndexMap<String, GffValue<'static>>, name: &str) -> String {
+        let GffValue::ListOwned(vars) = &entry["VarTable"] else {
+            panic!("VarTable")
+        };
+        vars.iter()
+            .find(|v| matches!(v.get("Name"), Some(GffValue::String(n)) if n == name))
+            .and_then(|v| match v.get("Value") {
+                Some(GffValue::String(s)) => Some(s.to_string()),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn mod_companion_variable_follows_the_new_prefix_and_keeps_the_tier() {
+        let mut entry = IndexMap::new();
+        entry.insert(
+            "VarTable".to_string(),
+            GffValue::ListOwned(vec![
+                var("other", "x"),
+                var("cmi_animcomp", "c_ancom_boar12"),
+            ]),
+        );
+        sync_mod_companion_variable(&mut entry, "c_ancom_panther");
+        assert_eq!(var_value(&entry, "cmi_animcomp"), "c_ancom_panther12");
+        assert_eq!(var_value(&entry, "other"), "x");
+    }
+
+    #[test]
+    fn mod_companion_variable_is_left_alone_when_matching_or_absent() {
+        let mut entry = IndexMap::new();
+        entry.insert(
+            "VarTable".to_string(),
+            GffValue::ListOwned(vec![var("cmi_animcomp", "c_ancom_boar1")]),
+        );
+        sync_mod_companion_variable(&mut entry, "c_ancom_boar");
+        assert_eq!(var_value(&entry, "cmi_animcomp"), "c_ancom_boar1");
+
+        let mut no_vars: IndexMap<String, GffValue<'static>> = IndexMap::new();
+        sync_mod_companion_variable(&mut no_vars, "c_ancom_boar");
+        assert!(no_vars.is_empty());
+    }
 
     fn character_with_pets() -> Character {
         let mut fields = IndexMap::new();

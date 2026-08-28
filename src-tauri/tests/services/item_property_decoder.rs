@@ -254,3 +254,82 @@ async fn metadata_exposes_the_cost_table_index() {
     assert_eq!(idx(16), Some(4)); // Damage Bonus -> IPRP_DAMAGECOST
     assert_eq!(idx(52), Some(25)); // Skill Bonus -> IPRP_SKILLCOST
 }
+
+#[tokio::test]
+async fn ac_bonus_family_reads_like_the_game_and_carries_the_item_ac_type() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+
+    // AC Bonus vs. Damage Type, subtype Slashing (iprp_combatdam row 2), +3, on a cloak.
+    let on_cloak = decoder.decode_item_properties(&[property(3, 2, 3)], 80);
+    assert_eq!(
+        on_cloak[0].description,
+        "Armor Bonus vs. Slashing + 3 (Deflection)"
+    );
+    assert_eq!(on_cloak[0].ac_type.as_deref(), Some("Deflection"));
+
+    // AC Bonus vs. Alignment Group, subtype Evil (iprp_aligngrp row 5), +2, on armor.
+    let on_armor = decoder.decode_item_properties(&[property(2, 5, 2)], 16);
+    assert_eq!(on_armor[0].description, "Armor Bonus vs. Evil + 2 (Armor)");
+
+    // AC Bonus vs. Specific Alignment, Lawful Good (iprp_alignment row 0), +1, on a shield.
+    let on_shield = decoder.decode_item_properties(&[property(5, 0, 1)], 56);
+    assert_eq!(
+        on_shield[0].description,
+        "Armor Bonus vs. Lawful Good + 1 (Shield)"
+    );
+
+    // Plain AC Bonus keeps its own text, only gaining the AC type.
+    let plain = decoder.decode_item_properties(&[property(1, 0, 3)], 80);
+    assert_eq!(plain[0].description, "Armor Class Bonus: +3 (Deflection)");
+}
+
+#[tokio::test]
+async fn cast_spell_reads_like_the_game() {
+    let context = common::create_test_context().await;
+    let mut decoder = init_decoder(&context).await;
+    let spells = {
+        let rm = context.resource_manager.read().await;
+        app_lib::services::item_property_decoder::load_2da_options_from_rm(&rm, "iprp_spells")
+    };
+    decoder.set_lookup_tables(
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+        spells,
+        HashMap::new(),
+    );
+
+    // Acid Fog (iprp_spells row 0, caster level 11), 4 Uses/Day (iprp_chargecost row 11).
+    let decoded = decoder
+        .decode_property(&property(15, 0, 11))
+        .expect("cast spell decodes");
+    assert_eq!(decoded.description, "Use: Acid Fog (11) 4 Uses/Day");
+}
+
+/// `itemprops.2da` decides which properties a base item honours: a cloak
+/// (PropColumn 16) takes AC Bonus but neither Keen nor Attack Bonus.
+#[tokio::test]
+async fn metadata_carries_the_itemprops_allow_list() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+    let rm = context.resource_manager.read().await;
+    let metadata = decoder.get_editor_property_metadata_with_rm(&EditorContext::default(), &rm);
+    let allowed = |id: u32| {
+        metadata
+            .iter()
+            .find(|m| m.id == id)
+            .unwrap_or_else(|| panic!("property {id} in metadata"))
+            .allowed_columns
+            .clone()
+    };
+
+    let cloak_column = 16;
+    assert!(allowed(1).contains(&cloak_column), "AC Bonus on cloak");
+    assert!(!allowed(43).contains(&cloak_column), "Keen on cloak");
+    assert!(
+        !allowed(56).contains(&cloak_column),
+        "Attack Bonus on cloak"
+    );
+    assert!(allowed(43).contains(&0), "Keen on melee weapons");
+}

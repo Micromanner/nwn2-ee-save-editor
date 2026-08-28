@@ -330,9 +330,9 @@
     "propertySubtype": "Untertyp",
     "propertyValue": "Wert",
     "propertyValueInvalid": "Ungültig",
-    "propertiesOverMax": "über dem Limit dieses Gegenstandstyps",
     "stackSize": "Stapelgröße",
     "notStackable": "Dieser Gegenstandstyp ist nicht stapelbar.",
+    "propertyNotSupported": "Wird vom Spiel bei diesem Gegenstandstyp nicht angewendet",
     "save": "Speichern",
     "editItem": "Bearbeiten"
   },

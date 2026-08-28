@@ -705,6 +705,7 @@ export interface FullInventoryItem {
   base_ac: number | null;
   max_stack: number;
   max_props: number;
+  prop_column: number;
   category: string;
   equippable_slots: string[];
   default_slot: string | null;
@@ -726,6 +727,7 @@ export interface FullEquippedItem {
   base_ac: number | null;
   max_stack: number;
   max_props: number;
+  prop_column: number;
   decoded_properties: DecodedPropertyInfo[];
   appearance: ItemAppearance;
 }

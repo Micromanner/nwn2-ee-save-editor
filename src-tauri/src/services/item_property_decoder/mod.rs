@@ -92,6 +92,22 @@ fn get_subtype_context_key(subtype_ref: &str) -> Option<&'static str> {
 #[allow(dead_code)]
 const PROPERTY_ID_ABILITY_BONUS: u32 = 0;
 const PROPERTY_ID_AC_BONUS: u32 = 1;
+const PROPERTY_ID_AC_BONUS_VS_ALIGNMENT: u32 = 5;
+const BASE_ITEM_ARMOR: i32 = 16;
+const BASE_ITEM_SHIELDS: [i32; 3] = [14, 56, 57];
+
+/// AC type the engine applies to an AC bonus property on this base item:
+/// armor enchantment on armor, shield enchantment on shields, deflection
+/// everywhere else.
+pub fn ac_bonus_kind(base_item_id: i32) -> &'static str {
+    if base_item_id == BASE_ITEM_ARMOR {
+        "Armor"
+    } else if BASE_ITEM_SHIELDS.contains(&base_item_id) {
+        "Shield"
+    } else {
+        "Deflection"
+    }
+}
 const PROPERTY_ID_ENHANCEMENT: u32 = 6;
 const PROPERTY_ID_ATTACK_PENALTY: u32 = 10;
 const PROPERTY_ID_BONUS_FEAT: u32 = 12;
@@ -132,6 +148,9 @@ pub struct ItemPropertyDecoder {
     property_cache: HashMap<u32, PropertyDefinition>,
     /// Keyed by `iprp_costtable.2da` row, i.e. `PropertyDefinition::cost_table_ref`.
     cost_tables: HashMap<u32, CostTableData>,
+    /// Subtype tables that have no shared context map, keyed by lowercase
+    /// `SubTypeResRef` (e.g. `iprp_combatdam`).
+    subtype_tables: HashMap<String, HashMap<u32, String>>,
     initialized: bool,
     skills: HashMap<u32, String>,
     classes: HashMap<u32, String>,
@@ -154,6 +173,7 @@ impl ItemPropertyDecoder {
             rm,
             property_cache: HashMap::new(),
             cost_tables: HashMap::new(),
+            subtype_tables: HashMap::new(),
             initialized: false,
             skills: HashMap::new(),
             classes: HashMap::new(),
@@ -221,6 +241,7 @@ impl ItemPropertyDecoder {
 
         self.load_property_definitions_from_rm(rm);
         self.load_cost_tables_from_rm(rm);
+        self.load_subtype_tables_from_rm(rm);
         self.abilities = load_2da_options_from_rm(rm, "iprp_abilities");
         self.damage_types = load_2da_options_from_rm(rm, "iprp_damagetype");
         self.immunity_types = load_2da_options_from_rm(rm, "iprp_immunity");
@@ -325,6 +346,37 @@ impl ItemPropertyDecoder {
             self.cost_tables
                 .insert(table_idx, load_cost_table_from_rm(rm, &table_name));
         }
+    }
+
+    fn load_subtype_tables_from_rm(&mut self, rm: &ResourceManager) {
+        let refs: Vec<String> = self
+            .property_cache
+            .values()
+            .filter_map(|def| def.subtype_ref.as_ref())
+            .filter(|r| get_subtype_context_key(r).is_none())
+            .map(|r| r.to_lowercase())
+            .collect();
+
+        for table_name in refs {
+            if self.subtype_tables.contains_key(&table_name) {
+                continue;
+            }
+            let options = load_2da_options_from_rm(rm, &table_name);
+            self.subtype_tables.insert(table_name, options);
+        }
+    }
+
+    /// Subtype display name for any property, via its context map when one
+    /// exists and otherwise via the property's own `SubTypeResRef` table.
+    fn subtype_name(&self, def: &PropertyDefinition, subtype: u32) -> Option<String> {
+        let subtype_ref = def.subtype_ref.as_ref()?;
+        if let Some(key) = get_subtype_context_key(subtype_ref) {
+            return self.resolve_lookup(key, subtype);
+        }
+        self.subtype_tables
+            .get(&subtype_ref.to_lowercase())?
+            .get(&subtype)
+            .cloned()
     }
 
     fn cost_table_for(&self, property_id: u32) -> Option<&CostTableData> {
@@ -446,7 +498,18 @@ impl ItemPropertyDecoder {
                     .get(&subtype)
                     .cloned()
                     .unwrap_or_else(|| format!("Spell_{subtype}"));
-                property_types::decode_cast_spell(&spell_name, cost_value, param1_value, raw_data)
+                let prefix = self
+                    .property_cache
+                    .get(&property_id)
+                    .map(|d| d.description.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Use:");
+                property_types::decode_cast_spell(
+                    prefix,
+                    &spell_name,
+                    self.cost_label(property_id, cost_value),
+                    raw_data,
+                )
             }
             PROPERTY_ID_BONUS_FEAT => {
                 let feat_name = self
@@ -485,14 +548,19 @@ impl ItemPropertyDecoder {
                     .map(|d| d.label.clone())
                     .unwrap_or_else(|| format!("Property {property_id}"));
 
-                let subtype_name = def
-                    .and_then(|d| d.subtype_ref.as_ref())
-                    .and_then(|sr| get_subtype_context_key(sr))
-                    .and_then(|key| self.resolve_lookup(key, subtype));
+                let subtype_name = def.and_then(|d| self.subtype_name(d, subtype));
+
+                // The GameStrRef text is what the game prints in front of the
+                // subtype/value on the item itself ("Armor Bonus vs.", "Use:").
+                let prefix = def
+                    .map(|d| d.description.as_str())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&label);
 
                 property_types::decode_generic_with_context(
                     property_id,
                     &label,
+                    prefix,
                     subtype_name.as_deref(),
                     self.cost_label(property_id, cost_value),
                     raw_data,
@@ -513,6 +581,27 @@ impl ItemPropertyDecoder {
             .collect()
     }
 
+    /// Decodes an item's properties and stamps the AC family (rows 1-5) with
+    /// the AC type the engine derives from the base item, since the property
+    /// itself does not store one.
+    pub fn decode_item_properties(
+        &self,
+        properties: &[HashMap<String, serde_json::Value>],
+        base_item_id: i32,
+    ) -> Vec<DecodedProperty> {
+        let ac_kind = ac_bonus_kind(base_item_id);
+        let mut decoded = self.decode_all_properties(properties);
+        for prop in &mut decoded {
+            if (PROPERTY_ID_AC_BONUS..=PROPERTY_ID_AC_BONUS_VS_ALIGNMENT)
+                .contains(&prop.property_id)
+            {
+                prop.description = format!("{} ({ac_kind})", prop.description);
+                prop.ac_type = Some(ac_kind.to_string());
+            }
+        }
+        decoded
+    }
+
     pub fn get_item_bonuses(
         &self,
         properties: &[HashMap<String, serde_json::Value>],
@@ -521,8 +610,8 @@ impl ItemPropertyDecoder {
         let decoded = self.decode_all_properties(properties);
         let mut bonuses = ItemBonuses::default();
 
-        let is_armor = base_item_id == 16;
-        let is_shield = [14, 56, 57].contains(&base_item_id);
+        let is_armor = base_item_id == BASE_ITEM_ARMOR;
+        let is_shield = BASE_ITEM_SHIELDS.contains(&base_item_id);
 
         for prop in decoded {
             match prop.bonus_type.as_str() {
@@ -653,6 +742,7 @@ impl ItemPropertyDecoder {
         rm: &ResourceManager,
     ) -> Vec<PropertyMetadata> {
         let mut metadata = Vec::new();
+        let allowed_columns = load_itemprops_columns_from_rm(rm);
 
         for (id, def) in &self.property_cache {
             if is_hidden_property(*id) {
@@ -664,6 +754,7 @@ impl ItemPropertyDecoder {
                 label: def.label.clone(),
                 original_label: def.raw_label.clone(),
                 description: def.description.clone(),
+                allowed_columns: allowed_columns.get(id).cloned().unwrap_or_default(),
                 ..Default::default()
             };
 
@@ -766,6 +857,45 @@ fn normalize_ability_name(name: &str) -> &str {
         "Cha" | "Charisma" => "Cha",
         _ => name,
     }
+}
+
+/// `itemprops.2da`: one row per `itempropdef` row, one column per base-item
+/// class (`0_Melee` ... `21_Glove`, indexed by `baseitems.PropColumn`), `1`
+/// where the engine honours the property on that class.
+pub fn load_itemprops_columns_from_rm(rm: &ResourceManager) -> HashMap<u32, Vec<u32>> {
+    let mut allowed = HashMap::new();
+    let Ok(table) = rm.get_2da("itemprops") else {
+        warn!("itemprops.2da not available; property/base-item compatibility unknown");
+        return allowed;
+    };
+
+    let columns: Vec<(u32, String)> = table
+        .column_names()
+        .into_iter()
+        .filter_map(|name| {
+            let digits: String = name.chars().take_while(char::is_ascii_digit).collect();
+            digits
+                .parse::<u32>()
+                .ok()
+                .map(|idx| (idx, name.to_string()))
+        })
+        .collect();
+
+    for row_idx in 0..table.row_count() {
+        let cols: Vec<u32> = columns
+            .iter()
+            .filter(|(_, name)| {
+                table
+                    .get_cell_by_name(row_idx, name)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|v| v == "1")
+            })
+            .map(|(idx, _)| *idx)
+            .collect();
+        allowed.insert(row_idx as u32, cols);
+    }
+    allowed
 }
 
 pub fn load_2da_options_from_rm(rm: &ResourceManager, table_name: &str) -> HashMap<u32, String> {

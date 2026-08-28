@@ -330,9 +330,9 @@
     "propertySubtype": "Sous-type",
     "propertyValue": "Valeur",
     "propertyValueInvalid": "Invalide",
-    "propertiesOverMax": "au-delà de la limite de ce type d'objet",
     "stackSize": "Taille de Pile",
     "notStackable": "Ce type d'objet ne s'empile pas.",
+    "propertyNotSupported": "Non appliqué par le jeu sur ce type d'objet",
     "save": "Enregistrer",
     "editItem": "Éditer"
   },

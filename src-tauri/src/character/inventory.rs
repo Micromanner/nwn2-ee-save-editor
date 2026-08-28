@@ -173,6 +173,9 @@ pub struct BaseItemData {
     /// `baseitems.MaxProps` - how many item properties this base type is meant to
     /// carry. 0 when the row leaves it blank.
     pub max_props: i32,
+    /// `baseitems.PropColumn` - the `itemprops.2da` column that says which
+    /// properties the engine honours on this base type. -1 when blank.
+    pub prop_column: i32,
     pub num_dice: i32,
     pub die_to_roll: i32,
     pub crit_threat: i32,
@@ -249,6 +252,8 @@ pub struct FullInventoryItem {
     pub max_stack: i32,
     /// `baseitems.MaxProps` - property count this base type is meant to carry.
     pub max_props: i32,
+    /// See [`BaseItemData::prop_column`].
+    pub prop_column: i32,
     pub category: String,
     pub equippable_slots: Vec<String>,
     pub default_slot: Option<String>,
@@ -281,6 +286,7 @@ pub struct FullEquippedItem {
     /// See [`FullInventoryItem::max_stack`] / [`FullInventoryItem::max_props`].
     pub max_stack: i32,
     pub max_props: i32,
+    pub prop_column: i32,
     pub decoded_properties: Vec<DecodedPropertyInfo>,
     pub appearance: ItemAppearance,
 }
@@ -600,6 +606,8 @@ impl super::Character {
 
         let max_props = row_int(&row, "maxprops", 0);
 
+        let prop_column = row_int(&row, "propcolumn", -1);
+
         let num_dice = row_int(&row, "numdice", 0);
 
         let die_to_roll = row_int(&row, "dietoroll", 0);
@@ -626,6 +634,7 @@ impl super::Character {
             base_ac,
             max_stack,
             max_props,
+            prop_column,
             num_dice,
             die_to_roll,
             crit_threat,
@@ -723,23 +732,7 @@ impl super::Character {
                     .and_then(gff_value_to_i32)
                     .unwrap_or(1);
 
-                let value = {
-                    let calculator = ItemCostCalculator::new();
-                    match calculator.calculate_item_cost(item_struct, game_data) {
-                        Some(v) if v > 0 => v as i32,
-                        _ => {
-                            let cost = item_struct
-                                .get("Cost")
-                                .and_then(gff_value_to_i32)
-                                .unwrap_or(0);
-                            let modify_cost = item_struct
-                                .get("ModifyCost")
-                                .and_then(gff_value_to_i32)
-                                .unwrap_or(0);
-                            cost + modify_cost
-                        }
-                    }
-                };
+                let value = item_value(item_struct, game_data);
 
                 let enhancement = item_struct
                     .get("Enhancement")
@@ -824,6 +817,7 @@ impl super::Character {
                     base_ac,
                     max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack),
                     max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
+                    prop_column: base_item_data.as_ref().map_or(-1, |d| d.prop_column),
                     category,
                     equippable_slots,
                     default_slot,
@@ -877,23 +871,7 @@ impl super::Character {
                     .get_base_item_weight(base_item_id, game_data)
                     .unwrap_or(0.0);
 
-                let value = {
-                    let calculator = ItemCostCalculator::new();
-                    match calculator.calculate_item_cost(item_struct, game_data) {
-                        Some(v) if v > 0 => v as i32,
-                        _ => {
-                            let cost = item_struct
-                                .get("Cost")
-                                .and_then(gff_value_to_i32)
-                                .unwrap_or(0);
-                            let modify_cost = item_struct
-                                .get("ModifyCost")
-                                .and_then(gff_value_to_i32)
-                                .unwrap_or(0);
-                            cost + modify_cost
-                        }
-                    }
-                };
+                let value = item_value(item_struct, game_data);
 
                 let base_ac = self.get_base_item_ac(item_struct, base_item_id, game_data);
 
@@ -917,6 +895,7 @@ impl super::Character {
                     base_ac,
                     max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack),
                     max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
+                    prop_column: base_item_data.as_ref().map_or(-1, |d| d.prop_column),
                     decoded_properties,
                     appearance: {
                         let mut a = ItemAppearance::from_gff(item_struct);
@@ -1043,6 +1022,10 @@ impl super::Character {
         let Some(GffValue::ListOwned(props)) = item_struct.get("PropertiesList") else {
             return Vec::new();
         };
+        let base_item_id = item_struct
+            .get("BaseItem")
+            .and_then(gff_value_to_i32)
+            .unwrap_or(0);
 
         let mut prop_maps = Vec::new();
         for prop in props {
@@ -1056,7 +1039,7 @@ impl super::Character {
         }
 
         decoder
-            .decode_all_properties(&prop_maps)
+            .decode_item_properties(&prop_maps, base_item_id)
             .into_iter()
             .map(|dp| {
                 let cost_value = dp
@@ -1627,8 +1610,9 @@ impl super::Character {
     pub fn transform_inventory_item(
         &mut self,
         index: usize,
-        new_item: IndexMap<String, GffValue<'static>>,
+        mut new_item: IndexMap<String, GffValue<'static>>,
     ) -> Result<TransformResult, CharacterError> {
+        mark_identified(&mut new_item);
         let mut inv_list = self
             .get_list_owned("ItemList")
             .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
@@ -1656,9 +1640,10 @@ impl super::Character {
     pub fn transform_equipped_item(
         &mut self,
         slot: EquipmentSlot,
-        new_item: IndexMap<String, GffValue<'static>>,
+        mut new_item: IndexMap<String, GffValue<'static>>,
         game_data: &GameData,
     ) -> Result<TransformResult, CharacterError> {
+        mark_identified(&mut new_item);
         let base_item_id = new_item
             .get("BaseItem")
             .and_then(gff_value_to_i32)
@@ -2228,6 +2213,10 @@ impl super::Character {
         let Some(GffValue::ListOwned(props)) = item_struct.get("PropertiesList") else {
             return Vec::new();
         };
+        let base_item_id = item_struct
+            .get("BaseItem")
+            .and_then(gff_value_to_i32)
+            .unwrap_or(0);
 
         let mut prop_maps = Vec::new();
         for prop in props {
@@ -2240,7 +2229,7 @@ impl super::Character {
             prop_maps.push(map);
         }
 
-        decoder.decode_all_properties(&prop_maps)
+        decoder.decode_item_properties(&prop_maps, base_item_id)
     }
 
     pub fn get_enhanced_item_summary(
@@ -2313,25 +2302,7 @@ impl super::Character {
             .get_base_item_weight(base_item_id, game_data)
             .unwrap_or(0.0);
 
-        let value = {
-            let calculator = ItemCostCalculator::new();
-            let calculated = calculator.calculate_item_cost(item_struct, game_data);
-
-            match calculated {
-                Some(v) if v > 0 => v as i32,
-                _ => {
-                    let cost = item_struct
-                        .get("Cost")
-                        .and_then(gff_value_to_i32)
-                        .unwrap_or(0);
-                    let modify_cost = item_struct
-                        .get("ModifyCost")
-                        .and_then(gff_value_to_i32)
-                        .unwrap_or(0);
-                    cost + modify_cost
-                }
-            }
-        };
+        let value = item_value(item_struct, game_data);
 
         EnhancedItemSummary {
             base_item_id,
@@ -2579,9 +2550,10 @@ impl super::Character {
 
     pub fn add_item_from_struct(
         &mut self,
-        item: IndexMap<String, GffValue<'static>>,
+        mut item: IndexMap<String, GffValue<'static>>,
         game_data: &GameData,
     ) -> Result<AddItemResult, CharacterError> {
+        mark_identified(&mut item);
         let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
 
         let tag = item
@@ -3143,6 +3115,36 @@ fn property_lists_match(
     a_ids.sort_unstable();
     b_ids.sort_unstable();
     a_ids == b_ids
+}
+
+/// Item value as the game shows it: computed from the 2DAs, falling back to the
+/// stored `Cost + ModifyCost` only when the base item is unknown.
+fn item_value(item_struct: &IndexMap<String, GffValue<'static>>, game_data: &GameData) -> i32 {
+    ItemCostCalculator::new()
+        .calculate_item_cost(item_struct, game_data)
+        .map_or_else(
+            || {
+                let cost = item_struct
+                    .get("Cost")
+                    .and_then(gff_value_to_i32)
+                    .unwrap_or(0);
+                let modify_cost = item_struct
+                    .get("ModifyCost")
+                    .and_then(gff_value_to_i32)
+                    .unwrap_or(0);
+                cost + modify_cost
+            },
+            |v| v as i32,
+        )
+}
+
+/// Blueprints are loot templates: 65% of vanilla `.uti` files ship
+/// `Identified = 0` so the game can hand them out unidentified. An item the
+/// user adds or transforms in the editor is an explicit choice, so it is
+/// stamped identified like the base-item add path always was. BYTE is the
+/// type every real item uses for the field.
+fn mark_identified(item: &mut IndexMap<String, GffValue<'static>>) {
+    item.insert("Identified".to_string(), GffValue::Byte(1));
 }
 
 /// Strict stack-merge identity: same BaseItem, same Tag (empty matches empty),
@@ -3790,7 +3792,7 @@ mod tests {
             item.get("Tag").and_then(gff_value_to_string).unwrap(),
             "new_item"
         );
-        assert!(item.get("Identified").is_none());
+        assert_eq!(item.get("Identified").and_then(gff_value_to_i32), Some(1));
     }
 
     #[test]

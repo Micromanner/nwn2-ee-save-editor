@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, HTMLSelect, InputGroup } from '@blueprintjs/core';
+import { Button, InputGroup } from '@blueprintjs/core';
 import { GiQuillInk } from 'react-icons/gi';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -8,6 +8,7 @@ import { useCharacterContext } from '@/contexts/CharacterContext';
 import { display } from '@/utils/dataHelpers';
 import type { PetSlot, PetsState } from '@/lib/bindings';
 import { GameIcon } from '../shared/GameIcon';
+import { DropdownSelect } from '../shared';
 import { T } from '../theme';
 
 const TYPE_NONE = -1;
@@ -60,13 +61,15 @@ function PetSlotRow({
     <div style={{ padding: '5px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="t-md" style={{ color: T.textMuted, flex: 1 }}>{t(labelKey)}</span>
-        <HTMLSelect
-          value={slot.type_id}
-          onChange={e => onChange({ typeId: Number(e.currentTarget.value) })}
-          options={[
-            { value: TYPE_NONE, label: t('overview.pets.none') },
-            ...slot.options.map(o => ({ value: o.id, label: o.name })),
+        <DropdownSelect
+          small
+          width={180}
+          value={slot.type_id === TYPE_NONE ? t('overview.pets.none') : (slot.options.find(o => o.id === slot.type_id)?.name ?? String(slot.type_id))}
+          items={[
+            { id: TYPE_NONE, label: t('overview.pets.none') },
+            ...slot.options.map(o => ({ id: o.id, label: o.name })),
           ]}
+          onChange={typeId => onChange({ typeId })}
         />
         {/* Fixed width so the select does not shift when the name toggles to an input */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: 208 }}>

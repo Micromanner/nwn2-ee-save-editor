@@ -1,6 +1,7 @@
 mod campaign;
 mod companions;
 mod item_appearance_candidates;
+mod item_cost;
 mod item_property_decoder;
 mod load_diagnostics;
 mod playerinfo;

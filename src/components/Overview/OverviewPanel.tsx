@@ -216,7 +216,10 @@ export function OverviewPanel() {
     setAlignmentSaving(true);
     try {
       const res = await CharacterAPI.updateAlignment(characterId, { law_chaos: lc, good_evil: ge });
-      updateCharacterPartial({ alignment: res.alignment_string });
+      updateCharacterPartial({
+        alignment: res.alignment_string,
+        alignmentValues: { law_chaos: lc, good_evil: ge },
+      });
     } catch (err) {
       handleError(err);
     }

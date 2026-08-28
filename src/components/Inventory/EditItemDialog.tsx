@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Button, Checkbox, Menu, MenuItem, Popover, Spinner, Tab, Tabs } from '@blueprintjs/core';
+import { Button, Checkbox, Spinner, Tab, Tabs } from '@blueprintjs/core';
 import { GiTiedScroll } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
-import { ParchmentDialog, StepInput } from '../shared';
+import { DropdownSelect, ParchmentDialog, StepInput } from '../shared';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -40,34 +40,6 @@ function defaultCostValue(meta: PropertyMetadata | undefined): number {
   return keys.length ? Math.min(...keys) : 0;
 }
 
-function DropdownSelect({ label, value, items, onChange, disabled, valueColor }: {
-  label: string;
-  value: string;
-  items: { id: string | number; label: string }[];
-  onChange: (id: number) => void;
-  disabled?: boolean;
-  valueColor?: string;
-}) {
-  const menu = (
-    <Menu style={{ maxHeight: 300, overflowY: 'auto' }}>
-      {items.map(item => (
-        <MenuItem key={item.id} text={item.label} active={item.label === value} onClick={() => onChange(Number(item.id))} />
-      ))}
-    </Menu>
-  );
-  return (
-    <div style={{ opacity: disabled ? 0.35 : 1, pointerEvents: disabled ? 'none' : undefined }}>
-      <div className="t-semibold t-sm" style={{ color: T.textMuted, marginBottom: 3 }}>{label}</div>
-      <Popover content={menu} placement="bottom-start" minimal fill disabled={disabled}>
-        <Button minimal rightIcon="caret-down" text={value} fill
-          style={{ textAlign: 'left', border: `1px solid ${T.border}`, background: T.surface, color: valueColor }}
-          disabled={disabled}
-        />
-      </Popover>
-    </div>
-  );
-}
-
 export interface EditItemDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -80,9 +52,10 @@ export interface EditItemDialogProps {
   resolvedIcon?: string;
   preloadedMetadata?: ItemEditorMetadataResponse | null;
   appearance?: ItemAppearance | null;
-  // baseitems.Stacking / baseitems.MaxProps for this item's base type.
+  // baseitems.Stacking for this item's base type.
   maxStack?: number;
-  maxProps?: number;
+  // baseitems.PropColumn - which itemprops.2da column governs this base type.
+  propColumn?: number;
 }
 
 export function EditItemDialog({
@@ -98,7 +71,7 @@ export function EditItemDialog({
   preloadedMetadata,
   appearance,
   maxStack,
-  maxProps,
+  propColumn,
 }: EditItemDialogProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
@@ -193,9 +166,17 @@ export function EditItemDialog({
     setLocalData(prev => prev ? { ...prev, [field]: value } : prev);
   };
 
+  // itemprops.2da: the engine silently ignores a property the base item's
+  // column does not allow, so the picker only offers the ones that work.
+  const isPropertyAllowed = useCallback((meta: PropertyMetadata) => {
+    if (propColumn === undefined || propColumn < 0) return true;
+    return (meta.allowed_columns ?? []).includes(propColumn);
+  }, [propColumn]);
+
   const handleAddProperty = () => {
     if (!preloadedMetadata?.property_types.length) return;
-    const firstProp = preloadedMetadata.property_types[0];
+    const firstProp = preloadedMetadata.property_types.find(isPropertyAllowed)
+      ?? preloadedMetadata.property_types[0];
     const newProp = {
       PropertyName: firstProp.id,
       Subtype: 0,
@@ -275,7 +256,6 @@ export function EditItemDialog({
   const properties = (localData?.PropertiesList as Record<string, unknown>[] | undefined) || [];
   const itemName = stripNwn2Tags(getLocalizedValue('LocalizedName'));
   const stackLimit = Math.max(1, maxStack ?? 1);
-  const propsOverCap = Boolean(maxProps && maxProps > 0 && properties.length > maxProps);
 
   return (
     <>
@@ -410,8 +390,9 @@ export function EditItemDialog({
                   padding: '10px 12px', background: T.sectionBg, border: `1px solid ${T.sectionBorder}`, borderRadius: 4,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Absent Identified counts as identified, as the backend and the game read it. */}
                     <Checkbox
-                      checked={localData.Identified === 1}
+                      checked={(localData.Identified ?? 1) !== 0}
                       onChange={(e) => handleBasicChange('Identified', (e.target as HTMLInputElement).checked ? 1 : 0)}
                       style={{ margin: 0 }}
                     />
@@ -450,12 +431,7 @@ export function EditItemDialog({
             <div style={{ paddingTop: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span className="t-semibold" style={{ color: T.text }}>
-                  {t('inventory.enchantments')} ({maxProps && maxProps > 0 ? `${properties.length} / ${maxProps}` : properties.length})
-                  {propsOverCap && (
-                    <span className="t-sm" style={{ color: T.negative, marginLeft: 8 }}>
-                      {t('inventory.propertiesOverMax')}
-                    </span>
-                  )}
+                  {t('inventory.enchantments')} ({properties.length})
                 </span>
                 <Button small icon="add" intent="primary" text={t('inventory.addProperty')} onClick={handleAddProperty} disabled={!preloadedMetadata} />
               </div>
@@ -465,7 +441,10 @@ export function EditItemDialog({
                   const propMeta = getPropMeta(prop.PropertyName as number);
                   const subtypeOptions = getSubtypeOptions(prop.PropertyName as number);
 
-                  const propertyItems = (preloadedMetadata?.property_types || []).map(pt => ({ id: pt.id, label: pt.label }));
+                  const propAllowed = !propMeta || isPropertyAllowed(propMeta);
+                  const propertyItems = (preloadedMetadata?.property_types || [])
+                    .filter(pt => pt.id === prop.PropertyName || isPropertyAllowed(pt))
+                    .map(pt => ({ id: pt.id, label: pt.label }));
                   const subtypeItems = subtypeOptions
                     ? Object.entries(subtypeOptions).map(([id, label]) => ({ id, label }))
                     : [];
@@ -500,7 +479,13 @@ export function EditItemDialog({
                         value={propLabel}
                         items={propertyItems}
                         onChange={(id) => handlePropertyChange(i, 'PropertyName', id)}
+                        valueColor={propAllowed ? undefined : T.negative}
                       />
+                      {!propAllowed && (
+                        <div className="t-sm t-semibold" style={{ gridColumn: '1 / -1', color: T.negative, marginTop: -2 }}>
+                          {t('inventory.propertyNotSupported')}
+                        </div>
+                      )}
                       {propMeta?.has_subtype && (
                         <DropdownSelect
                           label={t('inventory.propertySubtype')}

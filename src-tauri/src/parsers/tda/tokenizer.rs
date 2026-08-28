@@ -41,7 +41,7 @@ impl TDATokenizer {
     }
 
     fn tokenize_tab_separated<'a>(line: &'a str) -> TDAResult<LineTokens<'a>> {
-        let mut tokens = SmallVec::new();
+        let mut tokens: LineTokens<'a> = SmallVec::new();
         let mut position = 0;
 
         for field in line.split('\t') {
@@ -69,6 +69,16 @@ impl TDATokenizer {
             tokens.push(token);
 
             position += field.len() + 1;
+        }
+
+        // The engine splits on whitespace runs, so tabs at either end of a line
+        // are not cells. Some third-party 2DAs (e.g. workshop overrides) indent
+        // every data row with a leading tab; keeping that empty field would make
+        // it the row label and shift every cell one column left.
+        let leading = tokens.iter().take_while(|t| t.content.is_empty()).count();
+        tokens.drain(..leading);
+        while tokens.last().is_some_and(|t| t.content.is_empty()) {
+            tokens.pop();
         }
 
         Ok(tokens)
@@ -223,6 +233,16 @@ mod tests {
         assert_eq!(tokens[1].content, "col2");
         assert_eq!(tokens[2].content, "");
         assert_eq!(tokens[3].content, "col4");
+    }
+
+    #[test]
+    fn test_tab_separated_ignores_leading_and_trailing_tabs() {
+        let mut tokenizer = TDATokenizer::new();
+        let tokens = tokenizer.tokenize_line("	16	650	Damage	").unwrap();
+
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[0].content, "16");
+        assert_eq!(tokens[2].content, "Damage");
     }
 
     #[test]

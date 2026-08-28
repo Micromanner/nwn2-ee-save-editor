@@ -86,6 +86,7 @@ export interface PropertyMetadata {
   param1_options: Record<number, string>;
   param1_idx: number | null;
   is_flat: boolean;
+  allowed_columns: number[];
 }
 
 export interface ItemEditorMetadataResponse {

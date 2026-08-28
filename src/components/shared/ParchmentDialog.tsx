@@ -30,7 +30,8 @@ export function ParchmentDialog({
       onClosed={onClosed}
       title={title}
       className="bp-app"
-      style={{ width, minHeight, height, paddingBottom: 0, background: T.surface }}
+      // Explicit flex column so a minHeight/height stretches the body and keeps the footer at the bottom.
+      style={{ width, minHeight, height, paddingBottom: 0, background: T.surface, display: 'flex', flexDirection: 'column' }}
       canOutsideClickClose
     >
       <div style={{ background: T.surface, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
