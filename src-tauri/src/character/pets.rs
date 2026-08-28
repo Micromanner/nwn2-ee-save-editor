@@ -93,19 +93,19 @@ pub fn companion_blueprint_prefix(type_id: i32, game_data: &GameData) -> Option<
         .filter(|s| s != "****" && !s.is_empty())
 }
 
-/// Script local variable in which the Clangeddin Utilities workshop mod's
-/// replacement `nw_s2_animalcom` caches the companion blueprint. Its summon
-/// script reads this instead of `CompanionType` once it is set, so a type
-/// change in the editor would otherwise keep summoning the old creature.
+/// Script local variable in which the CMI workshop mod's (Steam item
+/// 3531898085) replacement `nw_s2_animalcom` caches the companion blueprint
+/// on the summoning creature. Its summon script reads this instead of
+/// `CompanionType` once it is set, so a type change in the editor would
+/// otherwise keep summoning the old creature. The mod keeps no such cache
+/// for familiars.
 const MOD_COMPANION_VAR: &str = "cmi_animcomp";
 
-/// Points the mod's cached companion blueprint at `prefix`, keeping its level
+/// Points the mod's cached companion blueprint in `fields` (the root struct
+/// of a playerlist entry or a `.ros` file) at `prefix`, keeping its level
 /// tier suffix. No-op when the variable is absent or already matches.
-pub fn sync_mod_companion_variable(
-    player_entry: &mut IndexMap<String, GffValue<'static>>,
-    prefix: &str,
-) {
-    let Some(GffValue::ListOwned(vars)) = player_entry.get_mut("VarTable") else {
+pub fn sync_mod_companion_variable(fields: &mut IndexMap<String, GffValue<'static>>, prefix: &str) {
+    let Some(GffValue::ListOwned(vars)) = fields.get_mut("VarTable") else {
         return;
     };
     for var in vars.iter_mut() {

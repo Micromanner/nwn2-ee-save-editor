@@ -69,8 +69,18 @@ fn get_quest_patterns() -> &'static Vec<(Regex, &'static str, i32)> {
     })
 }
 
+/// Official campaign a companion belongs to; used to list the whole cast of
+/// the campaign a save is playing, not just the members the game has written
+/// variables for yet.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+pub enum Campaign {
+    Oc,
+    MotB,
+}
+
 #[derive(Clone, Serialize)]
 pub struct CompanionDefinition {
+    pub campaign: Campaign,
     pub name: &'static str,
     pub influence_var: &'static str,
     pub joined_var: &'static str,
@@ -85,6 +95,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "neeshka",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Neeshka",
             influence_var: "00_nInfluenceneeshka",
             joined_var: "00_bNeeshka_Joined",
@@ -95,6 +106,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "khelgar",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Khelgar",
             influence_var: "00_nInfluencekhelgar",
             joined_var: "00_bKhelgar_Joined",
@@ -105,6 +117,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "elanee",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Elanee",
             influence_var: "00_nInfluenceelanee",
             joined_var: "00_bElanee_Joined",
@@ -115,6 +128,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "qara",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Qara",
             influence_var: "00_nInfluenceqara",
             joined_var: "00_bQaraJoined",
@@ -125,6 +139,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "casavir",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Casavir",
             influence_var: "00_nInfluencecasavir",
             joined_var: "00_bCasavir_Joined",
@@ -135,6 +150,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "grobnar",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Grobnar",
             influence_var: "00_nInfluencegrobnar",
             joined_var: "00_bGrobnar_Joined",
@@ -145,6 +161,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "sand",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Sand",
             influence_var: "00_nInfluencesand",
             joined_var: "00_bSand_Joined",
@@ -155,6 +172,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "bishop",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Bishop",
             influence_var: "00_nInfluencebishop",
             joined_var: "00_bBishop_Joined",
@@ -165,6 +183,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "shandra",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Shandra",
             influence_var: "00_nInfluenceshandra",
             joined_var: "00_bShandra_Joined",
@@ -175,6 +194,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "ammon_jerro",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Ammon Jerro",
             influence_var: "00_nInfluenceammon",
             joined_var: "00_bAmmon_Joined",
@@ -185,6 +205,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "zhjaeve",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Zhjaeve",
             influence_var: "00_nInfluencezhjaeve",
             joined_var: "00_bZhjaeve_Joined",
@@ -195,6 +216,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "construct",
         CompanionDefinition {
+            campaign: Campaign::Oc,
             name: "Construct",
             influence_var: "00_nInfluenceconstruct",
             joined_var: "00_bConstruct_Joined",
@@ -205,6 +227,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "safiya",
         CompanionDefinition {
+            campaign: Campaign::MotB,
             name: "Safiya",
             influence_var: "00_nInfluencesafiya",
             joined_var: "00_bSafiya_Joined",
@@ -215,6 +238,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "gann",
         CompanionDefinition {
+            campaign: Campaign::MotB,
             name: "Gann",
             influence_var: "00_nInfluencegann",
             joined_var: "00_bGann_Joined",
@@ -225,6 +249,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "kaelyn",
         CompanionDefinition {
+            campaign: Campaign::MotB,
             name: "Kaelyn the Dove",
             influence_var: "00_nInfluencekaelyn",
             joined_var: "00_bKaelyn_Joined",
@@ -235,6 +260,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "okku",
         CompanionDefinition {
+            campaign: Campaign::MotB,
             name: "Okku",
             influence_var: "00_nInfluenceokku",
             joined_var: "00_bOkku_Joined",
@@ -245,11 +271,12 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map.insert(
         "one_of_many",
         CompanionDefinition {
+            campaign: Campaign::MotB,
             name: "One of Many",
             influence_var: "00_nInfluenceoneofmany",
             joined_var: "00_bOneOfMany_Joined",
             met_var: Some("bOneOfManyMet"),
-            ros_name: None,
+            ros_name: Some("oneofmany"),
         },
     );
     map
@@ -328,39 +355,55 @@ impl RustXmlParser {
         discovered
     }
 
-    pub fn get_companion_status(&self) -> HashMap<String, CompanionStatus> {
+    /// Status of every known companion of the campaign(s) this save is
+    /// playing. `ros_names` are the `.ros` files in the save: a companion with
+    /// one is party-capable, hence recruited, whatever globals.xml says (the
+    /// game does not write `*_Joined`/`*Met` for every companion). A campaign
+    /// counts as present when any of its companions has a `.ros` file or an
+    /// influence variable.
+    pub fn get_companion_status(&self, ros_names: &[String]) -> HashMap<String, CompanionStatus> {
         let mut companion_status = HashMap::new();
         let defs = get_companion_definitions();
+        let in_roster = |comp_id: &str, def: &CompanionDefinition| {
+            let ros_name = def.ros_name.unwrap_or(comp_id);
+            ros_names.iter().any(|r| r.eq_ignore_ascii_case(ros_name))
+        };
+        let campaigns: HashSet<Campaign> = defs
+            .iter()
+            .filter(|(comp_id, def)| {
+                in_roster(comp_id, def) || self.data.integers.contains_key(def.influence_var)
+            })
+            .map(|(_, def)| def.campaign)
+            .collect();
 
         // 1. Explicit definitions
-        for (comp_id, def) in defs {
-            let mut influence = None;
-            let mut recruitment = "not_recruited".to_string();
-
-            if let Some(val) = self.data.integers.get(def.influence_var) {
-                influence = Some(*val);
+        for (comp_id, def) in &defs {
+            if !campaigns.contains(&def.campaign) {
+                continue;
             }
-
+            let influence = self.data.integers.get(def.influence_var).copied();
             let joined = self.data.integers.get(def.joined_var).copied().unwrap_or(0);
-            if joined > 0 {
-                recruitment = "recruited".to_string();
-            } else if let Some(met_var) = def.met_var
-                && self.data.integers.get(met_var).copied().unwrap_or(0) > 0
-            {
-                recruitment = "met".to_string();
-            }
+            let met = def
+                .met_var
+                .and_then(|v| self.data.integers.get(v).copied())
+                .unwrap_or(0);
+            let recruitment = if joined > 0 || in_roster(comp_id, def) {
+                "recruited"
+            } else if met > 0 {
+                "met"
+            } else {
+                "not_recruited"
+            };
 
-            if influence.is_some() || recruitment != "not_recruited" {
-                companion_status.insert(
-                    comp_id.to_string(),
-                    CompanionStatus {
-                        name: def.name.to_string(),
-                        influence,
-                        recruitment,
-                        source: "explicit".to_string(),
-                    },
-                );
-            }
+            companion_status.insert(
+                comp_id.to_string(),
+                CompanionStatus {
+                    name: def.name.to_string(),
+                    influence,
+                    recruitment: recruitment.to_string(),
+                    source: "explicit".to_string(),
+                },
+            );
         }
 
         // 2. Discovered
@@ -518,7 +561,7 @@ impl RustXmlParser {
     pub fn get_full_summary_struct(&self) -> FullSummary {
         FullSummary {
             general_info: self.get_general_info(),
-            companion_status: self.get_companion_status(),
+            companion_status: self.get_companion_status(&[]),
             quest_overview: self.get_quest_overview_struct(),
             raw_data_counts: HashMap::from([
                 ("integers".to_string(), self.data.integers.len()),

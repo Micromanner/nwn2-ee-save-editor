@@ -54,3 +54,6 @@ mod diagnose_head_hair_mask_format;
 
 #[path = "debugging/make_tint_sentinel_save.rs"]
 mod make_tint_sentinel_save;
+
+#[path = "debugging/dump_roster_flags.rs"]
+mod dump_roster_flags;

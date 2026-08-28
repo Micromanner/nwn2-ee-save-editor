@@ -79,3 +79,50 @@ fn test_campaign_manager_write_operations() {
     assert!(xml_content_2.contains(test_str_var));
     assert!(xml_content_2.contains(test_str_val));
 }
+
+// Fixture reality: MOTB/globals.xml carries a single companion variable
+// (00_nInfluencesafiya); gann/okku/dove/oneofmany exist only as .ros files.
+// The influence page must still list the whole MotB cast and none of the OC.
+#[test]
+fn companion_influence_lists_whole_campaign_cast_from_roster() {
+    let handler = SaveGameHandler::new(common::fixtures_path().join("saves/MOTB"), false, false)
+        .expect("handler");
+    let companions = CampaignManager::get_companion_influence(&handler).expect("influence");
+
+    let mut ids: Vec<&str> = companions
+        .iter()
+        .filter(|(_, s)| s.source == "explicit")
+        .map(|(id, _)| id.as_str())
+        .collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec!["gann", "kaelyn", "okku", "one_of_many", "safiya"]);
+    assert_eq!(companions["safiya"].influence, Some(-6));
+    assert_eq!(companions["kaelyn"].influence, None);
+    assert_eq!(companions["kaelyn"].recruitment, "recruited");
+    assert_eq!(companions["one_of_many"].recruitment, "recruited");
+}
+
+// Classic_Campaign has *_Joined for four companions and .ros files for more;
+// every OC companion is listed, with the .ros file deciding recruitment.
+#[test]
+fn companion_influence_lists_oc_cast_with_unrecruited_members() {
+    let handler = SaveGameHandler::new(
+        common::fixtures_path().join("saves/Classic_Campaign"),
+        false,
+        false,
+    )
+    .expect("handler");
+    let companions = CampaignManager::get_companion_influence(&handler).expect("influence");
+
+    let explicit = companions
+        .values()
+        .filter(|s| s.source == "explicit")
+        .count();
+    assert_eq!(explicit, 12);
+    assert!(
+        !companions.contains_key("safiya"),
+        "MotB cast must not leak into an OC save"
+    );
+    assert_eq!(companions["ammon_jerro"].recruitment, "recruited");
+    assert_eq!(companions["khelgar"].recruitment, "recruited");
+}

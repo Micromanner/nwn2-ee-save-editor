@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -301,12 +301,14 @@ impl SessionState {
     ) -> Result<Option<String>, String> {
         if let CharacterSource::Companion { ros_name } = &self.character_source {
             let ros_name = ros_name.clone();
-            return self.save_companion_inner(&ros_name);
+            let companion_prefix = self.companion_blueprint_prefix(game_data);
+            return self.save_companion_inner(&ros_name, companion_prefix.as_deref());
         }
         if self.character_source == CharacterSource::Standalone {
             return self.save_standalone_inner(backup_keep_count);
         }
 
+        let companion_prefix = self.companion_blueprint_prefix(game_data);
         let handler = self
             .savegame_handler
             .as_mut()
@@ -324,10 +326,6 @@ impl SessionState {
         let char_fields = character.clone_gff();
         let selected_player_index = self.selected_player_index;
         let update_primary_player_files = self.primary_player_index == Some(selected_player_index);
-        let companion_prefix = crate::character::pets::companion_blueprint_prefix(
-            character.animal_companion_type(),
-            game_data,
-        );
 
         handler
             .rewrite_player_files(|src| {
@@ -367,12 +365,21 @@ impl SessionState {
         Ok(None)
     }
 
-    pub fn save_companion(&mut self) -> Result<Option<String>, String> {
+    pub fn save_companion(&mut self, game_data: &GameData) -> Result<Option<String>, String> {
         let CharacterSource::Companion { ros_name } = &self.character_source else {
             return Err("Active character is not a companion".into());
         };
         let ros_name = ros_name.clone();
-        self.save_companion_inner(&ros_name)
+        let companion_prefix = self.companion_blueprint_prefix(game_data);
+        self.save_companion_inner(&ros_name, companion_prefix.as_deref())
+    }
+
+    fn companion_blueprint_prefix(&self, game_data: &GameData) -> Option<String> {
+        let character = self.character.as_ref()?;
+        crate::character::pets::companion_blueprint_prefix(
+            character.animal_companion_type(),
+            game_data,
+        )
     }
 
     fn save_standalone_inner(
@@ -401,7 +408,11 @@ impl SessionState {
         Ok(None)
     }
 
-    fn save_companion_inner(&mut self, ros_name: &str) -> Result<Option<String>, String> {
+    fn save_companion_inner(
+        &mut self,
+        ros_name: &str,
+        companion_prefix: Option<&str>,
+    ) -> Result<Option<String>, String> {
         let handler = self
             .savegame_handler
             .as_mut()
@@ -419,12 +430,12 @@ impl SessionState {
         let original = handler
             .extract_file(&stored_name)
             .map_err(|e| format!("Failed to read companion file: {e}"))?;
-        let bytes = crate::parsers::gff::merge_fields_into_gff(
-            Some(&original),
-            &character.clone_gff(),
-            "ROS ",
-            true,
-        )?;
+        let mut fields = character.clone_gff();
+        if let Some(prefix) = companion_prefix {
+            crate::character::pets::sync_mod_companion_variable(&mut fields, prefix);
+        }
+        let bytes =
+            crate::parsers::gff::merge_fields_into_gff(Some(&original), &fields, "ROS ", true)?;
         handler
             .update_file(&stored_name, &bytes)
             .map_err(|e| format!("Failed to write companion file: {e}"))?;
@@ -633,31 +644,15 @@ impl SessionState {
             .list_companions()
             .map_err(|e| format!("Failed to list companions: {e}"))?;
 
-        let recruited = recruited_ros_names(handler);
-        if let Some(set) = &recruited {
-            debug!(
-                "list_roster: filtering by {} recruited companion(s) from globals.xml",
-                set.len()
-            );
-        } else {
-            debug!(
-                "list_roster: no recruited companions found in globals.xml; falling back to roster availability flags"
-            );
-        }
-
+        // Neither globals.xml `*_Joined` vars nor the RosAvailable/RosSelectable/
+        // RosCampaignNPC flags identify a companion: the game skips the vars for
+        // some companions and clears all three flags on an active party member.
         Ok(members
             .into_iter()
             .filter(|m| {
-                let has_file = companion_files
+                companion_files
                     .iter()
-                    .any(|c| c.eq_ignore_ascii_case(&m.ros_name));
-                if !has_file {
-                    return false;
-                }
-                match &recruited {
-                    Some(set) => set.contains(&normalize_ros_name(&m.ros_name)),
-                    None => m.available || m.campaign_npc,
-                }
+                    .any(|c| c.eq_ignore_ascii_case(&m.ros_name))
             })
             .map(|m| RosterListing {
                 ros_name: m.ros_name,
@@ -759,45 +754,6 @@ fn write_playerinfo_for_character(
         .map_err(|e| format!("Failed to write playerinfo.bin: {e}"))?;
 
     Ok(())
-}
-
-/// Companions the player has actually recruited, keyed by normalized `RosName`,
-/// derived from `globals.xml`'s `*_Joined` variables. `None` when the save has
-/// no known companion vars (custom campaign, or globals.xml unreadable) —
-/// callers should fall back to the roster file's availability flags in that case.
-fn recruited_ros_names(handler: &SaveGameHandler) -> Option<HashSet<String>> {
-    let xml = handler.extract_globals_xml().ok()?;
-    let parser = crate::parsers::xml::RustXmlParser::from_string(&xml).ok()?;
-    let statuses = parser.get_companion_status();
-    let defs = crate::parsers::xml::get_companion_definitions();
-
-    let recruited: HashSet<String> = statuses
-        .iter()
-        .filter(|(_, status)| status.recruitment == "recruited")
-        .map(|(comp_id, _)| {
-            let ros_name = defs
-                .get(comp_id.as_str())
-                .and_then(|def| def.ros_name)
-                .unwrap_or(comp_id.as_str());
-            normalize_ros_name(ros_name)
-        })
-        .collect();
-
-    if recruited.is_empty() {
-        None
-    } else {
-        Some(recruited)
-    }
-}
-
-/// Normalize a companion identifier (comp_id or `RosName`) to lowercase
-/// alphanumerics so naming variants like `ammon_jerro`/`ammon_jerro` or
-/// `one_of_many`/`oneofmany` compare equal.
-fn normalize_ros_name(name: &str) -> String {
-    name.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .collect()
 }
 
 fn sync_roster(
@@ -1056,40 +1012,6 @@ mod tests {
 
         assert!(session.undo_stack.is_empty());
         assert!(session.redo_stack.is_empty());
-    }
-
-    #[test]
-    fn normalize_ros_name_lowercases_and_strips_separators() {
-        assert_eq!(normalize_ros_name("khelgar"), "khelgar");
-        assert_eq!(normalize_ros_name("ammon_jerro"), "ammonjerro");
-        assert_eq!(normalize_ros_name("one_of_many"), "oneofmany");
-        assert_eq!(normalize_ros_name("Khelgar"), "khelgar");
-    }
-
-    #[test]
-    fn normalize_ros_name_matches_across_comp_id_and_ros_name_variants() {
-        assert_eq!(
-            normalize_ros_name("ammon_jerro"),
-            normalize_ros_name("ammon_jerro")
-        );
-        assert_eq!(
-            normalize_ros_name("one_of_many"),
-            normalize_ros_name("oneofmany")
-        );
-    }
-
-    #[test]
-    fn kaelyn_comp_id_normalizes_differently_from_dove_ros_name() {
-        // Without the explicit alias these would not match; the alias in
-        // CompanionDefinition::ros_name is what bridges the two.
-        assert_ne!(normalize_ros_name("kaelyn"), normalize_ros_name("dove"));
-
-        let defs = crate::parsers::xml::get_companion_definitions();
-        let kaelyn_ros_name = defs.get("kaelyn").and_then(|d| d.ros_name).unwrap();
-        assert_eq!(
-            normalize_ros_name(kaelyn_ros_name),
-            normalize_ros_name("dove")
-        );
     }
 
     #[test]

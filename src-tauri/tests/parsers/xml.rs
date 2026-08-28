@@ -182,7 +182,7 @@ fn test_companion_status() {
 
     let parser = RustXmlParser::from_string(&content).expect("Failed to parse globals.xml");
 
-    let companions = parser.get_companion_status();
+    let companions = parser.get_companion_status(&[]);
 
     println!("Companion Status:");
     for (name, status) in &companions {
@@ -202,7 +202,7 @@ fn test_motb_companions() {
 
     let parser = RustXmlParser::from_string(&content).expect("Failed to parse globals.xml");
 
-    let companions = parser.get_companion_status();
+    let companions = parser.get_companion_status(&[]);
 
     let motb_companion_names = ["safiya", "gann", "kaelyn", "okku", "oneofmany", "ammon"];
 

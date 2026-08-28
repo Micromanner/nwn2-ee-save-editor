@@ -29,12 +29,11 @@ fn load_save(session: &mut SessionState, save: &str) {
         .expect("load save");
 }
 
-// Fixture reality (verified with --nocapture): this save's globals.xml has no
-// `*_Joined`/influence vars at all, so `list_roster` falls back to the
-// roster.rst availability flags. Under that fallback, all 12 recruited
-// companions (including shandra/zhjaeve) are marked available/campaign_npc,
-// each with a matching .ros file; only the non-party NPCs npc_bevil and
-// 0_amie are unavailable and excluded.
+// Fixture reality (verified with --nocapture): roster.rst lists 14 members,
+// all with a .ros file, including the cutscene followers npc_bevil and
+// 0_amie. Nothing in roster.rst separates those from real companions (a
+// user's save had Casavir in the party with RosAvailable/RosSelectable/
+// RosCampaignNPC all 0, the same as the followers), so all 14 are listed.
 #[test]
 fn list_roster_filters_party_members_with_files_original_format() {
     let mut session = make_session();
@@ -43,37 +42,34 @@ fn list_roster_filters_party_members_with_files_original_format() {
     let roster = session.list_roster().expect("list roster");
     let names: Vec<&str> = roster.iter().map(|r| r.ros_name.as_str()).collect();
 
-    assert_eq!(roster.len(), 12);
+    assert_eq!(roster.len(), 14);
     assert!(names.contains(&"khelgar"));
     assert!(names.contains(&"shandra"));
     assert!(names.contains(&"zhjaeve"));
-    assert!(!names.contains(&"npc_bevil"), "not a party member");
-    assert!(!names.contains(&"0_amie"), "not a party member");
+    assert!(names.contains(&"npc_bevil"));
 
     let khelgar = roster.iter().find(|r| r.ros_name == "khelgar").unwrap();
     assert_eq!(khelgar.char_name, "Khelgar Ironfist");
     assert_eq!(khelgar.classes, vec![(4, 2)]);
 }
 
-// Fixture reality (verified with --nocapture): this save's globals.xml only
-// has `00_b*_Joined = 1` for Khelgar, Neeshka, Elanee and Qara — none of the
-// other companions' joined_var (per get_companion_definitions, e.g.
-// 00_bAmmon_Joined) is present, so ammon_jerro is not recruited even though
-// his .ros file exists. `list_roster` now filters by the recruited set from
-// globals.xml, so exactly those 4 are listed.
+// Fixture reality: this save's globals.xml only has `00_b*_Joined = 1` for
+// Khelgar, Neeshka, Elanee and Qara, yet ammon_jerro.ros exists - the game
+// does not write a *_Joined var for every companion (user reports 4 and 7),
+// so the .ros file alone decides membership.
 #[test]
 fn list_roster_works_on_ee_zip_format() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");
 
     let roster = session.list_roster().expect("list roster");
-    let mut names: Vec<&str> = roster.iter().map(|r| r.ros_name.as_str()).collect();
-    names.sort_unstable();
-    assert_eq!(names, vec!["elanee", "khelgar", "neeshka", "qara"]);
-    assert!(
-        !names.contains(&"ammon_jerro"),
-        "ammon_jerro has no *_Joined var set in this save's globals.xml"
-    );
+    let names: Vec<&str> = roster.iter().map(|r| r.ros_name.as_str()).collect();
+    for expected in ["elanee", "khelgar", "neeshka", "qara", "ammon_jerro"] {
+        assert!(
+            names.contains(&expected),
+            "{expected} missing from {names:?}"
+        );
+    }
 }
 
 #[test]
@@ -162,7 +158,7 @@ fn list_roster_excludes_available_members_without_ros_file() {
     let roster = session.list_roster().expect("list roster");
     let names: Vec<&str> = roster.iter().map(|r| r.ros_name.as_str()).collect();
 
-    assert_eq!(roster.len(), 10);
+    assert_eq!(roster.len(), 12);
     assert!(
         !names.contains(&"shandra"),
         "flagged available but .ros file deleted"
@@ -172,6 +168,12 @@ fn list_roster_excludes_available_members_without_ros_file() {
         "flagged available but .ros file deleted"
     );
     assert!(names.contains(&"khelgar"));
+}
+
+fn empty_game_data() -> app_lib::loaders::GameData {
+    app_lib::loaders::GameData::new(Arc::new(std::sync::RwLock::new(
+        app_lib::parsers::tlk::TLKParser::default(),
+    )))
 }
 
 fn temp_save_copy(save: &str) -> (tempfile::TempDir, PathBuf) {
@@ -196,9 +198,6 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
     session
         .load_character(&save_path.to_string_lossy(), None, &mut report)
         .expect("load save");
-    // khelgar is recruited (00_bKhelgar_Joined = 1) in this fixture's
-    // globals.xml, so he still shows up in list_roster after the new
-    // recruited-status filter below.
     session
         .load_companion("khelgar", false)
         .expect("load companion");
@@ -214,7 +213,9 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
     // without force.
     assert!(session.load_companion("bishop", false).is_err());
 
-    let warning = session.save_companion().expect("save companion");
+    let warning = session
+        .save_companion(&empty_game_data())
+        .expect("save companion");
     assert!(warning.is_none(), "roster sync should succeed: {warning:?}");
     assert!(!session.has_unsaved_changes());
 
@@ -284,7 +285,12 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
         character.set_familiar_name("Whiskers".to_string());
         character.set_familiar_type(1);
     }
-    assert!(session.save_companion().expect("save companion").is_none());
+    assert!(
+        session
+            .save_companion(&empty_game_data())
+            .expect("save companion")
+            .is_none()
+    );
 
     let mut session2 = make_session();
     let mut report2 = app_lib::services::load_diagnostics::LoadReport::new(
@@ -324,4 +330,65 @@ fn export_to_localvault_rejected_for_companion() {
 
     let paths = app_lib::config::NWN2Paths::new();
     assert!(session.export_to_localvault(&paths).is_err());
+}
+
+// The CMI workshop mod caches the summoned blueprint on the summoning
+// creature itself (`cmi_animcomp`), so a druid companion carries it in its
+// own .ros VarTable; saving must retarget it there like the player path does.
+#[test]
+fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
+    use app_lib::parsers::gff::GffValue;
+    use indexmap::IndexMap;
+    use std::borrow::Cow;
+
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    session
+        .load_companion("bishop", false)
+        .expect("load companion");
+
+    let mut var = IndexMap::new();
+    var.insert(
+        "Name".to_string(),
+        GffValue::String(Cow::Borrowed("cmi_animcomp")),
+    );
+    var.insert("Type".to_string(), GffValue::Dword(3));
+    var.insert(
+        "Value".to_string(),
+        GffValue::String(Cow::Borrowed("c_ancom_wolf3")),
+    );
+    {
+        let character = session.character_mut().expect("character");
+        character.set_list("VarTable", vec![var]);
+        character.set_animal_companion_type(2);
+    }
+
+    let mut hen = app_lib::parsers::tda::TDAParser::new();
+    hen.parse_from_string("2DA V2.0\n\n\tLABEL\tbaseresref_prefix\n0\tBadger\tc_ancom_badger\n1\tWolf\tc_ancom_wolf\n2\tBear\tc_ancom_bear\n")
+        .expect("parse hen_companion");
+    let mut game_data = empty_game_data();
+    game_data.tables.insert(
+        "hen_companion".to_string(),
+        app_lib::loaders::LoadedTable::new("hen_companion".to_string(), Arc::new(hen)),
+    );
+    session.save_companion(&game_data).expect("save companion");
+
+    let mut session2 = make_session();
+    load_save(&mut session2, &save_path.to_string_lossy());
+    session2
+        .load_companion("bishop", false)
+        .expect("reload companion");
+    let GffValue::ListOwned(vars) = &session2.character().unwrap().gff()["VarTable"] else {
+        panic!("VarTable missing");
+    };
+    let value = vars
+        .iter()
+        .find(|v| matches!(v.get("Name"), Some(GffValue::String(n)) if n == "cmi_animcomp"))
+        .and_then(|v| match v.get("Value") {
+            Some(GffValue::String(s)) => Some(s.to_string()),
+            _ => None,
+        })
+        .expect("cmi_animcomp present");
+    assert_eq!(value, "c_ancom_bear3");
 }

@@ -60,7 +60,7 @@ fn test_classic_campaign_globals() {
     let info = parser.get_general_info();
     println!("General info entries: {}", info.len());
 
-    let companions = parser.get_companion_status();
+    let companions = parser.get_companion_status(&[]);
     println!("Companions tracked: {}", companions.len());
 
     for (name, status) in &companions {
@@ -134,7 +134,7 @@ fn test_compare_campaign_quest_counts() {
             && let Ok(parser) = RustXmlParser::from_string(&content)
         {
             let overview = parser.get_quest_overview_struct();
-            let companions = parser.get_companion_status();
+            let companions = parser.get_companion_status(&[]);
 
             println!(
                 "{}: {} vars, {} groups, {} companions",
@@ -156,7 +156,7 @@ fn test_campaign_companion_influence() {
 
     let parser = RustXmlParser::from_string(&content).expect("Failed to parse globals.xml");
 
-    let companions = parser.get_companion_status();
+    let companions = parser.get_companion_status(&[]);
 
     println!("\n=== MOTB Companion Influence ===");
 

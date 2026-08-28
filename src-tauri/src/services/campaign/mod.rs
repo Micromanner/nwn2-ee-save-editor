@@ -156,7 +156,8 @@ impl CampaignManager {
     ) -> Result<HashMap<String, CompanionStatus>, String> {
         let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
         let parser = GlobalsParser::from_string(&xml_content)?;
-        Ok(parser.get_companion_status())
+        let ros_names = handler.list_companions().map_err(|e| e.to_string())?;
+        Ok(parser.get_companion_status(&ros_names))
     }
 
     pub fn update_companion_influence(
