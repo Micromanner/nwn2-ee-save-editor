@@ -268,13 +268,18 @@ export function AppearancePanel() {
     return null;
   }, [raceGroups, raceOptions, subraceOptions, currentAppearanceType, pickedRaceKey]);
 
+  const currentAppearanceTypeName = appearanceSubsystem.data?.appearance_type_name;
   const currentRaceLabel = useMemo(() => {
-    if (!activeRaceKey) return currentAppearanceType !== undefined ? `#${currentAppearanceType}` : null;
+    if (!activeRaceKey) {
+      if (!currentAppearanceTypeName) return null;
+      const npc = /^N_(.+)$/.exec(currentAppearanceTypeName);
+      return npc ? t('appearance.npcVariant', { name: npc[1] }) : currentAppearanceTypeName;
+    }
     const [kind, idStr] = activeRaceKey.split(':');
     const id = Number(idStr);
     if (kind === 'race') return raceOptions.find(r => r.id === id)?.name ?? null;
     return subraceOptions.find(s => s.id === id)?.name ?? null;
-  }, [activeRaceKey, raceOptions, subraceOptions, currentAppearanceType]);
+  }, [activeRaceKey, raceOptions, subraceOptions, currentAppearanceTypeName, t]);
 
   const applyAppearanceType = useCallback(async (appearanceId: number, key: string) => {
     try {

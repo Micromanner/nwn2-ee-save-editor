@@ -126,6 +126,7 @@ export interface AppearanceState {
   gender: number;
   gender_name: string;
   appearance_type: number;
+  appearance_type_name: string;
   appearance_head: number;
   appearance_hair: number;
   appearance_fhair: number;

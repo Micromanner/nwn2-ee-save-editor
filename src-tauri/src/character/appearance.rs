@@ -24,6 +24,9 @@ pub struct AppearanceState {
     pub gender_name: String,
 
     pub appearance_type: i32,
+    /// `appearance.2da` row name (TLK `STRING_REF`, else `LABEL`) so rows outside the
+    /// playable race list (companion-specific rows) still display a name.
+    pub appearance_type_name: String,
 
     pub appearance_head: i32,
     pub appearance_hair: i32,
@@ -326,6 +329,19 @@ impl Character {
         self.set_struct("ModelScale", map);
     }
 
+    fn resolve_appearance_name(game_data: &GameData, row_id: i32) -> String {
+        let name = game_data
+            .get_table("appearance")
+            .and_then(|table| table.get_by_id(row_id))
+            .and_then(|row| {
+                row_str(&row, "string_ref")
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .and_then(|strref| game_data.get_string(strref))
+                    .or_else(|| row_str(&row, "label"))
+            });
+        name.unwrap_or_else(|| format!("{row_id}"))
+    }
+
     fn resolve_label_from_2da(game_data: &GameData, table_name: &str, row_id: i32) -> String {
         let Some(table) = game_data.get_table(table_name) else {
             return format!("{row_id}");
@@ -398,6 +414,7 @@ impl Character {
             gender_name,
 
             appearance_type: self.appearance_type(),
+            appearance_type_name: Self::resolve_appearance_name(game_data, self.appearance_type()),
 
             appearance_head: self.appearance_head(),
             appearance_hair: self.appearance_hair(),

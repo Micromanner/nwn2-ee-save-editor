@@ -884,6 +884,7 @@
     "eyebrowColor": "Augenbrauenfarbe",
     "hairColor": "Haarfarbe",
     "tintNoTintMap": "Dieses Modell hat keine Tint-Map, Farben haben keine Wirkung",
+    "npcVariant": "{name} (NPC)",
     "tintChannelUnused": "Die Tint-Maske dieses Modells nutzt diesen Kanal nicht",
     "bodyTint": "Körperfarbe (Schwanz & Flügel)",
     "bodyTintChannel": "Farbkanal {n}",
