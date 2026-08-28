@@ -2795,7 +2795,13 @@ impl Character {
         Ok(())
     }
 
-    /// Calculate theoretical skill points for history correction.
+    /// Skill points the character earned over their level history, per class.
+    ///
+    /// The engine grants points with the INT modifier in effect at each
+    /// level-up and never retroactively, so the level-up ability increases
+    /// recorded in `LvlStatAbility` are replayed: the current base INT is
+    /// rolled back by the number of INT increases and re-applied level by
+    /// level (an increase counts from the level it was taken).
     pub fn get_theoretical_skill_points(&self, game_data: &GameData) -> HashMap<ClassId, i32> {
         let mut class_points = HashMap::new();
 
@@ -2805,15 +2811,25 @@ impl Character {
             .and_then(|t| t.get_by_id(race_id.0))
             .map_or(0, |row| row_int(&row, "skillpointmodifier", 0));
 
-        let int_mod = self.ability_modifier(AbilityIndex::INT);
-
         let Some(lvl_stat_list) = self.get_list("LvlStatList") else {
             return class_points;
         };
 
+        let is_int_increase = |entry: &IndexMap<String, GffValue>| {
+            entry.get("LvlStatAbility").and_then(gff_value_to_i32)
+                == Some(i32::from(AbilityIndex::INT.0))
+        };
+        let int_increases = lvl_stat_list.iter().filter(|e| is_int_increase(e)).count() as i32;
+        let mut int_score = self.base_ability(AbilityIndex::INT) - int_increases;
+
         let classes_table = game_data.get_table("classes");
 
         for (idx, entry) in lvl_stat_list.iter().enumerate() {
+            if is_int_increase(entry) {
+                int_score += 1;
+            }
+            let int_mod = crate::character::types::calculate_modifier(int_score);
+
             let class_id = entry
                 .get("LvlStatClass")
                 .and_then(gff_value_to_i32)

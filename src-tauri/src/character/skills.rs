@@ -1150,6 +1150,28 @@ mod tests {
         assert_eq!(character.get_available_skill_points(), 50);
     }
 
+    /// Level 4 rogue whose INT went 13 -> 14 with the level 4 ability
+    /// increase: levels 1-3 were granted at +1 INT ((8 + 1) * 4 + 9 + 9),
+    /// level 4 at +2 (10), for 64 earned. Applying today's +2 to every
+    /// level would claim 70.
+    #[test]
+    fn test_reset_all_skills_replays_int_increases_from_level_history() {
+        let mut character = create_level2_rogue_with_injected_ranks();
+        let mut lvl_stats = character.get_list_owned("LvlStatList").unwrap();
+        for level in 3..=4 {
+            let mut entry = IndexMap::new();
+            entry.insert("LvlStatClass".to_string(), GffValue::Byte(0));
+            if level == 4 {
+                entry.insert("LvlStatAbility".to_string(), GffValue::Byte(3));
+            }
+            lvl_stats.push(entry);
+        }
+        character.set_list("LvlStatList", lvl_stats);
+        let game_data = game_data_with_rogue_class();
+
+        assert_eq!(character.reset_all_skills(&game_data), 64);
+    }
+
     #[test]
     fn test_reset_all_skills_clears_every_rank() {
         let mut character = create_level2_rogue_with_injected_ranks();
