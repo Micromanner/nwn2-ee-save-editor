@@ -151,7 +151,7 @@
       "namePlaceholder": "Name",
       "noAnimalCompanionFeat": "No Animal Companion feat - the game has nothing to summon.",
       "noFamiliarFeat": "No Familiar feat - the game has nothing to summon.",
-      "resummonHint": "Applies the next time the creature is summoned."
+      "resummonHint": "Applies the next time the creature is summoned. To be safe, unsummon the creature in-game before saving here; an already-summoned one is stored in the module state and keeps its old name and type until it is resummoned."
     },
     "biography": "Biography",
     "noBiography": "No biography written",

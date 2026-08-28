@@ -144,7 +144,7 @@
       "namePlaceholder": "Nombre",
       "noAnimalCompanionFeat": "Sin la dote Compañero animal: el juego no tiene nada que invocar.",
       "noFamiliarFeat": "Sin la dote Familiar: el juego no tiene nada que invocar.",
-      "resummonHint": "Se aplica la próxima vez que se invoque a la criatura."
+      "resummonHint": "Se aplica la próxima vez que se invoque a la criatura. Por seguridad, despide a la criatura en el juego antes de guardar aquí; una criatura ya invocada se guarda en el estado del módulo y conserva su nombre y tipo hasta que se vuelva a invocar."
     },
     "biography": "Biografía",
     "noBiography": "Sin biografía escrita",

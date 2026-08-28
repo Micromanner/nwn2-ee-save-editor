@@ -144,7 +144,7 @@
       "namePlaceholder": "Name",
       "noAnimalCompanionFeat": "Kein Talent „Tiergefährte“ - das Spiel hat nichts zu rufen.",
       "noFamiliarFeat": "Kein Talent „Vertrauter“ - das Spiel hat nichts zu rufen.",
-      "resummonHint": "Wirkt beim nächsten Herbeirufen der Kreatur."
+      "resummonHint": "Wirkt beim nächsten Herbeirufen der Kreatur. Sicherheitshalber die Kreatur im Spiel entlassen, bevor hier gespeichert wird; eine bereits gerufene Kreatur liegt im Modulzustand und behält Name und Typ, bis sie erneut gerufen wird."
     },
     "biography": "Biographie",
     "noBiography": "Keine Biographie geschrieben",

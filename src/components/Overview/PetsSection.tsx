@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, InputGroup } from '@blueprintjs/core';
+import { Button, Callout, InputGroup } from '@blueprintjs/core';
 import { GiQuillInk } from 'react-icons/gi';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -116,8 +116,10 @@ export function PetsSection() {
   const { handleError } = useErrorHandler();
   const { characterId, activeSource } = useCharacterContext();
   const [pets, setPets] = useState<PetsState | null>(null);
+  const [edited, setEdited] = useState(false);
 
   useEffect(() => {
+    setEdited(false);
     if (!characterId) {
       setPets(null);
       return;
@@ -139,6 +141,7 @@ export function PetsSection() {
         typeId: update.typeId ?? null,
       });
       setPets(state);
+      setEdited(true);
     } catch (err) {
       handleError(err);
     }
@@ -175,9 +178,11 @@ export function PetsSection() {
           onChange={update => updateSlot('familiar', update)}
         />
       )}
-      <div className="t-sm" style={{ color: T.textMuted, marginTop: 6 }}>
-        {t('overview.pets.resummonHint')}
-      </div>
+      {edited && (
+        <Callout intent="warning" compact style={{ marginTop: 8 }}>
+          {t('overview.pets.resummonHint')}
+        </Callout>
+      )}
     </div>
   );
 }
