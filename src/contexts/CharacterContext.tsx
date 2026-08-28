@@ -164,8 +164,8 @@ interface CharacterContextState {
   playerClassId: number | null;
   isPreloading: boolean;
   refreshRoster: () => Promise<void>;
-  switchToCompanion: (rosName: string, force: boolean) => Promise<void>;
-  switchToPlayer: (force: boolean) => Promise<void>;
+  switchToCompanion: (rosName: string) => Promise<void>;
+  switchToPlayer: () => Promise<void>;
 
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
@@ -555,14 +555,14 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const switchToCompanion = useCallback(async (rosName: string, force: boolean) => {
-    await CharacterStateAPI.loadCompanion(rosName, force);
+  const switchToCompanion = useCallback(async (rosName: string) => {
+    await CharacterStateAPI.loadCompanion(rosName);
     setActiveSource({ kind: 'companion', rosName });
     if (characterId) await loadCharacter(characterId);
   }, [characterId, loadCharacter]);
 
-  const switchToPlayer = useCallback(async (force: boolean) => {
-    await CharacterStateAPI.loadPlayer(force);
+  const switchToPlayer = useCallback(async () => {
+    await CharacterStateAPI.loadPlayer();
     setActiveSource({ kind: 'player' });
     if (characterId) await loadCharacter(characterId);
   }, [characterId, loadCharacter]);

@@ -37,9 +37,7 @@ export function Navbar({ onBack }: NavbarProps) {
         console.warn(result.warning);
         showToast(t('roster.syncWarning'), 'warning');
       }
-      if (activeSource.kind === 'companion') {
-        refreshRoster();
-      }
+      refreshRoster();
       showToast(t('actions.saveSuccess'), 'success');
       const config = await invoke<{ show_launch_dialog: boolean }>('get_app_config');
       if (config.show_launch_dialog) {
@@ -50,7 +48,7 @@ export function Navbar({ onBack }: NavbarProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [showToast, t, handleError, activeSource, refreshRoster]);
+  }, [showToast, t, handleError, refreshRoster]);
 
   const handleExport = async () => {
     setIsExporting(true);

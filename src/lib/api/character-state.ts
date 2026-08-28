@@ -186,13 +186,12 @@ export const CharacterStateAPI = {
   /**
    * Load a companion from the roster into the active editor session.
    */
-  loadCompanion: (rosName: string, force: boolean) =>
-    invoke<boolean>('load_companion', { rosName, force }),
+  loadCompanion: (rosName: string) => invoke<boolean>('load_companion', { rosName }),
 
   /**
    * Load the player character back into the active editor session.
    */
-  loadPlayer: (force: boolean) => invoke<boolean>('load_player', { force }),
+  loadPlayer: () => invoke<boolean>('load_player'),
 
   /**
    * Close the current character.

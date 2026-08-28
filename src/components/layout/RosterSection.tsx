@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Dialog, DialogBody, DialogFooter } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useIcon } from '@/hooks/useIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { useToast } from '@/contexts/ToastContext';
-import { CharacterStateAPI } from '@/lib/api/character-state';
 
 type SwitchTarget = { kind: 'player' } | { kind: 'companion'; rosName: string };
 
@@ -57,12 +54,10 @@ interface RosterSectionProps {
 export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
-  const { showToast } = useToast();
   const {
     character, roster, activeSource, playerName: storedPlayerName, playerClassId,
-    isPreloading, isMetadataLoading, switchToCompanion, switchToPlayer, refreshRoster,
+    isPreloading, isMetadataLoading, switchToCompanion, switchToPlayer,
   } = useCharacterContext();
-  const [pendingTarget, setPendingTarget] = useState<SwitchTarget | null>(null);
   const [classNames, setClassNames] = useState<Record<number, string>>({});
   const [classIcons, setClassIcons] = useState<Record<number, string | null>>({});
   const [isSwitching, setIsSwitching] = useState(false);
@@ -105,69 +100,24 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
     });
   }, [roster, playerClassId, classIcons]);
 
-  const doSwitch = useCallback(async (target: SwitchTarget, force: boolean) => {
-    try {
-      if (target.kind === 'player') {
-        await switchToPlayer(force);
-      } else {
-        await switchToCompanion(target.rosName, force);
-      }
-      if (activeTab === 'appearance' || activeTab === 'models' || activeTab === 'gamestate') {
-        onTabChange('overview');
-      }
-    } catch (error) {
-      handleError(error);
-    }
-  }, [switchToPlayer, switchToCompanion, activeTab, onTabChange, handleError]);
-
   const requestSwitch = useCallback(async (target: SwitchTarget) => {
     if (isSwitching) return;
     setIsSwitching(true);
     try {
-      const dirty = await CharacterStateAPI.hasUnsavedChanges();
-      if (dirty) {
-        setPendingTarget(target);
+      if (target.kind === 'player') {
+        await switchToPlayer();
       } else {
-        await doSwitch(target, false);
+        await switchToCompanion(target.rosName);
+      }
+      if (activeTab === 'gamestate') {
+        onTabChange('overview');
       }
     } catch (error) {
       handleError(error);
     } finally {
       setIsSwitching(false);
     }
-  }, [doSwitch, handleError, isSwitching]);
-
-  const confirmSave = useCallback(async () => {
-    const target = pendingTarget;
-    setPendingTarget(null);
-    if (!target) return;
-    setIsSwitching(true);
-    try {
-      const result = await CharacterStateAPI.saveCharacter();
-      if (result.warning) {
-        console.warn(result.warning);
-        showToast(t('roster.syncWarning'), 'warning');
-      }
-      await refreshRoster();
-      await doSwitch(target, false);
-    } catch (error) {
-      handleError(error);
-    } finally {
-      setIsSwitching(false);
-    }
-  }, [pendingTarget, doSwitch, refreshRoster, handleError, showToast, t]);
-
-  const confirmDiscard = useCallback(async () => {
-    const target = pendingTarget;
-    setPendingTarget(null);
-    if (!target) return;
-    setIsSwitching(true);
-    try {
-      await doSwitch(target, true);
-    } finally {
-      setIsSwitching(false);
-    }
-  }, [pendingTarget, doSwitch]);
+  }, [switchToPlayer, switchToCompanion, activeTab, onTabChange, handleError, isSwitching]);
 
   if (!character) return null;
 
@@ -192,11 +142,6 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
   // loaded — `character.name` would show the active companion's name here.
   const playerName = storedPlayerName || t('roster.player');
 
-  // Name of the character that is CURRENTLY active (i.e. the one with the
-  // unsaved changes the dialog is warning about), not the switch target.
-  const activeCharacterName = activeSource.kind === 'player'
-    ? playerName
-    : roster.find(r => r.ros_name === activeSource.rosName)?.char_name ?? playerName;
 
   return (
     <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -262,24 +207,6 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
         })}
       </div>
 
-      <Dialog
-        isOpen={pendingTarget !== null}
-        onClose={() => setPendingTarget(null)}
-        title={t('roster.unsavedTitle')}
-      >
-        <DialogBody>
-          <p>{t('roster.unsavedMessage', { name: activeCharacterName })}</p>
-        </DialogBody>
-        <DialogFooter
-          actions={
-            <>
-              <Button text={t('roster.cancel')} disabled={isSwitching} onClick={() => setPendingTarget(null)} />
-              <Button text={t('roster.discardChanges')} intent="danger" disabled={isSwitching} onClick={confirmDiscard} />
-              <Button text={t('roster.saveAndSwitch')} intent="primary" disabled={isSwitching} onClick={confirmSave} />
-            </>
-          }
-        />
-      </Dialog>
     </div>
   );
 }

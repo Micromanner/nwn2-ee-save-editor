@@ -61,6 +61,9 @@ pub struct SessionState {
     pub redo_stack: Vec<HistoryEntry>,
     pub character_source: CharacterSource,
     pub standalone_backup_done: bool,
+    /// Characters edited earlier in this session but not currently active. Edits
+    /// stay in memory across switches; `save_character` flushes all of them.
+    parked: Vec<(CharacterSource, Character)>,
 }
 
 impl SessionState {
@@ -89,6 +92,7 @@ impl SessionState {
             redo_stack: Vec::new(),
             character_source: CharacterSource::Player,
             standalone_backup_done: false,
+            parked: Vec::new(),
         }
     }
 
@@ -244,6 +248,7 @@ impl SessionState {
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
         self.character_source = CharacterSource::Player;
+        self.parked.clear();
         self.clear_history();
 
         info!("Character loaded successfully");
@@ -288,40 +293,84 @@ impl SessionState {
         self.primary_player_index = None;
         self.character_source = CharacterSource::Standalone;
         self.standalone_backup_done = false;
+        self.parked.clear();
         self.clear_history();
 
         info!("Standalone character loaded successfully");
         Ok(())
     }
 
+    /// Write every modified character of this session (active and parked) to the save.
     pub fn save_character(
         &mut self,
         game_data: &GameData,
         backup_keep_count: usize,
     ) -> Result<Option<String>, String> {
-        if let CharacterSource::Companion { ros_name } = &self.character_source {
-            let ros_name = ros_name.clone();
-            let companion_prefix = self.companion_blueprint_prefix(game_data);
-            return self.save_companion_inner(&ros_name, companion_prefix.as_deref());
-        }
         if self.character_source == CharacterSource::Standalone {
             return self.save_standalone_inner(backup_keep_count);
         }
 
-        let companion_prefix = self.companion_blueprint_prefix(game_data);
-        let handler = self
-            .savegame_handler
-            .as_mut()
-            .ok_or_else(|| "No active save handler".to_string())?;
-        let character = self
-            .character
-            .as_ref()
-            .ok_or_else(|| "No character loaded".to_string())?;
+        let mut warnings = Vec::new();
+        let mut active = self.character.take().ok_or("No character loaded")?;
+        let active_source = self.character_source.clone();
+        let result = self.save_one(&active_source, &mut active, game_data);
+        self.character = Some(active);
+        warnings.extend(result?);
 
+        let parked = std::mem::take(&mut self.parked);
+        let mut restored = Vec::with_capacity(parked.len());
+        let mut first_error = None;
+        for (source, mut character) in parked {
+            if first_error.is_none() {
+                match self.save_one(&source, &mut character, game_data) {
+                    Ok(warning) => warnings.extend(warning),
+                    Err(e) => first_error = Some(e),
+                }
+            }
+            restored.push((source, character));
+        }
+        self.parked = restored;
+        if let Some(e) = first_error {
+            return Err(e);
+        }
+
+        Ok(if warnings.is_empty() {
+            None
+        } else {
+            Some(warnings.join("\n"))
+        })
+    }
+
+    fn save_one(
+        &mut self,
+        source: &CharacterSource,
+        character: &mut Character,
+        game_data: &GameData,
+    ) -> Result<Option<String>, String> {
+        match source {
+            CharacterSource::Companion { ros_name } => {
+                let prefix = Self::companion_blueprint_prefix(character, game_data);
+                self.save_companion_inner(character, ros_name, prefix.as_deref())
+            }
+            CharacterSource::Player => self.save_player_inner(character, game_data),
+            CharacterSource::Standalone => Err("Standalone character cannot be parked".into()),
+        }
+    }
+
+    fn save_player_inner(
+        &mut self,
+        character: &mut Character,
+        game_data: &GameData,
+    ) -> Result<Option<String>, String> {
         if !character.is_modified() {
             info!("No changes to save");
             return Ok(None);
         }
+        let companion_prefix = Self::companion_blueprint_prefix(character, game_data);
+        let handler = self
+            .savegame_handler
+            .as_mut()
+            .ok_or_else(|| "No active save handler".to_string())?;
 
         let char_fields = character.clone_gff();
         let selected_player_index = self.selected_player_index;
@@ -353,10 +402,11 @@ impl SessionState {
             .map_err(|e| format!("Failed to write save file: {e}"))?;
 
         if update_primary_player_files {
-            self.write_playerinfo(game_data)?;
+            let save_dir = self.save_dir.as_ref().ok_or("No current save path")?;
+            write_playerinfo_for_character(save_dir, character, game_data)?;
         }
 
-        self.character.as_mut().unwrap().mark_saved();
+        character.mark_saved();
 
         info!(
             "Character saved successfully (player.bic_updated={})",
@@ -365,17 +415,21 @@ impl SessionState {
         Ok(None)
     }
 
+    /// Save only the active companion. `save_character` is the normal path; this
+    /// exists for callers that must not touch other parked characters.
     pub fn save_companion(&mut self, game_data: &GameData) -> Result<Option<String>, String> {
         let CharacterSource::Companion { ros_name } = &self.character_source else {
             return Err("Active character is not a companion".into());
         };
         let ros_name = ros_name.clone();
-        let companion_prefix = self.companion_blueprint_prefix(game_data);
-        self.save_companion_inner(&ros_name, companion_prefix.as_deref())
+        let mut character = self.character.take().ok_or("No character loaded")?;
+        let prefix = Self::companion_blueprint_prefix(&character, game_data);
+        let result = self.save_companion_inner(&mut character, &ros_name, prefix.as_deref());
+        self.character = Some(character);
+        result
     }
 
-    fn companion_blueprint_prefix(&self, game_data: &GameData) -> Option<String> {
-        let character = self.character.as_ref()?;
+    fn companion_blueprint_prefix(character: &Character, game_data: &GameData) -> Option<String> {
         crate::character::pets::companion_blueprint_prefix(
             character.animal_companion_type(),
             game_data,
@@ -410,6 +464,7 @@ impl SessionState {
 
     fn save_companion_inner(
         &mut self,
+        character: &mut Character,
         ros_name: &str,
         companion_prefix: Option<&str>,
     ) -> Result<Option<String>, String> {
@@ -417,7 +472,6 @@ impl SessionState {
             .savegame_handler
             .as_mut()
             .ok_or("No active save handler")?;
-        let character = self.character.as_ref().ok_or("No character loaded")?;
 
         if !character.is_modified() {
             info!("No changes to save");
@@ -459,7 +513,7 @@ impl SessionState {
             }
         };
 
-        self.character.as_mut().unwrap().mark_saved();
+        character.mark_saved();
         info!("Companion saved: {stored_name}");
         Ok(warning)
     }
@@ -476,6 +530,7 @@ impl SessionState {
         self.quest_graph_cache = None;
         self.character_source = CharacterSource::Player;
         self.standalone_backup_done = false;
+        self.parked.clear();
         self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
@@ -574,9 +629,8 @@ impl SessionState {
     }
 
     pub fn has_unsaved_changes(&self) -> bool {
-        self.character
-            .as_ref()
-            .is_some_and(super::super::character::Character::is_modified)
+        self.character.as_ref().is_some_and(Character::is_modified)
+            || self.parked.iter().any(|(_, c)| c.is_modified())
     }
 
     pub fn character(&self) -> Option<&Character> {
@@ -587,11 +641,18 @@ impl SessionState {
         self.character.as_mut()
     }
 
-    pub fn load_companion(&mut self, ros_name: &str, force: bool) -> Result<(), String> {
-        if !force && self.has_unsaved_changes() {
-            return Err(
-                "Unsaved changes present; save or discard before switching characters".into(),
-            );
+    /// Make `ros_name` the active character. Pending edits on the previous
+    /// character are parked in memory, not written; `save_character` flushes them.
+    pub fn load_companion(&mut self, ros_name: &str) -> Result<(), String> {
+        let target = CharacterSource::Companion {
+            ros_name: ros_name.to_string(),
+        };
+        if self.character_source == target && self.character.is_some() {
+            return Ok(());
+        }
+        if let Some(character) = self.take_parked(&target) {
+            self.activate(target, character);
+            return Ok(());
         }
         let handler = self
             .savegame_handler
@@ -615,14 +676,56 @@ impl SessionState {
             character.full_name(),
             character.total_level()
         );
+        self.activate(target, character);
+        Ok(())
+    }
+
+    /// Make the player the active character again, restoring in-memory edits if
+    /// the player was parked, else re-reading it from the save.
+    pub fn load_player(&mut self) -> Result<(), String> {
+        if self.character_source == CharacterSource::Player && self.character.is_some() {
+            return Ok(());
+        }
+        if let Some(character) = self.take_parked(&CharacterSource::Player) {
+            self.activate(CharacterSource::Player, character);
+            return Ok(());
+        }
+        let handler = self
+            .savegame_handler
+            .as_ref()
+            .ok_or("No active save handler")?;
+        let fields = read_player_fields(
+            handler,
+            self.selected_player_index,
+            self.primary_player_index,
+        )?;
+        let character = Character::from_gff(fields);
+        info!(
+            "Player reloaded: {} (level {})",
+            character.full_name(),
+            character.total_level()
+        );
+        self.activate(CharacterSource::Player, character);
+        Ok(())
+    }
+
+    fn take_parked(&mut self, source: &CharacterSource) -> Option<Character> {
+        let idx = self.parked.iter().position(|(s, _)| s == source)?;
+        Some(self.parked.swap_remove(idx).1)
+    }
+
+    /// Park the current character (if any) and install `character` as active.
+    /// Same save, so module/quest caches stay; character-scoped state does not.
+    fn activate(&mut self, source: CharacterSource, character: Character) {
+        if let Some(previous) = self.character.take() {
+            let previous_source = self.character_source.clone();
+            self.parked.retain(|(s, _)| *s != previous_source);
+            self.parked.push((previous_source, previous));
+        }
         self.character = Some(character);
-        self.character_source = CharacterSource::Companion {
-            ros_name: ros_name.to_string(),
-        };
-        // Same save, so module/quest caches stay; character-scoped cache does not.
+        self.character_source = source;
         self.feat_cache = None;
         self.clear_history();
-        Ok(())
     }
 
     pub fn list_roster(&self) -> Result<Vec<RosterListing>, String> {
@@ -664,12 +767,6 @@ impl SessionState {
                 classes: m.classes,
             })
             .collect())
-    }
-
-    fn write_playerinfo(&self, game_data: &GameData) -> Result<(), String> {
-        let character = self.character.as_ref().ok_or("No character loaded")?;
-        let save_dir = self.save_dir.as_ref().ok_or("No current save path")?;
-        write_playerinfo_for_character(save_dir, character, game_data)
     }
 
     #[instrument(name = "SessionState::export_to_localvault", skip(self, paths))]
@@ -819,6 +916,28 @@ fn serialize_playerlist_bytes(
     GffWriter::new(&file_type, &file_version)
         .write(root_fields)
         .map_err(|e| format!("playerlist.ifo serialization error: {e}"))
+}
+
+/// Player fields for `selected_index`: player.bic when that slot is the primary
+/// player and the bic is readable, else the playerlist slot.
+fn read_player_fields(
+    handler: &SaveGameHandler,
+    selected_index: usize,
+    primary_index: Option<usize>,
+) -> Result<IndexMap<String, GffValue<'static>>, String> {
+    let playerlist_data = handler
+        .extract_player_data()
+        .map_err(|e| format!("Failed to extract playerlist.ifo: {e}"))?;
+    let gff =
+        GffParser::from_bytes(playerlist_data).map_err(|e| format!("GFF parse error: {e}"))?;
+    let entries = read_playerlist_entries(gff)?;
+    if primary_index == Some(selected_index)
+        && let Ok(Some(bic)) = handler.extract_player_bic()
+        && let Ok(fields) = read_player_bic_entry(bic)
+    {
+        return Ok(fields);
+    }
+    read_playerlist_entry_from_entries(&entries, selected_index)
 }
 
 pub(crate) fn read_playerlist_entries(

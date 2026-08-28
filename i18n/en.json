@@ -975,11 +975,6 @@
     "party": "Party",
     "player": "Player",
     "levelLine": "Level {level}",
-    "unsavedTitle": "Unsaved Changes",
-    "unsavedMessage": "{name} has unsaved changes. Save them before switching?",
-    "saveAndSwitch": "Save & Switch",
-    "discardChanges": "Discard Changes",
-    "cancel": "Cancel",
     "syncWarning": "Companion saved, but the party roster cache could not be updated."
   }
 }

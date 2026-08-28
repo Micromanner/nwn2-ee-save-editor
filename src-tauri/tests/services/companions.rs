@@ -85,9 +85,7 @@ fn load_companion_swaps_session_character_and_source() {
     load_save(&mut session, "Classic_Campaign");
     assert_eq!(session.character_source, CharacterSource::Player);
 
-    session
-        .load_companion("khelgar", false)
-        .expect("load companion");
+    session.load_companion("khelgar").expect("load companion");
     assert_eq!(
         session.character_source,
         CharacterSource::Companion {
@@ -109,16 +107,14 @@ fn companion_pet_fields_read_from_ros() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");
 
-    session
-        .load_companion("bishop", false)
-        .expect("load bishop");
+    session.load_companion("bishop").expect("load bishop");
     let bishop = session.character().expect("character loaded");
     assert_eq!(bishop.animal_companion_name(), "Karnwyr");
     assert_eq!(bishop.animal_companion_type(), 1);
     assert_eq!(bishop.familiar_name(), "");
     assert_eq!(bishop.familiar_type(), -1);
 
-    session.load_companion("qara", false).expect("load qara");
+    session.load_companion("qara").expect("load qara");
     let qara = session.character().expect("character loaded");
     assert_eq!(qara.familiar_name(), "Carel");
     assert_eq!(qara.familiar_type(), 4);
@@ -129,7 +125,7 @@ fn companion_pet_fields_read_from_ros() {
 fn load_companion_rejects_unknown_name() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");
-    assert!(session.load_companion("does_not_exist", false).is_err());
+    assert!(session.load_companion("does_not_exist").is_err());
 }
 
 // Exercises the file-existence half of the filter: members flagged available
@@ -198,9 +194,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
     session
         .load_character(&save_path.to_string_lossy(), None, &mut report)
         .expect("load save");
-    session
-        .load_companion("khelgar", false)
-        .expect("load companion");
+    session.load_companion("khelgar").expect("load companion");
 
     session
         .character_mut()
@@ -209,9 +203,19 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         .expect("set str");
     assert!(session.has_unsaved_changes());
 
-    // Dirty-switch guard (spec requirement): switching while dirty must fail
-    // without force.
-    assert!(session.load_companion("bishop", false).is_err());
+    // Switching parks the edit in memory; nothing hits disk until save.
+    session.load_companion("bishop").expect("switch to bishop");
+    assert!(session.has_unsaved_changes());
+    assert!(!session.character().expect("bishop").is_modified());
+    session.load_companion("khelgar").expect("switch back");
+    assert_eq!(
+        session
+            .character()
+            .expect("khelgar")
+            .base_ability(app_lib::character::AbilityIndex::STR),
+        18
+    );
+    assert!(session.character().expect("khelgar").is_modified());
 
     let warning = session
         .save_companion(&empty_game_data())
@@ -232,7 +236,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         .load_character(&save_path.to_string_lossy(), None, &mut report2)
         .expect("reload save");
     session2
-        .load_companion("khelgar", false)
+        .load_companion("khelgar")
         .expect("reload companion");
     assert_eq!(
         session2
@@ -275,9 +279,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
     session
         .load_character(&save_path.to_string_lossy(), None, &mut report)
         .expect("load save");
-    session
-        .load_companion("khelgar", false)
-        .expect("load companion");
+    session.load_companion("khelgar").expect("load companion");
 
     {
         let character = session.character_mut().expect("character");
@@ -304,7 +306,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
         .load_character(&save_path.to_string_lossy(), None, &mut report2)
         .expect("reload save");
     session2
-        .load_companion("khelgar", false)
+        .load_companion("khelgar")
         .expect("reload companion");
 
     let character = session2.character().expect("character");
@@ -324,9 +326,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
 fn export_to_localvault_rejected_for_companion() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");
-    session
-        .load_companion("khelgar", false)
-        .expect("load companion");
+    session.load_companion("khelgar").expect("load companion");
 
     let paths = app_lib::config::NWN2Paths::new();
     assert!(session.export_to_localvault(&paths).is_err());
@@ -344,9 +344,7 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
     let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
-    session
-        .load_companion("bishop", false)
-        .expect("load companion");
+    session.load_companion("bishop").expect("load companion");
 
     let mut var = IndexMap::new();
     var.insert(
@@ -376,9 +374,7 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
 
     let mut session2 = make_session();
     load_save(&mut session2, &save_path.to_string_lossy());
-    session2
-        .load_companion("bishop", false)
-        .expect("reload companion");
+    session2.load_companion("bishop").expect("reload companion");
     let GffValue::ListOwned(vars) = &session2.character().unwrap().gff()["VarTable"] else {
         panic!("VarTable missing");
     };
@@ -391,4 +387,75 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
         })
         .expect("cmi_animcomp present");
     assert_eq!(value, "c_ancom_bear3");
+}
+
+#[test]
+fn save_character_flushes_parked_companion_and_player_edits() {
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+
+    let mut session = make_session();
+    let mut report = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session
+        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .expect("load save");
+
+    session
+        .character_mut()
+        .expect("player")
+        .set_ability(app_lib::character::AbilityIndex::STR, 17)
+        .expect("set player str");
+    session.load_companion("khelgar").expect("load khelgar");
+    session
+        .character_mut()
+        .expect("khelgar")
+        .set_ability(app_lib::character::AbilityIndex::STR, 18)
+        .expect("set khelgar str");
+    session.load_companion("bishop").expect("load bishop");
+    assert!(session.has_unsaved_changes());
+
+    session
+        .save_character(&empty_game_data(), 3)
+        .expect("save all");
+    assert!(!session.has_unsaved_changes());
+
+    let mut session2 = make_session();
+    let mut report2 = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session2
+        .load_character(&save_path.to_string_lossy(), None, &mut report2)
+        .expect("reload save");
+    assert_eq!(
+        session2
+            .character()
+            .expect("player")
+            .base_ability(app_lib::character::AbilityIndex::STR),
+        17
+    );
+    session2.load_companion("khelgar").expect("reload khelgar");
+    assert_eq!(
+        session2
+            .character()
+            .expect("khelgar")
+            .base_ability(app_lib::character::AbilityIndex::STR),
+        18
+    );
+    session2.load_player().expect("back to player");
+    assert_eq!(
+        session2
+            .character()
+            .expect("player")
+            .base_ability(app_lib::character::AbilityIndex::STR),
+        17
+    );
 }
