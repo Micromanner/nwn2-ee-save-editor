@@ -2711,7 +2711,10 @@ impl Character {
         self.set_list("LvlStatList", lvl_stat_list);
     }
 
-    /// Record an ability score increase in the current level history.
+    /// Record an ability score increase in the first unspent level-up slot.
+    /// A slot counts as unspent when `LvlStatAbility` is absent or not a valid
+    /// ability index, mirroring `get_level_up_ability_history`; the editor
+    /// writes 255, but toolset-made histories may omit the field entirely.
     pub fn record_ability_change(&mut self, ability_index: AbilityIndex) {
         use crate::character::types::ABILITY_INCREASE_INTERVAL;
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
@@ -2722,9 +2725,11 @@ impl Character {
         let mut changed = false;
         for (idx, entry) in lvl_stat_list.iter_mut().enumerate() {
             let char_level = (idx + 1) as i32;
-            if char_level % ABILITY_INCREASE_INTERVAL == 0
-                && entry.get("LvlStatAbility").and_then(gff_value_to_i32) == Some(255)
-            {
+            let spent = matches!(
+                entry.get("LvlStatAbility").and_then(gff_value_to_i32),
+                Some(0..=5)
+            );
+            if char_level % ABILITY_INCREASE_INTERVAL == 0 && !spent {
                 entry.insert(
                     "LvlStatAbility".to_string(),
                     GffValue::Byte(ability_index.0),

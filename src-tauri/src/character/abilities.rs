@@ -307,11 +307,18 @@ impl Character {
         history
     }
 
+    /// Level-up ability points are tracked per `LvlStatList` entry, so a
+    /// character without a level history (e.g. Bishop in the OC, level 7 with
+    /// no entries) has no slot to spend into and reports 0 expected/available
+    /// rather than a phantom point.
     pub fn get_ability_points_summary(&self) -> AbilityPointsSummary {
         let base_scores = self.base_scores();
         let level_increases = self.get_level_up_ability_history();
-        let total_level = self.total_level();
-        let expected_increases = total_level / ABILITY_INCREASE_INTERVAL;
+        let history_levels = self
+            .get_list("LvlStatList")
+            .map_or(0, |list| list.len() as i32)
+            .min(self.total_level());
+        let expected_increases = history_levels / ABILITY_INCREASE_INTERVAL;
         let actual_increases = level_increases.len() as i32;
         let available = expected_increases - actual_increases;
 
@@ -845,5 +852,71 @@ mod tests {
         let total = character.get_total_abilities(&game_data, &decoder);
         assert_eq!(total.str_, 16); // 14 + 2
         assert_eq!(total.dex, 12);
+    }
+
+    fn character_with_levels(level4_ability: Option<GffValue<'static>>) -> Character {
+        let mut fields = IndexMap::new();
+        fields.insert("Str".to_string(), GffValue::Byte(16));
+        let mut class = IndexMap::new();
+        class.insert("Class".to_string(), GffValue::Byte(0));
+        class.insert("ClassLevel".to_string(), GffValue::Short(5));
+        fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![class]));
+        let levels = (1..=5)
+            .map(|lvl| {
+                let mut entry = IndexMap::new();
+                entry.insert("LvlStatClass".to_string(), GffValue::Byte(0));
+                if lvl == 4
+                    && let Some(v) = level4_ability.clone()
+                {
+                    entry.insert("LvlStatAbility".to_string(), v);
+                }
+                entry
+            })
+            .collect();
+        fields.insert("LvlStatList".to_string(), GffValue::ListOwned(levels));
+        Character::from_gff(fields)
+    }
+
+    #[test]
+    fn no_level_history_means_no_points() {
+        let mut fields = IndexMap::new();
+        fields.insert("Str".to_string(), GffValue::Byte(16));
+        let mut class = IndexMap::new();
+        class.insert("Class".to_string(), GffValue::Byte(0));
+        class.insert("ClassLevel".to_string(), GffValue::Short(7));
+        fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![class]));
+        let character = Character::from_gff(fields);
+        let summary = character.get_ability_points_summary();
+        assert_eq!(summary.expected_increases, 0);
+        assert_eq!(summary.available, 0);
+    }
+
+    #[test]
+    fn increase_fills_unspent_slot_written_as_255() {
+        let mut character = character_with_levels(Some(GffValue::Byte(255)));
+        assert_eq!(character.get_ability_points_summary().available, 1);
+        character.record_ability_change(AbilityIndex::STR);
+        let summary = character.get_ability_points_summary();
+        assert_eq!(summary.available, 0);
+        assert_eq!(summary.level_increases[0].ability, AbilityIndex::STR);
+    }
+
+    #[test]
+    fn increase_fills_unspent_slot_with_absent_field() {
+        let mut character = character_with_levels(None);
+        assert_eq!(character.get_ability_points_summary().available, 1);
+        character.record_ability_change(AbilityIndex::DEX);
+        let summary = character.get_ability_points_summary();
+        assert_eq!(summary.available, 0);
+        assert_eq!(summary.level_increases[0].ability, AbilityIndex::DEX);
+    }
+
+    #[test]
+    fn increase_does_not_overwrite_spent_slot() {
+        let mut character = character_with_levels(Some(GffValue::Byte(2)));
+        assert_eq!(character.get_ability_points_summary().available, 0);
+        character.record_ability_change(AbilityIndex::STR);
+        let summary = character.get_ability_points_summary();
+        assert_eq!(summary.level_increases[0].ability, AbilityIndex::CON);
     }
 }
