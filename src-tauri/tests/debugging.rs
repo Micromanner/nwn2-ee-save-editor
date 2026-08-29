@@ -57,3 +57,6 @@ mod make_tint_sentinel_save;
 
 #[path = "debugging/dump_roster_flags.rs"]
 mod dump_roster_flags;
+
+#[path = "debugging/diagnose_pending_spells.rs"]
+mod diagnose_pending_spells;

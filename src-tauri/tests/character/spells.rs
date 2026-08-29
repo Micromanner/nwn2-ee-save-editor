@@ -338,3 +338,54 @@ async fn test_non_caster_has_no_class_ability_spells_overlap() {
         assert!(!spell.name.is_empty());
     }
 }
+
+/// Level-up spell picks: Sorcerer tracks the SpellKnownTable per level and clears
+/// as spells are learned; Warlock invocations are not offered by the editor and the
+/// game stores them in one KnownList regardless of grade, so no picks are pending.
+#[tokio::test]
+async fn test_pending_spell_picks_sorcerer_and_warlock() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let load = |name: &str| {
+        let parser = GffParser::from_bytes(load_test_gff(name)).expect("Failed to parse GFF");
+        Character::from_gff(parser.read_struct_fields(0).expect("root"))
+    };
+
+    let mut qara = load("qaraofblacklake/qaraofblacklake1.bic");
+    let sorcerer = ClassId(9);
+    assert!(
+        qara.get_spells_state(game_data)
+            .pending_spell_learning
+            .is_empty()
+    );
+    qara.level_up(sorcerer, game_data).expect("level up");
+    let pending = qara.get_spells_state(game_data).pending_spell_learning;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].by_level.get(&0), Some(&1));
+    let slot = qara
+        .get_spells_state(game_data)
+        .spellcasting_classes
+        .iter()
+        .find(|c| c.class_id == sorcerer)
+        .map(|c| c.index as usize)
+        .expect("sorcerer caster slot");
+    qara.add_known_spell(slot, 0, app_lib::character::SpellId(424))
+        .expect("learn cantrip");
+    assert!(
+        qara.get_spells_state(game_data)
+            .pending_spell_learning
+            .is_empty()
+    );
+
+    let mut melchior = load("sagemelchior/sagemelchior1.bic");
+    let warlock = ClassId(39);
+    melchior.level_up(warlock, game_data).expect("level up");
+    melchior.level_up(warlock, game_data).expect("level up");
+    assert!(
+        melchior
+            .get_spells_state(game_data)
+            .pending_spell_learning
+            .is_empty()
+    );
+}

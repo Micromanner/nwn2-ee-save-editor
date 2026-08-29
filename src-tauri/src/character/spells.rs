@@ -1082,6 +1082,15 @@ impl Character {
             return None;
         }
 
+        // Only classes whose spell list the editor can offer (the All Spells tab reads
+        // the same columns). Warlock invocations live in the `warlock` column and the
+        // game stores them in one KnownList regardless of grade, so neither the
+        // per-level count nor the picker applies.
+        let column = self.get_spell_table_column_for_class(class_id, game_data)?;
+        if !Self::LEARNABLE_CLASS_COLUMNS.contains(&column.as_str()) {
+            return None;
+        }
+
         let class_name = self.get_class_name(class_id, game_data);
 
         // Spellbook casters (Wizard): 2 spells per level

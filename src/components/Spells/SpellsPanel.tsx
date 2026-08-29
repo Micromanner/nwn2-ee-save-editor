@@ -51,7 +51,6 @@ export function SpellsPanel() {
   const [allSpellsTotal, setAllSpellsTotal] = useState(0);
   const [_allSpellsHasNext, setAllSpellsHasNext] = useState(false);
   const [_allSpellsHasPrev, setAllSpellsHasPrev] = useState(false);
-  const [usedCache, setUsedCache] = useState(false);
   const [abilitiesOpen, setAbilitiesOpen] = useState(true);
   const [abilitySelected, setAbilitySelected] = useState(false);
 
@@ -63,23 +62,13 @@ export function SpellsPanel() {
     }
   }, [character?.id, spells.data, spells.isLoading, spells]);
 
-  // Use preloaded cache for initial unfiltered load
-  useEffect(() => {
-    if (allSpellsCache && allSpells.length === 0 && !usedCache) {
-      setAllSpells(allSpellsCache.spells);
-      setAllSpellsTotal(allSpellsCache.pagination.total);
-      setAllSpellsHasNext(allSpellsCache.pagination.has_next);
-      setAllSpellsHasPrev(allSpellsCache.pagination.has_previous);
-      setUsedCache(true);
-    }
-  }, [allSpellsCache]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch when filters change on the 'all' tab
+  // Fetch when filters change on the 'all' tab. The preload cache is re-adopted
+  // whenever it changes: it is refetched per character on a roster switch and
+  // its spell levels come from that character's class columns.
   useEffect(() => {
     const characterId = character?.id;
-    if (!characterId || tab !== 'all') return;
+    if (!characterId) return;
 
-    // Restore from cache when filters cleared on page 1 (allSpells may hold filtered data from a prior fetch)
     const hasFilters = activeSchool !== 'all' || activeLevel !== 'all' || activeClass !== 'all' || debouncedSearch.length >= 3;
     if (!hasFilters && allSpellsPage === 1 && allSpellsCache) {
       setAllSpells(allSpellsCache.spells);
@@ -88,6 +77,7 @@ export function SpellsPanel() {
       setAllSpellsHasPrev(allSpellsCache.pagination.has_previous);
       return;
     }
+    if (tab !== 'all') return;
 
     const loadAllSpells = async () => {
       setAllSpellsLoading(true);
@@ -122,7 +112,7 @@ export function SpellsPanel() {
 
     loadAllSpells();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character?.id, tab, allSpellsPage, activeSchool, activeLevel, activeClass, debouncedSearch, usedCache]);
+  }, [character?.id, tab, allSpellsPage, activeSchool, activeLevel, activeClass, debouncedSearch, allSpellsCache]);
 
   const casterClasses = useMemo(() => mapCasterClasses(spellsData?.spellcasting_classes), [spellsData]);
 

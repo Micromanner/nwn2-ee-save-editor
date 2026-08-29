@@ -71,7 +71,6 @@ export function FeatsPanel() {
   const [_hasNext, setHasNext] = useState(false);
   const [_hasPrevious, setHasPrevious] = useState(false);
   const [allFeatsTotal, setAllFeatsTotal] = useState(0);
-  const [usedCache, setUsedCache] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -81,30 +80,20 @@ export function FeatsPanel() {
     }
   }, [character, featsData, featsSubsystem]);
 
-  // Use preloaded cache for initial unfiltered load
+  // Fetch when filters change on the 'all' tab. The preload cache is re-adopted
+  // whenever it changes (refetched per character on a roster switch).
   useEffect(() => {
-    if (allFeatsCache && allFeats.length === 0 && !usedCache) {
-      setAllFeats(allFeatsCache.feats);
-      setAllFeatsTotal(allFeatsCache.pagination.total);
-      setHasNext(allFeatsCache.pagination.has_next);
-      setHasPrevious(allFeatsCache.pagination.has_previous);
-      setUsedCache(true);
-    }
-  }, [allFeatsCache]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!character?.id) return;
 
-  // Fetch when filters change on the 'all' tab
-  useEffect(() => {
-    if (tab !== 'all' || !character?.id) return;
-
-    // Restore cache when returning to unfiltered state
     const hasFilters = activeTypeBit != null || debouncedSearch.length >= 3;
-    if (!hasFilters && currentPage === 1 && usedCache && allFeatsCache) {
+    if (!hasFilters && currentPage === 1 && allFeatsCache) {
       setAllFeats(allFeatsCache.feats);
       setAllFeatsTotal(allFeatsCache.pagination.total);
       setHasNext(allFeatsCache.pagination.has_next);
       setHasPrevious(allFeatsCache.pagination.has_previous);
       return;
     }
+    if (tab !== 'all') return;
 
     let cancelled = false;
     setAllFeatsLoading(true);
@@ -134,7 +123,7 @@ export function FeatsPanel() {
     });
 
     return () => { cancelled = true; };
-  }, [tab, character?.id, currentPage, activeTypeBit, debouncedSearch, usedCache]);
+  }, [tab, character?.id, currentPage, activeTypeBit, debouncedSearch, allFeatsCache]);
 
   useEffect(() => {
     setCurrentPage(1);

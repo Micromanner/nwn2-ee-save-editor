@@ -113,7 +113,7 @@ function ShellContent() {
             backgroundSize: '200px 200px',
           }}>
             <LevelHelper onNavigate={setActiveTab} />
-            <ErrorBoundary key={activeTab}>
+            <ErrorBoundary key={`${activeTab}:${activeSource.kind === 'player' ? 'player' : activeSource.rosName}`}>
               {Panel ? <Panel /> : (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   <div style={{ textAlign: 'center' }}>
