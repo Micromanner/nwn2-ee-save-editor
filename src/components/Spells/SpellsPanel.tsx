@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, NonIdealState } from '@blueprintjs/core';
+import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, NonIdealState, Icon } from '@blueprintjs/core';
 import { GiVisoredHelm, GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -433,9 +433,11 @@ export function SpellsPanel() {
             }}
             onClick={() => setAbilitiesOpen(o => !o)}
           >
-            <span style={{ color: T.accent, width: 10 }}>
-              {abilitiesOpen ? '\u25BC' : '\u25B6'}
-            </span>
+            <Icon
+              icon={abilitiesOpen ? 'caret-down' : 'caret-right'}
+              size={16}
+              style={{ color: T.accent, width: 16 }}
+            />
             <span className="t-bold" style={{ color: T.accent, flex: 1 }}>{t('spells.specialAbilities')}</span>
             <span style={{ color: T.textMuted }}>{abilitySpells.length}</span>
           </div>

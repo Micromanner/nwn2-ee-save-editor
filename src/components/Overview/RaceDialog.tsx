@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Button, InputGroup } from '@blueprintjs/core';
+import { Button, InputGroup, Icon } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
 import { ParchmentDialog, LoadingState } from '../shared';
@@ -233,9 +233,11 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
                           color: isActive ? T.accent : T.text,
                         }}
                       >
-                        <span style={{ color: T.accent }}>
-                          {isExpanded ? '\u25BC' : '\u25B6'}
-                        </span>
+                        <Icon
+                          icon={isExpanded ? 'caret-down' : 'caret-right'}
+                          size={16}
+                          style={{ color: T.accent }}
+                        />
                         {r.name}
                       </button>
                       {isExpanded && loadingSubraces && (

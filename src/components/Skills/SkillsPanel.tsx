@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Tag } from '@blueprintjs/core';
+import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Tag, Icon } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
@@ -16,9 +16,11 @@ type SortDir = 'asc' | 'desc';
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) return null;
   return (
-    <span className="t-xs" style={{ marginLeft: 4 }}>
-      {dir === 'asc' ? '\u25B2' : '\u25BC'}
-    </span>
+    <Icon
+      icon={dir === 'asc' ? 'caret-up' : 'caret-down'}
+      size={10}
+      style={{ marginLeft: 4 }}
+    />
   );
 }
 

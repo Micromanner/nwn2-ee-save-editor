@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Icon } from '@blueprintjs/core';
 import { VariableSizeList } from 'react-window';
 import { T } from '../theme';
 import { useFontSize } from '@/providers/FontSizeProvider';
@@ -93,9 +94,11 @@ export function GroupedList<T extends { id: number }>({ sections, selectedId, on
           style={{ ...style, display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', cursor: 'pointer', userSelect: 'none', background: T.sectionBg, borderBottom: `1px solid ${T.sectionBorder}` }}
           onClick={() => toggleSection(row.sectionKey)}
         >
-          <span style={{ color: T.accent, width: 10 }}>
-            {isCollapsed ? '\u25B6' : '\u25BC'}
-          </span>
+          <Icon
+            icon={isCollapsed ? 'caret-right' : 'caret-down'}
+            size={16}
+            style={{ color: T.accent, width: 16 }}
+          />
           <span className="t-bold" style={{ color: T.accent, flex: 1 }}>
             {row.title}
           </span>

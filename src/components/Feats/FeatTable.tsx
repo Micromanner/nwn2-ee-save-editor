@@ -1,4 +1,4 @@
-import { HTMLTable, Tag } from '@blueprintjs/core';
+import { HTMLTable, Tag, Icon } from '@blueprintjs/core';
 import { T } from '../theme';
 import type { DummyFeat } from '../dummy-data';
 import { FeatExpandedDetail } from './FeatExpandedDetail';
@@ -87,9 +87,11 @@ function FeatRow({ feat, expanded, onToggle, tagColor, colCount, showOwned }: {
           </Tag>
         </td>
         <td style={{ textAlign: 'center' }}>
-          <span className="t-base" style={{ color: expanded ? T.accent : T.textMuted }}>
-            {expanded ? '\u25BC' : '\u25B6'}
-          </span>
+          <Icon
+            icon={expanded ? 'caret-down' : 'caret-right'}
+            size={16}
+            style={{ color: expanded ? T.accent : T.textMuted }}
+          />
         </td>
         {showOwned && (
           <td style={{ textAlign: 'center' }}>
