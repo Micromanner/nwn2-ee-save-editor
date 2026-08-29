@@ -41,21 +41,18 @@ export function AbilitiesPanel() {
   );
 
   useEffect(() => {
-    if (character?.id) {
-      if (!abilitiesSubsystem.data && !abilitiesSubsystem.isLoading) {
-        abilitiesSubsystem.load();
-      }
-      if (!savesSubsystem.data && !savesSubsystem.isLoading) {
-        savesSubsystem.load();
-      }
-      if (!combatSubsystem.data && !combatSubsystem.isLoading) {
-        combatSubsystem.load();
-      }
+    if (!character?.id) return;
+    if (!abilitiesSubsystem.data && !abilitiesSubsystem.isLoading) {
+      abilitiesSubsystem.load();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character?.id]);
+    if (!savesSubsystem.data && !savesSubsystem.isLoading) {
+      savesSubsystem.load();
+    }
+    if (!combatSubsystem.data && !combatSubsystem.isLoading) {
+      combatSubsystem.load();
+    }
+  }, [character?.id, abilitiesSubsystem, savesSubsystem, combatSubsystem]);
 
-  const isLoading = abilitiesSubsystem.isLoading || savesSubsystem.isLoading || combatSubsystem.isLoading;
   const hasError = abilitiesSubsystem.error || savesSubsystem.error || combatSubsystem.error;
 
   if (!character) {
@@ -70,7 +67,7 @@ export function AbilitiesPanel() {
     );
   }
 
-  if (isLoading && !abilitiesSubsystem.data) {
+  if (!abilitiesSubsystem.data || !savesSubsystem.data || !combatSubsystem.data) {
     return (
       <div style={{ padding: 32 }}>
         <NonIdealState icon={<Spinner />} title={t('common.loading')} />
