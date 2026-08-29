@@ -4,10 +4,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { createMaterial, tintChannelsToColors, updateTintUniforms, type TintColors } from '../ModelViewer/materials';
 import { buildSkeleton, buildMesh, buildAnimationClips } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
+import { LoadingState } from '../shared';
 import { useThreeScene, clearSceneModels, frameBounds } from '../ModelViewer/useThreeScene';
 import type { AttachedPart, MeshData, ModelData } from '../ModelViewer/types';
 import type { TintChannels } from '@/lib/bindings';
-import { Spinner } from '@blueprintjs/core';
 
 type PartType = 'head' | 'hair' | 'fhair' | 'wings' | 'tail' | 'helm' | 'body' | 'cloak';
 
@@ -513,9 +513,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       
       {loading && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-          <Spinner />
-        </div>
+        <LoadingState variant="overlay" text={t('modelViewer.loading')} />
       )}
       {error && (
         <div className="t-base" style={{ position: 'absolute', top: 8, left: 8, color: '#ff4444' }}>

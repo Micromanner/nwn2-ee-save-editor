@@ -13,3 +13,4 @@ export { LevelHelper } from './LevelHelper';
 export { ErrorBoundary } from './ErrorBoundary';
 export { AboutDialog } from './AboutDialog';
 export { GameLaunchDialog } from './GameLaunchDialog';
+export { LoadingState } from './LoadingState';

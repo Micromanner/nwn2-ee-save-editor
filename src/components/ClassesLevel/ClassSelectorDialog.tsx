@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button, InputGroup, Tabs, Tab, NonIdealState, Spinner } from '@blueprintjs/core';
+import { Button, InputGroup, Tabs, Tab, NonIdealState } from '@blueprintjs/core';
 import { GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
-import { ParchmentDialog, GroupedList } from '../shared';
+import { ParchmentDialog, GroupedList, LoadingState } from '../shared';
 import type { ListSection } from '../shared';
 import { T } from '../theme';
 import { ClassDetail } from './ClassDetail';
@@ -166,7 +166,7 @@ export function ClassSelectorDialog({
 
   const renderList = () => {
     if (!categorizedClasses) {
-      return <NonIdealState icon={<Spinner size={30} />} title={t('common.loading')} />;
+      return <LoadingState text={t('common.loadingClasses')} />;
     }
     if (sections.length === 0) {
       return <NonIdealState icon={<GameIcon icon={GiMagnifyingGlass} size={40} />} title={t('classes.noClassesFound')} />;

@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Button, ButtonGroup, Card, Elevation, H4, InputGroup, NonIdealState, ProgressBar, Spinner, TextArea } from '@blueprintjs/core';
+import { Button, ButtonGroup, Card, Elevation, H4, InputGroup, NonIdealState, ProgressBar, TextArea } from '@blueprintjs/core';
 import { GiQuillInk, GiVisoredHelm } from 'react-icons/gi';
 import { useTranslations } from '@/hooks/useTranslations';
 import { GameIcon } from '../shared/GameIcon';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { T } from '../theme';
-import { KVRow, mod, StepInput } from '../shared';
+import { KVRow, LoadingState, mod, StepInput } from '../shared';
 import { DeityDialog } from './DeityDialog';
 import { RaceDialog } from './RaceDialog';
 import { PetsSection } from './PetsSection';
@@ -234,9 +234,7 @@ export function OverviewPanel() {
 
   if (isLoading && !character) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400 }}>
-        <Spinner size={40} />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('navigation.overview').toLowerCase() })} />
     );
   }
 

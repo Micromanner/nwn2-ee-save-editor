@@ -2305,3 +2305,11 @@
 }
 
 } /* Close @layer components */
+
+/* Shared loading indicator: sienna head on a faint parchment track */
+.nwn-spinner .bp5-spinner-head {
+  stroke: #a0522d;
+}
+.nwn-spinner .bp5-spinner-track {
+  stroke: rgba(160, 82, 45, 0.15);
+}

@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import { Button, Card, Elevation, HTMLTable, NonIdealState, Spinner } from '@blueprintjs/core';
+import { Button, Card, Elevation, HTMLTable, NonIdealState } from '@blueprintjs/core';
 import { GiVisoredHelm, GiBrokenShield, GiAnticlockwiseRotation } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
-import { ModCell, mod, StepInput } from '../shared';
+import { LoadingState, ModCell, mod, StepInput } from '../shared';
 import { RespecDialog } from './RespecDialog';
 import { useSubsystem, useCharacterContext } from '@/contexts/CharacterContext';
 import { useAbilityScores } from '@/hooks/useAbilityScores';
@@ -69,9 +69,7 @@ export function AbilitiesPanel() {
 
   if (!abilitiesSubsystem.data || !savesSubsystem.data || !combatSubsystem.data) {
     return (
-      <div style={{ padding: 32 }}>
-        <NonIdealState icon={<Spinner />} title={t('common.loading')} />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('abilityScores.abilityScores').toLowerCase() })} />
     );
   }
 

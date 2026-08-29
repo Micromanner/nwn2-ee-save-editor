@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Button, Card, Elevation, HTMLTable, NonIdealState, ProgressBar, Spinner, Tag } from '@blueprintjs/core';
+import { Button, Card, Elevation, HTMLTable, NonIdealState, ProgressBar, Tag } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiHazardSign } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
-import { StepInput } from '../shared';
+import { StepInput, LoadingState } from '../shared';
 import { ClassSelectorDialog } from './ClassSelectorDialog';
 import { useSubsystem, useCharacterContext } from '@/contexts/CharacterContext';
 import { useClassesLevel, type ClassesData, type ClassInfo } from '@/hooks/useClassesLevel';
@@ -164,9 +164,7 @@ export function ClassesPanel() {
   // Loading state
   if (classesSubsystem.isLoading && !classesSubsystem.data) {
     return (
-      <div style={{ padding: 32, display: 'flex', justifyContent: 'center' }}>
-        <Spinner size={32} />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('navigation.classes').toLowerCase() })} />
     );
   }
 

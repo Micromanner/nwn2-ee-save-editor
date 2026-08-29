@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Button, InputGroup, Spinner } from '@blueprintjs/core';
+import { Button, InputGroup } from '@blueprintjs/core';
 import { FixedSizeGrid, GridChildComponentProps } from 'react-window';
 import { invoke } from '@tauri-apps/api/core';
-import { ParchmentDialog } from '../shared';
+import { ParchmentDialog, LoadingState } from '../shared';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -272,10 +272,7 @@ export function IconPickerDialog({ isOpen, onClose, onPick, initialResref }: Ico
           }}
         >
           {isLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10 }}>
-              <Spinner size={20} />
-              <span style={{ color: T.textMuted }}>{t('inventory.loadingIcons')}</span>
-            </div>
+            <LoadingState text={t('inventory.loadingIcons')} />
           ) : filtered.length === 0 ? (
             <div style={{ padding: 32, textAlign: 'center', color: T.textMuted }}>
               {t('inventory.noIconsMatch')}

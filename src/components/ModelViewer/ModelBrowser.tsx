@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { InputGroup, Spinner, NonIdealState, Tag } from '@blueprintjs/core';
+import { InputGroup, NonIdealState, Tag } from '@blueprintjs/core';
+import { LoadingState } from '@/components/shared';
 import { GiBrokenShield, GiCube, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { FixedSizeList as List, ListChildComponentProps } from 'react-window';
@@ -101,7 +102,7 @@ export function ModelBrowser() {
   }), [filtered, selectedResref, handleSelect]);
 
   if (loading) {
-    return <Spinner size={24} />;
+    return <LoadingState text={t('common.loadingModels')} />;
   }
 
   if (error) {

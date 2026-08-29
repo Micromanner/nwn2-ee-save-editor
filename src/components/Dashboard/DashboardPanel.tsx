@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button, Dialog, DialogBody, DialogFooter, Spinner, Tab, Tabs } from '@blueprintjs/core';
+import { Button, Dialog, DialogBody, DialogFooter, Tab, Tabs } from '@blueprintjs/core';
+import { LoadingState } from '@/components/shared';
 import { GiBackwardTime, GiCharacter, GiCog, GiOpenFolder, GiOrganigram, GiScrollUnfurled } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -325,9 +326,7 @@ export default function DashboardPanel() {
 
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {isLoadingSaves ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner size={30} />
-            </div>
+            <LoadingState text={t('common.loadingSaves')} />
           ) : (
             <SaveList
               saves={saves}

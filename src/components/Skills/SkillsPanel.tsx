@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Spinner, Tag } from '@blueprintjs/core';
+import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Tag } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
-import { ModCell, mod, StepInput } from '../shared';
+import { LoadingState, ModCell, mod, StepInput } from '../shared';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { useSkillManagement } from '@/hooks/useSkillManagement';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -140,9 +140,7 @@ export function SkillsPanel() {
 
   if (isLoading && !skillsData) {
     return (
-      <div style={{ padding: 16, display: 'flex', justifyContent: 'center', paddingTop: 64 }}>
-        <Spinner size={30} />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('navigation.skills').toLowerCase() })} />
     );
   }
 

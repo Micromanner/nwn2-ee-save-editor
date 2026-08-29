@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Elevation, NonIdealState, ProgressBar, Spinner } from '@blueprintjs/core';
+import { Button, Card, Elevation, NonIdealState, ProgressBar } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { T } from '../theme';
-import { fmtNum } from '../shared';
+import { fmtNum, LoadingState } from '../shared';
 import { ItemDetails, makeEquippedItem, makeInventoryItem, type AnyItem } from './ItemDetails';
 import { AddItemDialog } from './AddItemDialog';
 import { EditItemDialog } from './EditItemDialog';
@@ -249,9 +249,7 @@ export function InventoryPanel() {
 
   if (inventorySubsystem.isLoading) {
     return (
-      <div style={{ padding: 16, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spinner />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('navigation.inventory').toLowerCase() })} />
     );
   }
 

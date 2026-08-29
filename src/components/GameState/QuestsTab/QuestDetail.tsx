@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { HTMLTable, NonIdealState, Spinner } from '@blueprintjs/core';
+import { HTMLTable, NonIdealState } from '@blueprintjs/core';
+import { LoadingState } from '@/components/shared';
 import { GiScrollQuill } from 'react-icons/gi';
 import { T } from '../../theme';
 import { GameIcon } from '../../shared/GameIcon';
@@ -164,9 +165,7 @@ function renderTransitionsSection(
 ) {
   if (!entry || entry.state === 'pending') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: T.textMuted }}>
-        <Spinner size={16} /> <span>{t('gameState.quests.detail.loadingTransitions')}</span>
-      </div>
+      <LoadingState variant="inline" text={t('gameState.quests.detail.loadingTransitions')} />
     );
   }
   if (entry.state === 'error') {

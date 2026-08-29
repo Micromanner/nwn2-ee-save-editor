@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, Spinner, NonIdealState } from '@blueprintjs/core';
+import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, NonIdealState } from '@blueprintjs/core';
 import { GiVisoredHelm, GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { T, SPELL_SCHOOL_COLORS } from '../theme';
-import { SplitPane, GroupedList } from '../shared';
+import { SplitPane, GroupedList, LoadingState } from '../shared';
 import type { ListSection } from '../shared';
 import { SpellDetail } from './SpellDetail';
 import { useSubsystem } from '@/contexts/CharacterContext';
@@ -389,11 +389,7 @@ export function SpellsPanel() {
 
   const listContent = () => {
     if (isLoadingInitial) {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48 }}>
-          <Spinner size={32} />
-        </div>
-      );
+      return <LoadingState text={t('common.loadingSpells')} />;
     }
 
     if (!character) {
@@ -407,11 +403,7 @@ export function SpellsPanel() {
     }
 
     if (tab === 'all' && allSpellsLoading) {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48 }}>
-          <Spinner size={32} />
-        </div>
-      );
+      return <LoadingState text={t('common.loadingSpells')} />;
     }
 
     if (sections.length === 0) {

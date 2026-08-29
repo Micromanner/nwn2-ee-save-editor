@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Button, InputGroup, Spinner } from '@blueprintjs/core';
+import { Button, InputGroup } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
-import { ParchmentDialog } from '../shared';
+import { ParchmentDialog, LoadingState } from '../shared';
 import { useTranslations } from '@/hooks/useTranslations';
 import { stripNwn2Tags } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
@@ -212,9 +212,7 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {loadingRaces ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-                <Spinner size={20} />
-              </div>
+              <LoadingState height={200} text={t('common.loadingRaces')} />
             ) : (
               <>
                 {filtered.map(r => {
@@ -241,8 +239,8 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
                         {r.name}
                       </button>
                       {isExpanded && loadingSubraces && (
-                        <div style={{ padding: '4px 24px' }}>
-                          <Spinner size={14} />
+                        <div style={{ padding: '0 24px' }}>
+                          <LoadingState variant="inline" text={t('common.loadingSubraces')} />
                         </div>
                       )}
                       {showChildren && subraces.map(sub => {

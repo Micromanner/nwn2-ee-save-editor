@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, NonIdealState, Spinner } from '@blueprintjs/core';
+import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, NonIdealState } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiMagnifyingGlass, GiFunnel } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { T, FEAT_TYPE_COLORS } from '../theme';
-import { SplitPane, GroupedList } from '../shared';
+import { SplitPane, GroupedList, LoadingState } from '../shared';
 import type { ListSection } from '../shared';
 import { FeatDetail } from './FeatDetail';
 import { useSubsystem, useCharacterContext } from '@/contexts/CharacterContext';
@@ -314,9 +314,7 @@ export function FeatsPanel() {
   const renderList = () => {
     if (tab === 'my') {
       if (isLoading && !featsData) {
-        return (
-          <NonIdealState icon={<Spinner size={30} />} title={t('feats.loadingFeats')} />
-        );
+        return <LoadingState text={t('feats.loadingFeats')} />;
       }
       if (loadError) {
         return (
@@ -342,9 +340,7 @@ export function FeatsPanel() {
         );
       }
       if (allFeatsLoading) {
-        return (
-          <NonIdealState icon={<Spinner size={30} />} title={t('feats.loadingFeats')} />
-        );
+        return <LoadingState text={t('feats.loadingFeats')} />;
       }
       if (allFeatsError) {
         return (

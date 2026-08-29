@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Button, ButtonGroup, InputGroup, Menu, MenuItem, Popover, Spinner, Tab, Tabs } from '@blueprintjs/core';
+import { Button, ButtonGroup, InputGroup, Menu, MenuItem, Popover, Tab, Tabs } from '@blueprintjs/core';
 import { GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { FixedSizeList as List } from 'react-window';
-import { ParchmentDialog } from '../shared';
+import { ParchmentDialog, LoadingState } from '../shared';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -408,10 +408,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
 
         <div ref={setContainerNode} style={{ flex: 1, minHeight: LIST_HEIGHT }}>
           {isLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: listHeight, gap: 10 }}>
-              <Spinner size={20} />
-              <span style={{ color: T.textMuted }}>{tab === 'base' ? t('inventory.loadingBaseItems') : t('inventory.loadingTemplates')}</span>
-            </div>
+            <LoadingState height={listHeight} text={tab === 'base' ? t('inventory.loadingBaseItems') : t('inventory.loadingTemplates')} />
           ) : itemCount > 0 ? (
             <List
               height={listHeight}

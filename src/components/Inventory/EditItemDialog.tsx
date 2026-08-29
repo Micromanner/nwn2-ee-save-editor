@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Button, Checkbox, Spinner, Tab, Tabs } from '@blueprintjs/core';
+import { Button, Checkbox, Tab, Tabs } from '@blueprintjs/core';
 import { GiTiedScroll } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
-import { DropdownSelect, ParchmentDialog, StepInput } from '../shared';
+import { DropdownSelect, ParchmentDialog, StepInput, LoadingState } from '../shared';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -283,9 +283,7 @@ export function EditItemDialog({
       }
     >
       {!localData ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, gap: 10 }}>
-          <Spinner size={20} />
-        </div>
+        <LoadingState height={200} text={t('common.loadingItem')} />
       ) : (
         <Tabs id="edit-item-tab" selectedTabId={tab} onChange={(id) => setTab(id as string)}>
           <Tab id="basic" title={t('inventory.basicInfoTab')} panel={

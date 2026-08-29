@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Spinner } from '@blueprintjs/core';
 import { GiCancel, GiCheckMark } from 'react-icons/gi';
 import { T } from '../theme';
 import { GameIcon } from '../shared/GameIcon';
+import { LoadingState } from '../shared';
 import { display } from '@/utils/dataHelpers';
 import { nwn2ToHtml } from '@/utils/nwn2Markup';
 import type { ClassInfo } from '@/hooks/useClassesLevel';
@@ -136,9 +136,7 @@ export function ClassDetail({ cls, canSelect, selectReason }: ClassDetailProps) 
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <Spinner size={24} />
-      </div>
+      <LoadingState />
     );
   }
 

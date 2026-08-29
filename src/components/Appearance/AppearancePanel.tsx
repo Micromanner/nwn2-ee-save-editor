@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuItem, NonIdealState, Popover, Slider, Spinner, Switch } from '@blueprintjs/core';
+import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuItem, NonIdealState, Popover, Slider, Switch } from '@blueprintjs/core';
 import { GiMirrorMirror, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -7,7 +7,7 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { CharacterStateAPI } from '@/lib/api/character-state';
 import { T } from '../theme';
-import { KVRow } from '../shared';
+import { KVRow, LoadingState } from '../shared';
 import type { AppearanceOption, AppearanceUpdates, AvailableRace, AvailableSubrace, PartTintCapability, TintChannel, TintChannels, VoiceSetInfo } from '@/lib/bindings';
 import { invoke } from '@tauri-apps/api/core';
 import { CharacterViewer3D } from './CharacterViewer3D';
@@ -314,9 +314,7 @@ export function AppearancePanel() {
 
   if (!appearanceSubsystem.data) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <Spinner />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('navigation.appearance').toLowerCase() })} />
     );
   }
 

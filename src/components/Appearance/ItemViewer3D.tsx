@@ -7,7 +7,8 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useThreeScene, clearSceneModels, frameBounds } from '../ModelViewer/useThreeScene';
 import type { MeshData, ModelData } from '../ModelViewer/types';
 import type { ItemAppearance, TintChannels } from '@/lib/bindings';
-import { NonIdealState, Spinner } from '@blueprintjs/core';
+import { NonIdealState } from '@blueprintjs/core';
+import { LoadingState } from '@/components/shared';
 
 interface ItemViewer3DProps {
   appearance: ItemAppearance;
@@ -261,9 +262,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
       {loading && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', zIndex: 10 }}>
-          <Spinner size={50} />
-        </div>
+        <LoadingState variant="overlay" text={t('modelViewer.loading')} />
       )}
 
       {noPreview && !loading && (

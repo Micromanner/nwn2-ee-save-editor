@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Button, InputGroup, Spinner } from '@blueprintjs/core';
+import { Button, InputGroup } from '@blueprintjs/core';
 import { T } from '../theme';
-import { ParchmentDialog } from '../shared';
+import { ParchmentDialog, LoadingState } from '../shared';
 import { CharacterAPI, type Deity } from '@/services/characterApi';
 import { useIcon } from '@/hooks/useIcon';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -78,9 +78,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {loadingDeities ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-                <Spinner size={20} />
-              </div>
+              <LoadingState height={200} text={t('common.loadingDeities')} />
             ) : (
               <>
                 <button

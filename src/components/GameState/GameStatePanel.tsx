@@ -1,13 +1,13 @@
 import { Fragment, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Button, Card, Elevation, HTMLTable, InputGroup, Menu, MenuItem,
-  NonIdealState, Spinner, Switch, Tab, Tabs,
+  NonIdealState, Switch, Tab, Tabs,
 } from '@blueprintjs/core';
 import { Popover } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiBackwardTime, GiInfo, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T, formatBytes } from '../theme';
-import { KVRow, ParchmentDialog, StepInput } from '../shared';
+import { KVRow, ParchmentDialog, StepInput, LoadingState } from '../shared';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
@@ -81,9 +81,7 @@ function RestoreBackupDialog({
         )}
         <div style={{ overflowY: 'auto', maxHeight: 380, paddingLeft: 16 }}>
           {isLoading ? (
-            <div style={{ padding: 32, textAlign: 'center' }}>
-              <Spinner size={24} />
-            </div>
+            <LoadingState height={160} text={t('common.loadingBackups')} />
           ) : backups.length === 0 ? (
             <div style={{ padding: 32, textAlign: 'center', color: T.textMuted }}>{t('common.noBackups')}</div>
           ) : backups.map(b => {
@@ -220,9 +218,7 @@ function ReputationTab({ characterId }: { characterId: number }) {
 
   if (isLoading) {
     return (
-      <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spinner size={32} />
-      </div>
+      <LoadingState text={t('common.loadingSection', { section: t('navigation.gameState').toLowerCase() })} />
     );
   }
 
@@ -638,7 +634,7 @@ function ModuleInfoSection({ characterId, onModuleIdChange }: { characterId: num
   const selectedLabel = availableModules.find(m => m.id === selectedModuleId)?.name || selectedModuleId || '-';
 
   if (isLoading && !moduleInfo) {
-    return <div style={{ padding: 16 }}><Spinner size={20} /></div>;
+    return <LoadingState text={t('common.loadingModule')} />;
   }
 
   const moduleMenu = (
@@ -714,7 +710,7 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
   const floats = vars ? recordToVarEntries(vars.floats) : [];
 
   if (isLoading && !vars) {
-    return <div style={{ padding: 16, textAlign: 'center' }}><Spinner size={20} /></div>;
+    return <LoadingState text={t('common.loadingVariables')} />;
   }
 
   if (error && !vars) {
@@ -835,7 +831,7 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
   };
 
   if (isLoading) {
-    return <div style={{ padding: 32, textAlign: 'center' }}><Spinner size={24} /></div>;
+    return <LoadingState text={t('common.loadingCampaignSettings')} />;
   }
 
   if (error && !settings) {
@@ -972,7 +968,7 @@ function CampaignVariablesSection({ characterId }: { characterId: number }) {
   const floats = vars ? recordToVarEntries(vars.floats) : [];
 
   if (isLoading && !vars) {
-    return <div style={{ padding: 16, textAlign: 'center' }}><Spinner size={20} /></div>;
+    return <LoadingState text={t('common.loadingVariables')} />;
   }
 
   if (error && !vars) {

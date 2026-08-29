@@ -10,6 +10,7 @@ import {
 import { GiOpenFolder, GiExitDoor, GiFullFolder, GiFoldedPaper, GiBrokenShield, GiMagnifyingGlass } from 'react-icons/gi';
 import { useTranslations } from '@/hooks/useTranslations';
 import { GameIcon } from '../shared/GameIcon';
+import { LoadingState } from '../shared';
 import { display, formatNumber } from '@/utils/dataHelpers';
 import { T, formatBytes } from '../theme';
 
@@ -496,10 +497,7 @@ export function FileBrowserDialog({
 
           <div ref={setContainerNode} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
             {loading && files.length === 0 ? (
-              <NonIdealState
-                icon={<Spinner size={32} />}
-                description={t('fileBrowser.loading')}
-              />
+              <LoadingState text={t('fileBrowser.loading')} />
             ) : error ? (
               <NonIdealState icon={<GameIcon icon={GiBrokenShield} size={40} />} description={error} />
             ) : sortedFiles.length === 0 ? (
@@ -526,11 +524,8 @@ export function FileBrowserDialog({
                       const file = sortedFiles[index];
                       if (!file) {
                         return (
-                          <div style={{ ...style, display: 'flex', alignItems: 'center', padding: '0 16px' }}>
-                            <Spinner size={14} />
-                            <span style={{ color: T.textMuted, marginLeft: 8 }}>
-                              {t('fileBrowser.loadingMore')}
-                            </span>
+                          <div style={{ ...style, padding: '0 16px' }}>
+                            <LoadingState variant="inline" text={t('fileBrowser.loadingMore')} />
                           </div>
                         );
                       }
@@ -623,7 +618,7 @@ export function FileBrowserDialog({
                 color: T.textMuted,
                 zIndex: 10,
               }}>
-                <Spinner size={12} />
+                <Spinner className="nwn-spinner" size={12} />
                 {t('fileBrowser.loadingMore')}
               </div>
             )}
