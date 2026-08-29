@@ -2,12 +2,12 @@ import { useState, useCallback, useEffect } from 'react';
 import {
   Button, Navbar as BPNavbar, NavbarDivider, NavbarGroup, Tooltip,
 } from '@blueprintjs/core';
-import { GiCog, GiExitDoor, GiScrollUnfurled, GiTiedScroll, GiAnticlockwiseRotation, GiClockwiseRotation } from 'react-icons/gi';
+import { GiCog, GiExitDoor, GiScrollUnfurled, GiTiedScroll, GiAnticlockwiseRotation, GiClockwiseRotation, GiScrollQuill } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
 import { SettingsDialog } from '../Settings/SettingsPanel';
-import { GameLaunchDialog } from '../shared';
+import { GameLaunchDialog, HistoryDialog } from '../shared';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import type { SaveCharacterResult } from '@/lib/api/character-state';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -28,6 +28,7 @@ export function Navbar({ onBack }: NavbarProps) {
   const [showGameLaunch, setShowGameLaunch] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -104,6 +105,7 @@ export function Navbar({ onBack }: NavbarProps) {
           <Tooltip content={historyState?.undo_label ? t('actions.undoLabel', { action: historyState.undo_label }) : t('actions.undo')} placement="bottom">
             <Button icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} color={T.sidebarText} />} text={t('actions.undo')} small minimal disabled={!historyState?.can_undo} style={{ color: T.sidebarText }} onClick={() => void undo()} />
           </Tooltip>
+          <Button icon={<GameIcon icon={GiScrollQuill} size={14} color={T.sidebarText} />} text={t('actions.history')} small minimal disabled={!character} style={{ color: T.sidebarText }} onClick={() => setShowHistory(true)} />
           <Tooltip content={historyState?.redo_label ? t('actions.redoLabel', { action: historyState.redo_label }) : t('actions.redo')} placement="bottom">
             <Button icon={<GameIcon icon={GiClockwiseRotation} size={14} color={T.sidebarText} />} text={t('actions.redo')} small minimal disabled={!historyState?.can_redo} style={{ color: T.sidebarText }} onClick={() => void redo()} />
           </Tooltip>
@@ -115,6 +117,7 @@ export function Navbar({ onBack }: NavbarProps) {
         </NavbarGroup>
       </BPNavbar>
       {showSettings && <SettingsDialog isOpen onClose={() => setShowSettings(false)} />}
+      {showHistory && <HistoryDialog isOpen onClose={() => setShowHistory(false)} />}
       <GameLaunchDialog
         isOpen={showGameLaunch}
         onClose={() => setShowGameLaunch(false)}

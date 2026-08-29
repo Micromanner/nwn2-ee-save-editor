@@ -60,10 +60,7 @@ pub async fn update_natural_armor(
     value: i32,
 ) -> CommandResult<NaturalArmorChange> {
     let mut session = state.session.write();
-    session.record_history(
-        format!("Set natural armor to {value}"),
-        Some("combat:natural_armor"),
-    );
+    session.record_history(format!("Set natural armor to {value}"));
     let character = session
         .character
         .as_mut()
@@ -111,10 +108,7 @@ pub async fn set_misc_save_bonus(
     };
 
     let mut session = state.session.write();
-    session.record_history(
-        format!("Set misc save bonus to {value}"),
-        Some("combat:misc_save"),
-    );
+    session.record_history(format!("Set misc save bonus to {value}"));
     let character = session
         .character
         .as_mut()

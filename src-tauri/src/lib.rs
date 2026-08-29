@@ -108,6 +108,7 @@ pub fn run() {
             crate::commands::session::undo,
             crate::commands::session::redo,
             crate::commands::session::get_history_state,
+            crate::commands::session::get_session_history,
             // Companions
             crate::commands::companions::list_roster,
             crate::commands::companions::load_companion,

@@ -89,7 +89,7 @@ pub async fn update_character(
         } else {
             format!("Update character: {}", changed_fields.join(", "))
         };
-        session.record_history(label, None);
+        session.record_history(label);
     }
     let character = session
         .character
@@ -166,25 +166,19 @@ pub async fn update_abilities(
         .into_iter()
         .filter_map(|(name, val)| val.map(|v| (name, v)))
         .collect();
-        let (label, coalesce_key) = match changes.as_slice() {
-            [] => ("Update abilities".to_string(), None),
-            [(name, value)] => (
-                format!("Set {name} to {value}"),
-                Some(format!("ability:{name}")),
-            ),
-            multi => (
-                format!(
-                    "Set {}",
-                    multi
-                        .iter()
-                        .map(|(n, v)| format!("{n} to {v}"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                None,
+        let label = match changes.as_slice() {
+            [] => "Update abilities".to_string(),
+            [(name, value)] => format!("Set {name} to {value}"),
+            multi => format!(
+                "Set {}",
+                multi
+                    .iter()
+                    .map(|(n, v)| format!("{n} to {v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         };
-        session.record_history(label, coalesce_key.as_deref());
+        session.record_history(label);
         let character = session
             .character
             .as_mut()
@@ -283,7 +277,7 @@ pub async fn apply_point_buy(
 
     {
         let mut session = state.session.write();
-        session.record_history("Apply point buy", None);
+        session.record_history("Apply point buy");
         let character = session
             .character
             .as_mut()

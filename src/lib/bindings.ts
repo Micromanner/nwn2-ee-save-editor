@@ -931,6 +931,17 @@ export interface HistoryState {
   redo_label: string | null;
 }
 
+export interface CharacterHistory {
+  /** null for the player / standalone character. */
+  ros_name: string | null;
+  name: string;
+  active: boolean;
+  /** Newest first. */
+  undo_labels: string[];
+  /** Nearest first. */
+  redo_labels: string[];
+}
+
 // =============================================================================
 // Error Handling
 // =============================================================================

@@ -82,7 +82,10 @@
     "undo": "Rückgängig",
     "redo": "Wiederholen",
     "undoLabel": "Rückgängig: {action}",
-    "redoLabel": "Wiederholen: {action}"
+    "redoLabel": "Wiederholen: {action}",
+    "history": "Verlauf",
+    "historyCurrent": "Aktueller Stand",
+    "historyEmpty": "Noch keine Änderungen"
   },
   "character": {
     "noCharacter": "Kein Charakter",

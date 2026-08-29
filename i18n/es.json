@@ -82,7 +82,10 @@
     "undo": "Deshacer",
     "redo": "Rehacer",
     "undoLabel": "Deshacer: {action}",
-    "redoLabel": "Rehacer: {action}"
+    "redoLabel": "Rehacer: {action}",
+    "history": "Historial",
+    "historyCurrent": "Estado actual",
+    "historyEmpty": "Sin cambios todavía"
   },
   "character": {
     "noCharacter": "Sin Personaje",

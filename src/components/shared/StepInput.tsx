@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Button } from '@blueprintjs/core';
 import { T } from '../theme';
 
@@ -25,14 +26,19 @@ export function StepInput({
 }: StepInputProps) {
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    if (raw === '' || raw === '-') return;
-    const parsed = Number(raw);
-    if (!isNaN(parsed)) onValueChange(clamp(parsed));
+  // Typed text is held locally and committed on blur/Enter so a value like
+  // "18" produces one history entry, not one per keystroke.
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [value]);
+
+  const commitDraft = () => {
+    if (draft === null) return;
+    const parsed = Number(draft);
+    if (draft !== '' && draft !== '-' && !isNaN(parsed) && clamp(parsed) !== value) onValueChange(clamp(parsed));
+    setDraft(null);
   };
 
-  const displayValue = value === 0 && zeroDisplay !== undefined ? zeroDisplay : value;
+  const displayValue = draft ?? (value === 0 && zeroDisplay !== undefined ? zeroDisplay : value);
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0, width }}>
@@ -49,7 +55,9 @@ export function StepInput({
         type="text"
         inputMode="numeric"
         value={displayValue}
-        onChange={handleChange}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         disabled={disabled}
         className="t-lg t-semibold"
         style={{

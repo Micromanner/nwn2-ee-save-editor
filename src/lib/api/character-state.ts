@@ -40,6 +40,7 @@ import type {
   SkillId,
   UndoResult,
   HistoryState,
+  CharacterHistory,
 } from '../bindings';
 
 export interface RosterClassInfo {
@@ -259,6 +260,7 @@ export const CharacterStateAPI = {
 
   // History
   getHistoryState: () => invoke<HistoryState>('get_history_state'),
+  getSessionHistory: () => invoke<CharacterHistory[]>('get_session_history'),
   undo: () => invoke<UndoResult>('undo'),
   redo: () => invoke<UndoResult>('redo'),
 };

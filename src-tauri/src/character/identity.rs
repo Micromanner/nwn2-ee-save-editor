@@ -263,6 +263,22 @@ impl Character {
 /// files store `FirstName`/`LastName` as a bare strref). Does not touch the
 /// GFF data — the resolved value is never written back, so saving a
 /// companion never bakes a TLK-derived name over the strref.
+/// `first last` with each half falling back to its TLK strref when the GFF
+/// field has no literal substring (companion `.ros` files). Read-path only.
+pub fn resolved_full_name(character: &Character, game_data: &GameData) -> String {
+    let first = resolve_localized_name(
+        character.first_name(),
+        character.first_name_strref(),
+        game_data,
+    );
+    let last = resolve_localized_name(
+        character.last_name(),
+        character.last_name_strref(),
+        game_data,
+    );
+    format!("{first} {last}").trim().to_string()
+}
+
 pub fn resolve_localized_name(value: String, strref: Option<i32>, game_data: &GameData) -> String {
     if !value.is_empty() {
         return value;

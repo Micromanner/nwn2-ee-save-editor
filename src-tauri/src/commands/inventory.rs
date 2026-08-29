@@ -132,7 +132,7 @@ pub async fn get_gold(state: State<'_, AppState>) -> CommandResult<u32> {
 #[tauri::command]
 pub async fn set_gold(state: State<'_, AppState>, amount: u32) -> CommandResult<u32> {
     let mut session = state.session.write();
-    session.record_history(format!("Set gold to {amount}"), Some("gold"));
+    session.record_history(format!("Set gold to {amount}"));
     let character = session
         .character
         .as_mut()
@@ -144,7 +144,7 @@ pub async fn set_gold(state: State<'_, AppState>, amount: u32) -> CommandResult<
 #[tauri::command]
 pub async fn add_gold(state: State<'_, AppState>, amount: i32) -> CommandResult<u32> {
     let mut session = state.session.write();
-    session.record_history(format!("Add {amount} gold"), Some("gold"));
+    session.record_history(format!("Add {amount} gold"));
     let character = session
         .character
         .as_mut()
@@ -205,7 +205,7 @@ pub async fn equip_item(
 ) -> CommandResult<EquipResult> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(format!("Equip item to {slot:?}"), None);
+    session.record_history(format!("Equip item to {slot:?}"));
     let character = session
         .character
         .as_mut()
@@ -219,7 +219,7 @@ pub async fn unequip_item(
     slot: EquipmentSlot,
 ) -> CommandResult<UnequipResult> {
     let mut session = state.session.write();
-    session.record_history(format!("Unequip {slot:?}"), None);
+    session.record_history(format!("Unequip {slot:?}"));
     let character = session
         .character
         .as_mut()
@@ -259,7 +259,7 @@ pub async fn add_to_inventory(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_base_item_name(base_item_id, &game_data)
     };
-    session.record_history(format!("Add {item_label} (x{stack_size})"), None);
+    session.record_history(format!("Add {item_label} (x{stack_size})"));
     let character = session
         .character
         .as_mut()
@@ -273,7 +273,7 @@ pub async fn remove_from_inventory(
     index: usize,
 ) -> CommandResult<RemoveItemResult> {
     let mut session = state.session.write();
-    session.record_history(format!("Remove item from slot {index}"), None);
+    session.record_history(format!("Remove item from slot {index}"));
     let character = session
         .character
         .as_mut()
@@ -653,7 +653,7 @@ pub async fn add_item_from_template(
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(format!("Add {item_label} from template"), None);
+    session.record_history(format!("Add {item_label} from template"));
     let character = session
         .character
         .as_mut()
@@ -934,7 +934,7 @@ pub async fn update_item(
         (None, Some(idx)) => format!("Update item at slot {idx}"),
         _ => "Update item".to_string(),
     };
-    session.record_history(label, None);
+    session.record_history(label);
     let character = session
         .character
         .as_mut()
@@ -992,7 +992,7 @@ pub async fn transform_item(
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(format!("Transform item into {item_label}"), None);
+    session.record_history(format!("Transform item into {item_label}"));
     let character = session
         .character
         .as_mut()

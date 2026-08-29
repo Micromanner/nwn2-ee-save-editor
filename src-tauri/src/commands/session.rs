@@ -5,6 +5,7 @@ use crate::parsers::gff::GffParser;
 use crate::services::load_diagnostics::{self, LoadInput, LoadReport, LoadStage, LoadStatus};
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
+use crate::state::session_state::CharacterHistory;
 use tauri::{AppHandle, Manager, State};
 use tracing::{error, info, instrument, warn};
 
@@ -304,6 +305,15 @@ pub async fn get_history_state(state: State<'_, AppState>) -> CommandResult<Hist
         undo_label: session.undo_label().map(str::to_owned),
         redo_label: session.redo_label().map(str::to_owned),
     })
+}
+
+#[tauri::command]
+pub async fn get_session_history(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<CharacterHistory>> {
+    let game_data = state.game_data.read();
+    let session = state.session.read();
+    Ok(session.session_history(&game_data))
 }
 
 #[tauri::command]

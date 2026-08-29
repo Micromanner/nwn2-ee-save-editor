@@ -1,6 +1,6 @@
 use crate::character::{
     AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, Character, HitPoints,
-    resolve_localized_name,
+    resolve_localized_name, resolved_full_name,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::loaders::GameData;
@@ -25,12 +25,6 @@ fn resolved_last_name(character: &Character, game_data: &GameData) -> String {
         character.last_name_strref(),
         game_data,
     )
-}
-
-fn resolved_full_name(character: &Character, game_data: &GameData) -> String {
-    let first = resolved_first_name(character, game_data);
-    let last = resolved_last_name(character, game_data);
-    format!("{first} {last}").trim().to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,10 +107,7 @@ pub async fn get_last_name(state: State<'_, AppState>) -> CommandResult<String> 
 #[tauri::command]
 pub async fn set_first_name(state: State<'_, AppState>, name: String) -> CommandResult<String> {
     let mut session = state.session.write();
-    session.record_history(
-        format!("Set first name to {name}"),
-        Some("identity:first_name"),
-    );
+    session.record_history(format!("Set first name to {name}"));
     let character = session
         .character
         .as_mut()
@@ -128,10 +119,7 @@ pub async fn set_first_name(state: State<'_, AppState>, name: String) -> Command
 #[tauri::command]
 pub async fn set_last_name(state: State<'_, AppState>, name: String) -> CommandResult<String> {
     let mut session = state.session.write();
-    session.record_history(
-        format!("Set last name to {name}"),
-        Some("identity:last_name"),
-    );
+    session.record_history(format!("Set last name to {name}"));
     let character = session
         .character
         .as_mut()
@@ -153,7 +141,7 @@ pub async fn get_character_age(state: State<'_, AppState>) -> CommandResult<i32>
 #[tauri::command]
 pub async fn set_character_age(state: State<'_, AppState>, age: i32) -> CommandResult<i32> {
     let mut session = state.session.write();
-    session.record_history(format!("Set age to {age}"), Some("identity:age"));
+    session.record_history(format!("Set age to {age}"));
     let character = session
         .character
         .as_mut()
@@ -180,7 +168,7 @@ pub async fn get_experience_points(state: State<'_, AppState>) -> CommandResult<
 #[tauri::command]
 pub async fn set_experience_points(state: State<'_, AppState>, xp: i32) -> CommandResult<i32> {
     let mut session = state.session.write();
-    session.record_history(format!("Set experience to {xp}"), Some("identity:xp"));
+    session.record_history(format!("Set experience to {xp}"));
     let character = session
         .character
         .as_mut()
@@ -211,7 +199,7 @@ pub async fn set_alignment(
     good_evil: Option<i32>,
 ) -> CommandResult<Alignment> {
     let mut session = state.session.write();
-    session.record_history("Set alignment", None);
+    session.record_history("Set alignment");
     let character = session
         .character
         .as_mut()
@@ -238,7 +226,7 @@ pub async fn get_deity(state: State<'_, AppState>) -> CommandResult<String> {
 #[tauri::command]
 pub async fn set_deity(state: State<'_, AppState>, deity: String) -> CommandResult<String> {
     let mut session = state.session.write();
-    session.record_history(format!("Set deity to {deity}"), Some("identity:deity"));
+    session.record_history(format!("Set deity to {deity}"));
     let character = session
         .character
         .as_mut()
@@ -272,7 +260,7 @@ pub async fn set_biography(
     description: String,
 ) -> CommandResult<String> {
     let mut session = state.session.write();
-    session.record_history("Update biography", Some("identity:biography"));
+    session.record_history("Update biography");
     let character = session
         .character
         .as_mut()
@@ -388,10 +376,7 @@ pub async fn set_attribute(
 ) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(
-        format!("Set {ability:?} to {value}"),
-        Some(&format!("ability:{ability:?}")),
-    );
+    session.record_history(format!("Set {ability:?} to {value}"));
     let character = session
         .character
         .as_mut()
@@ -418,7 +403,7 @@ pub async fn update_hit_points(
         (None, Some(m)) => format!("Set HP to {m}/{m}"),
         (None, None) => "Set HP".to_string(),
     };
-    session.record_history(label, Some("hp"));
+    session.record_history(label);
     let character = session
         .character
         .as_mut()
@@ -452,25 +437,19 @@ pub async fn set_all_ability_scores(
         .filter(|(_, idx, val)| current.base_ability(*idx) != *val)
         .map(|(name, _, val)| (name, val))
         .collect();
-        let (label, coalesce_key) = match changes.as_slice() {
-            [] => ("Update abilities".to_string(), None),
-            [(name, value)] => (
-                format!("Set {name} to {value}"),
-                Some(format!("ability:{name}")),
-            ),
-            multi => (
-                format!(
-                    "Set {}",
-                    multi
-                        .iter()
-                        .map(|(n, v)| format!("{n} to {v}"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                None,
+        let label = match changes.as_slice() {
+            [] => "Update abilities".to_string(),
+            [(name, value)] => format!("Set {name} to {value}"),
+            multi => format!(
+                "Set {}",
+                multi
+                    .iter()
+                    .map(|(n, v)| format!("{n} to {v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         };
-        session.record_history(label, coalesce_key.as_deref());
+        session.record_history(label);
     }
     let character = session
         .character
@@ -641,7 +620,7 @@ pub async fn change_race(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_race_name_by_id(race_id, &game_data)
     };
-    session.record_history(format!("Change race to {race_label}"), None);
+    session.record_history(format!("Change race to {race_label}"));
     let character = session
         .character
         .as_mut()

@@ -107,7 +107,7 @@ pub async fn get_level_history(
 #[tauri::command]
 pub async fn set_experience(state: State<'_, AppState>, xp: i32) -> CommandResult<()> {
     let mut session = state.session.write();
-    session.record_history(format!("Set XP to {xp}"), Some("xp"));
+    session.record_history(format!("Set XP to {xp}"));
     let character = session
         .character
         .as_mut()
@@ -135,7 +135,7 @@ pub async fn add_class_entry(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Add level: {class_label}"), None);
+    session.record_history(format!("Add level: {class_label}"));
     let character = session
         .character
         .as_mut()
@@ -163,7 +163,7 @@ pub async fn set_class_level(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Set {class_label} to level {new_level}"), None);
+    session.record_history(format!("Set {class_label} to level {new_level}"));
     let character = session
         .character
         .as_mut()
@@ -187,7 +187,7 @@ pub async fn remove_class_entry(state: State<'_, AppState>, class_id: i32) -> Co
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Remove class: {class_label}"), None);
+    session.record_history(format!("Remove class: {class_label}"));
     let character = session
         .character
         .as_mut()
@@ -266,7 +266,7 @@ pub async fn add_class_level(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Add {count} {class_label} level(s)"), None);
+    session.record_history(format!("Add {count} {class_label} level(s)"));
     let character = session
         .character
         .as_mut()
@@ -304,7 +304,7 @@ pub async fn change_class(
             character.get_class_name(ClassId(new_class_id), &game_data),
         )
     };
-    session.record_history(format!("Change class: {old_label} -> {new_label}"), None);
+    session.record_history(format!("Change class: {old_label} -> {new_label}"));
     let character = session
         .character
         .as_mut()
@@ -340,7 +340,7 @@ pub async fn remove_class_levels(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Remove {count} {class_label} level(s)"), None);
+    session.record_history(format!("Remove {count} {class_label} level(s)"));
     let character = session
         .character
         .as_mut()

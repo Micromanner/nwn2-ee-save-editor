@@ -2,7 +2,6 @@ use indexmap::IndexMap;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tracing::{debug, info, instrument, warn};
 
 use crate::character::{Character, FeatInfo};
@@ -18,14 +17,31 @@ use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 use crate::state::standalone_bic;
 
 const HISTORY_LIMIT: usize = 100;
-const COALESCE_WINDOW: Duration = Duration::from_millis(500);
 
 pub struct HistoryEntry {
     pub label: String,
-    pub coalesce_key: Option<String>,
-    pub timestamp: Instant,
     gff_snapshot: IndexMap<String, GffValue<'static>>,
     modified_snapshot: bool,
+}
+
+/// Undo/redo stacks of one character. Parked together with the character so
+/// switching party members keeps each one's history.
+#[derive(Default)]
+pub struct History {
+    pub undo_stack: VecDeque<HistoryEntry>,
+    pub redo_stack: Vec<HistoryEntry>,
+}
+
+#[derive(serde::Serialize, specta::Type)]
+pub struct CharacterHistory {
+    /// `None` for the player / standalone character.
+    pub ros_name: Option<String>,
+    pub name: String,
+    pub active: bool,
+    /// Newest first.
+    pub undo_labels: Vec<String>,
+    /// Nearest first.
+    pub redo_labels: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,13 +73,13 @@ pub struct SessionState {
     /// per-quest fetch both read through the shared pointer.
     /// Cleared whenever the save changes (`load_character`, `close_character`).
     pub quest_graph_cache: Option<Arc<SaveGraph>>,
-    pub undo_stack: VecDeque<HistoryEntry>,
-    pub redo_stack: Vec<HistoryEntry>,
+    pub history: History,
     pub character_source: CharacterSource,
     pub standalone_backup_done: bool,
     /// Characters edited earlier in this session but not currently active. Edits
-    /// stay in memory across switches; `save_character` flushes all of them.
-    parked: Vec<(CharacterSource, Character)>,
+    /// and undo history stay in memory across switches; `save_character` flushes
+    /// all of them.
+    parked: Vec<(CharacterSource, Character, History)>,
 }
 
 impl SessionState {
@@ -88,8 +104,7 @@ impl SessionState {
             feat_cache: None,
             module_info_cache: None,
             quest_graph_cache: None,
-            undo_stack: VecDeque::new(),
-            redo_stack: Vec::new(),
+            history: History::default(),
             character_source: CharacterSource::Player,
             standalone_backup_done: false,
             parked: Vec::new(),
@@ -320,14 +335,14 @@ impl SessionState {
         let parked = std::mem::take(&mut self.parked);
         let mut restored = Vec::with_capacity(parked.len());
         let mut first_error = None;
-        for (source, mut character) in parked {
+        for (source, mut character, history) in parked {
             if first_error.is_none() {
                 match self.save_one(&source, &mut character, game_data) {
                     Ok(warning) => warnings.extend(warning),
                     Err(e) => first_error = Some(e),
                 }
             }
-            restored.push((source, character));
+            restored.push((source, character, history));
         }
         self.parked = restored;
         if let Some(e) = first_error {
@@ -535,39 +550,27 @@ impl SessionState {
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
 
-    pub fn record_history(&mut self, label: impl Into<String>, coalesce_key: Option<&str>) {
+    pub fn record_history(&mut self, label: impl Into<String>) {
         let Some(character) = self.character.as_ref() else {
             return;
         };
-        let now = Instant::now();
-        if let Some(coalesce_key) = coalesce_key
-            && let Some(last) = self.undo_stack.back()
-            && last.coalesce_key.as_deref() == Some(coalesce_key)
-            && now.duration_since(last.timestamp) < COALESCE_WINDOW
-        {
-            return;
-        }
         let entry = HistoryEntry {
             label: label.into(),
-            coalesce_key: coalesce_key.map(str::to_owned),
-            timestamp: now,
             gff_snapshot: character.clone_gff(),
             modified_snapshot: character.is_modified(),
         };
-        self.undo_stack.push_back(entry);
-        if self.undo_stack.len() > HISTORY_LIMIT {
-            self.undo_stack.pop_front();
+        self.history.undo_stack.push_back(entry);
+        if self.history.undo_stack.len() > HISTORY_LIMIT {
+            self.history.undo_stack.pop_front();
         }
-        self.redo_stack.clear();
+        self.history.redo_stack.clear();
     }
 
     pub fn undo(&mut self) -> Option<String> {
-        let entry = self.undo_stack.pop_back()?;
+        let entry = self.history.undo_stack.pop_back()?;
         let label = entry.label.clone();
         let redo_entry = self.character.as_ref().map(|ch| HistoryEntry {
             label: label.clone(),
-            coalesce_key: entry.coalesce_key.clone(),
-            timestamp: Instant::now(),
             gff_snapshot: ch.clone_gff(),
             modified_snapshot: ch.is_modified(),
         });
@@ -575,18 +578,16 @@ impl SessionState {
             character.restore_snapshot(entry.gff_snapshot, entry.modified_snapshot);
         }
         if let Some(redo) = redo_entry {
-            self.redo_stack.push(redo);
+            self.history.redo_stack.push(redo);
         }
         Some(label)
     }
 
     pub fn redo(&mut self) -> Option<String> {
-        let entry = self.redo_stack.pop()?;
+        let entry = self.history.redo_stack.pop()?;
         let label = entry.label.clone();
         let undo_entry = self.character.as_ref().map(|ch| HistoryEntry {
             label: label.clone(),
-            coalesce_key: entry.coalesce_key.clone(),
-            timestamp: Instant::now(),
             gff_snapshot: ch.clone_gff(),
             modified_snapshot: ch.is_modified(),
         });
@@ -594,30 +595,93 @@ impl SessionState {
             character.restore_snapshot(entry.gff_snapshot, entry.modified_snapshot);
         }
         if let Some(undo) = undo_entry {
-            self.undo_stack.push_back(undo);
+            self.history.undo_stack.push_back(undo);
         }
         Some(label)
     }
 
     pub fn clear_history(&mut self) {
-        self.undo_stack.clear();
-        self.redo_stack.clear();
+        self.history.undo_stack.clear();
+        self.history.redo_stack.clear();
     }
 
     pub fn can_undo(&self) -> bool {
-        !self.undo_stack.is_empty()
+        !self.history.undo_stack.is_empty()
     }
 
     pub fn can_redo(&self) -> bool {
-        !self.redo_stack.is_empty()
+        !self.history.redo_stack.is_empty()
     }
 
     pub fn undo_label(&self) -> Option<&str> {
-        self.undo_stack.back().map(|e| e.label.as_str())
+        self.history.undo_stack.back().map(|e| e.label.as_str())
     }
 
     pub fn redo_label(&self) -> Option<&str> {
-        self.redo_stack.last().map(|e| e.label.as_str())
+        self.history.redo_stack.last().map(|e| e.label.as_str())
+    }
+
+    /// Undo labels newest first.
+    pub fn undo_labels(&self) -> Vec<String> {
+        self.history
+            .undo_stack
+            .iter()
+            .rev()
+            .map(|e| e.label.clone())
+            .collect()
+    }
+
+    /// Redo labels nearest first.
+    pub fn redo_labels(&self) -> Vec<String> {
+        self.history
+            .redo_stack
+            .iter()
+            .rev()
+            .map(|e| e.label.clone())
+            .collect()
+    }
+
+    /// Every character of this session that has undo history: the active one
+    /// first, then parked ones.
+    pub fn session_history(&self, game_data: &GameData) -> Vec<CharacterHistory> {
+        let entry =
+            |source: &CharacterSource, character: &Character, history: &History, active: bool| {
+                CharacterHistory {
+                    ros_name: match source {
+                        CharacterSource::Companion { ros_name } => Some(ros_name.clone()),
+                        CharacterSource::Player | CharacterSource::Standalone => None,
+                    },
+                    name: crate::character::resolved_full_name(character, game_data),
+                    active,
+                    undo_labels: history
+                        .undo_stack
+                        .iter()
+                        .rev()
+                        .map(|e| e.label.clone())
+                        .collect(),
+                    redo_labels: history
+                        .redo_stack
+                        .iter()
+                        .rev()
+                        .map(|e| e.label.clone())
+                        .collect(),
+                }
+            };
+        let mut out = Vec::new();
+        if let Some(character) = self.character.as_ref() {
+            out.push(entry(
+                &self.character_source,
+                character,
+                &self.history,
+                true,
+            ));
+        }
+        for (source, character, history) in &self.parked {
+            if !history.undo_stack.is_empty() || !history.redo_stack.is_empty() {
+                out.push(entry(source, character, history, false));
+            }
+        }
+        out
     }
 
     pub fn invalidate_feat_cache(&mut self) {
@@ -630,7 +694,7 @@ impl SessionState {
 
     pub fn has_unsaved_changes(&self) -> bool {
         self.character.as_ref().is_some_and(Character::is_modified)
-            || self.parked.iter().any(|(_, c)| c.is_modified())
+            || self.parked.iter().any(|(_, c, _)| c.is_modified())
     }
 
     pub fn character(&self) -> Option<&Character> {
@@ -650,8 +714,8 @@ impl SessionState {
         if self.character_source == target && self.character.is_some() {
             return Ok(());
         }
-        if let Some(character) = self.take_parked(&target) {
-            self.activate(target, character);
+        if let Some((character, history)) = self.take_parked(&target) {
+            self.activate(target, character, history);
             return Ok(());
         }
         let handler = self
@@ -676,7 +740,7 @@ impl SessionState {
             character.full_name(),
             character.total_level()
         );
-        self.activate(target, character);
+        self.activate(target, character, History::default());
         Ok(())
     }
 
@@ -686,8 +750,8 @@ impl SessionState {
         if self.character_source == CharacterSource::Player && self.character.is_some() {
             return Ok(());
         }
-        if let Some(character) = self.take_parked(&CharacterSource::Player) {
-            self.activate(CharacterSource::Player, character);
+        if let Some((character, history)) = self.take_parked(&CharacterSource::Player) {
+            self.activate(CharacterSource::Player, character, history);
             return Ok(());
         }
         let handler = self
@@ -705,27 +769,31 @@ impl SessionState {
             character.full_name(),
             character.total_level()
         );
-        self.activate(CharacterSource::Player, character);
+        self.activate(CharacterSource::Player, character, History::default());
         Ok(())
     }
 
-    fn take_parked(&mut self, source: &CharacterSource) -> Option<Character> {
-        let idx = self.parked.iter().position(|(s, _)| s == source)?;
-        Some(self.parked.swap_remove(idx).1)
+    fn take_parked(&mut self, source: &CharacterSource) -> Option<(Character, History)> {
+        let idx = self.parked.iter().position(|(s, _, _)| s == source)?;
+        let (_, character, history) = self.parked.swap_remove(idx);
+        Some((character, history))
     }
 
-    /// Park the current character (if any) and install `character` as active.
-    /// Same save, so module/quest caches stay; character-scoped state does not.
-    fn activate(&mut self, source: CharacterSource, character: Character) {
+    /// Park the current character and its history (if any) and install
+    /// `character` as active. Same save, so module/quest caches stay;
+    /// character-scoped state does not.
+    fn activate(&mut self, source: CharacterSource, character: Character, history: History) {
         if let Some(previous) = self.character.take() {
             let previous_source = self.character_source.clone();
-            self.parked.retain(|(s, _)| *s != previous_source);
-            self.parked.push((previous_source, previous));
+            self.parked.retain(|(s, _, _)| *s != previous_source);
+            let previous_history = std::mem::take(&mut self.history);
+            self.parked
+                .push((previous_source, previous, previous_history));
         }
         self.character = Some(character);
         self.character_source = source;
         self.feat_cache = None;
-        self.clear_history();
+        self.history = history;
     }
 
     pub fn list_roster(&self) -> Result<Vec<RosterListing>, String> {
@@ -1079,7 +1147,7 @@ mod tests {
         let initial_gff = make_gff_with_str(10);
         let mut session = make_session_with_character(initial_gff);
 
-        session.record_history("Set STR to 18", None);
+        session.record_history("Set STR to 18");
 
         let mutated = make_gff_with_str(18);
         session
@@ -1100,28 +1168,16 @@ mod tests {
     }
 
     #[test]
-    fn coalesce_skips_second_push_within_window() {
-        let gff = make_gff_with_str(10);
-        let mut session = make_session_with_character(gff);
-
-        session.record_history("Set STR to 15", Some("ability:STR"));
-        session.record_history("Set STR to 16", Some("ability:STR"));
-
-        assert_eq!(session.undo_stack.len(), 1);
-        assert_eq!(session.undo_stack.back().unwrap().label, "Set STR to 15");
-    }
-
-    #[test]
     fn redo_cleared_on_new_history() {
         let gff = make_gff_with_str(10);
         let mut session = make_session_with_character(gff);
 
-        session.record_history("first", None);
+        session.record_history("first");
         session.undo();
-        assert_eq!(session.redo_stack.len(), 1);
+        assert_eq!(session.history.redo_stack.len(), 1);
 
-        session.record_history("second", None);
-        assert_eq!(session.redo_stack.len(), 0);
+        session.record_history("second");
+        assert_eq!(session.history.redo_stack.len(), 0);
     }
 
     #[test]
@@ -1129,13 +1185,13 @@ mod tests {
         let gff = make_gff_with_str(10);
         let mut session = make_session_with_character(gff);
 
-        session.record_history("op1", None);
-        session.record_history("op2", None);
+        session.record_history("op1");
+        session.record_history("op2");
         session.undo();
         session.clear_history();
 
-        assert!(session.undo_stack.is_empty());
-        assert!(session.redo_stack.is_empty());
+        assert!(session.history.undo_stack.is_empty());
+        assert!(session.history.redo_stack.is_empty());
     }
 
     #[test]
@@ -1144,10 +1200,10 @@ mod tests {
         let mut session = make_session_with_character(gff);
 
         for i in 0..=HISTORY_LIMIT {
-            session.record_history(format!("op{i}"), None);
+            session.record_history(format!("op{i}"));
         }
 
-        assert_eq!(session.undo_stack.len(), HISTORY_LIMIT);
-        assert_eq!(session.undo_stack.front().unwrap().label, "op1");
+        assert_eq!(session.history.undo_stack.len(), HISTORY_LIMIT);
+        assert_eq!(session.history.undo_stack.front().unwrap().label, "op1");
     }
 }

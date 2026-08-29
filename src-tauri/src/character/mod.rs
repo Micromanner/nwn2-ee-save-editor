@@ -46,7 +46,7 @@ pub use feats::{
     DomainInfo, FeatAvailability, FeatCategory, FeatEntry, FeatInfo, FeatSlots, FeatSource,
     FeatSummary, FeatType, FeatsState, PrerequisiteResult,
 };
-pub use identity::{Alignment, resolve_localized_name};
+pub use identity::{Alignment, resolve_localized_name, resolved_full_name};
 pub use inventory::{
     AddItemResult, BasicItemInfo, EncumbranceInfo, EquipResult, EquipmentSlot, EquipmentSummary,
     FullEncumbrance, FullEquippedItem, FullInventoryItem, FullInventorySummary, InventoryItem,

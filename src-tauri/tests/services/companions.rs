@@ -122,6 +122,32 @@ fn companion_pet_fields_read_from_ros() {
 }
 
 #[test]
+fn undo_history_survives_character_switch() {
+    let mut session = make_session();
+    load_save(&mut session, "Classic_Campaign");
+    session.record_history("player edit");
+
+    session.load_companion("khelgar").expect("load companion");
+    assert!(
+        !session.can_undo(),
+        "fresh companion starts with empty history"
+    );
+    session.record_history("khelgar edit");
+    session.record_history("khelgar edit 2");
+
+    session.load_player().expect("load player");
+    assert_eq!(session.undo_labels(), vec!["player edit".to_string()]);
+
+    session.load_companion("khelgar").expect("reload companion");
+    assert_eq!(
+        session.undo_labels(),
+        vec!["khelgar edit 2".to_string(), "khelgar edit".to_string()]
+    );
+    assert_eq!(session.undo().as_deref(), Some("khelgar edit 2"));
+    assert_eq!(session.redo_labels(), vec!["khelgar edit 2".to_string()]);
+}
+
+#[test]
 fn load_companion_rejects_unknown_name() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");

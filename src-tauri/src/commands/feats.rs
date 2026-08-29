@@ -112,7 +112,7 @@ pub async fn add_feat(state: State<'_, AppState>, feat_id: i32) -> CommandResult
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_feat_name(crate::character::FeatId(feat_id), &game_data)
     };
-    session.record_history(format!("Add feat: {feat_label}"), None);
+    session.record_history(format!("Add feat: {feat_label}"));
 
     // Background feats only take effect when CharBackground (Dword on the character root)
     // points at the matching backgrounds.2da row; adding the feat alone is not enough.
@@ -226,7 +226,7 @@ pub async fn remove_feat(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_feat_name(FeatId(feat_id), &game_data)
     };
-    session.record_history(format!("Remove feat: {feat_label}"), None);
+    session.record_history(format!("Remove feat: {feat_label}"));
 
     // Background feats only take effect when CharBackground points at the matching row;
     // clearing that field is required for the game to treat the character as having no background.
@@ -335,7 +335,7 @@ pub async fn swap_feat(
             character.get_feat_name(FeatId(new_feat_id), &game_data),
         )
     };
-    session.record_history(format!("Swap feat: {old_label} -> {new_label}"), None);
+    session.record_history(format!("Swap feat: {old_label} -> {new_label}"));
     let result = {
         let character = session
             .character
@@ -401,7 +401,7 @@ pub async fn add_domain(state: State<'_, AppState>, domain_id: i32) -> CommandRe
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_domain_name(DomainId(domain_id), &game_data)
     };
-    session.record_history(format!("Add domain: {domain_label}"), None);
+    session.record_history(format!("Add domain: {domain_label}"));
     let feats = {
         let character = session
             .character
@@ -429,7 +429,7 @@ pub async fn remove_domain(state: State<'_, AppState>, domain_id: i32) -> Comman
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_domain_name(DomainId(domain_id), &game_data)
     };
-    session.record_history(format!("Remove domain: {domain_label}"), None);
+    session.record_history(format!("Remove domain: {domain_label}"));
     let feats = {
         let character = session
             .character

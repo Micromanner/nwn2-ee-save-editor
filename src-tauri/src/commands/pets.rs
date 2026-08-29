@@ -22,7 +22,7 @@ pub async fn set_animal_companion(
 ) -> CommandResult<PetsState> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history("Set animal companion", Some("pets:animal_companion"));
+    session.record_history("Set animal companion");
     let character = session
         .character
         .as_mut()
@@ -46,7 +46,7 @@ pub async fn set_familiar(
 ) -> CommandResult<PetsState> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history("Set familiar", Some("pets:familiar"));
+    session.record_history("Set familiar");
     let character = session
         .character
         .as_mut()

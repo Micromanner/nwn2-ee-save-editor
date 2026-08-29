@@ -89,7 +89,10 @@
     "undo": "Undo",
     "redo": "Redo",
     "undoLabel": "Undo: {action}",
-    "redoLabel": "Redo: {action}"
+    "redoLabel": "Redo: {action}",
+    "history": "History",
+    "historyCurrent": "Current state",
+    "historyEmpty": "No edits yet"
   },
   "character": {
     "noCharacter": "No Character",

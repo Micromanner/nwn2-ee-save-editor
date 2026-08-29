@@ -559,13 +559,15 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await CharacterStateAPI.loadCompanion(rosName);
     setActiveSource({ kind: 'companion', rosName });
     if (characterId) await loadCharacter(characterId);
-  }, [characterId, loadCharacter]);
+    await refreshHistoryState();
+  }, [characterId, loadCharacter, refreshHistoryState]);
 
   const switchToPlayer = useCallback(async () => {
     await CharacterStateAPI.loadPlayer();
     setActiveSource({ kind: 'player' });
     if (characterId) await loadCharacter(characterId);
-  }, [characterId, loadCharacter]);
+    await refreshHistoryState();
+  }, [characterId, loadCharacter, refreshHistoryState]);
 
   // Import character from save
   const importCharacter = useCallback(async (savePath: string, playerIndex?: number) => {

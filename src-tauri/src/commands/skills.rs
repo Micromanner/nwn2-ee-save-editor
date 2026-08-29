@@ -142,10 +142,7 @@ pub async fn set_skill_rank(
         (old_ranks, old_cost, new_cost, skill_label)
     };
 
-    session.record_history(
-        format!("Set {skill_label} to rank {ranks}"),
-        Some(&format!("skill:{skill_id}")),
-    );
+    session.record_history(format!("Set {skill_label} to rank {ranks}"));
     let character = session
         .character
         .as_mut()
@@ -179,7 +176,7 @@ pub async fn set_skill_rank(
 pub async fn reset_all_skills(state: State<'_, AppState>) -> CommandResult<i32> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history("Reset all skills", None);
+    session.record_history("Reset all skills");
     let character = session
         .character
         .as_mut()
