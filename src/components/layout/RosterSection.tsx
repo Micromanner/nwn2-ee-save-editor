@@ -201,6 +201,9 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
                       textDecoration: 'underline',
                       textDecorationColor: T.sidebarAccent,
                       textUnderlineOffset: 3,
+                      // IBM Plex Serif overflows Blueprint's line box; without
+                      // this the offset underline is clipped by overflow:hidden.
+                      paddingBottom: 4,
                     } : {}),
                   }}
                 >
