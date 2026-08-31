@@ -35,7 +35,8 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
     const q = search.toLowerCase();
     return deities.filter(d =>
       d.name.toLowerCase().includes(q) ||
-      (d.portfolio ?? '').toLowerCase().includes(q)
+      (d.portfolio ?? '').toLowerCase().includes(q) ||
+      (d.aliases ?? '').toLowerCase().includes(q)
     );
   }, [search, deities]);
 
@@ -123,10 +124,12 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
           {detail ? (
             <div>
               <DeityDetailHeader deity={detail} />
-              {detail.alignment && <div className="t-base" style={{ color: T.textMuted, marginBottom: 16 }}>{detail.alignment}</div>}
-
-              {detail.portfolio && <DetailRow label={t('deity.portfolio')} value={detail.portfolio} />}
-              {detail.favored_weapon && <DetailRow label={t('deity.favoredWeapon')} value={detail.favored_weapon} />}
+              <div style={{ marginTop: 12 }}>
+                {detail.aliases && <DetailRow label={t('deity.aliases')} value={detail.aliases} />}
+                {detail.alignment && <DetailRow label={t('deity.alignment')} value={detail.alignment} />}
+                {detail.portfolio && <DetailRow label={t('deity.portfolio')} value={detail.portfolio} />}
+                {detail.favored_weapon && <DetailRow label={t('deity.favoredWeapon')} value={detail.favored_weapon} />}
+              </div>
 
               {detail.description && (
                 <div className="t-md t-body" style={{ marginTop: 12, color: T.textMuted }}>

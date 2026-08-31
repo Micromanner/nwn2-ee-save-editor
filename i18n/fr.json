@@ -913,6 +913,8 @@
     "searchPlaceholder": "Chercher divinités...",
     "noneNoDeity": "Aucune (Athée)",
     "noDeitySelected": "Aucune divinité choisie",
+    "aliases": "Autres noms",
+    "alignment": "Alignement",
     "portfolio": "Portfolio",
     "favoredWeapon": "Arme de prédilection",
     "selectFromList": "Choisir dans la liste",

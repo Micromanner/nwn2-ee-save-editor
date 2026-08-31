@@ -914,6 +914,8 @@
     "searchPlaceholder": "Поиск богов...",
     "noneNoDeity": "Нет (Безбожник)",
     "noDeitySelected": "Божество не выбрано",
+    "aliases": "Прозвища",
+    "alignment": "Мировоззрение",
     "portfolio": "Сферы влияния",
     "favoredWeapon": "Любимое оружие",
     "selectFromList": "Выберите из списка",

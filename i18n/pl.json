@@ -915,6 +915,8 @@
     "searchPlaceholder": "Szukaj bóstw...",
     "noneNoDeity": "Brak (Bez bóstwa)",
     "noDeitySelected": "Nie wybrano bóstwa",
+    "aliases": "Przydomki",
+    "alignment": "Charakter",
     "portfolio": "Domeny",
     "favoredWeapon": "Ulubiona broń",
     "selectFromList": "Wybierz z listy",

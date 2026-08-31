@@ -905,6 +905,8 @@
     "noneNoDeity": "Keine (Gottlos)",
     "noDeitySelected": "Keine Gottheit ausgewählt",
     "selectFromList": "Wählen Sie eine Gottheit aus der Liste",
+    "aliases": "Beinamen",
+    "alignment": "Gesinnung",
     "portfolio": "Portfolio",
     "favoredWeapon": "Bevorzugte Waffe",
     "noMatch": "Keine Gottheiten entsprechen Ihrer Suche."

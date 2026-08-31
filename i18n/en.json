@@ -915,6 +915,8 @@
     "noneNoDeity": "None (No Deity)",
     "noDeitySelected": "No deity selected",
     "selectFromList": "Select a deity from the list",
+    "aliases": "Aliases",
+    "alignment": "Alignment",
     "portfolio": "Portfolio",
     "favoredWeapon": "Favored Weapon",
     "noMatch": "No deities match your search."

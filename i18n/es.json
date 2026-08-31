@@ -906,6 +906,8 @@
     "noneNoDeity": "Ninguna (Sin Deidad)",
     "noDeitySelected": "Sin deidad seleccionada",
     "selectFromList": "Seleccione una deidad de la lista",
+    "aliases": "Alias",
+    "alignment": "Alineamiento",
     "portfolio": "Portfolio",
     "favoredWeapon": "Arma Predilecta",
     "noMatch": "No hay deidades que coincidan."
