@@ -65,6 +65,7 @@
     "inventory": "Inventory",
     "settings": "Settings",
     "gameState": "Game State",
+    "party": "Party Management",
     "models": "3D Models"
   },
   "actions": {
@@ -991,6 +992,13 @@
     "party": "Party",
     "player": "Player",
     "levelLine": "Level {level}",
-    "syncWarning": "Companion saved, but the party roster cache could not be updated."
+    "syncWarning": "Companion saved, but the party roster cache could not be updated.",
+    "changePartyHint": "Click a companion to add or remove them from the active party. Takes effect the next time the save is loaded in game.",
+    "inParty": "In party",
+    "benched": "Benched",
+    "partyCount": "In party: {count} / {limit}",
+    "partyCountNoLimit": "In party: {count}",
+    "pendingSave": "not saved yet",
+    "pendingSaveHint": "Changes are written when you save."
   }
 }

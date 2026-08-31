@@ -60,6 +60,7 @@
     "inventory": "Ekwipunek",
     "settings": "Ustawienia",
     "gameState": "Stan Gry",
+    "party": "Zarządzanie drużyną",
     "models": "Modele 3D"
   },
   "actions": {
@@ -938,6 +939,13 @@
     "saveAndSwitch": "Zapisz i przełącz",
     "discardChanges": "Odrzuć zmiany",
     "cancel": "Anuluj",
-    "syncWarning": "Towarzysz zapisany, ale nie udało się zaktualizować pamięci podręcznej drużyny."
+    "syncWarning": "Towarzysz zapisany, ale nie udało się zaktualizować pamięci podręcznej drużyny.",
+    "changePartyHint": "Kliknij towarzysza, aby dodać go do aktywnej drużyny lub z niej usunąć. Zadziała przy następnym wczytaniu zapisu w grze.",
+    "inParty": "W drużynie",
+    "benched": "Poza drużyną",
+    "partyCount": "W drużynie: {count} / {limit}",
+    "partyCountNoLimit": "W drużynie: {count}",
+    "pendingSave": "niezapisane",
+    "pendingSaveHint": "Zmiany zostaną zapisane przy zapisie."
   }
 }

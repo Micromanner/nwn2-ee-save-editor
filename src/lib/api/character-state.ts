@@ -52,6 +52,13 @@ export interface RosterEntryInfo {
   ros_name: string;
   char_name: string;
   classes: RosterClassInfo[];
+  in_party: boolean;
+  staged_in_party: boolean | null;
+}
+
+export interface PartyMembershipChange {
+  ros_name: string;
+  in_party: boolean;
 }
 
 export interface SaveCharacterResult {
@@ -183,6 +190,18 @@ export const CharacterStateAPI = {
    * List all roster (companion) entries available for the loaded module.
    */
   listRoster: () => invoke<RosterEntryInfo[]>('list_roster'),
+
+  /**
+   * Companion cap of the party screen (`RosPartyLimit`), null when absent.
+   */
+  getPartyLimit: () => invoke<number | null>('get_party_limit'),
+
+  /**
+   * Stage the desired party composition in the session; written to the save
+   * on the next Save. Staging a member back to their on-disk state un-stages.
+   */
+  stagePartyMembership: (changes: PartyMembershipChange[]) =>
+    invoke<boolean>('stage_party_membership', { changes }),
 
   /**
    * Load a companion from the roster into the active editor session.

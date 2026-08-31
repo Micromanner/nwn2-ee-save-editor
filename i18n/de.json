@@ -58,6 +58,7 @@
     "inventory": "Inventar",
     "settings": "Einstellungen",
     "gameState": "Spielzustand",
+    "party": "Gruppenverwaltung",
     "models": "3D-Modelle"
   },
   "actions": {
@@ -936,6 +937,13 @@
     "party": "Gruppe",
     "player": "Spieler",
     "levelLine": "Stufe {level}",
-    "syncWarning": "Begleiter gespeichert, aber der Gruppen-Cache konnte nicht aktualisiert werden."
+    "syncWarning": "Begleiter gespeichert, aber der Gruppen-Cache konnte nicht aktualisiert werden.",
+    "changePartyHint": "Klicke auf einen Begleiter, um ihn zur aktiven Gruppe hinzuzufügen oder zu entfernen. Gilt beim nächsten Laden des Spielstands im Spiel.",
+    "inParty": "In der Gruppe",
+    "benched": "Nicht in der Gruppe",
+    "partyCount": "In der Gruppe: {count} / {limit}",
+    "partyCountNoLimit": "In der Gruppe: {count}",
+    "pendingSave": "noch nicht gespeichert",
+    "pendingSaveHint": "Änderungen werden beim Speichern geschrieben."
   }
 }

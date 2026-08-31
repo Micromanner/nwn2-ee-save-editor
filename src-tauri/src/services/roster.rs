@@ -9,9 +9,17 @@ pub struct RosterMember {
     pub char_name: String,
     /// `(class_id, level)` pairs from `RosClass0-3`/`RosLevel0-3` where level > 0.
     pub classes: Vec<(i32, i32)>,
+    /// `RosAvailable` is the engine's party-membership record: 0 = in the
+    /// active party, 1 = benched/available for recruitment (in-game verified
+    /// 2026-08-31; flipping it swaps party members on the next load).
     pub available: bool,
     pub campaign_npc: bool,
 }
+
+/// `FactionID` the engine writes on a benched companion's `.ros` ("Defender").
+/// Party members carry the PC's dynamic party faction instead (read it from
+/// `playerlist.ifo` `Mod_PlayerList[0].FactionID`; never hardcode it).
+pub const BENCHED_FACTION: u16 = 4;
 
 fn gff_int(value: &GffValue<'_>) -> Option<i64> {
     match value {
@@ -141,6 +149,95 @@ pub fn sync_member(
         .map_err(|e| format!("roster serialization error: {e}"))
 }
 
+/// `RosPartyLimit` from the roster root: how many companions the party screen
+/// allows at once. `None` when the roster lacks the field.
+pub fn parse_party_limit(bytes: Vec<u8>) -> Result<Option<i32>, String> {
+    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
+    let root = parser
+        .read_struct_fields(0)
+        .map_err(|e| format!("roster root error: {e}"))?;
+    Ok(root
+        .get("RosPartyLimit")
+        .and_then(gff_int)
+        .map(|v| v as i32))
+}
+
+/// Set `RosAvailable` for each `(ros_name, in_party)` change (in party = 0,
+/// benched = 1), preserving the file's numeric GFF variant. Errors if any
+/// named member is missing from the roster.
+pub fn set_party_membership(bytes: Vec<u8>, changes: &[(String, bool)]) -> Result<Vec<u8>, String> {
+    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
+    let file_type = parser.file_type.clone();
+    let file_version = parser.file_version.clone();
+    let root_struct_id = parser
+        .get_struct_id(0)
+        .map_err(|e| format!("roster root id error: {e}"))?;
+    let mut root: IndexMap<String, GffValue<'static>> = parser
+        .read_struct_fields(0)
+        .map_err(|e| format!("roster root error: {e}"))?
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned()))
+        .collect();
+
+    let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
+        return Err("roster has no RosMembers list".into());
+    };
+
+    let mut missing: Vec<&str> = changes.iter().map(|(n, _)| n.as_str()).collect();
+    for entry in members.iter_mut() {
+        let Some(name) = entry.get("RosName").and_then(gff_str) else {
+            continue;
+        };
+        let Some((_, in_party)) = changes.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name))
+        else {
+            continue;
+        };
+        missing.retain(|n| !n.eq_ignore_ascii_case(&name));
+        set_int_preserving_type(entry, "RosAvailable", i64::from(!in_party));
+    }
+    if !missing.is_empty() {
+        return Err(format!("roster members not found: {}", missing.join(", ")));
+    }
+
+    GffWriter::new(&file_type, &file_version)
+        .write_with_struct_id(root, root_struct_id)
+        .map_err(|e| format!("roster serialization error: {e}"))
+}
+
+/// Rewrite the root `FactionID` of a creature GFF (a `.ros`). Membership is
+/// read from `roster.rst`; the engine mirrors it here on save, so we keep the
+/// two consistent. Preserves the existing numeric variant, creates as Word.
+pub fn set_faction_id(bytes: Vec<u8>, faction: u16) -> Result<Vec<u8>, String> {
+    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("ros parse error: {e}"))?;
+    let file_type = parser.file_type.clone();
+    let file_version = parser.file_version.clone();
+    let root_struct_id = parser
+        .get_struct_id(0)
+        .map_err(|e| format!("ros root id error: {e}"))?;
+    let mut root: IndexMap<String, GffValue<'static>> = parser
+        .read_struct_fields(0)
+        .map_err(|e| format!("ros root error: {e}"))?
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned()))
+        .collect();
+
+    set_faction_in_fields(&mut root, faction);
+
+    GffWriter::new(&file_type, &file_version)
+        .write_with_struct_id(root, root_struct_id)
+        .map_err(|e| format!("ros serialization error: {e}"))
+}
+
+/// In-memory variant of [`set_faction_id`] for callers that already hold the
+/// creature's field map (e.g. the companion save path).
+pub fn set_faction_in_fields(fields: &mut IndexMap<String, GffValue<'static>>, faction: u16) {
+    if fields.contains_key("FactionID") {
+        set_int_preserving_type(fields, "FactionID", i64::from(faction));
+    } else {
+        fields.insert("FactionID".into(), GffValue::Word(faction));
+    }
+}
+
 /// Overwrite `key` keeping the numeric GFF variant the file already uses so the
 /// game reads it back with the type it wrote. Missing keys stay absent.
 fn set_int_preserving_type(entry: &mut IndexMap<String, GffValue<'static>>, key: &str, value: i64) {
@@ -255,5 +352,64 @@ mod tests {
         let result =
             sync_member(bytes, "nonexistent", &[(1, 1)], RosterIdentity::default()).expect("sync");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_party_limit_reads_root_field() {
+        let bytes = build_roster(vec![member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1)]);
+        assert_eq!(parse_party_limit(bytes).expect("parse"), Some(3));
+    }
+
+    #[test]
+    fn set_party_membership_flips_available_preserving_type() {
+        let bytes = build_roster(vec![
+            member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1),
+            member("neeshka", "Neeshka", (9, 2), 0, 1),
+        ]);
+        let updated = set_party_membership(
+            bytes,
+            &[("Khelgar".into(), true), ("neeshka".into(), false)],
+        )
+        .expect("set membership");
+
+        let members = parse_roster_members(updated.clone()).expect("reparse");
+        assert!(!members[0].available, "khelgar now in party");
+        assert!(members[1].available, "neeshka now benched");
+
+        // The builder writes RosAvailable as Byte; the variant must survive.
+        let parser = crate::parsers::gff::GffParser::from_bytes(updated).expect("parse");
+        let root = parser.read_struct_fields(0).expect("root");
+        let GffValue::List(entries) = root.get("RosMembers").expect("RosMembers") else {
+            panic!("RosMembers not a list");
+        };
+        let entry = entries.first().expect("entry").force_load();
+        assert!(matches!(entry.get("RosAvailable"), Some(GffValue::Byte(0))));
+    }
+
+    #[test]
+    fn set_party_membership_unknown_member_errors() {
+        let bytes = build_roster(vec![member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1)]);
+        let err = set_party_membership(bytes, &[("bishop".into(), true)]).unwrap_err();
+        assert!(err.contains("bishop"), "error names the member: {err}");
+    }
+
+    #[test]
+    fn set_faction_id_preserves_word_and_creates_word() {
+        let mut fields: IndexMap<String, GffValue<'static>> = IndexMap::new();
+        fields.insert("FactionID".into(), GffValue::Word(9));
+        let bytes = GffWriter::new("ROS ", "V3.2").write(fields).expect("write");
+        let updated = set_faction_id(bytes, BENCHED_FACTION).expect("set");
+        let parser = crate::parsers::gff::GffParser::from_bytes(updated).expect("parse");
+        let root = parser.read_struct_fields(0).expect("root");
+        assert!(matches!(root.get("FactionID"), Some(GffValue::Word(4))));
+
+        let no_field: IndexMap<String, GffValue<'static>> = IndexMap::new();
+        let bytes = GffWriter::new("ROS ", "V3.2")
+            .write(no_field)
+            .expect("write");
+        let updated = set_faction_id(bytes, 9).expect("set");
+        let parser = crate::parsers::gff::GffParser::from_bytes(updated).expect("parse");
+        let root = parser.read_struct_fields(0).expect("root");
+        assert!(matches!(root.get("FactionID"), Some(GffValue::Word(9))));
     }
 }

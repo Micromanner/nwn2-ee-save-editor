@@ -58,6 +58,7 @@
     "inventory": "Inventaire",
     "settings": "Paramètres",
     "gameState": "État du Jeu",
+    "party": "Gestion du groupe",
     "models": "Modèles 3D"
   },
   "actions": {
@@ -936,6 +937,13 @@
     "saveAndSwitch": "Enregistrer et changer",
     "discardChanges": "Abandonner les modifications",
     "cancel": "Annuler",
-    "syncWarning": "Compagnon enregistré, mais le cache du groupe n'a pas pu être mis à jour."
+    "syncWarning": "Compagnon enregistré, mais le cache du groupe n'a pas pu être mis à jour.",
+    "changePartyHint": "Cliquez sur un compagnon pour l'ajouter au groupe actif ou l'en retirer. Prend effet au prochain chargement de la sauvegarde en jeu.",
+    "inParty": "Dans le groupe",
+    "benched": "Hors du groupe",
+    "partyCount": "Dans le groupe : {count} / {limit}",
+    "partyCountNoLimit": "Dans le groupe : {count}",
+    "pendingSave": "non sauvegardé",
+    "pendingSaveHint": "Les modifications sont écrites lors de la sauvegarde."
   }
 }

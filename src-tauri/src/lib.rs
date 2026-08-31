@@ -113,6 +113,8 @@ pub fn run() {
             crate::commands::companions::list_roster,
             crate::commands::companions::load_companion,
             crate::commands::companions::load_player,
+            crate::commands::companions::get_party_limit,
+            crate::commands::companions::stage_party_membership,
             // Character - Identity
             crate::commands::character::get_character_name,
             crate::commands::character::get_first_name,

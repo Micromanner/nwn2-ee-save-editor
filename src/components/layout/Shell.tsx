@@ -20,6 +20,7 @@ import { FeatsPanel } from '../Feats/FeatsPanel';
 import { SpellsPanel } from '../Spells/SpellsPanel';
 import { InventoryPanel } from '../Inventory/InventoryPanel';
 import { GameStatePanel } from '../GameState/GameStatePanel';
+import { PartyPanel } from '../Party/PartyPanel';
 import { ModelBrowser } from '../ModelViewer/ModelBrowser';
 import { IconShowcasePanel } from '../IconShowcase/IconShowcasePanel';
 import { AppearancePanel } from '../Appearance/AppearancePanel';
@@ -37,6 +38,7 @@ const PANELS: Record<string, React.ComponentType> = {
   spells: SpellsPanel,
   inventory: InventoryPanel,
   gamestate: GameStatePanel,
+  party: PartyPanel,
   models: ModelBrowser,
   icons: IconShowcasePanel,
 };

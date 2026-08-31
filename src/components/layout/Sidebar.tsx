@@ -45,7 +45,11 @@ export function getHiddenTabs(activeSource: ActiveSource, sessionKind: 'save' | 
   const hidden = new Set<string>(
     activeSource.kind === 'player' ? [] : ['gamestate'],
   );
-  if (sessionKind === 'vault') hidden.add('gamestate');
+  if (sessionKind === 'vault') {
+    hidden.add('gamestate');
+    // A vault .bic has no save, hence no roster to manage.
+    hidden.add('party');
+  }
   return hidden;
 }
 

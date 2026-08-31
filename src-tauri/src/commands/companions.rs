@@ -14,6 +14,14 @@ pub struct RosterEntryInfo {
     pub ros_name: String,
     pub char_name: String,
     pub classes: Vec<RosterClassInfo>,
+    pub in_party: bool,
+    pub staged_in_party: Option<bool>,
+}
+
+#[derive(Clone, serde::Deserialize, specta::Type)]
+pub struct PartyMembershipChange {
+    pub ros_name: String,
+    pub in_party: bool,
 }
 
 #[tauri::command]
@@ -36,8 +44,52 @@ pub async fn list_roster(state: State<'_, AppState>) -> CommandResult<Vec<Roster
                 .into_iter()
                 .map(|(class_id, level)| RosterClassInfo { class_id, level })
                 .collect(),
+            in_party: l.in_party,
+            staged_in_party: l.staged_in_party,
         })
         .collect())
+}
+
+#[tauri::command]
+pub async fn get_party_limit(state: State<'_, AppState>) -> CommandResult<Option<i32>> {
+    let session = state.session.read();
+    session
+        .party_limit()
+        .map_err(|message| CommandError::FileError {
+            message,
+            path: None,
+            diagnostics_path: None,
+        })
+}
+
+/// Stage the desired party composition in the session; it is written to the
+/// save when the character is saved.
+#[tauri::command]
+#[instrument(name = "stage_party_membership_command", skip(state, changes))]
+pub async fn stage_party_membership(
+    state: State<'_, AppState>,
+    changes: Vec<PartyMembershipChange>,
+) -> CommandResult<bool> {
+    info!(
+        "Stage party membership command invoked ({} entries)",
+        changes.len()
+    );
+    let desired: Vec<(String, bool)> = changes
+        .into_iter()
+        .map(|c| (c.ros_name, c.in_party))
+        .collect();
+    let mut session = state.session.write();
+    session
+        .stage_party_membership(&desired)
+        .map_err(|message| {
+            error!("Failed to stage party membership: {message}");
+            CommandError::FileError {
+                message,
+                path: None,
+                diagnostics_path: None,
+            }
+        })?;
+    Ok(true)
 }
 
 #[tauri::command]

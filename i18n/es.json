@@ -58,6 +58,7 @@
     "inventory": "Inventario",
     "settings": "Ajustes",
     "gameState": "Estado del Juego",
+    "party": "Gestión del grupo",
     "models": "Modelos 3D"
   },
   "actions": {
@@ -937,6 +938,13 @@
     "party": "Grupo",
     "player": "Jugador",
     "levelLine": "Nivel {level}",
-    "syncWarning": "Compañero guardado, pero no se pudo actualizar la caché del grupo."
+    "syncWarning": "Compañero guardado, pero no se pudo actualizar la caché del grupo.",
+    "changePartyHint": "Haz clic en un compañero para añadirlo o quitarlo del grupo activo. Surte efecto la próxima vez que se cargue la partida en el juego.",
+    "inParty": "En el grupo",
+    "benched": "Fuera del grupo",
+    "partyCount": "En el grupo: {count} / {limit}",
+    "partyCountNoLimit": "En el grupo: {count}",
+    "pendingSave": "sin guardar",
+    "pendingSaveHint": "Los cambios se escriben al guardar."
   }
 }
