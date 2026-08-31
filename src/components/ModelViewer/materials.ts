@@ -76,7 +76,7 @@ function injectTintShader(
   // first's compiled program — so the face renders with the hair's swap and
   // the eyebrows get driven by the eye channel. Keying on swapGB keeps the two
   // channel orderings in separate programs.
-  mat.customProgramCacheKey = () => `nwn2tint_${swapGB ? 'gb' : 'rgb'}_${mat.type}`;
+  mat.customProgramCacheKey = () => `nwn2tint_${swapGB ? 'gb' : 'rgb'}`;
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tintMap = uniforms.tintMap;
@@ -181,14 +181,13 @@ export async function createMaterial(
   tintColors?: TintColors,
   swapGB: boolean = false,
   envMap: THREE.Texture | null = null,
-): Promise<THREE.MeshStandardMaterial> {
+): Promise<THREE.MeshPhysicalMaterial> {
   const rawLevel = materialData.specular_level;
   const specLevel = rawLevel !== undefined && Number.isFinite(rawLevel) ? Math.max(rawLevel, 0) : 0;
   const mat = new THREE.MeshPhysicalMaterial({
     side: THREE.DoubleSide,
     roughness: powerToRoughness(materialData.specular_power),
     metalness: 0.0,
-    envMapIntensity: 0.0001,
     specularColor: new THREE.Color(...(materialData.specular_color ?? [1, 1, 1])),
     specularIntensity: THREE.MathUtils.clamp(
       specLevel * SPECULAR.INTENSITY_SCALE,

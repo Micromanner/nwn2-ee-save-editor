@@ -118,6 +118,7 @@ export interface ItemAppearanceOptions {
   available_part1: number[];
   available_part2: number[];
   available_part3: number[];
+  has_model: boolean;
 }
 
 export interface AppearanceState {

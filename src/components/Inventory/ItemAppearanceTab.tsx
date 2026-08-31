@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Button, Card, Elevation, HTMLSelect, Menu, MenuItem, Popover } from '@blueprintjs/core';
+import { Button, Card, Elevation, Menu, MenuItem, Popover } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { ItemAppearance, ItemAppearanceOptions, TintChannels, TintChannel } from '@/lib/bindings';
 import { ItemViewer3D } from '../Appearance/ItemViewer3D';
 import { ColorPicker } from '../Appearance/ColorPicker';
 import { VariantStepper } from '../Appearance/VariantStepper';
-import { KVRow } from '../shared';
+import { KVRow, LoadingState } from '../shared';
 import { T } from '../theme';
 
 interface ItemAppearanceTabProps {
@@ -61,8 +61,6 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
   const [options, setOptions] = useState<ItemAppearanceOptions | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshPart, setRefreshPart] = useState<{ partIndex: number; key: number } | null>(null);
-  const [meshCandidates, setMeshCandidates] = useState<string[]>([]);
-  const [meshOverride, setMeshOverride] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<ItemAppearanceOptions>('get_item_appearance_options', {
@@ -72,15 +70,6 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
       .then(setOptions)
       .catch(err => console.error('Failed to load item appearance options:', err));
   }, [baseItemId, appearance.armor_visual_type]);
-
-  useEffect(() => {
-    invoke<string[]>('list_armor_mesh_candidates', { baseItemId })
-      .then(cands => {
-        setMeshCandidates(cands);
-        setMeshOverride(null);
-      })
-      .catch(err => console.error('Failed to load mesh candidates:', err));
-  }, [baseItemId]);
 
   const hasMultipleParts = useMemo(() => {
     return options && (options.available_part1.length > 0 || options.available_part2.length > 0 || options.available_part3.length > 0);
@@ -116,11 +105,12 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
           baseItemId={baseItemId}
           refreshKey={refreshKey}
           refreshPart={refreshPart}
-          meshOverride={meshOverride}
         />
       </div>
 
       <div style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+
+        {!options && <LoadingState />}
 
         {hasMultipleParts && options && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
@@ -161,7 +151,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
           </Card>
         )}
 
-        {(!hasMultipleParts || (options && options.available_variations.length > 0)) && (
+        {options && options.available_variations.length > 0 && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
             <SectionHeader label={t('appearance.variation')} />
             <KVRow
@@ -169,7 +159,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
               value={
                 <VariantStepper
                   value={appearance.variation}
-                  variants={options?.available_variations ?? []}
+                  variants={options.available_variations}
                   onChange={updateVariation}
                 />
               }
@@ -177,41 +167,28 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
           </Card>
         )}
 
-        {meshCandidates.length > 0 && (
+        {options?.has_model && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
-            <SectionHeader label={t('appearance.meshOverride.label')} />
-            <HTMLSelect
-              fill
-              value={meshOverride ?? ''}
-              onChange={(e) => setMeshOverride(e.currentTarget.value || null)}
-              options={[
-                { value: '', label: t('appearance.meshOverride.auto') },
-                ...meshCandidates.map(resref => ({ value: resref, label: resref })),
-              ]}
-            />
+            <SectionHeader label={t('appearance.colors')} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <ColorPicker
+                label={t('appearance.color1')}
+                value={appearance.tints.channel1}
+                onChange={(c) => updateTint('channel1', c)}
+              />
+              <ColorPicker
+                label={t('appearance.color2')}
+                value={appearance.tints.channel2}
+                onChange={(c) => updateTint('channel2', c)}
+              />
+              <ColorPicker
+                label={t('appearance.color3')}
+                value={appearance.tints.channel3}
+                onChange={(c) => updateTint('channel3', c)}
+              />
+            </div>
           </Card>
         )}
-
-        <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
-          <SectionHeader label={t('appearance.colors')} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <ColorPicker
-              label={t('appearance.color1')}
-              value={appearance.tints.channel1}
-              onChange={(c) => updateTint('channel1', c)}
-            />
-            <ColorPicker
-              label={t('appearance.color2')}
-              value={appearance.tints.channel2}
-              onChange={(c) => updateTint('channel2', c)}
-            />
-            <ColorPicker
-              label={t('appearance.color3')}
-              value={appearance.tints.channel3}
-              onChange={(c) => updateTint('channel3', c)}
-            />
-          </div>
-        </Card>
 
       </div>
     </div>

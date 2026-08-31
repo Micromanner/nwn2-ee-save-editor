@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { createMaterial, tintChannelsToColors, updateTintUniforms, type TintColors } from '../ModelViewer/materials';
 import { buildSkeleton, buildMesh } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
-import { useThreeScene, clearSceneModels, frameBounds } from '../ModelViewer/useThreeScene';
+import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { MeshData, ModelData } from '../ModelViewer/types';
 import type { ItemAppearance, TintChannels } from '@/lib/bindings';
 import { NonIdealState } from '@blueprintjs/core';
@@ -15,7 +15,6 @@ interface ItemViewer3DProps {
   baseItemId: number;
   refreshKey: number;
   refreshPart: { partIndex: number; key: number } | null;
-  meshOverride?: string | null;
 }
 
 const PART_LETTERS = ['a', 'b', 'c'] as const;
@@ -70,7 +69,7 @@ async function buildPartGroup(
   return group;
 }
 
-export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, meshOverride }: ItemViewer3DProps) {
+export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart }: ItemViewer3DProps) {
   const t = useTranslations();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +117,6 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
       const modelData = await invoke<ModelData>('load_item_model', {
         appearance: appearanceRef.current,
         baseItemId,
-        overrideResref: meshOverride ?? null,
       });
 
       if (requestId !== loadCounterRef.current || !sceneRef.current) return;
@@ -155,8 +153,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
       const groups = await Promise.all(
         Object.entries(buckets).map(([letter, meshes]) =>
-          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone,
-            (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null),
+          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone, getEnvMap(sceneRef.current)),
         ),
       );
 
@@ -211,7 +208,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         setLoading(false);
       }
     }
-  }, [sceneRef, baseItemId, cameraRef, controlsRef, meshOverride]);
+  }, [sceneRef, baseItemId, cameraRef, controlsRef]);
 
   const replacePart = useCallback(async (partIndex: number) => {
     const scene = sceneRef.current;
@@ -231,7 +228,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
       });
       const tintColors = tintChannelsToColors(swapItemTints(appearanceRef.current.tints));
       const newGroup = await buildPartGroup(data.meshes, letter, tintColors, undefined, undefined,
-        (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null);
+        getEnvMap(sceneRef.current));
 
       const old = model.getObjectByName(partGroupName(letter));
       if (old) model.remove(old);
@@ -244,7 +241,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
   useEffect(() => {
     loadItem();
     return () => { loadCounterRef.current++; };
-  }, [loadItem, refreshKey, meshOverride]);
+  }, [loadItem, refreshKey]);
 
   useEffect(() => {
     if (!refreshPart) return;

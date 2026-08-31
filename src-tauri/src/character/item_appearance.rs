@@ -456,6 +456,10 @@ pub struct ItemAppearanceOptions {
     pub available_part1: Vec<i32>,
     pub available_part2: Vec<i32>,
     pub available_part3: Vec<i32>,
+    /// Whether this base item has an in-world model at all. Rings, amulets
+    /// and other modeltype-less items have none — tints and variants are
+    /// meaningless for them and the UI hides those controls.
+    pub has_model: bool,
 }
 
 impl ItemAppearance {
@@ -530,17 +534,25 @@ impl ItemAppearance {
     /// before the item is serialized. Counterpart to `normalize_for_ui`:
     /// for SinglePart items the game reads `ModelPart1`, so the stepper's
     /// value needs to land there rather than (or in addition to) `Variation`.
-    pub fn prepare_for_write(&mut self, base_item_id: i32, game_data: &GameData) {
+    ///
+    /// Returns `true` when the item is a SinglePart kind, i.e. `variation`
+    /// is a UI-only mirror of `ModelPart1` — the writer must then not
+    /// create a `Variation` field the item never had.
+    pub fn prepare_for_write(&mut self, base_item_id: i32, game_data: &GameData) -> bool {
         let Some(table) = game_data.get_table("baseitems") else {
-            return;
+            return false;
         };
         let Some(row) = table.get_by_id(base_item_id) else {
-            return;
+            return false;
         };
         let kind = classify_model_type(&row_str(&row, "modeltype").unwrap_or_default());
-        if matches!(kind, ItemModelKind::SinglePart) && self.variation > 0 {
+        if !matches!(kind, ItemModelKind::SinglePart) {
+            return false;
+        }
+        if self.variation > 0 {
             self.model_parts[0] = self.variation;
         }
+        true
     }
 
     pub fn get_options(
@@ -577,26 +589,33 @@ impl ItemAppearance {
                     available_part1: Self::discover_variants(resource_manager, &full_prefix, "_a"),
                     available_part2: Self::discover_variants(resource_manager, &full_prefix, "_b"),
                     available_part3: Self::discover_variants(resource_manager, &full_prefix, "_c"),
+                    has_model: true,
                 }
             }
             ItemModelKind::SinglePart if is_bracer => {
                 // Bracer items render as a fixed glove mesh (variant 01);
                 // the mesh is chosen entirely by AVT → material. Variation
                 // / ModelPart1 on these items don't drive mesh selection,
-                // so expose no stepper.
-                ItemAppearanceOptions::new_empty()
+                // so expose no stepper — but the mesh exists and tints apply.
+                ItemAppearanceOptions {
+                    has_model: true,
+                    ..ItemAppearanceOptions::new_empty()
+                }
             }
             ItemModelKind::SinglePart => {
                 let full_prefix = normalize_weapon_prefix(&prefix);
+                let available_variations =
+                    Self::discover_variants(resource_manager, &full_prefix, "");
+                // Rings, amulets and belts also ship modeltype=0 but have no
+                // itemclass and no MDB family on disk — zero discovered
+                // variants means there is nothing to render or tint.
+                let has_model = !available_variations.is_empty();
                 ItemAppearanceOptions {
-                    available_variations: Self::discover_variants(
-                        resource_manager,
-                        &full_prefix,
-                        "",
-                    ),
+                    available_variations,
                     available_part1: Vec::new(),
                     available_part2: Vec::new(),
                     available_part3: Vec::new(),
+                    has_model,
                 }
             }
             ItemModelKind::BodyArmor => {
@@ -615,6 +634,9 @@ impl ItemAppearance {
                     available_part1: Vec::new(),
                     available_part2: Vec::new(),
                     available_part3: Vec::new(),
+                    // Armor renders even when variant discovery found nothing
+                    // (e.g. modded materials); only a slot-less item has no mesh.
+                    has_model: slot.is_some(),
                 }
             }
             ItemModelKind::None => ItemAppearanceOptions::new_empty(),
@@ -1182,6 +1204,7 @@ impl ItemAppearanceOptions {
             available_part1: Vec::new(),
             available_part2: Vec::new(),
             available_part3: Vec::new(),
+            has_model: false,
         }
     }
 }

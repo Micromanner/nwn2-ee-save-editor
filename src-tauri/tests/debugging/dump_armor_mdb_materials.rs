@@ -218,8 +218,9 @@ fn survey_mdb_specular() {
                     m.specular_color[2],
                 );
                 *combo_hist.entry(key).or_insert(0) += 1;
-                csv.push_str(&format!(
-                    "{},{},{},{},0x{:02X},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4}\n",
+                let _ = writeln!(
+                    csv,
+                    "{},{},{},{},0x{:02X},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4}",
                     base,
                     zip_name,
                     kind,
@@ -234,7 +235,7 @@ fn survey_mdb_specular() {
                     m.diffuse_color[0],
                     m.diffuse_color[1],
                     m.diffuse_color[2],
-                ));
+                );
             };
             for m in &mdb.rigid_meshes {
                 record("RIGD", &m.name, &m.material);
@@ -246,7 +247,7 @@ fn survey_mdb_specular() {
     }
 
     let mut hist: Vec<(String, u32)> = combo_hist.into_iter().collect();
-    hist.sort_by(|a, b| b.1.cmp(&a.1));
+    hist.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
     eprintln!("Total mesh materials: {total} (parse failures: {parse_failures})");
     eprintln!(
         "ENVIRONMENT_MAPPING (0x08) set on {} materials:",

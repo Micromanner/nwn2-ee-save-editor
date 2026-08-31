@@ -17,6 +17,12 @@ export interface SceneRefs {
   frame: React.RefObject<number>;
 }
 
+/// Prefiltered sky env map built by useThreeScene for ENVIRONMENT_MAPPING
+/// (0x08) materials; null before scene setup or when the PMREM build failed.
+export function getEnvMap(scene: THREE.Scene | null | undefined): THREE.Texture | null {
+  return (scene?.userData.envMap as THREE.Texture | undefined) ?? null;
+}
+
 export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRefs {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);

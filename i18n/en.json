@@ -981,11 +981,7 @@
     "variation": "Variation",
     "color1": "Color 1",
     "color2": "Color 2",
-    "color3": "Color 3",
-    "meshOverride": {
-      "label": "Mesh override (debug)",
-      "auto": "Auto (resolver)"
-    }
+    "color3": "Color 3"
   },
   "roster": {
     "party": "Party",
