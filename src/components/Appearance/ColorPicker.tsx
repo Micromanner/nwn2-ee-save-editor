@@ -4,7 +4,7 @@ import { T } from '../theme';
 import type { TintChannel } from '@/lib/bindings';
 
 interface ColorPickerProps {
-  label: string;
+  label?: string;
   value: TintChannel;
   onChange: (value: TintChannel) => void;
   disabled?: boolean;
@@ -51,7 +51,7 @@ export function ColorPicker({ label, value, onChange, disabled, disabledReason }
           background: 'none',
         }}
       />
-      <span className="t-base" style={{ color: T.textMuted }}>{label}</span>
+      {label && <span className="t-base" style={{ color: T.textMuted }}>{label}</span>}
     </div>
   );
 

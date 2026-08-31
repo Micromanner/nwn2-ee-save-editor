@@ -5,7 +5,7 @@ import { createMaterial, tintChannelsToColors, updateTintUniforms, type TintColo
 import { buildSkeleton, buildMesh, buildAnimationClips } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
 import { LoadingState } from '../shared';
-import { useThreeScene, clearSceneModels, frameBounds } from '../ModelViewer/useThreeScene';
+import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { AttachedPart, MeshData, ModelData } from '../ModelViewer/types';
 import type { TintChannels } from '@/lib/bindings';
 
@@ -123,7 +123,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
         meshData.material,
         colors,
         swapGB,
-        (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null,
+        getEnvMap(sceneRef.current),
       );
       const bound = overrideSkeleton ?? getSkeletonFor(meshData.skeleton_ref);
       const obj = buildMesh(meshData, material, bound?.skeleton, bound?.rootBone);
@@ -320,7 +320,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
           meshData.material,
           colors,
           swapGB,
-          (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null,
+          getEnvMap(sceneRef.current),
         );
       });
       const allMaterials = await Promise.all(materialPromises);

@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { createMaterial, tintChannelsToColors, updateTintUniforms, type TintColors } from '../ModelViewer/materials';
 import { buildSkeleton, buildMesh } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
-import { useThreeScene, clearSceneModels, frameBounds } from '../ModelViewer/useThreeScene';
+import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { MeshData, ModelData } from '../ModelViewer/types';
 import type { ItemAppearance, TintChannels } from '@/lib/bindings';
 import { NonIdealState } from '@blueprintjs/core';
@@ -15,8 +15,12 @@ interface ItemViewer3DProps {
   baseItemId: number;
   refreshKey: number;
   refreshPart: { partIndex: number; key: number } | null;
-  meshOverride?: string | null;
+  // Tint channel to flood with the highlight color (UI-only): shows the user
+  // which area of the model a color picker actually affects while hovered.
+  highlightChannel?: keyof TintChannels | null;
 }
+
+const HIGHLIGHT_TINT = { r: 255, g: 0, b: 255, a: 255 };
 
 const PART_LETTERS = ['a', 'b', 'c'] as const;
 const partGroupName = (letter: string) => `__item_part_${letter}`;
@@ -26,7 +30,7 @@ const partGroupName = (letter: string) => `__item_part_${letter}`;
 // shared, so swap on the way in to match what the game actually renders.
 // Backend already does this swap for boots/gloves/bracer override_tints;
 // this covers the top-level tint that applies to the primary item mesh.
-const swapItemTints = (t: TintChannels): TintChannels => ({
+export const swapItemTints = (t: TintChannels): TintChannels => ({
   channel1: t.channel1,
   channel2: t.channel3,
   channel3: t.channel2,
@@ -70,7 +74,7 @@ async function buildPartGroup(
   return group;
 }
 
-export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, meshOverride }: ItemViewer3DProps) {
+export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, highlightChannel }: ItemViewer3DProps) {
   const t = useTranslations();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +82,15 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
   const appearanceRef = useRef(appearance);
   appearanceRef.current = appearance;
+  const highlightRef = useRef(highlightChannel);
+  highlightRef.current = highlightChannel;
+  // Highlight is applied in GFF channel order (pre-swap), so it floods exactly
+  // the region the matching color picker edits.
+  const effectiveTints = useCallback((): TintChannels => {
+    const tints = appearanceRef.current.tints;
+    const h = highlightRef.current;
+    return h ? { ...tints, [h]: HIGHLIGHT_TINT } : tints;
+  }, []);
   const loadCounterRef = useRef(0);
   // Camera is framed on the very first successful load and then kept on
   // subsequent reloads (variation changes, tint edits) — swapping meshes
@@ -118,7 +131,6 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
       const modelData = await invoke<ModelData>('load_item_model', {
         appearance: appearanceRef.current,
         baseItemId,
-        overrideResref: meshOverride ?? null,
       });
 
       if (requestId !== loadCounterRef.current || !sceneRef.current) return;
@@ -145,7 +157,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         rootGroup.add(rootBone);
       }
 
-      const tintColors = tintChannelsToColors(swapItemTints(appearanceRef.current.tints));
+      const tintColors = tintChannelsToColors(swapItemTints(effectiveTints()));
 
       const buckets: Record<string, MeshData[]> = {};
       for (const m of modelData.meshes) {
@@ -155,8 +167,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
       const groups = await Promise.all(
         Object.entries(buckets).map(([letter, meshes]) =>
-          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone,
-            (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null),
+          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone, getEnvMap(sceneRef.current)),
         ),
       );
 
@@ -211,7 +222,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         setLoading(false);
       }
     }
-  }, [sceneRef, baseItemId, cameraRef, controlsRef, meshOverride]);
+  }, [sceneRef, baseItemId, cameraRef, controlsRef, effectiveTints]);
 
   const replacePart = useCallback(async (partIndex: number) => {
     const scene = sceneRef.current;
@@ -229,9 +240,9 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         partIndex,
         variant,
       });
-      const tintColors = tintChannelsToColors(swapItemTints(appearanceRef.current.tints));
+      const tintColors = tintChannelsToColors(swapItemTints(effectiveTints()));
       const newGroup = await buildPartGroup(data.meshes, letter, tintColors, undefined, undefined,
-        (sceneRef.current?.userData.envMap as THREE.Texture | undefined) ?? null);
+        getEnvMap(sceneRef.current));
 
       const old = model.getObjectByName(partGroupName(letter));
       if (old) model.remove(old);
@@ -239,12 +250,12 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
     } catch (err: any) {
       console.error(`Failed to load part ${letter}:`, err);
     }
-  }, [sceneRef, baseItemId]);
+  }, [sceneRef, baseItemId, effectiveTints]);
 
   useEffect(() => {
     loadItem();
     return () => { loadCounterRef.current++; };
-  }, [loadItem, refreshKey, meshOverride]);
+  }, [loadItem, refreshKey]);
 
   useEffect(() => {
     if (!refreshPart) return;
@@ -253,9 +264,9 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
   useEffect(() => {
     if (!sceneRef.current) return;
-    const colors = tintChannelsToColors(swapItemTints(appearance.tints));
+    const colors = tintChannelsToColors(swapItemTints(effectiveTints()));
     updateTintUniforms(sceneRef.current, 'item', colors);
-  }, [appearance.tints, sceneRef]);
+  }, [appearance.tints, highlightChannel, effectiveTints, sceneRef]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '400px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>

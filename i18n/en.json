@@ -979,19 +979,12 @@
     "equipment": "Equipment",
     "showHelmet": "Show Helmet In-Game",
     "noFacialHair": "No facial hair available for this head",
-    "model_parts": "Model Parts",
     "part": "Variant",
-    "part1": "Part A (Blade)",
-    "part2": "Part B (Hilt)",
-    "part3": "Part C (Pommel)",
+    "part1": "Part A",
+    "part2": "Part B",
+    "part3": "Part C",
     "variation": "Variation",
-    "color1": "Color 1",
-    "color2": "Color 2",
-    "color3": "Color 3",
-    "meshOverride": {
-      "label": "Mesh override (debug)",
-      "auto": "Auto (resolver)"
-    }
+    "colorsHoverHint": "Hover over a color to highlight the area it affects"
   },
   "roster": {
     "party": "Party",

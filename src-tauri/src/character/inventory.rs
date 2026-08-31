@@ -2446,8 +2446,8 @@ impl super::Character {
             .and_then(gff_value_to_i32)
             .unwrap_or(-1);
         let mut routed = appearance.clone();
-        routed.prepare_for_write(base_item_id, game_data);
-        write_appearance_into_item(&mut inv_list[index], &routed);
+        let variation_is_ui_only = routed.prepare_for_write(base_item_id, game_data);
+        write_appearance_into_item(&mut inv_list[index], &routed, !variation_is_ui_only);
         self.set_list("ItemList", inv_list);
         Ok(())
     }
@@ -2481,8 +2481,8 @@ impl super::Character {
             .and_then(gff_value_to_i32)
             .unwrap_or(-1);
         let mut routed = appearance.clone();
-        routed.prepare_for_write(base_item_id, game_data);
-        write_appearance_into_item(&mut equip_list[item_idx], &routed);
+        let variation_is_ui_only = routed.prepare_for_write(base_item_id, game_data);
+        write_appearance_into_item(&mut equip_list[item_idx], &routed, !variation_is_ui_only);
         self.set_list("Equip_ItemList", equip_list);
         Ok(())
     }
@@ -2985,6 +2985,7 @@ fn json_to_gff_best_guess(json_val: &JsonValue) -> Option<GffValue<'static>> {
 fn write_appearance_into_item(
     item: &mut IndexMap<String, GffValue<'static>>,
     appearance: &crate::character::ItemAppearance,
+    create_variation: bool,
 ) {
     // Preserve existing numeric type where possible; fall back to the NWN2 schema defaults
     // (Variation: Int, ModelPartN: Byte).
@@ -3025,7 +3026,12 @@ fn write_appearance_into_item(
     let new_mp2 = typed_byte(item.get("ModelPart2"), appearance.model_parts[1]);
     let new_mp3 = typed_byte(item.get("ModelPart3"), appearance.model_parts[2]);
 
-    write_num(item, "Variation", appearance.variation, new_variation);
+    // SinglePart items (shields etc.) store their variant in ModelPart1; the
+    // UI-side `variation` is only a mirror of it, so never create a Variation
+    // field on them — an existing one is still kept in sync.
+    if create_variation || item.contains_key("Variation") {
+        write_num(item, "Variation", appearance.variation, new_variation);
+    }
     write_num(item, "ModelPart1", appearance.model_parts[0], new_mp1);
     write_num(item, "ModelPart2", appearance.model_parts[1], new_mp2);
     write_num(item, "ModelPart3", appearance.model_parts[2], new_mp3);
@@ -4080,5 +4086,66 @@ mod tests {
             "Identified should be Byte(0): {:?}",
             stored.get("Identified")
         );
+    }
+
+    fn appearance_with_variation(variation: i32) -> crate::character::ItemAppearance {
+        crate::character::ItemAppearance {
+            variation,
+            model_parts: [variation, 0, 0],
+            tints: crate::character::TintChannels::default(),
+            armor_visual_type: None,
+            boots: None,
+            gloves: None,
+            accessories: crate::character::ArmorAccessories::default(),
+        }
+    }
+
+    #[test]
+    fn write_appearance_does_not_inject_variation_on_single_part_items() {
+        let mut item = IndexMap::new();
+        item.insert("ModelPart1".to_string(), GffValue::Byte(2));
+
+        write_appearance_into_item(&mut item, &appearance_with_variation(3), false);
+
+        assert!(
+            item.get("Variation").is_none(),
+            "round-trip must not create a Variation field the item never had"
+        );
+        assert!(matches!(item.get("ModelPart1"), Some(GffValue::Byte(3))));
+        assert!(
+            item.get("Tintable").is_none(),
+            "all-zero tints must not materialise a Tintable struct"
+        );
+    }
+
+    #[test]
+    fn write_appearance_keeps_existing_variation_in_sync() {
+        let mut item = IndexMap::new();
+        item.insert("Variation".to_string(), GffValue::Int(2));
+        item.insert("ModelPart1".to_string(), GffValue::Byte(2));
+
+        write_appearance_into_item(&mut item, &appearance_with_variation(3), false);
+
+        assert!(matches!(item.get("Variation"), Some(GffValue::Int(3))));
+        assert!(matches!(item.get("ModelPart1"), Some(GffValue::Byte(3))));
+    }
+
+    #[test]
+    fn write_appearance_creates_variation_for_variation_items() {
+        let mut item = IndexMap::new();
+        let appearance = crate::character::ItemAppearance {
+            variation: 4,
+            model_parts: [0, 0, 0],
+            tints: crate::character::TintChannels::default(),
+            armor_visual_type: None,
+            boots: None,
+            gloves: None,
+            accessories: crate::character::ArmorAccessories::default(),
+        };
+
+        write_appearance_into_item(&mut item, &appearance, true);
+
+        assert!(matches!(item.get("Variation"), Some(GffValue::Int(4))));
+        assert!(item.get("ModelPart1").is_none());
     }
 }

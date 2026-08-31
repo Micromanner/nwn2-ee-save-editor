@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Button, Checkbox, Tab, Tabs } from '@blueprintjs/core';
 import { GiTiedScroll } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
@@ -13,7 +14,7 @@ import { stripNwn2Tags, nwn2ToHtml, htmlToNwn2 } from '@/utils/nwn2Markup';
 import { ItemAppearanceTab } from './ItemAppearanceTab';
 import { IconPickerDialog } from './IconPickerDialog';
 import { useIcon } from '@/hooks/useIcon';
-import type { ItemAppearance } from '@/lib/bindings';
+import type { ItemAppearance, ItemAppearanceOptions } from '@/lib/bindings';
 
 function sortCostTableEntries(entries: [string, string][]): [string, string][] {
   return entries.sort(([, a], [, b]) => {
@@ -81,6 +82,7 @@ export function EditItemDialog({
   const [tab, setTab] = useState<string>('basic');
   const [localData, setLocalData] = useState<Record<string, unknown> | null>(null);
   const [localAppearance, setLocalAppearance] = useState<ItemAppearance | null>(null);
+  const [appearanceOptions, setAppearanceOptions] = useState<ItemAppearanceOptions | null>(null);
   const [localIconResref, setLocalIconResref] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editorInitialized, setEditorInitialized] = useState(false);
@@ -95,10 +97,12 @@ export function EditItemDialog({
     if (isOpen) setTab('basic');
   }, [isOpen]);
 
+  const itemKey = `${itemIndex ?? ''}:${slot ?? ''}`;
+  const baseItemId = Number(localData?.BaseItem || 0);
+
   useEffect(() => {
     if (!isOpen || !itemData || !characterId) return;
 
-    const itemKey = `${itemIndex ?? ''}:${slot ?? ''}`;
     if (prevItemKey.current !== itemKey) {
       setTab('basic');
       prevItemKey.current = itemKey;
@@ -124,9 +128,23 @@ export function EditItemDialog({
     setLocalData(data);
     setLocalAppearance(appearance ? structuredClone(appearance) : null);
     setLocalIconResref(resolvedIcon ?? null);
+    setAppearanceOptions(null);
     setEditorInitialized(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, itemData, characterId, resolvedName, resolvedDescription, resolvedIcon]);
+
+  useEffect(() => {
+    if (!isOpen || !localData || !localAppearance) return;
+    let cancelled = false;
+    invoke<ItemAppearanceOptions>('get_item_appearance_options', {
+      baseItemId,
+      armorVisualType: localAppearance.armor_visual_type,
+    })
+      .then((opts) => { if (!cancelled) setAppearanceOptions(opts); })
+      .catch((err) => console.error('Failed to load item appearance options:', err));
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, baseItemId, localAppearance?.armor_visual_type, localData !== null]);
 
   useEffect(() => {
     if (!isOpen || !localData || editorInitialized) return;
@@ -258,6 +276,16 @@ export function EditItemDialog({
   const itemName = stripNwn2Tags(getLocalizedValue('LocalizedName'));
   const stackLimit = Math.max(1, maxStack ?? 1);
 
+  // Grey out the appearance tab for items with no in-world model at all
+  // (rings, amulets, potions...). null = options still loading - keep the tab
+  // enabled rather than flashing disabled during the fetch.
+  const appearanceDisabled = appearanceOptions !== null
+    && !appearanceOptions.has_model
+    && appearanceOptions.available_variations.length === 0
+    && appearanceOptions.available_part1.length === 0
+    && appearanceOptions.available_part2.length === 0
+    && appearanceOptions.available_part3.length === 0;
+
   return (
     <>
     <ParchmentDialog
@@ -265,7 +293,7 @@ export function EditItemDialog({
       onClose={onClose}
       onOpened={undefined}
       title={itemName ? `${t('inventory.editItem')}: ${itemName}` : t('inventory.editItem')}
-      width={1160}
+      width={1300}
       minHeight={720}
       footerActions={
         <Button
@@ -526,12 +554,15 @@ export function EditItemDialog({
             </div>
           } />
 
-          <Tab id="appearance" title={t('appearance.title')} panel={
-            <div style={{ paddingTop: 4, maxHeight: '58vh', overflowY: 'auto', paddingRight: 8 }}>
-              {localAppearance && localData && (
-                <ItemAppearanceTab 
+          <Tab id="appearance" title={t('appearance.title')} disabled={appearanceDisabled} panel={
+            <div style={{ paddingTop: 4, height: '58vh', overflow: 'hidden' }}>
+              {localAppearance && localData && !appearanceDisabled && (
+                <ItemAppearanceTab
+                  key={itemKey}
                   appearance={localAppearance}
-                  baseItemId={Number(localData.BaseItem || 0)}
+                  baseItemId={baseItemId}
+                  options={appearanceOptions}
+                  active={tab === 'appearance'}
                   onChange={setLocalAppearance}
                 />
               )}

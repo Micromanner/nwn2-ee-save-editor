@@ -1,17 +1,25 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Button, Card, Elevation, HTMLSelect, Menu, MenuItem, Popover } from '@blueprintjs/core';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Card, Elevation, Icon } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
+import { useCharacterContext } from '@/contexts/CharacterContext';
 import type { ItemAppearance, ItemAppearanceOptions, TintChannels, TintChannel } from '@/lib/bindings';
-import { ItemViewer3D } from '../Appearance/ItemViewer3D';
+import type { ModelData } from '../ModelViewer/types';
+import { tintChannelsToColors } from '../ModelViewer/materials';
+import { ItemViewer3D, swapItemTints } from '../Appearance/ItemViewer3D';
 import { ColorPicker } from '../Appearance/ColorPicker';
-import { VariantStepper } from '../Appearance/VariantStepper';
-import { KVRow } from '../shared';
+import { ThumbnailGallery } from '../Appearance/ThumbnailGallery';
+import { LoadingState } from '../shared';
 import { T } from '../theme';
 
 interface ItemAppearanceTabProps {
   appearance: ItemAppearance;
   baseItemId: number;
+  options: ItemAppearanceOptions | null;
+  // Whether the appearance tab is the selected one. Blueprint mounts hidden
+  // tab panels too; galleries wait for the first activation so opening the
+  // dialog doesn't kick off every thumbnail load.
+  active: boolean;
   onChange: (appearance: ItemAppearance) => void;
 }
 
@@ -23,68 +31,29 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
-function PartSelect({ value, options, partLabel, onChange }: {
-  value: number;
-  options: number[];
-  partLabel: string;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <Popover
-      content={
-        <Menu style={{ maxHeight: 300, overflowY: 'auto' }}>
-          {options.map(v => (
-            <MenuItem
-              key={v}
-              text={`${partLabel} ${v}`}
-              active={value === v}
-              onClick={() => onChange(v)}
-            />
-          ))}
-        </Menu>
-      }
-      placement="bottom-end"
-      minimal
-    >
-      <Button
-        minimal
-        rightIcon="caret-down"
-        text={`${partLabel} ${value}`}
-        className="t-semibold"
-      />
-    </Popover>
-  );
+function tintChannelsKey(t: TintChannels): string {
+  const c = (ch: { r: number; g: number; b: number }) => `${ch.r},${ch.g},${ch.b}`;
+  return `${c(t.channel1)}|${c(t.channel2)}|${c(t.channel3)}`;
 }
 
-export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppearanceTabProps) {
+const PART_LABEL_KEYS = ['appearance.part1', 'appearance.part2', 'appearance.part3'] as const;
+
+export function ItemAppearanceTab({ appearance, baseItemId, options, active, onChange }: ItemAppearanceTabProps) {
   const t = useTranslations();
-  const [options, setOptions] = useState<ItemAppearanceOptions | null>(null);
+  const { characterId } = useCharacterContext();
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshPart, setRefreshPart] = useState<{ partIndex: number; key: number } | null>(null);
-  const [meshCandidates, setMeshCandidates] = useState<string[]>([]);
-  const [meshOverride, setMeshOverride] = useState<string | null>(null);
-
+  const [hoveredChannel, setHoveredChannel] = useState<keyof TintChannels | null>(null);
+  const [activated, setActivated] = useState(active);
   useEffect(() => {
-    invoke<ItemAppearanceOptions>('get_item_appearance_options', {
-      baseItemId,
-      armorVisualType: appearance.armor_visual_type,
-    })
-      .then(setOptions)
-      .catch(err => console.error('Failed to load item appearance options:', err));
-  }, [baseItemId, appearance.armor_visual_type]);
+    if (active) setActivated(true);
+  }, [active]);
 
-  useEffect(() => {
-    invoke<string[]>('list_armor_mesh_candidates', { baseItemId })
-      .then(cands => {
-        setMeshCandidates(cands);
-        setMeshOverride(null);
-      })
-      .catch(err => console.error('Failed to load mesh candidates:', err));
-  }, [baseItemId]);
-
-  const hasMultipleParts = useMemo(() => {
-    return options && (options.available_part1.length > 0 || options.available_part2.length > 0 || options.available_part3.length > 0);
-  }, [options]);
+  // Thumbnails render once with the tints active when the tab mounts; later
+  // tint edits update only the live viewer (the parent remounts this tab per
+  // edited item, so the freeze resets on item switch).
+  const frozenTints = useRef(tintChannelsToColors(swapItemTints(appearance.tints))).current;
+  const tintKey = useRef(tintChannelsKey(appearance.tints)).current;
 
   const updatePart = useCallback((idx: number, value: number) => {
     const newParts = [...appearance.model_parts];
@@ -108,110 +77,99 @@ export function ItemAppearanceTab({ appearance, baseItemId, onChange }: ItemAppe
     });
   }, [appearance, onChange]);
 
+  const partLists = options
+    ? [options.available_part1, options.available_part2, options.available_part3]
+    : [];
+  const hasParts = partLists.some(list => list.length > 0);
+
   return (
-    <div style={{ display: 'flex', gap: 20, height: '100%', minHeight: 500 }}>
-      <div style={{ flex: 1, minWidth: 400 }}>
+    <div style={{ display: 'flex', gap: 20, height: '100%' }}>
+      <div style={{ flex: '0 0 480px', height: '100%' }}>
         <ItemViewer3D
           appearance={appearance}
           baseItemId={baseItemId}
           refreshKey={refreshKey}
           refreshPart={refreshPart}
-          meshOverride={meshOverride}
+          highlightChannel={hoveredChannel}
         />
       </div>
 
-      <div style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+      {/* Horizontal padding keeps the cards' elevation shadows from being
+          clipped by this scroll container. */}
+      <div style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', padding: '4px 8px 12px 4px' }}>
 
-        {hasMultipleParts && options && (
-          <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
-            <SectionHeader label={t('appearance.model_parts')} />
-            <KVRow
-              label={t('appearance.part1')}
-              value={
-                <PartSelect
-                  value={appearance.model_parts[0]}
-                  options={options.available_part1}
-                  partLabel={t('appearance.part')}
-                  onChange={(v) => updatePart(0, v)}
-                />
-              }
-            />
-            <KVRow
-              label={t('appearance.part2')}
-              value={
-                <PartSelect
-                  value={appearance.model_parts[1]}
-                  options={options.available_part2}
-                  partLabel={t('appearance.part')}
-                  onChange={(v) => updatePart(1, v)}
-                />
-              }
-            />
-            <KVRow
-              label={t('appearance.part3')}
-              value={
-                <PartSelect
-                  value={appearance.model_parts[2]}
-                  options={options.available_part3}
-                  partLabel={t('appearance.part')}
-                  onChange={(v) => updatePart(2, v)}
-                />
-              }
+        {!options && <LoadingState />}
+
+        {activated && hasParts && partLists.map((list, idx) => list.length > 0 && (
+          <Card key={idx} elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
+            <SectionHeader label={t(PART_LABEL_KEYS[idx])} />
+            <ThumbnailGallery
+              values={list}
+              selected={appearance.model_parts[idx]}
+              onSelect={(v) => updatePart(idx, v)}
+              cacheKey={(v) => `part:${baseItemId}:${idx}:${v}:${tintKey}`}
+              fetchModel={(v) => invoke<ModelData>('load_item_part', {
+                baseItemId,
+                partIndex: idx,
+                variant: v,
+              })}
+              tints={frozenTints}
+              tileLabel={(v) => `${t('appearance.part')} ${v}`}
             />
           </Card>
-        )}
+        ))}
 
-        {(!hasMultipleParts || (options && options.available_variations.length > 0)) && (
+        {activated && options && options.available_variations.length > 0 && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
             <SectionHeader label={t('appearance.variation')} />
-            <KVRow
-              label={t('appearance.variation')}
-              value={
-                <VariantStepper
-                  value={appearance.variation}
-                  variants={options?.available_variations ?? []}
-                  onChange={updateVariation}
-                />
-              }
+            <ThumbnailGallery
+              values={options.available_variations}
+              selected={appearance.variation}
+              onSelect={updateVariation}
+              cacheKey={(v) =>
+                `variation:${baseItemId}:${characterId ?? 'none'}:${appearance.armor_visual_type ?? 'none'}:${v}:${tintKey}`}
+              // Synthetic appearance: variation only, boots/gloves/accessories
+              // stripped so armor thumbnails load just the primary mesh.
+              fetchModel={(v) => invoke<ModelData>('load_item_model', {
+                appearance: {
+                  variation: v,
+                  model_parts: [v, 0, 0],
+                  tints: appearance.tints,
+                  armor_visual_type: appearance.armor_visual_type,
+                  boots: null,
+                  gloves: null,
+                },
+                baseItemId,
+              })}
+              tints={frozenTints}
+              tileLabel={(v) => `${t('appearance.variation')} ${v}`}
             />
           </Card>
         )}
 
-        {meshCandidates.length > 0 && (
+        {options?.has_model && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
-            <SectionHeader label={t('appearance.meshOverride.label')} />
-            <HTMLSelect
-              fill
-              value={meshOverride ?? ''}
-              onChange={(e) => setMeshOverride(e.currentTarget.value || null)}
-              options={[
-                { value: '', label: t('appearance.meshOverride.auto') },
-                ...meshCandidates.map(resref => ({ value: resref, label: resref })),
-              ]}
-            />
+            <SectionHeader label={t('appearance.colors')} />
+            <div style={{ display: 'flex', gap: 12 }}>
+              {(['channel1', 'channel2', 'channel3'] as const).map((channel) => (
+                <div
+                  key={channel}
+                  onMouseEnter={() => setHoveredChannel(channel)}
+                  onMouseLeave={() => setHoveredChannel((c) => (c === channel ? null : c))}
+                >
+                  <ColorPicker
+                    value={appearance.tints[channel]}
+                    onChange={(c) => updateTint(channel, c)}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="t-base" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Icon icon="info-sign" size={12} style={{ color: T.textMuted }} />
+              {t('appearance.colorsHoverHint')}
+            </div>
           </Card>
         )}
-
-        <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
-          <SectionHeader label={t('appearance.colors')} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <ColorPicker
-              label={t('appearance.color1')}
-              value={appearance.tints.channel1}
-              onChange={(c) => updateTint('channel1', c)}
-            />
-            <ColorPicker
-              label={t('appearance.color2')}
-              value={appearance.tints.channel2}
-              onChange={(c) => updateTint('channel2', c)}
-            />
-            <ColorPicker
-              label={t('appearance.color3')}
-              value={appearance.tints.channel3}
-              onChange={(c) => updateTint('channel3', c)}
-            />
-          </div>
-        </Card>
 
       </div>
     </div>

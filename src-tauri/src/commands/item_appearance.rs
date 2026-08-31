@@ -12,74 +12,6 @@ fn resref_is_boots_or_gloves(resref: &str) -> bool {
     lower.contains("_boots") || lower.contains("_gloves")
 }
 
-/// Returns every MDB resref matching the slot of `base_item_id`.
-///
-/// For body-armor base items, derives the slot from `baseitems.2da.equipableslots`
-/// and returns all `p_hhm_*_<slot>NN` MDBs that exist in the resource index.
-/// For weapons / non-armor items returns an empty vector.
-pub fn list_armor_mesh_candidates_impl(
-    base_item_id: i32,
-    game_data: &crate::loaders::GameData,
-    resource_manager: &crate::services::resource_manager::ResourceManager,
-) -> Vec<String> {
-    use crate::character::{detect_armor_slot, parse_equip_slots};
-    use crate::utils::parsing::row_str;
-
-    let Some(table) = game_data.get_table("baseitems") else {
-        return Vec::new();
-    };
-    let Some(row) = table.get_by_id(base_item_id) else {
-        return Vec::new();
-    };
-
-    let modeltype = row_str(&row, "modeltype").unwrap_or_default();
-    // Bracer items ship with modeltype=0 but render as glove meshes; let
-    // them through so the debug mesh-override dropdown offers candidates.
-    let label = row_str(&row, "label").unwrap_or_default();
-    if modeltype.trim() != "3" && !crate::character::is_bracer_label(&label) {
-        return Vec::new();
-    }
-
-    let equip_slots = parse_equip_slots(&row_str(&row, "equipableslots").unwrap_or_default());
-    let Some(slot) = detect_armor_slot(equip_slots) else {
-        return Vec::new();
-    };
-    let slot_fragment = slot.part_name().to_lowercase();
-
-    let mdbs = resource_manager.list_resources_by_prefix("p_hhm_", "mdb");
-    let needle = format!("_{slot_fragment}");
-    let digits_only = |s: &str| -> bool { !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) };
-
-    let mut out: Vec<String> = mdbs
-        .into_iter()
-        .filter_map(|name| {
-            let stem = name.trim_end_matches(".mdb").to_string();
-            let lower = stem.to_lowercase();
-            let idx = lower.rfind(&needle)?;
-            let after = &lower[idx + needle.len()..];
-            if digits_only(after) { Some(stem) } else { None }
-        })
-        .collect();
-
-    out.sort_unstable();
-    out.dedup();
-    out
-}
-
-#[tauri::command]
-pub fn list_armor_mesh_candidates(
-    state: State<'_, AppState>,
-    base_item_id: i32,
-) -> Result<Vec<String>, String> {
-    let game_data = state.game_data.read();
-    let rm = state.resource_manager.blocking_read();
-    Ok(list_armor_mesh_candidates_impl(
-        base_item_id,
-        &game_data,
-        &rm,
-    ))
-}
-
 #[tauri::command]
 pub fn get_item_appearance_options(
     state: State<'_, AppState>,
@@ -120,7 +52,6 @@ pub fn load_item_model_impl(
     base_item_id: i32,
     appearance: &ItemAppearance,
     body_prefix: Option<&str>,
-    override_resref: Option<&str>,
     game_data: &crate::loaders::GameData,
     rm: &crate::services::resource_manager::ResourceManager,
 ) -> Result<ModelData, String> {
@@ -139,23 +70,7 @@ pub fn load_item_model_impl(
     let is_gloves_like =
         crate::character::is_bracer_label(&base_label) || base_label.eq_ignore_ascii_case("gloves");
 
-    let mut groups = appearance.resolve_model_resrefs(base_item_id, game_data, body_prefix);
-
-    // When an override is provided, replace the primary group with a single-
-    // entry group containing exactly that resref. Accessory / nested boots /
-    // gloves groups (indexes 1..) are preserved so the rest of the outfit
-    // still renders.
-    if let Some(override_res) = override_resref {
-        if groups.is_empty() {
-            groups.push(vec![override_res.to_string()]);
-        } else {
-            groups[0] = vec![override_res.to_string()];
-        }
-        info!(
-            target: "item_model",
-            "ITEM base={base_label}(#{base_item_id}) OVERRIDE={override_res}"
-        );
-    }
+    let groups = appearance.resolve_model_resrefs(base_item_id, game_data, body_prefix);
 
     if groups.is_empty() {
         info!(
@@ -261,7 +176,6 @@ pub fn load_item_model(
     state: State<'_, AppState>,
     appearance: ItemAppearance,
     base_item_id: i32,
-    override_resref: Option<String>,
 ) -> Result<ModelData, String> {
     let game_data = state.game_data.read();
     let rm = state.resource_manager.blocking_read();
@@ -270,7 +184,6 @@ pub fn load_item_model(
         base_item_id,
         &appearance,
         body_prefix.as_deref(),
-        override_resref.as_deref(),
         &game_data,
         &rm,
     )

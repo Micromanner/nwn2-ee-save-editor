@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { invoke } from '@tauri-apps/api/core';
 import { createMaterial } from './materials';
+import { getEnvMap } from './useThreeScene';
 import { buildSkeleton, buildMesh } from './meshBuilder';
 import type { ModelData } from './types';
 
@@ -38,7 +39,7 @@ export function useModelLoader() {
           meshData.material,
           undefined,
           false,
-          (scene.userData.envMap as THREE.Texture | undefined) ?? null,
+          getEnvMap(scene),
         );
         const obj = buildMesh(meshData, material, skeleton, rootBone);
         group.add(obj);
