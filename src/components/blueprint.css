@@ -387,10 +387,9 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
   padding: 0;
   border-radius: 6px;
   overflow: hidden;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 .party-card:hover {
-  transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(45, 45, 48, 0.18);
 }
 .party-card .party-card-action {
@@ -400,4 +399,12 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 .party-card:hover .party-card-action,
 .party-card:focus-visible .party-card-action {
   opacity: 1;
+}
+/* Fallback avatar pulse while a companion portrait renders */
+@keyframes portrait-loading-pulse {
+  0%, 100% { opacity: 0.9; filter: blur(0); }
+  50% { opacity: 0.4; filter: blur(2px); }
+}
+.portrait-loading {
+  animation: portrait-loading-pulse 1.6s ease-in-out infinite;
 }

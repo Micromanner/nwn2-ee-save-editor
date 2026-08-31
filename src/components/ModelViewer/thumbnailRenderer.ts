@@ -16,6 +16,10 @@ interface RendererState {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  /// Back + hemisphere fill for item shots; washes faces out, so portraits
+  /// swap them for the character viewer's rim light (sun is shared).
+  itemLights: THREE.Light[];
+  portraitLights: THREE.Light[];
 }
 
 let state: RendererState | null = null;
@@ -56,11 +60,31 @@ function initRenderer(): RendererState {
   scene.add(back);
   const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
   scene.add(hemi);
+  // Portrait rig: own key (portraits render without the filmic tone map, so
+  // the shared 1.5 sun would blow out), soft cool fill lifting the shadow
+  // side of the face, back rim separating hair from the dark card background.
+  const pkey = new THREE.DirectionalLight(0xffe0b2, 1.85);
+  pkey.position.set(250, 500, -400);
+  scene.add(pkey);
+  const fill = new THREE.DirectionalLight(0xbfd4e0, 0.6);
+  fill.position.set(-250, 200, -300);
+  scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.5);
+  rim.position.set(-100, 300, 350);
+  scene.add(rim);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
 
-  return { renderer, scene, camera };
+  return {
+    renderer,
+    scene,
+    camera,
+    itemLights: [sun, back, hemi],
+    portraitLights: [pkey, fill, rim],
+  };
 }
+
+export type ThumbnailFraming = 'model' | 'portrait';
 
 function frameCamera(
   camera: THREE.PerspectiveCamera,
@@ -77,6 +101,44 @@ function frameCamera(
   } else {
     camera.position.set(center.x + distance, center.y + distance * 0.25, center.z - distance * 0.6);
   }
+  camera.lookAt(center);
+}
+
+/// Tight head close-up matching the in-game portrait: hair to just below the
+/// chin fills the frame, a hint of neck/collar at the bottom. The top follows
+/// the hair mesh (capped so extreme hairstyles don't shrink the face). Falls
+/// back to whole-model framing when no head mesh is present.
+function framePortraitCamera(
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Object3D,
+  headObjects: THREE.Object3D[],
+  hairObjects: THREE.Object3D[],
+): void {
+  target.updateMatrixWorld(true);
+  const headBox = new THREE.Box3();
+  for (const obj of headObjects) headBox.expandByObject(obj);
+  if (headBox.isEmpty()) {
+    frameCamera(camera, target, true);
+    return;
+  }
+  const headSize = headBox.getSize(new THREE.Vector3());
+  const headCenter = headBox.getCenter(new THREE.Vector3());
+
+  // The head mesh includes neck geometry below the chin, so climb the frame
+  // bottom back up into the box; cap the hair allowance so big hairstyles
+  // don't shrink the face.
+  const hairBox = new THREE.Box3();
+  for (const obj of hairObjects) hairBox.expandByObject(obj);
+  let top = headBox.max.y + headSize.y * 0.05;
+  if (!hairBox.isEmpty()) {
+    top = Math.min(Math.max(top, hairBox.max.y), headBox.max.y + headSize.y * 0.18);
+  }
+  const bottom = headBox.min.y + headSize.y * 0.15;
+
+  const frameHeight = (top - bottom) * 1.2;
+  const center = new THREE.Vector3(headCenter.x, (top + bottom) / 2, headCenter.z);
+  const distance = frameHeight / 2 / Math.tan((camera.fov * Math.PI) / 360);
+  camera.position.set(center.x, center.y + headSize.y * 0.05, center.z - distance);
   camera.lookAt(center);
 }
 
@@ -102,10 +164,19 @@ function disposeGroup(group: THREE.Group): void {
 export async function renderModelThumbnail(
   modelData: ModelData,
   tints: TintColors,
+  framing: ThumbnailFraming = 'model',
 ): Promise<string> {
   if (modelData.meshes.length === 0) return '';
 
-  const { renderer, scene, camera } = (state ??= initRenderer());
+  const { renderer, scene, camera, itemLights, portraitLights } = (state ??= initRenderer());
+  for (const light of itemLights) light.visible = framing !== 'portrait';
+  for (const light of portraitLights) light.visible = framing === 'portrait';
+  // Portraits skip the filmic curve: ACES flattens and desaturates skin into
+  // a waxy look; the game's own portrait renderer has no filmic tone map.
+  // Materials are created fresh per job, so they compile under this setting.
+  renderer.toneMapping =
+    framing === 'portrait' ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = framing === 'portrait' ? 1.0 : 0.8;
 
   const group = new THREE.Group();
   let skeleton: THREE.Skeleton | undefined;
@@ -129,17 +200,42 @@ export async function renderModelThumbnail(
         ),
       ),
     );
+    if (framing === 'portrait') {
+      // The shared specular calibration is for armor; at portrait close-up it
+      // reads as glossy skin, so halve it.
+      for (const mat of materials) mat.specularIntensity *= 0.5;
+    }
+    const headObjects: THREE.Object3D[] = [];
+    const hairObjects: THREE.Object3D[] = [];
     for (let i = 0; i < visible.length; i++) {
-      group.add(buildMesh(visible[i], materials[i], skeleton, rootBone));
+      const obj = buildMesh(visible[i], materials[i], skeleton, rootBone);
+      if (visible[i].part === 'head') headObjects.push(obj);
+      if (visible[i].part === 'hair') hairObjects.push(obj);
+      const attach = visible[i].attach_bone;
+      if (attach && rootBone) {
+        const bone = rootBone.getObjectByName(attach);
+        if (bone) {
+          bone.add(obj);
+          continue;
+        }
+      }
+      group.add(obj);
     }
 
     // Same posing conventions as ItemViewer3D: yaw flat weapons off-axis,
-    // face skinned armor bodies straight on.
+    // face skinned armor bodies straight on; portraits turn the face toward
+    // the viewer's left like the in-game party portrait (negative yaw =
+    // screen-left with the camera on -Z).
     const isSkinnedArmor = modelData.skeleton != null;
-    group.rotation.y = isSkinnedArmor ? 0 : Math.PI / 5;
+    group.rotation.y =
+      framing === 'portrait' ? -Math.PI / 6 : isSkinnedArmor ? 0 : Math.PI / 5;
 
     scene.add(group);
-    frameCamera(camera, group, isSkinnedArmor);
+    if (framing === 'portrait') {
+      framePortraitCamera(camera, group, headObjects, hairObjects);
+    } else {
+      frameCamera(camera, group, isSkinnedArmor);
+    }
     renderer.render(scene, camera);
     if (renderer.getContext().isContextLost()) return '';
     return renderer.domElement.toDataURL('image/png');

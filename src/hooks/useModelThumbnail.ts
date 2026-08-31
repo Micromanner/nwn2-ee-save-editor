@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { renderModelThumbnail } from '@/components/ModelViewer/thumbnailRenderer';
+import { renderModelThumbnail, type ThumbnailFraming } from '@/components/ModelViewer/thumbnailRenderer';
 import type { TintColors } from '@/components/ModelViewer/materials';
 import type { ModelData } from '@/components/ModelViewer/types';
 
@@ -67,6 +67,7 @@ export function fetchModelThumbnail(
   cacheKey: string,
   fetchModel: () => Promise<ModelData>,
   tints: TintColors,
+  framing: ThumbnailFraming = 'model',
 ): Promise<string> {
   const cached = cacheGet(cacheKey);
   if (cached !== undefined) return Promise.resolve(cached);
@@ -82,7 +83,7 @@ export function fetchModelThumbnail(
           return;
         }
         const model = await fetchModel();
-        const url = await renderModelThumbnail(model, tints);
+        const url = await renderModelThumbnail(model, tints, framing);
         cachePut(cacheKey, url);
         resolve(url);
       } catch (err) {
@@ -103,6 +104,7 @@ export function useModelThumbnail(
   cacheKey: string,
   fetchModel: () => Promise<ModelData>,
   tints: TintColors,
+  framing: ThumbnailFraming = 'model',
 ): string | null {
   const [dataUrl, setDataUrl] = useState<string | null>(() => cacheGet(cacheKey) ?? null);
 
@@ -116,7 +118,7 @@ export function useModelThumbnail(
     subscribe(cacheKey);
     let cancelled = false;
     setDataUrl(null);
-    fetchModelThumbnail(cacheKey, fetchModel, tints).then((url) => {
+    fetchModelThumbnail(cacheKey, fetchModel, tints, framing).then((url) => {
       if (!cancelled) setDataUrl(url);
     });
 

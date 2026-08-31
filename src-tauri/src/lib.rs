@@ -352,6 +352,7 @@ pub fn run() {
             crate::commands::appearance::get_available_tails,
             crate::commands::appearance::load_character_model,
             crate::commands::appearance::load_character_part,
+            crate::commands::appearance::load_companion_portrait_model,
             crate::commands::appearance::get_available_voicesets,
             crate::commands::appearance::preview_voiceset,
             // Overview (Aggregated State Commands)

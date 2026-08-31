@@ -5,7 +5,7 @@ use tauri::State;
 use tracing::{debug, info, warn};
 
 use crate::character::{
-    AccessorySlot, AppearanceOption, AppearanceState, Character, TintChannels,
+    AccessorySlot, AppearanceOption, AppearanceState, Character, TintChannel, TintChannels,
     cosmetic_gloves_tint, swap_tint_2_3,
 };
 use crate::commands::{CommandError, CommandResult};
@@ -505,6 +505,168 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
         animations,
         attached_parts,
         secondary_skeletons,
+    })
+}
+
+/// Head-and-shoulders model for a companion's Party Management portrait:
+/// torso body part + head + hair/fhair + shoulder accessories, no helmet.
+/// Every mesh gets its tints baked into `override_tints` so the shared
+/// thumbnail renderer needs no per-group tint mapping. That renderer always
+/// applies the shader G/B swap; head/armor tints already expect it (same as
+/// the character viewer), hair is raw GFF order and is pre-swapped to cancel.
+#[tauri::command]
+pub fn load_companion_portrait_model(
+    state: State<'_, AppState>,
+    ros_name: String,
+) -> CommandResult<ModelData> {
+    let session = state.session.read();
+    let character = session
+        .companion_snapshot(&ros_name)
+        .map_err(CommandError::Internal)?;
+    drop(session);
+    let game_data = state.game_data.read();
+    let rm = state.resource_manager.blocking_read();
+    let parts = character
+        .resolve_model_parts(&game_data, &rm)
+        .ok_or_else(|| CommandError::Internal("Failed to resolve character model parts".into()))?;
+
+    let skeleton = model_loader::load_skeleton(&rm, &parts.skeleton_resref);
+    let palettes = skeleton.as_ref().map(model_loader::build_bone_palettes);
+    let load_part = |resref: &str, part: &str, tint: &str| -> Result<Vec<MeshData>, String> {
+        if let (Some(skel), Some(pal)) = (&skeleton, &palettes) {
+            model_loader::load_meshes_with_existing_skeleton(&rm, resref, part, tint, skel, pal)
+        } else {
+            model_loader::load_model(&rm, resref, part, tint).map(|d| d.meshes)
+        }
+    };
+
+    let white = TintChannels {
+        channel1: TintChannel {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        channel2: TintChannel {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        channel3: TintChannel {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+    };
+    let mut all_meshes: Vec<MeshData> = Vec::new();
+
+    let body_tint = parts.armor_tint.clone().unwrap_or_else(|| white.clone());
+    let mut body_loaded = false;
+    for part_resref in parts
+        .body_parts
+        .iter()
+        .chain(std::iter::once(&parts.naked_body_resref))
+    {
+        if let Ok(meshes) = load_part(part_resref, "body", "body") {
+            for mut mesh in meshes {
+                mesh.override_tints = Some(body_tint.clone());
+                all_meshes.push(mesh);
+            }
+            body_loaded = true;
+            break;
+        }
+    }
+    if !body_loaded {
+        warn!(
+            "Portrait body candidates all failed for '{ros_name}': {:?}",
+            parts.body_parts
+        );
+    }
+
+    let head_tint = character.tint_head();
+    let hair_tint = character.tint_hair();
+    let fhair_tint = TintChannels {
+        channel1: hair_tint.channel1.clone(),
+        channel2: white.channel1.clone(),
+        channel3: white.channel1.clone(),
+    };
+    match load_part(&parts.head_resref, "head", "head") {
+        Ok(head_meshes) => {
+            for mut mesh in head_meshes {
+                if mesh.name.to_lowercase().contains("_fhair") {
+                    if parts.show_fhair {
+                        mesh.part = "fhair".to_string();
+                        mesh.tint_group = "hair".to_string();
+                        mesh.override_tints = Some(fhair_tint.clone());
+                        all_meshes.push(mesh);
+                    }
+                } else {
+                    mesh.override_tints = Some(head_tint.clone());
+                    all_meshes.push(mesh);
+                }
+            }
+        }
+        Err(e) => warn!(
+            "Portrait head '{}' failed for '{ros_name}': {e}",
+            parts.head_resref
+        ),
+    }
+
+    if let Some(ref hair_resref) = parts.hair_resref {
+        match load_part(hair_resref, "hair", "hair") {
+            Ok(meshes) => {
+                let swapped = swap_tint_2_3(&hair_tint);
+                for mut mesh in meshes {
+                    mesh.override_tints = Some(swapped.clone());
+                    all_meshes.push(mesh);
+                }
+            }
+            Err(e) => debug!("Portrait hair '{hair_resref}' not found: {e}"),
+        }
+    }
+
+    let accessory_body_prefix = character
+        .body_prefix(&game_data)
+        .unwrap_or_else(|| "P_HHM".to_string());
+    for acc in parts
+        .chest_accessories
+        .iter_renderable(&accessory_body_prefix)
+    {
+        if !matches!(
+            acc.slot,
+            AccessorySlot::LtShoulder | AccessorySlot::RtShoulder
+        ) {
+            continue;
+        }
+        match load_part(&acc.resref, "accessory", "body") {
+            Ok(meshes) => {
+                for mut m in meshes {
+                    m.attach_bone = Some(acc.attach_bone.to_string());
+                    m.override_tints = Some(acc.tints.clone());
+                    all_meshes.push(m);
+                }
+            }
+            Err(e) => debug!("Portrait accessory '{}' skipped: {e}", acc.resref),
+        }
+    }
+
+    if all_meshes.is_empty() {
+        return Err(CommandError::Internal(
+            "No portrait meshes could be loaded".to_string(),
+        ));
+    }
+
+    Ok(ModelData {
+        meshes: all_meshes,
+        hooks: Vec::new(),
+        hair: Vec::new(),
+        helm: Vec::new(),
+        skeleton,
+        animations: Vec::new(),
+        attached_parts: Vec::new(),
+        secondary_skeletons: Vec::new(),
     })
 }
 

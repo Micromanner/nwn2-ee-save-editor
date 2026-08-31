@@ -10,6 +10,9 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { CharacterStateAPI, type RosterEntryInfo } from '@/lib/api/character-state';
 import { gameStateAPI } from '@/services/gameStateApi';
 import { display } from '@/utils/dataHelpers';
+import { useModelThumbnail } from '@/hooks/useModelThumbnail';
+import type { TintColors } from '@/components/ModelViewer/materials';
+import type { ModelData } from '@/components/ModelViewer/types';
 
 // Two campaign companions whose roster `RosName` doesn't match their
 // companion-influence id (see get_companion_definitions() in
@@ -49,21 +52,21 @@ function initials(name: string): string {
     .join('');
 }
 
-// Placeholder until portraits are rendered by our own pipeline.
-function FallbackPortrait({ name, icon }: { name: string; icon: string | null }) {
+// Shown while the rendered portrait is pending or failed. Only the class
+// logo pulses while loading; the initials fallback stays static.
+function FallbackPortrait({ name, icon, loading }: { name: string; icon: string | null; loading: boolean }) {
   const iconUrl = useIcon(icon);
   return (
     <div
       style={{
         width: '100%', height: '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: T.surfaceAlt,
       }}
     >
       {iconUrl ? (
-        <img src={iconUrl} alt="" style={{ width: '50%', opacity: 0.9 }} />
+        <img src={iconUrl} alt="" className={loading ? 'portrait-loading' : undefined} style={{ width: '50%', opacity: 0.9 }} />
       ) : (
-        <span className="t-3xl t-semibold" style={{ color: T.textMuted }}>
+        <span className="t-3xl t-semibold" style={{ color: 'rgba(245,240,232,0.55)' }}>
           {initials(name)}
         </span>
       )}
@@ -71,14 +74,45 @@ function FallbackPortrait({ name, icon }: { name: string; icon: string | null })
   );
 }
 
+// All portrait meshes arrive with baked override_tints; this identity tint is
+// only the fallback for a mesh without one.
+const PORTRAIT_TINTS: TintColors = {
+  channel1: [1, 1, 1], channel2: [1, 1, 1], channel3: [1, 1, 1],
+};
+
+function CompanionPortrait({ cacheKey, rosName, name, icon }: {
+  cacheKey: string;
+  rosName: string;
+  name: string;
+  icon: string | null;
+}) {
+  const dataUrl = useModelThumbnail(
+    cacheKey,
+    () => invoke<ModelData>('load_companion_portrait_model', { rosName }),
+    PORTRAIT_TINTS,
+    'portrait',
+  );
+  if (dataUrl) {
+    return (
+      <img
+        src={dataUrl}
+        alt=""
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+    );
+  }
+  return <FallbackPortrait name={name} icon={icon} loading={dataUrl === null} />;
+}
+
 function CompanionCard({
-  entry, classLine, metaLine, influence, fallbackIcon, onToggle,
+  entry, classLine, metaLine, influence, fallbackIcon, portraitKey, onToggle,
 }: {
   entry: RosterEntryInfo;
   classLine: string;
   metaLine: string;
   influence: number | null;
   fallbackIcon: string | null;
+  portraitKey: string;
   onToggle: () => void;
 }) {
   const t = useTranslations();
@@ -103,10 +137,16 @@ function CompanionCard({
         <div
           style={{
             position: 'relative', aspectRatio: '4 / 5', overflow: 'hidden', borderRadius: 3,
-            background: T.surfaceAlt, boxShadow: 'inset 0 0 0 1px rgba(45,45,48,0.15)',
+            background: 'radial-gradient(120% 100% at 50% 30%, #4a443c, #2b2722)',
+            boxShadow: 'inset 0 0 0 1px rgba(45,45,48,0.15)',
           }}
         >
-          <FallbackPortrait name={entry.char_name} icon={fallbackIcon} />
+          <CompanionPortrait
+            cacheKey={portraitKey}
+            rosName={entry.ros_name}
+            name={entry.char_name}
+            icon={fallbackIcon}
+          />
           <div
             className="party-card-action t-base"
             style={{
@@ -275,6 +315,7 @@ export function PartyPanel() {
       <CompanionCard
         key={entry.ros_name}
         entry={entry}
+        portraitKey={`companion-portrait:${characterId ?? 'none'}:${entry.ros_name.toLowerCase()}`}
         fallbackIcon={entry.classes[0] ? (classIcons[entry.classes[0].class_id] ?? null) : null}
         classLine={entry.classes
           .map(c => `${display(classNames[c.class_id])} ${c.level}`)

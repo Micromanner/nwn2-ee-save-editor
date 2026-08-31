@@ -800,6 +800,39 @@ impl SessionState {
         Ok(())
     }
 
+    /// Read-only copy of `ros_name`'s character without changing the active
+    /// source: the active or parked in-memory copy when present (unsaved edits
+    /// included), else parsed fresh from the save. Used for portrait rendering.
+    pub fn companion_snapshot(&self, ros_name: &str) -> Result<Character, String> {
+        let target = CharacterSource::Companion {
+            ros_name: ros_name.to_string(),
+        };
+        if self.character_source == target
+            && let Some(character) = &self.character
+        {
+            return Ok(Character::from_gff(character.clone_gff()));
+        }
+        if let Some((_, character, _)) = self.parked.iter().find(|(s, _, _)| *s == target) {
+            return Ok(Character::from_gff(character.clone_gff()));
+        }
+        let handler = self
+            .savegame_handler
+            .as_ref()
+            .ok_or("No active save handler")?;
+        let bytes = handler
+            .extract_companion(ros_name)
+            .map_err(|e| format!("Failed to extract companion '{ros_name}': {e}"))?;
+        let gff = GffParser::from_bytes(bytes)
+            .map_err(|e| format!("Failed to parse companion file: {e}"))?;
+        let fields: IndexMap<String, GffValue<'static>> = gff
+            .read_struct_fields(0)
+            .map_err(|e| format!("Failed to read companion fields: {e}"))?
+            .into_iter()
+            .map(|(k, v)| (k, v.force_owned()))
+            .collect();
+        Ok(Character::from_gff(fields))
+    }
+
     /// Make the player the active character again, restoring in-memory edits if
     /// the player was parked, else re-reading it from the save.
     pub fn load_player(&mut self) -> Result<(), String> {
