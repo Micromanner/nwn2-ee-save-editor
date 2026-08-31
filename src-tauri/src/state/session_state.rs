@@ -59,6 +59,9 @@ pub struct RosterListing {
     pub in_party: bool,
     /// Staged (unsaved) membership differing from `in_party`, if any.
     pub staged_in_party: Option<bool>,
+    pub gender: Option<i32>,
+    /// `RosRace` mirrors the creature's `Subrace` byte (a `racialsubtypes.2da` row).
+    pub subrace: Option<i32>,
 }
 
 pub struct SessionState {
@@ -891,6 +894,8 @@ impl SessionState {
                 ros_name: m.ros_name,
                 char_name: m.char_name,
                 classes: m.classes,
+                gender: m.gender,
+                subrace: m.subrace,
             })
             .collect())
     }

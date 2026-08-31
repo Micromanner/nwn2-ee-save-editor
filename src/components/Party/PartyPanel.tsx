@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Card, Elevation } from '@blueprintjs/core';
 import { T } from '../theme';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useIcon } from '@/hooks/useIcon';
@@ -17,6 +19,27 @@ const EXPLICIT_ROS_NAME_ALIASES: Record<string, string> = {
   one_of_many: 'oneofmany',
 };
 
+const CARD_GRID: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 170px))',
+  gap: 10,
+  justifyContent: 'center',
+};
+
+function PaneHeader({ title, right }: { title: string; right?: ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        height: 36, padding: '0 16px', borderBottom: `1px solid ${T.borderLight}`, flexShrink: 0,
+      }}
+    >
+      <span className="t-section">{title}</span>
+      {right}
+    </div>
+  );
+}
+
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -26,70 +49,117 @@ function initials(name: string): string {
     .join('');
 }
 
-function CardAvatar({ name, icon, inParty }: { name: string; icon?: string | null; inParty: boolean }) {
+// Placeholder until portraits are rendered by our own pipeline.
+function FallbackPortrait({ name, icon }: { name: string; icon: string | null }) {
   const iconUrl = useIcon(icon);
-  const size = 40;
-  if (iconUrl) {
-    return <img src={iconUrl} alt="" style={{ width: size, height: size, borderRadius: 4, flexShrink: 0 }} />;
-  }
   return (
     <div
       style={{
-        width: size, height: size, borderRadius: 4, flexShrink: 0,
+        width: '100%', height: '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: inParty ? 'rgba(160,82,45,0.18)' : T.surfaceAlt,
-        color: inParty ? T.accent : T.textMuted,
-        fontWeight: 600,
+        background: T.surfaceAlt,
       }}
     >
-      {initials(name)}
+      {iconUrl ? (
+        <img src={iconUrl} alt="" style={{ width: '50%', opacity: 0.9 }} />
+      ) : (
+        <span className="t-3xl t-semibold" style={{ color: T.textMuted }}>
+          {initials(name)}
+        </span>
+      )}
     </div>
   );
 }
 
 function CompanionCard({
-  entry, classLine, icon, onToggle,
+  entry, classLine, metaLine, influence, fallbackIcon, onToggle,
 }: {
   entry: RosterEntryInfo;
   classLine: string;
-  icon: string | null;
+  metaLine: string;
+  influence: number | null;
+  fallbackIcon: string | null;
   onToggle: () => void;
 }) {
   const t = useTranslations();
   const inParty = entry.staged_in_party ?? entry.in_party;
-  const staged = entry.staged_in_party != null;
+  const actionLabel = inParty ? t('roster.removeFromParty') : t('roster.addToParty');
   return (
     <button
+      className="party-card"
       onClick={onToggle}
+      title={actionLabel}
       style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
-        background: inParty ? 'rgba(160,82,45,0.08)' : T.surface,
-        border: inParty ? `2px solid ${T.accent}` : `2px solid ${T.borderLight}`,
-        borderRadius: 6,
-        transition: 'border-color 0.15s, background 0.15s',
+        background: T.surface,
+        border: `1px solid ${T.borderLight}`,
       }}
     >
-      <CardAvatar name={entry.char_name} icon={icon} inParty={inParty} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div className="t-md" style={{ fontWeight: 600, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div
+        style={{
+          margin: '8px 8px 0', padding: 2, borderRadius: 4,
+          background: T.sidebar,
+        }}
+      >
+        <div
+          style={{
+            position: 'relative', aspectRatio: '4 / 5', overflow: 'hidden', borderRadius: 3,
+            background: T.surfaceAlt, boxShadow: 'inset 0 0 0 1px rgba(45,45,48,0.15)',
+          }}
+        >
+          <FallbackPortrait name={entry.char_name} icon={fallbackIcon} />
+          <div
+            className="party-card-action t-base"
+            style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0,
+              padding: '12px 6px 5px', textAlign: 'center', color: '#f5f0e8',
+              background: 'linear-gradient(transparent, rgba(30,30,34,0.85))',
+            }}
+          >
+            {actionLabel}
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: '6px 10px 8px', display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+        <div className="t-md t-semibold" style={{ color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {entry.char_name}
         </div>
-        <div className="t-sm" style={{ color: T.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div className="t-base" style={{ color: T.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {classLine}
         </div>
-        <div className="t-sm" style={{ color: inParty ? T.accent : T.textMuted, fontStyle: staged ? 'italic' : 'normal' }}>
-          {inParty ? t('roster.inParty') : t('roster.benched')}
-          {staged && ` — ${t('roster.pendingSave')}`}
-        </div>
+        {metaLine && (
+          <div className="t-base" style={{ color: T.textMuted }}>{metaLine}</div>
+        )}
+        {influence != null && (
+          <div className="t-base" style={{ color: T.textMuted }}>
+            {t('roster.influenceLine', { value: influence })}
+          </div>
+        )}
       </div>
     </button>
   );
 }
 
-/// Save-level party composition: every roster companion as a card, in-party
-/// members framed. Clicking toggles staged membership; the save button writes
-/// it to roster.rst (+ .ros FactionID mirror).
+function EmptySlot() {
+  const t = useTranslations();
+  return (
+    <div
+      style={{
+        border: `2px dashed ${T.border}`, borderRadius: 6, minHeight: 200,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+        color: T.textMuted, background: 'rgba(45,45,48,0.02)',
+      }}
+    >
+      <span className="t-3xl" style={{ opacity: 0.5 }}>+</span>
+      <span className="t-md">{t('roster.emptySlot')}</span>
+    </div>
+  );
+}
+
+/// Save-level party composition: the active party as a framed slot row
+/// (empty slots up to the party limit), the remaining campaign cast as
+/// reserves, other roster entries separate. Clicking a card toggles staged
+/// membership; the save button writes it to roster.rst (+ .ros FactionID
+/// mirror).
 export function PartyPanel() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
@@ -98,6 +168,7 @@ export function PartyPanel() {
   const [classIcons, setClassIcons] = useState<Record<number, string | null>>({});
   const [partyLimit, setPartyLimit] = useState<number | null>(null);
   const [recognizedRosNames, setRecognizedRosNames] = useState<Set<string> | null>(null);
+  const [influenceByRos, setInfluenceByRos] = useState<Record<string, number>>({});
   const attemptedClassIds = useRef<Set<number>>(new Set());
 
   useEffect(() => {
@@ -138,9 +209,11 @@ export function PartyPanel() {
   // get_companion_influence marks the detected campaign's official companions
   // as "explicit". Anything else (e.g. a story NPC that also has a .ros file)
   // is left out. No campaign detected -> treat every roster entry as recognized.
+  // The same response carries current influence values for the cards.
   useEffect(() => {
     if (!characterId) {
       setRecognizedRosNames(null);
+      setInfluenceByRos({});
       return;
     }
     let cancelled = false;
@@ -148,13 +221,19 @@ export function PartyPanel() {
       .then(response => {
         if (cancelled) return;
         const names = new Set<string>();
+        const influences: Record<string, number> = {};
         for (const [compId, status] of Object.entries(response.companions)) {
-          if (status.source !== 'explicit') continue;
-          names.add((EXPLICIT_ROS_NAME_ALIASES[compId] ?? compId).toLowerCase());
+          const rosName = (EXPLICIT_ROS_NAME_ALIASES[compId] ?? compId).toLowerCase();
+          if (status.source === 'explicit') names.add(rosName);
+          if (status.influence != null) influences[rosName] = status.influence;
         }
         setRecognizedRosNames(names.size > 0 ? names : null);
+        setInfluenceByRos(influences);
       })
-      .catch(() => setRecognizedRosNames(null));
+      .catch(() => {
+        setRecognizedRosNames(null);
+        setInfluenceByRos({});
+      });
     return () => { cancelled = true; };
   }, [characterId]);
 
@@ -170,62 +249,95 @@ export function PartyPanel() {
     }
   };
 
-  const { recognizedRoster, otherRoster } = useMemo(() => {
-    if (!recognizedRosNames) return { recognizedRoster: roster, otherRoster: [] as RosterEntryInfo[] };
+  const { activeParty, reserves, otherRoster } = useMemo(() => {
     const recognized: RosterEntryInfo[] = [];
     const other: RosterEntryInfo[] = [];
     for (const entry of roster) {
-      (recognizedRosNames.has(entry.ros_name.toLowerCase()) ? recognized : other).push(entry);
+      (!recognizedRosNames || recognizedRosNames.has(entry.ros_name.toLowerCase()) ? recognized : other).push(entry);
     }
-    return { recognizedRoster: recognized, otherRoster: other };
+    const inParty = (r: RosterEntryInfo) => r.staged_in_party ?? r.in_party;
+    return {
+      activeParty: recognized.filter(inParty),
+      reserves: recognized.filter(r => !inParty(r)),
+      otherRoster: other,
+    };
   }, [roster, recognizedRosNames]);
 
-  const inPartyCount = recognizedRoster.filter(r => r.staged_in_party ?? r.in_party).length;
-  const hasStaged = roster.some(r => r.staged_in_party != null);
   const countLabel = partyLimit != null
-    ? t('roster.partyCount', { count: inPartyCount, limit: partyLimit })
-    : t('roster.partyCountNoLimit', { count: inPartyCount });
+    ? t('roster.partyCount', { count: activeParty.length, limit: partyLimit })
+    : t('roster.partyCountNoLimit', { count: activeParty.length });
+  const emptySlots = partyLimit != null ? Math.max(0, partyLimit - activeParty.length) : 0;
 
-  const renderCard = (entry: RosterEntryInfo) => (
-    <CompanionCard
-      key={entry.ros_name}
-      entry={entry}
-      icon={entry.classes[0] ? (classIcons[entry.classes[0].class_id] ?? null) : null}
-      classLine={entry.classes
-        .map(c => `${display(classNames[c.class_id])} ${c.level}`)
-        .join(' / ')}
-      onToggle={() => void toggle(entry)}
-    />
-  );
+  const renderCard = (entry: RosterEntryInfo) => {
+    const genderLabel = entry.gender === 0 ? t('roster.male') : entry.gender === 1 ? t('roster.female') : null;
+    const totalLevel = entry.classes.reduce((sum, c) => sum + c.level, 0);
+    return (
+      <CompanionCard
+        key={entry.ros_name}
+        entry={entry}
+        fallbackIcon={entry.classes[0] ? (classIcons[entry.classes[0].class_id] ?? null) : null}
+        classLine={entry.classes
+          .map(c => `${display(classNames[c.class_id])} ${c.level}`)
+          .join(' / ')}
+        metaLine={[
+          totalLevel > 0 ? t('roster.levelLine', { level: totalLevel }) : null,
+          entry.subrace_name,
+          genderLabel,
+        ].filter(Boolean).join(' · ')}
+        influence={influenceByRos[entry.ros_name.toLowerCase()] ?? null}
+        onToggle={() => void toggle(entry)}
+      />
+    );
+  };
 
   return (
-    <div style={{ padding: 16, height: '100%', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
-        <h2 className="t-lg" style={{ margin: 0, color: T.text }}>{t('navigation.party')}</h2>
-        <span className="t-sm" style={{ color: partyLimit != null && inPartyCount > partyLimit ? T.accent : T.textMuted }}>
-          {countLabel}
-        </span>
-      </div>
-      <div className="t-sm" style={{ color: T.textMuted, marginBottom: 12 }}>
-        {t('roster.changePartyHint')}
-        {hasStaged && <span style={{ fontStyle: 'italic' }}> {t('roster.pendingSaveHint')}</span>}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
-        {recognizedRoster.map(renderCard)}
-      </div>
-      {otherRoster.length > 0 && (
-        <>
-          <div className="t-section" style={{ color: T.accent, marginTop: 20, marginBottom: 4 }}>
-            {t('roster.otherRosterEntries')}
+    <div style={{ padding: 16, height: '100%' }}>
+      <Card
+        elevation={Elevation.ZERO}
+        style={{
+          padding: 0, background: T.surface, overflow: 'hidden',
+          display: 'flex', height: '100%', border: `1px solid ${T.border}`, boxShadow: 'none',
+        }}
+      >
+        <div style={{ width: '50%', borderRight: `1px solid ${T.borderLight}`, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <PaneHeader
+            title={t('roster.activeParty')}
+            right={(
+              <span
+                className="t-base t-semibold"
+                style={{ color: partyLimit != null && activeParty.length > partyLimit ? T.accent : T.textMuted }}
+              >
+                {countLabel}
+              </span>
+            )}
+          />
+          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+            <div style={CARD_GRID}>
+              {activeParty.map(renderCard)}
+              {Array.from({ length: emptySlots }, (_, i) => <EmptySlot key={`empty-${i}`} />)}
+            </div>
           </div>
-          <div className="t-sm" style={{ color: T.textMuted, marginBottom: 12 }}>
-            {t('roster.otherRosterEntriesHint')}
+        </div>
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <PaneHeader title={t('roster.reserves')} />
+          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+            {reserves.length > 0 ? (
+              <div style={CARD_GRID}>{reserves.map(renderCard)}</div>
+            ) : (
+              <div className="t-md" style={{ color: T.textMuted }}>{t('roster.reservesEmpty')}</div>
+            )}
+            {otherRoster.length > 0 && (
+              <>
+                <div className="t-section" style={{ margin: '32px 0 12px' }}>
+                  {t('roster.otherRosterEntries')}
+                </div>
+                <div style={CARD_GRID}>{otherRoster.map(renderCard)}</div>
+              </>
+            )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
-            {otherRoster.map(renderCard)}
-          </div>
-        </>
-      )}
+        </div>
+      </Card>
     </div>
   );
 }

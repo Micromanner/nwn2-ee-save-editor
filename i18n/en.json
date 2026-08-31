@@ -1002,6 +1002,15 @@
     "partyCountNoLimit": "In party: {count}",
     "pendingSave": "not saved yet",
     "pendingSaveHint": "Changes are written when you save.",
+    "activeParty": "Active Party",
+    "reserves": "Reserves",
+    "reservesEmpty": "Every companion is in the active party.",
+    "emptySlot": "Empty Slot",
+    "male": "Male",
+    "female": "Female",
+    "influenceLine": "Influence: {value}",
+    "addToParty": "Add to party",
+    "removeFromParty": "Remove from party",
     "otherRosterEntries": "Other Roster Entries",
     "otherRosterEntriesHint": "Roster entries not recognized as part of this campaign's companion cast (e.g. story NPCs). They can still be toggled but are not counted toward the party limit."
   }

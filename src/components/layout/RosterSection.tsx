@@ -192,13 +192,18 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
                 active={active}
               />
               <div style={{ minWidth: 0 }}>
-                <div className="t-md" style={{ display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {inParty && (
-                    <span
-                      title={t('roster.inParty')}
-                      style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: T.sidebarAccent }}
-                    />
-                  )}
+                <div
+                  className="t-md"
+                  title={inParty ? t('roster.inParty') : undefined}
+                  style={{
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    ...(inParty ? {
+                      textDecoration: 'underline',
+                      textDecorationColor: T.sidebarAccent,
+                      textUnderlineOffset: 3,
+                    } : {}),
+                  }}
+                >
                   {entry.char_name}
                 </div>
               </div>

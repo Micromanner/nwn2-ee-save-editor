@@ -108,13 +108,13 @@ pub fn get_icon_png(state: State<'_, AppState>, name: String) -> Result<String, 
     Err(format!("Icon not found: {name}"))
 }
 
-fn encode_png_data_url(png_bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn encode_png_data_url(png_bytes: &[u8]) -> Result<String, String> {
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(png_bytes);
     Ok(format!("data:image/png;base64,{b64}"))
 }
 
-fn decode_tga_to_png(tga_bytes: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_tga_to_png(tga_bytes: &[u8]) -> Result<Vec<u8>, String> {
     let img = image::load_from_memory_with_format(tga_bytes, image::ImageFormat::Tga)
         .map_err(|e| format!("TGA decode failed: {e}"))?;
     let mut png_buf = std::io::Cursor::new(Vec::new());
@@ -123,7 +123,7 @@ fn decode_tga_to_png(tga_bytes: &[u8]) -> Result<Vec<u8>, String> {
     Ok(png_buf.into_inner())
 }
 
-fn decode_dds_to_png(dds_bytes: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_dds_to_png(dds_bytes: &[u8]) -> Result<Vec<u8>, String> {
     let tex = crate::services::texture_decode::decode_dds_rgba(dds_bytes)?;
     let img: RgbaImage = ImageBuffer::from_raw(tex.width as u32, tex.height as u32, tex.rgba)
         .ok_or("Failed to create image buffer")?;

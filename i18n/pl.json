@@ -1008,6 +1008,15 @@
     "partyCountNoLimit": "W drużynie: {count}",
     "pendingSave": "niezapisane",
     "pendingSaveHint": "Zmiany zostaną zapisane przy zapisie.",
+    "activeParty": "Aktywna drużyna",
+    "reserves": "Rezerwa",
+    "reservesEmpty": "Wszyscy towarzysze są w aktywnej drużynie.",
+    "emptySlot": "Wolne miejsce",
+    "male": "Mężczyzna",
+    "female": "Kobieta",
+    "influenceLine": "Wpływ: {value}",
+    "addToParty": "Dodaj do drużyny",
+    "removeFromParty": "Usuń z drużyny",
     "otherRosterEntries": "Pozostałe wpisy listy",
     "otherRosterEntriesHint": "Wpisy listy nierozpoznane jako część obsady towarzyszy tej kampanii (np. postacie fabularne). Nadal można je przełączać, ale nie liczą się do limitu drużyny."
   }

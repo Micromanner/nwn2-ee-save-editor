@@ -1,4 +1,5 @@
 use crate::commands::{CommandError, CommandResult};
+use crate::loaders::GameData;
 use crate::state::AppState;
 use tauri::State;
 use tracing::{error, info, instrument};
@@ -16,6 +17,10 @@ pub struct RosterEntryInfo {
     pub classes: Vec<RosterClassInfo>,
     pub in_party: bool,
     pub staged_in_party: Option<bool>,
+    /// `RosGender` from the roster (0 = male, 1 = female); None when absent.
+    pub gender: Option<i32>,
+    /// Display name resolved from the roster's `RosRace` (`racialsubtypes.2da` row).
+    pub subrace_name: Option<String>,
 }
 
 #[derive(Clone, serde::Deserialize, specta::Type)]
@@ -24,9 +29,22 @@ pub struct PartyMembershipChange {
     pub in_party: bool,
 }
 
+fn subrace_display_name(game_data: &GameData, subrace: i32) -> Option<String> {
+    let table = game_data.get_table("racialsubtypes")?;
+    let row = table.get_by_id(subrace)?;
+    if let Some(Some(strref_str)) = row.get("name")
+        && let Ok(strref) = strref_str.parse::<i32>()
+        && let Some(name) = game_data.get_string(strref)
+    {
+        return Some(name);
+    }
+    row.get("label").and_then(|v| v.clone())
+}
+
 #[tauri::command]
 pub async fn list_roster(state: State<'_, AppState>) -> CommandResult<Vec<RosterEntryInfo>> {
     let session = state.session.read();
+    let game_data = state.game_data.read();
     let listings = session
         .list_roster()
         .map_err(|message| CommandError::FileError {
@@ -46,6 +64,10 @@ pub async fn list_roster(state: State<'_, AppState>) -> CommandResult<Vec<Roster
                 .collect(),
             in_party: l.in_party,
             staged_in_party: l.staged_in_party,
+            gender: l.gender,
+            subrace_name: l
+                .subrace
+                .and_then(|subrace| subrace_display_name(&game_data, subrace)),
         })
         .collect())
 }

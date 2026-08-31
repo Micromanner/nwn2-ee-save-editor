@@ -1006,6 +1006,15 @@
     "partyCountNoLimit": "Dans le groupe : {count}",
     "pendingSave": "non sauvegardé",
     "pendingSaveHint": "Les modifications sont écrites lors de la sauvegarde.",
+    "activeParty": "Groupe actif",
+    "reserves": "Réserve",
+    "reservesEmpty": "Tous les compagnons sont dans le groupe actif.",
+    "emptySlot": "Emplacement vide",
+    "male": "Homme",
+    "female": "Femme",
+    "influenceLine": "Influence : {value}",
+    "addToParty": "Ajouter au groupe",
+    "removeFromParty": "Retirer du groupe",
     "otherRosterEntries": "Autres entrées de la liste",
     "otherRosterEntriesHint": "Entrées de la liste non reconnues comme faisant partie de la distribution de compagnons de cette campagne (par ex. des PNJ d'histoire). Elles restent activables, mais ne comptent pas dans la limite du groupe."
   }
