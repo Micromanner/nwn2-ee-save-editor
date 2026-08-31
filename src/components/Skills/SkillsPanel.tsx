@@ -44,10 +44,10 @@ export function SkillsPanel() {
   const { data: skillsData, isLoading, error } = skillsSubsystem;
 
   useEffect(() => {
-    if (character?.id && !skillsData && !isLoading) {
+    if (character?.id && !skillsData && !isLoading && !error) {
       skillsSubsystem.load();
     }
-  }, [character?.id, skillsData, isLoading, skillsSubsystem]);
+  }, [character?.id, skillsData, isLoading, error, skillsSubsystem]);
 
   useEffect(() => {
     setLocalOverrides({});

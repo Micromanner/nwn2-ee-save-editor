@@ -170,7 +170,8 @@ export function EditItemDialog({
   // column does not allow, so the picker only offers the ones that work.
   const isPropertyAllowed = useCallback((meta: PropertyMetadata) => {
     if (propColumn === undefined || propColumn < 0) return true;
-    return (meta.allowed_columns ?? []).includes(propColumn);
+    // `null` means the allow-list couldn't be loaded - don't filter anything out.
+    return meta.allowed_columns === null || meta.allowed_columns.includes(propColumn);
   }, [propColumn]);
 
   const handleAddProperty = () => {

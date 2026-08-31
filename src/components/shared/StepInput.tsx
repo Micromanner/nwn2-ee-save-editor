@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@blueprintjs/core';
 import { T } from '../theme';
 
@@ -37,6 +37,14 @@ export function StepInput({
     if (draft !== '' && draft !== '-' && !isNaN(parsed) && clamp(parsed) !== value) onValueChange(clamp(parsed));
     setDraft(null);
   };
+
+  // Commit a pending edit if the input unmounts before blur/Enter fires (e.g.
+  // typing a value then switching tabs), so it isn't silently discarded. The
+  // ref is reassigned every render so the cleanup always sees the latest
+  // draft/value/onValueChange instead of the ones from the first render.
+  const commitDraftRef = useRef(commitDraft);
+  commitDraftRef.current = commitDraft;
+  useEffect(() => () => commitDraftRef.current(), []);
 
   const displayValue = draft ?? (value === 0 && zeroDisplay !== undefined ? zeroDisplay : value);
 

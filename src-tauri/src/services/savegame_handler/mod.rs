@@ -123,6 +123,9 @@ pub struct SaveGameHandler {
     format: SaveFormat,
     validate: bool,
     temp_files: Vec<PathBuf>,
+    /// `Some` while a batch is open: zip-bound `update_file` writes are staged
+    /// here and flushed by [`Self::commit_batch`] in one archive rewrite.
+    pending_zip_updates: Option<indexmap::IndexMap<String, Vec<u8>>>,
 }
 
 impl SaveGameHandler {
@@ -160,7 +163,31 @@ impl SaveGameHandler {
             format,
             validate,
             temp_files: Vec::new(),
+            pending_zip_updates: None,
         })
+    }
+
+    /// Stage subsequent zip-bound `update_file` writes in memory so
+    /// [`Self::commit_batch`] rewrites `resgff.zip` once for the whole save
+    /// operation instead of once per file. Reads observe staged bytes;
+    /// loose-disk writes stay immediate.
+    pub fn begin_batch(&mut self) {
+        if self.pending_zip_updates.is_none() {
+            self.pending_zip_updates = Some(indexmap::IndexMap::new());
+        }
+    }
+
+    /// Write all staged zip entries in a single archive rewrite and end the
+    /// batch. A failed commit drops the staged bytes so callers can retry
+    /// from their still-modified in-memory state.
+    pub fn commit_batch(&mut self) -> SaveGameResult<()> {
+        let Some(pending) = self.pending_zip_updates.take() else {
+            return Ok(());
+        };
+        if pending.is_empty() {
+            return Ok(());
+        }
+        self.write_zip_entries(&pending)
     }
 
     pub fn format(&self) -> SaveFormat {
@@ -181,17 +208,25 @@ impl SaveGameHandler {
 
         let contents = match self.format {
             SaveFormat::Ee => {
-                let file = File::open(&self.zip_path)?;
-                let mut archive = ZipArchive::new(file)?;
-                let mut zip_file =
-                    archive
-                        .by_name(filename)
-                        .map_err(|_| SaveGameError::FileNotInSave {
-                            filename: filename.into(),
-                        })?;
-                let mut buf = Vec::with_capacity(zip_file.size() as usize);
-                zip_file.read_to_end(&mut buf)?;
-                buf
+                if let Some(staged) = self
+                    .pending_zip_updates
+                    .as_ref()
+                    .and_then(|p| p.get(filename))
+                {
+                    staged.clone()
+                } else {
+                    let file = File::open(&self.zip_path)?;
+                    let mut archive = ZipArchive::new(file)?;
+                    let mut zip_file =
+                        archive
+                            .by_name(filename)
+                            .map_err(|_| SaveGameError::FileNotInSave {
+                                filename: filename.into(),
+                            })?;
+                    let mut buf = Vec::with_capacity(zip_file.size() as usize);
+                    zip_file.read_to_end(&mut buf)?;
+                    buf
+                }
             }
             SaveFormat::Original => {
                 let disk_path = self.save_dir.join(filename);
@@ -385,6 +420,26 @@ impl SaveGameHandler {
             return Ok(());
         }
 
+        if let Some(pending) = self.pending_zip_updates.as_mut() {
+            pending.insert(filename.to_string(), content.to_vec());
+            debug!("Staged file for batched save: {}", filename);
+            return Ok(());
+        }
+
+        let mut entries = indexmap::IndexMap::new();
+        entries.insert(filename.to_string(), content.to_vec());
+        self.write_zip_entries(&entries)?;
+
+        debug!("Updated file in save: {}", filename);
+        Ok(())
+    }
+
+    /// Rewrite `resgff.zip` once, substituting every entry in `entries` and
+    /// appending the ones the archive doesn't hold yet.
+    fn write_zip_entries(
+        &mut self,
+        entries: &indexmap::IndexMap<String, Vec<u8>>,
+    ) -> SaveGameResult<()> {
         let temp_path = self.zip_path.with_extension("zip.tmp");
 
         {
@@ -398,35 +453,33 @@ impl SaveGameHandler {
                 .compression_method(CompressionMethod::Deflated)
                 .last_modified_time(*NWN2_DATE_TIME);
 
-            let mut file_written = false;
+            let mut written: std::collections::HashSet<String> = std::collections::HashSet::new();
 
             for i in 0..src_archive.len() {
                 let mut src_entry = src_archive.by_index(i)?;
                 let name = src_entry.name().to_string();
-
-                if name == filename {
-                    dst_archive.start_file(&name, options)?;
+                dst_archive.start_file(&name, options)?;
+                if let Some(content) = entries.get(&name) {
                     dst_archive.write_all(content)?;
-                    file_written = true;
+                    written.insert(name);
                 } else {
-                    dst_archive.start_file(&name, options)?;
                     let mut buffer = Vec::with_capacity(src_entry.size() as usize);
                     src_entry.read_to_end(&mut buffer)?;
                     dst_archive.write_all(&buffer)?;
                 }
             }
 
-            if !file_written {
-                dst_archive.start_file(filename, options)?;
-                dst_archive.write_all(content)?;
+            for (name, content) in entries {
+                if !written.contains(name) {
+                    dst_archive.start_file(name, options)?;
+                    dst_archive.write_all(content)?;
+                }
             }
 
             dst_archive.finish()?;
         }
 
         fs::rename(&temp_path, &self.zip_path)?;
-
-        debug!("Updated file in save: {}", filename);
         Ok(())
     }
 
@@ -450,6 +503,29 @@ impl SaveGameHandler {
     where
         F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
     {
+        if self.pending_zip_updates.is_some() {
+            let playerlist_src = self.extract_file(PLAYERLIST_IFO)?;
+            let player_bic_src = match self.extract_file(PLAYER_BIC) {
+                Ok(b) => Some(b),
+                Err(SaveGameError::FileNotInSave { .. }) => None,
+                Err(e) => return Err(e),
+            };
+            let outputs = transform(PlayerSources {
+                playerlist: &playerlist_src,
+                player_bic: player_bic_src.as_deref(),
+            })
+            .map_err(SaveGameError::Transform)?;
+
+            if let Some(pending) = self.pending_zip_updates.as_mut() {
+                pending.insert(PLAYERLIST_IFO.to_string(), outputs.playerlist);
+                if let Some(bytes) = outputs.player_bic {
+                    pending.insert(PLAYER_BIC.to_string(), bytes);
+                }
+            }
+            info!("Staged player files for batched save (EE)");
+            return Ok(());
+        }
+
         let src_file = File::open(&self.zip_path)?;
         let mut src_archive = ZipArchive::new(src_file)?;
 
@@ -629,9 +705,17 @@ impl SaveGameHandler {
             SaveFormat::Ee => {
                 let file = File::open(&self.zip_path)?;
                 let mut archive = ZipArchive::new(file)?;
-                Ok((0..archive.len())
+                let mut names: Vec<String> = (0..archive.len())
                     .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
-                    .collect())
+                    .collect();
+                if let Some(pending) = self.pending_zip_updates.as_ref() {
+                    for name in pending.keys() {
+                        if !names.iter().any(|n| n == name) {
+                            names.push(name.clone());
+                        }
+                    }
+                }
+                Ok(names)
             }
             SaveFormat::Original => Ok(fs::read_dir(&self.save_dir)?
                 .filter_map(Result::ok)
@@ -952,6 +1036,7 @@ mod tests {
             format: SaveFormat::Ee,
             validate: true,
             temp_files: Vec::new(),
+            pending_zip_updates: None,
         };
 
         let valid_bic = b"BIC test data here";
@@ -1122,6 +1207,82 @@ mod tests {
             !tmp.path().join("resgff.zip").exists(),
             "Original-format writes must not synthesize a resgff.zip"
         );
+    }
+
+    #[test]
+    fn test_batched_updates_commit_in_single_rewrite() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("resgff.zip");
+        {
+            let file = std::fs::File::create(&zip_path).unwrap();
+            let mut zw = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default();
+            for (name, content) in [
+                ("playerlist.ifo", &b"IFO old"[..]),
+                ("khelgar.ros", &b"ROS khelgar old"[..]),
+                ("neeshka.ros", &b"ROS neeshka old"[..]),
+            ] {
+                zw.start_file(name, options).unwrap();
+                std::io::Write::write_all(&mut zw, content).unwrap();
+            }
+            zw.finish().unwrap();
+        }
+
+        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        handler.begin_batch();
+        handler
+            .update_file("khelgar.ros", b"ROS khelgar new")
+            .unwrap();
+        handler
+            .update_file("neeshka.ros", b"ROS neeshka new")
+            .unwrap();
+        handler.update_file("added.ros", b"ROS added").unwrap();
+
+        // Staged bytes are visible to reads before the commit.
+        assert_eq!(
+            handler.extract_file("khelgar.ros").unwrap(),
+            b"ROS khelgar new"
+        );
+        assert!(
+            handler
+                .entry_names()
+                .unwrap()
+                .iter()
+                .any(|n| n == "added.ros")
+        );
+        // Nothing hit the archive yet.
+        {
+            let file = std::fs::File::open(&zip_path).unwrap();
+            let mut archive = zip::ZipArchive::new(file).unwrap();
+            assert!(archive.by_name("added.ros").is_err());
+        }
+
+        handler.commit_batch().unwrap();
+
+        let file = std::fs::File::open(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        for (name, expected) in [
+            ("playerlist.ifo", &b"IFO old"[..]),
+            ("khelgar.ros", &b"ROS khelgar new"[..]),
+            ("neeshka.ros", &b"ROS neeshka new"[..]),
+            ("added.ros", &b"ROS added"[..]),
+        ] {
+            let mut entry = archive.by_name(name).unwrap();
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf, expected, "{name}");
+        }
+
+        // A committed batch is closed: later writes go straight to the zip.
+        handler
+            .update_file("khelgar.ros", b"ROS khelgar direct")
+            .unwrap();
+        let file = std::fs::File::open(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let mut entry = archive.by_name("khelgar.ros").unwrap();
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf, b"ROS khelgar direct");
     }
 
     #[test]

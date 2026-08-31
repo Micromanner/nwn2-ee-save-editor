@@ -8,9 +8,18 @@
     "loadSave": "Spielstand laden",
     "continueEditing": "Bearbeitung fortsetzen",
     "closeSession": "Sitzung schließen",
+    "closeSessionUnsavedTitle": "Ungespeicherte Änderungen",
+    "closeSessionUnsavedWarning": "Dieser Charakter hat ungespeicherte Änderungen. Wenn Sie die Sitzung jetzt schließen, gehen sie verloren.",
     "active": "Aktiv",
     "sessionActive": "Sitzung aktiv: {name}",
-    "openSave": "Spielstand öffnen"
+    "openSave": "Spielstand öffnen",
+    "chooseCharacter": "Charakter auswählen",
+    "chooseCharacterHint": "{save} enthält mehrere Spielercharaktere. Wählen Sie den zu bearbeitenden aus.",
+    "levelFallback": "Stufe {level}",
+    "multiplayer": "Mehrspieler",
+    "playerSlot": "Slot {slot}",
+    "singlePlayer": "Einzelspieler",
+    "unnamedPlayer": "Spieler {index}"
   },
   "fileBrowser": {
     "loadSave": "Spielstand laden",
@@ -93,7 +102,10 @@
     "loadSaveFile": "Laden Sie einen Spielstand",
     "level": "Stufe",
     "race": "Volk",
-    "gender": "Geschlecht",
+    "gender": {
+      "male": "Männlich",
+      "female": "Weiblich"
+    },
     "age": "Alter",
     "male": "Männlich",
     "female": "Weiblich",
@@ -108,17 +120,6 @@
     "rangedAttack": "Fernkampfangriff",
     "initiative": "Initiative",
     "speed": "Geschwindigkeit",
-    "size": "Größe",
-    "skillPoints": "Fertigkeitspunkte",
-    "totalFeats": "Talente gesamt",
-    "knownSpells": "Bekannte Zauber",
-    "questsCompleted": "Quests abgeschlossen",
-    "activeQuests": "Aktive Quests",
-    "genderLabel": "Geschlecht",
-    "gender": {
-      "male": "Männlich",
-      "female": "Weiblich"
-    },
     "size": {
       "fine": "Winzig",
       "diminutive": "Sehr klein",
@@ -129,7 +130,13 @@
       "huge": "Riesig",
       "gargantuan": "Gigantisch",
       "colossal": "Kolossal"
-    }
+    },
+    "skillPoints": "Fertigkeitspunkte",
+    "totalFeats": "Talente gesamt",
+    "knownSpells": "Bekannte Zauber",
+    "questsCompleted": "Quests abgeschlossen",
+    "activeQuests": "Aktive Quests",
+    "genderLabel": "Geschlecht"
   },
   "overview": {
     "armorClass": "Rüstungsklasse",
@@ -324,6 +331,10 @@
     "filterClear": "Leeren",
     "noItemsMatch": "Keine Gegenstände entsprechen Ihren Filtern.",
     "addingItem": "Wird hinzugefügt...",
+    "transformItem": "Verwandeln in...",
+    "transformDialogTitle": "Gegenstand verwandeln in",
+    "transformConfirm": "Gegenstand verwandeln",
+    "changingItem": "Wird verwandelt...",
     "selectNone": "Keine",
     "propertiesTab": "Eigenschaften",
     "basicInfoTab": "Basis-Info",
@@ -338,7 +349,29 @@
     "notStackable": "Dieser Gegenstandstyp ist nicht stapelbar.",
     "propertyNotSupported": "Wird vom Spiel bei diesem Gegenstandstyp nicht angewendet",
     "save": "Speichern",
-    "editItem": "Bearbeiten"
+    "editItem": "Bearbeiten",
+    "changeIcon": "Symbol ändern",
+    "iconCategories": {
+      "all": "Alle",
+      "apparel": "Kleidung",
+      "armor": "Rüstungen",
+      "crafting": "Handwerk",
+      "jewelry": "Schmuck",
+      "other": "Sonstiges",
+      "potions": "Tränke",
+      "scrolls": "Schriftrollen & Bücher",
+      "weapons": "Waffen"
+    },
+    "iconPickerTitle": "Symbol auswählen",
+    "loadingIcons": "Symbole werden geladen...",
+    "noIconsMatch": "Keine Symbole entsprechen Ihrer Suche.",
+    "noPreviewAvailable": "Kein 3D-Modell für diesen Gegenstand verfügbar",
+    "searchIcons": "Symbole suchen...",
+    "source": {
+      "all": "Alle",
+      "override": "Override",
+      "vanilla": "Vanilla"
+    }
   },
   "feats": {
     "selectFeatDetail": "Wählen Sie ein Talent aus, um Details anzuzeigen",
@@ -684,7 +717,8 @@
       "alreadyExists": "{item} existiert bereits",
       "operationFailed": "{operation} fehlgeschlagen: {reason}",
       "internal": "Ein unerwarteter Fehler ist aufgetreten",
-      "unknown": "Ein unbekannter Fehler ist aufgetreten"
+      "unknown": "Ein unbekannter Fehler ist aufgetreten",
+      "diagnosticsPath": "Diagnose: {path}"
     },
     "recovery": {
       "noCharacterLoaded": "Laden Sie einen Spielstand über das Dashboard, um zu beginnen.",
@@ -754,7 +788,8 @@
       "selectDocumentsFolder": "Wählen Sie das NWN2-Dokumenteverzeichnis",
       "selectWorkshopFolder": "Wählen Sie das Steam Workshop-Verzeichnis",
       "selectOverrideFolder": "Wählen Sie einen Override-Ordner",
-      "selectHakFolder": "Wählen Sie einen HAK-Ordner"
+      "selectHakFolder": "Wählen Sie einen HAK-Ordner",
+      "failedToFind": "Nicht gefunden"
     },
     "launch": {
       "launchBehavior": "Startverhalten",
@@ -810,7 +845,6 @@
     "description": "Beschreibung",
     "specialAbilities": "Spezialfähigkeiten",
     "domain": "Domäne",
-    "domainSpell": "Domänenzauber",
     "schools": {
       "abjuration": "Abjuration",
       "conjuration": "Beschwörung",
@@ -927,11 +961,24 @@
     "wingsAndTail": "Flügel & Schwanz",
     "wings": "Flügel",
     "tail": "Schwanz",
-    "nonHumanoidPartNote": "Dieses Aussehen ist für einen anderen Körper gebaut und lässt sich möglicherweise nicht korrekt an deinem Charakter befestigen.",
+    "nonHumanoidPartNote": "Dieses Aussehen ist für einen anderen Körper gebaut und lässt sich möglicherweise nicht korrekt an Ihrem Charakter befestigen.",
     "none": "Keine",
     "equipment": "Ausrüstung",
     "showHelmet": "Helm anzeigen",
-    "noFacialHair": "Kein Bart für diesen Kopf verfügbar"
+    "noFacialHair": "Kein Bart für diesen Kopf verfügbar",
+    "color1": "Farbe 1",
+    "color2": "Farbe 2",
+    "color3": "Farbe 3",
+    "meshOverride": {
+      "auto": "Auto (Resolver)",
+      "label": "Mesh-Override (Debug)"
+    },
+    "model_parts": "Modellteile",
+    "part": "Variante",
+    "part1": "Teil A (Klinge)",
+    "part2": "Teil B (Griff)",
+    "part3": "Teil C (Knauf)",
+    "variation": "Variation"
   },
   "roster": {
     "party": "Gruppe",
@@ -944,6 +991,15 @@
     "partyCount": "In der Gruppe: {count} / {limit}",
     "partyCountNoLimit": "In der Gruppe: {count}",
     "pendingSave": "noch nicht gespeichert",
-    "pendingSaveHint": "Änderungen werden beim Speichern geschrieben."
+    "pendingSaveHint": "Änderungen werden beim Speichern geschrieben.",
+    "otherRosterEntries": "Weitere Roster-Einträge",
+    "otherRosterEntriesHint": "Roster-Einträge, die nicht als Teil der Begleiter-Besetzung dieser Kampagne erkannt wurden (z. B. Story-NPCs). Sie können weiterhin umgeschaltet werden, zählen aber nicht zum Gruppenlimit."
+  },
+  "startup": {
+    "notFound": {
+      "description": "Es wurde keine Neverwinter Nights 2-Installation gefunden. Bitte legen Sie Ihren Spielordner fest, um fortzufahren.",
+      "retry": "Erneut versuchen",
+      "title": "NWN2-Installation nicht gefunden"
+    }
   }
 }

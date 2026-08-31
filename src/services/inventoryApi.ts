@@ -1,4 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { TransformItemRequest, TransformResult } from '@/lib/bindings';
+
+export type { TransformItemRequest, TransformResult };
 
 export interface EquipItemRequest {
   item_data: Record<string, unknown>;
@@ -86,7 +89,8 @@ export interface PropertyMetadata {
   param1_options: Record<number, string>;
   param1_idx: number | null;
   is_flat: boolean;
-  allowed_columns: number[];
+  /** `null` means the allow-list itself couldn't be loaded - treat as unfiltered, not as "allowed on nothing". */
+  allowed_columns: number[] | null;
 }
 
 export interface ItemEditorMetadataResponse {
@@ -133,17 +137,6 @@ export interface AddItemFromTemplateResponse {
     message: string;
     new_item: Record<string, unknown>;
     item_index?: number;
-}
-
-export interface TransformItemRequest {
-    item_index?: number;
-    slot?: string;
-    target_resref: string;
-}
-
-export interface TransformItemResponse {
-    success: boolean;
-    message: string;
 }
 
 interface AvailableBaseItem {
@@ -340,8 +333,8 @@ export class InventoryAPI {
       };
   }
 
-  async transformItem(_characterId: number, request: TransformItemRequest): Promise<TransformItemResponse> {
-      return invoke<TransformItemResponse>('transform_item', { request });
+  async transformItem(_characterId: number, request: TransformItemRequest): Promise<TransformResult> {
+      return invoke<TransformResult>('transform_item', { request });
   }
 }
 

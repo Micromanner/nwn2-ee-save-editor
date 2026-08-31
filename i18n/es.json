@@ -8,9 +8,18 @@
     "loadSave": "Cargar Partida",
     "continueEditing": "Continuar Editando",
     "closeSession": "Cerrar Sesión",
+    "closeSessionUnsavedTitle": "Cambios sin guardar",
+    "closeSessionUnsavedWarning": "Este personaje tiene cambios sin guardar. Cerrar la sesión ahora los descartará.",
     "active": "Activa",
     "sessionActive": "Sesión Activa: {name}",
-    "openSave": "Abrir Partida"
+    "openSave": "Abrir Partida",
+    "chooseCharacter": "Elegir personaje",
+    "chooseCharacterHint": "{save} contiene varios personajes jugadores. Elige el que quieras editar.",
+    "levelFallback": "Nivel {level}",
+    "multiplayer": "Multijugador",
+    "playerSlot": "Ranura {slot}",
+    "singlePlayer": "Un jugador",
+    "unnamedPlayer": "Jugador {index}"
   },
   "fileBrowser": {
     "loadSave": "Cargar Partida",
@@ -93,7 +102,10 @@
     "loadSaveFile": "Cargue un archivo de partida",
     "level": "Nivel",
     "race": "Raza",
-    "gender": "Género",
+    "gender": {
+      "male": "Varón",
+      "female": "Mujer"
+    },
     "age": "Edad",
     "male": "Varón",
     "female": "Mujer",
@@ -108,17 +120,6 @@
     "rangedAttack": "Ataque a Distancia",
     "initiative": "Iniciativa",
     "speed": "Velocidad",
-    "size": "Tamaño",
-    "skillPoints": "Puntos de Habilidad",
-    "totalFeats": "Total de Dotes",
-    "knownSpells": "Hechizos Conocidos",
-    "questsCompleted": "Misiones Completadas",
-    "activeQuests": "Misiones Activas",
-    "genderLabel": "Género",
-    "gender": {
-      "male": "Varón",
-      "female": "Mujer"
-    },
     "size": {
       "fine": "Diminuto",
       "diminutive": "Muy pequeño",
@@ -129,7 +130,13 @@
       "huge": "Enorme",
       "gargantuan": "Gargantuesco",
       "colossal": "Colosal"
-    }
+    },
+    "skillPoints": "Puntos de Habilidad",
+    "totalFeats": "Total de Dotes",
+    "knownSpells": "Hechizos Conocidos",
+    "questsCompleted": "Misiones Completadas",
+    "activeQuests": "Misiones Activas",
+    "genderLabel": "Género"
   },
   "overview": {
     "armorClass": "Clase de Armadura",
@@ -324,6 +331,10 @@
     "filterClear": "Limpiar",
     "noItemsMatch": "Ningún objeto coincide con los filtros.",
     "addingItem": "Añadiendo...",
+    "transformItem": "Convertir en...",
+    "transformDialogTitle": "Convertir objeto en",
+    "transformConfirm": "Convertir objeto",
+    "changingItem": "Convirtiendo...",
     "selectNone": "Ninguno",
     "propertiesTab": "Propiedades",
     "basicInfoTab": "Info Básica",
@@ -338,7 +349,29 @@
     "notStackable": "Este tipo de objeto no se puede apilar.",
     "propertyNotSupported": "El juego no lo aplica a este tipo de objeto",
     "save": "Guardar",
-    "editItem": "Editar"
+    "editItem": "Editar",
+    "changeIcon": "Cambiar icono",
+    "iconCategories": {
+      "all": "Todos",
+      "apparel": "Vestimenta",
+      "armor": "Armaduras",
+      "crafting": "Artesanía",
+      "jewelry": "Joyería",
+      "other": "Otros",
+      "potions": "Pociones",
+      "scrolls": "Pergaminos y libros",
+      "weapons": "Armas"
+    },
+    "iconPickerTitle": "Seleccionar icono",
+    "loadingIcons": "Cargando iconos...",
+    "noIconsMatch": "Ningún icono coincide con tu búsqueda.",
+    "noPreviewAvailable": "No hay modelo 3D disponible para este objeto",
+    "searchIcons": "Buscar iconos...",
+    "source": {
+      "all": "Todos",
+      "override": "Override",
+      "vanilla": "Vanilla"
+    }
   },
   "feats": {
     "selectFeatDetail": "Seleccione una dote para ver detalles",
@@ -685,7 +718,8 @@
       "alreadyExists": "{item} ya existe",
       "operationFailed": "{operation} falló: {reason}",
       "internal": "Ocurrió un error inesperado",
-      "unknown": "Error desconocido"
+      "unknown": "Error desconocido",
+      "diagnosticsPath": "Diagnóstico: {path}"
     },
     "recovery": {
       "noCharacterLoaded": "Cargue una partida desde el dashboard.",
@@ -755,7 +789,8 @@
       "selectDocumentsFolder": "Seleccionar Documentos de NWN2",
       "selectWorkshopFolder": "Seleccionar Steam Workshop",
       "selectOverrideFolder": "Seleccionar Carpeta Override",
-      "selectHakFolder": "Seleccionar Carpeta HAK"
+      "selectHakFolder": "Seleccionar Carpeta HAK",
+      "failedToFind": "No se encontró"
     },
     "launch": {
       "launchBehavior": "Comportamiento de Inicio",
@@ -802,7 +837,7 @@
     "castTime": "Tiempo de Lanzamiento",
     "metamagic": "Metamagia",
     "source": "Fuente",
-    "domainSpell": "Hechizo de Dominio",
+    "domainSpell": "Conjuro de Dominio",
     "memorized": "Memorizados",
     "availableTo": "Disponible para",
     "duration": "Duración",
@@ -811,7 +846,6 @@
     "description": "Descripción",
     "specialAbilities": "Habilidades Especiales",
     "domain": "Dominio",
-    "domainSpell": "Conjuro de Dominio",
     "schools": {
       "abjuration": "Abjuración",
       "conjuration": "Conjuración",
@@ -932,7 +966,20 @@
     "none": "Ninguna",
     "equipment": "Equipo",
     "showHelmet": "Ver Casco",
-    "noFacialHair": "Sin vello facial para esta cabeza"
+    "noFacialHair": "Sin vello facial para esta cabeza",
+    "color1": "Color 1",
+    "color2": "Color 2",
+    "color3": "Color 3",
+    "meshOverride": {
+      "auto": "Auto (resolver)",
+      "label": "Anulación de malla (debug)"
+    },
+    "model_parts": "Partes del modelo",
+    "part": "Variante",
+    "part1": "Parte A (Hoja)",
+    "part2": "Parte B (Empuñadura)",
+    "part3": "Parte C (Pomo)",
+    "variation": "Variación"
   },
   "roster": {
     "party": "Grupo",
@@ -945,6 +992,15 @@
     "partyCount": "En el grupo: {count} / {limit}",
     "partyCountNoLimit": "En el grupo: {count}",
     "pendingSave": "sin guardar",
-    "pendingSaveHint": "Los cambios se escriben al guardar."
+    "pendingSaveHint": "Los cambios se escriben al guardar.",
+    "otherRosterEntries": "Otras entradas del grupo",
+    "otherRosterEntriesHint": "Entradas del grupo no reconocidas como parte del elenco de compañeros de esta campaña (p. ej. PNJ de la historia). Se pueden alternar igualmente, pero no cuentan para el límite del grupo."
+  },
+  "startup": {
+    "notFound": {
+      "description": "No se encontró una instalación de Neverwinter Nights 2. Configura tu carpeta del juego para continuar.",
+      "retry": "Reintentar",
+      "title": "Instalación de NWN2 no encontrada"
+    }
   }
 }

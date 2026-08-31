@@ -8,9 +8,18 @@
     "loadSave": "Загрузить",
     "continueEditing": "Продолжить редактирование",
     "closeSession": "Закрыть сессию",
+    "closeSessionUnsavedTitle": "Несохранённые изменения",
+    "closeSessionUnsavedWarning": "У этого персонажа есть несохранённые изменения. Закрытие сессии сейчас отменит их.",
     "active": "Активно",
     "sessionActive": "Активная сессия: {name}",
-    "openSave": "Открыть сохранение"
+    "openSave": "Открыть сохранение",
+    "singlePlayer": "Одиночная игра",
+    "multiplayer": "Многопользовательская игра",
+    "chooseCharacter": "Выбрать персонажа",
+    "chooseCharacterHint": "{save} содержит несколько игровых персонажей. Выберите того, кого нужно редактировать.",
+    "playerSlot": "Слот {slot}",
+    "unnamedPlayer": "Игрок {index}",
+    "levelFallback": "Уровень {level}"
   },
   "fileBrowser": {
     "loadSave": "Загрузить сохранение",
@@ -83,7 +92,10 @@
     "undo": "Отменить",
     "redo": "Вернуть",
     "undoLabel": "Отменить: {action}",
-    "redoLabel": "Вернуть: {action}"
+    "redoLabel": "Вернуть: {action}",
+    "history": "История",
+    "historyCurrent": "Текущее состояние",
+    "historyEmpty": "Изменений пока нет"
   },
   "character": {
     "noCharacter": "Нет персонажа",
@@ -266,6 +278,7 @@
     "destroy": "Уничтожить",
     "backpackEmpty": "Рюкзак пуст",
     "backpackEmptyDescription": "В рюкзаке нет предметов.",
+    "noPreviewAvailable": "Для этого предмета нет 3D-модели",
     "item": "Предмет",
     "qty": "Кол-во",
     "editor": {
@@ -280,6 +293,11 @@
     "loadingTemplates": "Загрузка шаблонов...",
     "loadingBaseItems": "Загрузка базовых типов...",
     "selectedId": "Выбранный ID",
+    "source": {
+      "all": "Все",
+      "vanilla": "Vanilla",
+      "override": "Override"
+    },
     "subcategories": {
       "swords": "Мечи",
       "axes": "Топоры",
@@ -321,6 +339,10 @@
     "filterClear": "Очистить",
     "noItemsMatch": "Нет предметов, подходящих под фильтры.",
     "addingItem": "Добавление...",
+    "transformItem": "Превратить в...",
+    "transformDialogTitle": "Превратить предмет в",
+    "transformConfirm": "Превратить предмет",
+    "changingItem": "Изменение...",
     "selectNone": "Нет",
     "propertiesTab": "Свойства",
     "basicInfoTab": "Информация",
@@ -335,7 +357,23 @@
     "notStackable": "Этот тип предмета не складывается в стопки.",
     "propertyNotSupported": "Игра не применяет это к данному типу предмета",
     "save": "Сохранить",
-    "editItem": "Правка"
+    "editItem": "Правка",
+    "changeIcon": "Сменить значок",
+    "iconPickerTitle": "Выбрать значок",
+    "searchIcons": "Поиск значков...",
+    "noIconsMatch": "Нет значков, соответствующих запросу.",
+    "loadingIcons": "Загрузка значков...",
+    "iconCategories": {
+      "all": "Все",
+      "weapons": "Оружие",
+      "armor": "Доспехи",
+      "apparel": "Одежда",
+      "jewelry": "Украшения",
+      "potions": "Зелья",
+      "scrolls": "Свитки и книги",
+      "crafting": "Ремесло",
+      "other": "Прочее"
+    }
   },
   "feats": {
     "selectFeatDetail": "Выберите фит, чтобы увидеть детали",
@@ -681,7 +719,8 @@
       "alreadyExists": "Элемент {item} уже существует",
       "operationFailed": "Операция {operation} провалена: {reason}",
       "internal": "Произошла непредвиденная ошибка",
-      "unknown": "Произошла неизвестная ошибка"
+      "unknown": "Произошла неизвестная ошибка",
+      "diagnosticsPath": "Диагностика: {path}"
     },
     "recovery": {
       "noCharacterLoaded": "Загрузите файл сохранения с главного экрана.",
@@ -741,6 +780,7 @@
       "customHakFolders": "Папки HAK-файлов",
       "autoDetected": "Найдено автоматически",
       "manuallySet": "Указано вручную",
+      "failedToFind": "Не удалось найти",
       "notConfigured": "(Не настроено)",
       "reset": "Сбросить",
       "change": "Изменить",
@@ -773,6 +813,13 @@
       "newAvailable": "Доступно обновление: v{current} -> v{latest}",
       "openRelease": "Открыть страницу релиза",
       "error": "Не удалось подключиться к GitHub. Попробуйте позже."
+    }
+  },
+  "startup": {
+    "notFound": {
+      "title": "Установка NWN2 не найдена",
+      "description": "Не удалось найти установку Neverwinter Nights 2. Укажите папку с игрой, чтобы продолжить.",
+      "retry": "Повторить"
     }
   },
   "spells": {
@@ -898,6 +945,7 @@
     "eyebrowColor": "Цвет бровей",
     "hairColor": "Цвет волос",
     "tintNoTintMap": "У этой модели нет карты окраски, цвета не применяются",
+    "npcVariant": "{name} (NPC)",
     "tintChannelUnused": "Маска окраски этой модели не использует этот канал",
     "bodyTint": "Оттенок тела (хвост и крылья)",
     "bodyTintChannel": "Канал окраски {n}",
@@ -927,7 +975,20 @@
     "none": "Нет",
     "equipment": "Экипировка",
     "showHelmet": "Показывать шлем",
-    "noFacialHair": "Борода недоступна для этой головы"
+    "noFacialHair": "Борода недоступна для этой головы",
+    "model_parts": "Части модели",
+    "part": "Вариант",
+    "part1": "Часть A (Клинок)",
+    "part2": "Часть B (Рукоять)",
+    "part3": "Часть C (Навершие)",
+    "variation": "Вариация",
+    "color1": "Цвет 1",
+    "color2": "Цвет 2",
+    "color3": "Цвет 3",
+    "meshOverride": {
+      "label": "Замена меша (отладка)",
+      "auto": "Авто (резолвер)"
+    }
   },
   "roster": {
     "party": "Отряд",
@@ -945,6 +1006,8 @@
     "partyCount": "В отряде: {count} / {limit}",
     "partyCountNoLimit": "В отряде: {count}",
     "pendingSave": "не сохранено",
-    "pendingSaveHint": "Изменения записываются при сохранении."
+    "pendingSaveHint": "Изменения записываются при сохранении.",
+    "otherRosterEntries": "Другие записи ростера",
+    "otherRosterEntriesHint": "Записи ростера, не распознанные как часть состава спутников этой кампании (например, сюжетные NPC). Их всё ещё можно переключать, но они не учитываются в лимите отряда."
   }
 }

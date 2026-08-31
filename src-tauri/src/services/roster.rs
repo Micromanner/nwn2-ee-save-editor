@@ -163,7 +163,8 @@ pub fn parse_party_limit(bytes: Vec<u8>) -> Result<Option<i32>, String> {
 }
 
 /// Set `RosAvailable` for each `(ros_name, in_party)` change (in party = 0,
-/// benched = 1), preserving the file's numeric GFF variant. Errors if any
+/// benched = 1), preserving the file's numeric GFF variant and creating the
+/// field as Int (the engine's type) on entries that lack it. Errors if any
 /// named member is missing from the roster.
 pub fn set_party_membership(bytes: Vec<u8>, changes: &[(String, bool)]) -> Result<Vec<u8>, String> {
     let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
@@ -193,7 +194,11 @@ pub fn set_party_membership(bytes: Vec<u8>, changes: &[(String, bool)]) -> Resul
             continue;
         };
         missing.retain(|n| !n.eq_ignore_ascii_case(&name));
-        set_int_preserving_type(entry, "RosAvailable", i64::from(!in_party));
+        if entry.contains_key("RosAvailable") {
+            set_int_preserving_type(entry, "RosAvailable", i64::from(!in_party));
+        } else {
+            entry.insert("RosAvailable".into(), GffValue::Int(i32::from(!in_party)));
+        }
     }
     if !missing.is_empty() {
         return Err(format!("roster members not found: {}", missing.join(", ")));
@@ -384,6 +389,23 @@ mod tests {
         };
         let entry = entries.first().expect("entry").force_load();
         assert!(matches!(entry.get("RosAvailable"), Some(GffValue::Byte(0))));
+    }
+
+    #[test]
+    fn set_party_membership_creates_missing_field_as_int() {
+        let mut stripped = member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1);
+        stripped.shift_remove("RosAvailable");
+        let bytes = build_roster(vec![stripped]);
+        let updated =
+            set_party_membership(bytes, &[("khelgar".into(), false)]).expect("set membership");
+
+        let parser = crate::parsers::gff::GffParser::from_bytes(updated).expect("parse");
+        let root = parser.read_struct_fields(0).expect("root");
+        let GffValue::List(entries) = root.get("RosMembers").expect("RosMembers") else {
+            panic!("RosMembers not a list");
+        };
+        let entry = entries.first().expect("entry").force_load();
+        assert!(matches!(entry.get("RosAvailable"), Some(GffValue::Int(1))));
     }
 
     #[test]

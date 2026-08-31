@@ -93,21 +93,10 @@ fn get_subtype_context_key(subtype_ref: &str) -> Option<&'static str> {
 const PROPERTY_ID_ABILITY_BONUS: u32 = 0;
 const PROPERTY_ID_AC_BONUS: u32 = 1;
 const PROPERTY_ID_AC_BONUS_VS_ALIGNMENT: u32 = 5;
-const BASE_ITEM_ARMOR: i32 = 16;
-const BASE_ITEM_SHIELDS: [i32; 3] = [14, 56, 57];
-
-/// AC type the engine applies to an AC bonus property on this base item:
-/// armor enchantment on armor, shield enchantment on shields, deflection
-/// everywhere else.
-pub fn ac_bonus_kind(base_item_id: i32) -> &'static str {
-    if base_item_id == BASE_ITEM_ARMOR {
-        "Armor"
-    } else if BASE_ITEM_SHIELDS.contains(&base_item_id) {
-        "Shield"
-    } else {
-        "Deflection"
-    }
-}
+/// `baseitems.2da` `AC_Enchant` column value the engine treats as armor.
+const AC_ENCHANT_ARMOR: i32 = 2;
+/// `baseitems.2da` `AC_Enchant` column value the engine treats as a shield.
+const AC_ENCHANT_SHIELD: i32 = 3;
 const PROPERTY_ID_ENHANCEMENT: u32 = 6;
 const PROPERTY_ID_ATTACK_PENALTY: u32 = 10;
 const PROPERTY_ID_BONUS_FEAT: u32 = 12;
@@ -165,6 +154,10 @@ pub struct ItemPropertyDecoder {
     alignment_groups: HashMap<u32, String>,
     alignments: HashMap<u32, String>,
     racial_groups: HashMap<u32, String>,
+    light: HashMap<u32, String>,
+    /// `baseitems.2da` `AC_Enchant` column: 2 = armor enchantment, 3 = shield
+    /// enchantment, anything else (including missing rows) = deflection.
+    ac_enchant: HashMap<i32, i32>,
 }
 
 impl ItemPropertyDecoder {
@@ -188,6 +181,8 @@ impl ItemPropertyDecoder {
             alignment_groups: HashMap::new(),
             alignments: HashMap::new(),
             racial_groups: HashMap::new(),
+            light: HashMap::new(),
+            ac_enchant: HashMap::new(),
         }
     }
 
@@ -250,6 +245,8 @@ impl ItemPropertyDecoder {
         self.save_elements = load_2da_options_from_rm(rm, "iprp_saveelement");
         self.alignment_groups = load_2da_options_from_rm(rm, "iprp_aligngrp");
         self.alignments = load_2da_options_from_rm(rm, "iprp_alignment");
+        self.light = load_2da_options_from_rm(rm, "iprp_lightcost");
+        self.ac_enchant = load_baseitem_ac_enchant_from_rm(rm);
         self.initialized = true;
         debug!(
             "ItemPropertyDecoder initialized with {} property definitions",
@@ -410,6 +407,17 @@ impl ItemPropertyDecoder {
             .copied()
     }
 
+    /// AC type the engine applies to an AC bonus property on this base item:
+    /// armor enchantment on armor, shield enchantment on shields, deflection
+    /// everywhere else.
+    fn ac_bonus_kind(&self, base_item_id: i32) -> &'static str {
+        match self.ac_enchant.get(&base_item_id) {
+            Some(&AC_ENCHANT_ARMOR) => "Armor",
+            Some(&AC_ENCHANT_SHIELD) => "Shield",
+            _ => "Deflection",
+        }
+    }
+
     fn resolve_lookup(&self, context_key: &str, subtype: u32) -> Option<String> {
         let table = match context_key {
             "abilities" => &self.abilities,
@@ -424,6 +432,8 @@ impl ItemPropertyDecoder {
             "alignment_groups" => &self.alignment_groups,
             "alignments" => &self.alignments,
             "feats" => &self.feats,
+            "ac_types" => &self.ac_types,
+            "light" => &self.light,
             _ => return None,
         };
         table.get(&subtype).cloned()
@@ -592,7 +602,7 @@ impl ItemPropertyDecoder {
         properties: &[HashMap<String, serde_json::Value>],
         base_item_id: i32,
     ) -> Vec<DecodedProperty> {
-        let ac_kind = ac_bonus_kind(base_item_id);
+        let ac_kind = self.ac_bonus_kind(base_item_id);
         let mut decoded = self.decode_all_properties(properties);
         for prop in &mut decoded {
             if (PROPERTY_ID_AC_BONUS..=PROPERTY_ID_AC_BONUS_VS_ALIGNMENT)
@@ -613,8 +623,9 @@ impl ItemPropertyDecoder {
         let decoded = self.decode_all_properties(properties);
         let mut bonuses = ItemBonuses::default();
 
-        let is_armor = base_item_id == BASE_ITEM_ARMOR;
-        let is_shield = BASE_ITEM_SHIELDS.contains(&base_item_id);
+        let ac_kind = self.ac_bonus_kind(base_item_id);
+        let is_armor = ac_kind == "Armor";
+        let is_shield = ac_kind == "Shield";
 
         for prop in decoded {
             match prop.bonus_type.as_str() {
@@ -757,7 +768,9 @@ impl ItemPropertyDecoder {
                 label: def.label.clone(),
                 original_label: def.raw_label.clone(),
                 description: def.description.clone(),
-                allowed_columns: allowed_columns.get(id).cloned().unwrap_or_default(),
+                allowed_columns: allowed_columns
+                    .as_ref()
+                    .map(|cols| cols.get(id).cloned().unwrap_or_default()),
                 ..Default::default()
             };
 
@@ -865,11 +878,14 @@ fn normalize_ability_name(name: &str) -> &str {
 /// `itemprops.2da`: one row per `itempropdef` row, one column per base-item
 /// class (`0_Melee` ... `21_Glove`, indexed by `baseitems.PropColumn`), `1`
 /// where the engine honours the property on that class.
-pub fn load_itemprops_columns_from_rm(rm: &ResourceManager) -> HashMap<u32, Vec<u32>> {
+///
+/// Returns `None` if the table itself failed to load, distinct from a loaded
+/// table where a property's row is empty (genuinely disallowed everywhere).
+pub fn load_itemprops_columns_from_rm(rm: &ResourceManager) -> Option<HashMap<u32, Vec<u32>>> {
     let mut allowed = HashMap::new();
     let Ok(table) = rm.get_2da_with_overrides("itemprops") else {
         warn!("itemprops.2da not available; property/base-item compatibility unknown");
-        return allowed;
+        return None;
     };
 
     let columns: Vec<(u32, String)> = table
@@ -898,7 +914,29 @@ pub fn load_itemprops_columns_from_rm(rm: &ResourceManager) -> HashMap<u32, Vec<
             .collect();
         allowed.insert(row_idx as u32, cols);
     }
-    allowed
+    Some(allowed)
+}
+
+/// `baseitems.2da` `AC_Enchant` column, keyed by base item row: the engine's
+/// own record of which AC family (armor/shield/deflection) an item's AC
+/// enchantment belongs to.
+fn load_baseitem_ac_enchant_from_rm(rm: &ResourceManager) -> HashMap<i32, i32> {
+    let mut ac_enchant = HashMap::new();
+    let Ok(table) = rm.get_2da_with_overrides("baseitems") else {
+        warn!("baseitems.2da not available; AC bonuses will default to deflection");
+        return ac_enchant;
+    };
+
+    for row_idx in 0..table.row_count() {
+        let Ok(row) = table.get_row_dict(row_idx) else {
+            continue;
+        };
+        let value = row_int(&row, "ac_enchant", -1);
+        if value >= 0 {
+            ac_enchant.insert(row_idx as i32, value);
+        }
+    }
+    ac_enchant
 }
 
 pub fn load_2da_options_from_rm(rm: &ResourceManager, table_name: &str) -> HashMap<u32, String> {
@@ -950,11 +988,17 @@ pub fn load_2da_options_from_rm(rm: &ResourceManager, table_name: &str) -> HashM
 
 /// Load one `iprp_*cost` table.
 ///
-/// Rows without a resolvable `Name` strref are dropped. The engine builds an item
-/// property's description from that strref, so a row it cannot resolve renders as
-/// "Bad StrRef" on the item in game - which is exactly what row 0 ("Random", Name
-/// `****`) of every cost table does. Random is an authoring-time instruction for
-/// the treasure generator, not a value a finished item can carry.
+/// `amounts` is recorded for every row that carries a parsable numeric column,
+/// independent of whether the row has a usable display name - `cost_amount`
+/// consumers (damage resistance/vulnerability) need the value even for rows
+/// `labels` rejects.
+///
+/// `labels` drops rows without a resolvable `Name` strref. The engine builds an
+/// item property's description from that strref, so a row it cannot resolve
+/// renders as "Bad StrRef" on the item in game - which is exactly what row 0
+/// ("Random", Name `****`) of every cost table does. Random is an
+/// authoring-time instruction for the treasure generator, not a value a
+/// finished item can carry.
 fn load_cost_table_from_rm(rm: &ResourceManager, table_name: &str) -> CostTableData {
     let mut data = CostTableData::default();
     let Ok(table) = rm.get_2da_with_overrides(table_name) else {
@@ -965,6 +1009,13 @@ fn load_cost_table_from_rm(rm: &ResourceManager, table_name: &str) -> CostTableD
         let Ok(row) = table.get_row_dict(row_idx) else {
             continue;
         };
+
+        for column in ["amount", "value"] {
+            if let Some(amount) = row_str(&row, column).and_then(|s| s.parse::<i32>().ok()) {
+                data.amounts.insert(row_idx as u32, amount);
+                break;
+            }
+        }
 
         let name_str_ref = row_int(&row, "name", -1);
         if name_str_ref <= 100 {
@@ -989,13 +1040,6 @@ fn load_cost_table_from_rm(rm: &ResourceManager, table_name: &str) -> CostTableD
         };
 
         data.labels.insert(row_idx as u32, clean_label(&display));
-
-        for column in ["amount", "value"] {
-            if let Some(amount) = row_str(&row, column).and_then(|s| s.parse::<i32>().ok()) {
-                data.amounts.insert(row_idx as u32, amount);
-                break;
-            }
-        }
     }
 
     data

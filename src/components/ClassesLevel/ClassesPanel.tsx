@@ -61,11 +61,11 @@ export function ClassesPanel() {
 
   // Load subsystem on mount if not already loaded
   useEffect(() => {
-    if (!classesSubsystem.data && !classesSubsystem.isLoading) {
+    if (!classesSubsystem.data && !classesSubsystem.isLoading && !classesSubsystem.error) {
       classesSubsystem.load().catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classesSubsystem.data, classesSubsystem.isLoading]);
+  }, [classesSubsystem.data, classesSubsystem.isLoading, classesSubsystem.error]);
 
   // Fetch XP progress when data is loaded but xpProgress missing
   useEffect(() => {

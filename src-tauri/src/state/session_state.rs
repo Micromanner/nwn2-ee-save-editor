@@ -325,7 +325,11 @@ impl SessionState {
         Ok(())
     }
 
-    /// Write every modified character of this session (active and parked) to the save.
+    /// Write every modified character of this session (active and parked) to the
+    /// save, then any staged party changes, batching all zip-bound writes into a
+    /// single archive rewrite. Every character is attempted even when one fails;
+    /// the collected failures (with any warnings) come back as one error, and
+    /// nothing is marked saved until the batch is committed.
     pub fn save_character(
         &mut self,
         game_data: &GameData,
@@ -335,31 +339,76 @@ impl SessionState {
             return self.save_standalone_inner(backup_keep_count);
         }
 
-        let mut warnings = Vec::new();
         let mut active = self.character.take().ok_or("No character loaded")?;
+        if let Some(handler) = self.savegame_handler.as_mut() {
+            handler.begin_batch();
+        }
+
+        let mut warnings = Vec::new();
+        let mut errors = Vec::new();
+
         let active_source = self.character_source.clone();
-        let result = self.save_one(&active_source, &mut active, game_data);
+        let active_saved = match self.save_one(&active_source, &mut active, game_data) {
+            Ok(warning) => {
+                warnings.extend(warning);
+                true
+            }
+            Err(e) => {
+                errors.push(format!("{}: {e}", describe_source(&active_source)));
+                false
+            }
+        };
         self.character = Some(active);
-        warnings.extend(result?);
 
         let parked = std::mem::take(&mut self.parked);
         let mut restored = Vec::with_capacity(parked.len());
-        let mut first_error = None;
+        let mut saved_parked = Vec::new();
         for (source, mut character, history) in parked {
-            if first_error.is_none() {
-                match self.save_one(&source, &mut character, game_data) {
-                    Ok(warning) => warnings.extend(warning),
-                    Err(e) => first_error = Some(e),
+            match self.save_one(&source, &mut character, game_data) {
+                Ok(warning) => {
+                    warnings.extend(warning);
+                    saved_parked.push(restored.len());
                 }
+                Err(e) => errors.push(format!("{}: {e}", describe_source(&source))),
             }
             restored.push((source, character, history));
         }
         self.parked = restored;
-        if let Some(e) = first_error {
-            return Err(e);
+
+        let flushed_party = match self.flush_staged_party() {
+            Ok(warning) => {
+                warnings.extend(warning);
+                true
+            }
+            Err(e) => {
+                errors.push(format!("party changes: {e}"));
+                false
+            }
+        };
+
+        if let Some(handler) = self.savegame_handler.as_mut()
+            && let Err(e) = handler.commit_batch()
+        {
+            errors.push(format!("Failed to write save file: {e}"));
+            return Err(errors.join("\n"));
         }
 
-        warnings.extend(self.flush_staged_party()?);
+        if active_saved && let Some(character) = self.character.as_mut() {
+            character.mark_saved();
+        }
+        for idx in saved_parked {
+            self.parked[idx].1.mark_saved();
+        }
+        if flushed_party {
+            self.staged_party.clear();
+        }
+
+        if !errors.is_empty() {
+            if !warnings.is_empty() {
+                errors.extend(warnings);
+            }
+            return Err(errors.join("\n"));
+        }
 
         Ok(if warnings.is_empty() {
             None
@@ -433,27 +482,11 @@ impl SessionState {
             write_playerinfo_for_character(save_dir, character, game_data)?;
         }
 
-        character.mark_saved();
-
         info!(
             "Character saved successfully (player.bic_updated={})",
             update_primary_player_files
         );
         Ok(None)
-    }
-
-    /// Save only the active companion. `save_character` is the normal path; this
-    /// exists for callers that must not touch other parked characters.
-    pub fn save_companion(&mut self, game_data: &GameData) -> Result<Option<String>, String> {
-        let CharacterSource::Companion { ros_name } = &self.character_source else {
-            return Err("Active character is not a companion".into());
-        };
-        let ros_name = ros_name.clone();
-        let mut character = self.character.take().ok_or("No character loaded")?;
-        let prefix = Self::companion_blueprint_prefix(&character, game_data);
-        let result = self.save_companion_inner(&mut character, &ros_name, prefix.as_deref());
-        self.character = Some(character);
-        result
     }
 
     fn companion_blueprint_prefix(character: &Character, game_data: &GameData) -> Option<String> {
@@ -547,7 +580,6 @@ impl SessionState {
             }
         };
 
-        character.mark_saved();
         info!("Companion saved: {stored_name}");
         Ok(warning)
     }
@@ -715,6 +747,7 @@ impl SessionState {
     pub fn has_unsaved_changes(&self) -> bool {
         self.character.as_ref().is_some_and(Character::is_modified)
             || self.parked.iter().any(|(_, c, _)| c.is_modified())
+            || !self.staged_party.is_empty()
     }
 
     pub fn character(&self) -> Option<&Character> {
@@ -909,9 +942,10 @@ impl SessionState {
         Ok(())
     }
 
-    /// Write any staged party changes to disk and clear the staging area.
-    /// Returns a warning string when the roster was written but the faction
-    /// mirror partially failed.
+    /// Write any staged party changes to the save (or the open batch). The
+    /// caller clears `staged_party` once the write is committed. Returns a
+    /// warning string when the roster was written but the faction mirror
+    /// partially failed.
     fn flush_staged_party(&mut self) -> Result<Option<String>, String> {
         if self.staged_party.is_empty() {
             return Ok(None);
@@ -921,9 +955,7 @@ impl SessionState {
             .iter()
             .map(|(name, in_party)| (name.clone(), *in_party))
             .collect();
-        let warning = self.apply_party_membership(&desired)?;
-        self.staged_party.clear();
-        Ok(warning)
+        self.apply_party_membership(&desired)
     }
 
     /// Change which companions are in the active party. Writes `RosAvailable`
@@ -1090,6 +1122,14 @@ fn write_playerinfo_for_character(
         .map_err(|e| format!("Failed to write playerinfo.bin: {e}"))?;
 
     Ok(())
+}
+
+fn describe_source(source: &CharacterSource) -> String {
+    match source {
+        CharacterSource::Player => "player".into(),
+        CharacterSource::Companion { ros_name } => ros_name.clone(),
+        CharacterSource::Standalone => "standalone character".into(),
+    }
 }
 
 fn sync_roster(

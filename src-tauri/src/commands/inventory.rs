@@ -928,6 +928,8 @@ pub async fn update_item(
     state: State<'_, AppState>,
     request: UpdateItemRequest,
 ) -> CommandResult<UpdateItemResponse> {
+    let game_data = state.game_data.read();
+
     let mut session = state.session.write();
     let label = match (&request.slot, request.item_index) {
         (Some(slot), _) => format!("Update item at slot {slot}"),
@@ -939,8 +941,6 @@ pub async fn update_item(
         .character
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-
-    let game_data = state.game_data.read();
 
     if let Some(slot_str) = &request.slot {
         let slot = parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
@@ -1006,7 +1006,7 @@ pub async fn transform_item(
         })?;
         Ok(character.transform_equipped_item(slot, item_fields, &game_data)?)
     } else if let Some(index) = request.item_index {
-        Ok(character.transform_inventory_item(index, item_fields)?)
+        Ok(character.transform_inventory_item(index, item_fields, &game_data)?)
     } else {
         Err(CommandError::InvalidValue {
             field: "request".to_string(),

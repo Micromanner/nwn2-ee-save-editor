@@ -195,8 +195,11 @@ pub struct PropertyMetadata {
     pub is_flat: bool,
     /// `itemprops.2da` columns (= `baseitems.PropColumn` values) on which the
     /// engine honours this property. A property added to a base item outside
-    /// this list is stored but neither shown nor applied in-game.
-    pub allowed_columns: Vec<u32>,
+    /// this list is stored but neither shown nor applied in-game. `None` means
+    /// `itemprops.2da` itself failed to load, so compatibility is unknown -
+    /// distinct from `Some(vec![])`, which means the table loaded and this
+    /// property is genuinely disallowed on every base item.
+    pub allowed_columns: Option<Vec<u32>>,
 }
 
 impl Default for PropertyMetadata {
@@ -218,7 +221,7 @@ impl Default for PropertyMetadata {
             param1_options: HashMap::new(),
             param1_idx: None,
             is_flat: true,
-            allowed_columns: Vec::new(),
+            allowed_columns: None,
         }
     }
 }

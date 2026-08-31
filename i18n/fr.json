@@ -8,9 +8,18 @@
     "loadSave": "Charger la Partie",
     "continueEditing": "Continuer l'Édition",
     "closeSession": "Fermer la Session",
+    "closeSessionUnsavedTitle": "Modifications non enregistrées",
+    "closeSessionUnsavedWarning": "Ce personnage a des modifications non enregistrées. Fermer la session maintenant les abandonnera.",
     "active": "Active",
     "sessionActive": "Session Active : {name}",
-    "openSave": "Ouvrir une Sauvegarde"
+    "openSave": "Ouvrir une Sauvegarde",
+    "singlePlayer": "Solo",
+    "multiplayer": "Multijoueur",
+    "chooseCharacter": "Choisir un Personnage",
+    "chooseCharacterHint": "{save} contient plusieurs personnages joueurs. Choisissez celui à modifier.",
+    "playerSlot": "Emplacement {slot}",
+    "unnamedPlayer": "Joueur {index}",
+    "levelFallback": "Niveau {level}"
   },
   "fileBrowser": {
     "loadSave": "Charger la Partie",
@@ -83,7 +92,10 @@
     "undo": "Annuler",
     "redo": "Rétablir",
     "undoLabel": "Annuler : {action}",
-    "redoLabel": "Rétablir : {action}"
+    "redoLabel": "Rétablir : {action}",
+    "history": "Historique",
+    "historyCurrent": "État actuel",
+    "historyEmpty": "Aucune modification pour l'instant"
   },
   "character": {
     "noCharacter": "Aucun Personnage",
@@ -266,6 +278,7 @@
     "destroy": "Détruire",
     "backpackEmpty": "Sac à dos vide",
     "backpackEmptyDescription": "Aucun objet dans l'inventaire.",
+    "noPreviewAvailable": "Aucun modèle 3D disponible pour cet objet",
     "item": "Objet",
     "qty": "Qté",
     "editor": {
@@ -280,6 +293,11 @@
     "loadingTemplates": "Chargement des modèles...",
     "loadingBaseItems": "Chargement des objets de base...",
     "selectedId": "ID Sélectionné",
+    "source": {
+      "all": "Tout",
+      "vanilla": "Vanilla",
+      "override": "Override"
+    },
     "subcategories": {
       "swords": "Épées",
       "axes": "Haches",
@@ -321,6 +339,10 @@
     "filterClear": "Effacer",
     "noItemsMatch": "Aucun objet ne correspond.",
     "addingItem": "Ajout...",
+    "transformItem": "Changer en...",
+    "transformDialogTitle": "Changer l'Objet En",
+    "transformConfirm": "Changer l'Objet",
+    "changingItem": "Changement...",
     "selectNone": "Aucun",
     "propertiesTab": "Propriétés",
     "basicInfoTab": "Infos de Base",
@@ -335,7 +357,23 @@
     "notStackable": "Ce type d'objet ne s'empile pas.",
     "propertyNotSupported": "Non appliqué par le jeu sur ce type d'objet",
     "save": "Enregistrer",
-    "editItem": "Éditer"
+    "editItem": "Éditer",
+    "changeIcon": "Changer l'icône",
+    "iconPickerTitle": "Sélectionner une icône",
+    "searchIcons": "Rechercher des icônes...",
+    "noIconsMatch": "Aucune icône ne correspond à votre recherche.",
+    "loadingIcons": "Chargement des icônes...",
+    "iconCategories": {
+      "all": "Tout",
+      "weapons": "Armes",
+      "armor": "Armures",
+      "apparel": "Vêtements",
+      "jewelry": "Bijoux",
+      "potions": "Potions",
+      "scrolls": "Parchemins & Livres",
+      "crafting": "Artisanat",
+      "other": "Autres"
+    }
   },
   "feats": {
     "selectFeatDetail": "Sélectionnez un don pour voir les détails",
@@ -681,7 +719,8 @@
       "alreadyExists": "{item} existe déjà",
       "operationFailed": "Échec de l'opération {operation} : {reason}",
       "internal": "Une erreur inattendue est survenue",
-      "unknown": "Une erreur inconnue est survenue"
+      "unknown": "Une erreur inconnue est survenue",
+      "diagnosticsPath": "Diagnostics : {path}"
     },
     "recovery": {
       "noCharacterLoaded": "Chargez un personnage depuis le dashboard.",
@@ -741,6 +780,7 @@
       "customHakFolders": "Dossiers HAK Persos",
       "autoDetected": "Autodétecté",
       "manuallySet": "Défini Manuellement",
+      "failedToFind": "Introuvable",
       "notConfigured": "(Non configuré)",
       "reset": "Réinitialiser",
       "change": "Modifier",
@@ -773,6 +813,13 @@
       "newAvailable": "Mise à jour disponible : v{current} -> v{latest}",
       "openRelease": "Ouvrir la page de la version",
       "error": "Impossible de joindre GitHub. Réessayez plus tard."
+    }
+  },
+  "startup": {
+    "notFound": {
+      "title": "Installation de NWN2 introuvable",
+      "description": "Impossible de trouver une installation de Neverwinter Nights 2. Veuillez indiquer votre dossier de jeu pour continuer.",
+      "retry": "Réessayer"
     }
   },
   "spells": {
@@ -897,6 +944,7 @@
     "eyebrowColor": "Couleur Sourcils",
     "hairColor": "Couleur Cheveux",
     "tintNoTintMap": "Ce modèle n'a pas de carte de teinte, les couleurs sont sans effet",
+    "npcVariant": "{name} (PNJ)",
     "tintChannelUnused": "Le masque de teinte de ce modèle n'utilise pas ce canal",
     "bodyTint": "Teinte du corps (queue et ailes)",
     "bodyTintChannel": "Canal de teinte {n}",
@@ -926,7 +974,20 @@
     "none": "Aucun",
     "equipment": "Équipement",
     "showHelmet": "Afficher Casque",
-    "noFacialHair": "Pas de barbe pour cette tête"
+    "noFacialHair": "Pas de barbe pour cette tête",
+    "model_parts": "Parties du Modèle",
+    "part": "Variante",
+    "part1": "Partie A (Lame)",
+    "part2": "Partie B (Poignée)",
+    "part3": "Partie C (Pommeau)",
+    "variation": "Variation",
+    "color1": "Couleur 1",
+    "color2": "Couleur 2",
+    "color3": "Couleur 3",
+    "meshOverride": {
+      "label": "Substitution de maillage (debug)",
+      "auto": "Auto (résolveur)"
+    }
   },
   "roster": {
     "party": "Groupe",
@@ -944,6 +1005,8 @@
     "partyCount": "Dans le groupe : {count} / {limit}",
     "partyCountNoLimit": "Dans le groupe : {count}",
     "pendingSave": "non sauvegardé",
-    "pendingSaveHint": "Les modifications sont écrites lors de la sauvegarde."
+    "pendingSaveHint": "Les modifications sont écrites lors de la sauvegarde.",
+    "otherRosterEntries": "Autres entrées de la liste",
+    "otherRosterEntriesHint": "Entrées de la liste non reconnues comme faisant partie de la distribution de compagnons de cette campagne (par ex. des PNJ d'histoire). Elles restent activables, mais ne comptent pas dans la limite du groupe."
   }
 }

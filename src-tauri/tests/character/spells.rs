@@ -389,3 +389,33 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
             .is_empty()
     );
 }
+
+/// The 2DA-derived learnable columns must cover exactly the spell-level columns the
+/// loaded `spells.2da` actually has (vanilla carries no FavSoul/SpiritShm columns:
+/// Favored Soul resolves to `cleric`, Spirit Shaman to `druid`), with Warlock
+/// excluded (invocations live in `KnownList4` and the editor neither lists nor
+/// counts them).
+#[tokio::test]
+async fn test_learnable_spell_columns_derived_from_2da() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let columns = Character::learnable_spell_columns(game_data);
+    let mut names: Vec<&str> = columns.keys().map(String::as_str).collect();
+    names.sort_unstable();
+
+    assert_eq!(
+        names,
+        vec!["bard", "cleric", "druid", "paladin", "ranger", "wiz_sorc"],
+    );
+    assert!(!columns.contains_key("warlock"));
+
+    let ids = |col: &str| -> Vec<i32> {
+        let mut v: Vec<i32> = columns[col].iter().map(|c| c.0).collect();
+        v.sort_unstable();
+        v
+    };
+    assert_eq!(ids("wiz_sorc"), vec![9, 10], "Sorcerer and Wizard share");
+    assert_eq!(ids("cleric"), vec![2, 58], "Favored Soul maps to cleric");
+    assert_eq!(ids("druid"), vec![3, 55], "Spirit Shaman maps to druid");
+}

@@ -1087,7 +1087,7 @@ impl Character {
         // game stores them in one KnownList regardless of grade, so neither the
         // per-level count nor the picker applies.
         let column = self.get_spell_table_column_for_class(class_id, game_data)?;
-        if !Self::LEARNABLE_CLASS_COLUMNS.contains(&column.as_str()) {
+        if !Self::learnable_spell_columns(game_data).contains_key(&column) {
             return None;
         }
 
@@ -1198,21 +1198,75 @@ impl Character {
         classes
     }
 
-    const LEARNABLE_CLASS_COLUMNS: &[&str] = &[
-        "bard",
-        "cleric",
-        "druid",
-        "paladin",
-        "ranger",
-        "wiz_sorc",
-        "favsoul",
-        "spiritshm",
-    ];
+    /// Columns in `spells.2da` that gate which class spell lists the editor treats as
+    /// learnable, keyed by column name with the base caster classes (`SpellCaster`
+    /// = 1) that share it: Wizard and Sorcerer both resolve to `wiz_sorc`, Favored
+    /// Soul to `cleric`, Spirit Shaman to `druid`. Kept are only columns that
+    /// actually exist in the loaded `spells.2da` (a HAK class bringing its own
+    /// `SpellTableColumn` and column qualifies automatically). `warlock` is
+    /// deliberately excluded: invocations are written to `KnownList4` regardless of
+    /// grade, so the editor neither lists nor counts them.
+    pub fn learnable_spell_columns(game_data: &GameData) -> IndexMap<String, Vec<ClassId>> {
+        let mut by_column: IndexMap<String, Vec<ClassId>> = IndexMap::new();
 
-    fn is_on_learnable_caster_list(spell_row: &ahash::AHashMap<String, Option<String>>) -> bool {
-        Self::LEARNABLE_CLASS_COLUMNS.iter().any(|&col| {
+        let Some(classes_table) = game_data.get_table("classes") else {
+            return by_column;
+        };
+        let Some(spells_table) = game_data.get_table("spells") else {
+            return by_column;
+        };
+
+        for row_id in 0..classes_table.row_count() {
+            let Ok(class_data) = classes_table.get_row(row_id) else {
+                continue;
+            };
+            let is_caster = class_data
+                .get("spellcaster")
+                .and_then(|v| v.as_ref())
+                .is_some_and(|v| v == "1");
+            if !is_caster {
+                continue;
+            }
+            let Some(column) = Self::spell_table_column_from_row(&class_data) else {
+                continue;
+            };
+            if column == "warlock" || spells_table.find_column_index(&column).is_none() {
+                continue;
+            }
+
+            by_column
+                .entry(column)
+                .or_default()
+                .push(ClassId(row_id as i32));
+        }
+
+        by_column
+    }
+
+    /// Learnable spell-table columns paired with a display label built from
+    /// `classes.2da` names via TLK. Classes sharing a column (e.g. Wizard and
+    /// Sorcerer both using `wiz_sorc`) are joined with "/".
+    pub fn learnable_spell_class_labels(&self, game_data: &GameData) -> Vec<(String, String)> {
+        Self::learnable_spell_columns(game_data)
+            .into_iter()
+            .map(|(column, class_ids)| {
+                let label = class_ids
+                    .iter()
+                    .map(|&class_id| self.get_class_name(class_id, game_data))
+                    .collect::<Vec<_>>()
+                    .join("/");
+                (column, label)
+            })
+            .collect()
+    }
+
+    fn is_on_learnable_caster_list(
+        spell_row: &ahash::AHashMap<String, Option<String>>,
+        learnable_columns: &IndexMap<String, Vec<ClassId>>,
+    ) -> bool {
+        learnable_columns.keys().any(|col| {
             spell_row
-                .get(col)
+                .get(col.as_str())
                 .and_then(|v| v.as_ref())
                 .is_some_and(|v| {
                     !v.is_empty() && v != "****" && v.parse::<i32>().is_ok_and(|n| n >= 0)
@@ -1252,6 +1306,8 @@ impl Character {
             }
         }
 
+        let learnable_columns = Self::learnable_spell_columns(game_data);
+
         let mut ability_spells = Vec::new();
         let mut seen = HashSet::new();
 
@@ -1282,7 +1338,7 @@ impl Character {
                 .get("label")
                 .and_then(|v| v.as_ref())
                 .is_some_and(|v| v.starts_with("SPELLABILITY_"));
-            let on_caster_list = Self::is_on_learnable_caster_list(&spell_row);
+            let on_caster_list = Self::is_on_learnable_caster_list(&spell_row, &learnable_columns);
 
             let has_feat = feat_id.is_some_and(|fid| char_feats.contains(&fid));
             let has_feat_granted = feat_granted_spells.contains(&spell_id_val);
@@ -1573,7 +1629,15 @@ impl Character {
     ) -> Option<String> {
         let classes_table = game_data.get_table("classes")?;
         let class_data = classes_table.get_by_id(class_id.0)?;
+        Self::spell_table_column_from_row(&class_data)
+    }
 
+    /// `spells.2da` column for a `classes.2da` row: its `SpellTableColumn` when the
+    /// table carries one (vanilla does not; some mods add it), else derived from
+    /// the class label the way the shipped classes map to columns.
+    fn spell_table_column_from_row(
+        class_data: &ahash::AHashMap<String, Option<String>>,
+    ) -> Option<String> {
         let spell_col = class_data
             .get("spelltablecolumn")
             .and_then(|v| v.as_ref())
@@ -1584,7 +1648,6 @@ impl Character {
             return spell_col;
         }
 
-        // Fallback based on label
         let label = class_data.get("label").and_then(|v| v.as_ref())?;
 
         let l_lower = label.to_lowercase();

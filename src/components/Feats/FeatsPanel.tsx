@@ -75,7 +75,7 @@ export function FeatsPanel() {
   const debouncedSearch = useDebouncedValue(search, 300);
 
   useEffect(() => {
-    if (character && !featsData && !featsSubsystem.isLoading) {
+    if (character && !featsData && !featsSubsystem.isLoading && !featsSubsystem.error) {
       featsSubsystem.load();
     }
   }, [character, featsData, featsSubsystem]);
@@ -91,9 +91,14 @@ export function FeatsPanel() {
       setAllFeatsTotal(allFeatsCache.pagination.total);
       setHasNext(allFeatsCache.pagination.has_next);
       setHasPrevious(allFeatsCache.pagination.has_previous);
+      setAllFeatsLoading(false);
+      setAllFeatsError(null);
       return;
     }
-    if (tab !== 'all') return;
+    if (tab !== 'all') {
+      setAllFeatsLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setAllFeatsLoading(true);

@@ -57,10 +57,10 @@ export function SpellsPanel() {
   const debouncedSearch = useDebouncedValue(search, 300);
 
   useEffect(() => {
-    if (character?.id && !spells.data && !spells.isLoading) {
+    if (character?.id && !spells.data && !spells.isLoading && !spells.error) {
       spells.load();
     }
-  }, [character?.id, spells.data, spells.isLoading, spells]);
+  }, [character?.id, spells.data, spells.isLoading, spells.error, spells]);
 
   // Fetch when filters change on the 'all' tab. The preload cache is re-adopted
   // whenever it changes: it is refetched per character on a roster switch and

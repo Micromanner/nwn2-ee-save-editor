@@ -69,7 +69,7 @@ export function useFeatManagement(
   const error = characterError || feats.error;
 
   useEffect(() => {
-    if (autoLoadFeats && character && !feats.data && !feats.isLoading) {
+    if (autoLoadFeats && character && !feats.data && !feats.isLoading && !feats.error) {
       feats.load();
     }
   }, [autoLoadFeats, character, feats]);

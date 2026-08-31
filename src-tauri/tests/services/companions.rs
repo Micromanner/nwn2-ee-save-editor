@@ -244,7 +244,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
     assert!(session.character().expect("khelgar").is_modified());
 
     let warning = session
-        .save_companion(&empty_game_data())
+        .save_character(&empty_game_data(), 3)
         .expect("save companion");
     assert!(warning.is_none(), "roster sync should succeed: {warning:?}");
     assert!(!session.has_unsaved_changes());
@@ -315,7 +315,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
     }
     assert!(
         session
-            .save_companion(&empty_game_data())
+            .save_character(&empty_game_data(), 3)
             .expect("save companion")
             .is_none()
     );
@@ -396,7 +396,9 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
         "hen_companion".to_string(),
         app_lib::loaders::LoadedTable::new("hen_companion".to_string(), Arc::new(hen)),
     );
-    session.save_companion(&game_data).expect("save companion");
+    session
+        .save_character(&game_data, 3)
+        .expect("save companion");
 
     let mut session2 = make_session();
     load_save(&mut session2, &save_path.to_string_lossy());
@@ -484,4 +486,41 @@ fn save_character_flushes_parked_companion_and_player_edits() {
             .base_ability(app_lib::character::AbilityIndex::STR),
         17
     );
+}
+
+#[test]
+fn staged_party_membership_counts_as_dirty_and_flushes_on_save() {
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+
+    let roster = session.list_roster().expect("roster");
+    let (name, was_in_party) = {
+        let entry = roster.first().expect("roster entry");
+        (entry.ros_name.clone(), entry.in_party)
+    };
+    assert!(!session.has_unsaved_changes());
+
+    session
+        .stage_party_membership(&[(name.clone(), !was_in_party)])
+        .expect("stage membership");
+    assert!(
+        session.has_unsaved_changes(),
+        "staged party change is dirty"
+    );
+
+    session
+        .save_character(&empty_game_data(), 3)
+        .expect("save with staged party change");
+    assert!(!session.has_unsaved_changes());
+
+    let mut session2 = make_session();
+    load_save(&mut session2, &save_path.to_string_lossy());
+    let roster2 = session2.list_roster().expect("roster after save");
+    let after = roster2
+        .iter()
+        .find(|r| r.ros_name == name)
+        .expect("entry survives save");
+    assert_eq!(after.in_party, !was_in_party);
+    assert_eq!(after.staged_in_party, None);
 }

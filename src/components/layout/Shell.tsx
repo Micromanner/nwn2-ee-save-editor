@@ -3,9 +3,11 @@ import { Button, Card, Elevation, ProgressBar } from '@blueprintjs/core';
 import { GiAnvil } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { invoke } from '@tauri-apps/api/core';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { TauriAPI } from '@/lib/tauri-api';
 import { CharacterProvider, useCharacterContext } from '@/contexts/CharacterContext';
+import { CharacterStateAPI } from '@/lib/api/character-state';
 import { useTranslations } from '@/hooks/useTranslations';
 import { T, PATTERN_BG } from '../theme';
 import '../blueprint.css';
@@ -72,9 +74,29 @@ function ShellContent() {
 
   const handleBackToDashboard = () => setViewMode('dashboard');
 
-  const handleCloseSession = () => {
+  const finishCloseSession = async () => {
+    try {
+      await CharacterStateAPI.closeCharacter();
+    } catch (err) {
+      console.error('Failed to close character session:', err);
+    }
     clearCharacter();
     setViewMode('dashboard');
+  };
+
+  const handleCloseSession = async () => {
+    try {
+      if (await CharacterStateAPI.hasUnsavedChanges()) {
+        const confirmed = await ask(t('dashboard.closeSessionUnsavedWarning'), {
+          title: t('dashboard.closeSessionUnsavedTitle'),
+          kind: 'warning',
+        });
+        if (!confirmed) return;
+      }
+    } catch (err) {
+      console.error('Failed to check unsaved changes:', err);
+    }
+    await finishCloseSession();
   };
 
   if (viewMode === 'dashboard' || !character) {
@@ -91,7 +113,7 @@ function ShellContent() {
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button small intent="primary" text={t('dashboard.continueEditing')} onClick={() => setViewMode('editor')} />
-              <Button small text={t('dashboard.closeSession')} onClick={handleCloseSession} />
+              <Button small text={t('dashboard.closeSession')} onClick={() => void handleCloseSession()} />
             </div>
           </div>
         )}

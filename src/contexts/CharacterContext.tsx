@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CharacterAPI, CharacterData, LegitimateFeatsResponse, LegitimateSpellsResponse } from '@/services/characterApi';
 import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/inventoryApi';
@@ -720,12 +720,16 @@ export function useSubsystem<K extends SubsystemType>(subsystem: K): {
     return loadSubsystem(subsystem, options);
   }, [subsystem, loadSubsystem]);
 
-  return {
+  // Memoize the returned object so its identity stays stable between renders
+  // unless the underlying subsystem state actually changed. Without this,
+  // every render produced a fresh object, which retriggered any effect that
+  // depended on it (e.g. the load-on-mount effects in the panels).
+  return useMemo(() => ({
     data: subsystemData.data as SubsystemTypeMap[K] | null,
     isLoading: subsystemData.isLoading,
     error: subsystemData.error,
     lastFetched: subsystemData.lastFetched,
     load,
     updateData,
-  };
+  }), [subsystemData.data, subsystemData.isLoading, subsystemData.error, subsystemData.lastFetched, load, updateData]);
 }

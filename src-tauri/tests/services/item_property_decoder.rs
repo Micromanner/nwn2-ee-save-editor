@@ -322,6 +322,7 @@ async fn metadata_carries_the_itemprops_allow_list() {
             .unwrap_or_else(|| panic!("property {id} in metadata"))
             .allowed_columns
             .clone()
+            .expect("itemprops.2da should load in the test fixture")
     };
 
     let cloak_column = 16;

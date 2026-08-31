@@ -5,23 +5,24 @@ import { inventoryAPI, EquipItemRequest, UnequipItemRequest, UpdateItemRequest }
 const EQUIP_DEPENDENT_SUBSYSTEMS = ['abilityScores', 'combat', 'saves', 'skills'] as const;
 
 export function useInventoryManagement() {
-  const { character, invalidateSubsystems, undo } = useCharacterContext();
+  const { character, invalidateSubsystems } = useCharacterContext();
   const inventoryData = useSubsystem('inventory');
 
-  // The backend mutation has already committed by the time the refresh runs.
-  // If the refresh throws, the session and the UI would silently diverge (the
-  // change kept but reported as failed), so roll back to the pre-mutation
-  // history snapshot instead. Context undo() never throws and re-invalidates
-  // every subsystem on success.
-  const refreshOrRollback = useCallback(async (refresh: () => Promise<void>) => {
+  // The backend mutation has already committed by the time this runs. If the
+  // refresh itself throws (e.g. a transient IPC failure), just surface that
+  // error to the caller - don't call undo() here. undo() reverts whatever the
+  // most recently recorded history entry is, which isn't necessarily this
+  // mutation if another one was recorded in the meantime (e.g. two inventory
+  // actions fired close together), so it can silently revert an unrelated,
+  // successful change instead of the one that actually failed to refresh.
+  const refreshAfterMutation = useCallback(async (refresh: () => Promise<void>) => {
     try {
       await refresh();
     } catch (err) {
-      console.error('Post-mutation refresh failed, rolling back:', err);
-      await undo();
+      console.error('Post-mutation refresh failed:', err);
       throw err;
     }
-  }, [undo]);
+  }, []);
 
   const refreshInventory = useCallback(async () => {
     await inventoryData.load({ silent: true });
@@ -37,30 +38,30 @@ export function useInventoryManagement() {
 
     const response = await inventoryAPI.equipItem(character.id, request);
     if (response.success) {
-      await refreshOrRollback(refreshInventoryAndEquipStats);
+      await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventoryAndEquipStats]);
+  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const unequipItem = useCallback(async (request: UnequipItemRequest) => {
     if (!character?.id) throw new Error('No character loaded');
 
     const response = await inventoryAPI.unequipItem(character.id, request);
     if (response.success) {
-      await refreshOrRollback(refreshInventoryAndEquipStats);
+      await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventoryAndEquipStats]);
+  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const deleteItem = useCallback(async (itemIndex: number) => {
     if (!character?.id) throw new Error('No character loaded');
 
     const response = await inventoryAPI.deleteItem(character.id, itemIndex);
     if (response.success) {
-      await refreshOrRollback(refreshInventory);
+      await refreshAfterMutation(refreshInventory);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventory]);
+  }, [character?.id, refreshAfterMutation, refreshInventory]);
 
   const addItemByBaseType = useCallback(async (baseItemId: number, iconTemplateResref?: string) => {
     if (!character?.id) throw new Error('No character loaded');
@@ -70,44 +71,44 @@ export function useInventoryManagement() {
       icon_template_resref: iconTemplateResref,
     });
     if (response.success) {
-      await refreshOrRollback(refreshInventory);
+      await refreshAfterMutation(refreshInventory);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventory]);
+  }, [character?.id, refreshAfterMutation, refreshInventory]);
 
   const updateItem = useCallback(async (request: UpdateItemRequest) => {
     if (!character?.id) throw new Error('No character loaded');
 
     const response = await inventoryAPI.updateItem(character.id, request);
     if (response.success) {
-      await refreshOrRollback(refreshInventoryAndEquipStats);
+      await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventoryAndEquipStats]);
+  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const addItemFromTemplate = useCallback(async (resref: string) => {
     if (!character?.id) throw new Error('No character loaded');
 
     const response = await inventoryAPI.addItemFromTemplate(character.id, resref);
     if (response.success) {
-      await refreshOrRollback(refreshInventoryAndEquipStats);
+      await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventoryAndEquipStats]);
+  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const transformItem = useCallback(async (target: { itemIndex?: number; slot?: string }, targetResref: string) => {
     if (!character?.id) throw new Error('No character loaded');
 
     const response = await inventoryAPI.transformItem(character.id, {
-      item_index: target.itemIndex,
-      slot: target.slot,
+      item_index: target.itemIndex ?? null,
+      slot: target.slot ?? null,
       target_resref: targetResref,
     });
     if (response.success) {
-      await refreshOrRollback(refreshInventoryAndEquipStats);
+      await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshOrRollback, refreshInventoryAndEquipStats]);
+  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   return {
     equipItem,

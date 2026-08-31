@@ -8,6 +8,8 @@
     "loadSave": "Load Save",
     "continueEditing": "Continue Editing",
     "closeSession": "Close Session",
+    "closeSessionUnsavedTitle": "Unsaved Changes",
+    "closeSessionUnsavedWarning": "This character has unsaved changes. Closing the session now will discard them.",
     "active": "Active",
     "sessionActive": "Session Active: {name}",
     "openSave": "Open Save",
@@ -999,6 +1001,8 @@
     "partyCount": "In party: {count} / {limit}",
     "partyCountNoLimit": "In party: {count}",
     "pendingSave": "not saved yet",
-    "pendingSaveHint": "Changes are written when you save."
+    "pendingSaveHint": "Changes are written when you save.",
+    "otherRosterEntries": "Other Roster Entries",
+    "otherRosterEntriesHint": "Roster entries not recognized as part of this campaign's companion cast (e.g. story NPCs). They can still be toggled but are not counted toward the party limit."
   }
 }

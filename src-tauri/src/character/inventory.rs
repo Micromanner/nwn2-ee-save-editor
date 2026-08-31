@@ -1481,8 +1481,8 @@ impl super::Character {
 
                     if current_stack < max_stack {
                         let new_stack = (current_stack + stack_size).min(max_stack);
-                        item_struct
-                            .insert("StackSize".to_string(), GffValue::Short(new_stack as i16));
+                        let new_value = typed_stack_size(item_struct.get("StackSize"), new_stack);
+                        item_struct.insert("StackSize".to_string(), new_value);
                         self.set_list("ItemList", inv_list);
 
                         return Ok(AddItemResult {
@@ -1502,7 +1502,7 @@ impl super::Character {
         new_item.insert("BaseItem".to_string(), GffValue::Int(base_item_id));
         new_item.insert(
             "StackSize".to_string(),
-            GffValue::Short(stack_size.min(max_stack) as i16),
+            GffValue::Word(stack_size.min(max_stack) as u16),
         );
         new_item.insert("Identified".to_string(), GffValue::Byte(1));
         new_item.insert("Charges".to_string(), GffValue::Byte(0));
@@ -1611,8 +1611,10 @@ impl super::Character {
         &mut self,
         index: usize,
         mut new_item: IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
     ) -> Result<TransformResult, CharacterError> {
         mark_identified(&mut new_item);
+        self.clamp_stack_size(&mut new_item, game_data);
         let mut inv_list = self
             .get_list_owned("ItemList")
             .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
@@ -1644,6 +1646,7 @@ impl super::Character {
         game_data: &GameData,
     ) -> Result<TransformResult, CharacterError> {
         mark_identified(&mut new_item);
+        self.clamp_stack_size(&mut new_item, game_data);
         let base_item_id = new_item
             .get("BaseItem")
             .and_then(gff_value_to_i32)
@@ -2338,7 +2341,9 @@ impl super::Character {
             )));
         }
 
+        let had_identified = inv_list[index].contains_key("Identified");
         merge_json_into_gff_struct(&mut inv_list[index], updated_data);
+        normalize_identified_field(&mut inv_list[index], had_identified);
         normalize_item_properties_list(&mut inv_list[index]);
         self.clamp_stack_size(&mut inv_list[index], game_data);
         self.set_list("ItemList", inv_list);
@@ -2413,7 +2418,9 @@ impl super::Character {
                 slot.display_name()
             )))?;
 
+        let had_identified = equip_list[item_idx].contains_key("Identified");
         merge_json_into_gff_struct(&mut equip_list[item_idx], updated_data);
+        normalize_identified_field(&mut equip_list[item_idx], had_identified);
         normalize_item_properties_list(&mut equip_list[item_idx]);
         self.clamp_stack_size(&mut equip_list[item_idx], game_data);
         self.set_list("Equip_ItemList", equip_list);
@@ -2554,6 +2561,7 @@ impl super::Character {
         game_data: &GameData,
     ) -> Result<AddItemResult, CharacterError> {
         mark_identified(&mut item);
+        self.clamp_stack_size(&mut item, game_data);
         let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
 
         let tag = item
@@ -2595,7 +2603,8 @@ impl super::Character {
 
                 if current_stack < max_stack {
                     let new_stack = (current_stack + stack_size).min(max_stack);
-                    existing.insert("StackSize".to_string(), GffValue::Short(new_stack as i16));
+                    let new_value = typed_stack_size(existing.get("StackSize"), new_stack);
+                    existing.insert("StackSize".to_string(), new_value);
 
                     return Ok(AddItemResult {
                         success: true,
@@ -3050,6 +3059,26 @@ fn write_appearance_into_item(
 /// The engine reads the GFF with per-field type tags and silently drops properties
 /// whose types don't match the expected schema on the next load, so every numeric
 /// field must be re-typed to Byte/Word before writing.
+/// `merge_json_into_gff_struct` preserves `Identified`'s existing GFF type when
+/// the field is already on the item, but creates a brand new field as
+/// `GffValue::Int` (the JSON-number merge default) when the item never had
+/// one. The engine only honours a Byte there, so rewrite just that
+/// freshly-created case.
+fn normalize_identified_field(
+    item: &mut IndexMap<String, GffValue<'static>>,
+    existed_before_merge: bool,
+) {
+    if existed_before_merge {
+        return;
+    }
+    if let Some(value) = item.get("Identified").and_then(gff_value_to_i32) {
+        item.insert(
+            "Identified".to_string(),
+            GffValue::Byte(value.clamp(0, 1) as u8),
+        );
+    }
+}
+
 fn normalize_item_properties_list(item: &mut IndexMap<String, GffValue<'static>>) {
     if let Some(GffValue::ListOwned(entries)) = item.get_mut("PropertiesList") {
         for entry in entries {
@@ -3145,6 +3174,19 @@ fn item_value(item_struct: &IndexMap<String, GffValue<'static>>, game_data: &Gam
 /// type every real item uses for the field.
 fn mark_identified(item: &mut IndexMap<String, GffValue<'static>>) {
     item.insert("Identified".to_string(), GffValue::Byte(1));
+}
+
+/// `StackSize` on a real .uti/.bic item is a Word. Preserve the field's existing
+/// GFF type when replacing a value already on an item (the engine is
+/// type-strict), and default to Word when there is nothing to preserve.
+fn typed_stack_size(existing: Option<&GffValue<'static>>, value: i32) -> GffValue<'static> {
+    match existing {
+        Some(GffValue::Byte(_)) => GffValue::Byte(value as u8),
+        Some(GffValue::Short(_)) => GffValue::Short(value as i16),
+        Some(GffValue::Int(_)) => GffValue::Int(value),
+        Some(GffValue::Dword(_)) => GffValue::Dword(value as u32),
+        _ => GffValue::Word(value as u16),
+    }
 }
 
 /// Strict stack-merge identity: same BaseItem, same Tag (empty matches empty),
@@ -3779,10 +3821,11 @@ mod tests {
 
     #[test]
     fn test_transform_inventory_item_replaces_struct_cleanly() {
+        let game_data = game_data_with_stackable_baseitem();
         let mut character = Character::from_gff(create_test_fields());
 
         let result = character
-            .transform_inventory_item(0, stackable_item("new_item", 1, &[(52, 21)]))
+            .transform_inventory_item(0, stackable_item("new_item", 1, &[(52, 21)]), &game_data)
             .unwrap();
 
         assert!(result.success);
@@ -3797,8 +3840,10 @@ mod tests {
 
     #[test]
     fn test_transform_inventory_item_out_of_bounds_errors() {
+        let game_data = game_data_with_stackable_baseitem();
         let mut character = Character::from_gff(create_test_fields());
-        let result = character.transform_inventory_item(99, stackable_item("x", 1, &[]));
+        let result =
+            character.transform_inventory_item(99, stackable_item("x", 1, &[]), &game_data);
         assert!(result.is_err());
     }
 
@@ -3867,5 +3912,173 @@ mod tests {
         assert!(!result.stacked);
         assert_eq!(result.item.unwrap().stack_size, 5);
         assert_eq!(stack_size_at(&character, 0), 5);
+    }
+
+    #[test]
+    fn test_add_item_stack_merge_preserves_word_stack_size_type() {
+        // A stack merge onto an existing Word-typed item must stay a Word, not
+        // get retyped to Short (the engine is type-strict).
+        // add_item's stack-merge path matches only untagged items (fresh
+        // base-type adds never carry a Tag).
+        let game_data = game_data_with_stackable_baseitem();
+        let mut item = stackable_item("", 3, &[]);
+        item.insert("StackSize".to_string(), GffValue::Word(3));
+        let mut character = character_with_items(vec![item]);
+
+        character.add_item(0, 2, None, &game_data).unwrap();
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(
+            matches!(stored.get("StackSize"), Some(GffValue::Word(5))),
+            "StackSize should stay Word(5): {:?}",
+            stored.get("StackSize")
+        );
+    }
+
+    #[test]
+    fn test_add_item_from_struct_stack_merge_preserves_word_stack_size_type() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut existing = stackable_item("cft_ess_fire4", 2, &[(52, 21)]);
+        existing.insert("StackSize".to_string(), GffValue::Word(2));
+        let mut character = character_with_items(vec![existing]);
+
+        character
+            .add_item_from_struct(stackable_item("cft_ess_fire4", 1, &[(52, 21)]), &game_data)
+            .unwrap();
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(
+            matches!(stored.get("StackSize"), Some(GffValue::Word(3))),
+            "StackSize should stay Word(3): {:?}",
+            stored.get("StackSize")
+        );
+    }
+
+    #[test]
+    fn test_add_item_new_entry_uses_word_stack_size() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![]);
+
+        character.add_item(0, 1, None, &game_data).unwrap();
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(
+            matches!(stored.get("StackSize"), Some(GffValue::Word(1))),
+            "new StackSize should be Word(1): {:?}",
+            stored.get("StackSize")
+        );
+    }
+
+    #[test]
+    fn test_transform_inventory_item_clamps_stack_to_new_base_item() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = Character::from_gff(create_test_fields());
+
+        character
+            .transform_inventory_item(0, stackable_item("bundle", 50, &[]), &game_data)
+            .unwrap();
+
+        // game_data_with_stackable_baseitem's only row (BaseItem 0) caps at 10.
+        assert_eq!(stack_size_at(&character, 0), 10);
+    }
+
+    #[test]
+    fn test_update_inventory_item_identified_absent_field_normalizes_to_byte() {
+        // Item never had an Identified field in the GFF; the merge creates one
+        // as an Int by default. The engine only honours a Byte there.
+        let mut item = stackable_item("unidentified_ring", 1, &[]);
+        item.shift_remove("Identified");
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![item]);
+
+        let updates: HashMap<String, JsonValue> =
+            [("Identified".to_string(), serde_json::json!(0))]
+                .into_iter()
+                .collect();
+        character
+            .update_inventory_item(0, &updates, &game_data)
+            .unwrap();
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(
+            matches!(stored.get("Identified"), Some(GffValue::Byte(0))),
+            "Identified should be Byte(0): {:?}",
+            stored.get("Identified")
+        );
+    }
+
+    #[test]
+    fn test_update_inventory_item_identified_existing_field_preserves_variant() {
+        // If the item's GFF already had an Identified field, the update must
+        // keep its existing variant instead of retyping it.
+        let mut item = stackable_item("weird_ring", 1, &[]);
+        item.insert("Identified".to_string(), GffValue::Int(1));
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![item]);
+
+        let updates: HashMap<String, JsonValue> =
+            [("Identified".to_string(), serde_json::json!(0))]
+                .into_iter()
+                .collect();
+        character
+            .update_inventory_item(0, &updates, &game_data)
+            .unwrap();
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(
+            matches!(stored.get("Identified"), Some(GffValue::Int(0))),
+            "Identified should stay Int(0): {:?}",
+            stored.get("Identified")
+        );
+    }
+
+    #[test]
+    fn test_update_equipped_item_identified_absent_field_normalizes_to_byte() {
+        let game_data = game_data_with_stackable_baseitem();
+
+        let mut equipped_item = IndexMap::new();
+        equipped_item.insert(
+            "__struct_id__".to_string(),
+            GffValue::Word(EquipmentSlot::RightHand.to_bitmask() as u16),
+        );
+        equipped_item.insert("BaseItem".to_string(), GffValue::Int(0));
+        equipped_item.insert(
+            "Tag".to_string(),
+            GffValue::String(Cow::Owned("unidentified_blade".to_string())),
+        );
+        equipped_item.insert("StackSize".to_string(), GffValue::Short(1));
+
+        let mut fields = IndexMap::new();
+        fields.insert(
+            "Equip_ItemList".to_string(),
+            GffValue::ListOwned(vec![equipped_item]),
+        );
+        let mut character = Character::from_gff(fields);
+
+        assert!(
+            character
+                .get_equipped_item_raw(EquipmentSlot::RightHand)
+                .unwrap()
+                .get("Identified")
+                .is_none(),
+            "test fixture must start without an Identified field"
+        );
+
+        let updates: HashMap<String, JsonValue> =
+            [("Identified".to_string(), serde_json::json!(0))]
+                .into_iter()
+                .collect();
+        character
+            .update_equipped_item(EquipmentSlot::RightHand, &updates, &game_data)
+            .unwrap();
+
+        let stored = character
+            .get_equipped_item_raw(EquipmentSlot::RightHand)
+            .unwrap();
+        assert!(
+            matches!(stored.get("Identified"), Some(GffValue::Byte(0))),
+            "Identified should be Byte(0): {:?}",
+            stored.get("Identified")
+        );
     }
 }

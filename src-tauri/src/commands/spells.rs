@@ -395,17 +395,6 @@ pub struct PaginationInfo {
     pub has_previous: bool,
 }
 
-const LEARNABLE_CLASS_COLUMNS: &[(&str, &str)] = &[
-    ("bard", "Bard"),
-    ("cleric", "Cleric"),
-    ("druid", "Druid"),
-    ("paladin", "Paladin"),
-    ("ranger", "Ranger"),
-    ("wiz_sorc", "Wizard/Sorcerer"),
-    ("favsoul", "Favored Soul"),
-    ("spiritshm", "Spirit Shaman"),
-];
-
 #[tauri::command]
 pub async fn get_character_available_spells(
     state: State<'_, AppState>,
@@ -433,6 +422,8 @@ pub async fn get_character_available_spells(
         .ok_or_else(|| CommandError::NotFound {
             item: "spells table".to_string(),
         })?;
+
+    let learnable_class_labels = character.learnable_spell_class_labels(&game_data);
 
     // Get all spellcasting classes for this character
     let class_columns: Vec<(ClassId, String, String)> = character
@@ -475,9 +466,9 @@ pub async fn get_character_available_spells(
         // Only include spells on a traditional caster class list - excludes Warlock
         // invocations, Stormlord abilities, and other class features that only appear
         // in Warlock/Innate columns
-        let on_caster_list = LEARNABLE_CLASS_COLUMNS.iter().any(|&(col, _)| {
+        let on_caster_list = learnable_class_labels.iter().any(|(col, _)| {
             spell_row
-                .get(col)
+                .get(col.as_str())
                 .and_then(|v| v.as_ref())
                 .is_some_and(|v| {
                     !v.is_empty() && v != "****" && v.parse::<i32>().is_ok_and(|n| n >= 0)
@@ -492,8 +483,8 @@ pub async fn get_character_available_spells(
         let mut found_level: Option<i32> = None;
 
         if show_all {
-            for &(col, class_name) in LEARNABLE_CLASS_COLUMNS {
-                if let Some(level_str) = spell_row.get(col).and_then(|v| v.as_ref())
+            for (col, class_name) in &learnable_class_labels {
+                if let Some(level_str) = spell_row.get(col.as_str()).and_then(|v| v.as_ref())
                     && let Ok(lvl) = level_str.parse::<i32>()
                     && lvl >= 0
                 {
@@ -502,7 +493,7 @@ pub async fn get_character_available_spells(
                     {
                         continue;
                     }
-                    available_classes.push(class_name.to_string());
+                    available_classes.push(class_name.clone());
                     if found_level.is_none() {
                         found_level = Some(lvl);
                     }

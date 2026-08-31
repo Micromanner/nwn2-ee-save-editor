@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
 import { useCharacterContext } from '@/contexts/CharacterContext';
@@ -6,6 +6,16 @@ import { useIcon } from '@/hooks/useIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { CharacterStateAPI, type RosterEntryInfo } from '@/lib/api/character-state';
+import { gameStateAPI } from '@/services/gameStateApi';
+import { display } from '@/utils/dataHelpers';
+
+// Two campaign companions whose roster `RosName` doesn't match their
+// companion-influence id (see get_companion_definitions() in
+// src-tauri/src/parsers/xml/parser.rs, which is the source of truth).
+const EXPLICIT_ROS_NAME_ALIASES: Record<string, string> = {
+  kaelyn: 'dove',
+  one_of_many: 'oneofmany',
+};
 
 function initials(name: string): string {
   return name
@@ -83,10 +93,12 @@ function CompanionCard({
 export function PartyPanel() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
-  const { roster, refreshRoster } = useCharacterContext();
-  const [classNames, setClassNames] = useState<Record<number, string>>({});
+  const { characterId, roster, refreshRoster } = useCharacterContext();
+  const [classNames, setClassNames] = useState<Record<number, string | null>>({});
   const [classIcons, setClassIcons] = useState<Record<number, string | null>>({});
   const [partyLimit, setPartyLimit] = useState<number | null>(null);
+  const [recognizedRosNames, setRecognizedRosNames] = useState<Set<string> | null>(null);
+  const attemptedClassIds = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     CharacterStateAPI.getPartyLimit()
@@ -96,8 +108,10 @@ export function PartyPanel() {
 
   useEffect(() => {
     const ids = [...new Set(roster.flatMap(r => r.classes.map(c => c.class_id)))];
-    const missing = ids.filter(id => !(id in classNames) || !(id in classIcons));
+    const missing = ids.filter(id => !attemptedClassIds.current.has(id));
     if (missing.length === 0) return;
+    missing.forEach(id => attemptedClassIds.current.add(id));
+
     Promise.allSettled(
       missing.map(async id => {
         const [name, icon] = await Promise.all([
@@ -107,18 +121,42 @@ export function PartyPanel() {
         return [id, name, icon] as const;
       }),
     ).then(results => {
-      const names: Record<number, string> = {};
+      const names: Record<number, string | null> = {};
       const icons: Record<number, string | null> = {};
       for (const r of results) {
         if (r.status !== 'fulfilled') continue;
         const [id, name, icon] = r.value;
-        if (name) names[id] = name;
+        names[id] = name;
         icons[id] = icon;
       }
       setClassNames(prev => ({ ...prev, ...names }));
       setClassIcons(prev => ({ ...prev, ...icons }));
     });
-  }, [roster, classNames, classIcons]);
+  }, [roster]);
+
+  // Recognized campaign companion cast - same source the Influence page uses:
+  // get_companion_influence marks the detected campaign's official companions
+  // as "explicit". Anything else (e.g. a story NPC that also has a .ros file)
+  // is left out. No campaign detected -> treat every roster entry as recognized.
+  useEffect(() => {
+    if (!characterId) {
+      setRecognizedRosNames(null);
+      return;
+    }
+    let cancelled = false;
+    gameStateAPI.getCompanionInfluence(characterId)
+      .then(response => {
+        if (cancelled) return;
+        const names = new Set<string>();
+        for (const [compId, status] of Object.entries(response.companions)) {
+          if (status.source !== 'explicit') continue;
+          names.add((EXPLICIT_ROS_NAME_ALIASES[compId] ?? compId).toLowerCase());
+        }
+        setRecognizedRosNames(names.size > 0 ? names : null);
+      })
+      .catch(() => setRecognizedRosNames(null));
+    return () => { cancelled = true; };
+  }, [characterId]);
 
   const toggle = async (entry: RosterEntryInfo) => {
     try {
@@ -132,11 +170,33 @@ export function PartyPanel() {
     }
   };
 
-  const inPartyCount = roster.filter(r => r.staged_in_party ?? r.in_party).length;
+  const { recognizedRoster, otherRoster } = useMemo(() => {
+    if (!recognizedRosNames) return { recognizedRoster: roster, otherRoster: [] as RosterEntryInfo[] };
+    const recognized: RosterEntryInfo[] = [];
+    const other: RosterEntryInfo[] = [];
+    for (const entry of roster) {
+      (recognizedRosNames.has(entry.ros_name.toLowerCase()) ? recognized : other).push(entry);
+    }
+    return { recognizedRoster: recognized, otherRoster: other };
+  }, [roster, recognizedRosNames]);
+
+  const inPartyCount = recognizedRoster.filter(r => r.staged_in_party ?? r.in_party).length;
   const hasStaged = roster.some(r => r.staged_in_party != null);
   const countLabel = partyLimit != null
     ? t('roster.partyCount', { count: inPartyCount, limit: partyLimit })
     : t('roster.partyCountNoLimit', { count: inPartyCount });
+
+  const renderCard = (entry: RosterEntryInfo) => (
+    <CompanionCard
+      key={entry.ros_name}
+      entry={entry}
+      icon={entry.classes[0] ? (classIcons[entry.classes[0].class_id] ?? null) : null}
+      classLine={entry.classes
+        .map(c => `${display(classNames[c.class_id])} ${c.level}`)
+        .join(' / ')}
+      onToggle={() => void toggle(entry)}
+    />
+  );
 
   return (
     <div style={{ padding: 16, height: '100%', overflowY: 'auto' }}>
@@ -151,18 +211,21 @@ export function PartyPanel() {
         {hasStaged && <span style={{ fontStyle: 'italic' }}> {t('roster.pendingSaveHint')}</span>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
-        {roster.map(entry => (
-          <CompanionCard
-            key={entry.ros_name}
-            entry={entry}
-            icon={entry.classes[0] ? (classIcons[entry.classes[0].class_id] ?? null) : null}
-            classLine={entry.classes
-              .map(c => `${classNames[c.class_id] ?? '?'} ${c.level}`)
-              .join(' / ')}
-            onToggle={() => void toggle(entry)}
-          />
-        ))}
+        {recognizedRoster.map(renderCard)}
       </div>
+      {otherRoster.length > 0 && (
+        <>
+          <div className="t-section" style={{ color: T.accent, marginTop: 20, marginBottom: 4 }}>
+            {t('roster.otherRosterEntries')}
+          </div>
+          <div className="t-sm" style={{ color: T.textMuted, marginBottom: 12 }}>
+            {t('roster.otherRosterEntriesHint')}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
+            {otherRoster.map(renderCard)}
+          </div>
+        </>
+      )}
     </div>
   );
 }

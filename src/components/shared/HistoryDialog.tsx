@@ -7,6 +7,7 @@ import { GameIcon } from './GameIcon';
 import { LoadingState } from './LoadingState';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { CharacterStateAPI } from '@/lib/api/character-state';
 import type { CharacterHistory } from '@/lib/bindings';
 
@@ -20,6 +21,7 @@ const keyOf = (e: CharacterHistory) => e.ros_name ?? 'player';
 /// Read-only view of every edited character's undo/redo stack.
 export function HistoryDialog({ isOpen, onClose }: HistoryDialogProps) {
   const t = useTranslations();
+  const { handleError } = useErrorHandler();
   const [entries, setEntries] = useState<CharacterHistory[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -29,10 +31,10 @@ export function HistoryDialog({ isOpen, onClose }: HistoryDialogProps) {
       setEntries(list);
       setSelected(prev => (prev && list.some(e => keyOf(e) === prev) ? prev : (list[0] ? keyOf(list[0]) : null)));
     } catch (err) {
-      console.error('Failed to load history:', err);
+      handleError(err);
       setEntries([]);
     }
-  }, []);
+  }, [handleError]);
 
   useEffect(() => {
     if (isOpen) void load();

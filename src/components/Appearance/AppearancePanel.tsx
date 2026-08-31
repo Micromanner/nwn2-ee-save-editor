@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuItem, NonIdealState, Popover, Slider, Switch } from '@blueprintjs/core';
-import { GiMirrorMirror, GiMagnifyingGlass } from 'react-icons/gi';
+import { GiMirrorMirror, GiMagnifyingGlass, GiBrokenShield } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -51,7 +51,7 @@ export function AppearancePanel() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    if (character?.id && !appearanceSubsystem.data && !appearanceSubsystem.isLoading) {
+    if (character?.id && !appearanceSubsystem.data && !appearanceSubsystem.isLoading && !appearanceSubsystem.error) {
       appearanceSubsystem.load();
     }
   }, [character?.id, appearanceSubsystem]);
@@ -310,6 +310,18 @@ export function AppearancePanel() {
 
   if (!character) {
     return <NonIdealState icon={<GameIcon icon={GiMirrorMirror} size={40} />} title={t('character.noCharacter')} description={t('character.loadSaveFile')} />;
+  }
+
+  if (appearanceSubsystem.error && !appearanceSubsystem.data) {
+    return (
+      <div style={{ padding: 32 }}>
+        <NonIdealState
+          icon={<GameIcon icon={GiBrokenShield} size={40} />}
+          title={t('common.failedToLoad', { section: t('navigation.appearance').toLowerCase() })}
+          description={appearanceSubsystem.error}
+        />
+      </div>
+    );
   }
 
   if (!appearanceSubsystem.data) {

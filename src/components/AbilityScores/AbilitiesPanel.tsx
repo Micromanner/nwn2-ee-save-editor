@@ -42,13 +42,13 @@ export function AbilitiesPanel() {
 
   useEffect(() => {
     if (!character?.id) return;
-    if (!abilitiesSubsystem.data && !abilitiesSubsystem.isLoading) {
+    if (!abilitiesSubsystem.data && !abilitiesSubsystem.isLoading && !abilitiesSubsystem.error) {
       abilitiesSubsystem.load();
     }
-    if (!savesSubsystem.data && !savesSubsystem.isLoading) {
+    if (!savesSubsystem.data && !savesSubsystem.isLoading && !savesSubsystem.error) {
       savesSubsystem.load();
     }
-    if (!combatSubsystem.data && !combatSubsystem.isLoading) {
+    if (!combatSubsystem.data && !combatSubsystem.isLoading && !combatSubsystem.error) {
       combatSubsystem.load();
     }
   }, [character?.id, abilitiesSubsystem, savesSubsystem, combatSubsystem]);
@@ -67,13 +67,7 @@ export function AbilitiesPanel() {
     );
   }
 
-  if (!abilitiesSubsystem.data || !savesSubsystem.data || !combatSubsystem.data) {
-    return (
-      <LoadingState text={t('common.loadingSection', { section: t('abilityScores.abilityScores').toLowerCase() })} />
-    );
-  }
-
-  if (hasError && !abilitiesSubsystem.data) {
+  if (hasError && (!abilitiesSubsystem.data || !savesSubsystem.data || !combatSubsystem.data)) {
     return (
       <div style={{ padding: 32 }}>
         <NonIdealState
@@ -82,6 +76,12 @@ export function AbilitiesPanel() {
           description={abilitiesSubsystem.error ?? savesSubsystem.error ?? combatSubsystem.error ?? undefined}
         />
       </div>
+    );
+  }
+
+  if (!abilitiesSubsystem.data || !savesSubsystem.data || !combatSubsystem.data) {
+    return (
+      <LoadingState text={t('common.loadingSection', { section: t('abilityScores.abilityScores').toLowerCase() })} />
     );
   }
 
