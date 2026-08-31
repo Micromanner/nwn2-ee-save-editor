@@ -495,7 +495,7 @@ export function OverviewPanel() {
                   key={a.labelKey}
                   onClick={() => handleAlignmentSelect(a.lc, a.ge)}
                   disabled={alignmentSaving}
-                  className={`t-sm t-center ${active ? 't-bold' : 't-medium'}`}
+                  className={`t-base t-center ${active ? 't-bold' : 't-medium'}`}
                   style={{
                     padding: '6px 4px', lineHeight: 1.2,
                     border: `2px solid ${active ? a.color : T.borderLight}`,
@@ -511,12 +511,12 @@ export function OverviewPanel() {
             })}
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <div>
-              <div className="t-xs t-semibold" style={{ color: T.textMuted, marginBottom: 3 }}>{t('alignment.lawChaosLabel')}</div>
+            <div style={{ textAlign: 'center' }}>
+              <div className="t-sm t-semibold" style={{ color: T.textMuted, marginBottom: 3 }}>{t('alignment.lawChaosLabel')}</div>
               <StepInput value={lawChaos} onValueChange={v => handleAlignmentStep('lc', v)} min={0} max={100} width={88} />
             </div>
-            <div>
-              <div className="t-xs t-semibold" style={{ color: T.textMuted, marginBottom: 3 }}>{t('alignment.goodEvilLabel')}</div>
+            <div style={{ textAlign: 'center' }}>
+              <div className="t-sm t-semibold" style={{ color: T.textMuted, marginBottom: 3 }}>{t('alignment.goodEvilLabel')}</div>
               <StepInput value={goodEvil} onValueChange={v => handleAlignmentStep('ge', v)} min={0} max={100} width={88} />
             </div>
           </div>

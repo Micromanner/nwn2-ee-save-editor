@@ -98,22 +98,23 @@ export function Navbar({ onBack }: NavbarProps) {
     <>
       <BPNavbar className="bp5-dark" style={{ background: T.navbar, paddingLeft: 12, paddingRight: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.15)', position: 'relative', zIndex: 10 }}>
         <NavbarGroup align="left">
-          <Button icon={<GameIcon icon={GiCog} size={14} color={T.sidebarText} />} text={t('common.settings')} small minimal style={{ color: T.sidebarText }} onClick={() => setShowSettings(true)} />
           <Button icon={<GameIcon icon={GiExitDoor} size={14} color={T.sidebarText} />} text={t('common.back')} small minimal style={{ color: T.sidebarText }} onClick={onBack} />
         </NavbarGroup>
         <NavbarGroup align="right">
           <Tooltip content={historyState?.undo_label ? t('actions.undoLabel', { action: historyState.undo_label }) : t('actions.undo')} placement="bottom">
             <Button icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} color={T.sidebarText} />} text={t('actions.undo')} small minimal disabled={!historyState?.can_undo} style={{ color: T.sidebarText }} onClick={() => void undo()} />
           </Tooltip>
-          <Button icon={<GameIcon icon={GiScrollQuill} size={14} color={T.sidebarText} />} text={t('actions.history')} small minimal disabled={!character} style={{ color: T.sidebarText }} onClick={() => setShowHistory(true)} />
           <Tooltip content={historyState?.redo_label ? t('actions.redoLabel', { action: historyState.redo_label }) : t('actions.redo')} placement="bottom">
             <Button icon={<GameIcon icon={GiClockwiseRotation} size={14} color={T.sidebarText} />} text={t('actions.redo')} small minimal disabled={!historyState?.can_redo} style={{ color: T.sidebarText }} onClick={() => void redo()} />
           </Tooltip>
+          <Button icon={<GameIcon icon={GiScrollQuill} size={14} color={T.sidebarText} />} text={t('actions.history')} small minimal disabled={!character} style={{ color: T.sidebarText }} onClick={() => setShowHistory(true)} />
           <NavbarDivider />
           {activeSource.kind === 'player' && sessionKind === 'save' && (
             <Button icon={<GameIcon icon={GiScrollUnfurled} size={14} color={T.sidebarText} />} text={t('actions.exportCharacter')} small minimal loading={isExporting} style={{ color: T.sidebarText }} onClick={handleExport} />
           )}
           <Button icon={<GameIcon icon={GiTiedScroll} size={14} color={T.sidebarText} />} text={isSaving ? t('actions.saving') : t('actions.save')} small minimal loading={isSaving} style={{ color: T.sidebarText }} onClick={handleSave} />
+          <NavbarDivider />
+          <Button icon={<GameIcon icon={GiCog} size={14} color={T.sidebarText} />} text={t('common.settings')} small minimal style={{ color: T.sidebarText }} onClick={() => setShowSettings(true)} />
         </NavbarGroup>
       </BPNavbar>
       {showSettings && <SettingsDialog isOpen onClose={() => setShowSettings(false)} />}
