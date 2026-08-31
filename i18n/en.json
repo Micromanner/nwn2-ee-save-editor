@@ -432,6 +432,7 @@
     "changeClass": "Change Class",
     "removeClass": "Remove Class",
     "searchClasses": "Search classes...",
+    "countSummary": "{total} classes | {current}/{max} slots",
     "class": "Class",
     "level": "Level",
     "hitDie": "Hit Die",

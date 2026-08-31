@@ -430,6 +430,7 @@
     "changeClass": "Klasse ändern",
     "removeClass": "Klasse entfernen",
     "searchClasses": "Klassen suchen...",
+    "countSummary": "{total} Klassen | {current}/{max} Plätze",
     "class": "Klasse",
     "level": "Stufe",
     "hitDie": "Trefferwürfel",

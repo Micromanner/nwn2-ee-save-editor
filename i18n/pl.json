@@ -434,6 +434,7 @@
     "changeClass": "Zmień Klasę",
     "removeClass": "Usuń Klasę",
     "searchClasses": "Szukaj klas...",
+    "countSummary": "{total} klas | {current}/{max} miejsc",
     "class": "Klasa",
     "level": "Poziom",
     "hitDie": "Kość Wytrzymałości",

@@ -430,6 +430,7 @@
     "changeClass": "Cambiar Clase",
     "removeClass": "Quitar Clase",
     "searchClasses": "Buscar clases...",
+    "countSummary": "{total} clases | {current}/{max} huecos",
     "class": "Clase",
     "level": "Nivel",
     "hitDie": "Dado de Golpe",

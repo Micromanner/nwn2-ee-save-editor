@@ -432,6 +432,7 @@
     "changeClass": "Сменить класс",
     "removeClass": "Удалить класс",
     "searchClasses": "Поиск классов...",
+    "countSummary": "{total} классов | {current}/{max} ячеек",
     "class": "Класс",
     "level": "Уровень",
     "hitDie": "Кость здоровья",

@@ -158,8 +158,8 @@ export function ClassSelectorDialog({
         style={{ maxWidth: 200 }}
       />
       <div style={{ flex: 1 }} />
-      <span className="t-sm" style={{ color: T.textMuted }}>
-        {totalClasses} classes | {currentClassCount}/{maxClasses} slots
+      <span className="t-base" style={{ color: T.textMuted }}>
+        {t('classes.countSummary', { total: totalClasses, current: currentClassCount, max: maxClasses })}
       </span>
     </>
   );

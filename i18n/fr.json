@@ -432,6 +432,7 @@
     "changeClass": "Changer Classe",
     "removeClass": "Retirer Classe",
     "searchClasses": "Chercher classes...",
+    "countSummary": "{total} classes | {current}/{max} emplacements",
     "class": "Classe",
     "level": "Niveau",
     "hitDie": "Dés de Vie",
