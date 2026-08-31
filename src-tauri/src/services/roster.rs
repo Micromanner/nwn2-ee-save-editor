@@ -14,6 +14,9 @@ pub struct RosterMember {
     /// 2026-08-31; flipping it swaps party members on the next load).
     pub available: bool,
     pub campaign_npc: bool,
+    pub gender: Option<i32>,
+    /// `RosRace` mirrors the creature's `Subrace` byte (a `racialsubtypes.2da` row).
+    pub subrace: Option<i32>,
 }
 
 /// `FactionID` the engine writes on a benched companion's `.ros` ("Defender").
@@ -82,6 +85,8 @@ pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String>
             classes,
             available: entry.get("RosAvailable").and_then(gff_int).unwrap_or(0) != 0,
             campaign_npc: entry.get("RosCampaignNPC").and_then(gff_int).unwrap_or(0) != 0,
+            gender: entry.get("RosGender").and_then(gff_int).map(|v| v as i32),
+            subrace: entry.get("RosRace").and_then(gff_int).map(|v| v as i32),
         });
     }
     Ok(out)
@@ -319,6 +324,8 @@ mod tests {
         assert_eq!(members[0].classes, vec![(4, 2)]);
         assert!(members[0].available);
         assert!(members[0].campaign_npc);
+        assert_eq!(members[0].gender, Some(0));
+        assert_eq!(members[0].subrace, Some(2));
         assert!(!members[1].available);
         assert!(!members[1].campaign_npc);
     }

@@ -54,6 +54,8 @@ export interface RosterEntryInfo {
   classes: RosterClassInfo[];
   in_party: boolean;
   staged_in_party: boolean | null;
+  gender: number | null;
+  subrace_name: string | null;
 }
 
 export interface PartyMembershipChange {

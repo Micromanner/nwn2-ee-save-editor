@@ -377,3 +377,27 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
   flex-direction: column;
   gap: 8px;
 }
+
+/* Party management cards */
+.party-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.party-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(45, 45, 48, 0.18);
+}
+.party-card .party-card-action {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.party-card:hover .party-card-action,
+.party-card:focus-visible .party-card-action {
+  opacity: 1;
+}
