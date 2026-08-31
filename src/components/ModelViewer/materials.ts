@@ -24,28 +24,75 @@ export function tintChannelsToColors(tc: TintChannelsRaw): TintColors {
   };
 }
 
+// Parsed-DDS cache: fetching + parsing is the expensive part and variants of
+// one item mostly share textures, so cache the CPU-side parse result (null =
+// known failure) and build a fresh, independently-disposable CompressedTexture
+// per consumer. Never cache live GPU textures here - consumers dispose them.
+type ParsedDds = ReturnType<DDSLoader['parse']>;
+
+const DDS_CACHE_LIMIT = 300;
+const ddsCache = new Map<string, ParsedDds | null>();
+const pendingDds = new Map<string, Promise<ParsedDds | null>>();
+
+function ddsCachePut(name: string, parsed: ParsedDds | null): void {
+  if (ddsCache.has(name)) {
+    ddsCache.delete(name);
+  } else if (ddsCache.size >= DDS_CACHE_LIMIT) {
+    const oldest = ddsCache.keys().next().value;
+    if (oldest !== undefined) ddsCache.delete(oldest);
+  }
+  ddsCache.set(name, parsed);
+}
+
+function ddsCacheGet(name: string): ParsedDds | null | undefined {
+  const value = ddsCache.get(name);
+  if (value !== undefined) {
+    ddsCache.delete(name);
+    ddsCache.set(name, value);
+  }
+  return value;
+}
+
+function buildTexture(dds: ParsedDds): THREE.CompressedTexture {
+  const texture = new THREE.CompressedTexture(
+    dds.mipmaps,
+    dds.width,
+    dds.height,
+    dds.format as THREE.CompressedPixelFormat,
+  );
+  texture.needsUpdate = true;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
 export async function loadDDSTexture(textureName: string): Promise<THREE.CompressedTexture | null> {
   if (!textureName) return null;
 
-  try {
-    const buffer: ArrayBuffer = await invoke('get_texture_bytes', { name: textureName });
-    const dds = ddsLoader.parse(buffer, false);
+  const cached = ddsCacheGet(textureName);
+  if (cached !== undefined) return cached ? buildTexture(cached) : null;
 
-    const texture = new THREE.CompressedTexture(
-      dds.mipmaps,
-      dds.width,
-      dds.height,
-      dds.format as THREE.CompressedPixelFormat,
-    );
-    texture.needsUpdate = true;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
+  const pending = pendingDds.get(textureName);
+  if (pending) return pending.then((p) => (p ? buildTexture(p) : null));
 
-    return texture;
-  } catch (err) {
-    console.warn(`[texture] Failed to load '${textureName}':`, err);
-    return null;
-  }
+  const request = (async () => {
+    try {
+      const buffer: ArrayBuffer = await invoke('get_texture_bytes', { name: textureName });
+      const parsed = ddsLoader.parse(buffer, false);
+      ddsCachePut(textureName, parsed);
+      return parsed;
+    } catch (err) {
+      console.warn(`[texture] Failed to load '${textureName}':`, err);
+      ddsCachePut(textureName, null);
+      return null;
+    } finally {
+      pendingDds.delete(textureName);
+    }
+  })();
+
+  pendingDds.set(textureName, request);
+  const parsed = await request;
+  return parsed ? buildTexture(parsed) : null;
 }
 
 function injectTintShader(

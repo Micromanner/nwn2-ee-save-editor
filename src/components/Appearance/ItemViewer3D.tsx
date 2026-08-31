@@ -25,7 +25,7 @@ const partGroupName = (letter: string) => `__item_part_${letter}`;
 // shared, so swap on the way in to match what the game actually renders.
 // Backend already does this swap for boots/gloves/bracer override_tints;
 // this covers the top-level tint that applies to the primary item mesh.
-const swapItemTints = (t: TintChannels): TintChannels => ({
+export const swapItemTints = (t: TintChannels): TintChannels => ({
   channel1: t.channel1,
   channel2: t.channel3,
   channel3: t.channel2,
