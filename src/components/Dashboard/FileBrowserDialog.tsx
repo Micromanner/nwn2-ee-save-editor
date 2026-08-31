@@ -397,7 +397,7 @@ export function FileBrowserDialog({
         style={{ width: 'min(1400px, 95vw)', height: '80vh', paddingBottom: 0, background: T.surface, display: 'flex', flexDirection: 'column' as const }}
         canOutsideClickClose
       >
-        <DialogBody style={{ padding: 0, margin: 0, background: T.surface, display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 }}>
+        <DialogBody useOverflowScrollContainer={false} style={{ padding: 0, margin: 0, background: T.surface, display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',

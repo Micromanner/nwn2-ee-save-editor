@@ -60,6 +60,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
       onOpened={handleOpen}
       title={t('deity.selectTitle')}
       width={720}
+      height={560}
       footerActions={
         <Button text={t('common.confirm')} intent="primary" onClick={handleConfirm} style={{ background: T.accent }} />
       }
