@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Card, Elevation } from '@blueprintjs/core';
+import { Card, Elevation, Icon } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
@@ -43,6 +43,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   const { characterId } = useCharacterContext();
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshPart, setRefreshPart] = useState<{ partIndex: number; key: number } | null>(null);
+  const [hoveredChannel, setHoveredChannel] = useState<keyof TintChannels | null>(null);
   const [activated, setActivated] = useState(active);
   useEffect(() => {
     if (active) setActivated(true);
@@ -89,6 +90,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
           baseItemId={baseItemId}
           refreshKey={refreshKey}
           refreshPart={refreshPart}
+          highlightChannel={hoveredChannel}
         />
       </div>
 
@@ -148,22 +150,23 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
         {options?.has_model && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
             <SectionHeader label={t('appearance.colors')} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <ColorPicker
-                label={t('appearance.color1')}
-                value={appearance.tints.channel1}
-                onChange={(c) => updateTint('channel1', c)}
-              />
-              <ColorPicker
-                label={t('appearance.color2')}
-                value={appearance.tints.channel2}
-                onChange={(c) => updateTint('channel2', c)}
-              />
-              <ColorPicker
-                label={t('appearance.color3')}
-                value={appearance.tints.channel3}
-                onChange={(c) => updateTint('channel3', c)}
-              />
+            <div style={{ display: 'flex', gap: 12 }}>
+              {(['channel1', 'channel2', 'channel3'] as const).map((channel) => (
+                <div
+                  key={channel}
+                  onMouseEnter={() => setHoveredChannel(channel)}
+                  onMouseLeave={() => setHoveredChannel((c) => (c === channel ? null : c))}
+                >
+                  <ColorPicker
+                    value={appearance.tints[channel]}
+                    onChange={(c) => updateTint(channel, c)}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="t-base" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Icon icon="info-sign" size={12} style={{ color: T.textMuted }} />
+              {t('appearance.colorsHoverHint')}
             </div>
           </Card>
         )}
