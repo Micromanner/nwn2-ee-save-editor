@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { createMaterial, tintChannelsToColors, type TintColors } from './materials';
 import { buildMesh, buildSkeleton } from './meshBuilder';
+import { applyPoseRotation, poseCameraPosition, poseFromModel } from './pose';
 import type { ModelData } from './types';
+import type { PreviewPose } from '@/lib/bindings';
 
 // Shared offscreen thumbnail renderer: ONE WebGL context for every thumbnail
 // in the app (browser contexts are limited to ~8-16), rendering one frame per
@@ -89,18 +91,14 @@ export type ThumbnailFraming = 'model' | 'portrait';
 function frameCamera(
   camera: THREE.PerspectiveCamera,
   target: THREE.Object3D,
-  isSkinnedArmor: boolean,
+  pose: PreviewPose,
 ): void {
   const box = new THREE.Box3().setFromObject(target);
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
   const distance = Math.max(size.x, size.y, size.z) * 1.6;
 
-  if (isSkinnedArmor) {
-    camera.position.set(center.x, center.y + distance * 0.1, center.z - distance);
-  } else {
-    camera.position.set(center.x + distance, center.y + distance * 0.25, center.z - distance * 0.6);
-  }
+  camera.position.copy(poseCameraPosition(pose, center, distance));
   camera.lookAt(center);
 }
 
@@ -118,7 +116,7 @@ function framePortraitCamera(
   const headBox = new THREE.Box3();
   for (const obj of headObjects) headBox.expandByObject(obj);
   if (headBox.isEmpty()) {
-    frameCamera(camera, target, true);
+    frameCamera(camera, target, 'armor');
     return;
   }
   const headSize = headBox.getSize(new THREE.Vector3());
@@ -165,6 +163,7 @@ export async function renderModelThumbnail(
   modelData: ModelData,
   tints: TintColors,
   framing: ThumbnailFraming = 'model',
+  pose?: PreviewPose | null,
 ): Promise<string> {
   if (modelData.meshes.length === 0) return '';
 
@@ -222,19 +221,21 @@ export async function renderModelThumbnail(
       group.add(obj);
     }
 
-    // Same posing conventions as ItemViewer3D: yaw flat weapons off-axis,
-    // face skinned armor bodies straight on; portraits turn the face toward
-    // the viewer's left like the in-game party portrait (negative yaw =
-    // screen-left with the camera on -Z).
-    const isSkinnedArmor = modelData.skeleton != null;
-    group.rotation.y =
-      framing === 'portrait' ? -Math.PI / 6 : isSkinnedArmor ? 0 : Math.PI / 5;
+    // Portraits turn the face toward the viewer's left like the in-game party
+    // portrait (negative yaw = screen-left with the camera on -Z); everything
+    // else shares the item viewer's posing rules.
+    const effectivePose = pose ?? poseFromModel(modelData.skeleton != null);
+    if (framing === 'portrait') {
+      group.rotation.set(0, -Math.PI / 6, 0);
+    } else {
+      applyPoseRotation(group, effectivePose);
+    }
 
     scene.add(group);
     if (framing === 'portrait') {
       framePortraitCamera(camera, group, headObjects, hairObjects);
     } else {
-      frameCamera(camera, group, isSkinnedArmor);
+      frameCamera(camera, group, effectivePose);
     }
     renderer.render(scene, camera);
     if (renderer.getContext().isContextLost()) return '';

@@ -2,7 +2,7 @@ use tauri::State;
 use tracing::{debug, info};
 
 use crate::character::{
-    AccessorySlot, ItemAppearance, ItemAppearanceOptions, cosmetic_gloves_tint, swap_tint_2_3,
+    AccessorySlot, ArmorSlot, ItemAppearance, ItemAppearanceOptions, swap_tint_2_3,
 };
 use crate::services::model_loader::{self, ModelData};
 use crate::state::AppState;
@@ -12,14 +12,18 @@ fn resref_is_boots_or_gloves(resref: &str) -> bool {
     lower.contains("_boots") || lower.contains("_gloves")
 }
 
+// The model commands are async so their MDB parsing, texture-free mesh
+// serialization and the one-off resource prefix index build run on the
+// async runtime instead of the window's main thread, where a sync command
+// would freeze the UI for the duration of every thumbnail.
 #[tauri::command]
-pub fn get_item_appearance_options(
+pub async fn get_item_appearance_options(
     state: State<'_, AppState>,
     base_item_id: i32,
     armor_visual_type: Option<i32>,
 ) -> Result<ItemAppearanceOptions, String> {
+    let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
-    let rm = state.resource_manager.blocking_read();
     let body_prefix = current_body_prefix(&state, &game_data);
     debug!(
         "Getting appearance options for base item: {} (vt={:?}, body={:?})",
@@ -64,11 +68,17 @@ pub fn load_item_model_impl(
         })
         .unwrap_or_else(|| format!("base_item_{base_item_id}"));
 
-    // Gloves and bracer items share the glove MDB pipeline. In-game ch3
-    // is ignored for both; our resolver bakes `override_tints` with ch3
-    // forced white so a black ch3 in the save doesn't darken the mesh.
+    // Gloves and bracer items share the glove MDB pipeline. In-game ch3 is
+    // ignored for both, so their meshes get their own tint group and the
+    // frontend applies that rule at render time.
     let is_gloves_like =
         crate::character::is_bracer_label(&base_label) || base_label.eq_ignore_ascii_case("gloves");
+
+    // Boots/gloves that ARE the edited item render their own tints live, so
+    // they must stay in the "item" tint group the frontend updates. Only the
+    // boots/gloves nested inside a chest item get baked, frozen tints.
+    let own_slot = ItemAppearance::base_item_armor_slot(base_item_id, game_data);
+    let is_own_boots_or_gloves = matches!(own_slot, Some(ArmorSlot::Boots | ArmorSlot::Gloves));
 
     let groups = appearance.resolve_model_resrefs(base_item_id, game_data, body_prefix);
 
@@ -113,15 +123,14 @@ pub fn load_item_model_impl(
                             }
                         }
                     } else if is_gloves_like && resref.to_lowercase().contains("_gloves") {
-                        // Freeze the tint group so the frontend's live
-                        // `updateTintUniforms("item", …)` pass doesn't
-                        // overwrite the baked cosmetic override.
-                        let cosmetic = cosmetic_gloves_tint(&appearance.tints);
+                        // The game ignores channel 3 on gloves and bracers. Own
+                        // tint group so the frontend can keep applying that rule
+                        // live (see `cosmetic_gloves_tint`) instead of us baking
+                        // a value the color pickers can no longer move.
                         for m in &mut data.meshes {
-                            m.override_tints = Some(cosmetic.clone());
-                            m.tint_group = "item_frozen".to_string();
+                            m.tint_group = "item_gloves".to_string();
                         }
-                    } else if resref_is_boots_or_gloves(resref) {
+                    } else if resref_is_boots_or_gloves(resref) && !is_own_boots_or_gloves {
                         let swapped = swap_tint_2_3(&appearance.tints);
                         for m in &mut data.meshes {
                             m.override_tints = Some(swapped.clone());
@@ -172,13 +181,13 @@ pub fn load_item_model_impl(
 }
 
 #[tauri::command]
-pub fn load_item_model(
+pub async fn load_item_model(
     state: State<'_, AppState>,
     appearance: ItemAppearance,
     base_item_id: i32,
 ) -> Result<ModelData, String> {
+    let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
-    let rm = state.resource_manager.blocking_read();
     let body_prefix = current_body_prefix(&state, &game_data);
     load_item_model_impl(
         base_item_id,
@@ -190,7 +199,7 @@ pub fn load_item_model(
 }
 
 #[tauri::command]
-pub fn load_item_part(
+pub async fn load_item_part(
     state: State<'_, AppState>,
     base_item_id: i32,
     part_index: u8,
@@ -200,8 +209,8 @@ pub fn load_item_part(
         "Loading item part base_item_id={} part_index={} variant={}",
         base_item_id, part_index, variant
     );
+    let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
-    let rm = state.resource_manager.blocking_read();
 
     let resref = ItemAppearance::resolve_weapon_part_resref(
         base_item_id,

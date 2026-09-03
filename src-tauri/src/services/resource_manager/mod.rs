@@ -79,6 +79,11 @@ pub struct ResourceManager {
     resource_index: HashMap<String, Vec<ResourceLocation>>,
     icon_file_paths: HashMap<String, PathBuf>,
 
+    /// Lazily built per-extension sorted key list, so `list_resources_by_prefix`
+    /// binary-searches a range instead of walking the whole index. Dropped
+    /// whenever `resource_index` changes.
+    prefix_index: DashMap<String, Arc<Vec<String>>>,
+
     cache_hits: AtomicU64,
     cache_misses: AtomicU64,
     initialized: bool,
@@ -103,6 +108,7 @@ impl ResourceManager {
             data_zip_paths: Vec::new(),
             resource_index: HashMap::new(),
             icon_file_paths: HashMap::new(),
+            prefix_index: DashMap::new(),
             module_cache: ModuleLRUCache::new(),
             file_mod_tracker: FileModificationTracker::new(),
             cache_hits: AtomicU64::new(0),
@@ -158,6 +164,7 @@ impl ResourceManager {
         self.file_mod_tracker.clear();
         self.data_zip_paths.clear();
         self.resource_index.clear();
+        self.prefix_index.clear();
         self.icon_file_paths.clear();
         self.cache_hits.store(0, Ordering::Relaxed);
         self.cache_misses.store(0, Ordering::Relaxed);
@@ -242,6 +249,8 @@ impl ResourceManager {
                 self.template_locations.insert(entry.stem, location);
             }
         }
+
+        self.prefix_index.clear();
 
         let tda_count = self
             .resource_index
@@ -357,6 +366,8 @@ impl ResourceManager {
             }
         }
 
+        self.prefix_index.clear();
+
         info!(
             "Indexed {} icon files from {}",
             self.icon_file_paths.len(),
@@ -384,6 +395,8 @@ impl ResourceManager {
                 self.template_locations.insert(file.stem, location);
             }
         }
+
+        self.prefix_index.clear();
     }
 
     async fn load_base_tlk(&mut self) -> ResourceManagerResult<()> {
@@ -838,6 +851,7 @@ impl ResourceManager {
             for locs in self.resource_index.values_mut() {
                 locs.retain(|l| !matches!(l.source, OverrideSource::Campaign));
             }
+            self.prefix_index.clear();
 
             // Clear campaign entries from tda_cache
             self.tda_cache
@@ -961,6 +975,7 @@ impl ResourceManager {
         }
 
         self.resource_index.retain(|_, v| !v.is_empty());
+        self.prefix_index.clear();
 
         self.tda_cache
             .retain(|k, _| !matches!(k.1, OverrideSource::CustomOverride));
@@ -1390,28 +1405,43 @@ impl ResourceManager {
     pub fn list_resources_by_prefix(&self, prefix: &str, extension: &str) -> Vec<String> {
         let prefix_lower = prefix.to_lowercase();
         let ext_lower = extension.to_lowercase();
-        let ext_suffix = format!(".{ext_lower}");
 
         debug!(
             "ResourceManager: list_resources_by_prefix searching index for prefix: '{}' ext: '{}'",
             prefix, extension
         );
 
-        let mut results: Vec<String> = self
+        let keys = self.sorted_keys_for_extension(&ext_lower);
+        let start = keys.partition_point(|k| k.as_str() < prefix_lower.as_str());
+        keys[start..]
+            .iter()
+            .take_while(|k| k.starts_with(&prefix_lower))
+            .cloned()
+            .collect()
+    }
+
+    /// Sorted, deduplicated resource keys for one extension, built once and
+    /// memoized. The list is sorted by full key (`stem.ext`), which for a fixed
+    /// extension orders by stem, so a prefix match is a contiguous range.
+    fn sorted_keys_for_extension(&self, ext_lower: &str) -> Arc<Vec<String>> {
+        if let Some(cached) = self.prefix_index.get(ext_lower) {
+            return Arc::clone(cached.value());
+        }
+
+        let ext_suffix = format!(".{ext_lower}");
+        let mut keys: Vec<String> = self
             .resource_index
             .keys()
-            .filter_map(|key| {
-                if !key.ends_with(&ext_suffix) {
-                    return None;
-                }
-                let stem = key.trim_end_matches(&ext_suffix);
-                stem.starts_with(&prefix_lower).then(|| key.clone())
-            })
+            .filter(|key| key.ends_with(&ext_suffix))
+            .cloned()
             .collect();
+        keys.sort_unstable();
+        keys.dedup();
 
-        results.sort();
-        results.dedup();
-        results
+        let keys = Arc::new(keys);
+        self.prefix_index
+            .insert(ext_lower.to_string(), Arc::clone(&keys));
+        keys
     }
 }
 

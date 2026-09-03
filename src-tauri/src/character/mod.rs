@@ -53,10 +53,11 @@ pub use inventory::{
     ItemProficiencyInfo, ProficiencyRequirement, RemoveItemResult, TransformResult, UnequipResult,
     WeightStatus,
 };
+pub(crate) use item_appearance::ArmorSlot;
 pub(crate) use item_appearance::is_bracer_label;
 pub use item_appearance::{
     AccessorySlot, AccessorySlotData, ArmorAccessories, ItemAppearance, ItemAppearanceOptions,
-    RenderableAccessory, resref_attach_bone_and_slot,
+    MaterialOption, PreviewPose, RenderableAccessory, VariationField, resref_attach_bone_and_slot,
 };
 pub use overview::OverviewState;
 pub use pets::{PetSlot, PetTypeOption, PetsState};

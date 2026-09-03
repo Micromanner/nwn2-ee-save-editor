@@ -229,6 +229,13 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 .bp-app .bp6-tabs .bp6-tab:hover {
   color: #a0522d;
 }
+/* A disabled tab (e.g. Appearance on an item with no in-world model) must read
+   as inert: no hover accent, no pointer. */
+.bp-app .bp6-tabs .bp6-tab[aria-disabled="true"],
+.bp-app .bp6-tabs .bp6-tab[aria-disabled="true"]:hover {
+  color: #a8a196;
+  cursor: not-allowed;
+}
 
 /* Slider */
 .bp-app .bp6-slider-track .bp6-slider-progress {

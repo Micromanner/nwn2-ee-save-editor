@@ -419,7 +419,7 @@ async fn test_stack_size_clamped_to_base_item_stacking() {
     const ARROW: i32 = 20;
 
     let cloak_index = character
-        .add_item(CLOAK, 1, None, game_data)
+        .add_item(CLOAK, 1, None, None, game_data)
         .expect("add cloak")
         .inventory_index
         .expect("cloak index");
@@ -442,7 +442,7 @@ async fn test_stack_size_clamped_to_base_item_stacking() {
     assert_eq!(cloak.stack_size, 1, "cloak stack should be clamped to 1");
 
     let arrow_index = character
-        .add_item(ARROW, 1, None, game_data)
+        .add_item(ARROW, 1, None, None, game_data)
         .expect("add arrows")
         .inventory_index
         .expect("arrow index");

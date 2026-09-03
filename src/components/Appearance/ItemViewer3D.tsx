@@ -6,7 +6,8 @@ import { buildSkeleton, buildMesh } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { MeshData, ModelData } from '../ModelViewer/types';
-import type { ItemAppearance, TintChannels } from '@/lib/bindings';
+import type { ItemAppearance, PreviewPose, TintChannels } from '@/lib/bindings';
+import { applyPoseRotation, poseCameraPosition, poseFromModel } from '../ModelViewer/pose';
 import { NonIdealState } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
 
@@ -18,9 +19,13 @@ interface ItemViewer3DProps {
   // Tint channel to flood with the highlight color (UI-only): shows the user
   // which area of the model a color picker actually affects while hovered.
   highlightChannel?: keyof TintChannels | null;
+  // Backend hint for how to stand the model up; falls back to the skeleton
+  // heuristic while the appearance options are still loading.
+  pose?: PreviewPose | null;
 }
 
 const HIGHLIGHT_TINT = { r: 255, g: 0, b: 255, a: 255 };
+const WHITE_TINT = { r: 255, g: 255, b: 255, a: 255 };
 
 const PART_LETTERS = ['a', 'b', 'c'] as const;
 const partGroupName = (letter: string) => `__item_part_${letter}`;
@@ -36,6 +41,12 @@ export const swapItemTints = (t: TintChannels): TintChannels => ({
   channel3: t.channel2,
 });
 
+// Gloves and bracers ignore channel 3 in-game; a black ch3 in the save would
+// otherwise darken the whole mesh. Mirrors the backend's
+// `cosmetic_gloves_tint`, applied here so the color pickers stay live.
+const cosmeticGlovesTints = (t: TintChannels): TintChannels =>
+  swapItemTints({ ...t, channel3: WHITE_TINT });
+
 // Backend tags composite weapon meshes with part = "item_a" / "item_b" / "item_c";
 // simple items use "item" and collapse into a single bucket ('_').
 const meshPartLetter = (m: MeshData): string => {
@@ -49,6 +60,7 @@ async function buildPartGroup(
   meshes: MeshData[],
   letter: string,
   tintColors: TintColors,
+  glovesTintColors: TintColors,
   skeleton?: THREE.Skeleton,
   rootBone?: THREE.Bone,
   envMap: THREE.Texture | null = null,
@@ -56,8 +68,12 @@ async function buildPartGroup(
   const group = new THREE.Group();
   group.name = partGroupName(letter);
   const visible = meshes.filter(m => !/_L\d+$/i.test(m.name));
+  const meshTints = (m: MeshData): TintColors => {
+    if (m.override_tints) return tintChannelsToColors(m.override_tints);
+    return m.tint_group === 'item_gloves' ? glovesTintColors : tintColors;
+  };
   const materials = await Promise.all(
-    visible.map(m => createMaterial(m.material, m.override_tints ? tintChannelsToColors(m.override_tints) : tintColors, true, envMap))
+    visible.map(m => createMaterial(m.material, meshTints(m), true, envMap))
   );
   for (let i = 0; i < visible.length; i++) {
     const m = visible[i];
@@ -74,7 +90,7 @@ async function buildPartGroup(
   return group;
 }
 
-export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, highlightChannel }: ItemViewer3DProps) {
+export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, highlightChannel, pose }: ItemViewer3DProps) {
   const t = useTranslations();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +100,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
   appearanceRef.current = appearance;
   const highlightRef = useRef(highlightChannel);
   highlightRef.current = highlightChannel;
+  const poseRef = useRef(pose);
+  poseRef.current = pose;
   // Highlight is applied in GFF channel order (pre-swap), so it floods exactly
   // the region the matching color picker edits.
   const effectiveTints = useCallback((): TintChannels => {
@@ -158,6 +176,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
       }
 
       const tintColors = tintChannelsToColors(swapItemTints(effectiveTints()));
+      const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveTints()));
 
       const buckets: Record<string, MeshData[]> = {};
       for (const m of modelData.meshes) {
@@ -167,7 +186,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
       const groups = await Promise.all(
         Object.entries(buckets).map(([letter, meshes]) =>
-          buildPartGroup(meshes, letter, tintColors, skeleton, rootBone, getEnvMap(sceneRef.current)),
+          buildPartGroup(meshes, letter, tintColors, glovesTintColors, skeleton, rootBone,
+            getEnvMap(sceneRef.current)),
         ),
       );
 
@@ -175,11 +195,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
       for (const g of groups) rootGroup.add(g);
 
-      // Weapons are flat, so yaw the model off-axis to avoid razor-thin silhouettes and
-      // grazing-sun shading. Armour meshes are skinned full-body forms viewed from a
-      // fixed side profile, so we leave their yaw at 0 and move the camera instead.
-      const isSkinnedArmor = modelData.skeleton != null;
-      rootGroup.rotation.y = isSkinnedArmor ? 0 : Math.PI / 5;
+      const effectivePose = poseRef.current ?? poseFromModel(modelData.skeleton != null);
+      applyPoseRotation(rootGroup, effectivePose);
 
       clearSceneModels(sceneRef.current);
       sceneRef.current.add(rootGroup);
@@ -192,22 +209,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         const size = box.getSize(new THREE.Vector3());
         const distance = Math.max(size.x, size.y, size.z) * 1.6;
 
-        if (isSkinnedArmor) {
-          // Armour: front view. Stand in front of the model (camera on -Z) with a
-          // slight upward tilt. Full-body skinned meshes are tall in Y, so Y-offset
-          // is kept small to keep the figure roughly centred in frame.
-          cameraRef.current.position.set(
-            center.x,
-            center.y + distance * 0.1,
-            center.z - distance,
-          );
-        } else {
-          cameraRef.current.position.set(
-            center.x + distance,
-            center.y + distance * 0.25,
-            center.z - distance * 0.6,
-          );
-        }
+        cameraRef.current.position.copy(poseCameraPosition(effectivePose, center, distance));
         controlsRef.current.target.copy(center);
         controlsRef.current.update();
         framedForItemRef.current = baseItemId;
@@ -241,8 +243,9 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         variant,
       });
       const tintColors = tintChannelsToColors(swapItemTints(effectiveTints()));
-      const newGroup = await buildPartGroup(data.meshes, letter, tintColors, undefined, undefined,
-        getEnvMap(sceneRef.current));
+      const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveTints()));
+      const newGroup = await buildPartGroup(data.meshes, letter, tintColors, glovesTintColors,
+        undefined, undefined, getEnvMap(sceneRef.current));
 
       const old = model.getObjectByName(partGroupName(letter));
       if (old) model.remove(old);
@@ -252,10 +255,17 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
     }
   }, [sceneRef, baseItemId, effectiveTints]);
 
+  // The pose hint arrives with the appearance options, i.e. usually after the
+  // first load. It changes both the rotation and the camera, so allow one
+  // re-frame when it lands.
+  useEffect(() => {
+    framedForItemRef.current = null;
+  }, [pose]);
+
   useEffect(() => {
     loadItem();
     return () => { loadCounterRef.current++; };
-  }, [loadItem, refreshKey]);
+  }, [loadItem, refreshKey, pose]);
 
   useEffect(() => {
     if (!refreshPart) return;
@@ -264,8 +274,9 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
   useEffect(() => {
     if (!sceneRef.current) return;
-    const colors = tintChannelsToColors(swapItemTints(effectiveTints()));
-    updateTintUniforms(sceneRef.current, 'item', colors);
+    const tints = effectiveTints();
+    updateTintUniforms(sceneRef.current, 'item', tintChannelsToColors(swapItemTints(tints)));
+    updateTintUniforms(sceneRef.current, 'item_gloves', tintChannelsToColors(cosmeticGlovesTints(tints)));
   }, [appearance.tints, highlightChannel, effectiveTints, sceneRef]);
 
   return (

@@ -40,6 +40,13 @@ pub(crate) fn is_bracer_label(s: &str) -> bool {
     s.eq_ignore_ascii_case("bracer")
 }
 
+/// Shield MDBs (`W_She_*`) are authored lying flat in their arm-attachment
+/// orientation, so the preview has to stand them up. Takes the normalized
+/// weapon prefix, e.g. `W_She_Towr`.
+fn is_shield_prefix(full_prefix: &str) -> bool {
+    full_prefix.to_lowercase().starts_with("w_she")
+}
+
 /// Which armor part the item occupies, derived from `baseitems.2da`'s
 /// `equipableslots` bitmask.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +110,11 @@ const DEFAULT_BODY_PREFIX: &str = "P_HHM";
 /// the item's own `ArmorVisualType` doesn't resolve (e.g. for helmets, whose
 /// material normally comes from the wearer's chest armor).
 const FALLBACK_ARMOR_PREFIXES: &[&str] = &["LE", "CL", "CH", "BA", "PF"];
+
+/// `P_HHM_CL_{Body,Boots,Gloves}99.MDB` are the engine's intentionally empty
+/// "wear nothing" meshes: they load fine but draw nothing, so the gallery
+/// would show a blank tile for them.
+const INVISIBLE_ARMOR_VARIANT: i32 = 99;
 
 /// A body-armour item's nested Boots/Gloves sub-part. NWN2 chest armour items
 /// store these inline — each has its own `ArmorVisualType` (indexing `armor.2da`)
@@ -450,9 +462,43 @@ pub struct ItemAppearance {
     pub accessories: ArmorAccessories,
 }
 
+/// Which GFF field the variation gallery actually drives. SinglePart items
+/// (modeltype 0: shields, bows, crossbows) resolve their mesh from
+/// `ModelPart1` and treat `Variation` as a UI mirror — see `prepare_for_write`.
+/// The UI has to write both, otherwise the live preview keeps the old mesh.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum VariationField {
+    Variation,
+    ModelPart1,
+}
+
+/// How the preview should pose the model. Item MDBs are authored in their
+/// attachment orientation, which for shields means lying flat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewPose {
+    Weapon,
+    Shield,
+    Armor,
+}
+
+/// One `armor.2da` row the material select can write into
+/// `ArmorVisualType`. Purely visual: armor rules come from
+/// `ArmorRulesType` and the item properties, so any material can sit on any
+/// stats.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct MaterialOption {
+    pub id: i32,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct ItemAppearanceOptions {
     pub available_variations: Vec<i32>,
+    /// Materials with at least one mesh on disk for this armor slot. Empty
+    /// for anything that is not chest/boots/gloves/helmet.
+    pub available_materials: Vec<MaterialOption>,
     pub available_part1: Vec<i32>,
     pub available_part2: Vec<i32>,
     pub available_part3: Vec<i32>,
@@ -460,6 +506,8 @@ pub struct ItemAppearanceOptions {
     /// and other modeltype-less items have none — tints and variants are
     /// meaningless for them and the UI hides those controls.
     pub has_model: bool,
+    pub variation_field: VariationField,
+    pub preview_pose: PreviewPose,
 }
 
 impl ItemAppearance {
@@ -530,6 +578,25 @@ impl ItemAppearance {
         }
     }
 
+    /// The armor slot the base item itself occupies, or `None` for anything
+    /// that is not body armor. Lets callers tell an item's *own* boots/gloves
+    /// mesh apart from the boots/gloves nested inside a chest item.
+    pub(crate) fn base_item_armor_slot(
+        base_item_id: i32,
+        game_data: &GameData,
+    ) -> Option<ArmorSlot> {
+        let table = game_data.get_table("baseitems")?;
+        let row = table.get_by_id(base_item_id)?;
+        if classify_model_type(&row_str(&row, "modeltype").unwrap_or_default())
+            != ItemModelKind::BodyArmor
+        {
+            return None;
+        }
+        detect_armor_slot(parse_equip_slots(
+            &row_str(&row, "equipableslots").unwrap_or_default(),
+        ))
+    }
+
     /// Route the user-facing `variation` back into the correct GFF field
     /// before the item is serialized. Counterpart to `normalize_for_ui`:
     /// for SinglePart items the game reads `ModelPart1`, so the stepper's
@@ -586,10 +653,13 @@ impl ItemAppearance {
                 let full_prefix = normalize_weapon_prefix(&prefix);
                 ItemAppearanceOptions {
                     available_variations: Vec::new(),
+                    available_materials: Vec::new(),
                     available_part1: Self::discover_variants(resource_manager, &full_prefix, "_a"),
                     available_part2: Self::discover_variants(resource_manager, &full_prefix, "_b"),
                     available_part3: Self::discover_variants(resource_manager, &full_prefix, "_c"),
                     has_model: true,
+                    variation_field: VariationField::Variation,
+                    preview_pose: PreviewPose::Weapon,
                 }
             }
             ItemModelKind::SinglePart if is_bracer => {
@@ -599,6 +669,7 @@ impl ItemAppearance {
                 // so expose no stepper — but the mesh exists and tints apply.
                 ItemAppearanceOptions {
                     has_model: true,
+                    preview_pose: PreviewPose::Armor,
                     ..ItemAppearanceOptions::new_empty()
                 }
             }
@@ -612,10 +683,17 @@ impl ItemAppearance {
                 let has_model = !available_variations.is_empty();
                 ItemAppearanceOptions {
                     available_variations,
+                    available_materials: Vec::new(),
                     available_part1: Vec::new(),
                     available_part2: Vec::new(),
                     available_part3: Vec::new(),
                     has_model,
+                    variation_field: VariationField::ModelPart1,
+                    preview_pose: if is_shield_prefix(&full_prefix) {
+                        PreviewPose::Shield
+                    } else {
+                        PreviewPose::Weapon
+                    },
                 }
             }
             ItemModelKind::BodyArmor => {
@@ -623,31 +701,40 @@ impl ItemAppearance {
                     parse_equip_slots(&row_str(&row, "equipableslots").unwrap_or_default());
                 let slot = detect_armor_slot(equip_slots);
                 let body = body_prefix.unwrap_or(DEFAULT_BODY_PREFIX);
+                let available_variations = Self::discover_armor_variants(
+                    body,
+                    slot,
+                    armor_visual_type,
+                    game_data,
+                    resource_manager,
+                );
+                let available_materials =
+                    Self::discover_armor_materials(body, slot, game_data, resource_manager);
                 ItemAppearanceOptions {
-                    available_variations: Self::discover_armor_variants(
-                        body,
-                        slot,
-                        armor_visual_type,
-                        game_data,
-                        resource_manager,
-                    ),
+                    // Discovery now searches exactly the material prefixes the
+                    // loader will try, so an empty list means nothing renders.
+                    has_model: slot.is_some() && !available_variations.is_empty(),
+                    available_variations,
+                    available_materials,
                     available_part1: Vec::new(),
                     available_part2: Vec::new(),
                     available_part3: Vec::new(),
-                    // Armor renders even when variant discovery found nothing
-                    // (e.g. modded materials); only a slot-less item has no mesh.
-                    has_model: slot.is_some(),
+                    variation_field: VariationField::Variation,
+                    preview_pose: PreviewPose::Armor,
                 }
             }
             ItemModelKind::None => ItemAppearanceOptions::new_empty(),
         }
     }
 
-    /// Discover real mesh variants on disk for a body-armor slot. Previously
-    /// returned a blind `1..=50` range; now inspects the `P_HHM_{material}_
-    /// {Part}NN.mdb` files that actually exist so the stepper only offers
-    /// loadable variants. Helmets and cloaks have a hardcoded material, the
-    /// rest derive it from `ArmorVisualType`.
+    /// Discover real mesh variants on disk for a body-armor slot by inspecting
+    /// the `P_HHM_{material}_{Part}NN.mdb` files that actually exist.
+    ///
+    /// The material prefixes searched here must be exactly the ones
+    /// `build_armor_resrefs` will try at load time, otherwise the gallery
+    /// offers variants the viewer cannot render. Returned values are in the
+    /// same 0-indexed space as the GFF `Variation` field (the loader renders
+    /// `Variation + 1`), so `Boots01` is reported as `0`.
     fn discover_armor_variants(
         body_prefix: &str,
         slot: Option<ArmorSlot>,
@@ -660,47 +747,88 @@ impl ItemAppearance {
         };
         let part = slot.part_name();
 
-        // Aggregate across every material prefix we'd try at load time.
-        // `armor_resref_candidates` for helmets falls back to LE/CL/CH/BA/PF,
-        // and cloaks are fixed to CL — mirror that set here so the stepper's
-        // options line up with what the 3D viewer can actually render.
-        let mut material_prefixes: Vec<String> = Vec::new();
-        match slot {
-            ArmorSlot::Head => {
-                for p in FALLBACK_ARMOR_PREFIXES {
-                    material_prefixes.push(p.to_string());
-                }
-            }
-            ArmorSlot::Cloak => {
-                material_prefixes.push("CL".to_string());
-            }
+        let item_prefix = armor_visual_type.and_then(|vt| {
+            resolve_armor_prefix(game_data, vt, false)
+                .into_iter()
+                .next()
+        });
+
+        let material_prefixes: Vec<String> = match slot {
+            // Cloaks are hardcoded to CL by the loader.
+            ArmorSlot::Cloak => vec!["CL".to_string()],
+            // Helmets take the wearer's chest material, so the loader falls
+            // back to the common set when the item carries no usable VT.
+            ArmorSlot::Head => match item_prefix {
+                Some(pfx) => vec![pfx],
+                None => FALLBACK_ARMOR_PREFIXES
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect(),
+            },
+            // The loader renders nothing for these without a VT prefix, so an
+            // empty list is the honest answer.
             ArmorSlot::Body | ArmorSlot::Boots | ArmorSlot::Gloves => {
-                if let Some(vt) = armor_visual_type
-                    && let Some(pfx) = resolve_armor_prefix(game_data, vt, false)
-                        .into_iter()
-                        .next()
-                {
-                    material_prefixes.push(pfx);
-                }
-                // Fall back to common materials if the item has no usable VT
-                // (e.g. standalone boots in the item viewer). Without this the
-                // stepper would be empty.
-                if material_prefixes.is_empty() {
-                    for p in FALLBACK_ARMOR_PREFIXES {
-                        material_prefixes.push(p.to_string());
-                    }
-                }
+                item_prefix.into_iter().collect()
             }
-        }
+        };
 
         let mut variants: Vec<i32> = Vec::new();
         for mat in &material_prefixes {
             let full_prefix = format!("{body_prefix}_{mat}_{part}");
-            variants.extend(Self::discover_variants(resource_manager, &full_prefix, ""));
+            variants.extend(
+                Self::discover_variants(resource_manager, &full_prefix, "")
+                    .into_iter()
+                    .filter(|nn| *nn != INVISIBLE_ARMOR_VARIANT)
+                    .filter_map(|nn| nn.checked_sub(1).filter(|v| *v >= 0)),
+            );
         }
         variants.sort_unstable();
         variants.dedup();
         variants
+    }
+
+    /// Every `armor.2da` material that has at least one real mesh on disk
+    /// for this slot, so the material select never offers a look the viewer
+    /// (and the game) cannot render. Cloaks are hardcoded to `CL` by the
+    /// loader and get no choice.
+    fn discover_armor_materials(
+        body_prefix: &str,
+        slot: Option<ArmorSlot>,
+        game_data: &GameData,
+        resource_manager: &ResourceManager,
+    ) -> Vec<MaterialOption> {
+        let Some(slot) = slot else {
+            return Vec::new();
+        };
+        if slot == ArmorSlot::Cloak {
+            return Vec::new();
+        }
+        let Some(armor_table) = game_data.get_table("armor") else {
+            return Vec::new();
+        };
+        let part = slot.part_name();
+
+        (0..armor_table.row_count())
+            .filter_map(|idx| {
+                let row = armor_table.get_row(idx).ok()?;
+                let prefix = row_str(&row, "prefix")?;
+                let full_prefix = format!("{body_prefix}_{prefix}_{part}");
+                let has_mesh = Self::discover_variants(resource_manager, &full_prefix, "")
+                    .into_iter()
+                    .any(|nn| nn != INVISIBLE_ARMOR_VARIANT);
+                if !has_mesh {
+                    return None;
+                }
+                let name = row_str(&row, "name")
+                    .and_then(|s| s.parse::<i32>().ok())
+                    .and_then(|strref| game_data.get_string(strref))
+                    .or_else(|| row_str(&row, "label"))?;
+                Some(MaterialOption {
+                    id: idx as i32,
+                    name,
+                })
+            })
+            .collect()
     }
 
     fn discover_variants(
@@ -1201,10 +1329,13 @@ impl ItemAppearanceOptions {
     fn new_empty() -> Self {
         Self {
             available_variations: Vec::new(),
+            available_materials: Vec::new(),
             available_part1: Vec::new(),
             available_part2: Vec::new(),
             available_part3: Vec::new(),
             has_model: false,
+            variation_field: VariationField::Variation,
+            preview_pose: PreviewPose::Weapon,
         }
     }
 }
@@ -1611,6 +1742,25 @@ mod tests {
     fn standalone_gloves_use_only_item_prefix() {
         let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Gloves), Some("CH"), 2, 0);
         assert_eq!(r, vec![vec!["P_HHM_CH_Gloves03".to_string()]]);
+    }
+
+    /// `discover_armor_variants` reports the file `…Boots01` as the value `0`,
+    /// because the loader renders `variation + 1`. If these two ever disagree
+    /// the gallery offers a variant that renders nothing (and an item stored
+    /// with `Variation = 0` matches no tile at all).
+    #[test]
+    fn armor_variant_values_round_trip_to_their_filename() {
+        for nn in 1..=9i32 {
+            let discovered_value = nn - 1;
+            let r = build_armor_resrefs(
+                "P_HHM",
+                Some(ArmorSlot::Boots),
+                Some("LE"),
+                discovered_value,
+                0,
+            );
+            assert_eq!(r, vec![vec![format!("P_HHM_LE_Boots{nn:02}")]]);
+        }
     }
 
     #[test]

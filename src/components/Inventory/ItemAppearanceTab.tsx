@@ -9,6 +9,7 @@ import { tintChannelsToColors } from '../ModelViewer/materials';
 import { ItemViewer3D, swapItemTints } from '../Appearance/ItemViewer3D';
 import { ColorPicker } from '../Appearance/ColorPicker';
 import { ThumbnailGallery } from '../Appearance/ThumbnailGallery';
+import { DropdownSelect } from '../shared/DropdownSelect';
 import { LoadingState } from '../shared';
 import { T } from '../theme';
 
@@ -62,10 +63,36 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
     setRefreshPart({ partIndex: idx, key: Date.now() });
   }, [appearance, onChange]);
 
+  // Modeltype-0 items (shields, bows, crossbows) resolve their mesh from
+  // ModelPart1 and treat Variation as a mirror, so both have to move or the
+  // live preview keeps rendering the old variant.
+  const variationField = options?.variation_field ?? 'variation';
   const updateVariation = useCallback((value: number) => {
-    onChange({ ...appearance, variation: value });
+    const next = { ...appearance, variation: value };
+    if (variationField === 'model_part1') {
+      next.model_parts = [value, appearance.model_parts[1], appearance.model_parts[2]];
+    }
+    onChange(next);
+    setRefreshKey(k => k + 1);
+  }, [appearance, onChange, variationField]);
+
+  // ArmorVisualType is the armor.2da material; the parent refetches the
+  // options for the new material, and the effect below moves the variation
+  // onto that material's first mesh when the old one has no counterpart.
+  const updateMaterial = useCallback((id: number) => {
+    onChange({ ...appearance, armor_visual_type: id });
     setRefreshKey(k => k + 1);
   }, [appearance, onChange]);
+
+  const materials = options?.available_materials ?? [];
+  const variations = options?.available_variations ?? [];
+  useEffect(() => {
+    if (materials.length === 0 || variations.length === 0) return;
+    if (variations.includes(appearance.variation)) return;
+    onChange({ ...appearance, variation: variations[0] });
+    setRefreshKey(k => k + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
 
   const updateTint = useCallback((channel: keyof TintChannels, color: TintChannel) => {
     onChange({
@@ -91,6 +118,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
           refreshKey={refreshKey}
           refreshPart={refreshPart}
           highlightChannel={hoveredChannel}
+          pose={options?.preview_pose}
         />
       </div>
 
@@ -107,7 +135,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
               values={list}
               selected={appearance.model_parts[idx]}
               onSelect={(v) => updatePart(idx, v)}
-              cacheKey={(v) => `part:${baseItemId}:${idx}:${v}:${tintKey}`}
+              cacheKey={(v) => `part:${baseItemId}:${idx}:${v}:${tintKey}:${options?.preview_pose ?? 'auto'}`}
               fetchModel={(v) => invoke<ModelData>('load_item_part', {
                 baseItemId,
                 partIndex: idx,
@@ -115,19 +143,33 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
               })}
               tints={frozenTints}
               tileLabel={(v) => `${t('appearance.part')} ${v}`}
+              pose={options?.preview_pose}
             />
           </Card>
         ))}
 
-        {activated && options && options.available_variations.length > 0 && (
+        {activated && options && (materials.length > 0 || options.available_variations.length > 0) && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
             <SectionHeader label={t('appearance.variation')} />
+            {materials.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <DropdownSelect
+                  label={t('appearance.material')}
+                  value={materials.find(m => m.id === appearance.armor_visual_type)?.name ?? '-'}
+                  items={materials.map(m => ({ id: m.id, label: m.name }))}
+                  onChange={updateMaterial}
+                  width={220}
+                  small
+                />
+              </div>
+            )}
+            {options.available_variations.length > 0 && (
             <ThumbnailGallery
               values={options.available_variations}
               selected={appearance.variation}
               onSelect={updateVariation}
               cacheKey={(v) =>
-                `variation:${baseItemId}:${characterId ?? 'none'}:${appearance.armor_visual_type ?? 'none'}:${v}:${tintKey}`}
+                `variation:${baseItemId}:${characterId ?? 'none'}:${appearance.armor_visual_type ?? 'none'}:${v}:${tintKey}:${options.preview_pose}`}
               // Synthetic appearance: variation only, boots/gloves/accessories
               // stripped so armor thumbnails load just the primary mesh.
               fetchModel={(v) => invoke<ModelData>('load_item_model', {
@@ -143,7 +185,9 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
               })}
               tints={frozenTints}
               tileLabel={(v) => `${t('appearance.variation')} ${v}`}
+              pose={options.preview_pose}
             />
+            )}
           </Card>
         )}
 

@@ -15,6 +15,21 @@ fn appearance_with_variation(variation: i32) -> ItemAppearance {
     }
 }
 
+/// baseitems.2da row with the given `label` (e.g. `Boots`).
+fn find_base_item_by_label(game_data: &GameData, label: &str) -> i32 {
+    let table = game_data.get_table("baseitems").expect("baseitems.2da");
+    for id in 0..table.row_count() as i32 {
+        if let Some(row) = table.get_by_id(id)
+            && row_str(&row, "label")
+                .unwrap_or_default()
+                .eq_ignore_ascii_case(label)
+        {
+            return id;
+        }
+    }
+    panic!("no baseitems row labelled {label}");
+}
+
 /// First baseitems.2da row whose `modeltype` matches `want`.
 fn find_base_item_with_modeltype(game_data: &GameData, want: &str) -> i32 {
     let table = game_data.get_table("baseitems").expect("baseitems.2da");
@@ -63,6 +78,42 @@ async fn options_report_no_model_for_rings_and_a_model_for_shields() {
         !shield.available_variations.is_empty(),
         "shield variants should be discovered on disk"
     );
+}
+
+#[tokio::test]
+async fn options_list_only_materials_with_meshes_for_the_slot() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().unwrap();
+    let rm = ctx.resource_manager.read().await;
+
+    let boots = find_base_item_by_label(game_data, "Boots");
+    let opts = ItemAppearance::get_options(boots, Some(2), None, game_data, &rm);
+    assert!(
+        opts.available_materials
+            .iter()
+            .any(|m| m.id == 2 && m.name == "Leather"),
+        "boots should offer Leather (armor.2da row 2): {:?}",
+        opts.available_materials
+    );
+    for material in &opts.available_materials {
+        let per_material =
+            ItemAppearance::get_options(boots, Some(material.id), None, game_data, &rm);
+        assert!(
+            !per_material.available_variations.is_empty(),
+            "material {} listed for boots but has no variants",
+            material.name
+        );
+    }
+
+    let cloak = find_base_item_by_label(game_data, "Cloak");
+    let cloak_opts = ItemAppearance::get_options(cloak, None, None, game_data, &rm);
+    assert!(
+        cloak_opts.available_materials.is_empty(),
+        "cloaks are hardcoded to CL and must not offer a material"
+    );
+
+    let shield = ItemAppearance::get_options(14, None, None, game_data, &rm);
+    assert!(shield.available_materials.is_empty());
 }
 
 #[tokio::test]

@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { useModelThumbnail } from '@/hooks/useModelThumbnail';
 import type { TintColors } from '../ModelViewer/materials';
 import type { ModelData } from '../ModelViewer/types';
+import type { PreviewPose } from '@/lib/bindings';
 import { T } from '../theme';
 
 const TILE_SIZE = 96;
@@ -13,9 +15,10 @@ interface ThumbnailGalleryProps {
   fetchModel: (value: number) => Promise<ModelData>;
   tints: TintColors;
   tileLabel: (value: number) => string;
+  pose?: PreviewPose | null;
 }
 
-function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label }: {
+function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label, pose }: {
   value: number;
   selected: boolean;
   onSelect: (value: number) => void;
@@ -23,11 +26,26 @@ function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label }:
   fetchModel: (value: number) => Promise<ModelData>;
   tints: TintColors;
   label: string;
+  pose?: PreviewPose | null;
 }) {
-  const dataUrl = useModelThumbnail(cacheKey, () => fetchModel(value), tints);
+  const dataUrl = useModelThumbnail(cacheKey, () => fetchModel(value), tints, 'model', pose);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Bring the item's current variation into view once its image lands, so the
+  // user can see what they already have without scanning the whole grid.
+  useEffect(() => {
+    if (selected && dataUrl) ref.current?.scrollIntoView({ block: 'nearest' });
+    // Only on the first render of the selected tile's image.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataUrl]);
+
+  // A variant whose model does not resolve renders nothing at all rather than
+  // offering a click that would blank the preview.
+  if (dataUrl === '') return null;
 
   return (
     <div
+      ref={ref}
       role="button"
       tabIndex={0}
       title={label}
@@ -54,8 +72,6 @@ function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label }:
     >
       {dataUrl === null ? (
         <div style={{ width: TILE_SIZE - 16, height: TILE_SIZE - 16, background: T.border, borderRadius: 2 }} />
-      ) : dataUrl === '' ? (
-        <span className="t-sm t-semibold" style={{ color: T.textMuted }}>{value}</span>
       ) : (
         <img src={dataUrl} alt={label} width={TILE_SIZE - 4} height={TILE_SIZE - 4} draggable={false} />
       )}
@@ -74,6 +90,7 @@ export function ThumbnailGallery({
   fetchModel,
   tints,
   tileLabel,
+  pose,
 }: ThumbnailGalleryProps) {
   if (values.length === 0) return null;
 
@@ -89,6 +106,7 @@ export function ThumbnailGallery({
           fetchModel={fetchModel}
           tints={tints}
           label={tileLabel(v)}
+          pose={pose}
         />
       ))}
     </div>

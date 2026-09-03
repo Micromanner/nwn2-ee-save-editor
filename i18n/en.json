@@ -984,6 +984,7 @@
     "part2": "Part B",
     "part3": "Part C",
     "variation": "Variation",
+    "material": "Material",
     "colorsHoverHint": "Hover over a color to highlight the area it affects"
   },
   "roster": {

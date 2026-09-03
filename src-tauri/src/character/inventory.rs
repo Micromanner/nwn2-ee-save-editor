@@ -1463,6 +1463,7 @@ impl super::Character {
         base_item_id: i32,
         stack_size: i32,
         icon_id: Option<u32>,
+        armor_visual_type: Option<u8>,
         game_data: &GameData,
     ) -> Result<AddItemResult, CharacterError> {
         let base_item_data = self.get_base_item_data(base_item_id, game_data);
@@ -1533,8 +1534,15 @@ impl super::Character {
                 new_item.insert("ModelPart1".to_string(), GffValue::Byte(1));
             }
             "3" => {
-                // BodyArmor: variant comes from Variation.
+                // BodyArmor: variant comes from Variation, material from
+                // ArmorVisualType (armor.2da row). Chest, boots and gloves
+                // render nothing without a material, so seed the template's
+                // or fall back to row 0 (Cloth), which every slot ships.
                 new_item.insert("Variation".to_string(), GffValue::Int(1));
+                new_item.insert(
+                    "ArmorVisualType".to_string(),
+                    GffValue::Byte(armor_visual_type.unwrap_or(0)),
+                );
             }
             _ => {
                 // Modeltype empty / unknown (rings, amulets, etc.) — no
@@ -2501,7 +2509,7 @@ impl super::Character {
             });
         }
 
-        self.add_item(base_item_id, 1, None, game_data)
+        self.add_item(base_item_id, 1, None, None, game_data)
     }
 
     pub fn get_all_base_items(&self, game_data: &GameData) -> Vec<BaseItemInfo> {
@@ -3035,6 +3043,16 @@ fn write_appearance_into_item(
     write_num(item, "ModelPart1", appearance.model_parts[0], new_mp1);
     write_num(item, "ModelPart2", appearance.model_parts[1], new_mp2);
     write_num(item, "ModelPart3", appearance.model_parts[2], new_mp3);
+
+    // ArmorVisualType picks the armor material (armor.2da row); the game
+    // writes it as a Byte. `from_gff` only reports it when the item carried
+    // one, and the material select only sets it on armor-type items.
+    if let Some(vt) = appearance.armor_visual_type {
+        item.insert(
+            "ArmorVisualType".to_string(),
+            typed_byte(item.get("ArmorVisualType"), vt),
+        );
+    }
 
     // Tintable: same rule — skip if absent and all channels are (0,0,0).
     // Alpha isn't checked to match `read_item_tint_with_fallback`'s own
@@ -3752,7 +3770,7 @@ mod tests {
         let game_data = game_data_with_stackable_baseitem();
         let mut character = character_with_items(vec![stackable_item("ale", 3, &[])]);
 
-        let result = character.add_item(0, 1, None, &game_data).unwrap();
+        let result = character.add_item(0, 1, None, None, &game_data).unwrap();
 
         assert!(!result.stacked);
         assert_eq!(character.inventory_count(), 2);
@@ -3766,7 +3784,7 @@ mod tests {
         untagged.shift_remove("Tag");
         let mut character = character_with_items(vec![untagged]);
 
-        let result = character.add_item(0, 2, None, &game_data).unwrap();
+        let result = character.add_item(0, 2, None, None, &game_data).unwrap();
 
         assert!(result.stacked);
         assert_eq!(character.inventory_count(), 1);
@@ -3931,7 +3949,7 @@ mod tests {
         item.insert("StackSize".to_string(), GffValue::Word(3));
         let mut character = character_with_items(vec![item]);
 
-        character.add_item(0, 2, None, &game_data).unwrap();
+        character.add_item(0, 2, None, None, &game_data).unwrap();
 
         let stored = character.get_inventory_item_at(0).unwrap();
         assert!(
@@ -3965,7 +3983,7 @@ mod tests {
         let game_data = game_data_with_stackable_baseitem();
         let mut character = character_with_items(vec![]);
 
-        character.add_item(0, 1, None, &game_data).unwrap();
+        character.add_item(0, 1, None, None, &game_data).unwrap();
 
         let stored = character.get_inventory_item_at(0).unwrap();
         assert!(
@@ -4128,6 +4146,33 @@ mod tests {
 
         assert!(matches!(item.get("Variation"), Some(GffValue::Int(3))));
         assert!(matches!(item.get("ModelPart1"), Some(GffValue::Byte(3))));
+    }
+
+    #[test]
+    fn write_appearance_writes_armor_visual_type_preserving_type() {
+        let mut appearance = appearance_with_variation(2);
+        appearance.armor_visual_type = Some(4);
+
+        let mut fresh = IndexMap::new();
+        write_appearance_into_item(&mut fresh, &appearance, true);
+        assert!(
+            matches!(fresh.get("ArmorVisualType"), Some(GffValue::Byte(4))),
+            "new field must use the game's Byte type: {:?}",
+            fresh.get("ArmorVisualType")
+        );
+
+        let mut legacy = IndexMap::new();
+        legacy.insert("ArmorVisualType".to_string(), GffValue::Int(1));
+        write_appearance_into_item(&mut legacy, &appearance, true);
+        assert!(matches!(
+            legacy.get("ArmorVisualType"),
+            Some(GffValue::Int(4))
+        ));
+
+        appearance.armor_visual_type = None;
+        let mut untouched = IndexMap::new();
+        write_appearance_into_item(&mut untouched, &appearance, true);
+        assert!(untouched.get("ArmorVisualType").is_none());
     }
 
     #[test]

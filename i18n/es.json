@@ -982,7 +982,8 @@
     "part1": "Parte A (Hoja)",
     "part2": "Parte B (Empuñadura)",
     "part3": "Parte C (Pomo)",
-    "variation": "Variación"
+    "variation": "Variación",
+    "material": "Material"
   },
   "roster": {
     "party": "Grupo",

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { renderModelThumbnail, type ThumbnailFraming } from '@/components/ModelViewer/thumbnailRenderer';
 import type { TintColors } from '@/components/ModelViewer/materials';
 import type { ModelData } from '@/components/ModelViewer/types';
+import type { PreviewPose } from '@/lib/bindings';
 
 // Thumbnail cache + strictly sequential render queue over the shared offscreen
 // renderer (same LRU/pending-dedup shape as useIcon). Callers supply the model
@@ -68,6 +69,7 @@ export function fetchModelThumbnail(
   fetchModel: () => Promise<ModelData>,
   tints: TintColors,
   framing: ThumbnailFraming = 'model',
+  pose?: PreviewPose | null,
 ): Promise<string> {
   const cached = cacheGet(cacheKey);
   if (cached !== undefined) return Promise.resolve(cached);
@@ -83,7 +85,7 @@ export function fetchModelThumbnail(
           return;
         }
         const model = await fetchModel();
-        const url = await renderModelThumbnail(model, tints, framing);
+        const url = await renderModelThumbnail(model, tints, framing, pose);
         cachePut(cacheKey, url);
         resolve(url);
       } catch (err) {
@@ -105,6 +107,7 @@ export function useModelThumbnail(
   fetchModel: () => Promise<ModelData>,
   tints: TintColors,
   framing: ThumbnailFraming = 'model',
+  pose?: PreviewPose | null,
 ): string | null {
   const [dataUrl, setDataUrl] = useState<string | null>(() => cacheGet(cacheKey) ?? null);
 
@@ -118,7 +121,7 @@ export function useModelThumbnail(
     subscribe(cacheKey);
     let cancelled = false;
     setDataUrl(null);
-    fetchModelThumbnail(cacheKey, fetchModel, tints, framing).then((url) => {
+    fetchModelThumbnail(cacheKey, fetchModel, tints, framing, pose).then((url) => {
       if (!cancelled) setDataUrl(url);
     });
 

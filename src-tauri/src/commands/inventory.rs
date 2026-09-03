@@ -235,20 +235,29 @@ pub async fn add_to_inventory(
     icon_template_resref: Option<String>,
 ) -> CommandResult<AddItemResult> {
     // Base-type creation produces a minimal item; without a real Icon the engine
-    // renders a red question mark or "MISSING 2D TEXTURE" in-game, so we borrow
-    // one from a .uti template matching this base item.
-    let icon_id: Option<u32> = if let Some(resref) = icon_template_resref {
-        let rm = state.resource_manager.read().await;
-        rm.get_item_template(&resref)
-            .and_then(|info| rm.get_item_template_fields(&info).ok())
-            .and_then(|fields| {
-                fields
-                    .get("Icon")
-                    .and_then(crate::character::gff_helpers::gff_value_to_u32)
-            })
-    } else {
-        None
-    };
+    // renders a red question mark or "MISSING 2D TEXTURE" in-game, and without
+    // an ArmorVisualType a chest/boots/gloves item has no material to render,
+    // so we borrow both from a .uti template matching this base item.
+    let (icon_id, armor_visual_type): (Option<u32>, Option<u8>) =
+        if let Some(resref) = icon_template_resref {
+            let rm = state.resource_manager.read().await;
+            rm.get_item_template(&resref)
+                .and_then(|info| rm.get_item_template_fields(&info).ok())
+                .map(|fields| {
+                    (
+                        fields
+                            .get("Icon")
+                            .and_then(crate::character::gff_helpers::gff_value_to_u32),
+                        fields
+                            .get("ArmorVisualType")
+                            .and_then(crate::character::gff_helpers::gff_value_to_u32)
+                            .and_then(|v| u8::try_from(v).ok()),
+                    )
+                })
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
@@ -264,7 +273,13 @@ pub async fn add_to_inventory(
         .character
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.add_item(base_item_id, stack_size, icon_id, &game_data)?)
+    Ok(character.add_item(
+        base_item_id,
+        stack_size,
+        icon_id,
+        armor_visual_type,
+        &game_data,
+    )?)
 }
 
 #[tauri::command]

@@ -981,7 +981,8 @@
     "part1": "Teil A (Klinge)",
     "part2": "Teil B (Griff)",
     "part3": "Teil C (Knauf)",
-    "variation": "Variation"
+    "variation": "Variation",
+    "material": "Material"
   },
   "roster": {
     "party": "Gruppe",

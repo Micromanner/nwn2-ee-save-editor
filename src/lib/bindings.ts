@@ -113,12 +113,28 @@ export interface ItemAppearance {
   gloves: NestedArmorPart | null;
 }
 
+/// Which GFF field the variation gallery drives. Modeltype-0 items (shields,
+/// bows, crossbows) resolve their mesh from ModelPart1.
+export type VariationField = 'variation' | 'model_part1';
+
+/// How the preview poses the model; shield MDBs are authored lying flat.
+export type PreviewPose = 'weapon' | 'shield' | 'armor';
+
+/// One armor.2da row (id) the material select writes into ArmorVisualType.
+export interface MaterialOption {
+  id: number;
+  name: string;
+}
+
 export interface ItemAppearanceOptions {
   available_variations: number[];
+  available_materials: MaterialOption[];
   available_part1: number[];
   available_part2: number[];
   available_part3: number[];
   has_model: boolean;
+  variation_field: VariationField;
+  preview_pose: PreviewPose;
 }
 
 export interface AppearanceState {
