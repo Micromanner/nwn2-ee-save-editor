@@ -8,13 +8,16 @@ import { LoadingState } from '../shared';
 import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { AttachedPart, MeshData, ModelData } from '../ModelViewer/types';
 import type { TintChannels } from '@/lib/bindings';
+import { swapItemTints } from './ItemViewer3D';
 
 type PartType = 'head' | 'hair' | 'fhair' | 'wings' | 'tail' | 'helm' | 'body' | 'cloak';
 
 // The shader G/B swap cancels data-order differences, not a mask property:
-// head tints arrive in UI order (eyebrows/eyes swapped vs the GFF), and
-// armor/item tints use the item convention (verified vs Darksteel Full
-// Plate). Raw-GFF-order tints (hair, body tint for tail/wings) need no swap.
+// head tints arrive in UI order (eyebrows/eyes swapped vs the GFF), and item
+// tints (armor, cloak, helm) use the item convention. Chest-armor tints are
+// additionally pre-swapped in getTintColors so the net mapping matches
+// ItemViewer3D and the game. Raw-GFF-order tints (hair, body tint for
+// tail/wings) need no swap.
 function needsShaderGBSwap(group: string): boolean {
   return group === 'head' || group === 'body' || group === 'cloak' || group === 'helm';
 }
@@ -94,7 +97,14 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
     const white: TintColors = { channel1: [1, 1, 1], channel2: [1, 1, 1], channel3: [1, 1, 1] };
     const fhairColors: TintColors = { channel1: hairColors.channel1, channel2: [1, 1, 1], channel3: [1, 1, 1] };
     const cloakColors = tintCloakRef.current ? tintChannelsToColors(tintCloakRef.current) : white;
-    const armorColors = tintArmorRef.current ? tintChannelsToColors(tintArmorRef.current) : white;
+    // Chest-armor tints arrive in raw GFF order; mask channels 2 and 3 are
+    // swapped relative to the shader's armor convention, so pre-swap exactly
+    // like ItemViewer3D does (verified in-game: Harper Agent Leathers renders
+    // green, 2026-09-04). Accessory override_tints are NOT swapped here - the
+    // backend already hands them over in the order the shader expects.
+    const armorColors = tintArmorRef.current
+      ? tintChannelsToColors(swapItemTints(tintArmorRef.current))
+      : white;
     return { head: headColors, hair: hairColors, fhair: fhairColors, body: armorColors, cloak: cloakColors, tail: bodyTintColors, wings: bodyTintColors };
   }
 

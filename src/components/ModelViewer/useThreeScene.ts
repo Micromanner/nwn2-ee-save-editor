@@ -108,6 +108,19 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     rimLight.position.set(0, 100, -200);
     scene.add(rimLight);
 
+    // Neutral-white counter-light mirroring the warm sun, plus a hemisphere
+    // wash, so the shadowed side stays readable and the gloss/spec mask is
+    // visible off-key without tinting the albedo. Was item-viewer-only until
+    // 2026-09-04; the character viewer's single warm key crushed everything
+    // facing away from it.
+    const backLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    backLight.position.set(-250, 500, 400);
+    scene.add(backLight);
+    scene.add(backLight.target);
+
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
+    scene.add(hemiLight);
+
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.0);
     scene.add(ambientLight);
 

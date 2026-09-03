@@ -118,26 +118,6 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
   const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef } = useThreeScene();
 
-  // Item-viewer-only fill: mirrors the warm sun (from useThreeScene, at +X/+Y/-Z) with a
-  // neutral-white light + hemisphere so the shadowed side stays readable without tinting.
-  useEffect(() => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    const back = new THREE.DirectionalLight(0xffffff, 1.5);
-    back.position.set(-250, 500, 400);
-    scene.add(back);
-    scene.add(back.target);
-    const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
-    scene.add(hemi);
-    return () => {
-      scene.remove(back);
-      scene.remove(back.target);
-      back.dispose();
-      scene.remove(hemi);
-      hemi.dispose();
-    };
-  }, [sceneRef]);
-
   const loadItem = useCallback(async () => {
     if (!sceneRef.current) return;
     const requestId = ++loadCounterRef.current;
