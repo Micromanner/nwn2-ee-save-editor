@@ -2,7 +2,8 @@ use tauri::State;
 use tracing::{debug, info};
 
 use crate::character::{
-    AccessorySlot, ArmorSlot, ItemAppearance, ItemAppearanceOptions, swap_tint_2_3,
+    AccessorySlot, ArmorSlot, ItemAppearance, ItemAppearanceOptions, TintChannels,
+    accessory_resref, swap_tint_2_3,
 };
 use crate::services::model_loader::{self, ModelData};
 use crate::state::AppState;
@@ -228,4 +229,34 @@ pub async fn load_item_part(
     };
     model_loader::load_model(&rm, &resref, part_tag, "item")
         .map_err(|e| format!("Failed to load part '{resref}': {e}"))
+}
+
+/// One accessory mesh on its own (no body, no bone attachment) for the
+/// per-slot thumbnail gallery, tinted the way the item viewer tints it.
+#[tauri::command]
+pub async fn load_accessory_model(
+    state: State<'_, AppState>,
+    slot: AccessorySlot,
+    id: i32,
+    tints: TintChannels,
+) -> Result<ModelData, String> {
+    let rm = state.resource_manager.read().await;
+    let game_data = state.game_data.read();
+    let body_prefix = current_body_prefix(&state, &game_data)
+        .unwrap_or_else(|| crate::character::DEFAULT_BODY_PREFIX.to_string());
+    let resref = accessory_resref(&body_prefix, slot, id)
+        .ok_or_else(|| format!("No accessory mesh for {slot:?} id {id}"))?;
+    debug!("Loading accessory model {resref}");
+
+    let mut data = model_loader::load_model(&rm, &resref, "item", "item")
+        .map_err(|e| format!("Failed to load accessory '{resref}': {e}"))?;
+    let tints = if matches!(slot, AccessorySlot::LtBracer | AccessorySlot::RtBracer) {
+        swap_tint_2_3(&tints)
+    } else {
+        tints
+    };
+    for m in &mut data.meshes {
+        m.override_tints = Some(tints.clone());
+    }
+    Ok(data)
 }

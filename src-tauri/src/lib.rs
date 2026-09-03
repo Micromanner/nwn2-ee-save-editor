@@ -248,6 +248,7 @@ pub fn run() {
             crate::commands::item_appearance::get_item_appearance_options,
             crate::commands::item_appearance::load_item_model,
             crate::commands::item_appearance::load_item_part,
+            crate::commands::item_appearance::load_accessory_model,
             // Combat & Saves
             crate::commands::combat::get_combat_summary,
             crate::commands::combat::calculate_base_attack_bonus,

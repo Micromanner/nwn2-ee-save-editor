@@ -132,3 +132,44 @@ async fn prepare_for_write_keeps_variation_field_for_weapons_and_armor() {
         assert_eq!(appearance.model_parts[0], 0);
     }
 }
+
+#[tokio::test]
+async fn options_list_accessory_meshes_only_for_chest_armor() {
+    use app_lib::character::AccessorySlot;
+
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().unwrap();
+    let rm = ctx.resource_manager.read().await;
+
+    let armor = find_base_item_by_label(game_data, "Armor");
+    let opts = ItemAppearance::get_options(armor, Some(2), None, game_data, &rm);
+    let shoulder = opts
+        .available_accessories
+        .iter()
+        .find(|o| o.slot == AccessorySlot::LtShoulder)
+        .expect("chest armor offers left shoulder accessories");
+    assert!(
+        shoulder.ids.iter().all(|id| *id > 0),
+        "accessory ids are the 1-based mesh numbers: {:?}",
+        shoulder.ids
+    );
+    assert!(
+        rm.has_resource(&format!("A_HHM_LShoulder{}", shoulder.ids[0]), "mdb"),
+        "listed id must resolve to the mesh the loader will render (files are not zero-padded)"
+    );
+    for slot in [
+        AccessorySlot::LtAnkle,
+        AccessorySlot::RtFoot,
+        AccessorySlot::BkHip,
+        AccessorySlot::FtHip,
+    ] {
+        assert!(
+            !opts.available_accessories.iter().any(|o| o.slot == slot),
+            "vestigial slot {slot:?} has no meshes and must not be offered"
+        );
+    }
+
+    let boots = find_base_item_by_label(game_data, "Boots");
+    let boots_opts = ItemAppearance::get_options(boots, Some(2), None, game_data, &rm);
+    assert!(boots_opts.available_accessories.is_empty());
+}

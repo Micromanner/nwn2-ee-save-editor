@@ -3074,6 +3074,67 @@ fn write_appearance_into_item(
             GffValue::StructOwned(Box::new(tintable_outer)),
         );
     }
+
+    write_accessories_into_item(item, &appearance.accessories);
+}
+
+/// Write the 22 `AC*` accessory structs of a chest item. `None` slots are
+/// left untouched (the field stays as it was); `Some` slots get their
+/// `Accessory` id and `Tintable` written into the existing struct, so the
+/// toolset's `UVScroll` and struct id survive. A slot the item never had is
+/// cloned from a sibling `AC*` struct so the new one matches the item's own
+/// layout, falling back to a bare `Accessory` + `Tintable` pair.
+fn write_accessories_into_item(
+    item: &mut IndexMap<String, GffValue<'static>>,
+    accessories: &crate::character::ArmorAccessories,
+) {
+    use crate::character::AccessorySlot;
+    use crate::character::appearance_helpers::build_tintable_struct;
+
+    fn load_struct(value: &GffValue<'static>) -> Option<IndexMap<String, GffValue<'static>>> {
+        match value {
+            GffValue::StructOwned(s) => Some(s.as_ref().clone()),
+            GffValue::Struct(lazy) => Some(lazy.force_load()),
+            _ => None,
+        }
+    }
+    fn sibling_template(
+        item: &IndexMap<String, GffValue<'static>>,
+    ) -> IndexMap<String, GffValue<'static>> {
+        AccessorySlot::all()
+            .iter()
+            .find_map(|slot| item.get(slot.uti_field()).and_then(load_struct))
+            .unwrap_or_default()
+    }
+
+    for slot in AccessorySlot::all() {
+        let Some(data) = accessories.get_data(*slot) else {
+            continue;
+        };
+        let key = slot.uti_field();
+        let mut inner = match item.get(key).and_then(load_struct) {
+            Some(existing) => existing,
+            None => sibling_template(item),
+        };
+        let accessory = match inner.get("Accessory") {
+            Some(GffValue::Int(_)) => GffValue::Int(data.id),
+            Some(GffValue::Short(_)) => GffValue::Short(data.id as i16),
+            Some(GffValue::Word(_)) => GffValue::Word(data.id as u16),
+            _ => GffValue::Byte(data.id as u8),
+        };
+        inner.insert("Accessory".to_string(), accessory);
+        let t = &data.tints;
+        let tints_all_zero = [&t.channel1, &t.channel2, &t.channel3]
+            .iter()
+            .all(|ch| ch.r == 0 && ch.g == 0 && ch.b == 0);
+        if !tints_all_zero || inner.contains_key("Tintable") {
+            inner.insert(
+                "Tintable".to_string(),
+                GffValue::StructOwned(Box::new(build_tintable_struct(t))),
+            );
+        }
+        item.insert(key.to_string(), GffValue::StructOwned(Box::new(inner)));
+    }
 }
 
 /// Enforce NWN2 GFF schema types on every entry of an item's PropertiesList.
@@ -4192,5 +4253,114 @@ mod tests {
 
         assert!(matches!(item.get("Variation"), Some(GffValue::Int(4))));
         assert!(item.get("ModelPart1").is_none());
+    }
+
+    fn ac_struct(id: u8, tintable: bool) -> GffValue<'static> {
+        let mut inner = IndexMap::new();
+        inner.insert("__struct_id__".to_string(), GffValue::Dword(0));
+        inner.insert("Accessory".to_string(), GffValue::Byte(id));
+        if tintable {
+            let tints = crate::character::TintChannels::default();
+            inner.insert(
+                "Tintable".to_string(),
+                GffValue::StructOwned(Box::new(
+                    crate::character::appearance_helpers::build_tintable_struct(&tints),
+                )),
+            );
+        }
+        let mut uv = IndexMap::new();
+        uv.insert("Scroll".to_string(), GffValue::Byte(0));
+        inner.insert("UVScroll".to_string(), GffValue::StructOwned(Box::new(uv)));
+        GffValue::StructOwned(Box::new(inner))
+    }
+
+    fn struct_fields<'a>(value: &'a GffValue<'static>) -> &'a IndexMap<String, GffValue<'static>> {
+        match value {
+            GffValue::StructOwned(s) => s,
+            other => panic!("expected struct, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn write_appearance_writes_accessories_into_existing_and_new_ac_structs() {
+        use crate::character::{AccessorySlot, AccessorySlotData, TintChannel, TintChannels};
+
+        let mut item = IndexMap::new();
+        item.insert("ACLtShoulder".to_string(), ac_struct(3, true));
+        item.insert("ACRtShoulder".to_string(), ac_struct(0, true));
+
+        let mut appearance = appearance_with_variation(0);
+        let red = TintChannels {
+            channel1: TintChannel {
+                r: 200,
+                g: 10,
+                b: 10,
+                a: 255,
+            },
+            ..TintChannels::default()
+        };
+        appearance.accessories.set_data(
+            AccessorySlot::LtShoulder,
+            Some(AccessorySlotData {
+                id: 7,
+                tints: red.clone(),
+            }),
+        );
+        appearance.accessories.set_data(
+            AccessorySlot::LtKnee,
+            Some(AccessorySlotData { id: 2, tints: red }),
+        );
+
+        write_appearance_into_item(&mut item, &appearance, true);
+
+        let shoulder = struct_fields(item.get("ACLtShoulder").unwrap());
+        assert!(matches!(shoulder.get("Accessory"), Some(GffValue::Byte(7))));
+        assert!(shoulder.contains_key("UVScroll"), "existing layout kept");
+        let tint = struct_fields(shoulder.get("Tintable").unwrap());
+        let ch1 = struct_fields(struct_fields(tint.get("Tint").unwrap()).get("1").unwrap());
+        assert!(matches!(ch1.get("r"), Some(GffValue::Byte(200))));
+
+        // Untouched `None` slot keeps its struct verbatim.
+        let rt = struct_fields(item.get("ACRtShoulder").unwrap());
+        assert!(matches!(rt.get("Accessory"), Some(GffValue::Byte(0))));
+
+        // A slot the item never had is cloned from a sibling so it carries
+        // the same UVScroll/struct id layout.
+        let knee = struct_fields(item.get("ACLtKnee").unwrap());
+        assert!(matches!(knee.get("Accessory"), Some(GffValue::Byte(2))));
+        assert!(knee.contains_key("UVScroll"));
+        assert!(matches!(
+            knee.get("__struct_id__"),
+            Some(GffValue::Dword(0))
+        ));
+        assert!(knee.contains_key("Tintable"));
+        assert!(item.get("ACRtKnee").is_none());
+    }
+
+    #[test]
+    fn write_appearance_accessory_keeps_legacy_int_type_and_skips_zero_tint_without_tintable() {
+        use crate::character::{AccessorySlot, AccessorySlotData, TintChannels};
+
+        let mut legacy_inner = IndexMap::new();
+        legacy_inner.insert("Accessory".to_string(), GffValue::Int(1));
+        let mut item = IndexMap::new();
+        item.insert(
+            "ACLtBracer".to_string(),
+            GffValue::StructOwned(Box::new(legacy_inner)),
+        );
+
+        let mut appearance = appearance_with_variation(0);
+        appearance.accessories.set_data(
+            AccessorySlot::LtBracer,
+            Some(AccessorySlotData {
+                id: 5,
+                tints: TintChannels::default(),
+            }),
+        );
+        write_appearance_into_item(&mut item, &appearance, true);
+
+        let bracer = struct_fields(item.get("ACLtBracer").unwrap());
+        assert!(matches!(bracer.get("Accessory"), Some(GffValue::Int(5))));
+        assert!(bracer.get("Tintable").is_none());
     }
 }

@@ -104,6 +104,44 @@ export interface NestedArmorPart {
   variation: number;
 }
 
+/// The 22 accessory slots of a chest armor UTI (serde variant names).
+export type AccessorySlot =
+  | 'LtShoulder' | 'RtShoulder' | 'LtArm' | 'RtArm' | 'LtElbow' | 'RtElbow'
+  | 'LtBracer' | 'RtBracer' | 'LtLeg' | 'RtLeg' | 'LtKnee' | 'RtKnee'
+  | 'LtShin' | 'RtShin' | 'LtHip' | 'RtHip' | 'LtAnkle' | 'RtAnkle'
+  | 'LtFoot' | 'RtFoot' | 'BkHip' | 'FtHip';
+
+/// Mesh id (0 = none) plus the slot's own tints; null = AC* field absent.
+export interface AccessorySlotData {
+  id: number;
+  tints: TintChannels;
+}
+
+export interface ArmorAccessories {
+  lt_shoulder: AccessorySlotData | null;
+  rt_shoulder: AccessorySlotData | null;
+  lt_arm: AccessorySlotData | null;
+  rt_arm: AccessorySlotData | null;
+  lt_elbow: AccessorySlotData | null;
+  rt_elbow: AccessorySlotData | null;
+  lt_bracer: AccessorySlotData | null;
+  rt_bracer: AccessorySlotData | null;
+  lt_leg: AccessorySlotData | null;
+  rt_leg: AccessorySlotData | null;
+  lt_knee: AccessorySlotData | null;
+  rt_knee: AccessorySlotData | null;
+  lt_shin: AccessorySlotData | null;
+  rt_shin: AccessorySlotData | null;
+  lt_hip: AccessorySlotData | null;
+  rt_hip: AccessorySlotData | null;
+  lt_ankle: AccessorySlotData | null;
+  rt_ankle: AccessorySlotData | null;
+  lt_foot: AccessorySlotData | null;
+  rt_foot: AccessorySlotData | null;
+  bk_hip: AccessorySlotData | null;
+  ft_hip: AccessorySlotData | null;
+}
+
 export interface ItemAppearance {
   variation: number;
   model_parts: [number, number, number];
@@ -111,6 +149,13 @@ export interface ItemAppearance {
   armor_visual_type: number | null;
   boots: NestedArmorPart | null;
   gloves: NestedArmorPart | null;
+  accessories: ArmorAccessories;
+}
+
+/// Accessory ids with a mesh on disk for one slot (chest armor only).
+export interface AccessorySlotOptions {
+  slot: AccessorySlot;
+  ids: number[];
 }
 
 /// Which GFF field the variation gallery drives. Modeltype-0 items (shields,
@@ -135,6 +180,7 @@ export interface ItemAppearanceOptions {
   has_model: boolean;
   variation_field: VariationField;
   preview_pose: PreviewPose;
+  available_accessories: AccessorySlotOptions[];
 }
 
 export interface AppearanceState {

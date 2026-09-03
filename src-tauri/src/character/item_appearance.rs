@@ -104,7 +104,7 @@ pub(crate) fn detect_armor_slot(equip_slots: u32) -> Option<ArmorSlot> {
 /// stamped per race/gender (e.g. `P_HHM_` for Human Male); without a wearer
 /// context we pick a standard one. Files not matching this prefix simply
 /// won't load — the caller handles that by showing "No preview available".
-const DEFAULT_BODY_PREFIX: &str = "P_HHM";
+pub const DEFAULT_BODY_PREFIX: &str = "P_HHM";
 
 /// Common armor-material prefixes from `armor.2da`, tried as fallbacks when
 /// the item's own `ArmorVisualType` doesn't resolve (e.g. for helmets, whose
@@ -362,21 +362,14 @@ impl ArmorAccessories {
         &'a self,
         body_prefix: &str,
     ) -> impl Iterator<Item = RenderableAccessory<'a>> + 'a {
-        let body = body_prefix
-            .strip_prefix("P_")
-            .or_else(|| body_prefix.strip_prefix("p_"))
-            .unwrap_or(body_prefix)
-            .to_string();
+        let body = body_prefix.to_string();
         AccessorySlot::all().iter().filter_map(move |slot| {
             let data = self.get_data(*slot)?;
-            if data.id <= 0 {
-                return None;
-            }
-            let mdb_slot = slot.mdb_slot()?;
+            let resref = accessory_resref(&body, *slot, data.id)?;
             let attach_bone = slot.attach_bone()?;
             Some(RenderableAccessory {
                 slot: *slot,
-                resref: format!("A_{body}_{mdb_slot}{id:02}", id = data.id),
+                resref,
                 attach_bone,
                 tints: &data.tints,
             })
@@ -508,6 +501,17 @@ pub struct ItemAppearanceOptions {
     pub has_model: bool,
     pub variation_field: VariationField,
     pub preview_pose: PreviewPose,
+    /// Accessory meshes on disk per slot (`A_{body}_{slot}NN.mdb`), only for
+    /// chest armor; slots without a single mesh are omitted.
+    pub available_accessories: Vec<AccessorySlotOptions>,
+}
+
+/// The accessory ids that exist on disk for one slot, in the character's
+/// body prefix.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct AccessorySlotOptions {
+    pub slot: AccessorySlot,
+    pub ids: Vec<i32>,
 }
 
 impl ItemAppearance {
@@ -660,6 +664,7 @@ impl ItemAppearance {
                     has_model: true,
                     variation_field: VariationField::Variation,
                     preview_pose: PreviewPose::Weapon,
+                    available_accessories: Vec::new(),
                 }
             }
             ItemModelKind::SinglePart if is_bracer => {
@@ -694,6 +699,7 @@ impl ItemAppearance {
                     } else {
                         PreviewPose::Weapon
                     },
+                    available_accessories: Vec::new(),
                 }
             }
             ItemModelKind::BodyArmor => {
@@ -710,6 +716,11 @@ impl ItemAppearance {
                 );
                 let available_materials =
                     Self::discover_armor_materials(body, slot, game_data, resource_manager);
+                let available_accessories = if slot == Some(ArmorSlot::Body) {
+                    Self::discover_accessories(body, resource_manager)
+                } else {
+                    Vec::new()
+                };
                 ItemAppearanceOptions {
                     // Discovery now searches exactly the material prefixes the
                     // loader will try, so an empty list means nothing renders.
@@ -721,10 +732,33 @@ impl ItemAppearance {
                     available_part3: Vec::new(),
                     variation_field: VariationField::Variation,
                     preview_pose: PreviewPose::Armor,
+                    available_accessories,
                 }
             }
             ItemModelKind::None => ItemAppearanceOptions::new_empty(),
         }
+    }
+
+    /// Accessory ids per slot with a mesh on disk, using the same
+    /// `A_{body}_{slot}NN` naming `ArmorAccessories::iter_renderable` resolves
+    /// at load time. Vestigial slots (no MDB family) are never listed.
+    fn discover_accessories(
+        body_prefix: &str,
+        resource_manager: &ResourceManager,
+    ) -> Vec<AccessorySlotOptions> {
+        let body = body_prefix
+            .strip_prefix("P_")
+            .or_else(|| body_prefix.strip_prefix("p_"))
+            .unwrap_or(body_prefix);
+        AccessorySlot::all()
+            .iter()
+            .filter_map(|slot| {
+                let mdb_slot = slot.mdb_slot()?;
+                let ids =
+                    Self::discover_variants(resource_manager, &format!("A_{body}_{mdb_slot}"), "");
+                (!ids.is_empty()).then_some(AccessorySlotOptions { slot: *slot, ids })
+            })
+            .collect()
     }
 
     /// Discover real mesh variants on disk for a body-armor slot by inspecting
@@ -1287,6 +1321,22 @@ pub fn resref_attach_bone_and_slot(resref: &str) -> Option<(&'static str, Access
     Some((bone, slot))
 }
 
+/// MDB resref of one accessory mesh: `A_{body}_{slot}{id}` with the body
+/// prefix's `P_` stripped and the id NOT zero-padded (`A_HHM_LShoulder1`),
+/// which is how every accessory file on disk is named. `None` for id 0 and
+/// vestigial slots.
+pub fn accessory_resref(body_prefix: &str, slot: AccessorySlot, id: i32) -> Option<String> {
+    if id <= 0 {
+        return None;
+    }
+    let body = body_prefix
+        .strip_prefix("P_")
+        .or_else(|| body_prefix.strip_prefix("p_"))
+        .unwrap_or(body_prefix);
+    let mdb_slot = slot.mdb_slot()?;
+    Some(format!("A_{body}_{mdb_slot}{id}"))
+}
+
 /// Build one resref group per non-zero, non-vestigial accessory slot.
 /// Each group has a single candidate (no fallback list). Missing MDBs are
 /// skipped at load time by `load_item_model`'s fallback handling.
@@ -1336,6 +1386,7 @@ impl ItemAppearanceOptions {
             has_model: false,
             variation_field: VariationField::Variation,
             preview_pose: PreviewPose::Weapon,
+            available_accessories: Vec::new(),
         }
     }
 }
@@ -1397,7 +1448,7 @@ mod tests {
         let groups = accessory_resref_groups("P_EEM", &acc);
         let flat: Vec<String> = groups.iter().flatten().cloned().collect();
 
-        assert_eq!(flat, vec!["A_EEM_LKnee03".to_string()]);
+        assert_eq!(flat, vec!["A_EEM_LKnee3".to_string()]);
     }
 
     #[test]
@@ -1407,18 +1458,18 @@ mod tests {
         // Uppercase input (the real case — body_prefix comes from appearance.2da).
         assert_eq!(
             accessory_resref_groups("P_EEM", &acc),
-            vec![vec!["A_EEM_LShoulder01".to_string()]]
+            vec![vec!["A_EEM_LShoulder1".to_string()]]
         );
         // Lowercase input strips defensively; casing preserved. The resource
         // manager lookup is case-insensitive, so both resolve to the same file.
         assert_eq!(
             accessory_resref_groups("p_hhm", &acc),
-            vec![vec!["A_hhm_LShoulder01".to_string()]]
+            vec![vec!["A_hhm_LShoulder1".to_string()]]
         );
         // Body without P_ prefix is used as-is.
         assert_eq!(
             accessory_resref_groups("HHM", &acc),
-            vec![vec!["A_HHM_LShoulder01".to_string()]]
+            vec![vec!["A_HHM_LShoulder1".to_string()]]
         );
     }
 

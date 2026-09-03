@@ -16,6 +16,41 @@ interface ThumbnailGalleryProps {
   tints: TintColors;
   tileLabel: (value: number) => string;
   pose?: PreviewPose | null;
+  // When set, a plain text tile for value 0 ("none") leads the grid.
+  noneLabel?: string;
+}
+
+function NoneTile({ selected, onSelect, label }: { selected: boolean; onSelect: (value: number) => void; label: string }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      title={label}
+      onClick={() => onSelect(0)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(0);
+        }
+      }}
+      className="t-sm"
+      style={{
+        width: TILE_SIZE,
+        height: TILE_SIZE,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        color: selected ? T.accent : T.textMuted,
+        border: `1px solid ${selected ? T.accent : T.borderLight}`,
+        background: selected ? `${T.accent}18` : T.surfaceAlt,
+        borderRadius: 3,
+        userSelect: 'none',
+      }}
+    >
+      {label}
+    </div>
+  );
 }
 
 function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label, pose }: {
@@ -91,11 +126,15 @@ export function ThumbnailGallery({
   tints,
   tileLabel,
   pose,
+  noneLabel,
 }: ThumbnailGalleryProps) {
   if (values.length === 0) return null;
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {noneLabel !== undefined && (
+        <NoneTile selected={selected <= 0} onSelect={onSelect} label={noneLabel} />
+      )}
       {values.map((v) => (
         <Tile
           key={v}
