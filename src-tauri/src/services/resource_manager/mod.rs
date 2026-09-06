@@ -201,6 +201,23 @@ impl ResourceManager {
         }
 
         if let Some(ref gf) = game_folder {
+            let enhanced_data = gf.join("enhanced/data");
+            for name in [
+                "nwn2_models.zip",
+                "lod-merged.zip",
+                "lod-merged_x1.zip",
+                "lod-merged_x2.zip",
+                "nwn2_materials_noupscale.zip",
+                "upscale_initial.zip",
+                "upscale_main.zip",
+                "upscale_x1.zip",
+                "upscale_x2.zip",
+            ] {
+                let path = enhanced_data.join(name);
+                if path.is_file() {
+                    zip_paths.push(path);
+                }
+            }
             let vo_dir = gf.join("localization/english/data");
             for name in VO_ZIPS {
                 let p = vo_dir.join(name);
@@ -230,6 +247,15 @@ impl ResourceManager {
         let entry_count = entries.len();
 
         for entry in entries {
+            // EE LOD archives contain a newer Granny layout. Keep the original
+            // GR2 skeletons/animations until that layout has parser support.
+            if entry.extension == "gr2"
+                && game_folder
+                    .as_ref()
+                    .is_some_and(|gf| entry.zip_path.starts_with(gf.join("enhanced/data")))
+            {
+                continue;
+            }
             let key = resource_key(&entry.stem, &entry.extension);
             let mtime = zip_mtimes.get(&entry.zip_path).copied().unwrap_or(0.0);
 

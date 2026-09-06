@@ -57,6 +57,14 @@ async fn dump_armor_mdb_materials() {
     let mut out = String::new();
 
     let bodies = [
+        "A_HHM_LShoulder26",
+        "A_HHM_RShoulder7",
+        "A_HHM_LUpArm8",
+        "A_HHM_RUpArm5",
+        "A_HHM_LBracer5",
+        "A_HHM_RBracer6",
+        "P_HHM_Hair01",
+        "P_HHM_LE_Body01",
         // Expected accessory resrefs for darksteel plate UTI
         // (ACLtShoulder=15, ACRtShoulder=15, ACLtArm=14, ACRtArm=12,
         //  ACLtBracer=17, ACRtBracer=17, ACLtShin=11, ACRtShin=11,

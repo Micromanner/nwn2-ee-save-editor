@@ -1,7 +1,123 @@
 use crate::common::create_test_context;
+use app_lib::character::Character;
 use app_lib::character::{ArmorAccessories, ItemAppearance, TintChannels};
 use app_lib::loaders::GameData;
+use app_lib::parsers::gff::GffValue;
 use app_lib::utils::parsing::row_str;
+use indexmap::IndexMap;
+
+#[tokio::test]
+async fn equipped_part_precedence_and_nested_tints_match_item_preview() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().unwrap();
+    let rm = ctx.resource_manager.read().await;
+    let appearance_table = game_data.get_table("appearance").unwrap();
+    let human = (0..appearance_table.row_count() as i32)
+        .find(|id| {
+            appearance_table.get_by_id(*id).is_some_and(|row| {
+                row_str(&row, "nwn2_model_body").is_some_and(|s| s.eq_ignore_ascii_case("P_HH?"))
+            })
+        })
+        .unwrap();
+    let make_character = |items| {
+        Character::from_gff(IndexMap::from([
+            ("Appearance_Type".into(), GffValue::Word(human as u16)),
+            ("Gender".into(), GffValue::Byte(0)),
+            ("Appearance_Head".into(), GffValue::Byte(1)),
+            ("Equip_ItemList".into(), GffValue::ListOwned(items)),
+        ]))
+    };
+    let part = |avt, variation| {
+        IndexMap::from([
+            ("ArmorVisualType".into(), GffValue::Byte(avt)),
+            ("Variation".into(), GffValue::Byte(variation)),
+        ])
+    };
+    let mut nested_boots = part(0, 0);
+    let tint = IndexMap::from([
+        ("r".into(), GffValue::Byte(31)),
+        ("g".into(), GffValue::Byte(97)),
+        ("b".into(), GffValue::Byte(173)),
+        ("a".into(), GffValue::Byte(255)),
+    ]);
+    nested_boots.insert(
+        "ArmorTint".into(),
+        GffValue::StructOwned(Box::new(IndexMap::from([
+            ("1".into(), GffValue::StructOwned(Box::new(tint.clone()))),
+            ("2".into(), GffValue::StructOwned(Box::new(tint.clone()))),
+            ("3".into(), GffValue::StructOwned(Box::new(tint))),
+        ]))),
+    );
+    let mut chest = part(8, 0);
+    chest.insert(
+        "BaseItem".into(),
+        GffValue::Int(find_base_item_by_label(game_data, "Armor")),
+    );
+    chest.insert(
+        "Boots".into(),
+        GffValue::StructOwned(Box::new(nested_boots)),
+    );
+    let mut boots = part(2, 0);
+    boots.insert(
+        "BaseItem".into(),
+        GffValue::Int(find_base_item_by_label(game_data, "Boots")),
+    );
+
+    for items in [
+        vec![chest.clone(), boots.clone()],
+        vec![boots, chest.clone()],
+    ] {
+        let character = make_character(items);
+        let parts = character.resolve_model_parts(game_data, &rm).unwrap();
+        assert_eq!(parts.boots_candidates[0], "P_HHM_LE_Boots01");
+        assert!(parts.has_standalone_boots);
+        assert!(parts.boots_candidates.iter().all(|s| s.contains("_LE_")));
+    }
+
+    let character = make_character(vec![chest.clone()]);
+    let parts = character.resolve_model_parts(game_data, &rm).unwrap();
+    assert_eq!(parts.boots_candidates[0], "P_HHM_CL_Boots01");
+    assert!(!parts.has_standalone_boots);
+    assert_eq!(parts.boots_tint.as_ref().unwrap().channel1.r, 31);
+    let appearance = ItemAppearance::from_gff(&chest);
+    assert_eq!(appearance.boots.as_ref().unwrap().variation, 0);
+    assert_eq!(
+        appearance
+            .boots
+            .as_ref()
+            .unwrap()
+            .tints
+            .as_ref()
+            .unwrap()
+            .channel1
+            .b,
+        173
+    );
+    let model = app_lib::commands::item_appearance::load_item_model_impl(
+        find_base_item_by_label(game_data, "Armor"),
+        &appearance,
+        Some("P_HHM"),
+        game_data,
+        &rm,
+    )
+    .unwrap();
+    let boot_mesh = model
+        .meshes
+        .iter()
+        .find(|m| m.name.to_lowercase().contains("_boots"))
+        .unwrap();
+    assert_eq!(boot_mesh.override_tints.as_ref().unwrap().channel1.g, 97);
+
+    let mut bracer = part(2, 4);
+    bracer.insert(
+        "BaseItem".into(),
+        GffValue::Int(find_base_item_by_label(game_data, "Bracer")),
+    );
+    let parts = make_character(vec![bracer])
+        .resolve_model_parts(game_data, &rm)
+        .unwrap();
+    assert_eq!(parts.gloves_candidates[0], "P_HHM_LE_Gloves01");
+}
 
 fn appearance_with_variation(variation: i32) -> ItemAppearance {
     ItemAppearance {
@@ -12,6 +128,91 @@ fn appearance_with_variation(variation: i32) -> ItemAppearance {
         boots: None,
         gloves: None,
         accessories: ArmorAccessories::default(),
+    }
+}
+
+#[tokio::test]
+async fn accessory_palettes_cancel_the_viewer_swap_for_every_slot() {
+    use app_lib::character::{AccessorySlot, AccessorySlotData, TintChannel};
+
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().unwrap();
+    let rm = ctx.resource_manager.read().await;
+    let tints = TintChannels {
+        channel1: TintChannel {
+            r: 74,
+            g: 97,
+            b: 61,
+            a: 255,
+        },
+        channel2: TintChannel {
+            r: 100,
+            g: 135,
+            b: 80,
+            a: 255,
+        },
+        channel3: TintChannel {
+            r: 71,
+            g: 50,
+            b: 50,
+            a: 255,
+        },
+    };
+    let mut appearance = appearance_with_variation(0);
+    appearance.armor_visual_type = Some(2);
+    for (slot, id) in [
+        (AccessorySlot::LtShoulder, 26),
+        (AccessorySlot::RtShoulder, 7),
+        (AccessorySlot::LtArm, 8),
+        (AccessorySlot::RtArm, 5),
+        (AccessorySlot::LtBracer, 5),
+        (AccessorySlot::RtBracer, 6),
+    ] {
+        appearance.accessories.set_data(
+            slot,
+            Some(AccessorySlotData {
+                id,
+                tints: tints.clone(),
+            }),
+        );
+    }
+    let model = app_lib::commands::item_appearance::load_item_model_impl(
+        find_base_item_by_label(game_data, "Armor"),
+        &appearance,
+        Some("P_HHM"),
+        game_data,
+        &rm,
+    )
+    .unwrap();
+    for accessory in appearance.accessories.iter_renderable("P_HHM") {
+        let meshes: Vec<_> = model
+            .meshes
+            .iter()
+            .filter(|mesh| {
+                mesh.name
+                    .to_ascii_lowercase()
+                    .starts_with(&accessory.resref.to_ascii_lowercase())
+            })
+            .collect();
+        assert!(!meshes.is_empty(), "missing {}", accessory.resref);
+        for mesh in meshes {
+            let tint = mesh
+                .override_tints
+                .as_ref()
+                .expect("independent accessory palette");
+            assert_eq!(
+                (tint.channel1.r, tint.channel1.g, tint.channel1.b),
+                (74, 97, 61)
+            );
+            assert_eq!(
+                (tint.channel2.r, tint.channel2.g, tint.channel2.b),
+                (71, 50, 50)
+            );
+            assert_eq!(
+                (tint.channel3.r, tint.channel3.g, tint.channel3.b),
+                (100, 135, 80)
+            );
+        }
     }
 }
 

@@ -41,6 +41,10 @@ pub fn read_tint_from_tintable(tintable: &IndexMap<String, GffValue<'_>>) -> Tin
         Some(GffValue::Struct(lazy)) => lazy.force_load(),
         _ => return TintChannels::default(),
     };
+    read_tint_channels(&tint)
+}
+
+pub(crate) fn read_tint_channels(tint: &IndexMap<String, GffValue<'_>>) -> TintChannels {
     let ch = |key: &str| -> TintChannel {
         match tint.get(key) {
             Some(GffValue::StructOwned(s)) => read_tint_channel(s),
@@ -99,9 +103,7 @@ pub fn build_nested_tint(tints: &TintChannels) -> IndexMap<String, GffValue<'sta
     outer
 }
 
-/// Swap channels 2 and 3 on a tint. Glove and boot MDBs tag their tint
-/// masks with an opposite convention to chest armor; swapping the incoming
-/// tint once here lets the same shader code render both.
+/// Convert between raw GFF channels and the viewer's swapped channel order.
 pub fn swap_tint_2_3(t: &TintChannels) -> TintChannels {
     TintChannels {
         channel1: t.channel1.clone(),
@@ -134,26 +136,16 @@ pub fn resolve_armor_prefix(
         return prefixes;
     };
 
-    // Primary index based on context, then try the other as fallback
     let primary = if one_indexed {
         visual_type - 1
     } else {
         visual_type
     };
-    let fallback = if one_indexed {
-        visual_type
-    } else {
-        visual_type - 1
-    };
-
-    for row_id in [primary, fallback] {
-        if row_id >= 0
-            && let Some(row) = armor_table.get_by_id(row_id)
-            && let Some(prefix) = row_str(&row, "prefix")
-            && !prefixes.contains(&prefix)
-        {
-            prefixes.push(prefix);
-        }
+    if primary >= 0
+        && let Some(row) = armor_table.get_by_id(primary)
+        && let Some(prefix) = row_str(&row, "prefix")
+    {
+        prefixes.push(prefix);
     }
     prefixes
 }

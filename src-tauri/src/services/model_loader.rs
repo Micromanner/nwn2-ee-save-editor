@@ -669,17 +669,32 @@ fn convert_material(m: &Material) -> MaterialData {
     }
 }
 
+fn tangent_with_handedness(normal: [f32; 3], tangent: [f32; 3], binormal: [f32; 3]) -> [f32; 4] {
+    let cross = [
+        normal[1] * tangent[2] - normal[2] * tangent[1],
+        normal[2] * tangent[0] - normal[0] * tangent[2],
+        normal[0] * tangent[1] - normal[1] * tangent[0],
+    ];
+    let dot: f32 = cross.iter().zip(binormal).map(|(a, b)| a * b).sum();
+    [
+        tangent[0],
+        tangent[1],
+        tangent[2],
+        if dot < 0.0 { -1.0 } else { 1.0 },
+    ]
+}
+
 fn flatten_rigid_mesh(rm: &RigidMeshPacket, part: &str, tint_group: &str) -> MeshData {
     let vc = rm.vertices.len();
     let mut positions = Vec::with_capacity(vc * 3);
     let mut normals = Vec::with_capacity(vc * 3);
     let mut uvs = Vec::with_capacity(vc * 2);
-    let mut tangents = Vec::with_capacity(vc * 3);
+    let mut tangents = Vec::with_capacity(vc * 4);
 
     for v in &rm.vertices {
         positions.extend_from_slice(&v.position);
         normals.extend_from_slice(&v.normal);
-        tangents.extend_from_slice(&v.tangent);
+        tangents.extend_from_slice(&tangent_with_handedness(v.normal, v.tangent, v.binormal));
         uvs.push(v.uvw[0]);
         uvs.push(v.uvw[1]);
     }
@@ -840,14 +855,14 @@ fn flatten_skin_mesh(sm: &SkinMeshPacket, part: &str, tint_group: &str) -> MeshD
     let mut positions = Vec::with_capacity(vc * 3);
     let mut normals = Vec::with_capacity(vc * 3);
     let mut uvs = Vec::with_capacity(vc * 2);
-    let mut tangents = Vec::with_capacity(vc * 3);
+    let mut tangents = Vec::with_capacity(vc * 4);
     let mut bone_weights = Vec::with_capacity(vc * 4);
     let mut bone_indices = Vec::with_capacity(vc * 4);
 
     for v in &sm.vertices {
         positions.extend_from_slice(&v.position);
         normals.extend_from_slice(&v.normal);
-        tangents.extend_from_slice(&v.tangent);
+        tangents.extend_from_slice(&tangent_with_handedness(v.normal, v.tangent, v.binormal));
         uvs.push(v.uvw[0]);
         uvs.push(v.uvw[1]);
         bone_weights.extend_from_slice(&v.bone_weights);
@@ -876,6 +891,18 @@ fn flatten_skin_mesh(sm: &SkinMeshPacket, part: &str, tint_group: &str) -> MeshD
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authored_tangent_retains_mirrored_binormal() {
+        assert_eq!(
+            tangent_with_handedness([0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+            [1.0, 0.0, 0.0, 1.0]
+        );
+        assert_eq!(
+            tangent_with_handedness([0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, -1.0, 0.0]),
+            [1.0, 0.0, 0.0, -1.0]
+        );
+    }
 
     #[test]
     #[allow(clippy::float_cmp)]

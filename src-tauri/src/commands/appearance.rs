@@ -233,7 +233,8 @@ pub async fn get_available_tails(
 }
 
 #[tauri::command]
-pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelData> {
+pub async fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelData> {
+    let rm = state.resource_manager.read().await;
     let session = state.session.read();
     let character = session
         .character
@@ -241,7 +242,6 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
         .ok_or(CommandError::NoCharacterLoaded)?;
     let game_data = state.game_data.read();
 
-    let rm = state.resource_manager.blocking_read();
     let parts = character
         .resolve_model_parts(&game_data, &rm)
         .ok_or_else(|| CommandError::Internal("Failed to resolve character model parts".into()))?;
@@ -428,7 +428,13 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
     }
 
     if !parts.gloves_candidates.is_empty() {
-        let tint = parts.gloves_tint.as_ref().map(cosmetic_gloves_tint);
+        let tint = parts.gloves_tint.as_ref().map(|t| {
+            if parts.has_standalone_gloves {
+                cosmetic_gloves_tint(t)
+            } else {
+                swap_tint_2_3(t)
+            }
+        });
         if !load_body_part_with_tint(&parts.gloves_candidates, "gloves", tint.as_ref()) {
             warn!(
                 "Failed to load gloves from candidates: {:?}",
@@ -443,9 +449,8 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
     let accessory_body_prefix = character
         .body_prefix(&game_data)
         .unwrap_or_else(|| "P_HHM".to_string());
-    // Shin accessories clip through standalone boots; hide them when a
-    // boots item contributed its own tint.
-    let has_standalone_boots = parts.boots_tint.is_some();
+    // Shin accessories clip through standalone boots.
+    let has_standalone_boots = parts.has_standalone_boots;
     for acc in parts
         .chest_accessories
         .iter_renderable(&accessory_body_prefix)
@@ -458,11 +463,7 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
             );
             continue;
         }
-        let tints = if matches!(acc.slot, AccessorySlot::LtBracer | AccessorySlot::RtBracer) {
-            swap_tint_2_3(acc.tints)
-        } else {
-            acc.tints.clone()
-        };
+        let tints = swap_tint_2_3(acc.tints);
         match load_part(&acc.resref, "accessory", "body") {
             Ok(meshes) => {
                 for mut m in meshes {
@@ -515,17 +516,17 @@ pub fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelDa
 /// applies the shader G/B swap; head/armor tints already expect it (same as
 /// the character viewer), hair is raw GFF order and is pre-swapped to cancel.
 #[tauri::command]
-pub fn load_companion_portrait_model(
+pub async fn load_companion_portrait_model(
     state: State<'_, AppState>,
     ros_name: String,
 ) -> CommandResult<ModelData> {
+    let rm = state.resource_manager.read().await;
     let session = state.session.read();
     let character = session
         .companion_snapshot(&ros_name)
         .map_err(CommandError::Internal)?;
     drop(session);
     let game_data = state.game_data.read();
-    let rm = state.resource_manager.blocking_read();
     let parts = character
         .resolve_model_parts(&game_data, &rm)
         .ok_or_else(|| CommandError::Internal("Failed to resolve character model parts".into()))?;
@@ -562,7 +563,11 @@ pub fn load_companion_portrait_model(
     };
     let mut all_meshes: Vec<MeshData> = Vec::new();
 
-    let body_tint = parts.armor_tint.clone().unwrap_or_else(|| white.clone());
+    let body_tint = parts
+        .armor_tint
+        .as_ref()
+        .map(swap_tint_2_3)
+        .unwrap_or_else(|| white.clone());
     let mut body_loaded = false;
     for part_resref in parts
         .body_parts
@@ -644,7 +649,7 @@ pub fn load_companion_portrait_model(
             Ok(meshes) => {
                 for mut m in meshes {
                     m.attach_bone = Some(acc.attach_bone.to_string());
-                    m.override_tints = Some(acc.tints.clone());
+                    m.override_tints = Some(swap_tint_2_3(acc.tints));
                     all_meshes.push(m);
                 }
             }
@@ -671,7 +676,11 @@ pub fn load_companion_portrait_model(
 }
 
 #[tauri::command]
-pub fn load_character_part(state: State<'_, AppState>, part: String) -> CommandResult<ModelData> {
+pub async fn load_character_part(
+    state: State<'_, AppState>,
+    part: String,
+) -> CommandResult<ModelData> {
+    let rm = state.resource_manager.read().await;
     let session = state.session.read();
     let character = session
         .character
@@ -679,7 +688,6 @@ pub fn load_character_part(state: State<'_, AppState>, part: String) -> CommandR
         .ok_or(CommandError::NoCharacterLoaded)?;
     let game_data = state.game_data.read();
 
-    let rm = state.resource_manager.blocking_read();
     let parts = character
         .resolve_model_parts(&game_data, &rm)
         .ok_or_else(|| {

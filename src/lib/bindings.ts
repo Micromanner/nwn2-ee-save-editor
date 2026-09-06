@@ -102,6 +102,7 @@ export interface ColorCapabilities {
 export interface NestedArmorPart {
   armor_visual_type: number | null;
   variation: number;
+  tints: TintChannels | null;
 }
 
 /// The 22 accessory slots of a chest armor UTI (serde variant names).

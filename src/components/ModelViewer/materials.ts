@@ -31,17 +31,30 @@ export function tintChannelsToColors(tc: TintChannelsRaw): TintColors {
 type ParsedDds = ReturnType<DDSLoader['parse']>;
 
 const DDS_CACHE_LIMIT = 300;
+const DDS_CACHE_BYTES_LIMIT = 128 * 1024 * 1024;
 const ddsCache = new Map<string, ParsedDds | null>();
 const pendingDds = new Map<string, Promise<ParsedDds | null>>();
+let ddsCacheBytes = 0;
+
+function ddsBytes(parsed: ParsedDds | null | undefined): number {
+  return parsed?.mipmaps.reduce((total, mip) => total + mip.data.byteLength, 0) ?? 0;
+}
 
 function ddsCachePut(name: string, parsed: ParsedDds | null): void {
   if (ddsCache.has(name)) {
+    ddsCacheBytes -= ddsBytes(ddsCache.get(name));
     ddsCache.delete(name);
-  } else if (ddsCache.size >= DDS_CACHE_LIMIT) {
+  }
+  const bytes = ddsBytes(parsed);
+  if (bytes > DDS_CACHE_BYTES_LIMIT) return;
+  while (ddsCache.size >= DDS_CACHE_LIMIT || ddsCacheBytes + bytes > DDS_CACHE_BYTES_LIMIT) {
     const oldest = ddsCache.keys().next().value;
-    if (oldest !== undefined) ddsCache.delete(oldest);
+    if (oldest === undefined) break;
+    ddsCacheBytes -= ddsBytes(ddsCache.get(oldest));
+    ddsCache.delete(oldest);
   }
   ddsCache.set(name, parsed);
+  ddsCacheBytes += bytes;
 }
 
 function ddsCacheGet(name: string): ParsedDds | null | undefined {
@@ -78,7 +91,10 @@ export async function loadDDSTexture(textureName: string): Promise<THREE.Compres
   const request = (async () => {
     try {
       const buffer: ArrayBuffer = await invoke('get_texture_bytes', { name: textureName });
-      const parsed = ddsLoader.parse(buffer, false);
+      const parsed = ddsLoader.parse(buffer, true);
+      if (!parsed.width || !parsed.height || !parsed.format || parsed.mipmaps.length === 0) {
+        throw new Error(`Unsupported or invalid DDS: ${textureName}`);
+      }
       ddsCachePut(textureName, parsed);
       return parsed;
     } catch (err) {
@@ -110,9 +126,7 @@ function injectTintShader(
 
   (mat.userData as Record<string, unknown>).tintUniforms = uniforms;
 
-  // Armor/item tint masks use channel 2 → blue, channel 3 → green (verified
-  // against Darksteel Full Plate on 2026-04-18). Head/hair/face masks use
-  // the straight r/g/b order. Caller passes swapGB accordingly.
+  // swapGB converts viewer palettes back to raw shader RGB order.
   const ch2 = swapGB ? 'b' : 'g';
   const ch3 = swapGB ? 'g' : 'b';
 
@@ -153,9 +167,10 @@ uniform vec3 tintColor3;
     vec2 tintUv = vec2(0.0);
   #endif
   vec4 tintMask = texture2D(tintMap, tintUv);
-  vec3 tint = mix(vec3(1.0), tintColor1, tintMask.r)
-            * mix(vec3(1.0), tintColor2, tintMask.${ch2})
-            * mix(vec3(1.0), tintColor3, tintMask.${ch3});
+  // EE LightingPS: weighted sum, with alpha blending against untinted albedo.
+  vec3 tint = tintColor1 * tintMask.r
+            + tintColor2 * tintMask.${ch2}
+            + tintColor3 * tintMask.${ch3};
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * tint, tintMask.a);
 }
 `,
@@ -171,6 +186,7 @@ export function updateTintUniforms(
   scene.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh || obj instanceof THREE.SkinnedMesh)) return;
     if (obj.userData.tintGroup !== tintGroup) return;
+    if (obj.userData.hasOverrideTints) return;
 
     const mat = obj.material as THREE.MeshStandardMaterial;
     const uniforms = (mat.userData as Record<string, unknown>).tintUniforms as
@@ -280,7 +296,12 @@ export async function createMaterial(
 
   if (materialData.flags & 0x01) {
     mat.alphaTest = 0.5;
+  }
+
+  if (materialData.flags & 0x06) {
     mat.transparent = true;
+    mat.depthWrite = false;
+    if (materialData.flags & 0x04) mat.blending = THREE.AdditiveBlending;
   }
 
   if (glow) {

@@ -53,11 +53,11 @@ pub fn load_model(state: State<'_, AppState>, resref: String) -> Result<ModelDat
 }
 
 #[tauri::command]
-pub fn get_texture_bytes(
+pub async fn get_texture_bytes(
     state: State<'_, AppState>,
     name: String,
 ) -> Result<tauri::ipc::Response, String> {
-    let rm = state.resource_manager.blocking_read();
+    let rm = state.resource_manager.read().await;
     match rm.get_resource_bytes(&name, "dds") {
         Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
         Err(e) => {

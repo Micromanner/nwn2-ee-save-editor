@@ -123,6 +123,8 @@ const INVISIBLE_ARMOR_VARIANT: i32 = 99;
 pub struct NestedArmorPart {
     pub armor_visual_type: Option<i32>,
     pub variation: i32,
+    #[serde(default)]
+    pub tints: Option<super::appearance_helpers::TintChannels>,
 }
 
 /// One of the 22 accessory slots an NWN2 chest-armor UTI can declare.
@@ -1266,7 +1268,7 @@ fn read_accessories(fields: &IndexMap<String, GffValue<'_>>) -> ArmorAccessories
     out
 }
 
-fn read_nested_armor_part(
+pub(crate) fn read_nested_armor_part(
     fields: &IndexMap<String, GffValue<'_>>,
     key: &str,
 ) -> Option<NestedArmorPart> {
@@ -1280,7 +1282,7 @@ fn read_nested_armor_part(
         .get("Variation")
         .and_then(gff_value_to_i32)
         .unwrap_or(0);
-    if variation <= 0 {
+    if variation < 0 {
         return None;
     }
     let armor_visual_type = part_fields
@@ -1290,6 +1292,15 @@ fn read_nested_armor_part(
     Some(NestedArmorPart {
         armor_visual_type,
         variation,
+        tints: match part_fields.get("ArmorTint") {
+            Some(GffValue::StructOwned(s)) => {
+                Some(super::appearance_helpers::read_tint_channels(s))
+            }
+            Some(GffValue::Struct(lazy)) => Some(super::appearance_helpers::read_tint_channels(
+                &lazy.force_load(),
+            )),
+            _ => None,
+        },
     })
 }
 

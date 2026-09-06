@@ -87,8 +87,9 @@ async fn dump_full_armor_item() {
     let mut out = String::new();
 
     // 1. Dump darksteel plate UTI template (pristine item definition)
-    writeln!(out, "=== UTI template: mwa_hvfp_drk_3 ===\n").unwrap();
-    match rm.get_resource_bytes("mwa_hvfp_drk_3", "uti") {
+    let template = std::env::var("ARMOR_DUMP_TEMPLATE").unwrap_or_else(|_| "mwa_hvfp_drk_3".into());
+    writeln!(out, "=== UTI template: {template} ===\n").unwrap();
+    match rm.get_resource_bytes(&template, "uti") {
         Ok(bytes) => match GffParser::from_bytes(bytes) {
             Ok(gff) => match gff.read_struct_fields(0) {
                 Ok(fields) => {
@@ -105,9 +106,13 @@ async fn dump_full_armor_item() {
 
     // 2. Dump equipped darksteel plate from the live save
     writeln!(out, "\n\n=== EQUIPPED armor from save ===\n").unwrap();
-    let save_path = PathBuf::from(
-        r"C:\Users\01tee\Documents\Neverwinter Nights 2\saves\000064 - 17-04-2026-09-09",
-    );
+    let save_path = std::env::var_os("ARMOR_DUMP_SAVE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(
+                r"C:\Users\01tee\Documents\Neverwinter Nights 2\saves\000064 - 17-04-2026-09-09",
+            )
+        });
     if save_path.exists() {
         let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
         let bic_data = handler
@@ -115,7 +120,12 @@ async fn dump_full_armor_item() {
             .expect("extract")
             .expect("no bic");
         let gff = GffParser::from_bytes(bic_data).expect("parse");
-        let fields = gff.read_struct_fields(0).expect("read");
+        let fields: indexmap::IndexMap<_, _> = gff
+            .read_struct_fields(0)
+            .expect("read")
+            .into_iter()
+            .map(|(key, value)| (key, value.force_owned()))
+            .collect();
         if let Some(GffValue::ListOwned(equip)) = fields.get("Equip_ItemList") {
             for item in equip {
                 let base_item = match item.get("BaseItem") {

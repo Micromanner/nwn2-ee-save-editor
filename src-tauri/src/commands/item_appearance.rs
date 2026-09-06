@@ -109,14 +109,7 @@ pub fn load_item_model_impl(
                     if let Some((bone, slot)) =
                         crate::character::resref_attach_bone_and_slot(resref)
                     {
-                        let raw_tints = appearance.accessories.get_tints(slot).cloned();
-                        let tints = raw_tints.map(|t| {
-                            if matches!(slot, AccessorySlot::LtBracer | AccessorySlot::RtBracer) {
-                                swap_tint_2_3(&t)
-                            } else {
-                                t
-                            }
-                        });
+                        let tints = appearance.accessories.get_tints(slot).map(swap_tint_2_3);
                         for m in &mut data.meshes {
                             m.attach_bone = Some(bone.to_string());
                             if let Some(ref t) = tints {
@@ -132,7 +125,15 @@ pub fn load_item_model_impl(
                             m.tint_group = "item_gloves".to_string();
                         }
                     } else if resref_is_boots_or_gloves(resref) && !is_own_boots_or_gloves {
-                        let swapped = swap_tint_2_3(&appearance.tints);
+                        let nested = if resref.to_lowercase().contains("_boots") {
+                            appearance.boots.as_ref()
+                        } else {
+                            appearance.gloves.as_ref()
+                        };
+                        let tints = nested
+                            .and_then(|p| p.tints.as_ref())
+                            .unwrap_or(&appearance.tints);
+                        let swapped = swap_tint_2_3(tints);
                         for m in &mut data.meshes {
                             m.override_tints = Some(swapped.clone());
                             m.tint_group = "item_frozen".to_string();
@@ -250,11 +251,7 @@ pub async fn load_accessory_model(
 
     let mut data = model_loader::load_model(&rm, &resref, "item", "item")
         .map_err(|e| format!("Failed to load accessory '{resref}': {e}"))?;
-    let tints = if matches!(slot, AccessorySlot::LtBracer | AccessorySlot::RtBracer) {
-        swap_tint_2_3(&tints)
-    } else {
-        tints
-    };
+    let tints = swap_tint_2_3(&tints);
     for m in &mut data.meshes {
         m.override_tints = Some(tints.clone());
     }

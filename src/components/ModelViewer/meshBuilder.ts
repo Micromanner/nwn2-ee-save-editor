@@ -60,6 +60,16 @@ export function buildMesh(
   geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(normArray, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(meshData.uvs), 2));
+  if (meshData.tangents.length === meshData.positions.length / 3 * 4) {
+    const tangents = new Float32Array(meshData.tangents.length);
+    for (let i = 0; i < tangents.length; i += 4) {
+      tangents[i] = meshData.tangents[i];
+      tangents[i + 1] = meshData.tangents[i + 2];
+      tangents[i + 2] = -meshData.tangents[i + 1];
+      tangents[i + 3] = meshData.tangents[i + 3];
+    }
+    geometry.setAttribute('tangent', new THREE.BufferAttribute(tangents, 4));
+  }
   geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(meshData.indices), 1));
 
   if (meshData.mesh_type === 'skin' && meshData.bone_weights && meshData.bone_indices && skeleton && rootBone) {
@@ -70,6 +80,7 @@ export function buildMesh(
     skinnedMesh.castShadow = true;
     skinnedMesh.receiveShadow = true;
     skinnedMesh.userData.tintGroup = meshData.tint_group;
+    skinnedMesh.userData.hasOverrideTints = meshData.override_tints != null;
     if (!rootBone.parent) {
       skinnedMesh.add(rootBone);
     }
@@ -84,6 +95,7 @@ export function buildMesh(
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.userData.tintGroup = meshData.tint_group;
+  mesh.userData.hasOverrideTints = meshData.override_tints != null;
   return mesh;
 }
 

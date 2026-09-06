@@ -90,6 +90,8 @@ pub struct CharacterModelParts {
     pub gloves_candidates: Vec<String>,
     pub boots_tint: Option<TintChannels>,
     pub gloves_tint: Option<TintChannels>,
+    pub has_standalone_boots: bool,
+    pub has_standalone_gloves: bool,
     pub helm_tint: Option<TintChannels>,
     pub cloak_resref: Option<String>,
     pub cloak_tint: Option<TintChannels>,
@@ -115,6 +117,8 @@ struct EquippedVisuals {
     armor_tint: Option<TintChannels>,
     boots_tint: Option<TintChannels>,
     gloves_tint: Option<TintChannels>,
+    has_standalone_boots: bool,
+    has_standalone_gloves: bool,
     helm_tint: Option<TintChannels>,
     chest_accessories: super::item_appearance::ArmorAccessories,
 }
@@ -739,6 +743,8 @@ impl Character {
             gloves_candidates,
             boots_tint: equip_visuals.boots_tint,
             gloves_tint: equip_visuals.gloves_tint,
+            has_standalone_boots: equip_visuals.has_standalone_boots,
+            has_standalone_gloves: equip_visuals.has_standalone_gloves,
             helm_tint: equip_visuals.helm_tint,
             cloak_resref,
             cloak_tint: equip_visuals.cloak_tint,
@@ -764,6 +770,14 @@ impl Character {
             let var = pv.variation;
             for pfx in &pv.armor_prefixes {
                 push(format!("{body_prefix}_{pfx}_{part_name}{var:02}"));
+            }
+            if !pv.armor_prefixes.is_empty() {
+                if var != 1 {
+                    for pfx in &pv.armor_prefixes {
+                        push(format!("{body_prefix}_{pfx}_{part_name}01"));
+                    }
+                }
+                return candidates;
             }
             for pfx in chest_armor_prefixes {
                 push(format!("{body_prefix}_{pfx}_{part_name}{var:02}"));
@@ -793,16 +807,12 @@ impl Character {
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
 
-        if raw_variation == 0 {
+        if raw_variation < 0 {
             return None;
         }
 
         let variation = raw_variation + 1;
-        let armor_prefixes = if visual_type > 0 {
-            resolve_armor_prefix(game_data, visual_type, false)
-        } else {
-            Vec::new()
-        };
+        let armor_prefixes = resolve_armor_prefix(game_data, visual_type, false);
 
         Some(PartVisual {
             armor_prefixes,
@@ -826,6 +836,8 @@ impl Character {
             armor_tint: None,
             boots_tint: None,
             gloves_tint: None,
+            has_standalone_boots: false,
+            has_standalone_gloves: false,
             helm_tint: None,
             chest_accessories: super::item_appearance::ArmorAccessories::default(),
         };
@@ -835,6 +847,10 @@ impl Character {
         };
 
         let baseitems_table = game_data.get_table("baseitems");
+        let mut chest_boots = None;
+        let mut chest_gloves = None;
+        let mut chest_boots_tint = None;
+        let mut chest_gloves_tint = None;
 
         for item_struct in &equip_list {
             // Determine equipment slot from BaseItem -> baseitems.2da EquipableSlots
@@ -925,7 +941,7 @@ impl Character {
                     );
                     let has_color = [&tint.channel1, &tint.channel2, &tint.channel3]
                         .iter()
-                        .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0);
+                        .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0 || ch.a > 0);
                     if has_color {
                         result.armor_tint = Some(tint);
                     }
@@ -954,11 +970,13 @@ impl Character {
                     _ => None,
                 };
                 if let Some(ref fields) = boots_fields {
-                    result.boots = Self::parse_part_visual(fields, game_data);
+                    chest_boots = Self::parse_part_visual(fields, game_data);
+                    chest_boots_tint =
+                        super::item_appearance::read_nested_armor_part(item_struct, "Boots")
+                            .and_then(|p| p.tints);
                     debug!(
                         "Boots part: {:?}",
-                        result
-                            .boots
+                        chest_boots
                             .as_ref()
                             .map(|b| (&b.armor_prefixes, b.variation))
                     );
@@ -969,11 +987,13 @@ impl Character {
                     _ => None,
                 };
                 if let Some(ref fields) = gloves_fields {
-                    result.gloves = Self::parse_part_visual(fields, game_data);
+                    chest_gloves = Self::parse_part_visual(fields, game_data);
+                    chest_gloves_tint =
+                        super::item_appearance::read_nested_armor_part(item_struct, "Gloves")
+                            .and_then(|p| p.tints);
                     debug!(
                         "Gloves part: {:?}",
-                        result
-                            .gloves
+                        chest_gloves
                             .as_ref()
                             .map(|g| (&g.armor_prefixes, g.variation))
                     );
@@ -993,11 +1013,7 @@ impl Character {
                     .map(|v| v + 1)
                     .unwrap_or(1)
                     .max(1);
-                let armor_prefixes = if visual_type > 0 {
-                    resolve_armor_prefix(game_data, visual_type, false)
-                } else {
-                    Vec::new()
-                };
+                let armor_prefixes = resolve_armor_prefix(game_data, visual_type, false);
                 if !armor_prefixes.is_empty() || variation > 0 {
                     result.helm_part = Some(PartVisual {
                         armor_prefixes,
@@ -1007,6 +1023,7 @@ impl Character {
             }
 
             if is_boots {
+                result.has_standalone_boots = true;
                 result.boots = Self::parse_item_part_visual(item_struct, game_data);
                 result.boots_tint =
                     Self::read_item_tint_with_fallback(item_struct, resource_manager);
@@ -1020,7 +1037,16 @@ impl Character {
                 );
             }
             if is_gloves {
+                result.has_standalone_gloves = true;
                 result.gloves = Self::parse_item_part_visual(item_struct, game_data);
+                let is_bracer = baseitems_table
+                    .as_ref()
+                    .and_then(|t| t.get_by_id(base_item))
+                    .and_then(|row| row_str(&row, "label"))
+                    .is_some_and(|label| super::item_appearance::is_bracer_label(&label));
+                if is_bracer && let Some(ref mut gloves) = result.gloves {
+                    gloves.variation = 1;
+                }
                 result.gloves_tint =
                     Self::read_item_tint_with_fallback(item_struct, resource_manager);
                 debug!(
@@ -1062,6 +1088,14 @@ impl Character {
             }
         }
 
+        if !result.has_standalone_boots {
+            result.boots = chest_boots;
+            result.boots_tint = chest_boots_tint;
+        }
+        if !result.has_standalone_gloves {
+            result.gloves = chest_gloves;
+            result.gloves_tint = chest_gloves_tint;
+        }
         result
     }
 
@@ -1080,7 +1114,7 @@ impl Character {
             let tint = read_tint_from_tintable(t);
             let has_color = [&tint.channel1, &tint.channel2, &tint.channel3]
                 .iter()
-                .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0);
+                .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0 || ch.a > 0);
             if has_color {
                 return Some(tint);
             }
@@ -1106,7 +1140,7 @@ impl Character {
         let tint = read_tint_from_tintable(&tintable);
         let has_color = [&tint.channel1, &tint.channel2, &tint.channel3]
             .iter()
-            .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0);
+            .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0 || ch.a > 0);
         if has_color {
             debug!(
                 "Template '{}' tint: ch1=({},{},{},{}), ch2=({},{},{},{}), ch3=({},{},{},{})",
@@ -1147,11 +1181,7 @@ impl Character {
 
         debug!("Item part visual: ArmorVisualType={visual_type}, Variation(mesh)={variation}");
 
-        let armor_prefixes = if visual_type > 0 {
-            resolve_armor_prefix(game_data, visual_type, false)
-        } else {
-            Vec::new()
-        };
+        let armor_prefixes = resolve_armor_prefix(game_data, visual_type, false);
 
         Some(PartVisual {
             armor_prefixes,

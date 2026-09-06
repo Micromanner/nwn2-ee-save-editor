@@ -18,7 +18,7 @@ export interface MeshData {
   positions: number[];
   normals: number[];
   uvs: number[];
-  tangents: number[];
+  tangents: number[]; // xyzw: authored tangent and binormal handedness
   indices: number[];
   bone_weights: number[] | null;
   bone_indices: number[] | null;
