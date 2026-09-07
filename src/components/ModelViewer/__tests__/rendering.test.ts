@@ -42,15 +42,17 @@ describe('MDB rendering', () => {
     );
     const shader = {
       uniforms: {},
-      vertexShader: '',
-      fragmentShader: '#include <common>\n#include <color_fragment>',
+      vertexShader: THREE.ShaderLib.physical.vertexShader,
+      fragmentShader: THREE.ShaderLib.physical.fragmentShader,
     } as Parameters<typeof material.onBeforeCompile>[0];
     material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
     const compactShader = shader.fragmentShader.replace(/\s+/g, ' ');
     expect(compactShader).toContain(`vec3 tint = tintColor1 * tintMask.r + tintColor2 * tintMask.${swapGB ? 'b' : 'g'} + tintColor3 * tintMask.${swapGB ? 'g' : 'b'};`);
     expect(compactShader).toContain('diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * tint, tintMask.a);');
     expect(shader.uniforms.tintColor2.value.toArray()).toEqual(colors.channel2);
-    expect(material.customProgramCacheKey()).toBe(`nwn2tint_${swapGB ? 'gb' : 'rgb'}`);
+    expect(shader.uniforms.nwn2GameStyle).toBe(material.userData.lightingUniforms.nwn2GameStyle);
+    expect(shader.fragmentShader).toContain('#define RE_Direct RE_Direct_NWN2');
+    expect(material.customProgramCacheKey()).toBe(`nwn2tint_${swapGB ? 'gb' : 'rgb'}_nwn2lighting_v2`);
     material.map?.dispose();
     shader.uniforms.tintMap.value.dispose();
     material.dispose();
@@ -61,6 +63,40 @@ describe('MDB rendering', () => {
     const mesh = buildMesh(meshData, material) as THREE.Mesh;
     expect(Array.from(mesh.geometry.getAttribute('tangent').array)).toEqual([0, 0, -1, -1]);
     expect(Array.from(mesh.geometry.getAttribute('normal').array)).toEqual([0, 1, -0]);
+    mesh.geometry.dispose();
+    material.dispose();
+  });
+
+  it('switches material response without changing the calibrated physical values', async () => {
+    const material = await createMaterial({
+      ...materialData, normal_map: 'hair_normal', flags: 1,
+      specular_color: [0.9, 0.9, 0.9], specular_level: 0.45, specular_power: 10,
+    });
+    const scene = new THREE.Scene();
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(), material);
+    const render = () => material.onBeforeRender(
+      {} as THREE.WebGLRenderer, scene, new THREE.PerspectiveCamera(), mesh.geometry, mesh,
+      {} as THREE.Group,
+    );
+    const uniforms = material.userData.lightingUniforms;
+    expect(material.specularIntensity).toBeCloseTo(8.1);
+    expect(material.specularIntensityMap).toBe(material.normalMap);
+    expect(uniforms.nwn2Specular.value.r).toBeCloseTo(0.405);
+    expect(uniforms.nwn2SpecularPower.value).toBe(10);
+    render();
+    expect(uniforms.nwn2GameStyle.value).toBe(0);
+    const version = material.version;
+    scene.userData.shadingMode = 'game';
+    render();
+    expect(uniforms.nwn2GameStyle.value).toBe(1);
+    expect(material.version).toBe(version);
+    expect(material.specularIntensity).toBeCloseTo(8.1);
+    expect(material.envMap).toBeNull();
+    expect(material.transparent).toBe(false);
+    scene.userData.shadingMode = 'physical';
+    render();
+    expect(uniforms.nwn2GameStyle.value).toBe(0);
+    material.normalMap?.dispose();
     mesh.geometry.dispose();
     material.dispose();
   });

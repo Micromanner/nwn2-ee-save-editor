@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { createMaterial, tintChannelsToColors, updateTintUniforms, type TintColors } from '../ModelViewer/materials';
 import { buildSkeleton, buildMesh, buildAnimationClips } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
+import { DropdownSelect } from '@/components/shared/DropdownSelect';
 import { LoadingState } from '../shared';
 import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { AttachedPart, MeshData, ModelData } from '../ModelViewer/types';
@@ -76,7 +77,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
     for (const m of attachedMixersRef.current.values()) m.update(delta);
   }, []);
 
-  const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef } = useThreeScene(onAnimate);
+  const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef, shadingMode, setShadingMode } = useThreeScene(onAnimate);
 
   const applyHelmetVisibility = useCallback(() => {
     const scene = sceneRef.current;
@@ -521,6 +522,18 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 400 }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+        <DropdownSelect
+          small
+          label={t('modelViewer.shading')}
+          value={t(shadingMode === 'game' ? 'modelViewer.gameStyle' : 'modelViewer.physical')}
+          items={[
+            { id: 0, label: t('modelViewer.physical') },
+            { id: 1, label: t('modelViewer.gameStyle') },
+          ]}
+          onChange={(id) => setShadingMode(id === 1 ? 'game' : 'physical')}
+        />
+      </div>
       
       {loading && (
         <LoadingState variant="overlay" text={t('modelViewer.loading')} />

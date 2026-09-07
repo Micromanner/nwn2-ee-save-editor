@@ -895,6 +895,9 @@
     "gamePathWarning": "Instalación no detectada automáticamente."
   },
   "modelViewer": {
+    "shading": "Sombreado",
+    "physical": "Físico (referencia)",
+    "gameStyle": "Estilo del juego",
     "loading": "Cargando modelo...",
     "error": "Error",
     "searchPlaceholder": "Buscar modelos...",

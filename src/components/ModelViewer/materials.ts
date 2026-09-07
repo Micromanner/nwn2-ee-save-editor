@@ -218,6 +218,89 @@ export const SPECULAR = {
   DIFFUSE_COLOR_ENABLED: true,
 };
 
+export type ShadingMode = 'physical' | 'game';
+export const DEFAULT_SHADING_MODE: ShadingMode = 'game';
+
+function injectGameLighting(mat: THREE.MeshPhysicalMaterial, specular: THREE.Color, power: number): void {
+  const uniforms = {
+    nwn2GameStyle: { value: 0 },
+    nwn2Specular: { value: specular },
+    nwn2SpecularPower: { value: power },
+  };
+  mat.userData.lightingUniforms = uniforms;
+  mat.onBeforeRender = (_renderer, scene) => {
+    uniforms.nwn2GameStyle.value = scene.userData.shadingMode === 'game' ? 1 : 0;
+  };
+  const tintCompile = mat.onBeforeCompile;
+  const tintKey = mat.customProgramCacheKey();
+  mat.customProgramCacheKey = () => `${tintKey}_nwn2lighting_v2`;
+  mat.onBeforeCompile = (shader, renderer) => {
+    tintCompile.call(mat, shader, renderer);
+    Object.assign(shader.uniforms, uniforms);
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normalmap_pars_fragment>',
+      `#include <normalmap_pars_fragment>
+uniform float nwn2GameStyle;
+uniform vec3 nwn2Specular;
+uniform float nwn2SpecularPower;
+
+void RE_Direct_NWN2(const in IncidentLight light, const in vec3 position,
+    const in vec3 normal, const in vec3 viewDir, const in vec3 clearcoatNormal,
+    const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+  if (nwn2GameStyle < 0.5) {
+    RE_Direct_Physical(light, position, normal, viewDir, clearcoatNormal, material, reflectedLight);
+    return;
+  }
+  vec3 halfVector = light.direction + viewDir;
+  halfVector *= inversesqrt(max(dot(halfVector, halfVector), 1e-8));
+  float highlight = pow(saturate(dot(normal, halfVector)), nwn2SpecularPower);
+  float gloss = 1.0;
+  #ifdef USE_NORMALMAP
+    gloss = texture2D(normalMap, vNormalMapUv).a;
+  #endif
+  // Convert the physical preview rig's irradiance to unnormalized game light units.
+  vec3 lightColor = light.color * RECIPROCAL_PI;
+  reflectedLight.directDiffuse += lightColor * saturate(dot(normal, light.direction)) * material.diffuseColor;
+  reflectedLight.directSpecular += lightColor * nwn2Specular * highlight * gloss;
+}
+
+void RE_IndirectDiffuse_NWN2(const in vec3 irradiance, const in vec3 position,
+    const in vec3 normal, const in vec3 viewDir, const in vec3 clearcoatNormal,
+    const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+  if (nwn2GameStyle < 0.5) {
+    RE_IndirectDiffuse_Physical(irradiance, position, normal, viewDir, clearcoatNormal, material, reflectedLight);
+    return;
+  }
+  reflectedLight.indirectDiffuse += (irradiance * RECIPROCAL_PI) * material.diffuseColor;
+}
+
+void RE_IndirectSpecular_NWN2(const in vec3 radiance, const in vec3 irradiance,
+    const in vec3 clearcoatRadiance, const in vec3 position, const in vec3 normal,
+    const in vec3 viewDir, const in vec3 clearcoatNormal,
+    const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+  if (nwn2GameStyle < 0.5) {
+    RE_IndirectSpecular_Physical(radiance, irradiance, clearcoatRadiance, position, normal, viewDir, clearcoatNormal, material, reflectedLight);
+    return;
+  }
+  // Keep the existing 0x08 reflection approximation separate from diffuse.
+  #ifdef USE_ENVMAP
+    ReflectedLight environment = ReflectedLight(vec3(0.0), vec3(0.0), vec3(0.0), vec3(0.0));
+    RE_IndirectSpecular_Physical(radiance, irradiance, clearcoatRadiance, position, normal, viewDir, clearcoatNormal, material, environment);
+    reflectedLight.indirectSpecular += environment.indirectSpecular;
+  #endif
+}
+
+#undef RE_Direct
+#undef RE_IndirectDiffuse
+#undef RE_IndirectSpecular
+#define RE_Direct RE_Direct_NWN2
+#define RE_IndirectDiffuse RE_IndirectDiffuse_NWN2
+#define RE_IndirectSpecular RE_IndirectSpecular_NWN2
+`,
+    );
+  };
+}
+
 // Blinn-Phong exponent → GGX roughness. Non-finite/absent power falls back
 // to 1, which maps to ~0.82 — close to the viewer's previous flat default.
 function powerToRoughness(power: number | undefined): number {
@@ -314,6 +397,15 @@ export async function createMaterial(
     mat.envMapIntensity = SPECULAR.ENV_MAP_INTENSITY;
     mat.metalness = SPECULAR.ENV_MAP_METALNESS;
   }
+
+  // CPU-side MDB-to-light preprocessing is unresolved; use authored values
+  // for the comparison, without the physical path's plate calibration.
+  const power = materialData.specular_power;
+  injectGameLighting(
+    mat,
+    new THREE.Color(...(materialData.specular_color ?? [1, 1, 1])).multiplyScalar(specLevel),
+    power !== undefined && Number.isFinite(power) && power > 0 ? power : 1,
+  );
 
   return mat;
 }

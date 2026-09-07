@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createMaterial, tintChannelsToColors, type TintColors } from './materials';
+import { createMaterial, DEFAULT_SHADING_MODE, tintChannelsToColors, type TintColors } from './materials';
 import { buildMesh, buildSkeleton } from './meshBuilder';
 import { applyPoseRotation, poseCameraPosition, poseFromModel } from './pose';
 import type { ModelData } from './types';
@@ -54,6 +54,7 @@ function initRenderer(): RendererState {
   );
 
   const scene = new THREE.Scene();
+  scene.userData.shadingMode = DEFAULT_SHADING_MODE;
   const sun = new THREE.DirectionalLight(0xffe0b2, 1.5);
   sun.position.set(250, 500, -400);
   scene.add(sun);
@@ -199,11 +200,6 @@ export async function renderModelThumbnail(
         ),
       ),
     );
-    if (framing === 'portrait') {
-      // The shared specular calibration is for armor; at portrait close-up it
-      // reads as glossy skin, so halve it.
-      for (const mat of materials) mat.specularIntensity *= 0.5;
-    }
     const headObjects: THREE.Object3D[] = [];
     const hairObjects: THREE.Object3D[] = [];
     for (let i = 0; i < visible.length; i++) {

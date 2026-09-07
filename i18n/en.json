@@ -904,6 +904,9 @@
     "gamePathWarning": "Game installation not automatically detected. We'll try to find it when you launch."
   },
   "modelViewer": {
+    "shading": "Shading",
+    "physical": "Physical (baseline)",
+    "gameStyle": "Game style",
     "loading": "Loading model...",
     "error": "Error",
     "searchPlaceholder": "Search models...",

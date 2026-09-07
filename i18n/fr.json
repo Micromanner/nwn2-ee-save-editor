@@ -903,6 +903,9 @@
     "gamePathWarning": "Installation non auto-détectée."
   },
   "modelViewer": {
+    "shading": "Ombrage",
+    "physical": "Physique (référence)",
+    "gameStyle": "Style du jeu",
     "loading": "Chargement du modèle...",
     "error": "Erreur",
     "searchPlaceholder": "Chercher modèles...",

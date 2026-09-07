@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
+import { DropdownSelect } from '@/components/shared/DropdownSelect';
 import { useModelLoader } from './useModelLoader';
 import { useThreeScene, clearSceneModels, frameBounds } from './useThreeScene';
 import { LoadingState } from '@/components/shared';
@@ -11,7 +12,7 @@ interface AssetViewer3DProps {
 export function AssetViewer3D({ resref }: AssetViewer3DProps) {
   const t = useTranslations();
   const { loadModel, loading, error } = useModelLoader();
-  const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef } = useThreeScene();
+  const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef, shadingMode, setShadingMode } = useThreeScene();
 
   useEffect(() => {
     if (!resref || !sceneRef.current || !cameraRef.current || !controlsRef.current) return;
@@ -32,6 +33,18 @@ export function AssetViewer3D({ resref }: AssetViewer3DProps) {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 400 }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+        <DropdownSelect
+          small
+          label={t('modelViewer.shading')}
+          value={t(shadingMode === 'game' ? 'modelViewer.gameStyle' : 'modelViewer.physical')}
+          items={[
+            { id: 0, label: t('modelViewer.physical') },
+            { id: 1, label: t('modelViewer.gameStyle') },
+          ]}
+          onChange={(id) => setShadingMode(id === 1 ? 'game' : 'physical')}
+        />
+      </div>
       
       {loading && (
         <LoadingState variant="overlay" text={t('modelViewer.loading')} />
