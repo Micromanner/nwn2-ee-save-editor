@@ -894,9 +894,6 @@
     "gamePathWarning": "Spielverzeichnis nicht automatisch erkannt."
   },
   "modelViewer": {
-    "shading": "Schattierung",
-    "physical": "Physikalisch (Referenz)",
-    "gameStyle": "Spielstil",
     "loading": "Modell wird geladen...",
     "error": "Fehler",
     "searchPlaceholder": "Modelle suchen...",

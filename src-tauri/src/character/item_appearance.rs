@@ -211,8 +211,12 @@ impl AccessorySlot {
             Self::RtBracer => Some("RArm12"),
             Self::LtLeg => Some("LLeg1"),
             Self::RtLeg => Some("RLeg1"),
-            Self::LtKnee => Some("ap_knee_left"),
-            Self::RtKnee => Some("ap_knee_right"),
+            // Kneecaps parent to the shin bone, whose origin IS the knee
+            // joint. The `ap_knee_*` effect points sit ~7cm off it (4cm down
+            // the thigh, 5cm forward) and carry a ~180 deg Y rotation, which
+            // threw the accessory well clear of the knee.
+            Self::LtKnee => Some("LLeg2"),
+            Self::RtKnee => Some("RLeg2"),
             Self::LtShin => Some("LLeg2"),
             Self::RtShin => Some("RLeg2"),
             Self::LtHip => Some("LHip1"),
@@ -1599,8 +1603,8 @@ mod tests {
             (RtBracer, "RArm12"),
             (LtLeg, "LLeg1"),
             (RtLeg, "RLeg1"),
-            (LtKnee, "ap_knee_left"),
-            (RtKnee, "ap_knee_right"),
+            (LtKnee, "LLeg2"),
+            (RtKnee, "RLeg2"),
             (LtShin, "LLeg2"),
             (RtShin, "RLeg2"),
             (LtHip, "LHip1"),
@@ -1621,7 +1625,7 @@ mod tests {
         assert_eq!(resref_bone("A_EEM_LUpArm14"), Some("LArm010"));
         assert_eq!(resref_bone("A_EEM_RUpArm12"), Some("RArm110"));
         assert_eq!(resref_bone("A_EEM_LBracer17"), Some("LArm02"));
-        assert_eq!(resref_bone("A_EEM_RKnee11"), Some("ap_knee_right"));
+        assert_eq!(resref_bone("A_EEM_RKnee11"), Some("RLeg2"));
         assert_eq!(resref_bone("A_EEM_LLowLeg11"), Some("LLeg2"));
         // Non-accessory resrefs → None.
         assert_eq!(resref_bone("P_EEM_PF_Body03"), None);

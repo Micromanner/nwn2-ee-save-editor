@@ -905,9 +905,6 @@
     "gamePathWarning": "Nie wykryto ścieżki instalacji gry."
   },
   "modelViewer": {
-    "shading": "Cieniowanie",
-    "physical": "Fizyczne (odniesienie)",
-    "gameStyle": "Styl gry",
     "loading": "Wczytywanie modelu...",
     "error": "Błąd",
     "searchPlaceholder": "Szukaj modeli...",

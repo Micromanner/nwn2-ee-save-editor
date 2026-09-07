@@ -904,9 +904,6 @@
     "gamePathWarning": "Путь к игре не определен автоматически."
   },
   "modelViewer": {
-    "shading": "Затенение",
-    "physical": "Физическое (эталон)",
-    "gameStyle": "Стиль игры",
     "loading": "Загрузка модели...",
     "error": "Ошибка",
     "searchPlaceholder": "Поиск моделей...",

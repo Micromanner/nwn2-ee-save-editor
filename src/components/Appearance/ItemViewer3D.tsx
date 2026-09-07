@@ -4,7 +4,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { createMaterial, tintChannelsToColors, updateTintUniforms, type TintColors } from '../ModelViewer/materials';
 import { buildSkeleton, buildMesh } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
-import { DropdownSelect } from '@/components/shared/DropdownSelect';
 import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { MeshData, ModelData } from '../ModelViewer/types';
 import type { ItemAppearance, PreviewPose, TintChannels } from '@/lib/bindings';
@@ -117,7 +116,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
   // itself changes (different baseItemId).
   const framedForItemRef = useRef<number | null>(null);
 
-  const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef, shadingMode, setShadingMode } = useThreeScene();
+  const { container: containerRef, scene: sceneRef, camera: cameraRef, controls: controlsRef } = useThreeScene();
 
   const loadItem = useCallback(async () => {
     if (!sceneRef.current) return;
@@ -263,19 +262,6 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '400px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-        <DropdownSelect
-          small
-          label={t('modelViewer.shading')}
-          value={t(shadingMode === 'game' ? 'modelViewer.gameStyle' : 'modelViewer.physical')}
-          items={[
-            { id: 0, label: t('modelViewer.physical') },
-            { id: 1, label: t('modelViewer.gameStyle') },
-          ]}
-          onChange={(id) => setShadingMode(id === 1 ? 'game' : 'physical')}
-        />
-      </div>
-
       {loading && (
         <LoadingState variant="overlay" text={t('modelViewer.loading')} />
       )}

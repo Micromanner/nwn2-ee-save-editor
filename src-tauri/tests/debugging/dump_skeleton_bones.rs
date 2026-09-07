@@ -25,9 +25,15 @@ async fn dump_skeleton_bones() {
                 Ok(skel) => {
                     writeln!(out, "  name: '{}'", skel.name).unwrap();
                     writeln!(out, "  bone count: {}", skel.bones.len()).unwrap();
-                    writeln!(out, "  all bones (idx parent_idx name):").unwrap();
+                    writeln!(out, "  all bones (idx parent_idx name local_position):").unwrap();
                     for (i, b) in skel.bones.iter().enumerate() {
-                        writeln!(out, "    {i:3}  {:3}  {}", b.parent_index, b.name).unwrap();
+                        let p = b.transform.position;
+                        writeln!(
+                            out,
+                            "    {i:3}  {:3}  {:<28} [{:8.3} {:8.3} {:8.3}]",
+                            b.parent_index, b.name, p[0], p[1], p[2]
+                        )
+                        .unwrap();
                     }
                     writeln!(out, "\n  bones matching accessory slots:").unwrap();
                     let slot_patterns = [

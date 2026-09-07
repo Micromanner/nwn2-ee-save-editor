@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { createSkyObject } from './sky';
-import { DEFAULT_SHADING_MODE, type ShadingMode } from './materials';
+import { DEFAULT_SHADING_MODE } from './materials';
 
 export interface SceneRefs {
   container: React.RefObject<HTMLDivElement | null>;
@@ -16,8 +16,6 @@ export interface SceneRefs {
   renderer: React.RefObject<THREE.WebGLRenderer | null>;
   composer: React.RefObject<EffectComposer | null>;
   frame: React.RefObject<number>;
-  shadingMode: ShadingMode;
-  setShadingMode: (mode: ShadingMode) => void;
 }
 
 /// Prefiltered sky env map built by useThreeScene for ENVIRONMENT_MAPPING
@@ -27,7 +25,6 @@ export function getEnvMap(scene: THREE.Scene | null | undefined): THREE.Texture 
 }
 
 export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRefs {
-  const [shadingMode, setShadingMode] = useState<ShadingMode>(DEFAULT_SHADING_MODE);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -177,10 +174,6 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
   }, []);
 
   useEffect(() => {
-    if (sceneRef.current) sceneRef.current.userData.shadingMode = shadingMode;
-  }, [shadingMode]);
-
-  useEffect(() => {
     const scene = sceneRef.current;
     const camera = cameraRef.current;
     const renderer = rendererRef.current;
@@ -240,8 +233,6 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     renderer: rendererRef,
     composer: composerRef,
     frame: frameRef,
-    shadingMode,
-    setShadingMode,
   };
 }
 
