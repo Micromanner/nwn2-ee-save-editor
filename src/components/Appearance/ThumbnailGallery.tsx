@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { useModelThumbnail } from '@/hooks/useModelThumbnail';
 import type { TintColors } from '../ModelViewer/materials';
 import type { ModelData } from '../ModelViewer/types';
@@ -64,23 +63,12 @@ function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label, p
   pose?: PreviewPose | null;
 }) {
   const dataUrl = useModelThumbnail(cacheKey, () => fetchModel(value), tints, 'model', pose);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Bring the item's current variation into view once its image lands, so the
-  // user can see what they already have without scanning the whole grid.
-  useEffect(() => {
-    if (selected && dataUrl) ref.current?.scrollIntoView({ block: 'nearest' });
-    // Only on the first render of the selected tile's image.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataUrl]);
-
   // A variant whose model does not resolve renders nothing at all rather than
   // offering a click that would blank the preview.
   if (dataUrl === '') return null;
 
   return (
     <div
-      ref={ref}
       role="button"
       tabIndex={0}
       title={label}
