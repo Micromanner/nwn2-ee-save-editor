@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::utils::zip_content_reader::ZipEntryLocation;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OverrideSource {
     BaseGame,
@@ -69,6 +71,10 @@ pub struct ResourceLocation {
     pub container_path: PathBuf,
     pub internal_path: Option<String>,
     pub modified_time: f64,
+    /// Set for zip entries the startup scan can read directly, skipping the
+    /// archive open (a one-second central-directory read on the model zips).
+    #[serde(default)]
+    pub zip_entry: Option<ZipEntryLocation>,
 }
 
 impl ResourceLocation {
@@ -77,6 +83,7 @@ impl ResourceLocation {
         zip_path: PathBuf,
         internal: String,
         mtime: f64,
+        zip_entry: Option<ZipEntryLocation>,
     ) -> Self {
         Self {
             source,
@@ -84,6 +91,7 @@ impl ResourceLocation {
             container_path: zip_path,
             internal_path: Some(internal),
             modified_time: mtime,
+            zip_entry,
         }
     }
 
@@ -99,6 +107,7 @@ impl ResourceLocation {
             container_path: erf_path,
             internal_path: Some(internal),
             modified_time: mtime,
+            zip_entry: None,
         }
     }
 
@@ -109,6 +118,7 @@ impl ResourceLocation {
             container_path: file_path,
             internal_path: None,
             modified_time: mtime,
+            zip_entry: None,
         }
     }
 
@@ -231,6 +241,7 @@ mod tests {
             PathBuf::from("2da.zip"),
             "classes.2da".to_string(),
             0.0,
+            None,
         );
         assert!(zip_loc.is_archive());
         assert!(!zip_loc.is_loose_file());

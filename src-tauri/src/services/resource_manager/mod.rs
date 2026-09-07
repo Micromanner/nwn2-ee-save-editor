@@ -28,27 +28,6 @@ pub use override_chain::{
     CampaignInfo, ContainerType, ModuleInfo, OverrideSource, ResourceLocation, TemplateInfo,
 };
 
-const BASE_GAME_ZIPS: &[&str] = &["2da.zip", "2da_x1.zip", "2da_x2.zip"];
-const TEMPLATE_ZIPS: &[&str] = &["Templates.zip", "Templates_X1.zip", "Templates_X2.zip"];
-const SOUNDSET_ZIPS: &[&str] = &["soundsets.zip", "soundsets_x1.zip", "soundsets_x2.zip"];
-const SOUND_ZIPS: &[&str] = &["sounds.zip", "sounds_x1.zip", "sounds_x2.zip"];
-const MODEL_ZIPS: &[&str] = &[
-    "nwn2_models.zip",
-    "nwn2_models_x1.zip",
-    "nwn2_models_x2.zip",
-];
-const MATERIAL_ZIPS: &[&str] = &["nwn2_materials.zip"];
-const ACTOR_ZIPS: &[&str] = &["actors.zip", "actors_x1.zip", "actors_x2.zip"];
-const LOD_ZIPS: &[&str] = &[
-    "lod-merged.zip",
-    "lod-merged_x1.zip",
-    "lod-merged_x2.zip",
-    "lod-merged_v101.zip",
-    "lod-merged_v107.zip",
-    "lod-merged_v121.zip",
-    "lod-merged_x1_v121.zip",
-    "lod-merged_x2_v121.zip",
-];
 const VO_ZIPS: &[&str] = &["vo.zip", "vo_x1.zip", "vo_x2.zip"];
 
 pub struct ResourceManager {
@@ -134,7 +113,6 @@ impl ResourceManager {
         self.scan_override_directories().await?;
         self.scan_icon_directories().await?;
         self.load_base_tlk().await?;
-        self.cache_data_zip_paths().await;
 
         self.initialized = true;
         info!(
@@ -198,26 +176,16 @@ impl ResourceManager {
         let game_folder = paths.game_folder().cloned();
         drop(paths);
 
-        let all_zip_groups: &[&[&str]] = &[
-            BASE_GAME_ZIPS,
-            TEMPLATE_ZIPS,
-            SOUNDSET_ZIPS,
-            SOUND_ZIPS,
-            MODEL_ZIPS,
-            MATERIAL_ZIPS,
-            ACTOR_ZIPS,
-            LOD_ZIPS,
-        ];
-
-        let mut zip_paths: Vec<PathBuf> = Vec::new();
-        for group in all_zip_groups {
-            for name in *group {
-                let p = data_dir.join(name);
-                if p.exists() {
-                    zip_paths.push(p);
-                }
-            }
-        }
+        // Every archive in the data directory is indexed, so a lookup that
+        // misses is a hash miss instead of a search that opens each
+        // unindexed archive.
+        self.data_zip_paths = std::fs::read_dir(data_dir)
+            .map_err(ResourceManagerError::Io)?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")))
+            .collect();
+        let mut zip_paths = self.data_zip_paths.clone();
 
         if let Some(ref gf) = game_folder {
             let enhanced_data = gf.join("enhanced/data");
@@ -283,16 +251,13 @@ impl ResourceManager {
                 entry.zip_path,
                 entry.internal_path,
                 mtime,
+                entry.location,
             );
 
-            self.resource_index
-                .entry(key)
-                .or_default()
-                .push(location.clone());
-
             if entry.extension == "uti" {
-                self.template_locations.insert(entry.stem, location);
+                self.template_locations.insert(entry.stem, location.clone());
             }
+            self.resource_index.entry(key).or_default().push(location);
         }
 
         self.invalidate_index_caches();
@@ -554,20 +519,6 @@ impl ResourceManager {
         }
 
         Ok(())
-    }
-
-    async fn cache_data_zip_paths(&mut self) {
-        let paths = self.paths.read().await;
-        if let Some(data_dir) = paths.data()
-            && let Ok(entries) = std::fs::read_dir(data_dir)
-        {
-            self.data_zip_paths = entries
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")))
-                .collect();
-        }
-        debug!("Cached {} data zip paths", self.data_zip_paths.len());
     }
 
     pub fn get_2da(&self, name: &str) -> ResourceManagerResult<Arc<TDAParser>> {
@@ -1378,64 +1329,67 @@ impl ResourceManager {
                 "ResourceManager: Found resource '{}' in source: {:?}",
                 key, location.source
             );
-            return match &location.container_type {
-                ContainerType::Directory => Ok(std::fs::read(&location.container_path)?),
-                ContainerType::Zip => {
-                    let internal = location.internal_path.as_ref().ok_or_else(|| {
-                        ResourceManagerError::Parse("Missing internal path".into())
-                    })?;
-                    let zip_path = location.container_path.to_string_lossy().to_string();
-                    // Hold the reader only for the index lookup; the inflate
-                    // runs on a private handle so concurrent reads (a
-                    // thumbnail's textures, prefetched models) overlap.
-                    let direct = self
-                        .zip_reader
-                        .lock()
-                        .locate_for_direct_read(&zip_path, internal)
-                        .map_err(ResourceManagerError::ZipError)?;
-                    match direct {
-                        Some(entry) => ZipContentReader::read_entry(&zip_path, &entry)
-                            .map_err(ResourceManagerError::ZipError),
-                        None => self
-                            .zip_reader
-                            .lock()
-                            .read_file_from_zip(zip_path, internal.clone())
-                            .map_err(ResourceManagerError::ZipError),
-                    }
-                }
-                ContainerType::Erf => {
-                    let internal = location.internal_path.as_ref().ok_or_else(|| {
-                        ResourceManagerError::Parse("Missing internal path".into())
-                    })?;
-                    let mut erf = ErfParser::new();
-                    erf.read(&location.container_path)
-                        .map_err(|e| ResourceManagerError::InvalidErfFormat(format!("{e}")))?;
-                    erf.resources
-                        .get(internal)
-                        .and_then(|r| r.data.clone())
-                        .ok_or_else(|| ResourceManagerError::ExtractionFailed {
-                            resource: internal.clone(),
-                            container: location.container_path.display().to_string(),
-                        })
-                }
-            };
-        }
-
-        // Fallback: search unindexed zips (should rarely fire)
-        let mut zip_reader = self.zip_reader.lock();
-        for path in &self.data_zip_paths {
-            if let Ok(Some(bytes)) = zip_reader.find_file_by_name(&path.to_string_lossy(), &key) {
-                debug!(
-                    "Resource '{}' found via fallback zip scan (not in index)",
-                    key
+            let started = std::time::Instant::now();
+            let result = self.read_location_bytes(location);
+            let elapsed = started.elapsed();
+            if elapsed.as_millis() >= 50 {
+                info!(
+                    "Slow resource read '{key}': {elapsed:?} from {:?} {} (scan-located: {})",
+                    location.source,
+                    location.container_path.display(),
+                    location.zip_entry.is_some()
                 );
-                return Ok(bytes);
             }
+            return result;
         }
 
         Err(ResourceManagerError::FileNotFound(PathBuf::from(format!(
             "{resref}.{extension}"
         ))))
+    }
+
+    fn read_location_bytes(&self, location: &ResourceLocation) -> ResourceManagerResult<Vec<u8>> {
+        match &location.container_type {
+            ContainerType::Directory => Ok(std::fs::read(&location.container_path)?),
+            ContainerType::Zip => {
+                let internal = location
+                    .internal_path
+                    .as_ref()
+                    .ok_or_else(|| ResourceManagerError::Parse("Missing internal path".into()))?;
+                // Entries the startup scan located are read straight from
+                // the file, so concurrent reads (a thumbnail's textures,
+                // prefetched models) inflate in parallel instead of queueing
+                // on the shared reader.
+                match location.zip_entry {
+                    Some(entry) => ZipContentReader::read_entry(&location.container_path, &entry)
+                        .map_err(ResourceManagerError::ZipError),
+                    None => self
+                        .zip_reader
+                        .lock()
+                        .read_file_from_zip(
+                            location.container_path.to_string_lossy().to_string(),
+                            internal.clone(),
+                        )
+                        .map_err(ResourceManagerError::ZipError),
+                }
+            }
+            ContainerType::Erf => {
+                let internal = location
+                    .internal_path
+                    .as_ref()
+                    .ok_or_else(|| ResourceManagerError::Parse("Missing internal path".into()))?;
+                let mut erf = ErfParser::new();
+                erf.read(&location.container_path)
+                    .map_err(|e| ResourceManagerError::InvalidErfFormat(format!("{e}")))?;
+                erf.resources
+                    .get(internal)
+                    .and_then(|r| r.data.clone())
+                    .ok_or_else(|| ResourceManagerError::ExtractionFailed {
+                        resource: internal.clone(),
+                        container: location.container_path.display().to_string(),
+                    })
+            }
+        }
     }
 
     pub fn list_resources_by_extension(&self, extension: &str) -> Vec<(String, String)> {

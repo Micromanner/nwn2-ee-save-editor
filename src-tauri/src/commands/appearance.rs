@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -520,6 +522,7 @@ pub async fn load_companion_portrait_model(
     state: State<'_, AppState>,
     ros_name: String,
 ) -> CommandResult<ModelData> {
+    let started = Instant::now();
     let rm = state.resource_manager.read().await;
     let session = state.session.read();
     let character = session
@@ -531,14 +534,22 @@ pub async fn load_companion_portrait_model(
         .resolve_model_parts(&game_data, &rm)
         .ok_or_else(|| CommandError::Internal("Failed to resolve character model parts".into()))?;
 
+    // Per-step timings for the summary line, so a slow portrait names the
+    // step responsible.
+    let mut timings: Vec<(String, Duration)> = vec![("prep".into(), started.elapsed())];
+    let step = Instant::now();
     let skeleton = model_loader::load_skeleton(&rm, &parts.skeleton_resref);
     let palettes = skeleton.as_ref().map(model_loader::build_bone_palettes);
-    let load_part = |resref: &str, part: &str, tint: &str| -> Result<Vec<MeshData>, String> {
-        if let (Some(skel), Some(pal)) = (&skeleton, &palettes) {
+    timings.push(("skeleton".into(), step.elapsed()));
+    let mut load_part = |resref: &str, part: &str, tint: &str| -> Result<Vec<MeshData>, String> {
+        let step = Instant::now();
+        let result = if let (Some(skel), Some(pal)) = (&skeleton, &palettes) {
             model_loader::load_meshes_with_existing_skeleton(&rm, resref, part, tint, skel, pal)
         } else {
             model_loader::load_model_static(&rm, resref, part, tint).map(|d| d.meshes)
-        }
+        };
+        timings.push((resref.to_string(), step.elapsed()));
+        result
     };
 
     let white = TintChannels {
@@ -662,6 +673,17 @@ pub async fn load_companion_portrait_model(
             "No portrait meshes could be loaded".to_string(),
         ));
     }
+
+    info!(
+        "Portrait model '{ros_name}': {} meshes in {:?} [{}]",
+        all_meshes.len(),
+        started.elapsed(),
+        timings
+            .iter()
+            .map(|(step, elapsed)| format!("{step} {elapsed:?}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 
     Ok(ModelData {
         meshes: all_meshes,

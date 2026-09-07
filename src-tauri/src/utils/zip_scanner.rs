@@ -3,12 +3,16 @@ use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 
+use super::zip_content_reader::ZipEntryLocation;
+
 pub struct ZipEntry {
     pub stem: String,
     pub extension: String,
     pub internal_path: String,
     pub zip_path: PathBuf,
     pub size: u64,
+    /// Direct-read location, so resource loads never reopen the archive.
+    pub location: Option<ZipEntryLocation>,
 }
 
 /// Scan a single zip file, returning metadata for every file entry.
@@ -43,6 +47,7 @@ pub fn scan_zip(zip_path: &Path) -> Result<Vec<ZipEntry>, String> {
             internal_path: name,
             zip_path: zip_path.to_path_buf(),
             size: file.size(),
+            location: ZipEntryLocation::from_raw_entry(&file),
         });
     }
 
