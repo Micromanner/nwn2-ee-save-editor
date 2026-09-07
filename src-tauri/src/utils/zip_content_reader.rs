@@ -1,10 +1,26 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
+use flate2::read::DeflateDecoder;
 use rayon::prelude::*;
-use zip::ZipArchive;
+use zip::{CompressionMethod, ZipArchive};
+
+const LOCAL_HEADER_SIGNATURE: u32 = 0x0403_4b50;
+const LOCAL_HEADER_SIZE: u64 = 30;
+
+/// Where an entry's bytes live, so it can be read through a private file
+/// handle without holding the shared archive: concurrent texture and model
+/// reads then inflate in parallel instead of queueing on one mutex.
+#[derive(Clone, Copy, Debug)]
+pub struct ZipEntry {
+    index: usize,
+    header_start: u64,
+    compressed_size: u64,
+    size: u64,
+    method: CompressionMethod,
+}
 
 #[derive(Clone)]
 pub struct ZipReadRequest {
@@ -22,7 +38,7 @@ pub struct ZipReadResult {
 
 pub struct ZipContentReader {
     open_archives: HashMap<String, ZipArchive<BufReader<File>>>,
-    file_indices: HashMap<String, HashMap<String, usize>>,
+    file_indices: HashMap<String, HashMap<String, ZipEntry>>,
     basename_indices: HashMap<String, HashMap<String, String>>,
     files_read: u64,
     bytes_read: u64,
@@ -48,17 +64,16 @@ impl ZipContentReader {
         zip_path: String,
         internal_path: String,
     ) -> Result<Vec<u8>, String> {
-        if self.open_archives.contains_key(&zip_path) {
-            self.cache_hits += 1;
-        } else {
-            self.open_archive(&zip_path)?;
+        let entry = self.locate(&zip_path, &internal_path)?;
+        if matches!(
+            entry.method,
+            CompressionMethod::Stored | CompressionMethod::Deflated
+        ) {
+            let contents = Self::read_entry(&zip_path, &entry)?;
+            self.files_read += 1;
+            self.bytes_read += contents.len() as u64;
+            return Ok(contents);
         }
-
-        let index = self
-            .file_indices
-            .get(&zip_path)
-            .and_then(|indices| indices.get(&internal_path).copied())
-            .ok_or_else(|| format!("File not found in ZIP index: {internal_path}"))?;
 
         let archive = self
             .open_archives
@@ -66,8 +81,8 @@ impl ZipContentReader {
             .ok_or_else(|| format!("Failed to access ZIP archive: {zip_path}"))?;
 
         let mut file = archive
-            .by_index(index)
-            .map_err(|e| format!("Failed to read file at index {index}: {e}"))?;
+            .by_index(entry.index)
+            .map_err(|e| format!("Failed to read file at index {}: {e}", entry.index))?;
 
         let mut contents = Vec::new();
         file.read_to_end(&mut contents)
@@ -75,6 +90,69 @@ impl ZipContentReader {
 
         self.files_read += 1;
         self.bytes_read += contents.len() as u64;
+        Ok(contents)
+    }
+
+    /// Resolves an entry from the cached index (opening the archive on first
+    /// use). Returns `None` for compression methods `read_entry` cannot
+    /// handle; those go through `read_file_from_zip` under the lock.
+    pub fn locate_for_direct_read(
+        &mut self,
+        zip_path: &str,
+        internal_path: &str,
+    ) -> Result<Option<ZipEntry>, String> {
+        let entry = self.locate(zip_path, internal_path)?;
+        Ok(matches!(
+            entry.method,
+            CompressionMethod::Stored | CompressionMethod::Deflated
+        )
+        .then_some(entry))
+    }
+
+    fn locate(&mut self, zip_path: &str, internal_path: &str) -> Result<ZipEntry, String> {
+        if self.open_archives.contains_key(zip_path) {
+            self.cache_hits += 1;
+        } else {
+            self.open_archive(zip_path)?;
+        }
+
+        self.file_indices
+            .get(zip_path)
+            .and_then(|indices| indices.get(internal_path).copied())
+            .ok_or_else(|| format!("File not found in ZIP index: {internal_path}"))
+    }
+
+    /// Reads one stored or deflated entry through a fresh file handle. Needs
+    /// no `&self`, so callers drop the reader lock before calling it.
+    pub fn read_entry(zip_path: &str, entry: &ZipEntry) -> Result<Vec<u8>, String> {
+        let mut file =
+            File::open(zip_path).map_err(|e| format!("Failed to open ZIP {zip_path}: {e}"))?;
+        file.seek(SeekFrom::Start(entry.header_start))
+            .map_err(|e| format!("Failed to seek ZIP {zip_path}: {e}"))?;
+        let mut header = [0u8; LOCAL_HEADER_SIZE as usize];
+        file.read_exact(&mut header)
+            .map_err(|e| format!("Failed to read local header in {zip_path}: {e}"))?;
+        if u32::from_le_bytes(header[0..4].try_into().unwrap()) != LOCAL_HEADER_SIGNATURE {
+            return Err(format!("Bad local header signature in {zip_path}"));
+        }
+        let name_len = u64::from(u16::from_le_bytes(header[26..28].try_into().unwrap()));
+        let extra_len = u64::from(u16::from_le_bytes(header[28..30].try_into().unwrap()));
+        file.seek(SeekFrom::Start(
+            entry.header_start + LOCAL_HEADER_SIZE + name_len + extra_len,
+        ))
+        .map_err(|e| format!("Failed to seek ZIP {zip_path}: {e}"))?;
+
+        let raw = BufReader::with_capacity(64 * 1024, file).take(entry.compressed_size);
+        let mut contents = Vec::with_capacity(entry.size as usize);
+        match entry.method {
+            CompressionMethod::Stored => {
+                let mut raw = raw;
+                raw.read_to_end(&mut contents)
+            }
+            CompressionMethod::Deflated => DeflateDecoder::new(raw).read_to_end(&mut contents),
+            other => return Err(format!("Unsupported compression method {other:?}")),
+        }
+        .map_err(|e| format!("Failed to read entry in {zip_path}: {e}"))?;
         Ok(contents)
     }
 
@@ -340,7 +418,16 @@ impl ZipContentReader {
                 let name = file.name().to_string();
                 let basename = name.rsplit('/').next().unwrap_or(&name).to_lowercase();
                 basenames.insert(basename, name.clone());
-                indices.insert(name, i);
+                indices.insert(
+                    name,
+                    ZipEntry {
+                        index: i,
+                        header_start: file.header_start(),
+                        compressed_size: file.compressed_size(),
+                        size: file.size(),
+                        method: file.compression(),
+                    },
+                );
             }
         }
 

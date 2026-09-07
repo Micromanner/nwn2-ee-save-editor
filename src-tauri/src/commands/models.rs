@@ -56,10 +56,18 @@ pub fn load_model(state: State<'_, AppState>, resref: String) -> Result<ModelDat
 pub async fn get_texture_bytes(
     state: State<'_, AppState>,
     name: String,
+    max_size: Option<u32>,
 ) -> Result<tauri::ipc::Response, String> {
     let rm = state.resource_manager.read().await;
     match rm.get_resource_bytes(&name, "dds") {
-        Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        Ok(bytes) => {
+            // Thumbnails cap the texture size: dropping the top mips of a
+            // 2048px EE upscale cuts IPC, parse and GPU upload 16x.
+            let bytes = max_size
+                .and_then(|max| crate::services::texture_decode::trim_dds_mips(&bytes, max))
+                .unwrap_or(bytes);
+            Ok(tauri::ipc::Response::new(bytes))
+        }
         Err(e) => {
             error!("Texture not found '{}': {}", name, e);
             Err(format!("Texture not found {name}: {e}"))

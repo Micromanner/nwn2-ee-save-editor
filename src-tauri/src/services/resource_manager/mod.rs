@@ -19,6 +19,7 @@ use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::GffParser;
 use crate::parsers::tda::TDAParser;
 use crate::parsers::tlk::TLKParser;
+use crate::services::model_loader::SkeletonData;
 use crate::utils::ZipContentReader;
 
 pub use cache::{CacheStats, CachedModuleState, FileModificationTracker, ModuleLRUCache};
@@ -83,6 +84,9 @@ pub struct ResourceManager {
     /// binary-searches a range instead of walking the whole index. Dropped
     /// whenever `resource_index` changes.
     prefix_index: DashMap<String, Arc<Vec<String>>>,
+    /// Parsed skeleton GR2s by lowercase resref. Every skinned item model
+    /// resolves the same body skeleton, so it is parsed once per index state.
+    skeleton_cache: DashMap<String, Arc<SkeletonData>>,
 
     cache_hits: AtomicU64,
     cache_misses: AtomicU64,
@@ -109,6 +113,7 @@ impl ResourceManager {
             resource_index: HashMap::new(),
             icon_file_paths: HashMap::new(),
             prefix_index: DashMap::new(),
+            skeleton_cache: DashMap::new(),
             module_cache: ModuleLRUCache::new(),
             file_mod_tracker: FileModificationTracker::new(),
             cache_hits: AtomicU64::new(0),
@@ -164,11 +169,25 @@ impl ResourceManager {
         self.file_mod_tracker.clear();
         self.data_zip_paths.clear();
         self.resource_index.clear();
-        self.prefix_index.clear();
+        self.invalidate_index_caches();
         self.icon_file_paths.clear();
         self.cache_hits.store(0, Ordering::Relaxed);
         self.cache_misses.store(0, Ordering::Relaxed);
         *self.zip_reader.lock() = ZipContentReader::new();
+    }
+
+    /// Drops everything derived from `resource_index`; call whenever it changes.
+    fn invalidate_index_caches(&self) {
+        self.prefix_index.clear();
+        self.skeleton_cache.clear();
+    }
+
+    pub fn cached_skeleton(&self, key: &str) -> Option<Arc<SkeletonData>> {
+        self.skeleton_cache.get(key).map(|s| Arc::clone(&s))
+    }
+
+    pub fn cache_skeleton(&self, key: String, skeleton: Arc<SkeletonData>) {
+        self.skeleton_cache.insert(key, skeleton);
     }
 
     async fn scan_base_game_zips(&mut self) -> ResourceManagerResult<()> {
@@ -276,7 +295,7 @@ impl ResourceManager {
             }
         }
 
-        self.prefix_index.clear();
+        self.invalidate_index_caches();
 
         let tda_count = self
             .resource_index
@@ -392,7 +411,7 @@ impl ResourceManager {
             }
         }
 
-        self.prefix_index.clear();
+        self.invalidate_index_caches();
 
         info!(
             "Indexed {} icon files from {}",
@@ -422,7 +441,7 @@ impl ResourceManager {
             }
         }
 
-        self.prefix_index.clear();
+        self.invalidate_index_caches();
     }
 
     async fn load_base_tlk(&mut self) -> ResourceManagerResult<()> {
@@ -877,7 +896,7 @@ impl ResourceManager {
             for locs in self.resource_index.values_mut() {
                 locs.retain(|l| !matches!(l.source, OverrideSource::Campaign));
             }
-            self.prefix_index.clear();
+            self.invalidate_index_caches();
 
             // Clear campaign entries from tda_cache
             self.tda_cache
@@ -1001,7 +1020,7 @@ impl ResourceManager {
         }
 
         self.resource_index.retain(|_, v| !v.is_empty());
-        self.prefix_index.clear();
+        self.invalidate_index_caches();
 
         self.tda_cache
             .retain(|k, _| !matches!(k.1, OverrideSource::CustomOverride));
@@ -1365,13 +1384,24 @@ impl ResourceManager {
                     let internal = location.internal_path.as_ref().ok_or_else(|| {
                         ResourceManagerError::Parse("Missing internal path".into())
                     })?;
-                    self.zip_reader
+                    let zip_path = location.container_path.to_string_lossy().to_string();
+                    // Hold the reader only for the index lookup; the inflate
+                    // runs on a private handle so concurrent reads (a
+                    // thumbnail's textures, prefetched models) overlap.
+                    let direct = self
+                        .zip_reader
                         .lock()
-                        .read_file_from_zip(
-                            location.container_path.to_string_lossy().to_string(),
-                            internal.clone(),
-                        )
-                        .map_err(ResourceManagerError::ZipError)
+                        .locate_for_direct_read(&zip_path, internal)
+                        .map_err(ResourceManagerError::ZipError)?;
+                    match direct {
+                        Some(entry) => ZipContentReader::read_entry(&zip_path, &entry)
+                            .map_err(ResourceManagerError::ZipError),
+                        None => self
+                            .zip_reader
+                            .lock()
+                            .read_file_from_zip(zip_path, internal.clone())
+                            .map_err(ResourceManagerError::ZipError),
+                    }
                 }
                 ContainerType::Erf => {
                     let internal = location.internal_path.as_ref().ok_or_else(|| {

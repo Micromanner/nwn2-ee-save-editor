@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
-import { renderModelThumbnail, type ThumbnailFraming } from '@/components/ModelViewer/thumbnailRenderer';
+import {
+  renderModelThumbnail,
+  thumbnailTimings,
+  warmThumbnailTextures,
+  type ThumbnailFraming,
+} from '@/components/ModelViewer/thumbnailRenderer';
 import type { TintColors } from '@/components/ModelViewer/materials';
 import type { ModelData } from '@/components/ModelViewer/types';
 import type { PreviewPose } from '@/lib/bindings';
@@ -12,8 +17,10 @@ import type { PreviewPose } from '@/lib/bindings';
 // (items now, character parts later) can plug in.
 
 const THUMBNAIL_CACHE_LIMIT = 200;
-// Fetches in flight beyond the job currently rendering.
-const PREFETCH_AHEAD = 2;
+// Fetches in flight beyond the job currently rendering. Model loads run on
+// the backend's worker threads in parallel and take several times longer
+// than a render, so the queue keeps a few ahead.
+const PREFETCH_AHEAD = 4;
 
 const thumbnailCache = new Map<string, string>();
 const pendingRequests = new Map<string, Promise<string>>();
@@ -79,14 +86,21 @@ function prefetch(): void {
     const job = queue[i];
     if (job.model || !subscribers.has(job.key)) continue;
     job.model = job.fetchModel();
-    // The rejection is reported when the job awaits it; without a handler
-    // here it would surface as unhandled in the meantime.
-    job.model.catch(() => {});
+    // Textures start loading as soon as the model arrives. The rejection is
+    // reported when the job awaits it; without a handler here it would
+    // surface as unhandled in the meantime.
+    job.model.then(warmThumbnailTextures, () => {});
   }
 }
 
 async function drain(): Promise<void> {
   draining = true;
+  const batchStart = performance.now();
+  const materialsBefore = thumbnailTimings.materialsMs;
+  const drawBefore = thumbnailTimings.drawMs;
+  let rendered = 0;
+  let fetchWaitMs = 0;
+  let renderMs = 0;
   while (queue.length > 0) {
     const job = queue.shift()!;
     prefetch();
@@ -95,8 +109,13 @@ async function drain(): Promise<void> {
         job.resolve('');
         continue;
       }
+      const fetchStart = performance.now();
       const model = await (job.model ?? job.fetchModel());
+      const renderStart = performance.now();
       const url = await renderModelThumbnail(model, job.tints, job.framing, job.pose);
+      renderMs += performance.now() - renderStart;
+      fetchWaitMs += renderStart - fetchStart;
+      rendered++;
       cachePut(job.key, url);
       job.resolve(url);
     } catch (err) {
@@ -105,6 +124,15 @@ async function drain(): Promise<void> {
     } finally {
       pendingRequests.delete(job.key);
     }
+  }
+  if (rendered > 0) {
+    const total = Math.round(performance.now() - batchStart);
+    const materials = Math.round(thumbnailTimings.materialsMs - materialsBefore);
+    const draw = Math.round(thumbnailTimings.drawMs - drawBefore);
+    console.debug(
+      `[thumbnail] ${rendered} rendered in ${total} ms: waited on model fetch ${Math.round(fetchWaitMs)} ms, ` +
+        `render ${Math.round(renderMs)} ms (materials+textures ${materials} ms, draw+png ${draw} ms)`,
+    );
   }
   draining = false;
 }

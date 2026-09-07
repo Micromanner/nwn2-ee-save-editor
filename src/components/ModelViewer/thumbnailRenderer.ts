@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import { createMaterial, DEFAULT_SHADING_MODE, tintChannelsToColors, type TintColors } from './materials';
+import {
+  createMaterial,
+  DEFAULT_SHADING_MODE,
+  tintChannelsToColors,
+  warmDDSCache,
+  type TintColors,
+} from './materials';
 import { buildMesh, buildSkeleton } from './meshBuilder';
 import { applyPoseRotation, poseCameraPosition, poseFromModel } from './pose';
 import type { ModelData } from './types';
@@ -13,6 +19,8 @@ import type { PreviewPose } from '@/lib/bindings';
 // can reuse it later.
 
 const THUMBNAIL_SIZE = 224;
+// Largest texture dimension a thumbnail loads; a 224px image cannot show more.
+const THUMBNAIL_TEXTURE_SIZE = 512;
 
 interface RendererState {
   renderer: THREE.WebGLRenderer;
@@ -88,6 +96,27 @@ function initRenderer(): RendererState {
 }
 
 export type ThumbnailFraming = 'model' | 'portrait';
+
+/// Cumulative time spent inside renderModelThumbnail, split into material
+/// setup (texture fetch + parse + upload objects) and the GPU draw + PNG
+/// encode. The render queue snapshots it around a batch for its summary.
+export const thumbnailTimings = { materialsMs: 0, drawMs: 0 };
+
+function visibleMeshes(modelData: ModelData) {
+  return modelData.meshes.filter((m) => !/_L\d+$/i.test(m.name));
+}
+
+/// Starts the texture fetches a thumbnail will need so they overlap the
+/// thumbnail currently rendering instead of running inside its render step.
+export function warmThumbnailTextures(modelData: ModelData): void {
+  for (const m of visibleMeshes(modelData)) {
+    const mat = m.material;
+    void warmDDSCache(mat.diffuse_map, THUMBNAIL_TEXTURE_SIZE);
+    void warmDDSCache(mat.normal_map, THUMBNAIL_TEXTURE_SIZE);
+    if (mat.tint_map) void warmDDSCache(mat.tint_map, THUMBNAIL_TEXTURE_SIZE);
+    if (mat.flags & 0x20) void warmDDSCache(mat.glow_map, THUMBNAIL_TEXTURE_SIZE);
+  }
+}
 
 function frameCamera(
   camera: THREE.PerspectiveCamera,
@@ -193,17 +222,18 @@ export async function renderModelThumbnail(
   renderer.toneMappingExposure = framing === 'portrait' ? 1.0 : 0.8;
 
   const group = new THREE.Group();
-  let skeleton: THREE.Skeleton | undefined;
-  let rootBone: THREE.Bone | undefined;
-  if (modelData.skeleton) {
-    const built = buildSkeleton(modelData.skeleton);
-    skeleton = built.skeleton;
-    rootBone = built.rootBone;
-    group.add(rootBone);
-  }
-
+  const start = performance.now();
   try {
-    const visible = modelData.meshes.filter((m) => !/_L\d+$/i.test(m.name));
+    const visible = visibleMeshes(modelData);
+    // Thumbnails show the bind pose, where skinning is the identity, so
+    // skinned meshes are built as plain meshes: no bone texture upload, no
+    // skinning shader variant, one program shared with rigid meshes. The
+    // bone hierarchy is only needed when an accessory rides a bone.
+    let rootBone: THREE.Bone | undefined;
+    if (modelData.skeleton && visible.some((m) => m.attach_bone)) {
+      rootBone = buildSkeleton(modelData.skeleton).rootBone;
+      group.add(rootBone);
+    }
     const materials = await Promise.all(
       visible.map((m) =>
         createMaterial(
@@ -211,13 +241,16 @@ export async function renderModelThumbnail(
           m.override_tints ? tintChannelsToColors(m.override_tints) : tints,
           true,
           null,
+          THUMBNAIL_TEXTURE_SIZE,
         ),
       ),
     );
+    const materialsDone = performance.now();
+    thumbnailTimings.materialsMs += materialsDone - start;
     const headObjects: THREE.Object3D[] = [];
     const hairObjects: THREE.Object3D[] = [];
     for (let i = 0; i < visible.length; i++) {
-      const obj = buildMesh(visible[i], materials[i], skeleton, rootBone);
+      const obj = buildMesh(visible[i], materials[i]);
       if (visible[i].part === 'head') headObjects.push(obj);
       if (visible[i].part === 'hair') hairObjects.push(obj);
       const attach = visible[i].attach_bone;
@@ -249,12 +282,11 @@ export async function renderModelThumbnail(
     }
     renderer.render(scene, camera);
     if (renderer.getContext().isContextLost()) return '';
-    return renderer.domElement.toDataURL('image/png');
+    const url = renderer.domElement.toDataURL('image/png');
+    thumbnailTimings.drawMs += performance.now() - materialsDone;
+    return url;
   } finally {
     scene.remove(group);
     disposeGroup(group);
-    // Frees the boneTexture the renderer allocates for skinned meshes -
-    // without this every armor thumbnail leaks one GPU texture.
-    skeleton?.dispose();
   }
 }

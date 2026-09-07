@@ -79,36 +79,53 @@ function buildTexture(dds: ParsedDds): THREE.CompressedTexture {
   return texture;
 }
 
-export async function loadDDSTexture(textureName: string): Promise<THREE.CompressedTexture | null> {
+/// maxSize asks the backend to drop mip levels above that dimension (EE
+/// upscales are 2048px; thumbnails need far less), cached separately from
+/// the full-size texture.
+export async function loadDDSTexture(
+  textureName: string,
+  maxSize?: number,
+): Promise<THREE.CompressedTexture | null> {
   if (!textureName) return null;
+  const parsed = await fetchParsedDds(textureName, maxSize);
+  return parsed ? buildTexture(parsed) : null;
+}
 
-  const cached = ddsCacheGet(textureName);
-  if (cached !== undefined) return cached ? buildTexture(cached) : null;
+/// Fetches and parses a DDS into the cache without building a texture, so a
+/// later loadDDSTexture for the same name and size is a cache hit.
+export async function warmDDSCache(textureName: string, maxSize?: number): Promise<void> {
+  if (!textureName) return;
+  await fetchParsedDds(textureName, maxSize);
+}
 
-  const pending = pendingDds.get(textureName);
-  if (pending) return pending.then((p) => (p ? buildTexture(p) : null));
+async function fetchParsedDds(textureName: string, maxSize?: number): Promise<ParsedDds | null> {
+  const key = maxSize ? `${textureName}@${maxSize}` : textureName;
+  const cached = ddsCacheGet(key);
+  if (cached !== undefined) return cached;
+
+  const pending = pendingDds.get(key);
+  if (pending) return pending;
 
   const request = (async () => {
     try {
-      const buffer: ArrayBuffer = await invoke('get_texture_bytes', { name: textureName });
+      const buffer: ArrayBuffer = await invoke('get_texture_bytes', { name: textureName, maxSize });
       const parsed = ddsLoader.parse(buffer, true);
       if (!parsed.width || !parsed.height || !parsed.format || parsed.mipmaps.length === 0) {
         throw new Error(`Unsupported or invalid DDS: ${textureName}`);
       }
-      ddsCachePut(textureName, parsed);
+      ddsCachePut(key, parsed);
       return parsed;
     } catch (err) {
       console.warn(`[texture] Failed to load '${textureName}':`, err);
-      ddsCachePut(textureName, null);
+      ddsCachePut(key, null);
       return null;
     } finally {
-      pendingDds.delete(textureName);
+      pendingDds.delete(key);
     }
   })();
 
-  pendingDds.set(textureName, request);
-  const parsed = await request;
-  return parsed ? buildTexture(parsed) : null;
+  pendingDds.set(key, request);
+  return request;
 }
 
 function injectTintShader(
@@ -327,6 +344,7 @@ export async function createMaterial(
   tintColors?: TintColors,
   swapGB: boolean = false,
   envMap: THREE.Texture | null = null,
+  textureMaxSize?: number,
 ): Promise<THREE.MeshPhysicalMaterial> {
   const rawLevel = materialData.specular_level;
   const specLevel = rawLevel !== undefined && Number.isFinite(rawLevel) ? Math.max(rawLevel, 0) : 0;
@@ -348,10 +366,12 @@ export async function createMaterial(
   const needGlow = !!(materialData.flags & 0x20);
 
   const [diffuse, tintTex, normal, glow] = await Promise.all([
-    loadDDSTexture(materialData.diffuse_map),
-    materialData.tint_map ? loadDDSTexture(materialData.tint_map) : Promise.resolve(null),
-    loadDDSTexture(materialData.normal_map),
-    needGlow ? loadDDSTexture(materialData.glow_map) : Promise.resolve(null),
+    loadDDSTexture(materialData.diffuse_map, textureMaxSize),
+    materialData.tint_map
+      ? loadDDSTexture(materialData.tint_map, textureMaxSize)
+      : Promise.resolve(null),
+    loadDDSTexture(materialData.normal_map, textureMaxSize),
+    needGlow ? loadDDSTexture(materialData.glow_map, textureMaxSize) : Promise.resolve(null),
   ]);
 
   if (diffuse) {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -498,6 +500,16 @@ pub fn load_skeleton(
     resource_manager: &ResourceManager,
     skeleton_name: &str,
 ) -> Option<SkeletonData> {
+    let key = skeleton_name.to_lowercase();
+    if let Some(cached) = resource_manager.cached_skeleton(&key) {
+        return Some((*cached).clone());
+    }
+    let parsed = parse_skeleton(resource_manager, skeleton_name)?;
+    resource_manager.cache_skeleton(key, Arc::new(parsed.clone()));
+    Some(parsed)
+}
+
+fn parse_skeleton(resource_manager: &ResourceManager, skeleton_name: &str) -> Option<SkeletonData> {
     match resource_manager.get_resource_bytes(skeleton_name, "gr2") {
         Ok(gr2_data) => match Gr2Parser::parse(&gr2_data) {
             Ok(skel) => {
