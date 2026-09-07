@@ -101,6 +101,7 @@ pub struct QuestAggregate {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TransitionNode {
+    pub actions: Vec<ConvoFunctor>,
     pub module: String,
     pub dlg: String,
     pub node: i32,

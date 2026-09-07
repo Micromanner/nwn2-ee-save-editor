@@ -1,141 +1,96 @@
-import { useEffect, useState } from 'react';
-import { Card, Elevation, NonIdealState, ProgressBar } from '@blueprintjs/core';
-import { GiBrokenShield } from 'react-icons/gi';
-import { GameIcon } from '../../shared/GameIcon';
-import { T } from '../../theme';
+import { useCallback, useEffect, useState } from 'react';
+import { Button, Card, NonIdealState, ProgressBar } from '@blueprintjs/core';
+import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useQuestTransitions } from '@/hooks/useQuestTransitions';
 import { gameStateAPI, type QuestGraphProgress } from '@/services/gameStateApi';
-import type { SaveGraph } from './types';
+import { display } from '@/utils/dataHelpers';
+import type { PendingQuestEdit, SaveGraph } from './types';
 import { CampaignContextCard } from './CampaignContextCard';
 import { QuestList } from './QuestList';
 import { QuestDetail } from './QuestDetail';
-
-const POLL_INTERVAL_MS = 100;
-const INITIAL_PROGRESS: QuestGraphProgress = {
-  step: 'starting',
-  progress: 0,
-  message: '',
-};
+import { T } from '../../theme';
 
 export function QuestsTab() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
   const [graph, setGraph] = useState<SaveGraph | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingQuestEdit[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [progress, setProgress] = useState<QuestGraphProgress>(INITIAL_PROGRESS);
+  const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<QuestGraphProgress | null>(null);
+  const [refresh, setRefresh] = useState(0);
   const transitions = useQuestTransitions();
+  const refreshData = useCallback(() => setRefresh(r => r + 1), []);
 
   useEffect(() => {
-    let cancelled = false;
-    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    window.addEventListener('save-changed', refreshData);
+    return () => window.removeEventListener('save-changed', refreshData);
+  }, [refreshData]);
 
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      if (cancelled) return;
       try {
-        const snapshot = await gameStateAPI.getQuestGraphProgress();
-        if (cancelled) return;
-        setProgress(prev =>
-          prev.step === snapshot.step
-          && prev.progress === snapshot.progress
-          && prev.message === snapshot.message
-            ? prev
-            : snapshot,
-        );
-      } catch (err) {
-        console.debug('[QuestsTab] progress poll failed:', err);
-      }
-      if (!cancelled) {
-        pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
-      }
+        const value = await gameStateAPI.getQuestGraphProgress();
+        if (active) setProgress(value);
+      } catch { /* Main request reports loading failures. */ }
+      if (active) timer = setTimeout(poll, 250);
     };
+    setError(false); setBusy(true);
+    void poll();
+    Promise.all([gameStateAPI.getSaveQuestGraph(), invoke<PendingQuestEdit[]>('save_list_quest_edits')])
+      .then(([value, edits]) => { if (active) { setGraph(value); setPending(edits); } })
+      .catch(error => { if (active) { setError(true); handleError(error); } })
+      .finally(() => { if (active) setBusy(false); active = false; clearTimeout(timer); });
+    return () => { active = false; clearTimeout(timer); };
+  }, [handleError, refresh]);
 
-    setIsLoading(true);
-    setError(null);
-    setProgress(INITIAL_PROGRESS);
-    poll();
+  const discard = async (tag: string | null) => {
+    try {
+      await invoke('save_discard_quest_edits', { tag });
+      window.dispatchEvent(new Event('quest-edits-changed'));
+      refreshData();
+    } catch (error) { handleError(error); }
+  };
 
-    gameStateAPI.getSaveQuestGraph()
-      .then(setGraph)
-      .catch(err => {
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg);
-        handleError(err);
-      })
-      .finally(() => {
-        cancelled = true;
-        if (pollTimer) clearTimeout(pollTimer);
-        setIsLoading(false);
-      });
+  if (!graph && error) return <NonIdealState title={t('gameState.quests.failedToLoad')}
+    action={<Button onClick={refreshData}>{t('gameState.quests.edit.refresh')}</Button>} />;
+  if (!graph) return <div style={{ padding: 48 }}>
+    <p>{t('gameState.quests.loadingTitle')}</p>
+    <ProgressBar value={(progress?.progress ?? 0) / 100} />
+    <p>{progress?.message}</p>
+  </div>;
+  const quests = graph.quests.map(q => ({ ...q, pending_state: pending.find(p => p.tag === q.tag)?.target }));
+  const effectiveTag = selectedTag ?? quests[0]?.tag ?? null;
+  const selectedQuest = quests.find(q => q.tag === effectiveTag) ?? null;
 
-    return () => {
-      cancelled = true;
-      if (pollTimer) clearTimeout(pollTimer);
-    };
-  }, [handleError]);
-
-  if (isLoading && !graph) {
-    const isAnimated = progress.step !== 'ready' && progress.step !== 'error';
-    return (
-      <div style={{ padding: 48, display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: 360, textAlign: 'center' }}>
-          <div className="t-md t-bold" style={{ color: T.accent, marginBottom: 12 }}>
-            {t('gameState.quests.loadingTitle')}
-          </div>
-          <ProgressBar
-            value={progress.progress / 100}
-            intent="primary"
-            animate={isAnimated}
-            stripes={false}
-            style={{ marginBottom: 8 }}
-          />
-          <div className="t-sm" style={{ color: T.textMuted, minHeight: 18 }}>
-            {progress.message}
-          </div>
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <CampaignContextCard campaign={graph.campaign} modules={graph.modules} orphans={graph.orphans} />
+    {error && <Button onClick={refreshData}>{t('gameState.quests.edit.refresh')}</Button>}
+    {pending.length > 0 && <Card>
+      <strong>{t('gameState.quests.edit.pendingTitle')}</strong>
+      <p>{t('gameState.quests.edit.stagingExplanation')}</p>
+      {pending.map(edit => <details key={edit.tag} style={{ marginBottom: 8 }}>
+        <summary>{edit.tag}: {display(edit.saved_state)} → {edit.target}</summary>
+        {edit.source && <p>{edit.source.module} / {edit.source.dlg} / {edit.source.node}</p>}
+        {edit.writes.map((w, i) => <p key={i}>{w.key.module ?? t('gameState.quests.edit.campaign')} / {w.key.name} ({w.key.value_type}): {display(w.saved)} → {display(w.after)}</p>)}
+        <Button small disabled={busy} onClick={() => void discard(edit.tag)}>{t('gameState.quests.edit.discard')}</Button>
+      </details>)}
+      <Button small disabled={busy} onClick={() => void discard(null)}>{t('gameState.quests.edit.discardAll')}</Button>
+    </Card>}
+    <Card style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', minHeight: 480, maxHeight: 'calc(100vh - 280px)' }}>
+        <div style={{ flex: 3, minWidth: 360, borderRight: `1px solid ${T.borderLight}`, overflowY: 'auto' }}>
+          <QuestList quests={quests} modules={graph.modules} selectedTag={effectiveTag} onSelect={setSelectedTag} />
+        </div>
+        <div style={{ flex: 2, minWidth: 360, overflowY: 'auto' }}>
+          <QuestDetail key={effectiveTag} quest={selectedQuest} graph={graph} transitions={transitions} pending={pending} onApplied={refreshData} />
         </div>
       </div>
-    );
-  }
-
-  if (error && !graph) {
-    return (
-      <div style={{ padding: 24 }}>
-        <NonIdealState
-          icon={<GameIcon icon={GiBrokenShield} size={40} />}
-          title={t('gameState.quests.failedToLoad')}
-          description={error}
-        />
-      </div>
-    );
-  }
-
-  if (!graph) return null;
-
-  const effectiveTag = selectedTag ?? graph.quests[0]?.tag ?? null;
-  const selectedQuest = graph.quests.find(q => q.tag === effectiveTag) ?? null;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <CampaignContextCard campaign={graph.campaign} modules={graph.modules} orphans={graph.orphans} />
-
-      <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', minHeight: 480, maxHeight: 'calc(100vh - 280px)' }}>
-          <div style={{ flex: 3, minWidth: 360, borderRight: `1px solid ${T.borderLight}`, overflowY: 'auto' }}>
-            <QuestList
-              quests={graph.quests}
-              modules={graph.modules}
-              selectedTag={effectiveTag}
-              onSelect={setSelectedTag}
-            />
-          </div>
-          <div style={{ flex: 2, minWidth: 360, overflowY: 'auto' }}>
-            <QuestDetail quest={selectedQuest} graph={graph} transitions={transitions} />
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
+    </Card>
+  </div>;
 }

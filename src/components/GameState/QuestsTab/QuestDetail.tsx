@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { HTMLTable, NonIdealState } from '@blueprintjs/core';
+import { useEffect, useState } from 'react';
+import { Button, InputGroup, NonIdealState } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
 import { GiScrollQuill } from 'react-icons/gi';
 import { T } from '../../theme';
@@ -7,20 +7,26 @@ import { GameIcon } from '../../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useTlkResolver } from '@/hooks/useTlkResolver';
 import type { QuestTransitionsResolver } from '@/hooks/useQuestTransitions';
-import type { AggregatedModule, QuestSummary, SaveGraph, TransitionNode } from './types';
+import type { PendingQuestEdit, QuestSummary, SaveGraph, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
-import { effectiveSource, selectedRowStyle } from './utils';
+import { effectiveSource, questStates } from './utils';
 import { TransitionsList } from './TransitionsList';
 import { LiveOverlay } from './LiveOverlay';
+import { QuestEditDialog } from './QuestEditDialog';
+import { display } from '@/utils/dataHelpers';
 
 export function QuestDetail({
-  quest, graph, transitions,
+  quest, graph, transitions, pending, onApplied,
 }: {
   quest: QuestSummary | null;
   graph: SaveGraph;
   transitions: QuestTransitionsResolver;
+  pending: PendingQuestEdit[];
+  onApplied: () => void;
 }) {
   const t = useTranslations();
+  const [target, setTarget] = useState<number | null>(null);
+  const [numeric, setNumeric] = useState('');
   const tlk = useTlkResolver();
   const { resolveMany } = useModuleNameResolver(graph.modules);
 
@@ -102,78 +108,43 @@ export function QuestDetail({
       </div>
 
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-        <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
-          {t('gameState.quests.detail.entries')}
-        </div>
-        {quest.category.entries.length === 0 ? (
-          <div style={{ color: T.textMuted, fontStyle: 'italic' }}>{t('gameState.quests.detail.noEntries')}</div>
-        ) : (
-          <HTMLTable compact striped bordered style={{ width: '100%', tableLayout: 'fixed' }}>
-            <colgroup><col style={{ width: 60 }} /><col /><col style={{ width: 64 }} /></colgroup>
-            <thead>
-              <tr>
-                <th>{t('gameState.quests.list.live')}</th>
-                <th>{t('gameState.quests.list.name')}</th>
-                <th>{t('gameState.quests.detail.final')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quest.category.entries.slice().sort((a, b) => a.id - b.id).map(e => {
-                const isCurrent = e.id === quest.live_state;
-                return (
-                  <tr
-                    key={e.id}
-                    style={selectedRowStyle(isCurrent, T.accent)}
-                  >
-                    <td className="t-mono" style={{ textAlign: 'right' }}>{e.id}</td>
-                    <td>{e.text}</td>
-                    <td style={{ textAlign: 'center', color: e.final ? T.positive : T.textMuted }}>
-                      {e.final ? t('gameState.quests.detail.final') : '-'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </HTMLTable>
-        )}
-      </div>
-
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-        <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
-          {t('gameState.quests.detail.transitions')}
-        </div>
-        {renderTransitionsSection(entry, quest, loadedTransitions, tlk, t, graph.modules)}
+        <p>{t('gameState.quests.edit.pending')}: {display(quest.pending_state)}</p>
+        <p>{t('gameState.quests.edit.orderExplanation')}</p>
+        {!entry || entry.state === 'pending' ? <LoadingState variant="inline" /> : entry.state === 'error' ?
+          <p>{t('gameState.quests.detail.transitionsFailed')}: {entry.message}</p> : null}
+        {questStates(quest, loadedTransitions ?? []).map(state => {
+            const definition = quest.category.entries.find(e => e.id === state);
+            return <details key={state} style={{ borderTop: `1px solid ${T.borderLight}`, padding: '8px 0' }}>
+              <summary style={{ cursor: 'pointer' }}>
+                <strong>{state}</strong> &mdash; {definition?.text || t('gameState.quests.edit.undefinedState')}
+                {definition?.final && <span> ({t('gameState.quests.detail.final')})</span>}
+                {state === quest.live_state && <span> ({t('gameState.quests.edit.saved')})</span>}
+                {state === quest.pending_state && <span> ({t('gameState.quests.edit.pending')})</span>}
+              </summary>
+              <Button small intent="primary" onClick={() => setTarget(state)} style={{ margin: '8px 0' }}>
+                {t('gameState.quests.edit.setState')}
+              </Button>
+              <TransitionsList quest={quest} transitions={(loadedTransitions ?? []).filter(tr => tr.new_state === state)} tlk={tlk} modules={graph.modules} />
+            </details>;
+          })}
+        <details style={{ marginTop: 12 }}>
+          <summary>{t('gameState.quests.edit.advanced')}</summary>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <InputGroup type="number" min={0} max={4294967295} step={1} value={numeric} onChange={e => setNumeric(e.target.value)} aria-label={t('gameState.quests.edit.numericState')} />
+            <Button disabled={!/^\d+$/.test(numeric) || !Number.isSafeInteger(Number(numeric)) || Number(numeric) > 4294967295}
+              onClick={() => setTarget(Number(numeric))}>{t('gameState.quests.edit.setState')}</Button>
+          </div>
+        </details>
       </div>
 
       <div style={{ padding: '12px 16px' }}>
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.liveOverlay')}
         </div>
-        <LiveOverlay transitions={loadedTransitions ?? []} graph={graph} />
+        <LiveOverlay tag={quest.tag} pending={pending} />
       </div>
+      {target !== null && <QuestEditDialog key={`${quest.tag}:${target}`} quest={quest} target={target}
+        transitions={loadedTransitions ?? []} pending={pending} tlk={tlk} onClose={() => setTarget(null)} onApplied={onApplied} />}
     </div>
   );
-}
-
-function renderTransitionsSection(
-  entry: ReturnType<QuestTransitionsResolver['get']>,
-  quest: QuestSummary,
-  loaded: TransitionNode[] | null,
-  tlk: ReturnType<typeof useTlkResolver>,
-  t: ReturnType<typeof useTranslations>,
-  modules: AggregatedModule[],
-) {
-  if (!entry || entry.state === 'pending') {
-    return (
-      <LoadingState variant="inline" text={t('gameState.quests.detail.loadingTransitions')} />
-    );
-  }
-  if (entry.state === 'error') {
-    return (
-      <div style={{ color: T.negative }}>
-        {t('gameState.quests.detail.transitionsFailed')}: {entry.message}
-      </div>
-    );
-  }
-  return <TransitionsList quest={quest} transitions={loaded ?? []} tlk={tlk} modules={modules} />;
 }

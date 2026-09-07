@@ -358,6 +358,7 @@ fn collect_transitions(
             transitions: Vec::new(),
         });
         entry.transitions.push(TransitionNode {
+            actions: node.actions.clone(),
             module: module_name.to_string(),
             dlg: node.dlg.clone(),
             node: node.node,
@@ -373,7 +374,7 @@ fn collect_transitions(
 /// `ga_journal(tag, state)` or a synthetic `__connector_quest_tuple__` entry.
 /// Both carry the quest tag as `params[0]` (string) and state int as `params[1]`.
 fn extract_journal_transition(action: &ConvoFunctor) -> Option<(String, u32)> {
-    let is_journal_kind = action.kind == FunctorKind::Journal;
+    let is_journal_kind = action.script.eq_ignore_ascii_case("ga_journal");
     let is_connector_tuple = action.script == CONNECTOR_QUEST_TUPLE;
     if !is_journal_kind && !is_connector_tuple {
         return None;
@@ -388,9 +389,9 @@ fn extract_journal_transition(action: &ConvoFunctor) -> Option<(String, u32)> {
 
 fn param_as_u32(v: &serde_json::Value) -> Option<u32> {
     if let Some(n) = v.as_i64() {
-        if n < 0 { None } else { Some(n as u32) }
+        u32::try_from(n).ok()
     } else {
-        v.as_u64().map(|n| n as u32)
+        v.as_u64().and_then(|n| u32::try_from(n).ok())
     }
 }
 

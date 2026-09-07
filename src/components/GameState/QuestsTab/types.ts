@@ -38,6 +38,7 @@ export interface ConvoFunctor {
 }
 
 export interface TransitionNode {
+  actions: ConvoFunctor[];
   module: string;
   dlg: string;
   node: number;
@@ -56,7 +57,41 @@ export interface QuestSummary {
   category: JournalCategory;
   defined_in: string[];
   live_state: number | null;
+  pending_state?: number;
   transition_count: number;
+}
+
+export interface VariableKey {
+  module: string | null;
+  name: string;
+  value_type: string;
+}
+
+export interface VariableWrite {
+  key: VariableKey;
+  saved: string | number | null;
+  before: string | number | null;
+  after: string | number;
+  action_index: number;
+}
+
+export interface QuestPreview {
+  revision: string;
+  tag: string;
+  target: number;
+  saved_state: number | null;
+  before_state: number | null;
+  route: number | null;
+  writes: VariableWrite[];
+  effects: { action: ConvoFunctor; reason: string }[];
+}
+
+export interface PendingQuestEdit {
+  tag: string;
+  target: number;
+  saved_state: number | null;
+  source: TransitionNode | null;
+  writes: VariableWrite[];
 }
 
 export interface AggregatedModule {

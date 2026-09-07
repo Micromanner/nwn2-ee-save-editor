@@ -139,6 +139,7 @@ export function QuestList({
           <td className="t-mono" style={{ color: T.text }}>
             {q.live_state == null && <span style={{ color: T.textMuted }}>-</span>}
             {q.live_state != null && q.live_state}
+            {q.pending_state !== undefined && <span> / {t('gameState.quests.edit.pending')}: {q.pending_state}</span>}
             {matchingEntry?.final && <span style={{ color: T.positive, marginLeft: 4 }}>({t('gameState.quests.detail.final')})</span>}
           </td>
           <td style={{ color: source !== 'normal' ? T.negative : T.textMuted }}>

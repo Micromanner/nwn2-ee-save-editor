@@ -176,6 +176,20 @@ pub async fn update_module_variable(
     module_id: Option<String>,
 ) -> CommandResult<()> {
     let mut session = state.session.write();
+    let target_module = Some(module_id.clone().unwrap_or_else(|| {
+        session
+            .savegame_handler
+            .as_ref()
+            .and_then(|h| h.extract_current_module().ok())
+            .unwrap_or_default()
+    }));
+    check_pending_quest_variable(
+        &session,
+        target_module.as_deref(),
+        &variable_name,
+        &variable_type,
+    )?;
+
     let handler = session
         .savegame_handler
         .as_ref()
@@ -199,6 +213,17 @@ pub async fn batch_update_module_variables(
     module_id: Option<String>,
 ) -> CommandResult<()> {
     let mut session = state.session.write();
+    let target_module = Some(module_id.clone().unwrap_or_else(|| {
+        session
+            .savegame_handler
+            .as_ref()
+            .and_then(|h| h.extract_current_module().ok())
+            .unwrap_or_default()
+    }));
+    for (name, _, kind) in &updates {
+        check_pending_quest_variable(&session, target_module.as_deref(), name, kind)?;
+    }
+
     let handler = session
         .savegame_handler
         .as_ref()
@@ -224,6 +249,11 @@ pub async fn batch_update_campaign_variables(
     updates: Vec<(String, String, String)>,
 ) -> CommandResult<()> {
     let mut session = state.session.write();
+    let target_module = None::<String>;
+    for (name, _, kind) in &updates {
+        check_pending_quest_variable(&session, target_module.as_deref(), name, kind)?;
+    }
+
     let handler = session
         .savegame_handler
         .as_mut()
@@ -250,6 +280,14 @@ pub async fn update_campaign_variable(
     variable_type: String,
 ) -> CommandResult<()> {
     let mut session = state.session.write();
+    let target_module = None::<String>;
+    check_pending_quest_variable(
+        &session,
+        target_module.as_deref(),
+        &variable_name,
+        &variable_type,
+    )?;
+
     let handler = session
         .savegame_handler
         .as_mut()
@@ -307,4 +345,23 @@ pub async fn restore_module_backup(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     CampaignManager::restore_module_backup(handler, &backup_path).map_err(CommandError::from)
+}
+
+fn check_pending_quest_variable(
+    session: &crate::state::SessionState,
+    module: Option<&str>,
+    name: &str,
+    kind: &str,
+) -> CommandResult<()> {
+    if let Some(edit) = session.quest_edits.pending.iter().find(|p| {
+        p.writes.iter().any(|w| {
+            w.key.module.as_deref() == module && w.key.name == name && w.key.value_type == kind
+        })
+    }) {
+        return Err(CommandError::from(format!(
+            "Variable {name} has a pending quest edit ({}) currently owning it. Discard that quest edit before changing this variable here.",
+            edit.tag
+        )));
+    }
+    Ok(())
 }

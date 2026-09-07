@@ -493,7 +493,19 @@ pub fn batch_update_module_variables(
     if updates.is_empty() {
         return Ok(());
     }
+    let (path, bytes) = prepare_module_variable_updates(handler, updates, module_id)?;
+    let module = module_id
+        .map(str::to_string)
+        .unwrap_or(handler.extract_current_module().unwrap_or_default());
+    backup_module_z(handler, &module)?;
+    fs::write(path, bytes).map_err(|e| e.to_string())
+}
 
+pub fn prepare_module_variable_updates(
+    handler: &SaveGameHandler,
+    updates: &[(String, String, String)],
+    module_id: Option<&str>,
+) -> Result<(PathBuf, Vec<u8>), String> {
     let current_module_id = handler.extract_current_module().unwrap_or_default();
     let target_module = module_id.unwrap_or(&current_module_id);
     let save_dir = handler.save_dir();
@@ -592,18 +604,7 @@ pub fn batch_update_module_variables(
         z_path
     );
 
-    if let Err(e) = backup_module_z(handler, target_module) {
-        warn!("Failed to backup {}.z: {}", target_module, e);
-    }
-
-    fs::write(&z_path, compressed).map_err(|e| format!("Failed to write .z file: {e}"))?;
-
-    info!(
-        "Successfully batch-updated {} module variables in {:?}",
-        updates.len(),
-        z_path
-    );
-    Ok(())
+    Ok((z_path, compressed))
 }
 
 fn decompress_z_file(path: &Path) -> Result<Vec<u8>, String> {

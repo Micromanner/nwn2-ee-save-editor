@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { T } from '../theme';
 import { SettingsDialog } from '../Settings/SettingsPanel';
 import { GameLaunchDialog, HistoryDialog } from '../shared';
-import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
+import { useCharacterContext } from '@/contexts/CharacterContext';
 import type { SaveCharacterResult } from '@/lib/api/character-state';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -21,6 +21,15 @@ interface NavbarProps {
 
 export function Navbar({ onBack }: NavbarProps) {
   const t = useTranslations();
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const check = () => { void invoke<boolean>('has_unsaved_changes').then(value => { if (active) setDirty(value); }).catch(() => {}); };
+    check();
+    const timer = setInterval(check, 2000);
+    window.addEventListener('quest-edits-changed', check);
+    return () => { active = false; clearInterval(timer); window.removeEventListener('quest-edits-changed', check); };
+  }, []);
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
   const { character, playerName, historyState, undo, redo, activeSource, sessionKind, refreshRoster } = useCharacterContext();
@@ -38,6 +47,8 @@ export function Navbar({ onBack }: NavbarProps) {
         console.warn(result.warning);
         showToast(t('roster.syncWarning'), 'warning');
       }
+      window.dispatchEvent(new Event('save-changed'));
+      window.dispatchEvent(new Event('quest-edits-changed'));
       refreshRoster();
       showToast(t('actions.saveSuccess'), 'success');
       const config = await invoke<{ show_launch_dialog: boolean }>('get_app_config');
@@ -112,7 +123,7 @@ export function Navbar({ onBack }: NavbarProps) {
           {activeSource.kind === 'player' && sessionKind === 'save' && (
             <Button icon={<GameIcon icon={GiScrollUnfurled} size={14} color={T.sidebarText} />} text={t('actions.exportCharacter')} small minimal loading={isExporting} style={{ color: T.sidebarText }} onClick={handleExport} />
           )}
-          <Button icon={<GameIcon icon={GiTiedScroll} size={14} color={T.sidebarText} />} text={isSaving ? t('actions.saving') : t('actions.save')} small minimal loading={isSaving} style={{ color: T.sidebarText }} onClick={handleSave} />
+          <Button icon={<GameIcon icon={GiTiedScroll} size={14} color={T.sidebarText} />} text={isSaving ? t('actions.saving') : `${t('actions.save')}${dirty ? ' *' : ''}`} small minimal loading={isSaving} style={{ color: T.sidebarText }} onClick={handleSave} />
           <NavbarDivider />
           <Button icon={<GameIcon icon={GiCog} size={14} color={T.sidebarText} />} text={t('common.settings')} small minimal style={{ color: T.sidebarText }} onClick={() => setShowSettings(true)} />
         </NavbarGroup>

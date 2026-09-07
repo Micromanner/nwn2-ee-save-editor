@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 
 use crate::commands::campaign::cached_module_info;
 use crate::commands::{CommandError, CommandResult};
+use crate::services::save_graph::editing::{PendingQuestEdit, QuestPreview};
 use crate::services::save_graph::{
     self, BuildContext, QuestGraphProgress, SaveGraph, SaveGraphSummary, TransitionNode,
 };
@@ -20,7 +21,190 @@ pub async fn save_get_quest_graph(
     state: State<'_, AppState>,
 ) -> CommandResult<SaveGraphSummary> {
     let graph = ensure_quest_graph(&app, &state)?;
-    Ok(SaveGraphSummary::from(graph.as_ref()))
+    let mut summary = SaveGraphSummary::from(graph.as_ref());
+    let session = state.session.read();
+    let handler = session
+        .savegame_handler
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+    let journal = save_graph::read_live_journal(
+        handler,
+        session
+            .primary_player_index
+            .unwrap_or(session.selected_player_index),
+    )
+    .map_err(CommandError::from)?;
+    for quest in &mut summary.quests {
+        quest.live_state = journal.iter().find(|j| j.tag == quest.tag).map(|j| j.state);
+    }
+    summary.globals = crate::services::campaign::CampaignManager::get_campaign_variables(handler)
+        .unwrap_or_default();
+    Ok(summary)
+}
+
+#[tauri::command]
+pub async fn save_preview_quest_edit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    tag: String,
+    target: u32,
+    route: Option<usize>,
+) -> CommandResult<QuestPreview> {
+    let graph = ensure_quest_graph(&app, &state)?;
+    let session = state.session.read();
+    let handler = session
+        .savegame_handler
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+    session
+        .quest_edits
+        .preview(
+            &graph,
+            handler,
+            &state.paths.read(),
+            session
+                .primary_player_index
+                .unwrap_or(session.selected_player_index),
+            &tag,
+            target,
+            route,
+        )
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn save_stage_quest_edit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    tag: String,
+    target: u32,
+    route: Option<usize>,
+    revision: String,
+    selected: Vec<usize>,
+    replace: bool,
+) -> CommandResult<Vec<PendingQuestEdit>> {
+    let graph = ensure_quest_graph(&app, &state)?;
+    let mut session = state.session.write();
+    let handler = session
+        .savegame_handler
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+    let preview = session
+        .quest_edits
+        .preview(
+            &graph,
+            handler,
+            &state.paths.read(),
+            session
+                .primary_player_index
+                .unwrap_or(session.selected_player_index),
+            &tag,
+            target,
+            route,
+        )
+        .map_err(CommandError::from)?;
+    if preview.revision != revision {
+        return Err(CommandError::from(
+            "The save or pending edits changed. Refresh the preview before applying.".to_string(),
+        ));
+    }
+    session
+        .quest_edits
+        .stage(preview, &graph, &selected, replace)
+        .map_err(CommandError::from)?;
+    Ok(session.quest_edits.pending.clone())
+}
+
+#[tauri::command]
+pub fn save_list_quest_edits(state: State<'_, AppState>) -> Vec<PendingQuestEdit> {
+    state.session.read().quest_edits.pending.clone()
+}
+
+#[tauri::command]
+pub fn save_discard_quest_edits(
+    state: State<'_, AppState>,
+    tag: Option<String>,
+) -> Vec<PendingQuestEdit> {
+    let mut session = state.session.write();
+    session.quest_edits.discard(tag.as_deref());
+    session.quest_edits.pending.clone()
+}
+
+#[derive(serde::Serialize)]
+pub struct QuestVariableValue {
+    key: save_graph::editing::VariableKey,
+    saved: Option<serde_json::Value>,
+    effective: Option<serde_json::Value>,
+    available: bool,
+}
+
+#[tauri::command]
+pub async fn save_get_quest_variables(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    tag: String,
+) -> CommandResult<Vec<QuestVariableValue>> {
+    let graph = ensure_quest_graph(&app, &state)?;
+    let quest = graph
+        .quests
+        .iter()
+        .find(|q| q.tag == tag)
+        .ok_or_else(|| CommandError::from("Quest unavailable".to_string()))?;
+    let session = state.session.read();
+    let handler = session
+        .savegame_handler
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+    let mut keys = std::collections::BTreeSet::new();
+    for tr in &quest.transitions {
+        for action in tr.actions.iter().chain(&tr.gating_conditions) {
+            use crate::services::toolset_bridge::FunctorKind;
+            let kind = match action.kind {
+                FunctorKind::GlobalInt => "int",
+                FunctorKind::GlobalFloat => "float",
+                FunctorKind::GlobalString => "string",
+                FunctorKind::GlobalBool => "bool",
+                _ => {
+                    if let Ok((key, _)) = save_graph::editing::decode_assignment(action, &tr.module)
+                    {
+                        keys.insert(key);
+                    }
+                    continue;
+                }
+            };
+            if let Some(name) = action.params.first().and_then(serde_json::Value::as_str) {
+                keys.insert(save_graph::editing::VariableKey {
+                    module: None,
+                    name: name.into(),
+                    value_type: kind.into(),
+                });
+            }
+        }
+    }
+    let paths = state.paths.read();
+    let mut reader = save_graph::editing::VariableReader::new(handler, &paths);
+    Ok(keys
+        .into_iter()
+        .map(|key| {
+            let value = reader.read(&key);
+            let available = value.is_ok();
+            let saved = value.ok().flatten();
+            let effective = session
+                .quest_edits
+                .pending
+                .iter()
+                .flat_map(|p| &p.writes)
+                .rfind(|w| w.key == key)
+                .map(|w| w.after.clone())
+                .or(saved.clone());
+            QuestVariableValue {
+                key,
+                saved,
+                effective,
+                available,
+            }
+        })
+        .collect())
 }
 
 /// Returns the full transition list for a single quest tag, served out of the

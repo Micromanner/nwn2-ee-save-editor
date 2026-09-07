@@ -20,6 +20,7 @@ function functorKey(f: ConvoFunctor): string {
 function transitionSignature(tr: TransitionNode): string {
   return [
     tr.text_strref ?? 'null',
+    tr.actions.map(functorKey).join(';'),
     tr.co_authored_globals.map(functorKey).join(';'),
     tr.co_authored_locals.map(functorKey).join(';'),
     tr.gating_conditions.map(functorKey).join(';'),
@@ -106,7 +107,7 @@ function TransitionGroup({
           </span>
         )}
       </div>
-      <FunctorList title={t('gameState.quests.detail.coGlobals')} items={rep.co_authored_globals} />
+      <FunctorList title={t('gameState.quests.edit.authoredActions')} items={rep.actions} />
       <FunctorList title={t('gameState.quests.detail.coLocals')} items={rep.co_authored_locals} />
       <FunctorList title={t('gameState.quests.detail.gatingConditions')} items={rep.gating_conditions} />
       {isMulti && (

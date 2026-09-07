@@ -80,6 +80,7 @@ pub struct SessionState {
     /// per-quest fetch both read through the shared pointer.
     /// Cleared whenever the save changes (`load_character`, `close_character`).
     pub quest_graph_cache: Option<Arc<SaveGraph>>,
+    pub quest_edits: crate::services::save_graph::editing::QuestEdits,
     pub history: History,
     pub character_source: CharacterSource,
     pub standalone_backup_done: bool,
@@ -114,6 +115,7 @@ impl SessionState {
             feat_cache: None,
             module_info_cache: None,
             quest_graph_cache: None,
+            quest_edits: crate::services::save_graph::editing::QuestEdits::default(),
             history: History::default(),
             character_source: CharacterSource::Player,
             standalone_backup_done: false,
@@ -276,6 +278,7 @@ impl SessionState {
         self.character_source = CharacterSource::Player;
         self.parked.clear();
         self.staged_party.clear();
+        self.quest_edits.clear();
         self.clear_history();
 
         info!("Character loaded successfully");
@@ -322,6 +325,7 @@ impl SessionState {
         self.standalone_backup_done = false;
         self.parked.clear();
         self.staged_party.clear();
+        self.quest_edits.clear();
         self.clear_history();
 
         info!("Standalone character loaded successfully");
@@ -332,7 +336,8 @@ impl SessionState {
     /// save, then any staged party changes, batching all zip-bound writes into a
     /// single archive rewrite. Every character is attempted even when one fails;
     /// the collected failures (with any warnings) come back as one error, and
-    /// nothing is marked saved until the batch is committed.
+    /// serialization failures abort the batch. Archive and loose-file replacements
+    /// roll back together; nothing is marked saved until the batch commits.
     pub fn save_character(
         &mut self,
         game_data: &GameData,
@@ -342,6 +347,17 @@ impl SessionState {
             return self.save_standalone_inner(backup_keep_count);
         }
 
+        if !self.quest_edits.pending.is_empty() {
+            let handler = self.savegame_handler.as_ref().ok_or("No save loaded")?;
+            self.quest_edits.validate_saved(
+                handler,
+                &crate::config::NWN2Paths::new(),
+                self.primary_player_index
+                    .unwrap_or(self.selected_player_index),
+            )?;
+            crate::services::savegame_handler::backup::create_backup(handler.save_dir())
+                .map_err(|e| e.to_string())?;
+        }
         let mut active = self.character.take().ok_or("No character loaded")?;
         if let Some(handler) = self.savegame_handler.as_mut() {
             handler.begin_batch();
@@ -389,6 +405,22 @@ impl SessionState {
             }
         };
 
+        if let Some(handler) = self.savegame_handler.as_mut() {
+            if errors.is_empty()
+                && let Err(e) = self.quest_edits.flush(
+                    handler,
+                    self.primary_player_index
+                        .unwrap_or(self.selected_player_index),
+                )
+            {
+                errors.push(e);
+            }
+            if !errors.is_empty() {
+                handler.abort_batch();
+                return Err(errors.join("\n"));
+            }
+        }
+
         if let Some(handler) = self.savegame_handler.as_mut()
             && let Err(e) = handler.commit_batch()
         {
@@ -405,6 +437,8 @@ impl SessionState {
         if flushed_party {
             self.staged_party.clear();
         }
+        self.quest_edits.clear();
+        self.module_info_cache = None;
 
         if !errors.is_empty() {
             if !warnings.is_empty() {
@@ -482,7 +516,10 @@ impl SessionState {
 
         if update_primary_player_files {
             let save_dir = self.save_dir.as_ref().ok_or("No current save path")?;
-            write_playerinfo_for_character(save_dir, character, game_data)?;
+            let bytes = playerinfo_for_character(save_dir, character, game_data)?;
+            handler
+                .update_file("playerinfo.bin", &bytes)
+                .map_err(|e| e.to_string())?;
         }
 
         info!(
@@ -601,6 +638,7 @@ impl SessionState {
         self.standalone_backup_done = false;
         self.parked.clear();
         self.staged_party.clear();
+        self.quest_edits.clear();
         self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
     }
@@ -751,6 +789,7 @@ impl SessionState {
         self.character.as_ref().is_some_and(Character::is_modified)
             || self.parked.iter().any(|(_, c, _)| c.is_modified())
             || !self.staged_party.is_empty()
+            || !self.quest_edits.pending.is_empty()
     }
 
     pub fn character(&self) -> Option<&Character> {
@@ -1127,11 +1166,11 @@ impl SessionState {
     }
 }
 
-fn write_playerinfo_for_character(
+fn playerinfo_for_character(
     save_dir: &Path,
     character: &Character,
     game_data: &GameData,
-) -> Result<(), String> {
+) -> Result<Vec<u8>, String> {
     let playerinfo_path = save_dir.join("playerinfo.bin");
 
     let mut player_info = if playerinfo_path.exists() {
@@ -1155,11 +1194,9 @@ fn write_playerinfo_for_character(
         .collect::<Vec<_>>();
 
     player_info.update_from_gff_data(character.gff(), &subrace_label, &alignment_name, &classes);
-    player_info
-        .save(&playerinfo_path)
-        .map_err(|e| format!("Failed to write playerinfo.bin: {e}"))?;
-
-    Ok(())
+    let mut bytes = Vec::new();
+    player_info.write(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(bytes)
 }
 
 fn describe_source(source: &CharacterSource) -> String {
@@ -1220,6 +1257,16 @@ fn serialize_playerlist_bytes(
     let mut merged = player_entry.clone();
     for (key, value) in character_fields {
         merged.insert(key.clone(), value.clone());
+    }
+    let is_journal = |entry: &IndexMap<String, GffValue<'static>>| matches!(entry.get("Name"), Some(GffValue::String(name)) if name.starts_with("NW_JOURNAL_"));
+    if let Some(GffValue::ListOwned(saved_vars)) = player_entry.get("VarTable") {
+        let vars = merged
+            .entry("VarTable".into())
+            .or_insert_with(|| GffValue::ListOwned(Vec::new()));
+        if let GffValue::ListOwned(vars) = vars {
+            vars.retain(|entry| !is_journal(entry));
+            vars.extend(saved_vars.iter().filter(|entry| is_journal(entry)).cloned());
+        }
     }
     if let Some(prefix) = companion_prefix {
         crate::character::pets::sync_mod_companion_variable(&mut merged, prefix);
@@ -1417,6 +1464,122 @@ mod tests {
         let mut session = SessionState::new(rm);
         session.character = Some(Character::from_gff(gff));
         session
+    }
+
+    fn quest_save_session() -> (tempfile::TempDir, SessionState, GameData) {
+        use indexmap::indexmap;
+        let dir = tempfile::tempdir().unwrap();
+        let save = dir.path().join("save");
+        std::fs::create_dir(&save).unwrap();
+        let fields = indexmap! {
+            "Str".into() => GffValue::Byte(10),
+            "VarTable".into() => GffValue::ListOwned(vec![indexmap! {
+                "Name".into() => GffValue::String("NW_JOURNAL_ENTRYtest".into()),
+                "Type".into() => GffValue::Dword(1), "Value".into() => GffValue::Int(10),
+            }]),
+        };
+        let root =
+            indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![fields.clone()]) };
+        std::fs::write(
+            save.join("playerlist.ifo"),
+            GffWriter::new("IFO ", "V3.2").write(root).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            save.join("player.bic"),
+            GffWriter::new("BIC ", "V3.2")
+                .write(fields.clone())
+                .unwrap(),
+        )
+        .unwrap();
+        let mut session = make_session_with_character(fields);
+        session.save_dir = Some(save.clone());
+        session.savegame_handler = Some(SaveGameHandler::new(save, false, false).unwrap());
+        session.primary_player_index = Some(0);
+        session
+            .quest_edits
+            .pending
+            .push(crate::services::save_graph::editing::PendingQuestEdit {
+                tag: "test".into(),
+                target: 20,
+                saved_state: Some(10),
+                source: None,
+                writes: Vec::new(),
+            });
+        let data = GameData::new(Arc::new(std::sync::RwLock::new(
+            crate::parsers::tlk::TLKParser::new(),
+        )));
+        (dir, session, data)
+    }
+
+    #[test]
+    fn quest_save_survives_later_character_saves_and_undo() {
+        let (_dir, mut session, data) = quest_save_session();
+        session.record_history("Before character edit");
+        session
+            .character
+            .as_mut()
+            .unwrap()
+            .gff_mut()
+            .insert("Str".into(), GffValue::Byte(12));
+        assert!(session.has_unsaved_changes());
+        session.save_character(&data, 5).unwrap();
+        assert!(!session.has_unsaved_changes());
+        assert!(session.quest_edits.pending.is_empty());
+        session.undo();
+        session.character.as_mut().unwrap().mark_modified();
+        session.save_character(&data, 5).unwrap();
+        let journal = crate::services::save_graph::read_live_journal(
+            session.savegame_handler.as_ref().unwrap(),
+            0,
+        )
+        .unwrap();
+        assert_eq!(journal[0].state, 20);
+    }
+
+    #[test]
+    fn quest_save_targets_primary_player_when_companion_is_selected() {
+        let (_dir, mut session, data) = quest_save_session();
+        session.character_source = CharacterSource::Companion {
+            ros_name: "companion".into(),
+        };
+        session.character = Some(Character::from_gff(make_gff_with_str(10)));
+        session.save_character(&data, 5).unwrap();
+        let journal = crate::services::save_graph::read_live_journal(
+            session.savegame_handler.as_ref().unwrap(),
+            0,
+        )
+        .unwrap();
+        assert_eq!(journal[0].state, 20);
+    }
+
+    #[test]
+    fn failed_quest_preparation_keeps_character_changes_and_pending_edits() {
+        let (_dir, mut session, data) = quest_save_session();
+        let handler = session.savegame_handler.as_ref().unwrap();
+        let before = handler.extract_player_data().unwrap();
+        session.quest_edits.pending[0].target = u32::MAX;
+        session
+            .character
+            .as_mut()
+            .unwrap()
+            .gff_mut()
+            .insert("Str".into(), GffValue::Byte(12));
+        assert!(session.save_character(&data, 5).is_err());
+        assert!(session.has_unsaved_changes());
+        assert_eq!(session.quest_edits.pending.len(), 1);
+        assert_eq!(
+            session
+                .savegame_handler
+                .as_ref()
+                .unwrap()
+                .extract_player_data()
+                .unwrap(),
+            before
+        );
+        session.quest_edits.pending[0].target = 20;
+        session.save_character(&data, 5).unwrap();
+        assert!(!session.has_unsaved_changes());
     }
 
     #[test]

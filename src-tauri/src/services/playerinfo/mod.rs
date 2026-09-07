@@ -295,7 +295,7 @@ impl PlayerInfo {
         Ok(false)
     }
 
-    fn write(&self, writer: &mut impl Write) -> PlayerInfoResult<()> {
+    pub(crate) fn write(&self, writer: &mut impl Write) -> PlayerInfoResult<()> {
         write_string(writer, &self.data.first_name)?;
 
         let has_last_name = !self.data.last_name.is_empty();
