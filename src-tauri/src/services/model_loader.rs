@@ -247,6 +247,28 @@ pub fn load_model(
     part: &str,
     tint_group: &str,
 ) -> Result<ModelData, String> {
+    load_model_inner(resource_manager, resref, part, tint_group, true)
+}
+
+/// `load_model` without the idle animation GR2s: the item viewer, item and
+/// accessory thumbnails and portraits never animate, and parsing the two
+/// idle clips costs more than the mesh itself for every skinned model.
+pub fn load_model_static(
+    resource_manager: &ResourceManager,
+    resref: &str,
+    part: &str,
+    tint_group: &str,
+) -> Result<ModelData, String> {
+    load_model_inner(resource_manager, resref, part, tint_group, false)
+}
+
+fn load_model_inner(
+    resource_manager: &ResourceManager,
+    resref: &str,
+    part: &str,
+    tint_group: &str,
+    with_animations: bool,
+) -> Result<ModelData, String> {
     let (mut data, mdb) = parse_mdb(resource_manager, resref, part, tint_group)?;
 
     let skeleton_name = mdb
@@ -260,7 +282,9 @@ pub fn load_model(
         if let Some(ref skel) = data.skeleton {
             let palettes = build_bone_palettes(skel);
             remap_mesh_bone_indices(&mut data.meshes, &palettes, skel);
-            data.animations = load_idle_animations(resource_manager, skel_name);
+            if with_animations {
+                data.animations = load_idle_animations(resource_manager, skel_name);
+            }
         }
     }
 

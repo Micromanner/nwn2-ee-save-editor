@@ -1,4 +1,5 @@
-import { useModelThumbnail } from '@/hooks/useModelThumbnail';
+import { useEffect, useRef } from 'react';
+import { setThumbnailVisible, useModelThumbnail } from '@/hooks/useModelThumbnail';
 import type { TintColors } from '../ModelViewer/materials';
 import type { ModelData } from '../ModelViewer/types';
 import type { PreviewPose } from '@/lib/bindings';
@@ -64,12 +65,28 @@ function Tile({ value, selected, onSelect, cacheKey, fetchModel, tints, label, p
   pose?: PreviewPose | null;
 }) {
   const dataUrl = useModelThumbnail(cacheKey, () => fetchModel(value), tints, 'model', pose);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Tiles the user can see render before the rest of a long, scrolling grid.
+  useEffect(() => {
+    if (dataUrl !== null || !ref.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) setThumbnailVisible(cacheKey, entry.isIntersecting);
+    });
+    observer.observe(ref.current);
+    return () => {
+      observer.disconnect();
+      setThumbnailVisible(cacheKey, false);
+    };
+  }, [cacheKey, dataUrl]);
+
   // A variant whose model does not resolve renders nothing at all rather than
   // offering a click that would blank the preview.
   if (dataUrl === '') return null;
 
   return (
     <div
+      ref={ref}
       role="button"
       tabIndex={0}
       title={label}

@@ -141,7 +141,17 @@ function framePortraitCamera(
   camera.lookAt(center);
 }
 
+// Materials are not disposed with their thumbnail: material.dispose() drops
+// the renderer's program refcount to zero and destroys the compiled shader,
+// so the next thumbnail with the same material shape would recompile
+// MeshPhysicalMaterial plus the tint/lighting injections from scratch.
+// Keeping the last few thumbnails' materials alive keeps their programs
+// cached; geometry and textures are still freed immediately.
+const RETIRED_MATERIAL_BATCHES = 8;
+const retiredMaterials: THREE.Material[][] = [];
+
 function disposeGroup(group: THREE.Group): void {
+  const materials: THREE.Material[] = [];
   group.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh || obj instanceof THREE.SkinnedMesh)) return;
     obj.geometry.dispose();
@@ -153,8 +163,12 @@ function disposeGroup(group: THREE.Group): void {
       | { tintMap?: { value: THREE.Texture } }
       | undefined;
     uniforms?.tintMap?.value?.dispose();
-    mat.dispose();
+    materials.push(mat);
   });
+  retiredMaterials.push(materials);
+  while (retiredMaterials.length > RETIRED_MATERIAL_BATCHES) {
+    for (const mat of retiredMaterials.shift()!) mat.dispose();
+  }
 }
 
 /// Renders one model to a PNG data URL. Returns '' when the model has no

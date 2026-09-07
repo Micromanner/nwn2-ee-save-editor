@@ -269,7 +269,7 @@ pub async fn load_character_model(state: State<'_, AppState>) -> CommandResult<M
         if let (Some(skel), Some(pal)) = (&skeleton, &palettes) {
             model_loader::load_meshes_with_existing_skeleton(&rm, resref, part, tint, skel, pal)
         } else {
-            model_loader::load_model(&rm, resref, part, tint).map(|d| d.meshes)
+            model_loader::load_model_static(&rm, resref, part, tint).map(|d| d.meshes)
         }
     };
 
@@ -537,7 +537,7 @@ pub async fn load_companion_portrait_model(
         if let (Some(skel), Some(pal)) = (&skeleton, &palettes) {
             model_loader::load_meshes_with_existing_skeleton(&rm, resref, part, tint, skel, pal)
         } else {
-            model_loader::load_model(&rm, resref, part, tint).map(|d| d.meshes)
+            model_loader::load_model_static(&rm, resref, part, tint).map(|d| d.meshes)
         }
     };
 
@@ -704,7 +704,7 @@ pub async fn load_character_part(
                     &rm, resref, part_name, tint, skel, pal,
                 )
             } else {
-                model_loader::load_model(&rm, resref, part_name, tint).map(|d| d.meshes)
+                model_loader::load_model_static(&rm, resref, part_name, tint).map(|d| d.meshes)
             }
         };
 

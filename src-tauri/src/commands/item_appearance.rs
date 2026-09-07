@@ -104,7 +104,7 @@ pub fn load_item_model_impl(
                 [.., b'_', b'c'] => "item_c",
                 _ => "item",
             };
-            match model_loader::load_model(rm, resref, part_tag, "item") {
+            match model_loader::load_model_static(rm, resref, part_tag, "item") {
                 Ok(mut data) => {
                     if let Some((bone, slot)) =
                         crate::character::resref_attach_bone_and_slot(resref)
@@ -228,7 +228,7 @@ pub async fn load_item_part(
         2 => "item_c",
         _ => "item",
     };
-    model_loader::load_model(&rm, &resref, part_tag, "item")
+    model_loader::load_model_static(&rm, &resref, part_tag, "item")
         .map_err(|e| format!("Failed to load part '{resref}': {e}"))
 }
 
@@ -249,7 +249,7 @@ pub async fn load_accessory_model(
         .ok_or_else(|| format!("No accessory mesh for {slot:?} id {id}"))?;
     debug!("Loading accessory model {resref}");
 
-    let mut data = model_loader::load_model(&rm, &resref, "item", "item")
+    let mut data = model_loader::load_model_static(&rm, &resref, "item", "item")
         .map_err(|e| format!("Failed to load accessory '{resref}': {e}"))?;
     let tints = swap_tint_2_3(&tints);
     for m in &mut data.meshes {
