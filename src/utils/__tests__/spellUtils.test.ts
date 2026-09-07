@@ -56,6 +56,7 @@ describe('mapCasterClasses', () => {
     const classes = [{
       index: 0, class_name: 'Wizard', class_id: 10, can_edit_spells: true,
       class_level: 5, caster_level: 5, spell_type: 'prepared' as const,
+      expected_spells_known: {},
     }];
     const result = mapCasterClasses(classes);
     expect(result).toEqual([{ index: 0, name: 'Wizard', class_id: 10, can_edit_spells: true }]);
