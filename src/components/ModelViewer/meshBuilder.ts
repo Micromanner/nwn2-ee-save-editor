@@ -81,6 +81,7 @@ export function buildMesh(
     skinnedMesh.receiveShadow = true;
     skinnedMesh.userData.tintGroup = meshData.tint_group;
     skinnedMesh.userData.hasOverrideTints = meshData.override_tints != null;
+    skinnedMesh.userData.accessorySlot = meshData.accessory_slot ?? null;
     if (!rootBone.parent) {
       skinnedMesh.add(rootBone);
     }
@@ -96,6 +97,7 @@ export function buildMesh(
   mesh.receiveShadow = true;
   mesh.userData.tintGroup = meshData.tint_group;
   mesh.userData.hasOverrideTints = meshData.override_tints != null;
+  mesh.userData.accessorySlot = meshData.accessory_slot ?? null;
   return mesh;
 }
 

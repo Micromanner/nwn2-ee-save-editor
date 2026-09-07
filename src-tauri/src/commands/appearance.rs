@@ -470,6 +470,7 @@ pub async fn load_character_model(state: State<'_, AppState>) -> CommandResult<M
             Ok(meshes) => {
                 for mut m in meshes {
                     m.attach_bone = Some(acc.attach_bone.to_string());
+                    m.accessory_slot = Some(acc.slot);
                     m.override_tints = Some(tints.clone());
                     all_meshes.push(m);
                 }
@@ -660,6 +661,7 @@ pub async fn load_companion_portrait_model(
             Ok(meshes) => {
                 for mut m in meshes {
                     m.attach_bone = Some(acc.attach_bone.to_string());
+                    m.accessory_slot = Some(acc.slot);
                     m.override_tints = Some(swap_tint_2_3(acc.tints));
                     all_meshes.push(m);
                 }

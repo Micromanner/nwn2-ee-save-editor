@@ -1,3 +1,5 @@
+import type { AccessorySlot } from '@/lib/bindings';
+
 export interface MaterialData {
   diffuse_map: string;
   normal_map: string;
@@ -33,6 +35,8 @@ export interface MeshData {
     channel2: { r: number; g: number; b: number; a: number };
     channel3: { r: number; g: number; b: number; a: number };
   } | null;
+  /// Slot this accessory belongs to, if it is an armor accessory.
+  accessory_slot?: AccessorySlot | null;
 }
 
 export interface BoneData {

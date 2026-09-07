@@ -158,6 +158,8 @@ pub struct MeshData {
     /// can carry its own colour independently from the chest's tint.
     #[serde(default)]
     pub override_tints: Option<crate::character::appearance_helpers::TintChannels>,
+    #[serde(default)]
+    pub accessory_slot: Option<crate::character::AccessorySlot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -751,6 +753,7 @@ fn flatten_rigid_mesh(rm: &RigidMeshPacket, part: &str, tint_group: &str) -> Mes
         skeleton_ref: None,
         attach_bone: None,
         override_tints: None,
+        accessory_slot: None,
     }
 }
 
@@ -921,6 +924,7 @@ fn flatten_skin_mesh(sm: &SkinMeshPacket, part: &str, tint_group: &str) -> MeshD
         skeleton_ref: None,
         attach_bone: None,
         override_tints: None,
+        accessory_slot: None,
     }
 }
 

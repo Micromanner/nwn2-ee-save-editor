@@ -1006,7 +1006,12 @@
     },
     "accessoryResetTitle": "Accessory changes will be reset",
     "accessoryResetDesc": "Changing the variation puts the accessories back to what this item had when you opened it.",
-    "changeVariation": "Change Variation"
+    "changeVariation": "Change Variation",
+    "customColors": "Custom Colors",
+    "usingArmorColors": "Using armor colors",
+    "copyToPair": "Copy colors to {pair}",
+    "resetToArmor": "Reset to armor colors",
+    "hasCustomColors": "Custom colors"
   },
   "roster": {
     "party": "Party",

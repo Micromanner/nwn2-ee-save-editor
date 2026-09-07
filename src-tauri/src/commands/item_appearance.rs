@@ -112,6 +112,7 @@ pub fn load_item_model_impl(
                         let tints = appearance.accessories.get_tints(slot).map(swap_tint_2_3);
                         for m in &mut data.meshes {
                             m.attach_bone = Some(bone.to_string());
+                            m.accessory_slot = Some(slot);
                             if let Some(ref t) = tints {
                                 m.override_tints = Some(t.clone());
                             }
@@ -253,6 +254,7 @@ pub async fn load_accessory_model(
         .map_err(|e| format!("Failed to load accessory '{resref}': {e}"))?;
     let tints = swap_tint_2_3(&tints);
     for m in &mut data.meshes {
+        m.accessory_slot = Some(slot);
         m.override_tints = Some(tints.clone());
     }
     Ok(data)

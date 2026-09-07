@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Button, Card, Dialog, DialogBody, DialogFooter, Elevation, Icon } from '@blueprintjs/core';
+import { Button, Card, Dialog, DialogBody, DialogFooter, Elevation, Icon, Switch } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
@@ -13,7 +13,7 @@ import type {
 } from '@/lib/bindings';
 import type { ModelData } from '../ModelViewer/types';
 import { tintChannelsToColors } from '../ModelViewer/materials';
-import { ItemViewer3D, swapItemTints } from '../Appearance/ItemViewer3D';
+import { ACCESSORY_FIELD, ItemViewer3D, swapItemTints } from '../Appearance/ItemViewer3D';
 import { ColorPicker } from '../Appearance/ColorPicker';
 import { ThumbnailGallery } from '../Appearance/ThumbnailGallery';
 import { DropdownSelect } from '../shared/DropdownSelect';
@@ -33,7 +33,7 @@ interface ItemAppearanceTabProps {
 
 function SectionHeader({ label }: { label: string }) {
   return (
-    <div className="t-section" style={{ color: T.accent, marginBottom: 8, marginTop: 4 }}>
+    <div className="t-bold t-xl" style={{ color: T.accent, marginBottom: 8, marginTop: 4 }}>
       {label}
     </div>
   );
@@ -44,22 +44,12 @@ function tintChannelsKey(t: TintChannels): string {
   return `${c(t.channel1)}|${c(t.channel2)}|${c(t.channel3)}`;
 }
 
-const PART_LABEL_KEYS = ['appearance.part1', 'appearance.part2', 'appearance.part3'] as const;
+function tintToHex(c: TintChannel): string {
+  const hex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${hex(c.r)}${hex(c.g)}${hex(c.b)}`;
+}
 
-/// Serde variant name of each slot -> snake_case field on `ArmorAccessories`.
-const ACCESSORY_FIELD: Record<AccessorySlot, keyof ArmorAccessories> = {
-  LtShoulder: 'lt_shoulder', RtShoulder: 'rt_shoulder',
-  LtArm: 'lt_arm', RtArm: 'rt_arm',
-  LtElbow: 'lt_elbow', RtElbow: 'rt_elbow',
-  LtBracer: 'lt_bracer', RtBracer: 'rt_bracer',
-  LtLeg: 'lt_leg', RtLeg: 'rt_leg',
-  LtKnee: 'lt_knee', RtKnee: 'rt_knee',
-  LtShin: 'lt_shin', RtShin: 'rt_shin',
-  LtHip: 'lt_hip', RtHip: 'rt_hip',
-  LtAnkle: 'lt_ankle', RtAnkle: 'rt_ankle',
-  LtFoot: 'lt_foot', RtFoot: 'rt_foot',
-  BkHip: 'bk_hip', FtHip: 'ft_hip',
-};
+const PART_LABEL_KEYS = ['appearance.part1', 'appearance.part2', 'appearance.part3'] as const;
 
 /// Left/right pairs, in body order; the six vestigial slots have no meshes
 /// and are never offered.
@@ -89,10 +79,22 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshPart, setRefreshPart] = useState<{ partIndex: number; key: number } | null>(null);
   const [hoveredChannel, setHoveredChannel] = useState<keyof TintChannels | null>(null);
+  const [hoveredTarget, setHoveredTarget] = useState<AccessorySlot | null>(null);
+  const [hoveredSlot, setHoveredSlot] = useState<AccessorySlot | null>(null);
   const [activated, setActivated] = useState(active);
   useEffect(() => {
     if (active) setActivated(true);
   }, [active]);
+
+  const isZeroTints = useCallback((t: TintChannels) =>
+    t.channel1.r === 0 && t.channel1.g === 0 && t.channel1.b === 0 &&
+    t.channel2.r === 0 && t.channel2.g === 0 && t.channel2.b === 0 &&
+    t.channel3.r === 0 && t.channel3.g === 0 && t.channel3.b === 0, []);
+
+  // Slots the user switched to custom colors this session. Everything starts
+  // off: accessories keep their saved tints until a master color edit or a
+  // toggle touches them.
+  const [customTintSlots, setCustomTintSlots] = useState<Set<AccessorySlot>>(() => new Set());
 
   // Thumbnails render once with the tints active when the tab mounts; later
   // tint edits update only the live viewer (the parent remounts this tab per
@@ -150,14 +152,33 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   }, [options]);
 
   const updateTint = useCallback((channel: keyof TintChannels, color: TintChannel) => {
+    const nextTints = {
+      ...appearance.tints,
+      [channel]: color,
+    };
+    const nextAccessories = { ...appearance.accessories };
+    let changedAcc = false;
+    for (const row of ACCESSORY_ROWS) {
+      for (const slot of [row.left, row.right]) {
+        if (!customTintSlots.has(slot)) {
+          const key = ACCESSORY_FIELD[slot];
+          const current = nextAccessories[key];
+          if (current && current.id > 0) {
+            nextAccessories[key] = {
+              ...current,
+              tints: { ...current.tints, [channel]: color },
+            };
+            changedAcc = true;
+          }
+        }
+      }
+    }
     onChange({
       ...appearance,
-      tints: {
-        ...appearance.tints,
-        [channel]: color
-      }
+      tints: nextTints,
+      accessories: changedAcc ? nextAccessories : appearance.accessories,
     });
-  }, [appearance, onChange]);
+  }, [appearance, customTintSlots, onChange]);
 
   // A slot going from empty to a mesh takes the armor's own colors; swapping
   // the mesh of an already-set slot keeps that slot's tints. Picking "none"
@@ -166,12 +187,93 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
     const key = ACCESSORY_FIELD[slot];
     const current = appearance.accessories[key];
     if (!current && id === 0) return;
-    const tints = current && current.id > 0 ? current.tints : appearance.tints;
+    const isCustom = customTintSlots.has(slot);
+    const tints = isCustom && current && current.id > 0 ? current.tints : appearance.tints;
     onChange({
       ...appearance,
       accessories: { ...appearance.accessories, [key]: { id, tints } },
     });
     setRefreshKey(k => k + 1);
+  }, [appearance, customTintSlots, onChange]);
+
+  const pairedSlotOf = useCallback((slot: AccessorySlot): AccessorySlot | null => {
+    const row = ACCESSORY_ROWS.find(r => r.left === slot || r.right === slot);
+    if (!row) return null;
+    return slot === row.left ? row.right : row.left;
+  }, []);
+
+  const toggleCustom = useCallback((slot: AccessorySlot) => {
+    setCustomTintSlots(prev => {
+      const next = new Set(prev);
+      const isNowCustom = !next.has(slot);
+      if (isNowCustom) {
+        next.add(slot);
+      } else {
+        next.delete(slot);
+        const key = ACCESSORY_FIELD[slot];
+        const current = appearance.accessories[key];
+        if (current) {
+          onChange({
+            ...appearance,
+            accessories: {
+              ...appearance.accessories,
+              [key]: { ...current, tints: appearance.tints },
+            },
+          });
+        }
+      }
+      return next;
+    });
+  }, [appearance, onChange]);
+
+  const updateSlotTint = useCallback((slot: AccessorySlot, channel: keyof TintChannels, color: TintChannel) => {
+    const key = ACCESSORY_FIELD[slot];
+    const current = appearance.accessories[key];
+    if (!current) return;
+    const nextTints = { ...current.tints, [channel]: color };
+    onChange({
+      ...appearance,
+      accessories: {
+        ...appearance.accessories,
+        [key]: { ...current, tints: nextTints },
+      },
+    });
+  }, [appearance, onChange]);
+
+  const copyToPair = useCallback((sourceSlot: AccessorySlot, targetSlot: AccessorySlot) => {
+    const srcKey = ACCESSORY_FIELD[sourceSlot];
+    const dstKey = ACCESSORY_FIELD[targetSlot];
+    const srcData = appearance.accessories[srcKey];
+    const dstData = appearance.accessories[dstKey];
+    if (!srcData || !dstData || dstData.id === 0) return;
+
+    setCustomTintSlots(prev => new Set(prev).add(targetSlot));
+    onChange({
+      ...appearance,
+      accessories: {
+        ...appearance.accessories,
+        [dstKey]: { ...dstData, tints: { ...srcData.tints } },
+      },
+    });
+  }, [appearance, onChange]);
+
+  const resetToArmor = useCallback((slot: AccessorySlot) => {
+    setCustomTintSlots(prev => {
+      const next = new Set(prev);
+      next.delete(slot);
+      return next;
+    });
+    const key = ACCESSORY_FIELD[slot];
+    const current = appearance.accessories[key];
+    if (current) {
+      onChange({
+        ...appearance,
+        accessories: {
+          ...appearance.accessories,
+          [key]: { ...current, tints: appearance.tints },
+        },
+      });
+    }
   }, [appearance, onChange]);
 
   const accessoryOptions = options?.available_accessories ?? [];
@@ -198,7 +300,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   const activeIds = accessoryIds(activeSlot);
   const activeData = appearance.accessories[ACCESSORY_FIELD[activeSlot]];
   const activeId = accessoryId(activeSlot);
-  const activeTints = activeData && activeData.id > 0 ? activeData.tints : appearance.tints;
+  const activeTints = activeData && activeData.id > 0 && !isZeroTints(activeData.tints) ? activeData.tints : appearance.tints;
   const activeTintKey = tintChannelsKey(activeTints);
 
   const partLists = options
@@ -215,6 +317,8 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
           refreshKey={refreshKey}
           refreshPart={refreshPart}
           highlightChannel={hoveredChannel}
+          highlightTarget={hoveredTarget}
+          selectedAccessorySlot={hoveredSlot}
           pose={options?.preview_pose}
         />
       </div>
@@ -296,7 +400,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 every slot stays clickable while browsing a long list. */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}>
               <div style={{ flex: '0 0 200px', border: `1px solid ${T.border}`, borderRadius: 3, overflow: 'hidden', background: T.surfaceAlt }}>
-                <div className="t-semibold t-base" style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', color: T.textMuted, background: T.sectionBg, borderBottom: `1px solid ${T.border}` }}>
+                <div className="t-semibold t-md" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', color: T.textMuted, background: T.sectionBg, borderBottom: `1px solid ${T.border}` }}>
                   <span>{t('appearance.accessorySlotColumn')}</span>
                   <span>{t('appearance.accessoryCurrentColumn')}</span>
                 </div>
@@ -316,7 +420,9 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                           setActiveSlot(slot);
                         }
                       }}
-                      className="t-base"
+                      onMouseEnter={() => setHoveredSlot(slot)}
+                      onMouseLeave={() => setHoveredSlot(s => (s === slot ? null : s))}
+                      className="t-md"
                       style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '4px 10px', cursor: disabled ? 'default' : 'pointer',
@@ -327,44 +433,122 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                       }}
                     >
                       <span>{slotLabel(slot)}</span>
-                      <span
-                        className="t-base t-semibold"
-                        title={id > 0 ? t('appearance.accessoryCurrentTitle', { id: String(id) }) : t('appearance.none')}
-                        style={{
-                          minWidth: 28, textAlign: 'center', padding: '0 6px', borderRadius: 10,
-                          background: id > 0 ? (isActive ? 'rgba(255,255,255,0.25)' : `${T.accent}22`) : undefined,
-                          color: id > 0 ? (isActive ? '#fff' : T.accent) : (isActive ? 'rgba(255,255,255,0.7)' : T.textMuted),
-                        }}
-                      >
-                        {id > 0 ? `#${id}` : '-'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span
+                          className="t-md t-semibold"
+                          title={id > 0 ? t('appearance.accessoryCurrentTitle', { id: String(id) }) : t('appearance.none')}
+                          style={{
+                            minWidth: 28, textAlign: 'center', padding: '0 6px', borderRadius: 10,
+                            background: id > 0 ? (isActive ? 'rgba(255,255,255,0.25)' : `${T.accent}22`) : undefined,
+                            color: id > 0 ? (isActive ? '#fff' : T.accent) : (isActive ? 'rgba(255,255,255,0.7)' : T.textMuted),
+                          }}
+                        >
+                          {id > 0 ? `#${id}` : '-'}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: '0 4px' }}>
-                  <ThumbnailGallery
-                    values={activeIds}
-                    selected={activeId}
-                    onSelect={(id) => updateAccessory(activeSlot, id)}
-                    cacheKey={(id) => `accessory:${characterId ?? 'none'}:${activeSlot}:${id}:${activeTintKey}`}
-                    fetchModel={(id) => invoke<ModelData>('load_accessory_model', {
-                      slot: activeSlot,
-                      id,
-                      tints: activeTints,
-                    })}
-                    tints={frozenTints}
-                    tileLabel={(id) => String(id)}
-                    pose="armor"
-                    noneLabel={t('appearance.none')}
-                    centered
-                  />
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {activeId > 0 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+                    padding: '6px 10px', background: T.surfaceAlt,
+                    border: `1px solid ${T.borderLight}`, borderRadius: 3,
+                  }}>
+                    <Switch
+                      checked={customTintSlots.has(activeSlot)}
+                      label={t('appearance.customColors')}
+                      onChange={() => toggleCustom(activeSlot)}
+                      style={{ margin: 0 }}
+                      className="t-md"
+                    />
+                    {customTintSlots.has(activeSlot) ? (
+                      <>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          {(['channel1', 'channel2', 'channel3'] as const).map(channel => (
+                            <div
+                              key={channel}
+                              onMouseEnter={() => {
+                                setHoveredChannel(channel);
+                                setHoveredTarget(activeSlot);
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredChannel(c => (c === channel ? null : c));
+                                setHoveredTarget(null);
+                              }}
+                            >
+                              <ColorPicker
+                                value={activeTints[channel]}
+                                onChange={c => updateSlotTint(activeSlot, channel, c)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {pairedSlotOf(activeSlot) && accessoryId(pairedSlotOf(activeSlot)!) > 0 && (
+                          <Button
+                            small
+                            minimal
+                            icon="duplicate"
+                            text={t('appearance.copyToPair', { pair: slotLabel(pairedSlotOf(activeSlot)!) })}
+                            onClick={() => copyToPair(activeSlot, pairedSlotOf(activeSlot)!)}
+                          />
+                        )}
+                        <Button
+                          small
+                          minimal
+                          icon="undo"
+                          text={t('appearance.resetToArmor')}
+                          onClick={() => resetToArmor(activeSlot)}
+                        />
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.textMuted }} className="t-md">
+                        <span>{t('appearance.usingArmorColors')}</span>
+                        <div style={{ display: 'inline-flex', gap: 4 }}>
+                          {(['channel1', 'channel2', 'channel3'] as const).map(ch => (
+                            <span
+                              key={ch}
+                              style={{
+                                width: 14,
+                                height: 14,
+                                borderRadius: '50%',
+                                background: `rgb(${activeTints[ch].r}, ${activeTints[ch].g}, ${activeTints[ch].b})`,
+                                border: `1px solid ${T.border}`,
+                                display: 'inline-block',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0, position: 'relative', minHeight: 300 }}>
+                  <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: '0 4px' }}>
+                    <ThumbnailGallery
+                      values={activeIds}
+                      selected={activeId}
+                      onSelect={(id) => updateAccessory(activeSlot, id)}
+                      cacheKey={(id) => `accessory:${characterId ?? 'none'}:${activeSlot}:${id}:${activeTintKey}`}
+                      fetchModel={(id) => invoke<ModelData>('load_accessory_model', {
+                        slot: activeSlot,
+                        id,
+                        tints: activeTints,
+                      })}
+                      tints={frozenTints}
+                      tileLabel={(id) => String(id)}
+                      pose="armor"
+                      noneLabel={t('appearance.none')}
+                      centered
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="t-base" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Icon icon="info-sign" size={12} style={{ color: T.textMuted }} />
+            <div className="t-md" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Icon icon="info-sign" size={14} style={{ color: T.textMuted }} />
               {t('appearance.accessoriesHint')}
             </div>
           </Card>
@@ -383,7 +567,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
               borderRadius: 4, padding: 12,
             }}>
               <div className="t-md t-medium" style={{ color: T.text }}>{t('appearance.accessoryResetTitle')}</div>
-              <div className="t-base" style={{ color: T.textMuted, marginTop: 4 }}>{t('appearance.accessoryResetDesc')}</div>
+              <div className="t-md" style={{ color: T.textMuted, marginTop: 4 }}>{t('appearance.accessoryResetDesc')}</div>
             </div>
           </DialogBody>
           <DialogFooter
@@ -412,7 +596,10 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
               {(['channel1', 'channel2', 'channel3'] as const).map((channel) => (
                 <div
                   key={channel}
-                  onMouseEnter={() => setHoveredChannel(channel)}
+                  onMouseEnter={() => {
+                    setHoveredChannel(channel);
+                    setHoveredTarget(null);
+                  }}
                   onMouseLeave={() => setHoveredChannel((c) => (c === channel ? null : c))}
                 >
                   <ColorPicker
@@ -422,8 +609,8 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 </div>
               ))}
             </div>
-            <div className="t-base" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Icon icon="info-sign" size={12} style={{ color: T.textMuted }} />
+            <div className="t-md" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Icon icon="info-sign" size={14} style={{ color: T.textMuted }} />
               {t('appearance.colorsHoverHint')}
             </div>
           </Card>

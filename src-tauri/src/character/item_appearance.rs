@@ -234,12 +234,10 @@ impl AccessorySlot {
     /// `AccessorySlot` enum. Used by the item loader to tag rigid accessory
     /// meshes with their `attach_bone`.
     pub(crate) fn from_mdb_slot(slot: &str) -> Option<Self> {
-        for s in Self::all() {
-            if s.mdb_slot() == Some(slot) {
-                return Some(*s);
-            }
-        }
-        None
+        Self::all()
+            .iter()
+            .copied()
+            .find(|s| s.mdb_slot().is_some_and(|m| m.eq_ignore_ascii_case(slot)))
     }
 
     /// Filename slot fragment for the `A_{body}_{slot}{NN}.mdb` pattern.
@@ -555,6 +553,8 @@ impl ItemAppearance {
         let boots = read_nested_armor_part(fields, "Boots");
         let gloves = read_nested_armor_part(fields, "Gloves");
 
+        let accessories = read_accessories(fields, &tints);
+
         Self {
             variation,
             model_parts,
@@ -562,7 +562,7 @@ impl ItemAppearance {
             armor_visual_type,
             boots,
             gloves,
-            accessories: read_accessories(fields),
+            accessories,
         }
     }
 
@@ -1242,7 +1242,17 @@ fn normalize_weapon_prefix(prefix: &str) -> String {
 /// `ArmorAccessories`. Missing fields or non-struct values leave the slot
 /// as `None`. Present structs contribute `{ id, tints }`; `id = 0` is
 /// preserved so the original UTI can be reconstructed on write.
-fn read_accessories(fields: &IndexMap<String, GffValue<'_>>) -> ArmorAccessories {
+fn read_accessories(
+    fields: &IndexMap<String, GffValue<'_>>,
+    default_tints: &TintChannels,
+) -> ArmorAccessories {
+    let default_all_zero = [
+        &default_tints.channel1,
+        &default_tints.channel2,
+        &default_tints.channel3,
+    ]
+    .iter()
+    .all(|c| c.r == 0 && c.g == 0 && c.b == 0);
     let mut out = ArmorAccessories::default();
     for slot in AccessorySlot::all() {
         let Some(field) = fields.get(slot.uti_field()) else {
@@ -1266,7 +1276,13 @@ fn read_accessories(fields: &IndexMap<String, GffValue<'_>>) -> ArmorAccessories
                 _ => None,
             })
             .map(|t| read_tint_from_tintable(&t))
-            .unwrap_or_default();
+            .filter(|t| {
+                let all_zero = [&t.channel1, &t.channel2, &t.channel3]
+                    .iter()
+                    .all(|c| c.r == 0 && c.g == 0 && c.b == 0);
+                !all_zero || default_all_zero
+            })
+            .unwrap_or_else(|| default_tints.clone());
         out.set_data(*slot, Some(AccessorySlotData { id, tints }));
     }
     out

@@ -6,10 +6,24 @@ import { buildSkeleton, buildMesh } from '../ModelViewer/meshBuilder';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useThreeScene, clearSceneModels, frameBounds, getEnvMap } from '../ModelViewer/useThreeScene';
 import type { MeshData, ModelData } from '../ModelViewer/types';
-import type { ItemAppearance, PreviewPose, TintChannels } from '@/lib/bindings';
+import type { AccessorySlot, ArmorAccessories, ItemAppearance, PreviewPose, TintChannels } from '@/lib/bindings';
 import { applyPoseRotation, poseCameraPosition, poseFromModel } from '../ModelViewer/pose';
 import { NonIdealState } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
+
+export const ACCESSORY_FIELD: Record<AccessorySlot, keyof ArmorAccessories> = {
+  LtShoulder: 'lt_shoulder', RtShoulder: 'rt_shoulder',
+  LtArm: 'lt_arm', RtArm: 'rt_arm',
+  LtElbow: 'lt_elbow', RtElbow: 'rt_elbow',
+  LtBracer: 'lt_bracer', RtBracer: 'rt_bracer',
+  LtLeg: 'lt_leg', RtLeg: 'rt_leg',
+  LtKnee: 'lt_knee', RtKnee: 'rt_knee',
+  LtShin: 'lt_shin', RtShin: 'rt_shin',
+  LtHip: 'lt_hip', RtHip: 'rt_hip',
+  LtAnkle: 'lt_ankle', RtAnkle: 'rt_ankle',
+  LtFoot: 'lt_foot', RtFoot: 'rt_foot',
+  BkHip: 'bk_hip', FtHip: 'ft_hip',
+};
 
 interface ItemViewer3DProps {
   appearance: ItemAppearance;
@@ -19,6 +33,13 @@ interface ItemViewer3DProps {
   // Tint channel to flood with the highlight color (UI-only): shows the user
   // which area of the model a color picker actually affects while hovered.
   highlightChannel?: keyof TintChannels | null;
+  // If set, only this accessory slot is highlighted by highlightChannel.
+  // If null/undefined, the master color picker highlights the channel on the
+  // armor and every accessory (custom-colored ones included, so the user sees
+  // where the channel paints across the whole model).
+  highlightTarget?: AccessorySlot | null;
+  // Accessory slot currently selected or hovered in the UI to visually identify in 3D.
+  selectedAccessorySlot?: AccessorySlot | null;
   // Backend hint for how to stand the model up; falls back to the skeleton
   // heuristic while the appearance options are still loading.
   pose?: PreviewPose | null;
@@ -77,7 +98,11 @@ async function buildPartGroup(
   );
   for (let i = 0; i < visible.length; i++) {
     const m = visible[i];
-    const obj = buildMesh(m, materials[i], skeleton, rootBone);
+    const mat = materials[i];
+    if (mat.emissive) {
+      mat.userData.originalEmissive = mat.emissive.clone();
+    }
+    const obj = buildMesh(m, mat, skeleton, rootBone);
     if (m.attach_bone && rootBone) {
       const bone = rootBone.getObjectByName(m.attach_bone);
       if (bone) {
@@ -90,7 +115,16 @@ async function buildPartGroup(
   return group;
 }
 
-export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, highlightChannel, pose }: ItemViewer3DProps) {
+export function ItemViewer3D({
+  appearance,
+  baseItemId,
+  refreshKey,
+  refreshPart,
+  highlightChannel,
+  highlightTarget,
+  selectedAccessorySlot,
+  pose,
+}: ItemViewer3DProps) {
   const t = useTranslations();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,13 +134,17 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
   appearanceRef.current = appearance;
   const highlightRef = useRef(highlightChannel);
   highlightRef.current = highlightChannel;
+  const highlightTargetRef = useRef(highlightTarget);
+  highlightTargetRef.current = highlightTarget;
   const poseRef = useRef(pose);
   poseRef.current = pose;
   // Highlight is applied in GFF channel order (pre-swap), so it floods exactly
-  // the region the matching color picker edits.
-  const effectiveTints = useCallback((): TintChannels => {
+  // the region the matching color picker edits. Master highlight applies only
+  // when there is no specific accessory target. Read through refs so hover
+  // changes never invalidate `loadItem` (which would reload the whole model).
+  const effectiveMasterTints = useCallback((): TintChannels => {
     const tints = appearanceRef.current.tints;
-    const h = highlightRef.current;
+    const h = highlightTargetRef.current ? null : highlightRef.current;
     return h ? { ...tints, [h]: HIGHLIGHT_TINT } : tints;
   }, []);
   const loadCounterRef = useRef(0);
@@ -155,8 +193,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         rootGroup.add(rootBone);
       }
 
-      const tintColors = tintChannelsToColors(swapItemTints(effectiveTints()));
-      const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveTints()));
+      const tintColors = tintChannelsToColors(swapItemTints(effectiveMasterTints()));
+      const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveMasterTints()));
 
       const buckets: Record<string, MeshData[]> = {};
       for (const m of modelData.meshes) {
@@ -204,7 +242,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         setLoading(false);
       }
     }
-  }, [sceneRef, baseItemId, cameraRef, controlsRef, effectiveTints]);
+  }, [sceneRef, baseItemId, cameraRef, controlsRef, effectiveMasterTints]);
 
   const replacePart = useCallback(async (partIndex: number) => {
     const scene = sceneRef.current;
@@ -222,8 +260,8 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
         partIndex,
         variant,
       });
-      const tintColors = tintChannelsToColors(swapItemTints(effectiveTints()));
-      const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveTints()));
+      const tintColors = tintChannelsToColors(swapItemTints(effectiveMasterTints()));
+      const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveMasterTints()));
       const newGroup = await buildPartGroup(data.meshes, letter, tintColors, glovesTintColors,
         undefined, undefined, getEnvMap(sceneRef.current));
 
@@ -233,7 +271,7 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
     } catch (err: any) {
       console.error(`Failed to load part ${letter}:`, err);
     }
-  }, [sceneRef, baseItemId, effectiveTints]);
+  }, [sceneRef, baseItemId, effectiveMasterTints]);
 
   // The pose hint arrives with the appearance options, i.e. usually after the
   // first load. It changes both the rotation and the camera, so allow one
@@ -254,10 +292,62 @@ export function ItemViewer3D({ appearance, baseItemId, refreshKey, refreshPart, 
 
   useEffect(() => {
     if (!sceneRef.current) return;
-    const tints = effectiveTints();
-    updateTintUniforms(sceneRef.current, 'item', tintChannelsToColors(swapItemTints(tints)));
-    updateTintUniforms(sceneRef.current, 'item_gloves', tintChannelsToColors(cosmeticGlovesTints(tints)));
-  }, [appearance.tints, highlightChannel, effectiveTints, sceneRef]);
+    const masterTints = effectiveMasterTints();
+    updateTintUniforms(sceneRef.current, 'item', tintChannelsToColors(swapItemTints(masterTints)));
+    updateTintUniforms(sceneRef.current, 'item_gloves', tintChannelsToColors(cosmeticGlovesTints(masterTints)));
+
+    const h = highlightChannel;
+    const target = highlightTarget;
+    const accessories = appearanceRef.current.accessories;
+
+    sceneRef.current.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh || obj instanceof THREE.SkinnedMesh)) return;
+      const slot = obj.userData.accessorySlot as AccessorySlot | null;
+      if (!slot) return;
+
+      const mat = obj.material as THREE.MeshStandardMaterial;
+      const uniforms = (mat.userData as Record<string, unknown>)?.tintUniforms as
+        | Record<string, { value: THREE.Vector3 }>
+        | undefined;
+      if (!uniforms) return;
+
+      // The slot's own tints are the truth; master edits already propagate
+      // into them for non-custom slots.
+      const slotData = accessories[ACCESSORY_FIELD[slot]];
+      const baseTints = slotData && slotData.id > 0 ? slotData.tints : appearanceRef.current.tints;
+
+      const shouldHighlight = !!h && (target == null || target === slot);
+      const effective = shouldHighlight ? { ...baseTints, [h!]: HIGHLIGHT_TINT } : baseTints;
+      const colors = tintChannelsToColors(swapItemTints(effective));
+
+      uniforms.tintColor1.value.set(...colors.channel1);
+      uniforms.tintColor2.value.set(...colors.channel2);
+      uniforms.tintColor3.value.set(...colors.channel3);
+    });
+  }, [appearance.tints, appearance.accessories, highlightChannel, highlightTarget, effectiveMasterTints, sceneRef]);
+
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    const selected = selectedAccessorySlot;
+
+    sceneRef.current.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh || obj instanceof THREE.SkinnedMesh)) return;
+      const slot = obj.userData.accessorySlot as AccessorySlot | null;
+      if (!slot) return;
+
+      const mat = obj.material as THREE.MeshPhysicalMaterial;
+      if (!mat || !mat.emissive) return;
+
+      const orig = mat.userData.originalEmissive as THREE.Color | undefined;
+      if (selected && slot === selected) {
+        mat.emissive.setRGB(0.18, 0.28, 0.45);
+      } else if (orig) {
+        mat.emissive.copy(orig);
+      } else {
+        mat.emissive.setRGB(0, 0, 0);
+      }
+    });
+  }, [selectedAccessorySlot, sceneRef]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '400px', background: '#111', borderRadius: '4px', overflow: 'hidden' }}>
