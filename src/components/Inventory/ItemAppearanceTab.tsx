@@ -296,7 +296,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 every slot stays clickable while browsing a long list. */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}>
               <div style={{ flex: '0 0 200px', border: `1px solid ${T.border}`, borderRadius: 3, overflow: 'hidden', background: T.surfaceAlt }}>
-                <div className="t-semibold t-sm" style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', color: T.textMuted, background: T.sectionBg, borderBottom: `1px solid ${T.border}` }}>
+                <div className="t-semibold t-base" style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', color: T.textMuted, background: T.sectionBg, borderBottom: `1px solid ${T.border}` }}>
                   <span>{t('appearance.accessorySlotColumn')}</span>
                   <span>{t('appearance.accessoryCurrentColumn')}</span>
                 </div>
@@ -328,7 +328,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                     >
                       <span>{slotLabel(slot)}</span>
                       <span
-                        className="t-sm t-semibold"
+                        className="t-base t-semibold"
                         title={id > 0 ? t('appearance.accessoryCurrentTitle', { id: String(id) }) : t('appearance.none')}
                         style={{
                           minWidth: 28, textAlign: 'center', padding: '0 6px', borderRadius: 10,
@@ -343,7 +343,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 })}
               </div>
               <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-                <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', paddingRight: 4 }}>
+                <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: '0 4px' }}>
                   <ThumbnailGallery
                     values={activeIds}
                     selected={activeId}
@@ -358,6 +358,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                     tileLabel={(id) => String(id)}
                     pose="armor"
                     noneLabel={t('appearance.none')}
+                    centered
                   />
                 </div>
               </div>

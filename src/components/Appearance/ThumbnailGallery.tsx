@@ -17,6 +17,7 @@ interface ThumbnailGalleryProps {
   pose?: PreviewPose | null;
   // When set, a plain text tile for value 0 ("none") leads the grid.
   noneLabel?: string;
+  centered?: boolean;
 }
 
 function NoneTile({ selected, onSelect, label }: { selected: boolean; onSelect: (value: number) => void; label: string }) {
@@ -32,7 +33,7 @@ function NoneTile({ selected, onSelect, label }: { selected: boolean; onSelect: 
           onSelect(0);
         }
       }}
-      className="t-sm"
+      className="t-base"
       style={{
         width: TILE_SIZE,
         height: TILE_SIZE,
@@ -115,11 +116,21 @@ export function ThumbnailGallery({
   tileLabel,
   pose,
   noneLabel,
+  centered,
 }: ThumbnailGalleryProps) {
   if (values.length === 0) return null;
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    <div style={centered ? {
+      display: 'grid',
+      gridTemplateColumns: `repeat(auto-fit, ${TILE_SIZE}px)`,
+      gap: 6,
+      justifyContent: 'center',
+    } : {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+    }}>
       {noneLabel !== undefined && (
         <NoneTile selected={selected <= 0} onSelect={onSelect} label={noneLabel} />
       )}
