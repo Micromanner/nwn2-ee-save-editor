@@ -295,21 +295,23 @@ pub async fn load_character_model(state: State<'_, AppState>) -> CommandResult<M
     }
 
     // Head
-    match load_part(&parts.head_resref, "head", "head") {
-        Ok(head_meshes) => {
-            for mut mesh in head_meshes {
-                if mesh.name.to_lowercase().contains("_fhair") {
-                    if parts.show_fhair {
-                        mesh.part = "fhair".to_string();
-                        mesh.tint_group = "hair".to_string();
+    if let Some(ref head_resref) = parts.head_resref {
+        match load_part(head_resref, "head", "head") {
+            Ok(head_meshes) => {
+                for mut mesh in head_meshes {
+                    if mesh.name.to_lowercase().contains("_fhair") {
+                        if parts.show_fhair {
+                            mesh.part = "fhair".to_string();
+                            mesh.tint_group = "hair".to_string();
+                            all_meshes.push(mesh);
+                        }
+                    } else {
                         all_meshes.push(mesh);
                     }
-                } else {
-                    all_meshes.push(mesh);
                 }
             }
+            Err(e) => warn!("Failed to load head model '{head_resref}': {e}"),
         }
-        Err(e) => warn!("Failed to load head model '{}': {}", parts.head_resref, e),
     }
 
     // Hair
@@ -609,26 +611,25 @@ pub async fn load_companion_portrait_model(
         channel2: white.channel1.clone(),
         channel3: white.channel1.clone(),
     };
-    match load_part(&parts.head_resref, "head", "head") {
-        Ok(head_meshes) => {
-            for mut mesh in head_meshes {
-                if mesh.name.to_lowercase().contains("_fhair") {
-                    if parts.show_fhair {
-                        mesh.part = "fhair".to_string();
-                        mesh.tint_group = "hair".to_string();
-                        mesh.override_tints = Some(fhair_tint.clone());
+    if let Some(ref head_resref) = parts.head_resref {
+        match load_part(head_resref, "head", "head") {
+            Ok(head_meshes) => {
+                for mut mesh in head_meshes {
+                    if mesh.name.to_lowercase().contains("_fhair") {
+                        if parts.show_fhair {
+                            mesh.part = "fhair".to_string();
+                            mesh.tint_group = "hair".to_string();
+                            mesh.override_tints = Some(fhair_tint.clone());
+                            all_meshes.push(mesh);
+                        }
+                    } else {
+                        mesh.override_tints = Some(head_tint.clone());
                         all_meshes.push(mesh);
                     }
-                } else {
-                    mesh.override_tints = Some(head_tint.clone());
-                    all_meshes.push(mesh);
                 }
             }
+            Err(e) => warn!("Portrait head '{head_resref}' failed for '{ros_name}': {e}"),
         }
-        Err(e) => warn!(
-            "Portrait head '{}' failed for '{ros_name}': {e}",
-            parts.head_resref
-        ),
     }
 
     if let Some(ref hair_resref) = parts.hair_resref {
@@ -738,7 +739,9 @@ pub async fn load_character_part(
 
     match part.as_str() {
         "head" => {
-            if let Ok(head_meshes) = load_with_skel(&parts.head_resref, "head", "head") {
+            if let Some(ref head_resref) = parts.head_resref
+                && let Ok(head_meshes) = load_with_skel(head_resref, "head", "head")
+            {
                 meshes.extend(
                     head_meshes
                         .into_iter()
@@ -755,7 +758,8 @@ pub async fn load_character_part(
         }
         "fhair" => {
             if parts.show_fhair
-                && let Ok(head_meshes) = load_with_skel(&parts.head_resref, "fhair", "hair")
+                && let Some(ref head_resref) = parts.head_resref
+                && let Ok(head_meshes) = load_with_skel(head_resref, "fhair", "hair")
             {
                 for mesh in head_meshes {
                     if mesh.name.to_lowercase().contains("_fhair") {

@@ -74,7 +74,8 @@ pub struct AppearanceOption {
 pub struct CharacterModelParts {
     pub body_parts: Vec<String>,
     pub naked_body_resref: String,
-    pub head_resref: String,
+    /// `None` for headless creature appearances (`nwn2_model_head = ****`).
+    pub head_resref: Option<String>,
     pub hair_resref: Option<String>,
     pub show_fhair: bool,
     pub skeleton_resref: String,
@@ -400,11 +401,9 @@ impl Character {
         let model_parts = self.resolve_model_parts(game_data, resource_manager);
         let has_fhair_meshes = model_parts
             .as_ref()
-            .map(|parts| {
-                crate::services::model_loader::head_has_fhair_meshes(
-                    resource_manager,
-                    &parts.head_resref,
-                )
+            .and_then(|parts| parts.head_resref.as_deref())
+            .map(|head| {
+                crate::services::model_loader::head_has_fhair_meshes(resource_manager, head)
             })
             .unwrap_or(false);
         let cloak_tint = model_parts.as_ref().and_then(|p| p.cloak_tint.clone());
@@ -606,49 +605,49 @@ impl Character {
             warn!("No nwn2_model_body for appearance {appearance_id}");
             None
         })?;
-        let head_template = row_str(&row, "nwn2_model_head").or_else(|| {
-            warn!("No nwn2_model_head for appearance {appearance_id}");
-            None
-        })?;
         let skel_template = row_str(&row, "nwn2_skeleton_file").or_else(|| {
             warn!("No nwn2_skeleton_file for appearance {appearance_id}");
             None
         })?;
 
         let body_prefix = body_template.replace('?', &gender_letter);
-        let head_prefix = head_template.replace('?', &gender_letter);
         let skeleton_resref = skel_template.replace('?', &gender_letter);
 
         let model_type = row_str(&row, "modeltype").unwrap_or_default();
 
-        let naked_body_resref = format!("{body_prefix}_NK_Body01");
+        // Creature bodies (modeltype L/F/S) follow the same
+        // `{body}_{armor}_Body{NN}` naming as player bodies but ship no `_NK_`
+        // variant; their bare fallback is the cloth body.
+        let naked_body_resref = if model_type.eq_ignore_ascii_case("P") {
+            format!("{body_prefix}_NK_Body01")
+        } else {
+            format!("{body_prefix}_CL_Body01")
+        };
 
         // Extract all equipped visual info in one pass
         let equip_visuals = self.resolve_equipped_visuals(game_data, resource_manager);
         let armor_prefixes = &equip_visuals.armor_prefixes;
-        let body_parts = if model_type.to_uppercase() == "P" {
-            let var = equip_visuals.armor_variation;
-            let mut parts: Vec<String> = armor_prefixes
-                .iter()
-                .map(|pfx| format!("{body_prefix}_{pfx}_Body{var:02}"))
-                .collect();
-            // Fallback to variation 01 if the requested variation doesn't exist
-            if var != 1 {
-                for pfx in armor_prefixes {
-                    parts.push(format!("{body_prefix}_{pfx}_Body01"));
-                }
+        let var = equip_visuals.armor_variation;
+        let mut body_parts: Vec<String> = armor_prefixes
+            .iter()
+            .map(|pfx| format!("{body_prefix}_{pfx}_Body{var:02}"))
+            .collect();
+        // Fallback to variation 01 if the requested variation doesn't exist
+        if var != 1 {
+            for pfx in armor_prefixes {
+                body_parts.push(format!("{body_prefix}_{pfx}_Body01"));
             }
-            if parts.is_empty() {
-                parts.push(format!("{body_prefix}_CL_Body01"));
-            }
-            debug!("Body model candidates: {parts:?}");
-            parts
-        } else {
-            vec![body_prefix.clone()]
-        };
+        }
+        if body_parts.is_empty() {
+            body_parts.push(format!("{body_prefix}_CL_Body01"));
+        }
+        debug!("Body model candidates: {body_parts:?}");
 
         let head_id = self.appearance_head();
-        let head_resref = format!("{head_prefix}{head_id:02}");
+        let head_resref = row_str(&row, "nwn2_model_head").map(|head_template| {
+            let head_prefix = head_template.replace('?', &gender_letter);
+            format!("{head_prefix}{head_id:02}")
+        });
 
         let hair_resref = row_str(&row, "nwn2_model_hair").map(|hair_template| {
             let hair_prefix = hair_template.replace('?', &gender_letter);

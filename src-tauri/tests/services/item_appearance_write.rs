@@ -6,6 +6,48 @@ use app_lib::parsers::gff::GffValue;
 use app_lib::utils::parsing::row_str;
 use indexmap::IndexMap;
 
+/// Companion creature rows (construct = `Golem_Blade`, modeltype L, no head;
+/// Zhjaeve = `NPC_Zhjaeve`, modeltype F) ship `{body}_CL_Body01` meshes like
+/// player bodies, not a bare `{body}` mesh, and may have no head at all.
+#[tokio::test]
+async fn creature_appearances_resolve_body_and_optional_head() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().unwrap();
+    let rm = ctx.resource_manager.read().await;
+    let appearance_table = game_data.get_table("appearance").unwrap();
+    let find_row = |label: &str| {
+        (0..appearance_table.row_count() as i32)
+            .find(|id| {
+                appearance_table.get_by_id(*id).is_some_and(|row| {
+                    row_str(&row, "label").is_some_and(|s| s.eq_ignore_ascii_case(label))
+                })
+            })
+            .unwrap()
+    };
+    let make_character = |appearance: i32, gender: u8| {
+        Character::from_gff(IndexMap::from([
+            ("Appearance_Type".into(), GffValue::Word(appearance as u16)),
+            ("Gender".into(), GffValue::Byte(gender)),
+            ("Appearance_Head".into(), GffValue::Byte(1)),
+            ("Equip_ItemList".into(), GffValue::ListOwned(vec![])),
+        ]))
+    };
+
+    let parts = make_character(find_row("Golem_Blade"), 4)
+        .resolve_model_parts(game_data, &rm)
+        .unwrap();
+    assert!(parts.head_resref.is_none());
+    assert!(parts.body_parts.iter().any(|b| rm.has_resource(b, "mdb")));
+    assert!(rm.has_resource(&parts.naked_body_resref, "mdb"));
+
+    let parts = make_character(find_row("NPC_Zhjaeve"), 1)
+        .resolve_model_parts(game_data, &rm)
+        .unwrap();
+    assert!(rm.has_resource(parts.head_resref.as_deref().unwrap(), "mdb"));
+    assert!(parts.body_parts.iter().any(|b| rm.has_resource(b, "mdb")));
+    assert!(rm.has_resource(&parts.naked_body_resref, "mdb"));
+}
+
 #[tokio::test]
 async fn equipped_part_precedence_and_nested_tints_match_item_preview() {
     let ctx = create_test_context().await;

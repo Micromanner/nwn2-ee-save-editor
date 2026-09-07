@@ -133,7 +133,7 @@ fn diagnose_linux_save_appearance() {
     if let Some(parts) = &model_parts {
         println!("  skeleton: {}", parts.skeleton_resref);
         println!("  body_parts: {:?}", parts.body_parts);
-        println!("  head: {}", parts.head_resref);
+        println!("  head: {:?}", parts.head_resref);
     }
 }
 

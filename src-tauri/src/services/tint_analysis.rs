@@ -172,7 +172,11 @@ pub fn color_capabilities(
     parts: &CharacterModelParts,
 ) -> ColorCapabilities {
     ColorCapabilities {
-        head: analyze_cached(rm, cache, &parts.head_resref, true),
+        head: parts
+            .head_resref
+            .as_deref()
+            .map(|r| analyze_cached(rm, cache, r, true))
+            .unwrap_or_else(PartTintCapability::untintable),
         hair: parts
             .hair_resref
             .as_deref()
