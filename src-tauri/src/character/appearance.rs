@@ -20,6 +20,9 @@ use super::appearance_helpers::{
 pub struct AppearanceState {
     pub race_id: i32,
     pub race_name: String,
+    /// `racialsubtypes.2da` row of the `Subrace` byte, 0 = none. Several
+    /// subraces can share one appearance row, so the UI matches on this first.
+    pub subrace_id: i32,
     pub gender: i32,
     pub gender_name: String,
 
@@ -413,6 +416,7 @@ impl Character {
         AppearanceState {
             race_id: self.race_id().0,
             race_name: self.race_name(game_data),
+            subrace_id: self.subrace_index().unwrap_or(0),
             gender: gender_id,
             gender_name,
 
@@ -488,6 +492,32 @@ impl Character {
         let available_hairs = Self::discover_available_variants(resource_manager, &hair_prefix);
 
         (available_heads, available_hairs, true)
+    }
+
+    /// Every parts-based (`MODELTYPE = P`) `appearance.2da` row that has a head
+    /// template. Covers the companion/NPC rows (`N_Human`, `N_Elf`, ...) that no
+    /// playable race or subrace points at, so the appearance dropdown can offer
+    /// them and a character switched away from one can be switched back.
+    pub fn get_parts_based_appearances(game_data: &GameData) -> Vec<AppearanceOption> {
+        let Some(table) = game_data.get_table("appearance") else {
+            return Vec::new();
+        };
+        (0..table.row_count())
+            .filter_map(|i| {
+                let id = i as i32;
+                let row = table.get_by_id(id)?;
+                let model_type = row_str(&row, "modeltype")?;
+                if !model_type.eq_ignore_ascii_case("P") {
+                    return None;
+                }
+                row_str(&row, "nwn2_model_head")?;
+                Some(AppearanceOption {
+                    id,
+                    name: Self::resolve_appearance_name(game_data, id),
+                    fits_humanoid: true,
+                })
+            })
+            .collect()
     }
 
     /// Enumerate rows from a 2DA table, skipping any whose `model` MDB is
@@ -649,11 +679,15 @@ impl Character {
             format!("{head_prefix}{head_id:02}")
         });
 
-        let hair_resref = row_str(&row, "nwn2_model_hair").map(|hair_template| {
-            let hair_prefix = hair_template.replace('?', &gender_letter);
-            let hair_id = self.appearance_hair();
-            format!("{hair_prefix}{hair_id:02}")
-        });
+        // Hair variants start at 1; NPC heads with hair baked into the head
+        // mesh store 0, which has no mesh and therefore nothing to tint.
+        let hair_id = self.appearance_hair();
+        let hair_resref = row_str(&row, "nwn2_model_hair")
+            .filter(|_| hair_id > 0)
+            .map(|hair_template| {
+                let hair_prefix = hair_template.replace('?', &gender_letter);
+                format!("{hair_prefix}{hair_id:02}")
+            });
 
         let show_fhair = self.appearance_fhair() > 0;
 

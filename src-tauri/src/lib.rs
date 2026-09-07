@@ -351,6 +351,7 @@ pub fn run() {
             crate::commands::appearance::update_appearance,
             crate::commands::appearance::get_available_wings,
             crate::commands::appearance::get_available_tails,
+            crate::commands::appearance::get_parts_based_appearances,
             crate::commands::appearance::load_character_model,
             crate::commands::appearance::load_character_part,
             crate::commands::appearance::load_companion_portrait_model,

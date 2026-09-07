@@ -168,6 +168,12 @@ export const CharacterStateAPI = {
    */
   getAvailableTails: () => invoke<AppearanceOption[]>('get_available_tails'),
 
+  /**
+   * Every parts-based appearance.2da row with a head template, including the
+   * companion/NPC rows no playable race points at.
+   */
+  getPartsBasedAppearances: () => invoke<AppearanceOption[]>('get_parts_based_appearances'),
+
   getAvailableVoicesets: () => invoke<VoiceSetInfo[]>('get_available_voicesets'),
 
   previewVoiceset: (resref: string) => invoke<number[]>('preview_voiceset', { resref }),

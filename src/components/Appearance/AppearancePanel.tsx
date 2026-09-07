@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuItem, NonIdealState, Popover, Slider, Switch } from '@blueprintjs/core';
+import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuDivider, MenuItem, NonIdealState, Popover, Slider, Switch } from '@blueprintjs/core';
 import { GiMirrorMirror, GiMagnifyingGlass, GiBrokenShield } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -34,6 +34,7 @@ export function AppearancePanel() {
   const [tailOptions, setTailOptions] = useState<AppearanceOption[]>([]);
   const [raceOptions, setRaceOptions] = useState<AvailableRace[]>([]);
   const [subraceOptions, setSubraceOptions] = useState<AvailableSubrace[]>([]);
+  const [appearanceRows, setAppearanceRows] = useState<AppearanceOption[]>([]);
   const [modelRefreshKey, setModelRefreshKey] = useState(0);
   const [partRefresh, setPartRefresh] = useState<{ parts: PartType[]; key: number } | null>(null);
   const [liveHeight, setLiveHeight] = useState(0.95);
@@ -66,18 +67,20 @@ export function AppearancePanel() {
   useEffect(() => {
     async function loadOptions() {
       try {
-        const [wings, tails, voices, races, subraces] = await Promise.all([
+        const [wings, tails, voices, races, subraces, rows] = await Promise.all([
           CharacterStateAPI.getAvailableWings(),
           CharacterStateAPI.getAvailableTails(),
           CharacterStateAPI.getAvailableVoicesets(),
           invoke<AvailableRace[]>('get_available_races'),
           invoke<AvailableSubrace[]>('get_all_playable_subraces'),
+          CharacterStateAPI.getPartsBasedAppearances(),
         ]);
         setWingOptions(wings);
         setTailOptions(tails);
         setVoicesets(voices);
         setRaceOptions(races);
         setSubraceOptions(subraces);
+        setAppearanceRows(rows);
       } catch (err) {
         handleError(err);
       }
@@ -240,7 +243,40 @@ export function AppearancePanel() {
   }, [raceOptions, subraceOptions]);
 
   const currentAppearanceType = appearanceSubsystem.data?.appearance_type;
+  const currentAppearanceTypeName = appearanceSubsystem.data?.appearance_type_name;
+  const characterRaceId = appearanceSubsystem.data?.race_id;
+  const characterSubraceId = appearanceSubsystem.data?.subrace_id;
   const [pickedRaceKey, setPickedRaceKey] = useState<string | null>(null);
+
+  const npcRowLabel = useCallback((name: string) => {
+    const npc = /^N(?:PC)?_(.+)$/.exec(name);
+    return npc ? t('appearance.npcVariant', { name: npc[1].replace(/_/g, ' ') }) : name;
+  }, [t]);
+
+  // The row the character was loaded with, kept selectable for the session
+  // even when it is not parts-based (creature companions), so switching away
+  // from it is never one-way.
+  const [loadedRow, setLoadedRow] = useState<{ characterId: number; id: number; name: string } | null>(null);
+  useEffect(() => {
+    if (!character?.id || currentAppearanceType === undefined) return;
+    if (loadedRow?.characterId === character.id) return;
+    setLoadedRow({ characterId: character.id, id: currentAppearanceType, name: currentAppearanceTypeName || `#${currentAppearanceType}` });
+  }, [character?.id, currentAppearanceType, currentAppearanceTypeName, loadedRow]);
+
+  // appearance.2da rows no playable race or subrace points at (companion/NPC rows).
+  const extraAppearanceRows = useMemo(() => {
+    const covered = new Set<number>([
+      ...raceOptions.map(r => r.appearance),
+      ...subraceOptions.map(s => s.appearance),
+    ]);
+    const rows = appearanceRows
+      .filter(r => !covered.has(r.id))
+      .map(r => ({ id: r.id, name: npcRowLabel(r.name) }));
+    if (loadedRow && loadedRow.characterId === character?.id && !covered.has(loadedRow.id) && !rows.some(r => r.id === loadedRow.id)) {
+      rows.push({ id: loadedRow.id, name: npcRowLabel(loadedRow.name) });
+    }
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
+  }, [appearanceRows, raceOptions, subraceOptions, loadedRow, character?.id, npcRowLabel]);
 
   const activeRaceKey = useMemo(() => {
     if (currentAppearanceType === undefined) return null;
@@ -253,28 +289,35 @@ export function AppearancePanel() {
       } else if (kind === 'sub') {
         const s = subraceOptions.find(x => x.id === id);
         if (s && s.appearance === currentAppearanceType) return pickedRaceKey;
+      } else if (kind === 'app' && id === currentAppearanceType) {
+        return pickedRaceKey;
       }
     }
+    // Several subraces can share one appearance row, so the character's own
+    // race/subrace wins before falling back to the first row that matches.
+    const ownSub = subraceOptions.find(s => s.id === characterSubraceId);
+    if (ownSub && ownSub.appearance === currentAppearanceType) return `sub:${ownSub.id}`;
+    const ownRace = raceOptions.find(r => r.id === characterRaceId);
+    if (ownRace && ownRace.appearance === currentAppearanceType) return `race:${ownRace.id}`;
     for (const g of raceGroups) {
       if (g.race && g.race.appearance === currentAppearanceType) return `race:${g.race.id}`;
       const s = g.subraces.find(sr => sr.appearance === currentAppearanceType);
       if (s) return `sub:${s.id}`;
     }
+    if (extraAppearanceRows.some(r => r.id === currentAppearanceType)) return `app:${currentAppearanceType}`;
     return null;
-  }, [raceGroups, raceOptions, subraceOptions, currentAppearanceType, pickedRaceKey]);
+  }, [raceGroups, raceOptions, subraceOptions, extraAppearanceRows, currentAppearanceType, characterRaceId, characterSubraceId, pickedRaceKey]);
 
-  const currentAppearanceTypeName = appearanceSubsystem.data?.appearance_type_name;
   const currentRaceLabel = useMemo(() => {
     if (!activeRaceKey) {
-      if (!currentAppearanceTypeName) return null;
-      const npc = /^N_(.+)$/.exec(currentAppearanceTypeName);
-      return npc ? t('appearance.npcVariant', { name: npc[1] }) : currentAppearanceTypeName;
+      return currentAppearanceTypeName ? npcRowLabel(currentAppearanceTypeName) : null;
     }
     const [kind, idStr] = activeRaceKey.split(':');
     const id = Number(idStr);
     if (kind === 'race') return raceOptions.find(r => r.id === id)?.name ?? null;
-    return subraceOptions.find(s => s.id === id)?.name ?? null;
-  }, [activeRaceKey, raceOptions, subraceOptions, currentAppearanceTypeName, t]);
+    if (kind === 'sub') return subraceOptions.find(s => s.id === id)?.name ?? null;
+    return extraAppearanceRows.find(r => r.id === id)?.name ?? null;
+  }, [activeRaceKey, raceOptions, subraceOptions, extraAppearanceRows, currentAppearanceTypeName, npcRowLabel]);
 
   const applyAppearanceType = useCallback(async (appearanceId: number, key: string) => {
     try {
@@ -373,6 +416,19 @@ export function AppearancePanel() {
                         ))}
                       </Fragment>
                     ))}
+                    {extraAppearanceRows.length > 0 && (
+                      <>
+                        <MenuDivider title={t('appearance.npcAppearances')} />
+                        {extraAppearanceRows.map(row => (
+                          <MenuItem
+                            key={row.id}
+                            text={row.name}
+                            active={activeRaceKey === `app:${row.id}`}
+                            onClick={() => applyAppearanceType(row.id, `app:${row.id}`)}
+                          />
+                        ))}
+                      </>
+                    )}
                   </Menu>
                 }
                 placement="bottom-end"

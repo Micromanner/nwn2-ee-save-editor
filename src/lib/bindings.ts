@@ -187,6 +187,7 @@ export interface ItemAppearanceOptions {
 export interface AppearanceState {
   race_id: number;
   race_name: string;
+  subrace_id: number;
   gender: number;
   gender_name: string;
   appearance_type: number;

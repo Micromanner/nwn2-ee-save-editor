@@ -940,6 +940,7 @@
     "hairColor": "Color Pelo",
     "tintNoTintMap": "Este modelo no tiene mapa de tinte, los colores no se aplican",
     "npcVariant": "{name} (PNJ)",
+    "npcAppearances": "PNJ / otros",
     "tintChannelUnused": "La máscara de tinte de este modelo no usa este canal",
     "bodyTint": "Tinte corporal (cola y alas)",
     "bodyTintChannel": "Canal de tinte {n}",

@@ -105,19 +105,31 @@ fn analyze_model(rm: &ResourceManager, resref: &str, swap_gb: bool) -> PartTintC
         return PartTintCapability::permissive();
     };
 
-    let mut tint_maps: Vec<String> = Vec::new();
-    let names = mdb
+    // (tint map, belongs to an eye mesh). Eye meshes carry their own tint map
+    // (`P_HHM_Eye01_t`) whose channel 1 shades the eye whites with the skin
+    // colour; hand-painted NPC heads have no other tint map, so counting the
+    // eye mesh toward channel 1 would offer a skin picker that does nothing.
+    let mut tint_maps: Vec<(String, bool)> = Vec::new();
+    let meshes = mdb
         .rigid_meshes
         .iter()
-        .map(|m| m.material.tint_map_name.trim())
+        .map(|m| (m.name.as_str(), m.material.tint_map_name.trim()))
         .chain(
             mdb.skin_meshes
                 .iter()
-                .map(|m| m.material.tint_map_name.trim()),
+                .map(|m| (m.name.as_str(), m.material.tint_map_name.trim())),
         );
-    for name in names {
-        if !name.is_empty() && !tint_maps.iter().any(|t| t.eq_ignore_ascii_case(name)) {
-            tint_maps.push(name.to_string());
+    for (mesh, map) in meshes {
+        if map.is_empty() {
+            continue;
+        }
+        let is_eye = mesh.to_ascii_lowercase().contains("eye");
+        match tint_maps
+            .iter_mut()
+            .find(|(t, _)| t.eq_ignore_ascii_case(map))
+        {
+            Some(entry) => entry.1 &= is_eye,
+            None => tint_maps.push((map.to_string(), is_eye)),
         }
     }
     if tint_maps.is_empty() {
@@ -125,22 +137,23 @@ fn analyze_model(rm: &ResourceManager, resref: &str, swap_gb: bool) -> PartTintC
     }
 
     let mut usage = [0.0f32; 3];
-    for map in &tint_maps {
+    for (map, eye_only) in &tint_maps {
         let Ok(dds) = rm.get_resource_bytes(map, "dds") else {
             warn!("tint analysis: tint map '{map}' not found for '{resref}', permissive");
             return PartTintCapability::permissive();
         };
-        match decode_dds_rgba(&dds) {
-            Ok(tex) => {
-                let u = channel_usage(&tex.rgba);
-                for (acc, v) in usage.iter_mut().zip(u) {
-                    *acc = acc.max(v);
-                }
-            }
+        let mut u = match decode_dds_rgba(&dds) {
+            Ok(tex) => channel_usage(&tex.rgba),
             Err(e) => {
                 warn!("tint analysis: decode failed for '{map}': {e}, permissive");
                 return PartTintCapability::permissive();
             }
+        };
+        if *eye_only {
+            u[0] = 0.0;
+        }
+        for (acc, v) in usage.iter_mut().zip(u) {
+            *acc = acc.max(v);
         }
     }
     PartTintCapability {

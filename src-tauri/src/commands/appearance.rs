@@ -235,6 +235,14 @@ pub async fn get_available_tails(
 }
 
 #[tauri::command]
+pub fn get_parts_based_appearances(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<AppearanceOption>> {
+    let game_data = state.game_data.read();
+    Ok(Character::get_parts_based_appearances(&game_data))
+}
+
+#[tauri::command]
 pub async fn load_character_model(state: State<'_, AppState>) -> CommandResult<ModelData> {
     let rm = state.resource_manager.read().await;
     let session = state.session.read();

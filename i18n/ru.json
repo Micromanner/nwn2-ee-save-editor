@@ -949,6 +949,7 @@
     "hairColor": "Цвет волос",
     "tintNoTintMap": "У этой модели нет карты окраски, цвета не применяются",
     "npcVariant": "{name} (NPC)",
+    "npcAppearances": "NPC / другие",
     "tintChannelUnused": "Маска окраски этой модели не использует этот канал",
     "bodyTint": "Оттенок тела (хвост и крылья)",
     "bodyTintChannel": "Канал окраски {n}",

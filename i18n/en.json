@@ -949,6 +949,7 @@
     "hairColor": "Hair Color",
     "tintNoTintMap": "This model has no tint map, colors cannot be applied",
     "npcVariant": "{name} (NPC)",
+    "npcAppearances": "NPC / other",
     "tintChannelUnused": "This model's tint mask does not use this channel",
     "bodyTint": "Body Tint (Tail & Wings)",
     "bodyTintChannel": "Tint Channel {n}",

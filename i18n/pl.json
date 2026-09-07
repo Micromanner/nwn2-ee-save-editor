@@ -950,6 +950,7 @@
     "hairColor": "Kolor Włosów",
     "tintNoTintMap": "Ten model nie ma mapy barwienia, kolory nie działają",
     "npcVariant": "{name} (NPC)",
+    "npcAppearances": "NPC / inne",
     "tintChannelUnused": "Maska barwienia tego modelu nie używa tego kanału",
     "bodyTint": "Barwa ciała (ogon i skrzydła)",
     "bodyTintChannel": "Kanał barwy {n}",
