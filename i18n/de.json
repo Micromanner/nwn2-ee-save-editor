@@ -500,12 +500,8 @@
       "title": "Quests",
       "campaignContext": {
         "campaign": "Kampagne",
-        "campaignId": "Kampagnen-ID",
         "currentModule": "Aktuelles Modul",
-        "modules": "Module",
         "orphans": "Aggregations-Hinweise",
-        "current": "aktuell",
-        "unresolved": "nicht aufgelöst",
         "noCampaign": "Keine Kampagne aufgelöst — nur Einzelmodul-Ansicht"
       },
       "list": {

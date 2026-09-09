@@ -502,12 +502,8 @@
       "title": "Quêtes",
       "campaignContext": {
         "campaign": "Campagne",
-        "campaignId": "ID de Campagne",
         "currentModule": "Module actuel",
-        "modules": "Modules",
         "orphans": "Notes d'agrégation",
-        "current": "actuel",
-        "unresolved": "non résolu",
         "noCampaign": "Aucune campagne résolue — vue module unique"
       },
       "list": {

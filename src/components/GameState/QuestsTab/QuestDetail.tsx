@@ -141,9 +141,9 @@ export function QuestDetail({
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.liveOverlay')}
         </div>
-        <LiveOverlay tag={quest.tag} pending={pending} />
+        <LiveOverlay tag={quest.tag} pending={pending} modules={graph.modules} />
       </div>
-      {target !== null && <QuestEditDialog key={`${quest.tag}:${target}`} quest={quest} target={target}
+      {target !== null && <QuestEditDialog key={`${quest.tag}:${target}`} quest={quest} target={target} modules={graph.modules}
         transitions={loadedTransitions ?? []} pending={pending} tlk={tlk} onClose={() => setTarget(null)} onApplied={onApplied} />}
     </div>
   );

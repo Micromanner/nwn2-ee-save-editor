@@ -501,12 +501,8 @@
       "title": "Misiones",
       "campaignContext": {
         "campaign": "Campaña",
-        "campaignId": "ID de Campaña",
         "currentModule": "Módulo Actual",
-        "modules": "Módulos",
         "orphans": "Notas de Agregación",
-        "current": "actual",
-        "unresolved": "sin resolver",
         "noCampaign": "Sin campaña resuelta — vista de un solo módulo"
       },
       "list": {

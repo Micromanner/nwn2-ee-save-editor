@@ -9,7 +9,9 @@ use tracing::{debug, info, warn};
 use crate::config::NWN2Paths;
 use crate::parsers::xml::XmlData;
 use crate::services::campaign::CampaignManager;
-use crate::services::campaign::content::{ModuleInfo, ModuleVariables, find_campaign_path};
+use crate::services::campaign::content::{
+    ModuleInfo, ModuleVariables, find_campaign_name, find_campaign_path,
+};
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::toolset_bridge::{
     BridgeClient, ConvoFunctor, ConvoNode, FunctorKind, JournalCategory, ResolutionKind,
@@ -94,7 +96,9 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 let summary = CampaignSummary {
                     campaign_id: campaign_id.clone(),
                     campaign_path: Some(list.campaign_path.clone()),
-                    display_name: list.display_name.clone(),
+                    display_name: find_campaign_name(&campaign_id, ctx.paths)
+                        .filter(|name| !name.trim().is_empty())
+                        .unwrap_or_else(|| list.display_name.clone()),
                     start_module: list.start_module.clone(),
                     journal_synch: list.journal_synch,
                     current_module_id: current_module_id.clone(),

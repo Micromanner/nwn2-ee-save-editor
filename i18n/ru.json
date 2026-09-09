@@ -502,12 +502,8 @@
       "title": "Квесты",
       "campaignContext": {
         "campaign": "Кампания",
-        "campaignId": "ID кампании",
         "currentModule": "Текущий модуль",
-        "modules": "Модули",
         "orphans": "Заметки агрегации",
-        "current": "текущий",
-        "unresolved": "не разрешено",
         "noCampaign": "Кампания не определена — режим отдельного модуля"
       },
       "list": {

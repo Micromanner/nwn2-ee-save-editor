@@ -504,12 +504,8 @@
       "title": "Zadania",
       "campaignContext": {
         "campaign": "Kampania",
-        "campaignId": "ID Kampanii",
         "currentModule": "Obecny moduł",
-        "modules": "Moduły",
         "orphans": "Uwagi agregacji",
-        "current": "obecny",
-        "unresolved": "nierozwiązany",
         "noCampaign": "Brak rozwiązanej kampanii — widok pojedynczego modułu"
       },
       "list": {

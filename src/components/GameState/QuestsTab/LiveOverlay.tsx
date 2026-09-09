@@ -4,7 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { display } from '@/utils/dataHelpers';
-import type { PendingQuestEdit, VariableKey } from './types';
+import type { AggregatedModule, PendingQuestEdit, VariableKey } from './types';
+import { useModuleNameResolver } from './useModuleNameResolver';
 
 interface QuestVariableValue {
   key: VariableKey;
@@ -13,8 +14,9 @@ interface QuestVariableValue {
   available: boolean;
 }
 
-export function LiveOverlay({ tag, pending }: { tag: string; pending: PendingQuestEdit[] }) {
+export function LiveOverlay({ tag, pending, modules }: { tag: string; pending: PendingQuestEdit[]; modules: AggregatedModule[] }) {
   const t = useTranslations();
+  const { resolve: resolveModule } = useModuleNameResolver(modules);
   const { handleError } = useErrorHandler();
   const [rows, setRows] = useState<QuestVariableValue[] | null>(null);
   useEffect(() => {
@@ -30,7 +32,7 @@ export function LiveOverlay({ tag, pending }: { tag: string; pending: PendingQue
   return <HTMLTable compact bordered style={{ width: '100%' }}>
     <thead><tr><th>{t('gameState.quests.edit.variable')}</th><th>{t('gameState.quests.edit.saved')}</th><th>{t('gameState.quests.edit.effective')}</th></tr></thead>
     <tbody>{rows.map(row => <tr key={JSON.stringify(row.key)}>
-      <td>{row.key.name}<div>{row.key.module ?? t('gameState.quests.edit.campaign')} / {row.key.value_type}</div></td>
+      <td>{row.key.name}<div>{row.key.module ? resolveModule(row.key.module) : t('gameState.quests.edit.campaign')} / {row.key.value_type}</div></td>
       <td>{row.available ? display(row.saved) : t('gameState.quests.edit.unavailable')}</td>
       <td>{row.available ? display(row.effective) : t('gameState.quests.edit.unavailable')}</td>
     </tr>)}</tbody>

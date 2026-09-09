@@ -10,6 +10,7 @@ import type { PendingQuestEdit, SaveGraph } from './types';
 import { CampaignContextCard } from './CampaignContextCard';
 import { QuestList } from './QuestList';
 import { QuestDetail } from './QuestDetail';
+import { useModuleNameResolver } from './useModuleNameResolver';
 import { T } from '../../theme';
 
 export function QuestsTab() {
@@ -23,6 +24,7 @@ export function QuestsTab() {
   const [progress, setProgress] = useState<QuestGraphProgress | null>(null);
   const [refresh, setRefresh] = useState(0);
   const transitions = useQuestTransitions();
+  const { resolve: resolveModule } = useModuleNameResolver(graph?.modules ?? []);
   const refreshData = useCallback(() => setRefresh(r => r + 1), []);
 
   useEffect(() => {
@@ -76,8 +78,8 @@ export function QuestsTab() {
       <p>{t('gameState.quests.edit.stagingExplanation')}</p>
       {pending.map(edit => <details key={edit.tag} style={{ marginBottom: 8 }}>
         <summary>{edit.tag}: {display(edit.saved_state)} → {edit.target}</summary>
-        {edit.source && <p>{edit.source.module} / {edit.source.dlg} / {edit.source.node}</p>}
-        {edit.writes.map((w, i) => <p key={i}>{w.key.module ?? t('gameState.quests.edit.campaign')} / {w.key.name} ({w.key.value_type}): {display(w.saved)} → {display(w.after)}</p>)}
+        {edit.source && <p>{resolveModule(edit.source.module)} / {edit.source.dlg} / {edit.source.node}</p>}
+        {edit.writes.map((w, i) => <p key={i}>{w.key.module ? resolveModule(w.key.module) : t('gameState.quests.edit.campaign')} / {w.key.name} ({w.key.value_type}): {display(w.saved)} → {display(w.after)}</p>)}
         <Button small disabled={busy} onClick={() => void discard(edit.tag)}>{t('gameState.quests.edit.discard')}</Button>
       </details>)}
       <Button small disabled={busy} onClick={() => void discard(null)}>{t('gameState.quests.edit.discardAll')}</Button>

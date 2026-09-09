@@ -541,12 +541,8 @@
       "title": "Quests",
       "campaignContext": {
         "campaign": "Campaign",
-        "campaignId": "Campaign ID",
         "currentModule": "Current module",
-        "modules": "Modules",
         "orphans": "Aggregation notes",
-        "current": "current",
-        "unresolved": "unresolved",
         "noCampaign": "No campaign resolved — single-module view only"
       },
       "list": {

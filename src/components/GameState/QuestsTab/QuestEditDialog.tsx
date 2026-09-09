@@ -7,15 +7,17 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits } from './utils';
-import type { PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode } from './types';
+import type { AggregatedModule, PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode } from './types';
+import { useModuleNameResolver } from './useModuleNameResolver';
 
-export function QuestEditDialog({ quest, target, transitions, pending, tlk, onClose, onApplied }: {
+export function QuestEditDialog({ quest, target, transitions, pending, tlk, modules, onClose, onApplied }: {
   quest: QuestSummary; target: number; transitions: TransitionNode[]; pending: PendingQuestEdit[];
-  tlk: TlkResolver;
+  tlk: TlkResolver; modules: AggregatedModule[];
   onClose: () => void; onApplied: () => void;
 }) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
+  const { resolve: resolveModule } = useModuleNameResolver(modules);
   const [route, setRoute] = useState(-1);
   const [preview, setPreview] = useState<QuestPreview | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
@@ -25,7 +27,7 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, onCl
   const [refresh, setRefresh] = useState(0);
   const [failed, setFailed] = useState(false);
   const choices = [{ id: -1, label: t('gameState.quests.edit.journalOnly') }, ...transitions.flatMap((tr, i) =>
-    tr.new_state === target ? [{ id: i, label: `${(tlk.resolve(tr.text_strref) ?? t('gameState.quests.detail.noText')).slice(0, 120)} (${tr.module} / ${tr.dlg} / ${tr.node})` }] : [])];
+    tr.new_state === target ? [{ id: i, label: `${(tlk.resolve(tr.text_strref) ?? t('gameState.quests.detail.noText')).slice(0, 120)} (${resolveModule(tr.module)} / ${tr.dlg} / ${tr.node})` }] : [])];
 
   useEffect(() => {
     let active = true;
@@ -64,7 +66,7 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, onCl
         <p>{t('gameState.quests.edit.journalWrite', { tag: quest.tag, before: display(preview.before_state), target })}</p>
         {preview.writes.map((write, index) => <Checkbox key={index} checked={selected.includes(index)} disabled={busy}
           onChange={() => { setReplace(false); setSelected(old => old.includes(index) ? old.filter(i => i !== index) : [...old, index]); }}>
-          <strong>{write.key.name}</strong> ({write.key.module ?? t('gameState.quests.edit.campaign')}, {write.key.value_type})
+          <strong>{write.key.name}</strong> ({write.key.module ? resolveModule(write.key.module) : t('gameState.quests.edit.campaign')}, {write.key.value_type})
           <div>{t('gameState.quests.edit.saved')}: {display(write.saved)}; {t('gameState.quests.edit.effective')}: {display(write.before)} → {display(write.after)}</div>
         </Checkbox>)}
         {conflicts.length > 0 && <Checkbox checked={replace} onChange={() => setReplace(!replace)} disabled={busy}>
@@ -72,7 +74,7 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, onCl
         </Checkbox>}
         {conflicts.map(edit => <details key={edit.tag}>
           <summary>{edit.tag}: {edit.target} → {display(edit.saved_state)}</summary>
-          {edit.writes.map((write, i) => <p key={i}>{write.key.module ?? t('gameState.quests.edit.campaign')} / {write.key.name}: {display(write.after)}</p>)}
+          {edit.writes.map((write, i) => <p key={i}>{write.key.module ? resolveModule(write.key.module) : t('gameState.quests.edit.campaign')} / {write.key.name}: {display(write.after)}</p>)}
         </details>)}
         {preview.effects.length > 0 && <>
           <h4>{t('gameState.quests.edit.effects')}</h4>
