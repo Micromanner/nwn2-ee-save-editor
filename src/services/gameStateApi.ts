@@ -22,7 +22,6 @@ import type { SaveGraph, TransitionNode } from '@/components/GameState/QuestsTab
 export interface CompanionInfluenceData {
   name: string;
   influence: number | null;
-  recruitment: string;
   source: string;
 }
 

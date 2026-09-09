@@ -186,10 +186,7 @@ fn test_companion_status() {
 
     println!("Companion Status:");
     for (name, status) in &companions {
-        println!(
-            "  - {}: recruitment={}, influence={:?}",
-            name, status.recruitment, status.influence
-        );
+        println!("  - {}: influence={:?}", name, status.influence);
     }
 }
 

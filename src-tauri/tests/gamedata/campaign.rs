@@ -168,10 +168,7 @@ fn test_campaign_companion_influence() {
     });
 
     for (name, status) in sorted {
-        println!(
-            "  {} ({}) - Influence: {:?}",
-            name, status.recruitment, status.influence
-        );
+        println!("  {} - Influence: {:?}", name, status.influence);
     }
 }
 

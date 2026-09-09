@@ -151,12 +151,6 @@ function InfluenceSlider({ value, onChange }: { value: number; onChange: (v: num
   );
 }
 
-const RECRUITMENT_COLOR: Record<string, string> = {
-  recruited: T.positive,
-  met: T.gold,
-  not_recruited: T.textMuted,
-};
-
 function ReputationTab({ characterId }: { characterId: number }) {
   const t = useTranslations();
   const [companions, setCompanions] = useState<Record<string, CompanionInfluenceData>>({});
@@ -253,7 +247,6 @@ function ReputationTab({ characterId }: { characterId: number }) {
         const current = influences[companionId] ?? (companion.influence ?? 0);
         const initial = initialRef.current?.[companionId]?.influence ?? 0;
         const isModified = current !== initial;
-        const recruitColor = RECRUITMENT_COLOR[companion.recruitment] || T.textMuted;
 
         return (
           <div
@@ -268,7 +261,6 @@ function ReputationTab({ characterId }: { characterId: number }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span className="t-semibold" style={{ color: T.text }}>{companion.name || companionId}</span>
-                <span className="t-semibold" style={{ color: recruitColor }}>{companion.recruitment.replace('_', ' ')}</span>
                 {isModified && (
                   <span className="t-semibold" style={{ color: MODIFIED }}>{t('common.modified')}</span>
                 )}

@@ -98,14 +98,12 @@ fn companion_influence_lists_whole_campaign_cast_from_roster() {
     assert_eq!(ids, vec!["gann", "kaelyn", "okku", "one_of_many", "safiya"]);
     assert_eq!(companions["safiya"].influence, Some(-6));
     assert_eq!(companions["kaelyn"].influence, None);
-    assert_eq!(companions["kaelyn"].recruitment, "recruited");
-    assert_eq!(companions["one_of_many"].recruitment, "recruited");
 }
 
-// Classic_Campaign has *_Joined for four companions and .ros files for more;
-// every OC companion is listed, with the .ros file deciding recruitment.
+// Classic_Campaign has .ros files for the whole OC cast from campaign start;
+// every OC companion is listed and no MotB companion leaks in.
 #[test]
-fn companion_influence_lists_oc_cast_with_unrecruited_members() {
+fn companion_influence_lists_whole_oc_cast() {
     let handler = SaveGameHandler::new(
         common::fixtures_path().join("saves/Classic_Campaign"),
         false,
@@ -123,6 +121,4 @@ fn companion_influence_lists_oc_cast_with_unrecruited_members() {
         !companions.contains_key("safiya"),
         "MotB cast must not leak into an OC save"
     );
-    assert_eq!(companions["ammon_jerro"].recruitment, "recruited");
-    assert_eq!(companions["khelgar"].recruitment, "recruited");
 }

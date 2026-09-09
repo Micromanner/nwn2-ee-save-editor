@@ -83,8 +83,6 @@ pub struct CompanionDefinition {
     pub campaign: Campaign,
     pub name: &'static str,
     pub influence_var: &'static str,
-    pub joined_var: &'static str,
-    pub met_var: Option<&'static str>,
     /// Explicit roster `RosName` alias for companions whose comp_id doesn't
     /// normalize to a match (e.g. kaelyn's roster entry is "dove").
     pub ros_name: Option<&'static str>,
@@ -98,8 +96,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Neeshka",
             influence_var: "00_nInfluenceneeshka",
-            joined_var: "00_bNeeshka_Joined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -109,8 +105,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Khelgar",
             influence_var: "00_nInfluencekhelgar",
-            joined_var: "00_bKhelgar_Joined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -120,8 +114,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Elanee",
             influence_var: "00_nInfluenceelanee",
-            joined_var: "00_bElanee_Joined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -131,8 +123,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Qara",
             influence_var: "00_nInfluenceqara",
-            joined_var: "00_bQaraJoined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -142,8 +132,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Casavir",
             influence_var: "00_nInfluencecasavir",
-            joined_var: "00_bCasavir_Joined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -153,8 +141,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Grobnar",
             influence_var: "00_nInfluencegrobnar",
-            joined_var: "00_bGrobnar_Joined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -164,8 +150,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Sand",
             influence_var: "00_nInfluencesand",
-            joined_var: "00_bSand_Joined",
-            met_var: Some("SandIntroDone"),
             ros_name: None,
         },
     );
@@ -175,8 +159,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Bishop",
             influence_var: "00_nInfluencebishop",
-            joined_var: "00_bBishop_Joined",
-            met_var: None,
             ros_name: None,
         },
     );
@@ -186,8 +168,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Shandra",
             influence_var: "00_nInfluenceshandra",
-            joined_var: "00_bShandra_Joined",
-            met_var: Some("bShandraMet"),
             ros_name: None,
         },
     );
@@ -197,8 +177,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Ammon Jerro",
             influence_var: "00_nInfluenceammon",
-            joined_var: "00_bAmmon_Joined",
-            met_var: Some("bAmmonMet"),
             ros_name: None,
         },
     );
@@ -208,8 +186,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Zhjaeve",
             influence_var: "00_nInfluencezhjaeve",
-            joined_var: "00_bZhjaeve_Joined",
-            met_var: Some("bZhjaeveMet"),
             ros_name: None,
         },
     );
@@ -219,8 +195,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::Oc,
             name: "Construct",
             influence_var: "00_nInfluenceconstruct",
-            joined_var: "00_bConstruct_Joined",
-            met_var: Some("bConstructMet"),
             ros_name: None,
         },
     );
@@ -230,8 +204,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::MotB,
             name: "Safiya",
             influence_var: "00_nInfluencesafiya",
-            joined_var: "00_bSafiya_Joined",
-            met_var: Some("bSafiyaMet"),
             ros_name: None,
         },
     );
@@ -241,8 +213,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::MotB,
             name: "Gann",
             influence_var: "00_nInfluencegann",
-            joined_var: "00_bGann_Joined",
-            met_var: Some("bGannMet"),
             ros_name: None,
         },
     );
@@ -252,8 +222,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::MotB,
             name: "Kaelyn the Dove",
             influence_var: "00_nInfluencekaelyn",
-            joined_var: "00_bKaelyn_Joined",
-            met_var: Some("bKaelynMet"),
             ros_name: Some("dove"),
         },
     );
@@ -263,8 +231,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::MotB,
             name: "Okku",
             influence_var: "00_nInfluenceokku",
-            joined_var: "00_bOkku_Joined",
-            met_var: Some("bOkkuMet"),
             ros_name: None,
         },
     );
@@ -274,8 +240,6 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
             campaign: Campaign::MotB,
             name: "One of Many",
             influence_var: "00_nInfluenceoneofmany",
-            joined_var: "00_bOneOfMany_Joined",
-            met_var: Some("bOneOfManyMet"),
             ros_name: Some("oneofmany"),
         },
     );
@@ -345,7 +309,6 @@ impl RustXmlParser {
                         let mut info = BTreeMap::new();
                         info.insert("name".to_string(), capitalize(companion_name));
                         info.insert("influence".to_string(), value.to_string());
-                        info.insert("recruitment".to_string(), "unknown".to_string());
                         info.insert("source".to_string(), "discovered".to_string());
                         info
                     });
@@ -356,11 +319,11 @@ impl RustXmlParser {
     }
 
     /// Status of every known companion of the campaign(s) this save is
-    /// playing. `ros_names` are the `.ros` files in the save: a companion with
-    /// one is party-capable, hence recruited, whatever globals.xml says (the
-    /// game does not write `*_Joined`/`*Met` for every companion). A campaign
+    /// playing. `ros_names` are the `.ros` files in the save; a campaign
     /// counts as present when any of its companions has a `.ros` file or an
-    /// influence variable.
+    /// influence variable. Recruitment is deliberately not reported: the OC
+    /// writes `.ros` files for its whole cast at campaign start and skips the
+    /// `*_Joined`/`*Met` globals for most companions.
     pub fn get_companion_status(&self, ros_names: &[String]) -> HashMap<String, CompanionStatus> {
         let mut companion_status = HashMap::new();
         let defs = get_companion_definitions();
@@ -381,26 +344,11 @@ impl RustXmlParser {
             if !campaigns.contains(&def.campaign) {
                 continue;
             }
-            let influence = self.data.integers.get(def.influence_var).copied();
-            let joined = self.data.integers.get(def.joined_var).copied().unwrap_or(0);
-            let met = def
-                .met_var
-                .and_then(|v| self.data.integers.get(v).copied())
-                .unwrap_or(0);
-            let recruitment = if joined > 0 || in_roster(comp_id, def) {
-                "recruited"
-            } else if met > 0 {
-                "met"
-            } else {
-                "not_recruited"
-            };
-
             companion_status.insert(
                 comp_id.to_string(),
                 CompanionStatus {
                     name: def.name.to_string(),
-                    influence,
-                    recruitment: recruitment.to_string(),
+                    influence: self.data.integers.get(def.influence_var).copied(),
                     source: "explicit".to_string(),
                 },
             );
@@ -415,10 +363,6 @@ impl RustXmlParser {
                 CompanionStatus {
                     name: status.get("name").cloned().unwrap_or_default(),
                     influence: influence_val,
-                    recruitment: status
-                        .get("recruitment")
-                        .cloned()
-                        .unwrap_or("unknown".to_string()),
                     source: "discovered".to_string(),
                 }
             });
@@ -579,7 +523,6 @@ impl RustXmlParser {
 pub struct CompanionStatus {
     pub name: String,
     pub influence: Option<i32>,
-    pub recruitment: String,
     pub source: String,
 }
 
