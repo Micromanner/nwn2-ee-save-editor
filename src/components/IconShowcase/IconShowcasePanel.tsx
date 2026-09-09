@@ -105,7 +105,7 @@ export function IconShowcasePanel() {
     <div style={{ padding: 16, overflow: 'auto', height: '100%' }}>
       <div style={{ marginBottom: 16 }}>
         <h2 className="t-2xl" style={{ margin: 0, color: T.accent }}>Icon Showcase</h2>
-        <p className="t-md" style={{ color: T.textMuted, marginTop: 4 }}>
+        <p style={{ color: T.textMuted, marginTop: 4 }}>
           All game-icons.net icons used in this application, via react-icons/gi.
         </p>
       </div>
@@ -113,7 +113,7 @@ export function IconShowcasePanel() {
         <Card key={group.title} elevation={Elevation.ONE} style={{
           marginBottom: 16, padding: 16, background: T.surface,
         }}>
-          <h3 className="t-lg t-bold" style={{ margin: '0 0 12px', color: T.text }}>{group.title}</h3>
+          <h3 className="t-bold" style={{ margin: '0 0 12px', color: T.text }}>{group.title}</h3>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',

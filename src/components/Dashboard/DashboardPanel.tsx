@@ -441,14 +441,14 @@ export default function DashboardPanel() {
                       <div style={{ fontWeight: 600, color: T.text }}>
                         {player.name ?? t('dashboard.unnamedPlayer', { index: player.player_index + 1 })}
                       </div>
-                      <div style={{ marginTop: 4, fontSize: 12, color: T.textMuted }}>
+                      <div style={{ marginTop: 4, fontSize: 'var(--font-sm)', color: T.textMuted }}>
                         {player.race}
                       </div>
-                      <div style={{ marginTop: 8, fontSize: 12, color: T.textMuted }}>
+                      <div style={{ marginTop: 8, fontSize: 'var(--font-sm)', color: T.textMuted }}>
                         {classSummary}
                       </div>
                     </div>
-                    <div style={{ flexShrink: 0, fontSize: 11, color: T.textMuted }}>
+                    <div style={{ flexShrink: 0, fontSize: 'var(--font-sm)', color: T.textMuted }}>
                       {t('dashboard.playerSlot', { slot: player.player_index + 1 })}
                     </div>
                   </div>

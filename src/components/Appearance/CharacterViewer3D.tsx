@@ -525,7 +525,7 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
         <LoadingState variant="overlay" text={t('modelViewer.loading')} />
       )}
       {error && (
-        <div className="t-base" style={{ position: 'absolute', top: 8, left: 8, color: '#ff4444' }}>
+        <div style={{ position: 'absolute', top: 8, left: 8, color: '#ff4444' }}>
           {error}
         </div>
       )}

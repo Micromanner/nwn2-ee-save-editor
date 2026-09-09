@@ -75,7 +75,7 @@ export function SaveEntry({ save, isSelected, onClick, onDoubleClick }: SaveEntr
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="t-lg t-semibold" style={{
+          <span className="t-semibold" style={{
             color: isSelected ? T.accent : T.text,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -92,7 +92,7 @@ export function SaveEntry({ save, isSelected, onClick, onDoubleClick }: SaveEntr
             </Tag>
           )}
         </div>
-        <div className="t-base" style={{ color: T.textMuted, marginTop: 2 }}>
+        <div style={{ color: T.textMuted, marginTop: 2 }}>
           {save.folderName}
         </div>
         <div className="t-sm" style={{ color: T.textMuted, marginTop: 2 }}>

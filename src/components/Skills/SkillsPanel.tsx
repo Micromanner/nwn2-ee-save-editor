@@ -244,7 +244,7 @@ export function SkillsPanel() {
               })}
             </tbody>
           </HTMLTable>
-          <div className="t-base" style={{ marginTop: 8, display: 'flex', gap: 16, color: T.textMuted }}>
+          <div style={{ marginTop: 8, display: 'flex', gap: 16, color: T.textMuted }}>
             <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.accent }}>ACP</Tag> {t('skills.armorCheck')}</span>
             <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>2pt</Tag> Cross-class skill (costs 2 points per rank)</span>
           </div>

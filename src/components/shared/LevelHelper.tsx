@@ -150,7 +150,7 @@ export function LevelHelper({ onNavigate }: LevelHelperProps) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <GameIcon icon={gain.icon} size={14} style={{ color: gain.color }} />
-                <span className="t-md t-medium" style={{ color: T.text }}>{gain.label}</span>
+                <span className="t-medium" style={{ color: T.text }}>{gain.label}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Tag minimal round intent={gain.tagIntent} className="t-sm t-center" style={{ minWidth: 20 }}>
@@ -169,7 +169,7 @@ export function LevelHelper({ onNavigate }: LevelHelperProps) {
                   onClick={() => handleRowClick('spells')}
                 >
                   <GameIcon icon={GiSpellBook} size={14} style={{ color: SPELL_COLOR }} />
-                  <span className="t-md t-medium" style={{ color: T.text }}>{t('levelHelper.spellsToLearn')}</span>
+                  <span className="t-medium" style={{ color: T.text }}>{t('levelHelper.spellsToLearn')}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Tag minimal round className="t-sm t-center" style={{ minWidth: 20, color: SPELL_COLOR }}>
@@ -194,7 +194,7 @@ export function LevelHelper({ onNavigate }: LevelHelperProps) {
                 }}>
                   {spellClasses.map((cls, i) => (
                     <div key={i} style={{ marginBottom: i < spellClasses.length - 1 ? 8 : 0 }}>
-                      <div className="t-base t-semibold" style={{ color: T.text, marginBottom: 2 }}>
+                      <div className="t-semibold" style={{ color: T.text, marginBottom: 2 }}>
                         {cls.name}
                         {cls.casterType === 'spellbook' && (
                           <span style={{ color: T.textMuted, marginLeft: 4 }}>({t('levelHelper.spellbook')})</span>

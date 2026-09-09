@@ -28,7 +28,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const toasterRef = useRef<Toaster | null>(null);
 
   useEffect(() => {
-    OverlayToaster.createAsync({ position: 'bottom-right' }).then(t => {
+    OverlayToaster.createAsync({ position: 'bottom-right', className: 'bp-app' }).then(t => {
       toasterRef.current = t;
     });
   }, []);
@@ -38,7 +38,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       message: description ? (
         <div>
           <strong>{message}</strong>
-          <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>{description}</div>
+          <div style={{ fontSize: 'var(--font-sm)', opacity: 0.85, marginTop: 2 }}>{description}</div>
         </div>
       ) : message,
       intent: intentMap[type],

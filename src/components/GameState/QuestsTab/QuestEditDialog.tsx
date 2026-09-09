@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Button, Checkbox, Dialog, DialogBody, DialogFooter, Spinner } from '@blueprintjs/core';
+import { Button, Checkbox, Spinner } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { DropdownSelect } from '@/components/shared/DropdownSelect';
+import { ParchmentDialog } from '@/components/shared/ParchmentDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
@@ -52,8 +53,13 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, modu
     finally { setBusy(false); }
   };
 
-  return <Dialog isOpen title={t('gameState.quests.edit.title')} onClose={busy ? undefined : onClose} style={{ width: 760 }}>
-    <DialogBody style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+  return <ParchmentDialog isOpen title={t('gameState.quests.edit.title')} onClose={() => { if (!busy) onClose(); }} width={760}
+    footerActions={<>
+      <Button intent="primary" loading={busy} disabled={!preview || loading || (conflicts.length > 0 && !replace)} onClick={() => void apply()}>
+        {t('gameState.quests.edit.apply')}
+      </Button>
+    </>}>
+    <div style={{ overflowY: 'auto', minHeight: 0 }}>
       <p><strong>{quest.category.name || quest.tag}</strong> — {t('gameState.quests.edit.saved')}: {display(preview?.saved_state)} → {target}</p>
       <p>{quest.category.entries.find(e => e.id === target)?.text}</p>
       <DropdownSelect label={t('gameState.quests.edit.route')} value={choices.find(c => c.id === route)?.label ?? ''}
@@ -87,12 +93,6 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, modu
         <p>{t('gameState.quests.edit.loadExplanation')}</p>
         <p>{t('gameState.quests.edit.stagingExplanation')}</p>
       </>}
-    </DialogBody>
-    <DialogFooter actions={<>
-      <Button disabled={busy} onClick={onClose}>{t('common.cancel')}</Button>
-      <Button intent="primary" loading={busy} disabled={!preview || loading || (conflicts.length > 0 && !replace)} onClick={() => void apply()}>
-        {t('gameState.quests.edit.apply')}
-      </Button>
-    </>} />
-  </Dialog>;
+    </div>
+  </ParchmentDialog>;
 }

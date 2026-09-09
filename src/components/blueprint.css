@@ -12,13 +12,10 @@
   /* Typography scale - adjust these to change all font sizes globally */
   --font-xs: 10px;
   --font-sm: 11px;
-  --font-base: 12px;
-  --font-md: 13px;
-  --font-lg: 14px;
-  --font-xl: 15px;
+  --font-base: 14px;
+  --font-xl: 16px;
   --font-2xl: 18px;
   --font-3xl: 20px;
-  --font-4xl: 28px;
   --icon-nav: 24px;
 }
 
@@ -26,13 +23,10 @@ html.font-size-small .bp-app {
   font-size: 12px;
   --font-xs: 9px;
   --font-sm: 10px;
-  --font-base: 11px;
-  --font-md: 11.5px;
-  --font-lg: 12px;
-  --font-xl: 13px;
+  --font-base: 12px;
+  --font-xl: 14px;
   --font-2xl: 15px;
   --font-3xl: 17px;
-  --font-4xl: 24px;
   --icon-nav: 21px;
 }
 
@@ -40,13 +34,10 @@ html.font-size-large .bp-app {
   font-size: 16px;
   --font-xs: 12px;
   --font-sm: 13px;
-  --font-base: 14px;
-  --font-md: 15px;
-  --font-lg: 16px;
+  --font-base: 16px;
   --font-xl: 18px;
   --font-2xl: 21px;
   --font-3xl: 24px;
-  --font-4xl: 34px;
   --icon-nav: 27px;
 }
 
@@ -65,9 +56,6 @@ html.font-size-large .bp-app {
 
 .t-xs   { font-size: var(--font-xs); }
 .t-sm   { font-size: var(--font-sm); }
-.t-base { font-size: var(--font-base); }
-.t-md   { font-size: var(--font-md); }
-.t-lg   { font-size: var(--font-lg); }
 .t-xl   { font-size: var(--font-xl); }
 .t-2xl  { font-size: var(--font-2xl); }
 .t-3xl  { font-size: var(--font-3xl); }
@@ -105,7 +93,7 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 }
 .bp-app .bp6-html-table th {
   color: #2d2d30;
-  font-size: var(--font-lg);
+  font-size: var(--font-base);
   font-weight: 600;
 }
 
@@ -218,7 +206,7 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 .bp-app .bp6-tabs .bp6-tab {
   color: #4a453c;
   font-weight: 600;
-  font-size: var(--font-lg);
+  font-size: var(--font-base);
 }
 .bp-app .bp6-tabs .bp6-tab[aria-selected="true"] {
   color: #a0522d;
@@ -335,7 +323,7 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
   border: none;
   cursor: pointer;
   color: #4a453c;
-  font-size: var(--font-md);
+  font-size: var(--font-base);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -347,7 +335,7 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 }
 .about-description {
   color: #2d2d30;
-  font-size: var(--font-lg);
+  font-size: var(--font-base);
   max-width: 320px;
   margin: 4px 0 0;
 }
@@ -366,7 +354,7 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 .about-credits-panel,
 .about-legal-panel {
   padding: 20px;
-  font-size: var(--font-lg);
+  font-size: var(--font-base);
   color: #2d2d30;
   line-height: 1.6;
 }

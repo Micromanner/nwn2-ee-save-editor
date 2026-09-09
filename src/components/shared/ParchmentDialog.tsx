@@ -29,7 +29,6 @@ export function ParchmentDialog({
       onOpened={onOpened}
       onClosed={onClosed}
       title={title}
-      className="bp-app"
       // Explicit flex column so a minHeight/height stretches the body and keeps the footer at the bottom.
       // maxHeight clamps both fixed-height and content-sized dialogs to the viewport
       // (bp5-dialog has 30px vertical margins); the body scrolls internally instead.

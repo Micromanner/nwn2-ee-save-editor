@@ -19,7 +19,7 @@ function DefaultContent() {
           {t('dashboard.title')}
         </span>
       </div>
-      <div className="t-md" style={{ color: T.textMuted, marginBottom: 16 }}>
+      <div style={{ color: T.textMuted, marginBottom: 16 }}>
         {t('dashboard.tagline')}
       </div>
 
@@ -65,7 +65,7 @@ function SelectedContent({ save }: { save: SaveEntryData }) {
       <div className="t-2xl t-bold" style={{ color: T.accent, marginBottom: 4 }}>
         {save.characterName}
       </div>
-      <div className="t-base" style={{ color: T.textMuted, marginBottom: 4 }}>
+      <div style={{ color: T.textMuted, marginBottom: 4 }}>
         {save.folderName}
       </div>
       <div className="t-sm" style={{ color: T.textMuted, marginBottom: 20 }}>

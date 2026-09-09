@@ -4,6 +4,7 @@ import { TauriProvider } from '@/providers/TauriProvider';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { FontSizeProvider } from '@/providers/FontSizeProvider';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { PortalProvider } from '@blueprintjs/core';
 import Shell from '@/components/layout/Shell';
 
 function AppProviders({ children }: { children: React.ReactNode }) {
@@ -12,9 +13,11 @@ function AppProviders({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <FontSizeProvider>
           <LocaleProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
+            <PortalProvider portalClassName="bp-app">
+              <ToastProvider>
+                {children}
+              </ToastProvider>
+            </PortalProvider>
           </LocaleProvider>
         </FontSizeProvider>
       </ThemeProvider>

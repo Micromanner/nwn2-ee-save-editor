@@ -67,7 +67,7 @@ export function StepInput({
         onBlur={commitDraft}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         disabled={disabled}
-        className="t-lg t-semibold"
+        className="t-semibold"
         style={{
           flex: 1,
           minWidth: 0,

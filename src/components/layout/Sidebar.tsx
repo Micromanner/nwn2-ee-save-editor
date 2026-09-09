@@ -79,7 +79,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <button
             key={item.id}
             onClick={() => onTabChange(item.id)}
-            className="t-md"
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               width: '100%', padding: '8px 16px',

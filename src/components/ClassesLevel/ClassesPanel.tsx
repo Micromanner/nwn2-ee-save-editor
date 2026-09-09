@@ -350,7 +350,7 @@ export function ClassesPanel() {
             <button
               onClick={handleOpenAddClass}
               disabled={isUpdating}
-              className="t-md t-medium"
+              className="t-medium"
               style={{
                 width: '100%', marginTop: 8, padding: '8px 0',
                 border: `2px dashed ${T.border}`, borderRadius: 4,
@@ -372,7 +372,7 @@ export function ClassesPanel() {
       <Card elevation={Elevation.ONE} style={{ padding: '12px 16px 16px', background: T.surface }}>
         <SectionLabel>{t('classes.levelHistory')}</SectionLabel>
         {levelHistoryReversed.length === 0 ? (
-          <div className="t-base" style={{ color: T.textMuted, padding: '8px 0' }}>{t('classes.noLevelHistory')}</div>
+          <div style={{ color: T.textMuted, padding: '8px 0' }}>{t('classes.noLevelHistory')}</div>
         ) : (
           <HTMLTable compact striped bordered style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup>

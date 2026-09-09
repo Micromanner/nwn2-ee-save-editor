@@ -148,7 +148,7 @@ function CompanionCard({
             icon={fallbackIcon}
           />
           <div
-            className="party-card-action t-base"
+            className="party-card-action"
             style={{
               position: 'absolute', left: 0, right: 0, bottom: 0,
               padding: '12px 6px 5px', textAlign: 'center', color: '#f5f0e8',
@@ -160,17 +160,17 @@ function CompanionCard({
         </div>
       </div>
       <div style={{ padding: '6px 10px 8px', display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-        <div className="t-md t-semibold" style={{ color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div className="t-semibold" style={{ color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {entry.char_name}
         </div>
-        <div className="t-base" style={{ color: T.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ color: T.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {classLine}
         </div>
         {metaLine && (
-          <div className="t-base" style={{ color: T.textMuted }}>{metaLine}</div>
+          <div style={{ color: T.textMuted }}>{metaLine}</div>
         )}
         {influence != null && (
-          <div className="t-base" style={{ color: T.textMuted }}>
+          <div style={{ color: T.textMuted }}>
             {t('roster.influenceLine', { value: influence })}
           </div>
         )}
@@ -190,7 +190,7 @@ function EmptySlot() {
       }}
     >
       <span className="t-3xl" style={{ opacity: 0.5 }}>+</span>
-      <span className="t-md">{t('roster.emptySlot')}</span>
+      <span>{t('roster.emptySlot')}</span>
     </div>
   );
 }
@@ -345,7 +345,7 @@ export function PartyPanel() {
             title={t('roster.activeParty')}
             right={(
               <span
-                className="t-base t-semibold"
+                className="t-semibold"
                 style={{ color: partyLimit != null && activeParty.length > partyLimit ? T.accent : T.textMuted }}
               >
                 {countLabel}
@@ -366,7 +366,7 @@ export function PartyPanel() {
             {reserves.length > 0 ? (
               <div style={CARD_GRID}>{reserves.map(renderCard)}</div>
             ) : (
-              <div className="t-md" style={{ color: T.textMuted }}>{t('roster.reservesEmpty')}</div>
+              <div style={{ color: T.textMuted }}>{t('roster.reservesEmpty')}</div>
             )}
             {otherRoster.length > 0 && (
               <>

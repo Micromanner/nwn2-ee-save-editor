@@ -166,10 +166,10 @@ export function AbilitiesPanel() {
 
       <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-          <span className="t-lg" style={{ color: T.textMuted }}>
+          <span style={{ color: T.textMuted }}>
             {t('abilityScores.pointsSpent')}: <strong style={{ color: T.text }}>{spent}</strong>
           </span>
-          <span className="t-lg" style={{ color: T.textMuted }}>
+          <span style={{ color: T.textMuted }}>
             {t('abilityScores.availablePoints')}: <strong style={{ color: T.accent }}>{available}</strong>
           </span>
           <Button icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} text={t('abilityScores.pointBuy.button')} small minimal style={{ color: T.textMuted }} onClick={() => setIsRespecOpen(true)} />
@@ -209,7 +209,7 @@ export function AbilitiesPanel() {
                     <tr key={a.shortName}>
                       <td>
                         <strong style={{ color: T.text }}>{shortName}</strong>
-                        <span className="t-base" style={{ marginLeft: 6, color: T.textMuted }}>{a.name}</span>
+                        <span style={{ marginLeft: 6, color: T.textMuted }}>{a.name}</span>
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <StepInput
@@ -252,7 +252,7 @@ export function AbilitiesPanel() {
                     <tr key={key}>
                       <td>
                         <strong style={{ color: T.text }}>{shortNames[key]}</strong>
-                        <span className="t-base" style={{ marginLeft: 6, color: T.textMuted }}>{fullNames[key]}</span>
+                        <span style={{ marginLeft: 6, color: T.textMuted }}>{fullNames[key]}</span>
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <StepInput

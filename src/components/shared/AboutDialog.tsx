@@ -100,7 +100,7 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
       isOpen={isOpen}
       onClose={onClose}
       title={t('about.title')}
-      className="bp-app about-dialog"
+      className="about-dialog"
       canOutsideClickClose
     >
       <DialogBody className="about-dialog-body">

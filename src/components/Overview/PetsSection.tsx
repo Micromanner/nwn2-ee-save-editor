@@ -60,7 +60,7 @@ function PetSlotRow({
   return (
     <div style={{ padding: '5px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="t-md" style={{ color: T.textMuted, flex: 1 }}>{t(labelKey)}</span>
+        <span style={{ color: T.textMuted, flex: 1 }}>{t(labelKey)}</span>
         <DropdownSelect
           small
           width={180}
@@ -92,7 +92,7 @@ function PetSlotRow({
             </>
           ) : (
             <span
-              className="editable-row t-md t-semibold"
+              className="editable-row t-semibold"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: T.text }}
               onClick={() => setIsEditingName(true)}
             >

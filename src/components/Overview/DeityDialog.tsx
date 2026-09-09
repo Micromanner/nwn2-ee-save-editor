@@ -85,7 +85,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
               <>
                 <button
                   onClick={() => setSelected(null)}
-                  className={`t-md${selected === null ? ' t-semibold' : ''}`}
+                  className={selected === null ? 't-semibold' : undefined}
                   style={{
                     display: 'block', width: '100%', textAlign: 'left',
                     padding: '6px 12px', border: 'none', cursor: 'pointer',
@@ -100,7 +100,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
                   <button
                     key={d.name}
                     onClick={() => setSelected(d.name)}
-                    className={`t-md${selected === d.name ? ' t-semibold' : ''}`}
+                    className={selected === d.name ? 't-semibold' : undefined}
                     style={{
                       display: 'block', width: '100%', textAlign: 'left',
                       padding: '6px 12px', border: 'none', cursor: 'pointer',
@@ -114,7 +114,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
                   </button>
                 ))}
                 {filtered.length === 0 && !loadingDeities && (
-                  <div className="t-md t-center" style={{ padding: 16, color: T.textMuted }}>{t('deity.noMatch')}</div>
+                  <div className="t-center" style={{ padding: 16, color: T.textMuted }}>{t('deity.noMatch')}</div>
                 )}
               </>
             )}
@@ -133,7 +133,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
               </div>
 
               {detail.description && (
-                <div className="t-md t-body" style={{ marginTop: 12, color: T.textMuted }}>
+                <div className="t-body" style={{ marginTop: 12, color: T.textMuted }}>
                   {detail.description}
                 </div>
               )}
@@ -141,7 +141,7 @@ export function DeityDialog({ isOpen, currentDeity, onClose, onSelect }: DeityDi
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <div className="t-center">
-                <div className="t-lg" style={{ color: T.textMuted }}>
+                <div style={{ color: T.textMuted }}>
                   {selected === null ? t('deity.noDeitySelected') : t('deity.selectFromList')}
                 </div>
               </div>
@@ -165,7 +165,7 @@ function DeityDetailHeader({ deity }: { deity: Deity }) {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="t-md" style={{ display: 'flex', gap: 12, padding: '4px 0' }}>
+    <div style={{ display: 'flex', gap: 12, padding: '4px 0' }}>
       <span style={{ color: T.textMuted, width: 120, flexShrink: 0 }}>{label}</span>
       <span className="t-semibold" style={{ color: T.text }}>{value}</span>
     </div>

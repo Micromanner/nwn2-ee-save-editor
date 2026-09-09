@@ -19,7 +19,7 @@ export function LoadingState({ variant = 'page', text, height }: LoadingStatePro
 
   if (variant === 'inline') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', color: T.textMuted, fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', color: T.textMuted, fontSize: 'var(--font-sm)' }}>
         {spinner}
         {text && <span>{text}</span>}
       </div>
@@ -36,7 +36,7 @@ export function LoadingState({ variant = 'page', text, height }: LoadingStatePro
 
   if (variant === 'overlay') {
     return (
-      <div style={{ ...centered, position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(30, 30, 34, 0.35)', color: '#e8dcc8', fontSize: 12, letterSpacing: 0.4 }}>
+      <div style={{ ...centered, position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(30, 30, 34, 0.35)', color: '#e8dcc8', fontSize: 'var(--font-sm)', letterSpacing: 0.4 }}>
         {spinner}
         {text && <span>{text}</span>}
       </div>
@@ -44,7 +44,7 @@ export function LoadingState({ variant = 'page', text, height }: LoadingStatePro
   }
 
   return (
-    <div style={{ ...centered, flex: 1, width: '100%', height: height ?? '100%', minHeight: height ? undefined : 160, color: T.textMuted, fontSize: 12, letterSpacing: 0.4 }}>
+    <div style={{ ...centered, flex: 1, width: '100%', height: height ?? '100%', minHeight: height ? undefined : 160, color: T.textMuted, fontSize: 'var(--font-sm)', letterSpacing: 0.4 }}>
       {spinner}
       {text && <span>{text}</span>}
     </div>

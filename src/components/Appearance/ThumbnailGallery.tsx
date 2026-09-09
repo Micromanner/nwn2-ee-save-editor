@@ -34,7 +34,6 @@ function NoneTile({ selected, onSelect, label }: { selected: boolean; onSelect: 
           onSelect(0);
         }
       }}
-      className="t-md"
       style={{
         width: TILE_SIZE,
         height: TILE_SIZE,

@@ -18,7 +18,7 @@ type PartType = 'head' | 'hair' | 'fhair' | 'wings' | 'tail' | 'helm' | 'body';
 
 function SectionHeader({ label }: { label: string }) {
   return (
-    <div className="t-bold t-xl" style={{ color: T.accent, marginBottom: 8, marginTop: 4 }}>
+    <div className="t-section" style={{ marginBottom: 8, marginTop: 4 }}>
       {label}
     </div>
   );
@@ -509,7 +509,7 @@ export function AppearancePanel() {
                   }}
                   labelRenderer={false}
                 />
-                <span className="t-md t-semibold" style={{ minWidth: 36, textAlign: 'right' }}>{liveHeight.toFixed(2)}</span>
+                <span className="t-semibold" style={{ minWidth: 36, textAlign: 'right' }}>{liveHeight.toFixed(2)}</span>
               </div>
             }
           />
@@ -526,7 +526,7 @@ export function AppearancePanel() {
                   }}
                   labelRenderer={false}
                 />
-                <span className="t-md t-semibold" style={{ minWidth: 36, textAlign: 'right' }}>{liveGirth.toFixed(2)}</span>
+                <span className="t-semibold" style={{ minWidth: 36, textAlign: 'right' }}>{liveGirth.toFixed(2)}</span>
               </div>
             }
           />
@@ -545,7 +545,7 @@ export function AppearancePanel() {
             const currentVoice = voicesets.find(v => v.id === data.soundset);
             const currentName = currentVoice?.name ?? `#${data.soundset}`;
             return (
-              <div className="t-md" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ color: T.textMuted }}>{t('appearance.voiceCurrent')}:</span>
                 <span className="t-semibold">{currentName}</span>
                 {currentVoice && (
@@ -576,7 +576,7 @@ export function AppearancePanel() {
           />
           <div style={{ maxHeight: 300, overflowY: 'auto', border: `1px solid ${T.border}`, borderRadius: 3 }}>
             {voicesets.length === 0 ? (
-              <div className="t-md t-center" style={{ padding: 12, color: T.textMuted }}>
+              <div className="t-center" style={{ padding: 12, color: T.textMuted }}>
                 {t('appearance.voiceNone')}
               </div>
             ) : (
@@ -611,7 +611,6 @@ export function AppearancePanel() {
                         <div
                           key={v.id}
                           onClick={() => setPendingVoiceId(v.id === data.soundset ? null : v.id)}
-                          className="t-md"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -697,7 +696,7 @@ export function AppearancePanel() {
         {/* Wings & Tail */}
         <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>
           <SectionHeader label={t('appearance.wingsAndTail')} />
-          <div className="t-md">
+          <div>
             <KVRow
               label={t('appearance.wings')}
               value={
@@ -783,7 +782,7 @@ export function AppearancePanel() {
                 : undefined;
               return (
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div className="t-md t-semibold" style={{ color: T.textMuted }}>{t('appearance.bodyTint')}</div>
+                  <div className="t-semibold" style={{ color: T.textMuted }}>{t('appearance.bodyTint')}</div>
                   {([1, 2, 3] as const).map(n => (
                     <ColorPicker
                       key={n}

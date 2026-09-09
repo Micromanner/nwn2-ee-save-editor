@@ -108,7 +108,7 @@ function ShellContent() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '8px 16px', background: T.sectionBg, borderBottom: `1px solid ${T.sectionBorder}`,
           }}>
-            <span className="t-md" style={{ color: T.text }}>
+            <span style={{ color: T.text }}>
               <strong>{t('dashboard.sessionActive', { name: character.name })}</strong>
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -142,7 +142,7 @@ function ShellContent() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   <div style={{ textAlign: 'center' }}>
                     <GameIcon icon={GiAnvil} size={40} style={{ color: T.border }} />
-                    <p className="t-lg" style={{ marginTop: 12, color: T.textMuted }}>Coming soon</p>
+                    <p style={{ marginTop: 12, color: T.textMuted }}>Coming soon</p>
                   </div>
                 </div>
               )}
@@ -206,7 +206,7 @@ export default function Shell() {
             <div className="t-2xl t-bold" style={{ color: T.accent, marginBottom: 12 }}>
               {t('startup.notFound.title')}
             </div>
-            <div className="t-base" style={{ color: T.textMuted, marginBottom: 20 }}>
+            <div style={{ color: T.textMuted, marginBottom: 20 }}>
               {t('startup.notFound.description')}
             </div>
             <Button
@@ -245,7 +245,7 @@ export default function Shell() {
               stripes={false}
               style={{ marginBottom: 8 }}
             />
-            <div className="t-base" style={{ color: T.textMuted }}>{initProgress.message}</div>
+            <div style={{ color: T.textMuted }}>{initProgress.message}</div>
           </div>
         </div>
       </div>

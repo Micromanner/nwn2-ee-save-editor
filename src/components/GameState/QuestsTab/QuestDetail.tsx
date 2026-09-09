@@ -74,7 +74,7 @@ export function QuestDetail({
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
           {t('gameState.quests.detail.header')}
         </div>
-        <div className="t-md" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 16, rowGap: 4, alignItems: 'baseline' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 16, rowGap: 4, alignItems: 'baseline' }}>
           <span style={{ color: T.textMuted }}>{t('gameState.quests.list.tag')}</span>
           <span className="t-semibold t-mono" style={{ color: T.text }}>{quest.tag}</span>
           <span style={{ color: T.textMuted }}>{t('gameState.quests.list.name')}</span>

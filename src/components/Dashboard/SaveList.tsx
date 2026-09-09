@@ -56,7 +56,7 @@ export function SaveList({
             gap: 12,
           }}>
             <GameIcon icon={GiMagnifyingGlass} size={32} color={T.border} />
-            <span className="t-md" style={{ color: T.textMuted }}>
+            <span style={{ color: T.textMuted }}>
               {t('dashboard.noSaves')}
             </span>
           </div>

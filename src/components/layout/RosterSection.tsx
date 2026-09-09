@@ -133,7 +133,6 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
       {sessionKind !== 'vault' && (
         <button
           onClick={() => onTabChange('party')}
-          className="t-md"
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             width: '100%', padding: '8px 16px',
@@ -168,7 +167,7 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
             active={playerActive}
           />
           <div style={{ minWidth: 0 }}>
-            <div className="t-md" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {playerName}
             </div>
           </div>
@@ -193,7 +192,6 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
               />
               <div style={{ minWidth: 0 }}>
                 <div
-                  className="t-md"
                   title={inParty ? t('roster.inParty') : undefined}
                   style={{
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',

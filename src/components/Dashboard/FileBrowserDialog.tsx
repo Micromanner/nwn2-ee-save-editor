@@ -393,7 +393,6 @@ export function FileBrowserDialog({
         isOpen={isOpen}
         onClose={onClose}
         title={title}
-        className="bp-app"
         style={{ width: 'min(1400px, 95vw)', height: '80vh', paddingBottom: 0, background: T.surface, display: 'flex', flexDirection: 'column' as const }}
         canOutsideClickClose
       >
@@ -642,7 +641,6 @@ export function FileBrowserDialog({
         isOpen={showRestoreConfirm && !!selectedFile}
         onClose={() => setShowRestoreConfirm(false)}
         title={t('fileBrowser.confirmRestore')}
-        className="bp-app"
         style={{ width: 440, paddingBottom: 0, background: T.surface }}
       >
         <DialogBody style={{ background: T.surface, margin: 0, padding: 16 }}>

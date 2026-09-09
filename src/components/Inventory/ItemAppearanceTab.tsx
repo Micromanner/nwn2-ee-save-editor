@@ -33,7 +33,7 @@ interface ItemAppearanceTabProps {
 
 function SectionHeader({ label }: { label: string }) {
   return (
-    <div className="t-bold t-xl" style={{ color: T.accent, marginBottom: 8, marginTop: 4 }}>
+    <div className="t-section" style={{ marginBottom: 8, marginTop: 4 }}>
       {label}
     </div>
   );
@@ -400,7 +400,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 every slot stays clickable while browsing a long list. */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}>
               <div style={{ flex: '0 0 200px', border: `1px solid ${T.border}`, borderRadius: 3, overflow: 'hidden', background: T.surfaceAlt }}>
-                <div className="t-semibold t-md" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', color: T.textMuted, background: T.sectionBg, borderBottom: `1px solid ${T.border}` }}>
+                <div className="t-semibold" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', color: T.textMuted, background: T.sectionBg, borderBottom: `1px solid ${T.border}` }}>
                   <span>{t('appearance.accessorySlotColumn')}</span>
                   <span>{t('appearance.accessoryCurrentColumn')}</span>
                 </div>
@@ -422,7 +422,6 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                       }}
                       onMouseEnter={() => setHoveredSlot(slot)}
                       onMouseLeave={() => setHoveredSlot(s => (s === slot ? null : s))}
-                      className="t-md"
                       style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '4px 10px', cursor: disabled ? 'default' : 'pointer',
@@ -435,7 +434,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                       <span>{slotLabel(slot)}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <span
-                          className="t-md t-semibold"
+                          className="t-semibold"
                           title={id > 0 ? t('appearance.accessoryCurrentTitle', { id: String(id) }) : t('appearance.none')}
                           style={{
                             minWidth: 28, textAlign: 'center', padding: '0 6px', borderRadius: 10,
@@ -462,7 +461,6 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                       label={t('appearance.customColors')}
                       onChange={() => toggleCustom(activeSlot)}
                       style={{ margin: 0 }}
-                      className="t-md"
                     />
                     {customTintSlots.has(activeSlot) ? (
                       <>
@@ -504,7 +502,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                         />
                       </>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.textMuted }} className="t-md">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.textMuted }}>
                         <span>{t('appearance.usingArmorColors')}</span>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
                           {(['channel1', 'channel2', 'channel3'] as const).map(ch => (
@@ -547,7 +545,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 </div>
               </div>
             </div>
-            <div className="t-md" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
               <Icon icon="info-sign" size={14} style={{ color: T.textMuted }} />
               {t('appearance.accessoriesHint')}
             </div>
@@ -558,7 +556,6 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
           isOpen={pendingVariation !== null}
           onClose={() => setPendingVariation(null)}
           title={t('appearance.changeVariation')}
-          className="bp-app"
           style={{ width: 440, paddingBottom: 0, background: T.surface }}
         >
           <DialogBody style={{ padding: 16, margin: 0, background: T.surface }}>
@@ -566,8 +563,8 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
               background: T.sectionBg, border: `1px solid ${T.sectionBorder}`,
               borderRadius: 4, padding: 12,
             }}>
-              <div className="t-md t-medium" style={{ color: T.text }}>{t('appearance.accessoryResetTitle')}</div>
-              <div className="t-md" style={{ color: T.textMuted, marginTop: 4 }}>{t('appearance.accessoryResetDesc')}</div>
+              <div className="t-medium" style={{ color: T.text }}>{t('appearance.accessoryResetTitle')}</div>
+              <div style={{ color: T.textMuted, marginTop: 4 }}>{t('appearance.accessoryResetDesc')}</div>
             </div>
           </DialogBody>
           <DialogFooter
@@ -609,7 +606,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                 </div>
               ))}
             </div>
-            <div className="t-md" style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ color: T.textMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
               <Icon icon="info-sign" size={14} style={{ color: T.textMuted }} />
               {t('appearance.colorsHoverHint')}
             </div>

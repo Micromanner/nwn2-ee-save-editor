@@ -51,7 +51,7 @@ export function ColorPicker({ label, value, onChange, disabled, disabledReason }
           background: 'none',
         }}
       />
-      {label && <span className="t-md" style={{ color: T.textMuted }}>{label}</span>}
+      {label && <span style={{ color: T.textMuted }}>{label}</span>}
     </div>
   );
 
