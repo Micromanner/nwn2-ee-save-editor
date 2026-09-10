@@ -27,7 +27,7 @@ export function QuestDetail({
   const [target, setTarget] = useState<number | null>(null);
   const [technical, setTechnical] = useState(false);
   const tlk = useTlkResolver();
-  const { resolve: resolveModule, resolveMany } = useModuleNameResolver(graph.modules);
+  const { resolveMany } = useModuleNameResolver(graph.modules);
 
   const entry = quest ? transitions.get(quest.tag) : undefined;
   const loadedTransitions: TransitionNode[] | null =
@@ -107,7 +107,7 @@ export function QuestDetail({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <span className="t-bold" style={{ color: T.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {t('gameState.quests.detail.entries')}
-            <Tooltip content={t('gameState.quests.edit.orderExplanation')} placement="top">
+            <Tooltip content={t('gameState.quests.edit.orderExplanation')} placement="top" targetProps={{ style: { display: 'inline-flex' } }}>
               <Icon icon="info-sign" size={12} style={{ color: T.textMuted }} />
             </Tooltip>
           </span>
@@ -120,7 +120,6 @@ export function QuestDetail({
             const isCurrent = state === quest.live_state;
             const isPending = state === quest.pending_state;
             const routes = (loadedTransitions ?? []).filter(tr => tr.new_state === state);
-            const setBy = [...new Set(routes.map(tr => tr.module))];
             return <div key={state} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', borderTop: `1px solid ${T.borderLight}`, padding: '8px 0' }}>
               <span className="t-mono" style={{ color: T.textMuted, minWidth: 28, textAlign: 'right', paddingTop: 1 }}>{state}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -130,14 +129,6 @@ export function QuestDetail({
                 {isCurrent && <Tag minimal intent="primary" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.current')}</Tag>}
                 {isPending && <Tag minimal intent="warning" style={{ marginLeft: 6 }}>{t('gameState.quests.edit.pending')}</Tag>}
                 {definition?.final && <Tag minimal intent="success" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.endsQuest')}</Tag>}
-                {!technical && loadedTransitions && (
-                  <div style={{ color: T.textMuted, marginTop: 2 }}>
-                    {setBy.length === 0 ? t('gameState.quests.detail.noTransitionsLiveOnly') : <>
-                      {t('gameState.quests.detail.setBy')}{' '}
-                      {setBy.map(resolveModule).join(', ')}
-                    </>}
-                  </div>
-                )}
                 {technical && <div style={{ marginTop: 6 }}>
                   <TransitionsList quest={quest} transitions={routes} tlk={tlk} modules={graph.modules} />
                 </div>}
