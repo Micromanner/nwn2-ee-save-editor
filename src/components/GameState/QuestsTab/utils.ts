@@ -30,3 +30,16 @@ export function questStates(quest: QuestSummary, transitions: TransitionNode[]) 
     ...(quest.live_state == null ? [] : [quest.live_state]), ...(quest.pending_state == null ? [] : [quest.pending_state])])]
     .sort((a, b) => a - b);
 }
+
+export type QuestStatus = 'untouched' | 'active' | 'complete';
+
+export function questStatus(q: QuestSummary): QuestStatus {
+  if (q.live_state == null) return 'untouched';
+  return q.category.entries.find(e => e.id === q.live_state)?.final ? 'complete' : 'active';
+}
+
+/** Journal names carry a toolset prefix like `{1000}` or `{CUT!}` that players never see in-game. */
+export function questDisplayName(q: QuestSummary) {
+  return (q.category.name || '').replace(/^\{[^}]*\}\s*/, '') || q.tag;
+}
+

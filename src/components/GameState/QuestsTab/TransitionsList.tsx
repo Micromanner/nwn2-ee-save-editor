@@ -5,6 +5,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import type { AggregatedModule, ConvoFunctor, QuestSummary, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
+import { describeScript, formatRawCall, isJournalConnector } from './scriptDescriptions';
 
 function formatParam(param: unknown): string {
   if (param == null) return 'null';
@@ -59,6 +60,25 @@ function FunctorList({ title, items }: { title: string; items: ConvoFunctor[] })
           {items.map((f, i) => <FunctorRow key={i} f={f} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+export function PlainList({ title, items }: { title: string; items: ConvoFunctor[] }) {
+  const t = useTranslations();
+  const shown = items.filter(f => !isJournalConnector(f));
+  if (shown.length === 0) return null;
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div className="t-semibold" style={{ color: T.textMuted }}>{title}</div>
+      <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>
+        {shown.map((f, i) => {
+          const text = describeScript(f, t);
+          return <li key={i} style={{ color: T.text }}>
+            {text ?? <span className="t-mono" style={{ color: T.textMuted }}>{formatRawCall(f)}</span>}
+          </li>;
+        })}
+      </ul>
     </div>
   );
 }
@@ -208,7 +228,7 @@ export function TransitionsList({
             {g.entryText && (
               <>
                 <span style={{ color: T.text }}>&mdash; {g.entryText.text}</span>
-                {g.entryText.final && <span style={{ color: T.positive }}>({t('gameState.quests.detail.final')})</span>}
+                {g.entryText.final && <span style={{ color: T.positive }}>({t('gameState.quests.detail.endsQuest')})</span>}
               </>
             )}
           </div>

@@ -144,6 +144,17 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
   background: #8a4525;
   color: #fff;
 }
+.bp-app .bp6-button.bp6-intent-primary.bp6-disabled,
+.bp-app .bp6-button.bp6-intent-primary.bp6-disabled:hover {
+  background: transparent;
+  color: rgba(160, 82, 45, 0.45);
+  cursor: not-allowed;
+}
+.bp-app .bp6-button.bp6-intent-primary.bp6-disabled:not(.bp6-minimal):not(.bp6-outlined),
+.bp-app .bp6-button.bp6-intent-primary.bp6-disabled:not(.bp6-minimal):not(.bp6-outlined):hover {
+  background: rgba(160, 82, 45, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+}
 
 .bp-app ul {
   list-style-type: disc;

@@ -7,9 +7,11 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
-import { conflictingEdits } from './utils';
+import { conflictingEdits, questDisplayName } from './utils';
+import { describeScript, formatRawCall } from './scriptDescriptions';
 import type { AggregatedModule, PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
+import { PlainList } from './TransitionsList';
 
 export function QuestEditDialog({ quest, target, transitions, pending, tlk, modules, onClose, onApplied }: {
   quest: QuestSummary; target: number; transitions: TransitionNode[]; pending: PendingQuestEdit[];
@@ -60,11 +62,15 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, modu
       </Button>
     </>}>
     <div style={{ overflowY: 'auto', minHeight: 0 }}>
-      <p><strong>{quest.category.name || quest.tag}</strong> — {t('gameState.quests.edit.saved')}: {display(preview?.saved_state)} → {target}</p>
+      <p><strong>{questDisplayName(quest)}</strong> — {t('gameState.quests.edit.saved')}: {display(preview?.saved_state)} → {target}</p>
       <p>{quest.category.entries.find(e => e.id === target)?.text}</p>
       <DropdownSelect label={t('gameState.quests.edit.route')} value={choices.find(c => c.id === route)?.label ?? ''}
         items={choices} onChange={setRoute} disabled={busy} />
-      {route >= 0 && <p>{display(tlk.resolve(transitions[route]?.text_strref ?? null))}</p>}
+      {route >= 0 && transitions[route] && <div style={{ marginBottom: 8 }}>
+        <p style={{ fontStyle: 'italic' }}>{display(tlk.resolve(transitions[route].text_strref))}</p>
+        <PlainList title={t('gameState.quests.detail.alsoHappens')} items={[...transitions[route].actions, ...transitions[route].co_authored_locals]} />
+        <PlainList title={t('gameState.quests.detail.requires')} items={transitions[route].gating_conditions} />
+      </div>}
       {loading && <Spinner size={24} />}
       {failed && <Button onClick={() => setRefresh(r => r + 1)}>{t('gameState.quests.edit.refresh')}</Button>}
       {preview && <>
@@ -85,7 +91,7 @@ export function QuestEditDialog({ quest, target, transitions, pending, tlk, modu
         {preview.effects.length > 0 && <>
           <h4>{t('gameState.quests.edit.effects')}</h4>
           {preview.effects.map((effect, i) => <div key={i} style={{ marginBottom: 8 }}>
-            <code>{effect.action.script}({effect.action.params.map(p => JSON.stringify(p)).join(', ')})</code>
+            <div>{describeScript(effect.action, t) ?? <code>{formatRawCall(effect.action)}</code>}</div>
             <div>{t(`gameState.quests.edit.reason.${effect.reason}`)}</div>
           </div>)}
         </>}

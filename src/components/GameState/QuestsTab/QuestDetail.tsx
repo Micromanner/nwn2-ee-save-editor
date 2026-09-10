@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, InputGroup, NonIdealState } from '@blueprintjs/core';
+import { Button, Callout, Icon, NonIdealState, Switch, Tag, Tooltip } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
 import { GiScrollQuill } from 'react-icons/gi';
 import { T } from '../../theme';
@@ -9,11 +9,10 @@ import { useTlkResolver } from '@/hooks/useTlkResolver';
 import type { QuestTransitionsResolver } from '@/hooks/useQuestTransitions';
 import type { PendingQuestEdit, QuestSummary, SaveGraph, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
-import { effectiveSource, questStates } from './utils';
+import { effectiveSource, questDisplayName, questStates, questStatus } from './utils';
 import { TransitionsList } from './TransitionsList';
 import { LiveOverlay } from './LiveOverlay';
 import { QuestEditDialog } from './QuestEditDialog';
-import { display } from '@/utils/dataHelpers';
 
 export function QuestDetail({
   quest, graph, transitions, pending, onApplied,
@@ -26,9 +25,9 @@ export function QuestDetail({
 }) {
   const t = useTranslations();
   const [target, setTarget] = useState<number | null>(null);
-  const [numeric, setNumeric] = useState('');
+  const [technical, setTechnical] = useState(false);
   const tlk = useTlkResolver();
-  const { resolveMany } = useModuleNameResolver(graph.modules);
+  const { resolve: resolveModule, resolveMany } = useModuleNameResolver(graph.modules);
 
   const entry = quest ? transitions.get(quest.tag) : undefined;
   const loadedTransitions: TransitionNode[] | null =
@@ -61,88 +60,101 @@ export function QuestDetail({
     );
   }
 
-  const matchingEntry = quest.live_state != null
+  const status = questStatus(quest);
+  const currentEntry = quest.live_state != null
     ? quest.category.entries.find(e => e.id === quest.live_state)
     : null;
   const source = effectiveSource(quest);
-
-  const resolvedDefinedIn = quest.defined_in.length === 0 ? '-' : resolveMany(quest.defined_in);
+  const states = questStates(quest, loadedTransitions ?? []);
+  const entryLabel = (state: number) => t('gameState.quests.detail.entry', { n: state });
+  const statusColor = status === 'complete' ? T.positive : status === 'active' ? T.text : T.textMuted;
 
   return (
     <div>
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-        <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
-          {t('gameState.quests.detail.header')}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', columnGap: 16, rowGap: 4, alignItems: 'baseline' }}>
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.tag')}</span>
-          <span className="t-semibold t-mono" style={{ color: T.text }}>{quest.tag}</span>
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.name')}</span>
-          <span className="t-semibold" style={{ color: T.text }}>{quest.category.name || quest.tag}</span>
+        <div className="t-bold" style={{ color: T.text, marginBottom: 8 }}>{questDisplayName(quest)}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 4, alignItems: 'baseline' }}>
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.status')}</span>
+          <span className="t-semibold" style={{ color: statusColor }}>{t(`gameState.quests.status.${status}`)}</span>
 
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.priority')}</span>
-          <span className="t-semibold" style={{ color: T.text }}>{quest.category.priority || '-'}</span>
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.xp')}</span>
+          {quest.live_state != null && <>
+            <span style={{ color: T.textMuted }}>{t('gameState.quests.list.currentEntry')}</span>
+            <span style={{ color: T.text }}>
+              <span className="t-semibold">{entryLabel(quest.live_state)}</span>
+              {currentEntry && <>: {currentEntry.text}</>}
+            </span>
+          </>}
+
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.detail.xpReward')}</span>
           <span className="t-semibold" style={{ color: T.text }}>{String(quest.category.xp || 0)}</span>
 
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.source')}</span>
-          <span className="t-semibold" style={{ color: source !== 'normal' ? T.negative : T.text }}>
-            {t(`gameState.quests.sourceBadge.${source}`)}
-          </span>
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.definedIn')}</span>
-          <span className="t-semibold" title={quest.defined_in.join(', ')} style={{ color: T.text }}>{resolvedDefinedIn}</span>
-
-          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.live')}</span>
-          <span className="t-semibold" style={{ gridColumn: '2 / -1', color: T.text }}>
-            {quest.live_state == null ? (
-              <span style={{ color: T.textMuted }}>{t('gameState.quests.detail.notStarted')}</span>
-            ) : (
-              <>
-                <span className="t-mono">{quest.live_state}</span>
-                {matchingEntry && <> &mdash; {matchingEntry.text}</>}
-                {matchingEntry?.final && <span style={{ color: T.positive, marginLeft: 6 }}>({t('gameState.quests.detail.final')})</span>}
-              </>
-            )}
-          </span>
+          <span style={{ color: T.textMuted }}>{t('gameState.quests.list.module')}</span>
+          <span className="t-semibold" style={{ color: T.text }}>{quest.defined_in.length === 0 ? '-' : resolveMany(quest.defined_in)}</span>
         </div>
+        {technical && <div className="t-mono" style={{ color: T.textMuted, marginTop: 8 }}>
+          {quest.tag}
+          {quest.defined_in.map(id => <span key={id}> &middot; {id}</span>)}
+          {source !== 'normal' && <> &middot; <span style={{ color: T.negative }}>{t(`gameState.quests.sourceBadge.${source}`)}</span></>}
+        </div>}
       </div>
 
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-        <p>{t('gameState.quests.edit.pending')}: {display(quest.pending_state)}</p>
-        <p>{t('gameState.quests.edit.orderExplanation')}</p>
+        {quest.pending_state !== undefined && (
+          <Callout intent="primary" style={{ marginBottom: 12 }}>
+            {t('gameState.quests.detail.pendingBanner', { entry: entryLabel(quest.pending_state) })}
+          </Callout>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <span className="t-bold" style={{ color: T.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {t('gameState.quests.detail.entries')}
+            <Tooltip content={t('gameState.quests.edit.orderExplanation')} placement="top">
+              <Icon icon="info-sign" size={12} style={{ color: T.textMuted }} />
+            </Tooltip>
+          </span>
+          <Switch checked={technical} onChange={e => setTechnical(e.currentTarget.checked)} label={t('gameState.quests.detail.showScriptDetails')} style={{ margin: 0, whiteSpace: 'nowrap' }} />
+        </div>
         {!entry || entry.state === 'pending' ? <LoadingState variant="inline" /> : entry.state === 'error' ?
           <p>{t('gameState.quests.detail.transitionsFailed')}: {entry.message}</p> : null}
-        {questStates(quest, loadedTransitions ?? []).map(state => {
+        {states.map(state => {
             const definition = quest.category.entries.find(e => e.id === state);
-            return <details key={state} style={{ borderTop: `1px solid ${T.borderLight}`, padding: '8px 0' }}>
-              <summary style={{ cursor: 'pointer' }}>
-                <strong>{state}</strong> &mdash; {definition?.text || t('gameState.quests.edit.undefinedState')}
-                {definition?.final && <span> ({t('gameState.quests.detail.final')})</span>}
-                {state === quest.live_state && <span> ({t('gameState.quests.edit.saved')})</span>}
-                {state === quest.pending_state && <span> ({t('gameState.quests.edit.pending')})</span>}
-              </summary>
-              <Button small intent="primary" onClick={() => setTarget(state)} style={{ margin: '8px 0' }}>
-                {t('gameState.quests.edit.setState')}
+            const isCurrent = state === quest.live_state;
+            const isPending = state === quest.pending_state;
+            const routes = (loadedTransitions ?? []).filter(tr => tr.new_state === state);
+            const setBy = [...new Set(routes.map(tr => tr.module))];
+            return <div key={state} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', borderTop: `1px solid ${T.borderLight}`, padding: '8px 0' }}>
+              <span className="t-mono" style={{ color: T.textMuted, minWidth: 28, textAlign: 'right', paddingTop: 1 }}>{state}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ color: definition ? T.text : T.textMuted, fontStyle: definition ? 'normal' : 'italic' }}>
+                  {definition?.text || t('gameState.quests.edit.undefinedState')}
+                </span>
+                {isCurrent && <Tag minimal intent="primary" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.current')}</Tag>}
+                {isPending && <Tag minimal intent="warning" style={{ marginLeft: 6 }}>{t('gameState.quests.edit.pending')}</Tag>}
+                {definition?.final && <Tag minimal intent="success" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.endsQuest')}</Tag>}
+                {!technical && loadedTransitions && (
+                  <div style={{ color: T.textMuted, marginTop: 2 }}>
+                    {setBy.length === 0 ? t('gameState.quests.detail.noTransitionsLiveOnly') : <>
+                      {t('gameState.quests.detail.setBy')}{' '}
+                      {setBy.map(resolveModule).join(', ')}
+                    </>}
+                  </div>
+                )}
+                {technical && <div style={{ marginTop: 6 }}>
+                  <TransitionsList quest={quest} transitions={routes} tlk={tlk} modules={graph.modules} />
+                </div>}
+              </div>
+              <Button small intent="primary" disabled={isCurrent && !isPending} onClick={() => setTarget(state)} style={{ flexShrink: 0 }}>
+                {t('gameState.quests.edit.jump')}
               </Button>
-              <TransitionsList quest={quest} transitions={(loadedTransitions ?? []).filter(tr => tr.new_state === state)} tlk={tlk} modules={graph.modules} />
-            </details>;
+            </div>;
           })}
-        <details style={{ marginTop: 12 }}>
-          <summary>{t('gameState.quests.edit.advanced')}</summary>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <InputGroup type="number" min={0} max={4294967295} step={1} value={numeric} onChange={e => setNumeric(e.target.value)} aria-label={t('gameState.quests.edit.numericState')} />
-            <Button disabled={!/^\d+$/.test(numeric) || !Number.isSafeInteger(Number(numeric)) || Number(numeric) > 4294967295}
-              onClick={() => setTarget(Number(numeric))}>{t('gameState.quests.edit.setState')}</Button>
-          </div>
-        </details>
       </div>
 
-      <div style={{ padding: '12px 16px' }}>
+      {technical && <div style={{ padding: '12px 16px' }}>
         <div className="t-bold" style={{ color: T.textMuted, marginBottom: 8 }}>
-          {t('gameState.quests.detail.liveOverlay')}
+          {t('gameState.quests.detail.relatedVariables')}
         </div>
         <LiveOverlay tag={quest.tag} pending={pending} modules={graph.modules} />
-      </div>
+      </div>}
       {target !== null && <QuestEditDialog key={`${quest.tag}:${target}`} quest={quest} target={target} modules={graph.modules}
         transitions={loadedTransitions ?? []} pending={pending} tlk={tlk} onClose={() => setTarget(null)} onApplied={onApplied} />}
     </div>

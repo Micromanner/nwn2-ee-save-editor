@@ -4,22 +4,16 @@ import { T } from '../../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { AggregatedModule, QuestSummary } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
-import { effectiveSource, selectedRowStyle, type QuestSource } from './utils';
+import { questDisplayName, questStatus, selectedRowStyle, type QuestStatus } from './utils';
 
-type StatusFilter = 'all' | 'active' | 'complete' | 'untouched';
-type SourceFilter = 'all' | QuestSource;
-type SortKey = 'name' | 'live';
+type StatusFilter = 'all' | QuestStatus;
+type SortKey = 'name' | 'status';
 
-function statusOf(q: QuestSummary): Exclude<StatusFilter, 'all'> {
-  if (q.live_state == null) return 'untouched';
-  const matching = q.category.entries.find(e => e.id === q.live_state);
-  if (matching?.final) return 'complete';
-  return 'active';
-}
+const STATUS_ORDER: Record<QuestStatus, number> = { active: 0, complete: 1, untouched: 2 };
 
 function EmptyRow({ message }: { message: string }) {
   return (
-    <tr><td colSpan={8} style={{ textAlign: 'center', color: T.textMuted, padding: 20 }}>{message}</td></tr>
+    <tr><td colSpan={5} style={{ textAlign: 'center', color: T.textMuted, padding: 20 }}>{message}</td></tr>
   );
 }
 
@@ -34,34 +28,29 @@ export function QuestList({
   const t = useTranslations();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [moduleFilter, setModuleFilter] = useState<string>('all');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  const { resolveMany } = useModuleNameResolver(modules);
+  const { resolve, resolveMany } = useModuleNameResolver(modules);
 
   const rows = useMemo(() => {
     const needle = search.toLowerCase();
     const filtered = quests.filter(q => {
-      if (needle && !q.tag.toLowerCase().includes(needle) && !q.category.name.toLowerCase().includes(needle)) {
+      if (needle && !q.tag.toLowerCase().includes(needle) && !questDisplayName(q).toLowerCase().includes(needle)) {
         return false;
       }
-      if (statusFilter !== 'all' && statusOf(q) !== statusFilter) return false;
-      if (sourceFilter !== 'all' && effectiveSource(q) !== sourceFilter) return false;
+      if (statusFilter !== 'all' && questStatus(q) !== statusFilter) return false;
+      if (moduleFilter !== 'all' && !q.defined_in.includes(moduleFilter)) return false;
       return true;
     });
     return filtered.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'name') {
-        cmp = (a.category.name || a.tag).localeCompare(b.category.name || b.tag);
-      } else {
-        const av = a.live_state ?? -1;
-        const bv = b.live_state ?? -1;
-        cmp = av - bv;
-      }
+      const cmp = sortKey === 'name'
+        ? questDisplayName(a).localeCompare(questDisplayName(b))
+        : STATUS_ORDER[questStatus(a)] - STATUS_ORDER[questStatus(b)];
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [quests, search, statusFilter, sourceFilter, sortKey, sortDir]);
+  }, [quests, search, statusFilter, moduleFilter, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -79,16 +68,11 @@ export function QuestList({
 
   const statusOptions: { value: StatusFilter; labelKey: string }[] = [
     { value: 'all', labelKey: 'gameState.quests.list.statusAll' },
-    { value: 'active', labelKey: 'gameState.quests.list.statusActive' },
-    { value: 'complete', labelKey: 'gameState.quests.list.statusComplete' },
-    { value: 'untouched', labelKey: 'gameState.quests.list.statusUntouched' },
+    { value: 'active', labelKey: 'gameState.quests.status.active' },
+    { value: 'complete', labelKey: 'gameState.quests.status.complete' },
+    { value: 'untouched', labelKey: 'gameState.quests.status.untouched' },
   ];
-  const sourceOptions: { value: SourceFilter; labelKey: string }[] = [
-    { value: 'all', labelKey: 'gameState.quests.list.sourceAll' },
-    { value: 'normal', labelKey: 'gameState.quests.list.sourceNormal' },
-    { value: 'live_only', labelKey: 'gameState.quests.list.sourceLiveOnly' },
-    { value: 'transition_only', labelKey: 'gameState.quests.list.sourceTransitionOnly' },
-  ];
+  const moduleOptions = modules.filter(m => m.journal_category_tags.length > 0);
 
   const statusMenu = (
     <Menu>
@@ -103,50 +87,42 @@ export function QuestList({
     </Menu>
   );
 
-  const sourceMenu = (
+  const moduleMenu = (
     <Menu>
-      {sourceOptions.map(o => (
-        <MenuItem
-          key={o.value}
-          text={t(o.labelKey)}
-          active={sourceFilter === o.value}
-          onClick={() => setSourceFilter(o.value)}
-        />
+      <MenuItem text={t('gameState.quests.list.moduleAll')} active={moduleFilter === 'all'} onClick={() => setModuleFilter('all')} />
+      {moduleOptions.map(m => (
+        <MenuItem key={m.name} text={resolve(m.name)} active={moduleFilter === m.name} onClick={() => setModuleFilter(m.name)} />
       ))}
     </Menu>
   );
 
   const statusLabel = t(statusOptions.find(o => o.value === statusFilter)!.labelKey);
-  const sourceLabel = t(sourceOptions.find(o => o.value === sourceFilter)!.labelKey);
+  const moduleLabel = moduleFilter === 'all' ? t('gameState.quests.list.moduleAll') : resolve(moduleFilter);
 
   const renderBody = () => {
     if (quests.length === 0) return <EmptyRow message={t('gameState.quests.list.emptyAll')} />;
     if (rows.length === 0) return <EmptyRow message={t('gameState.quests.list.emptyFiltered')} />;
     return rows.map(q => {
       const isSelected = q.tag === selectedTag;
-      const source = effectiveSource(q);
-      const matchingEntry = q.live_state != null ? q.category.entries.find(e => e.id === q.live_state) : null;
+      const status = questStatus(q);
+      const currentEntry = q.live_state != null ? q.category.entries.find(e => e.id === q.live_state) : null;
+      const statusColor = status === 'complete' ? T.positive : status === 'active' ? T.text : T.textMuted;
       return (
         <tr
           key={q.tag}
           onClick={() => onSelect(q.tag)}
           style={{ cursor: 'pointer', ...selectedRowStyle(isSelected, T.accent) }}
         >
-          <td className="t-mono" style={{ color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.tag}</td>
-          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.category.name || q.tag}</td>
-          <td style={{ color: T.textMuted }}>{q.category.priority || '-'}</td>
+          <td style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{questDisplayName(q)}</td>
+          <td style={{ color: statusColor }}>
+            {t(`gameState.quests.status.${status}`)}
+            {q.pending_state !== undefined && <span style={{ color: T.accent }}> *</span>}
+          </td>
+          <td style={{ color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={currentEntry?.text}>
+            {currentEntry?.text ?? (q.live_state != null ? t('gameState.quests.edit.undefinedState') : '')}
+          </td>
           <td style={{ textAlign: 'right' }}>{q.category.xp || 0}</td>
-          <td className="t-mono" style={{ color: T.text }}>
-            {q.live_state == null && <span style={{ color: T.textMuted }}>-</span>}
-            {q.live_state != null && q.live_state}
-            {q.pending_state !== undefined && <span> / {t('gameState.quests.edit.pending')}: {q.pending_state}</span>}
-            {matchingEntry?.final && <span style={{ color: T.positive, marginLeft: 4 }}>({t('gameState.quests.detail.final')})</span>}
-          </td>
-          <td style={{ color: source !== 'normal' ? T.negative : T.textMuted }}>
-            {source !== 'normal' ? t(`gameState.quests.sourceBadge.${source}`) : ''}
-          </td>
-          <td style={{ textAlign: 'right' }}>{q.transition_count}</td>
-          <td title={q.defined_in.join(', ')} style={{ color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <td title={resolveMany(q.defined_in)} style={{ color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {q.defined_in.length === 0 ? '-' : resolveMany(q.defined_in)}
           </td>
         </tr>
@@ -168,36 +144,30 @@ export function QuestList({
         <Popover content={statusMenu} placement="bottom-start" minimal>
           <Button minimal rightIcon="caret-down" text={statusLabel} />
         </Popover>
-        <Popover content={sourceMenu} placement="bottom-start" minimal>
-          <Button minimal rightIcon="caret-down" text={sourceLabel} />
+        <Popover content={moduleMenu} placement="bottom-start" minimal>
+          <Button minimal rightIcon="caret-down" text={moduleLabel} />
         </Popover>
       </div>
 
       <HTMLTable compact striped style={{ width: '100%', tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: 120 }} />
+          <col style={{ width: 200 }} />
+          <col style={{ width: 96 }} />
           <col />
-          <col style={{ width: 70 }} />
           <col style={{ width: 50 }} />
-          <col style={{ width: 60 }} />
-          <col style={{ width: 80 }} />
-          <col style={{ width: 48 }} />
           <col style={{ width: 120 }} />
         </colgroup>
         <thead>
           <tr>
-            <th>{t('gameState.quests.list.tag')}</th>
             <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>
               {t('gameState.quests.list.name')}{sortIndicator('name')}
             </th>
-            <th>{t('gameState.quests.list.priority')}</th>
-            <th>{t('gameState.quests.list.xp')}</th>
-            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('live')}>
-              {t('gameState.quests.list.live')}{sortIndicator('live')}
+            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>
+              {t('gameState.quests.list.status')}{sortIndicator('status')}
             </th>
-            <th>{t('gameState.quests.list.source')}</th>
-            <th>{t('gameState.quests.list.transitions')}</th>
-            <th>{t('gameState.quests.list.definedIn')}</th>
+            <th>{t('gameState.quests.list.currentEntry')}</th>
+            <th>{t('gameState.quests.list.xp')}</th>
+            <th>{t('gameState.quests.list.module')}</th>
           </tr>
         </thead>
         <tbody>{renderBody()}</tbody>

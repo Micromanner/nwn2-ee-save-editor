@@ -12,6 +12,7 @@ import { QuestList } from './QuestList';
 import { QuestDetail } from './QuestDetail';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { T } from '../../theme';
+import { questDisplayName } from './utils';
 
 export function QuestsTab() {
   const t = useTranslations();
@@ -67,6 +68,7 @@ export function QuestsTab() {
     <p>{progress?.message}</p>
   </div>;
   const quests = graph.quests.map(q => ({ ...q, pending_state: pending.find(p => p.tag === q.tag)?.target }));
+  const questNames = new Map(quests.map(q => [q.tag, questDisplayName(q)]));
   const effectiveTag = selectedTag ?? quests[0]?.tag ?? null;
   const selectedQuest = quests.find(q => q.tag === effectiveTag) ?? null;
 
@@ -77,7 +79,7 @@ export function QuestsTab() {
       <strong>{t('gameState.quests.edit.pendingTitle')}</strong>
       <p>{t('gameState.quests.edit.stagingExplanation')}</p>
       {pending.map(edit => <details key={edit.tag} style={{ marginBottom: 8 }}>
-        <summary>{edit.tag}: {display(edit.saved_state)} → {edit.target}</summary>
+        <summary>{questNames.get(edit.tag) ?? edit.tag}: {display(edit.saved_state)} → {edit.target}</summary>
         {edit.source && <p>{resolveModule(edit.source.module)} / {edit.source.dlg} / {edit.source.node}</p>}
         {edit.writes.map((w, i) => <p key={i}>{w.key.module ? resolveModule(w.key.module) : t('gameState.quests.edit.campaign')} / {w.key.name} ({w.key.value_type}): {display(w.saved)} → {display(w.after)}</p>)}
         <Button small disabled={busy} onClick={() => void discard(edit.tag)}>{t('gameState.quests.edit.discard')}</Button>
