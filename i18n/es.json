@@ -502,8 +502,8 @@
       "campaignContext": {
         "campaign": "Campaña",
         "currentModule": "Módulo Actual",
-        "orphans": "Notas de Agregación",
-        "noCampaign": "Sin campaña resuelta — vista de un solo módulo"
+        "orphans": "Problemas al cargar",
+        "noCampaign": "No se encontró campaña, se muestra solo este módulo"
       },
       "list": {
         "name": "Nombre",
@@ -515,38 +515,38 @@
       },
       "detail": {
         "noText": "(sin texto)",
-        "noTransitionsLiveOnly": "Sin transiciones — etiqueta sólo activa",
-        "loadingTransitions": "Cargando transiciones…",
-        "transitionsFailed": "Error al cargar transiciones",
+        "noTransitionsLiveOnly": "Ningún diálogo de esta campaña lleva a esta entrada",
+        "loadingTransitions": "Cargando líneas de diálogo…",
+        "transitionsFailed": "Error al cargar líneas de diálogo",
         "noEntries": "Sin entradas de diario declaradas",
         "entries": "Entradas de diario",
         "liveOverlay": "Capa activa",
-        "groupPrefix": "al estado",
-        "coGlobals": "Globales coescritas",
-        "coLocals": "Locales coescritas",
-        "gatingConditions": "Condiciones de bloqueo",
+        "groupPrefix": "Lleva a la entrada",
+        "coGlobals": "Variables de campaña que fija esta línea",
+        "coLocals": "Variables de módulo que fija esta línea",
+        "gatingConditions": "Condiciones para esta línea",
         "none": "Ninguna",
         "selectQuest": "Selecciona una misión a la izquierda para ver detalles",
-        "liveOverlayGlobals": "Globales",
-        "liveOverlayLocals": "Locales del módulo",
+        "liveOverlayGlobals": "Variables de campaña",
+        "liveOverlayLocals": "Variables de módulo",
         "unset": "(sin definir)",
         "expected": "esperado",
-        "showSources": "Mostrar {count} fuentes",
-        "hideSources": "Ocultar fuentes"
+        "showSources": "Mostrar las {count} líneas de diálogo",
+        "hideSources": "Ocultar líneas de diálogo"
       },
       "sourceBadge": {
         "normal": "normal",
-        "live_only": "sólo activa",
-        "transition_only": "sólo transición"
+        "live_only": "solo en la partida",
+        "transition_only": "solo en diálogo"
       },
       "orphanKind": {
-        "unresolved_campaign": "Campaña sin resolver",
-        "unresolved_module": "Módulo sin resolver",
-        "graph_failed": "Error en el grafo",
-        "journal_read_failed": "Error al leer diario",
+        "unresolved_campaign": "Campaña no encontrada",
+        "unresolved_module": "Módulo no encontrado",
+        "graph_failed": "No se pudo leer el módulo",
+        "journal_read_failed": "No se pudo leer el diario",
         "bridge_unavailable": "Puente del toolset no disponible"
       },
-      "failedToLoad": "Error al cargar grafo de misiones",
+      "failedToLoad": "Error al cargar misiones",
       "loadingTitle": "Cargando datos de misiones"
     },
     "companions": {

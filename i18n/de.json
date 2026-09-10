@@ -501,8 +501,8 @@
       "campaignContext": {
         "campaign": "Kampagne",
         "currentModule": "Aktuelles Modul",
-        "orphans": "Aggregations-Hinweise",
-        "noCampaign": "Keine Kampagne aufgelöst — nur Einzelmodul-Ansicht"
+        "orphans": "Probleme beim Laden",
+        "noCampaign": "Keine Kampagne gefunden, nur dieses Modul wird angezeigt"
       },
       "list": {
         "name": "Name",
@@ -514,38 +514,38 @@
       },
       "detail": {
         "noText": "(kein Text)",
-        "noTransitionsLiveOnly": "Keine Übergänge — nur aktiver Tag",
-        "loadingTransitions": "Übergänge werden geladen…",
-        "transitionsFailed": "Übergänge konnten nicht geladen werden",
+        "noTransitionsLiveOnly": "Kein Dialog in dieser Kampagne führt zu diesem Eintrag",
+        "loadingTransitions": "Dialogzeilen werden geladen…",
+        "transitionsFailed": "Dialogzeilen konnten nicht geladen werden",
         "noEntries": "Keine Tagebucheinträge deklariert",
         "entries": "Tagebucheinträge",
         "liveOverlay": "Live-Overlay",
-        "groupPrefix": "zu Status",
-        "coGlobals": "Mitwirkende Globale",
-        "coLocals": "Mitwirkende Lokale",
-        "gatingConditions": "Bedingungen",
+        "groupPrefix": "Führt zu Eintrag",
+        "coGlobals": "Auf dieser Zeile gesetzte Kampagnen-Flags",
+        "coLocals": "Auf dieser Zeile gesetzte Modul-Flags",
+        "gatingConditions": "Bedingungen für diese Zeile",
         "none": "Keine",
         "selectQuest": "Quest links auswählen, um Details anzuzeigen",
-        "liveOverlayGlobals": "Globale",
-        "liveOverlayLocals": "Modul-Lokale",
+        "liveOverlayGlobals": "Kampagnenvariablen",
+        "liveOverlayLocals": "Modulvariablen",
         "unset": "(nicht gesetzt)",
         "expected": "erwartet",
-        "showSources": "{count} Quellen anzeigen",
-        "hideSources": "Quellen ausblenden"
+        "showSources": "Alle {count} Dialogzeilen anzeigen",
+        "hideSources": "Dialogzeilen ausblenden"
       },
       "sourceBadge": {
         "normal": "normal",
-        "live_only": "nur aktiv",
-        "transition_only": "nur Übergang"
+        "live_only": "nur im Spielstand",
+        "transition_only": "nur im Dialog"
       },
       "orphanKind": {
-        "unresolved_campaign": "Kampagne nicht aufgelöst",
-        "unresolved_module": "Modul nicht aufgelöst",
-        "graph_failed": "Graph fehlgeschlagen",
-        "journal_read_failed": "Tagebuch-Lesefehler",
+        "unresolved_campaign": "Kampagne nicht gefunden",
+        "unresolved_module": "Modul nicht gefunden",
+        "graph_failed": "Modul konnte nicht gelesen werden",
+        "journal_read_failed": "Tagebuch konnte nicht gelesen werden",
         "bridge_unavailable": "Toolset-Bridge nicht verfügbar"
       },
-      "failedToLoad": "Quest-Graph konnte nicht geladen werden",
+      "failedToLoad": "Quests konnten nicht geladen werden",
       "loadingTitle": "Quest-Daten werden geladen"
     },
     "companions": {

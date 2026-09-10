@@ -134,12 +134,12 @@ export function QuestList({
     <div>
       <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.borderLight}`, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <InputGroup
-          small
           leftIcon="search"
           placeholder={t('gameState.quests.list.searchPlaceholder')}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: 140 }}
+          rightElement={search ? <Button icon="cross" minimal onClick={() => setSearch('')} /> : undefined}
+          style={{ width: 260 }}
         />
         <Popover content={statusMenu} placement="bottom-start" minimal>
           <Button minimal rightIcon="caret-down" text={statusLabel} />
