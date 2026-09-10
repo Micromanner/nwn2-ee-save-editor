@@ -7,7 +7,7 @@ import { useModuleNameResolver } from './useModuleNameResolver';
 import { questDisplayName, questStatus, selectedRowStyle, type QuestStatus } from './utils';
 
 type StatusFilter = 'all' | QuestStatus;
-type SortKey = 'name' | 'status';
+type SortKey = 'name' | 'status' | 'xp' | 'module';
 
 const STATUS_ORDER: Record<QuestStatus, number> = { active: 0, complete: 1, untouched: 2 };
 
@@ -44,13 +44,19 @@ export function QuestList({
       if (moduleFilter !== 'all' && !q.defined_in.includes(moduleFilter)) return false;
       return true;
     });
+    const compare = (a: QuestSummary, b: QuestSummary): number => {
+      switch (sortKey) {
+        case 'name': return questDisplayName(a).localeCompare(questDisplayName(b));
+        case 'status': return STATUS_ORDER[questStatus(a)] - STATUS_ORDER[questStatus(b)];
+        case 'xp': return (a.category.xp || 0) - (b.category.xp || 0);
+        case 'module': return resolveMany(a.defined_in).localeCompare(resolveMany(b.defined_in));
+      }
+    };
     return filtered.sort((a, b) => {
-      const cmp = sortKey === 'name'
-        ? questDisplayName(a).localeCompare(questDisplayName(b))
-        : STATUS_ORDER[questStatus(a)] - STATUS_ORDER[questStatus(b)];
+      const cmp = compare(a, b) || questDisplayName(a).localeCompare(questDisplayName(b));
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [quests, search, statusFilter, moduleFilter, sortKey, sortDir]);
+  }, [quests, search, statusFilter, moduleFilter, sortKey, sortDir, resolveMany]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -166,8 +172,12 @@ export function QuestList({
               {t('gameState.quests.list.status')}{sortIndicator('status')}
             </th>
             <th>{t('gameState.quests.list.currentEntry')}</th>
-            <th>{t('gameState.quests.list.xp')}</th>
-            <th>{t('gameState.quests.list.module')}</th>
+            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('xp')}>
+              {t('gameState.quests.list.xp')}{sortIndicator('xp')}
+            </th>
+            <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('module')}>
+              {t('gameState.quests.list.module')}{sortIndicator('module')}
+            </th>
           </tr>
         </thead>
         <tbody>{renderBody()}</tbody>
