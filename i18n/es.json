@@ -280,7 +280,16 @@
     "qty": "Cant.",
     "editor": {
       "name": "Nombre",
-      "description": "Descripción"
+      "description": "Descripción",
+      "bold": "Negrita",
+      "italic": "Cursiva",
+      "color": "Color",
+      "apply": "Aplicar",
+      "showTags": "Mostrar etiquetas",
+      "preview": "Vista previa",
+      "rawOnly": "Este texto usa marcado que el editor visual cambiaría, por lo que se muestra como etiquetas.",
+      "unclosedTag": "La etiqueta {tag} nunca se cierra.",
+      "unopenedTag": "Una etiqueta de cierre {tag} no tiene etiqueta de apertura."
     },
     "addItem": "Añadir Objeto",
     "createNewBaseType": "Crear Nuevo",

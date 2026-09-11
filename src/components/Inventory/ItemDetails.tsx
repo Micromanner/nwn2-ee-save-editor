@@ -7,7 +7,7 @@ import { T } from '../theme';
 import { fmtNum } from '../shared';
 import type { FullEquippedItem, FullInventoryItem } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
-import { nwn2ToHtml } from '@/utils/nwn2Markup';
+import { nwn2ToHtml, renderNwn2Markup } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
 
 export type AnyItem =
@@ -80,7 +80,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
               />
             )}
             <div>
-            <H4 style={{ margin: 0, color: T.text }}>{name}</H4>
+            <H4 style={{ margin: 0, color: T.text, overflowWrap: 'anywhere' }}>{renderNwn2Markup(name)}</H4>
             <span style={{ color: T.textMuted }}>
               {equipped ? `${item.slot} \u00b7 ${baseItemName}` : baseItemName}
             </span>
@@ -198,7 +198,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
       {description && (
         <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '10px 16px' }}>
           <div className="t-bold" style={{ color: T.accent, marginBottom: 8 }}>{t('inventory.description')}</div>
-          <div className="t-body" style={{ margin: 0, color: T.textMuted }} dangerouslySetInnerHTML={{ __html: nwn2ToHtml(description) }} />
+          <div className="t-body" style={{ margin: 0, color: T.textMuted, overflowWrap: 'anywhere' }} dangerouslySetInnerHTML={{ __html: nwn2ToHtml(description) }} />
         </div>
       )}
 
@@ -222,7 +222,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
         confirmButtonText={t('inventory.delete')}
         cancelButtonText={t('actions.cancel')}
       >
-        <p><strong>{name}</strong></p>
+        <p><strong>{renderNwn2Markup(name)}</strong></p>
         <p>{isPlot ? t('inventory.deleteWarningPlot') : t('inventory.deleteWarningRegular')}</p>
       </Alert>
 
@@ -240,7 +240,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
         confirmButtonText={pendingPlotAction === 'transform' ? t('inventory.transformItem') : t('common.edit')}
         cancelButtonText={t('actions.cancel')}
       >
-        <p><strong>{name}</strong></p>
+        <p><strong>{renderNwn2Markup(name)}</strong></p>
         <p>{t('inventory.editWarningPlot')}</p>
       </Alert>
     </div>

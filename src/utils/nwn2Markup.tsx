@@ -116,7 +116,13 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function nwn2ToHtml(text: string): string {
+
+export const RAW_TAG_CLASS = 'nwn2-raw-tag';
+
+// Display: known tags become HTML, everything else is escaped text.
+// Editable: unknown tags become non-editable chips carrying the literal so the
+// contentEditable hands them back verbatim.
+export function nwn2ToHtml(text: string, editable = false): string {
   if (!text) return '';
   if (!text.includes('<') && !text.includes('\n')) return escapeHtml(text);
 
@@ -124,6 +130,7 @@ export function nwn2ToHtml(text: string): string {
   let cursor = 0;
   const openTagRe = /^<(b|i|color(?:=([^>]*))?)>/i;
   const closeTagRe = /^<\/(b|i|color)>/i;
+  const rawTagRe = /^<[^<>\n]*>/;
 
   while (cursor < text.length) {
     if (text[cursor] === '\n') {
@@ -154,6 +161,13 @@ export function nwn2ToHtml(text: string): string {
         cursor += closeMatch[0].length;
         continue;
       }
+      const rawMatch = editable ? rawTagRe.exec(remaining) : null;
+      if (rawMatch) {
+        const literal = escapeHtml(rawMatch[0]);
+        result += `<span class="${RAW_TAG_CLASS}" contenteditable="false" data-nwn2-raw="${literal}">${literal}</span>`;
+        cursor += rawMatch[0].length;
+        continue;
+      }
       result += '&lt;';
       cursor++;
       continue;
@@ -166,7 +180,7 @@ export function nwn2ToHtml(text: string): string {
   return result;
 }
 
-function cssColorToNwn2Name(cssColor: string): string {
+function cssColorToNwn2(cssColor: string): string {
   let hex = cssColor.trim().toLowerCase();
   const rgbMatch = hex.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
   if (rgbMatch) {
@@ -185,6 +199,29 @@ function cssColorToNwn2Name(cssColor: string): string {
   return hex.toUpperCase();
 }
 
+// The literal to write into <color=...>. The original literal is kept as long
+// as the span still shows that color; when the browser recolored the span in
+// place (foreColor on an exactly-selected span) the new style wins.
+function colorLiteralOf(el: HTMLElement): string | null {
+  const literal = el.getAttribute('data-nwn2-color');
+  const styleColor = el.style.color;
+  if (!literal) return styleColor ? cssColorToNwn2(styleColor) : null;
+  if (!styleColor) return literal;
+  const current = cssColorToNwn2(styleColor);
+  const expected = cssColorToNwn2(resolveColor(literal));
+  return current.toLowerCase() === expected.toLowerCase() ? literal : current;
+}
+
+// A color span whose only child is another color span is a stale outer wrapper
+// left behind by recoloring; the inner one carries the color the user chose.
+function wrapsSingleColorSpan(el: HTMLElement): boolean {
+  if (el.childNodes.length !== 1) return false;
+  const child = el.firstChild;
+  if (!child || child.nodeType !== Node.ELEMENT_NODE) return false;
+  const childEl = child as HTMLElement;
+  return childEl.tagName.toLowerCase() === 'span' && colorLiteralOf(childEl) !== null;
+}
+
 export function htmlToNwn2(element: HTMLElement): string {
   let result = '';
   for (const node of Array.from(element.childNodes)) {
@@ -193,7 +230,10 @@ export function htmlToNwn2(element: HTMLElement): string {
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
       const tag = el.tagName.toLowerCase();
-      if (tag === 'br') {
+      const raw = el.getAttribute('data-nwn2-raw');
+      if (raw !== null) {
+        result += raw;
+      } else if (tag === 'br') {
         result += '\n';
       } else if (tag === 'div' || tag === 'p') {
         if (result.length > 0 && !result.endsWith('\n')) result += '\n';
@@ -203,18 +243,17 @@ export function htmlToNwn2(element: HTMLElement): string {
       } else if (tag === 'i' || tag === 'em') {
         result += '<i>' + htmlToNwn2(el) + '</i>';
       } else if (tag === 'span') {
-        const nwn2Color = el.getAttribute('data-nwn2-color');
-        if (nwn2Color) {
-          result += `<color=${nwn2Color}>` + htmlToNwn2(el) + '</color>';
-        } else if (el.style.color) {
-          result += `<color=${cssColorToNwn2Name(el.style.color)}>` + htmlToNwn2(el) + '</color>';
+        const literal = colorLiteralOf(el);
+        const inner = htmlToNwn2(el);
+        if (literal === null || wrapsSingleColorSpan(el)) {
+          result += inner;
         } else {
-          result += htmlToNwn2(el);
+          result += `<color=${literal}>` + inner + '</color>';
         }
       } else if (tag === 'font') {
         const color = el.getAttribute('color');
         if (color) {
-          result += `<color=${cssColorToNwn2Name(color)}>` + htmlToNwn2(el) + '</color>';
+          result += `<color=${cssColorToNwn2(color)}>` + htmlToNwn2(el) + '</color>';
         } else {
           result += htmlToNwn2(el);
         }
@@ -224,4 +263,37 @@ export function htmlToNwn2(element: HTMLElement): string {
     }
   }
   return result;
+}
+
+// True when a visual (contentEditable) round trip reproduces the text
+// byte-for-byte. Overlapping tags, upper-case tags or stray brackets make the
+// DOM rebalance or rewrite the markup, so such text must be edited as raw tags.
+export function isVisuallyEditable(text: string): boolean {
+  if (typeof document === 'undefined') return false;
+  const probe = document.createElement('div');
+  probe.innerHTML = nwn2ToHtml(text, true);
+  return htmlToNwn2(probe) === text;
+}
+
+export interface MarkupError {
+  kind: 'unclosed' | 'unopened';
+  tag: string;
+}
+
+// First structural problem in the b/i/color markup, or null when balanced.
+export function findMarkupError(text: string): MarkupError | null {
+  const tagRe = /<(\/?)(b|i|color)(?:=[^>]*)?>/gi;
+  const stack: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(text)) !== null) {
+    const tag = m[2].toLowerCase();
+    if (m[1] === '') {
+      stack.push(tag);
+      continue;
+    }
+    const idx = stack.lastIndexOf(tag);
+    if (idx === -1) return { kind: 'unopened', tag };
+    stack.splice(idx, 1);
+  }
+  return stack.length ? { kind: 'unclosed', tag: stack[stack.length - 1] } : null;
 }

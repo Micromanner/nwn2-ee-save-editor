@@ -280,7 +280,16 @@
     "qty": "Menge",
     "editor": {
       "name": "Name",
-      "description": "Beschreibung"
+      "description": "Beschreibung",
+      "bold": "Fett",
+      "italic": "Kursiv",
+      "color": "Farbe",
+      "apply": "Anwenden",
+      "showTags": "Tags anzeigen",
+      "preview": "Vorschau",
+      "rawOnly": "Dieser Text enthält Markup, das der visuelle Editor verändern würde, daher werden die Tags angezeigt.",
+      "unclosedTag": "Das Tag {tag} wird nicht geschlossen.",
+      "unopenedTag": "Ein schließendes {tag} hat kein öffnendes Tag."
     },
     "addItem": "Gegenstand hinzufügen",
     "createNewBaseType": "Neu erstellen",

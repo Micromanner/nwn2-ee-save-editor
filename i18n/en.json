@@ -283,7 +283,16 @@
     "qty": "Qty",
     "editor": {
       "name": "Name",
-      "description": "Description"
+      "description": "Description",
+      "bold": "Bold",
+      "italic": "Italic",
+      "color": "Color",
+      "apply": "Apply",
+      "showTags": "Show tags",
+      "preview": "Preview",
+      "rawOnly": "This text uses markup the visual editor would change, so it is shown as tags.",
+      "unclosedTag": "Tag {tag} is never closed.",
+      "unopenedTag": "A closing {tag} has no opening tag."
     },
     "addItem": "Add Item",
     "createNewBaseType": "Create New",

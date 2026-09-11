@@ -16,6 +16,7 @@ import { inventoryAPI } from '@/services/inventoryApi';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import type { FullEquippedItem, FullInventoryItem, ItemAppearance } from '@/lib/bindings';
 import { resolveEquipSlot } from '@/utils/inventoryUtils';
+import { stripNwn2Tags } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
 
 const DISPLAY_SLOT_TO_API: Record<string, string> = {
@@ -82,7 +83,7 @@ function EquipSlot({ slot, equippedItem, selected, onSelect }: EquipSlotProps) {
   return (
     <div
       onClick={onSelect}
-      title={equippedItem ? `${equippedItem.name} (${slot})` : slot}
+      title={equippedItem ? `${stripNwn2Tags(equippedItem.name)} (${slot})` : slot}
       style={{
         width: 44, height: 44,
         borderRadius: 4,
@@ -104,7 +105,7 @@ function EquipSlot({ slot, equippedItem, selected, onSelect }: EquipSlotProps) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: T.accent,
           }}>
-            {equippedItem.name.charAt(0)}
+            {stripNwn2Tags(equippedItem.name).charAt(0)}
           </div>
         )
       ) : (

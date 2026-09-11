@@ -10,7 +10,8 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useInventoryManagement } from '@/hooks/useInventoryManagement';
 import { type ItemEditorMetadataResponse, type PropertyMetadata } from '@/services/inventoryApi';
-import { stripNwn2Tags, nwn2ToHtml, htmlToNwn2 } from '@/utils/nwn2Markup';
+import { stripNwn2Tags } from '@/utils/nwn2Markup';
+import { MarkupEditor } from './MarkupEditor';
 import { ItemAppearanceTab } from './ItemAppearanceTab';
 import { IconPickerDialog } from './IconPickerDialog';
 import { useIcon } from '@/hooks/useIcon';
@@ -85,12 +86,9 @@ export function EditItemDialog({
   const [appearanceOptions, setAppearanceOptions] = useState<ItemAppearanceOptions | null>(null);
   const [localIconResref, setLocalIconResref] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [editorInitialized, setEditorInitialized] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const iconPreviewUrl = useIcon(localIconResref);
 
-  const nameRef = useRef<HTMLDivElement>(null);
-  const descRef = useRef<HTMLDivElement>(null);
   const prevItemKey = useRef<string | null>(null);
 
   useEffect(() => {
@@ -111,27 +109,12 @@ export function EditItemDialog({
     const data = JSON.parse(JSON.stringify(itemData));
     if (data.StackSize === undefined) data.StackSize = 1;
 
-    if (resolvedName && data.LocalizedName) {
-      const substrings = (data.LocalizedName as Record<string, unknown>).substrings as Array<{ string?: string }> | undefined;
-      if (!substrings || substrings.length === 0) {
-        (data.LocalizedName as Record<string, unknown>).substrings = [{ language: 0, gender: 0, string: resolvedName }];
-      }
-    }
-
-    if (resolvedDescription && data.DescIdentified) {
-      const substrings = (data.DescIdentified as Record<string, unknown>).substrings as Array<{ string?: string }> | undefined;
-      if (!substrings || substrings.length === 0) {
-        (data.DescIdentified as Record<string, unknown>).substrings = [{ language: 0, gender: 0, string: resolvedDescription }];
-      }
-    }
-
     setLocalData(data);
     setLocalAppearance(appearance ? structuredClone(appearance) : null);
     setLocalIconResref(resolvedIcon ?? null);
     setAppearanceOptions(null);
-    setEditorInitialized(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, itemData, characterId, resolvedName, resolvedDescription, resolvedIcon]);
+  }, [isOpen, itemData, characterId, resolvedIcon]);
 
   useEffect(() => {
     if (!isOpen || !localData || !localAppearance) return;
@@ -146,30 +129,7 @@ export function EditItemDialog({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, baseItemId, localAppearance?.armor_visual_type, localData !== null]);
 
-  useEffect(() => {
-    if (!isOpen || !localData || editorInitialized) return;
-    const nameField = localData['LocalizedName'] as Record<string, unknown> | undefined;
-    const nameSubstrings = nameField?.substrings as Array<{ string?: string }> | undefined;
-    const descField = localData['DescIdentified'] as Record<string, unknown> | undefined;
-    const descSubstrings = descField?.substrings as Array<{ string?: string }> | undefined;
-    const nameHtml = nwn2ToHtml(nameSubstrings?.[0]?.string || '');
-    const descHtml = nwn2ToHtml(descSubstrings?.[0]?.string || '');
-
-    const tryInit = () => {
-      if (nameRef.current && descRef.current) {
-        nameRef.current.innerHTML = nameHtml;
-        descRef.current.innerHTML = descHtml;
-        setEditorInitialized(true);
-      } else {
-        requestAnimationFrame(tryInit);
-      }
-    };
-    requestAnimationFrame(tryInit);
-  }, [isOpen, localData, editorInitialized]);
-
-  const syncField = useCallback((field: string, ref: React.RefObject<HTMLDivElement | null>) => {
-    if (!ref.current) return;
-    const value = htmlToNwn2(ref.current);
+  const setLocalizedField = useCallback((field: string, value: string) => {
     setLocalData(prev => {
       if (!prev) return prev;
       const existing = prev[field] as Record<string, unknown> | undefined;
@@ -258,10 +218,12 @@ export function EditItemDialog({
     }
   };
 
-  const getLocalizedValue = (field: string) => {
+  // Inline substring wins; otherwise the strref text, which is only written
+  // back to the item once the user actually edits it.
+  const getLocalizedValue = (field: string, fallback?: string) => {
     const fieldData = localData?.[field] as Record<string, unknown> | undefined;
     const substrings = fieldData?.substrings as Array<{ string?: string }> | undefined;
-    return substrings?.[0]?.string || '';
+    return substrings?.[0]?.string || fallback || '';
   };
 
   const getSubtypeOptions = (propertyName: number): Record<number, string> | null => {
@@ -273,7 +235,7 @@ export function EditItemDialog({
     preloadedMetadata?.property_types.find(p => p.id === propertyName);
 
   const properties = (localData?.PropertiesList as Record<string, unknown>[] | undefined) || [];
-  const itemName = stripNwn2Tags(getLocalizedValue('LocalizedName'));
+  const itemName = stripNwn2Tags(getLocalizedValue('LocalizedName', resolvedName));
   const stackLimit = Math.max(1, maxStack ?? 1);
 
   // Grey out the appearance tab for items with no in-world model at all
@@ -314,9 +276,9 @@ export function EditItemDialog({
       {!localData ? (
         <LoadingState height={200} text={t('common.loadingItem')} />
       ) : (
-        <Tabs id="edit-item-tab" selectedTabId={tab} onChange={(id) => setTab(id as string)}>
+        <Tabs id="edit-item-tab" className="edit-item-tabs" selectedTabId={tab} onChange={(id) => setTab(id as string)}>
           <Tab id="basic" title={t('inventory.basicInfoTab')} panel={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4, maxHeight: '58vh', overflowY: 'auto', paddingRight: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4, paddingRight: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div
                   style={{
@@ -345,40 +307,19 @@ export function EditItemDialog({
 
               <div>
                 <label className="t-semibold" style={{ color: T.textMuted, display: 'block', marginBottom: 4 }}>{t('inventory.editor.name')}</label>
-                <div
-                  ref={nameRef}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onInput={() => syncField('LocalizedName', nameRef)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
-                  }}
-                  style={{
-                    width: '100%', borderRadius: 3, border: `1px solid ${T.border}`,
-                    background: T.surface, padding: '6px 10px', color: T.text,
-                    minHeight: 32, outline: 'none', whiteSpace: 'nowrap', overflow: 'hidden',
-                  }}
+                <MarkupEditor
+                  value={getLocalizedValue('LocalizedName', resolvedName)}
+                  onChange={(v) => setLocalizedField('LocalizedName', v)}
                 />
               </div>
 
               <div>
                 <label className="t-semibold" style={{ color: T.textMuted, display: 'block', marginBottom: 4 }}>{t('inventory.editor.description')}</label>
-                <div
-                  ref={descRef}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onInput={() => syncField('DescIdentified', descRef)}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
-                  }}
-                  style={{
-                    width: '100%', borderRadius: 3, border: `1px solid ${T.border}`,
-                    background: T.surfaceAlt, padding: '6px 10px', color: T.text,
-                    minHeight: 100, outline: 'none', resize: 'vertical',
-                  }}
+                <MarkupEditor
+                  value={getLocalizedValue('DescIdentified', resolvedDescription)}
+                  onChange={(v) => setLocalizedField('DescIdentified', v)}
+                  multiline
+                  minHeight={100}
                 />
               </div>
 
@@ -463,7 +404,7 @@ export function EditItemDialog({
                 <Button small icon="add" intent="primary" text={t('inventory.addProperty')} onClick={handleAddProperty} disabled={!preloadedMetadata} />
               </div>
 
-              <div style={{ maxHeight: '54vh', overflowY: 'auto', paddingRight: 8 }}>
+              <div style={{ paddingRight: 8 }}>
                 {properties.map((prop, i) => {
                   const propMeta = getPropMeta(prop.PropertyName as number);
                   const subtypeOptions = getSubtypeOptions(prop.PropertyName as number);
@@ -555,7 +496,7 @@ export function EditItemDialog({
           } />
 
           <Tab id="appearance" title={t('appearance.title')} disabled={appearanceDisabled} panel={
-            <div style={{ paddingTop: 4, height: '58vh', overflow: 'hidden' }}>
+            <div style={{ paddingTop: 4, height: '100%', overflow: 'hidden' }}>
               {localAppearance && localData && !appearanceDisabled && (
                 <ItemAppearanceTab
                   key={itemKey}

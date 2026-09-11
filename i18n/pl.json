@@ -285,7 +285,16 @@
     "qty": "Ilość",
     "editor": {
       "name": "Nazwa",
-      "description": "Opis"
+      "description": "Opis",
+      "bold": "Pogrubienie",
+      "italic": "Kursywa",
+      "color": "Kolor",
+      "apply": "Zastosuj",
+      "showTags": "Pokaż tagi",
+      "preview": "Podgląd",
+      "rawOnly": "Ten tekst zawiera znaczniki, które edytor wizualny by zmienił, dlatego wyświetlany jest jako tagi.",
+      "unclosedTag": "Tag {tag} nie został zamknięty.",
+      "unopenedTag": "Zamykający tag {tag} nie ma tagu otwierającego."
     },
     "addItem": "Dodaj Przedmiot",
     "createNewBaseType": "Stwórz Nowy",

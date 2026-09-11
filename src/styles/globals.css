@@ -2313,3 +2313,30 @@
 .nwn-spinner .bp5-spinner-track {
   stroke: rgba(160, 82, 45, 0.15);
 }
+
+/* Unknown markup tags inside the visual item description editor */
+.nwn2-markup-editor .nwn2-raw-tag {
+  display: inline-block;
+  padding: 0 3px;
+  margin: 0 1px;
+  border-radius: 2px;
+  background: rgba(160, 82, 45, 0.12);
+  border: 1px solid rgba(160, 82, 45, 0.35);
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  user-select: none;
+}
+
+/* Edit-item dialog: tabs fill the dialog body, each panel scrolls on its own */
+.edit-item-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.edit-item-tabs > .bp6-tab-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

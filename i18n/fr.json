@@ -283,7 +283,16 @@
     "qty": "Qté",
     "editor": {
       "name": "Nom",
-      "description": "Description"
+      "description": "Description",
+      "bold": "Gras",
+      "italic": "Italique",
+      "color": "Couleur",
+      "apply": "Appliquer",
+      "showTags": "Afficher les balises",
+      "preview": "Aperçu",
+      "rawOnly": "Ce texte utilise un balisage que l’éditeur visuel modifierait, il est donc affiché sous forme de balises.",
+      "unclosedTag": "La balise {tag} n’est jamais fermée.",
+      "unopenedTag": "Une balise fermante {tag} n’a pas de balise ouvrante."
     },
     "addItem": "Ajouter Objet",
     "createNewBaseType": "Créer Nouveau",

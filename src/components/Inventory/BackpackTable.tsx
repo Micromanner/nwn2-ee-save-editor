@@ -6,6 +6,7 @@ import { fmtNum } from '../shared';
 import { T } from '../theme';
 import type { FullInventoryItem } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
+import { renderNwn2Markup } from '@/utils/nwn2Markup';
 import { useTranslations } from '@/hooks/useTranslations';
 
 interface BackpackTableProps {
@@ -105,7 +106,7 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
                 color: item.is_custom ? T.accent : T.text,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
-                {display(item.name)}
+                {renderNwn2Markup(display(item.name))}
               </td>
               <td style={{ color: T.textMuted }}>{display(resolveCategory(item.category))}</td>
               <td style={{ textAlign: 'center' }}>{item.stack_size > 1 ? item.stack_size : ''}</td>

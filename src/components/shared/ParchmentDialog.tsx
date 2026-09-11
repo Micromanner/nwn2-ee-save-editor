@@ -31,13 +31,13 @@ export function ParchmentDialog({
       title={title}
       // Explicit flex column so a minHeight/height stretches the body and keeps the footer at the bottom.
       // maxHeight clamps both fixed-height and content-sized dialogs to the viewport
-      // (bp5-dialog has 30px vertical margins); the body scrolls internally instead.
+      // (bp6-dialog has 32px vertical margins); the body scrolls internally instead.
       // minHeight must carry its own cap because CSS min-height overrides max-height.
       style={{
         width,
-        minHeight: typeof minHeight === 'number' ? `min(${minHeight}px, calc(100vh - 60px))` : minHeight,
+        minHeight: typeof minHeight === 'number' ? `min(${minHeight}px, calc(100vh - 64px))` : minHeight,
         height,
-        maxHeight: 'calc(100vh - 60px)',
+        maxHeight: 'calc(100vh - 64px)',
         paddingBottom: 0, background: T.surface, display: 'flex', flexDirection: 'column',
       }}
       canOutsideClickClose
