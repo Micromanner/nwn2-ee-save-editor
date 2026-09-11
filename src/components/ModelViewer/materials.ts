@@ -79,6 +79,45 @@ function buildTexture(dds: ParsedDds): THREE.CompressedTexture {
   return texture;
 }
 
+/// Mean alpha (0..1) of a parsed DDS, read from the mip nearest 32px so a
+/// 2048px EE upscale costs nothing. NWN2 keeps the gloss mask in the normal
+/// map's alpha, and the mean is stable across mips (P_HHM_PF_Body01_n: 41.9
+/// at 512px, 41.9 at 32px). Formats without alpha report 1, matching the
+/// shader's gloss of 1.0 when the alpha channel is absent.
+export function ddsMeanAlpha(dds: Pick<ParsedDds, 'mipmaps' | 'format'>): number {
+  if (dds.mipmaps.length === 0) return 1;
+  let mip = dds.mipmaps[0];
+  for (const candidate of dds.mipmaps) {
+    if (candidate.width >= 32 && candidate.height >= 32) mip = candidate;
+  }
+  const data = mip.data as Uint8Array;
+  if (dds.format === THREE.RGBA_S3TC_DXT5_Format) {
+    const blocks = Math.max(1, mip.width >> 2) * Math.max(1, mip.height >> 2);
+    let total = 0;
+    for (let b = 0; b < blocks; b++) {
+      const off = b * 16;
+      const a0 = data[off];
+      const a1 = data[off + 1];
+      const palette = a0 > a1
+        ? [a0, a1, (6 * a0 + a1) / 7, (5 * a0 + 2 * a1) / 7, (4 * a0 + 3 * a1) / 7, (3 * a0 + 4 * a1) / 7, (2 * a0 + 5 * a1) / 7, (a0 + 6 * a1) / 7]
+        : [a0, a1, (4 * a0 + a1) / 5, (3 * a0 + 2 * a1) / 5, (2 * a0 + 3 * a1) / 5, (a0 + 4 * a1) / 5, 0, 255];
+      let bits = 0n;
+      for (let i = 5; i >= 0; i--) bits = (bits << 8n) | BigInt(data[off + 2 + i]);
+      for (let i = 0; i < 16; i++) {
+        total += palette[Number((bits >> BigInt(3 * i)) & 7n)];
+      }
+    }
+    return total / (blocks * 16 * 255);
+  }
+  if (dds.format === THREE.RGBAFormat && data.length >= mip.width * mip.height * 4) {
+    let total = 0;
+    const pixels = mip.width * mip.height;
+    for (let i = 0; i < pixels; i++) total += data[i * 4 + 3];
+    return total / (pixels * 255);
+  }
+  return 1;
+}
+
 /// maxSize asks the backend to drop mip levels above that dimension (EE
 /// upscales are 2048px; thumbnails need far less), cached separately from
 /// the full-size texture.
@@ -228,8 +267,13 @@ export const SPECULAR = {
   ROUGHNESS_MAX: 1.0,
   ENV_MAP_INTENSITY: 6.0,
   // 0x08 "mirroring" renders as an albedo-tinted metal reflection (gold trim
-  // reflects gold, steel reflects silver).
+  // reflects gold, steel reflects silver). EE's lit pass binds no environment
+  // texture, so this is an approximation accepted for plate; it is gated by
+  // the normal-alpha gloss mean so matte 0x08 cloth stays cloth (verified
+  // 2026-09-11: CL_Body14 gloss 0.018 vs PF_Body01 0.164, SC_Boots01 0.082).
   ENV_MAP_METALNESS: 0.85,
+  ENV_GLOSS_MIN: 0.04,
+  ENV_GLOSS_FULL: 0.08,
   // The engine multiplies the diffuse map by the MDB diffuse_color (plate
   // uses values down to 0.14). A/B toggle for calibration.
   DIFFUSE_COLOR_ENABLED: true,
@@ -365,14 +409,17 @@ export async function createMaterial(
 
   const needGlow = !!(materialData.flags & 0x20);
 
-  const [diffuse, tintTex, normal, glow] = await Promise.all([
+  const [diffuse, tintTex, parsedNormal, glow] = await Promise.all([
     loadDDSTexture(materialData.diffuse_map, textureMaxSize),
     materialData.tint_map
       ? loadDDSTexture(materialData.tint_map, textureMaxSize)
       : Promise.resolve(null),
-    loadDDSTexture(materialData.normal_map, textureMaxSize),
+    materialData.normal_map
+      ? fetchParsedDds(materialData.normal_map, textureMaxSize)
+      : Promise.resolve(null),
     needGlow ? loadDDSTexture(materialData.glow_map, textureMaxSize) : Promise.resolve(null),
   ]);
+  const normal = parsedNormal ? buildTexture(parsedNormal) : null;
 
   if (diffuse) {
     mat.map = diffuse;
@@ -413,9 +460,13 @@ export async function createMaterial(
   }
 
   if (envMap && materialData.flags & 0x08) {
-    mat.envMap = envMap;
-    mat.envMapIntensity = SPECULAR.ENV_MAP_INTENSITY;
-    mat.metalness = SPECULAR.ENV_MAP_METALNESS;
+    const gloss = parsedNormal ? ddsMeanAlpha(parsedNormal) : 1;
+    const envStrength = THREE.MathUtils.smoothstep(gloss, SPECULAR.ENV_GLOSS_MIN, SPECULAR.ENV_GLOSS_FULL);
+    if (envStrength > 0) {
+      mat.envMap = envMap;
+      mat.envMapIntensity = SPECULAR.ENV_MAP_INTENSITY * envStrength;
+      mat.metalness = SPECULAR.ENV_MAP_METALNESS * envStrength;
+    }
   }
 
   // CPU-side MDB-to-light preprocessing is unresolved; use authored values

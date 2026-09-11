@@ -1,20 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildMesh } from '../meshBuilder';
-import { createMaterial, updateTintUniforms } from '../materials';
+import { createMaterial, ddsMeanAlpha, updateTintUniforms } from '../materials';
 import type { MeshData } from '../types';
 
+// One 4x4 block: DXT1 (8 data bytes) or DXT5 with a flat alpha (16 data bytes,
+// a0 = a1 = alpha, all indices 0).
+function makeDds(fourCC: 'DXT1' | 'DXT5', alpha = 255): ArrayBuffer {
+  const blockBytes = fourCC === 'DXT1' ? 8 : 16;
+  const buffer = new ArrayBuffer(128 + blockBytes);
+  const header = new Int32Array(buffer, 0, 31);
+  header[0] = 0x20534444;
+  header[1] = 124;
+  header[3] = 4;
+  header[4] = 4;
+  header[20] = 4;
+  header[21] = fourCC === 'DXT1' ? 0x31545844 : 0x35545844;
+  if (fourCC === 'DXT5') {
+    const block = new Uint8Array(buffer, 128, 16);
+    block[0] = alpha;
+    block[1] = alpha;
+  }
+  return buffer;
+}
+
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async () => {
-    const buffer = new ArrayBuffer(136);
-    const header = new Int32Array(buffer, 0, 31);
-    header[0] = 0x20534444;
-    header[1] = 124;
-    header[3] = 4;
-    header[4] = 4;
-    header[20] = 4;
-    header[21] = 0x31545844;
-    return buffer;
+  invoke: vi.fn(async (_cmd: string, args: { name: string }) => {
+    if (args.name === 'matte_normal') return makeDds('DXT5', 0);
+    if (args.name === 'glossy_normal') return makeDds('DXT5', 255);
+    return makeDds('DXT1');
   }),
 }));
 
@@ -119,6 +133,41 @@ describe('MDB rendering', () => {
     expect(materials[1].userData.tintUniforms.tintColor1.value.toArray()).toEqual([0.2, 0.3, 0.4]);
     scene.children.forEach(obj => (obj as THREE.Mesh).geometry.dispose());
     materials.forEach(material => material.dispose());
+  });
+
+  it('reads the DXT5 gloss mean from the alpha block in both palette modes', () => {
+    const block = (a0: number, a1: number, indices: number[]) => {
+      const data = new Uint8Array(16);
+      data[0] = a0;
+      data[1] = a1;
+      let bits = 0n;
+      indices.forEach((idx, i) => { bits |= BigInt(idx) << BigInt(3 * i); });
+      for (let i = 0; i < 6; i++) data[2 + i] = Number((bits >> BigInt(8 * i)) & 0xffn);
+      return { mipmaps: [{ data, width: 4, height: 4 }], format: THREE.RGBA_S3TC_DXT5_Format };
+    };
+    // a0 > a1: 8-entry interpolated palette; index 1 = a1, index 7 = (a0 + 6 a1) / 7.
+    expect(ddsMeanAlpha(block(255, 0, new Array(16).fill(1)))).toBeCloseTo(0);
+    expect(ddsMeanAlpha(block(255, 0, new Array(16).fill(0)))).toBeCloseTo(1);
+    expect(ddsMeanAlpha(block(255, 0, new Array(16).fill(7)))).toBeCloseTo(1 / 7);
+    // a0 <= a1: 6-entry palette plus explicit 0 and 255.
+    expect(ddsMeanAlpha(block(0, 0, new Array(16).fill(7)))).toBeCloseTo(1);
+    expect(ddsMeanAlpha(block(0, 0, new Array(16).fill(6)))).toBeCloseTo(0);
+    expect(ddsMeanAlpha(block(100, 200, new Array(16).fill(1)))).toBeCloseTo(200 / 255);
+    expect(ddsMeanAlpha({ mipmaps: [{ data: new Uint8Array(8), width: 4, height: 4 }], format: THREE.RGB_S3TC_DXT1_Format })).toBe(1);
+  });
+
+  it('gates the 0x08 environment path on the normal-map gloss', async () => {
+    const envMap = new THREE.Texture();
+    const matte = await createMaterial({ ...materialData, normal_map: 'matte_normal', flags: 0x08 }, undefined, false, envMap);
+    expect(matte.envMap).toBeNull();
+    expect(matte.metalness).toBe(0);
+    const glossy = await createMaterial({ ...materialData, normal_map: 'glossy_normal', flags: 0x08 }, undefined, false, envMap);
+    expect(glossy.envMap).toBe(envMap);
+    expect(glossy.metalness).toBeCloseTo(0.85);
+    expect(glossy.envMapIntensity).toBeCloseTo(6);
+    const unflagged = await createMaterial({ ...materialData, normal_map: 'glossy_normal', flags: 0 }, undefined, false, envMap);
+    expect(unflagged.envMap).toBeNull();
+    [matte, glossy, unflagged].forEach(material => material.dispose());
   });
 
   it('keeps cutouts in the depth-writing pass and honors blend flags', async () => {

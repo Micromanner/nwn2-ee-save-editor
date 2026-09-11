@@ -271,8 +271,9 @@ impl Character {
     }
 
     /// Root-level body tint (`Tintable → Tint → 1/2/3`). The engine tints
-    /// TAIL and WING models (and the naked body) with this layer; the game
-    /// leaves it white. Raw GFF channel order — no 2/3 swap.
+    /// TAIL and WING models and the creature's own unarmored body (root
+    /// `ArmorVisualType`/`Variation`) with this layer; companions ship real
+    /// colours here (Neeshka's tan leathers). Raw GFF channel order — no 2/3 swap.
     pub fn tint_body(&self) -> TintChannels {
         let Some(tintable) = self.get_struct_owned("Tintable") else {
             return TintChannels::default();
@@ -668,8 +669,9 @@ impl Character {
                 body_parts.push(format!("{body_prefix}_{pfx}_Body01"));
             }
         }
-        if body_parts.is_empty() {
-            body_parts.push(format!("{body_prefix}_CL_Body01"));
+        let cloth_default = format!("{body_prefix}_CL_Body01");
+        if !body_parts.contains(&cloth_default) {
+            body_parts.push(cloth_default);
         }
         debug!("Body model candidates: {body_parts:?}");
 
@@ -875,9 +877,11 @@ impl Character {
             chest_accessories: super::item_appearance::ArmorAccessories::default(),
         };
 
-        let Some(equip_list) = self.get_list_owned("Equip_ItemList") else {
-            return result;
-        };
+        let equip_list = self.get_list_owned("Equip_ItemList").unwrap_or_default();
+        let never_show_armor = self.get_i32("NeverShowArmor") == Some(1);
+        if never_show_armor {
+            debug!("NeverShowArmor set: chest item visuals ignored, using creature body");
+        }
 
         let baseitems_table = game_data.get_table("baseitems");
         let mut chest_boots = None;
@@ -921,7 +925,7 @@ impl Character {
                 "Equip item: BaseItem={base_item}, raw_equipslots={raw_equip_str:?}, parsed=0x{equip_slots:04x}, chest={is_chest}, cloak={is_cloak}"
             );
 
-            if is_chest {
+            if is_chest && !never_show_armor {
                 let visual_type = item_struct
                     .get("ArmorVisualType")
                     .and_then(gff_value_to_i32)
@@ -1129,7 +1133,72 @@ impl Character {
             result.gloves = chest_gloves;
             result.gloves_tint = chest_gloves_tint;
         }
+        if result.armor_prefixes.is_empty() {
+            self.apply_creature_body_visual(game_data, &mut result);
+        }
         result
+    }
+
+    /// The creature root struct carries its own `ArmorVisualType` and
+    /// `Variation`: the outfit the engine renders when no chest item is
+    /// equipped (Elanee's robe, Neeshka's leathers), coloured by the root
+    /// `Tintable` (the root `ArmorTint` is all white on every companion).
+    /// Optional root `Boots`/`Gloves` structs (same shape as a chest item's
+    /// nested parts: Qara `LE_Boots07`, Shandra `CL_Boots04`) supply the
+    /// footwear; without them the material's `*01` parts (bare hands and
+    /// feet for cloth) apply, since bodies like Elanee's robe ship none.
+    /// Verified on live saves 2026-09-11; the fields are 0/0 for most
+    /// characters, which resolves to the plain `CL_Body01` cloth body.
+    fn apply_creature_body_visual(&self, game_data: &GameData, result: &mut EquippedVisuals) {
+        let visual_type = self.get_i32("ArmorVisualType").unwrap_or(0);
+        let variation = self.get_i32("Variation").map(|v| v + 1).unwrap_or(1).max(1);
+        result.armor_prefixes = resolve_armor_prefix(game_data, visual_type, false);
+        result.armor_variation = variation;
+
+        let root_part = |key: &str| {
+            let fields = self.get_struct_owned(key)?;
+            let visual = Self::parse_part_visual(&fields, game_data)?;
+            let tint = match fields.get("ArmorTint") {
+                Some(GffValue::StructOwned(s)) => {
+                    Some(super::appearance_helpers::read_tint_channels(s))
+                }
+                Some(GffValue::Struct(lazy)) => Some(
+                    super::appearance_helpers::read_tint_channels(&lazy.force_load()),
+                ),
+                _ => None,
+            };
+            debug!(
+                "Creature root {key}: {:?} var {}, tint {tint:?}",
+                visual.armor_prefixes, visual.variation
+            );
+            Some((visual, tint))
+        };
+        if !result.has_standalone_boots
+            && let Some((visual, tint)) = root_part("Boots")
+        {
+            result.boots = Some(visual);
+            result.boots_tint = tint;
+        }
+        if !result.has_standalone_gloves
+            && let Some((visual, tint)) = root_part("Gloves")
+        {
+            result.gloves = Some(visual);
+            result.gloves_tint = tint;
+        }
+        // Same channel order as a chest item's `Tintable`: consumers swap 2/3
+        // exactly as they do for item tints (Neeshka's tan vest, Qara's red
+        // tunic verified in-game 2026-09-11).
+        let tint = self.tint_body();
+        let has_color = [&tint.channel1, &tint.channel2, &tint.channel3]
+            .iter()
+            .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0 || ch.a > 0);
+        if has_color {
+            result.armor_tint = Some(tint);
+        }
+        debug!(
+            "Creature body: ArmorVisualType {visual_type}, Variation {variation} -> prefixes {:?}, tint {:?}",
+            result.armor_prefixes, result.armor_tint
+        );
     }
 
     /// Read an item's tint from its `Tintable` struct, falling back to the
@@ -1250,6 +1319,255 @@ mod tests {
     fn test_appearance_head() {
         let character = create_test_character();
         assert_eq!(character.appearance_head(), 3);
+    }
+
+    fn game_data_with_armor_and_baseitems() -> GameData {
+        use crate::loaders::types::LoadedTable;
+        use crate::parsers::tda::TDAParser;
+        use crate::parsers::tlk::TLKParser;
+        use std::sync::{Arc, RwLock};
+
+        let mut game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
+        let tables = [
+            (
+                "armor",
+                "2DA V2.0
+
+   Label   Prefix
+0  Cloth   CL
+1  Padded  CP
+2  Leather LE
+",
+            ),
+            (
+                "baseitems",
+                "2DA V2.0
+
+   Label   EquipableSlots
+0  Armor   0x00002
+",
+            ),
+            (
+                "appearance",
+                "2DA V2.0
+
+   LABEL  modeltype  nwn2_model_body  nwn2_skeleton_file
+0  Human  P          P_HH?            P_HH?_Skel
+",
+            ),
+            (
+                "gender",
+                "2DA V2.0
+
+   LABEL   gender
+0  Male    M
+1  Female  F
+",
+            ),
+        ];
+        for (name, content) in tables {
+            let mut parser = TDAParser::new();
+            parser.parse_from_bytes(content.as_bytes()).unwrap();
+            game_data.tables.insert(
+                name.to_string(),
+                LoadedTable::new(name.to_string(), Arc::new(parser)),
+            );
+        }
+        game_data
+    }
+
+    fn test_resource_manager() -> crate::services::resource_manager::ResourceManager {
+        use crate::config::nwn2_paths::NWN2Paths;
+        use std::sync::Arc;
+        use tauri::async_runtime::RwLock;
+        crate::services::resource_manager::ResourceManager::new(Arc::new(RwLock::new(
+            NWN2Paths::default(),
+        )))
+    }
+
+    fn chest_item(visual_type: u8, variation: u8) -> GffValue<'static> {
+        let mut item = IndexMap::new();
+        item.insert("BaseItem".to_string(), GffValue::Int(0));
+        item.insert("ArmorVisualType".to_string(), GffValue::Byte(visual_type));
+        item.insert("Variation".to_string(), GffValue::Byte(variation));
+        GffValue::ListOwned(vec![item])
+    }
+
+    #[test]
+    fn creature_root_variation_selects_unarmored_body() {
+        let mut fields = IndexMap::new();
+        fields.insert("ArmorVisualType".to_string(), GffValue::Byte(0));
+        fields.insert("Variation".to_string(), GffValue::Byte(8));
+        let character = Character::from_gff(fields);
+        let visuals = character.resolve_equipped_visuals(
+            &game_data_with_armor_and_baseitems(),
+            &test_resource_manager(),
+        );
+        assert_eq!(visuals.armor_prefixes, vec!["CL".to_string()]);
+        assert_eq!(visuals.armor_variation, 9);
+    }
+
+    #[test]
+    fn creature_root_leather_body_when_chest_empty() {
+        let mut fields = IndexMap::new();
+        fields.insert("ArmorVisualType".to_string(), GffValue::Byte(2));
+        fields.insert("Variation".to_string(), GffValue::Byte(2));
+        fields.insert("Equip_ItemList".to_string(), GffValue::ListOwned(vec![]));
+        let character = Character::from_gff(fields);
+        let visuals = character.resolve_equipped_visuals(
+            &game_data_with_armor_and_baseitems(),
+            &test_resource_manager(),
+        );
+        assert_eq!(visuals.armor_prefixes, vec!["LE".to_string()]);
+        assert_eq!(visuals.armor_variation, 3);
+    }
+
+    #[test]
+    fn creature_body_tint_is_root_tintable_raw_order() {
+        let mut fields = IndexMap::new();
+        fields.insert("Variation".to_string(), GffValue::Byte(2));
+        let mut character = Character::from_gff(fields);
+        let mut body = TintChannels::default();
+        body.channel2 = TintChannel {
+            r: 166,
+            g: 124,
+            b: 82,
+            a: 255,
+        };
+        body.channel3 = TintChannel {
+            r: 33,
+            g: 33,
+            b: 33,
+            a: 255,
+        };
+        character.set_tint_body(&body);
+        let visuals = character.resolve_equipped_visuals(
+            &game_data_with_armor_and_baseitems(),
+            &test_resource_manager(),
+        );
+        let tint = visuals.armor_tint.expect("root body tint applied");
+        assert_eq!(tint.channel2.r, 166);
+        assert_eq!(tint.channel3.r, 33);
+    }
+
+    #[test]
+    fn equipped_chest_item_wins_over_creature_root() {
+        let mut fields = IndexMap::new();
+        fields.insert("ArmorVisualType".to_string(), GffValue::Byte(0));
+        fields.insert("Variation".to_string(), GffValue::Byte(8));
+        fields.insert("Equip_ItemList".to_string(), chest_item(1, 4));
+        let character = Character::from_gff(fields);
+        let visuals = character.resolve_equipped_visuals(
+            &game_data_with_armor_and_baseitems(),
+            &test_resource_manager(),
+        );
+        assert_eq!(visuals.armor_prefixes, vec!["CP".to_string()]);
+        assert_eq!(visuals.armor_variation, 5);
+    }
+
+    #[test]
+    fn creature_root_body_without_part_structs_uses_material_defaults() {
+        let mut fields = IndexMap::new();
+        fields.insert("Gender".to_string(), GffValue::Byte(0));
+        fields.insert("ArmorVisualType".to_string(), GffValue::Byte(2));
+        fields.insert("Variation".to_string(), GffValue::Byte(4));
+        let character = Character::from_gff(fields);
+        let parts = character
+            .resolve_model_parts(
+                &game_data_with_armor_and_baseitems(),
+                &test_resource_manager(),
+            )
+            .expect("model parts");
+        assert_eq!(parts.body_parts[0], "P_HHM_LE_Body05");
+        assert_eq!(
+            parts.boots_candidates,
+            vec![
+                "P_HHM_LE_Boots01".to_string(),
+                "P_HHM_CL_Boots01".to_string()
+            ]
+        );
+        assert_eq!(
+            parts.gloves_candidates,
+            vec![
+                "P_HHM_LE_Gloves01".to_string(),
+                "P_HHM_CL_Gloves01".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn creature_root_boots_struct_selects_default_boots() {
+        let mut boots = IndexMap::new();
+        boots.insert("ArmorVisualType".to_string(), GffValue::Byte(2));
+        boots.insert("Variation".to_string(), GffValue::Byte(6));
+        let mut fields = IndexMap::new();
+        fields.insert("Gender".to_string(), GffValue::Byte(1));
+        fields.insert("Variation".to_string(), GffValue::Byte(13));
+        fields.insert("Boots".to_string(), GffValue::StructOwned(Box::new(boots)));
+        let character = Character::from_gff(fields);
+        let parts = character
+            .resolve_model_parts(
+                &game_data_with_armor_and_baseitems(),
+                &test_resource_manager(),
+            )
+            .expect("model parts");
+        assert_eq!(
+            parts.boots_candidates,
+            vec![
+                "P_HHF_LE_Boots07".to_string(),
+                "P_HHF_LE_Boots01".to_string()
+            ]
+        );
+        assert!(parts.boots_tint.is_none());
+        assert_eq!(
+            parts.gloves_candidates,
+            vec!["P_HHF_CL_Gloves01".to_string()]
+        );
+    }
+
+    #[test]
+    fn chest_item_keeps_default_boots_and_gloves() {
+        let mut fields = IndexMap::new();
+        fields.insert("Gender".to_string(), GffValue::Byte(0));
+        fields.insert("Equip_ItemList".to_string(), chest_item(1, 4));
+        let character = Character::from_gff(fields);
+        let parts = character
+            .resolve_model_parts(
+                &game_data_with_armor_and_baseitems(),
+                &test_resource_manager(),
+            )
+            .expect("model parts");
+        assert_eq!(parts.body_parts[0], "P_HHM_CP_Body05");
+        assert_eq!(
+            parts.boots_candidates,
+            vec![
+                "P_HHM_CP_Boots01".to_string(),
+                "P_HHM_CL_Boots01".to_string()
+            ]
+        );
+        assert_eq!(
+            parts.gloves_candidates,
+            vec![
+                "P_HHM_CP_Gloves01".to_string(),
+                "P_HHM_CL_Gloves01".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn never_show_armor_uses_creature_root() {
+        let mut fields = IndexMap::new();
+        fields.insert("ArmorVisualType".to_string(), GffValue::Byte(2));
+        fields.insert("Variation".to_string(), GffValue::Byte(4));
+        fields.insert("NeverShowArmor".to_string(), GffValue::Byte(1));
+        fields.insert("Equip_ItemList".to_string(), chest_item(1, 4));
+        let character = Character::from_gff(fields);
+        let visuals = character.resolve_equipped_visuals(
+            &game_data_with_armor_and_baseitems(),
+            &test_resource_manager(),
+        );
+        assert_eq!(visuals.armor_prefixes, vec!["LE".to_string()]);
+        assert_eq!(visuals.armor_variation, 5);
     }
 
     #[test]
