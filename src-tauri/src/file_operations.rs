@@ -23,15 +23,20 @@ pub fn is_save_dir(path: &std::path::Path) -> bool {
 
 /// Return the display name for a save folder.
 ///
-/// Prefers EE's `savename.txt` (plain text). Falls back to original NWN2's `savenfo.txt`
-/// formatted as `{strref}name` — strips the optional `{...}` prefix rather than
-/// resolving the TLK ID. Returns `fallback` if neither file exists.
+/// Prefers EE's `savename.txt` (plain text). Original NWN2 stores the user-typed name
+/// only in the folder name (`000002 - matt`), so that suffix comes next; `savenfo.txt`
+/// holds the area name as `{strref}text` and is the last resort before `fallback`.
 pub fn read_save_display_name(save_dir: &std::path::Path, fallback: &str) -> String {
     if let Ok(content) = std::fs::read_to_string(save_dir.join("savename.txt")) {
         let trimmed = content.trim();
         if !trimmed.is_empty() {
             return trimmed.to_string();
         }
+    }
+    if let Some(folder) = save_dir.file_name().and_then(|n| n.to_str())
+        && let Some(name) = legacy_folder_save_name(folder)
+    {
+        return name.to_string();
     }
     if let Ok(content) = std::fs::read_to_string(save_dir.join("savenfo.txt")) {
         let trimmed = content.trim();
@@ -41,6 +46,16 @@ pub fn read_save_display_name(save_dir: &std::path::Path, fallback: &str) -> Str
         }
     }
     fallback.to_string()
+}
+
+/// Extract the user-typed name from an original-NWN2 save folder (`000002 - matt` -> `matt`).
+fn legacy_folder_save_name(folder: &str) -> Option<&str> {
+    let (digits, rest) = folder.split_once(" - ")?;
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let rest = rest.trim();
+    (!rest.is_empty()).then_some(rest)
 }
 
 fn strip_strref_prefix(s: &str) -> &str {
@@ -980,6 +995,27 @@ mod tests {
             read_save_display_name(tmp.path(), "fallback"),
             "Farlong House, L2"
         );
+    }
+
+    #[test]
+    fn test_read_save_display_name_prefers_legacy_folder_suffix_over_savenfo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("000002 - matt");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(
+            dir.join("savenfo.txt"),
+            "{1013}Merchant Quarter
+",
+        )
+        .unwrap();
+        assert_eq!(read_save_display_name(&dir, "fallback"), "matt");
+    }
+
+    #[test]
+    fn test_legacy_folder_save_name_requires_numeric_prefix() {
+        assert_eq!(legacy_folder_save_name("000002 - matt"), Some("matt"));
+        assert_eq!(legacy_folder_save_name("Classic - foo"), None);
+        assert_eq!(legacy_folder_save_name("000002 - "), None);
     }
 
     #[test]

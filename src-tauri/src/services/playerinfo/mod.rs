@@ -81,8 +81,15 @@ impl PlayerInfo {
         }
     }
 
+    /// Full character name (first + last). Falls back to reading only the leading
+    /// first-name string when the rest of the file does not parse.
     pub fn get_player_name(path: impl AsRef<Path>) -> PlayerInfoResult<String> {
         let path = path.as_ref();
+        if let Ok(info) = Self::load(path)
+            && !info.data.name.trim().is_empty()
+        {
+            return Ok(info.data.name);
+        }
         let mut file = File::open(path)?;
 
         let mut len_bytes = [0u8; 4];

@@ -19,6 +19,7 @@ import { FileBrowserDialog } from './FileBrowserDialog';
 import type { FileInfo } from './FileBrowserDialog';
 import { SettingsDialog } from '../Settings/SettingsPanel';
 import { BackupAPI } from '@/services/backupApi';
+import { stripNwn2Tags } from '@/utils/nwn2Markup';
 
 export default function DashboardPanel() {
   const t = useTranslations();
@@ -72,8 +73,8 @@ export default function DashboardPanel() {
         const entries: SaveEntryData[] = result.map(save => {
           paths.push(save.path);
           return {
-            characterName: save.character_name || save.name,
-            folderName: save.name,
+            characterName: stripNwn2Tags(save.character_name || save.name),
+            folderName: stripNwn2Tags(save.name),
             date: save.modified
               ? new Date(save.modified * 1000).toLocaleString()
               : '',
