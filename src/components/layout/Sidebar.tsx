@@ -12,7 +12,7 @@ const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey
   { id: 'overview', icon: GiVisoredHelm, gameIcon: 'ia_character', labelKey: 'navigation.overview' },
   { id: 'appearance', icon: GiMirrorMirror, gameIcon: 'ia_appear', labelKey: 'navigation.appearance' },
   { id: 'abilities', icon: GiFist, gameIcon: 'ife_toughness', labelKey: 'navigation.abilityScores' },
-  { id: 'classes', icon: GiLayeredArmor, gameIcon: 'ic_b_fighter', labelKey: 'navigation.classes' },
+  { id: 'classes', icon: GiLayeredArmor, gameIcon: 'ia_paladinabilities', labelKey: 'navigation.classes' },
   { id: 'skills', icon: GiSkills, gameIcon: 'isk_lore', labelKey: 'navigation.skills' },
   { id: 'feats', icon: GiStarMedal, gameIcon: 'ife_dodge', labelKey: 'navigation.feats' },
   { id: 'spells', icon: GiSpellBook, gameIcon: 'b_spellbook', labelKey: 'navigation.spells' },
