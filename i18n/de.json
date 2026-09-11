@@ -487,7 +487,10 @@
     "armorCheck": "Rüstungsmalus",
     "cancel": "Abbrechen",
     "resetConfirmMessage": "Alle Fertigkeitsränge auf 0 zurücksetzen? Die Punkte werden erstattet.",
-    "fromFeatsItemsOrOtherBonuses": "Durch Talente, Gegenstände oder andere Boni"
+    "fromFeatsItemsOrOtherBonuses": "Durch Talente, Gegenstände oder andere Boni",
+    "levellingAs": "Stufenaufstieg als",
+    "levellingAsHint": "Neue Ränge werden als die Klasse der letzten Stufe gekauft. Nur deren Fertigkeiten kosten 1 Punkt pro Rang; die Ranggrenze zählt weiterhin alle Klassen.",
+    "crossClassLegend": "Klassenfremde Fertigkeit für {class} (kostet 2 Punkte pro Rang)"
   },
   "gameState": {
     "tabs": {

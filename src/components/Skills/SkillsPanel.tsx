@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Tag, Icon } from '@blueprintjs/core';
+import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Tag, Icon, Tooltip } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
@@ -9,6 +9,7 @@ import { useSkillManagement } from '@/hooks/useSkillManagement';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { applySkillOverrides, categorizeSkills, calculateSkillBudget, filterAndSortSkills } from '@/utils/skillUtils';
 import { useTranslations } from '@/hooks/useTranslations';
+import { display } from '@/utils/dataHelpers';
 
 type SortCol = 'name' | 'total' | 'ranks' | null;
 type SortDir = 'asc' | 'desc';
@@ -162,6 +163,8 @@ export function SkillsPanel() {
     );
   }
 
+  const levellingClass = skillsData.levelling_class_name ?? display(null);
+
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
@@ -170,6 +173,12 @@ export function SkillsPanel() {
           <span style={{ color: T.textMuted }}>Spent: <strong style={{ color: T.text }}>{budget.displayedSpent}</strong></span>
           <span style={{ color: T.textMuted }}>Available: <strong style={{ color: T.accent }}>{budget.available}</strong></span>
           <span style={{ color: budget.overdrawn > 0 ? T.negative : T.textMuted }}>Overdrawn: <strong>{budget.overdrawn}</strong></span>
+          <Tooltip content={t('skills.levellingAsHint')} placement="bottom">
+            <span style={{ color: T.textMuted, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {t('skills.levellingAs')}: <strong style={{ color: T.text }}>{levellingClass}</strong>
+              <Icon icon="info-sign" size={12} />
+            </span>
+          </Tooltip>
           <div style={{ flex: 1 }} />
           <InputGroup
             leftIcon="search" placeholder={t('skills.searchSkills')} value={filter}
@@ -246,7 +255,7 @@ export function SkillsPanel() {
           </HTMLTable>
           <div style={{ marginTop: 8, display: 'flex', gap: 16, color: T.textMuted }}>
             <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.accent }}>ACP</Tag> {t('skills.armorCheck')}</span>
-            <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>2pt</Tag> Cross-class skill (costs 2 points per rank)</span>
+            <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>2pt</Tag> {t('skills.crossClassLegend', { class: levellingClass })}</span>
           </div>
         </div>
       </Card>

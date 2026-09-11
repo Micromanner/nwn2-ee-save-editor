@@ -15,9 +15,9 @@
 
 use std::collections::HashMap;
 
-use super::{Character, CharacterError};
+use super::{Character, CharacterError, ClassId};
 use crate::character::gff_helpers::gff_value_to_i32;
-use crate::character::types::{AbilityIndex, AbilityModifiers, SkillId};
+use crate::character::types::{AbilityIndex, AbilityModifiers, FeatId, SkillId};
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
 use crate::services::item_property_decoder::ItemPropertyDecoder;
@@ -49,6 +49,8 @@ pub struct SkillSummaryEntry {
     pub modifier: i32,
     pub total: i32,
     pub ability: String,
+    /// Class skill of the class being levelled (1 point per rank); the rank
+    /// cap uses any class instead (`Character::is_class_skill`).
     pub is_class_skill: bool,
     pub untrained: bool,
     pub armor_check_penalty: bool,
@@ -57,15 +59,35 @@ pub struct SkillSummaryEntry {
 }
 
 impl Character {
-    /// Check if a skill is a class skill for this character.
+    /// Check if a skill is a class skill for any of the character's classes.
     ///
-    /// True when any of the character's classes lists it as a class skill.
-    /// Note the engine costs a rank against the class being levelled
-    /// (`is_class_skill_for`), not this union.
+    /// This is what the rank cap uses (NWN2 follows the 3.5 multiclass rule:
+    /// a skill any class lists may reach level + 3). Rank cost is judged
+    /// against the class being levelled instead (`is_levelling_class_skill`).
     pub fn is_class_skill(&self, skill_id: SkillId, game_data: &GameData) -> bool {
         self.class_entries()
             .iter()
             .any(|entry| self.is_class_skill_for(entry.class_id, skill_id, game_data))
+    }
+
+    /// Class a skill purchase is costed against: the class taken at the most
+    /// recent level, where the editor records rank changes. Characters
+    /// without a level history fall back to their last `ClassList` entry.
+    pub fn levelling_class(&self) -> Option<ClassId> {
+        self.get_list("LvlStatList")
+            .and_then(|levels| levels.last())
+            .and_then(|entry| entry.get("LvlStatClass"))
+            .and_then(gff_value_to_i32)
+            .filter(|id| *id != -1)
+            .map(ClassId)
+            .or_else(|| self.class_entries().last().map(|entry| entry.class_id))
+    }
+
+    /// Whether the class being levelled lists the skill, which decides the
+    /// 1 or 2 point rank price.
+    pub fn is_levelling_class_skill(&self, skill_id: SkillId, game_data: &GameData) -> bool {
+        self.levelling_class()
+            .is_some_and(|class_id| self.is_class_skill_for(class_id, skill_id, game_data))
     }
 
     /// Check if a skill is a class skill of one class (`classes.SkillsTable`).
@@ -145,10 +167,8 @@ impl Character {
         i32::from(self.has_feat(super::FeatId(SKILLED_FEAT_ID)))
     }
 
-    /// Calculate the cost in skill points for a given number of ranks.
-    ///
-    /// - Class skill OR Able Learner feat: 1 point per rank
-    /// - Cross-class skill: 2 points per rank
+    /// Cost of `ranks` bought now, against the class being levelled
+    /// (`skill_cost_for_class`). Without any class every skill is cross-class.
     pub fn calculate_skill_cost(
         &self,
         skill_id: SkillId,
@@ -156,16 +176,35 @@ impl Character {
         has_able_learner: bool,
         game_data: &GameData,
     ) -> i32 {
-        if ranks <= 0 {
-            return 0;
+        let class_id = self.levelling_class().unwrap_or(ClassId(-1));
+        self.skill_cost_for_class(class_id, skill_id, ranks, has_able_learner, game_data)
+    }
+
+    /// Net skill points a rank change costs (negative = refund).
+    ///
+    /// Added ranks are bought by the class being levelled. Removed ranks are
+    /// handed back most recent level first and refund what the class taken at
+    /// that level paid, mirroring `record_skill_change`; ranks no level
+    /// recorded refund at the levelling class's price.
+    pub fn skill_change_cost(&self, skill_id: SkillId, new_rank: i32, game_data: &GameData) -> i32 {
+        let has_able_learner = self.has_feat(FeatId(ABLE_LEARNER_FEAT_ID));
+        let delta = new_rank - self.skill_rank(skill_id);
+        if delta >= 0 {
+            return self.calculate_skill_cost(skill_id, delta, has_able_learner, game_data);
         }
 
-        let is_class_skill = self.is_class_skill(skill_id, game_data);
-        if is_class_skill || has_able_learner {
-            ranks
-        } else {
-            ranks * 2
-        }
+        let levelling = self.levelling_class().unwrap_or(ClassId(-1));
+        let refund: i32 = self
+            .skill_rank_take_back_plan(skill_id, -delta)
+            .into_iter()
+            .map(|(level_idx, ranks)| {
+                let class_id = level_idx
+                    .and_then(|idx| self.level_class(idx))
+                    .unwrap_or(levelling);
+                self.skill_cost_for_class(class_id, skill_id, ranks, has_able_learner, game_data)
+            })
+            .sum();
+        -refund
     }
 
     /// Calculate the total skill modifier for a skill.
@@ -330,7 +369,7 @@ impl Character {
                 ranks + ability_mod + item_skill_bonus + feat_bonus + synergy_bonus
             };
 
-            let is_class_skill = self.is_class_skill(skill_id, game_data);
+            let is_class_skill = self.is_levelling_class_skill(skill_id, game_data);
 
             let armor_check_penalty = row_bool(&skill_data, "armorcheckpenalty", false);
 
@@ -615,13 +654,7 @@ impl Character {
         new_rank: i32,
         game_data: &GameData,
     ) -> Result<i32, CharacterError> {
-        let current_rank = self.skill_rank(skill_id);
-        let has_able_learner = self.has_feat(super::FeatId(ABLE_LEARNER_FEAT_ID));
-
-        let current_cost =
-            self.calculate_skill_cost(skill_id, current_rank, has_able_learner, game_data);
-        let new_cost = self.calculate_skill_cost(skill_id, new_rank, has_able_learner, game_data);
-        let net_cost = new_cost - current_cost;
+        let net_cost = self.skill_change_cost(skill_id, new_rank, game_data);
 
         let available = self.get_available_skill_points();
         if net_cost > available {
@@ -670,34 +703,43 @@ impl Character {
         available
     }
 
-    /// Calculate total skill points spent, factoring in class/cross-class costs.
+    /// Skill points the current ranks cost.
     ///
-    /// Unlike `total_skill_points_spent` which just sums ranks, this method
-    /// calculates actual point cost: 1 per rank for class skills, 2 for cross-class.
+    /// Ranks the level history records are costed against the class taken at
+    /// that level; ranks it does not cover (toolset creation ranks, injected
+    /// ranks) against the class being levelled.
     pub fn calculate_total_spent_with_costs(&self, game_data: &GameData) -> i32 {
-        let Some(skill_list) = self.get_list("SkillList") else {
-            return 0;
-        };
+        let has_able_learner = self.has_feat(FeatId(ABLE_LEARNER_FEAT_ID));
+        let levelling = self.levelling_class().unwrap_or(ClassId(-1));
 
-        let has_able_learner = self.has_feat(super::FeatId(ABLE_LEARNER_FEAT_ID));
+        let mut recorded: HashMap<SkillId, i32> = HashMap::new();
+        let mut spent = 0;
+        for level in self.level_history() {
+            for skill in &level.skills_gained {
+                spent += self.skill_cost_for_class(
+                    level.class_id,
+                    skill.skill_id,
+                    skill.ranks,
+                    has_able_learner,
+                    game_data,
+                );
+                *recorded.entry(skill.skill_id).or_insert(0) += skill.ranks;
+            }
+        }
 
-        skill_list
-            .iter()
-            .enumerate()
-            .map(|(idx, entry)| {
-                let ranks = entry.get("Rank").and_then(gff_value_to_i32).unwrap_or(0);
-                if ranks > 0 {
-                    self.calculate_skill_cost(
-                        SkillId(idx as i32),
-                        ranks,
-                        has_able_learner,
-                        game_data,
-                    )
-                } else {
-                    0
-                }
-            })
-            .sum()
+        for skill in self.skill_ranks() {
+            let uncovered = skill.ranks - recorded.get(&skill.skill_id).copied().unwrap_or(0);
+            if uncovered > 0 {
+                spent += self.skill_cost_for_class(
+                    levelling,
+                    skill.skill_id,
+                    uncovered,
+                    has_able_learner,
+                    game_data,
+                );
+            }
+        }
+        spent
     }
 }
 
@@ -1217,5 +1259,185 @@ mod tests {
             available >= 7,
             "Fallback must not destroy existing points, got {available}"
         );
+    }
+
+    const SORCERER: i32 = 9;
+    const FIGHTER: i32 = 4;
+    const LORE: SkillId = SkillId(7);
+    const PARRY: SkillId = SkillId(10);
+
+    fn parse_2da(text: &[u8]) -> crate::loaders::LoadedTable {
+        use crate::parsers::tda::TDAParser;
+        let mut parser = TDAParser::new();
+        parser.parse_from_bytes(text).unwrap();
+        crate::loaders::LoadedTable::new("test.2da".to_string(), std::sync::Arc::new(parser))
+    }
+
+    /// Sorcerer lists Lore, Fighter lists Parry.
+    fn game_data_with_sorcerer_and_fighter() -> crate::loaders::GameData {
+        let mut game_data = create_mock_game_data();
+        game_data.tables.insert(
+            "classes".to_string(),
+            parse_2da(
+                b"2DA V2.0
+
+   Label     SkillPointBase  SkillsTable
+0  Barbarian 4               ****
+1  Bard      6               ****
+2  Cleric    2               ****
+3  Druid     4               ****
+4  Fighter   2               cls_skill_fight
+5  Monk      4               ****
+6  Paladin   2               ****
+7  Ranger    6               ****
+8  Rogue     8               ****
+9  Sorcerer  2               cls_skill_sorc
+",
+            ),
+        );
+        game_data.tables.insert(
+            "cls_skill_fight".to_string(),
+            parse_2da(
+                b"2DA V2.0
+
+   SkillLabel  SkillIndex  ClassSkill
+0  Parry       10          1
+1  Lore        7           0
+",
+            ),
+        );
+        game_data.tables.insert(
+            "cls_skill_sorc".to_string(),
+            parse_2da(
+                b"2DA V2.0
+
+   SkillLabel  SkillIndex  ClassSkill
+0  Lore        7           1
+",
+            ),
+        );
+        game_data
+    }
+
+    fn level_entry(
+        class_id: i32,
+        bought: &[(SkillId, i32)],
+    ) -> IndexMap<String, GffValue<'static>> {
+        let mut skills: Vec<IndexMap<String, GffValue<'static>>> = Vec::new();
+        for (skill_id, ranks) in bought {
+            while skills.len() <= skill_id.0 as usize {
+                let mut empty = IndexMap::new();
+                empty.insert("Rank".to_string(), GffValue::Byte(0));
+                skills.push(empty);
+            }
+            skills[skill_id.0 as usize].insert("Rank".to_string(), GffValue::Byte(*ranks as u8));
+        }
+        let mut entry = IndexMap::new();
+        entry.insert("LvlStatClass".to_string(), GffValue::Byte(class_id as u8));
+        entry.insert("SkillList".to_string(), GffValue::ListOwned(skills));
+        entry
+    }
+
+    /// Sorcerer 1 / Fighter 1 who bought 3 Lore as a Sorcerer, then 1 Lore
+    /// and 2 Parry as a Fighter; the Fighter level is the one being levelled.
+    fn create_sorcerer_then_fighter() -> Character {
+        let mut fields = IndexMap::new();
+        fields.insert("SkillPoints".to_string(), GffValue::Word(10));
+
+        let mut sorcerer = IndexMap::new();
+        sorcerer.insert("Class".to_string(), GffValue::Byte(SORCERER as u8));
+        sorcerer.insert("ClassLevel".to_string(), GffValue::Short(1));
+        let mut fighter = IndexMap::new();
+        fighter.insert("Class".to_string(), GffValue::Byte(FIGHTER as u8));
+        fighter.insert("ClassLevel".to_string(), GffValue::Short(1));
+        fields.insert(
+            "ClassList".to_string(),
+            GffValue::ListOwned(vec![sorcerer, fighter]),
+        );
+
+        fields.insert(
+            "LvlStatList".to_string(),
+            GffValue::ListOwned(vec![
+                level_entry(SORCERER, &[(LORE, 3)]),
+                level_entry(FIGHTER, &[(LORE, 1), (PARRY, 2)]),
+            ]),
+        );
+
+        let totals = level_entry(0, &[(LORE, 4), (PARRY, 2)]);
+        fields.insert("SkillList".to_string(), totals["SkillList"].clone());
+
+        Character::from_gff(fields)
+    }
+
+    #[test]
+    fn test_skill_cost_follows_levelling_class_not_union() {
+        let character = create_sorcerer_then_fighter();
+        let game_data = game_data_with_sorcerer_and_fighter();
+
+        assert_eq!(character.levelling_class(), Some(ClassId(FIGHTER)));
+        // Lore is a class skill of a class the character has, so the cap is
+        // the full one, but a Fighter pays the cross-class price for it.
+        assert!(character.is_class_skill(LORE, &game_data));
+        assert!(!character.is_levelling_class_skill(LORE, &game_data));
+        assert!(character.is_levelling_class_skill(PARRY, &game_data));
+        assert_eq!(
+            character.calculate_skill_cost(LORE, 1, false, &game_data),
+            2
+        );
+        assert_eq!(
+            character.calculate_skill_cost(PARRY, 1, false, &game_data),
+            1
+        );
+        assert_eq!(character.skill_change_cost(LORE, 5, &game_data), 2);
+        assert_eq!(
+            character.get_max_skill_ranks(LORE, &game_data),
+            character.total_level() + 3
+        );
+    }
+
+    #[test]
+    fn test_removed_ranks_refund_the_class_that_bought_them() {
+        let mut character = create_sorcerer_then_fighter();
+        let game_data = game_data_with_sorcerer_and_fighter();
+
+        // Lore 4 -> 2: the Fighter rank (2 points) and one Sorcerer rank (1).
+        assert_eq!(character.skill_change_cost(LORE, 2, &game_data), -3);
+        assert_eq!(
+            character.skill_rank_take_back_plan(LORE, 2),
+            vec![(Some(1), 1), (Some(0), 1)]
+        );
+
+        character.set_skill_rank(LORE, 2).unwrap();
+        let history = character.level_history();
+        assert_eq!(history[0].skills_gained[0].ranks, 2);
+        assert!(history[1].skills_gained.iter().all(|s| s.skill_id != LORE));
+
+        // Ranks no level recorded refund at the levelling class's price and
+        // never drive a level's record negative.
+        assert_eq!(character.skill_change_cost(LORE, 0, &game_data), -2);
+        let mut skill_list = character.get_list_owned("SkillList").unwrap();
+        skill_list[LORE.0 as usize].insert("Rank".to_string(), GffValue::Byte(5));
+        character.set_list("SkillList", skill_list);
+        assert_eq!(
+            character.skill_rank_take_back_plan(LORE, 5),
+            vec![(Some(0), 2), (None, 3)]
+        );
+        character.set_skill_rank(LORE, 0).unwrap();
+        assert!(character.level_history()[0].skills_gained.is_empty());
+    }
+
+    #[test]
+    fn test_total_spent_costs_each_level_against_its_class() {
+        let mut character = create_sorcerer_then_fighter();
+        let game_data = game_data_with_sorcerer_and_fighter();
+
+        // 3 Lore at 1 (Sorcerer) + 1 Lore at 2 (Fighter) + 2 Parry at 1.
+        assert_eq!(character.calculate_total_spent_with_costs(&game_data), 7);
+
+        // A rank the history does not cover is priced for the levelling class.
+        let mut skill_list = character.get_list_owned("SkillList").unwrap();
+        skill_list[LORE.0 as usize].insert("Rank".to_string(), GffValue::Byte(5));
+        character.set_list("SkillList", skill_list);
+        assert_eq!(character.calculate_total_spent_with_costs(&game_data), 9);
     }
 }

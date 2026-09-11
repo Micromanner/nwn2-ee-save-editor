@@ -2669,7 +2669,60 @@ impl Character {
         self.set_list("LvlStatList", lvl_stat_list);
     }
 
-    /// Sync a skill rank change to the current level history.
+    /// Class taken at a `LvlStatList` index.
+    pub fn level_class(&self, level_idx: usize) -> Option<ClassId> {
+        self.get_list("LvlStatList")?
+            .get(level_idx)?
+            .get("LvlStatClass")
+            .and_then(gff_value_to_i32)
+            .filter(|id| *id != -1)
+            .map(ClassId)
+    }
+
+    /// How `count` ranks of a skill come back out of the level history:
+    /// `(level index, ranks)` most recent level first, then `(None, rest)`
+    /// for ranks no level recorded.
+    pub fn skill_rank_take_back_plan(
+        &self,
+        skill_id: SkillId,
+        count: i32,
+    ) -> Vec<(Option<usize>, i32)> {
+        let mut remaining = count.max(0);
+        let mut plan = Vec::new();
+
+        if let Some(levels) = self.get_list("LvlStatList") {
+            for (idx, entry) in levels.iter().enumerate().rev() {
+                if remaining == 0 {
+                    break;
+                }
+                let bought = super::gff_helpers::extract_list_from_map(entry, "SkillList")
+                    .and_then(|skills| {
+                        skills
+                            .get(skill_id.0 as usize)?
+                            .get("Rank")
+                            .and_then(gff_value_to_i32)
+                    })
+                    .unwrap_or(0);
+                let take = bought.min(remaining);
+                if take > 0 {
+                    plan.push((Some(idx), take));
+                    remaining -= take;
+                }
+            }
+        }
+
+        if remaining > 0 {
+            plan.push((None, remaining));
+        }
+        plan
+    }
+
+    /// Sync a skill rank change to the level history.
+    ///
+    /// Added ranks are recorded at the current (last) level. Removed ranks
+    /// are taken back most recent level first, so a later delevel refunds
+    /// the cost of the class that bought them; ranks no level recorded
+    /// (toolset creation ranks, injected ranks) leave the history untouched.
     pub fn record_skill_change(&mut self, skill_id: SkillId, rank_delta: i32) {
         if rank_delta == 0 {
             return;
@@ -2680,35 +2733,46 @@ impl Character {
             return;
         }
 
-        let last_idx = lvl_stat_list.len() - 1;
-        let entry = &mut lvl_stat_list[last_idx];
+        let skill_idx = skill_id.0 as usize;
+        if rank_delta > 0 {
+            let last_idx = lvl_stat_list.len() - 1;
+            Self::adjust_level_skill_rank(&mut lvl_stat_list[last_idx], skill_idx, rank_delta);
+        } else {
+            for (level_idx, ranks) in self.skill_rank_take_back_plan(skill_id, -rank_delta) {
+                if let Some(level_idx) = level_idx {
+                    Self::adjust_level_skill_rank(&mut lvl_stat_list[level_idx], skill_idx, -ranks);
+                }
+            }
+        }
 
-        let mut skill_list = entry
-            .get("SkillList")
-            .and_then(|v| match v {
-                GffValue::ListOwned(l) => Some(l.clone()),
-                _ => None,
-            })
-            .unwrap_or_default();
+        self.set_list("LvlStatList", lvl_stat_list);
+    }
 
-        while skill_list.len() <= skill_id.0 as usize {
+    fn adjust_level_skill_rank(
+        entry: &mut IndexMap<String, GffValue<'static>>,
+        skill_idx: usize,
+        delta: i32,
+    ) {
+        let mut skill_list =
+            super::gff_helpers::extract_list_from_map(entry, "SkillList").unwrap_or_default();
+
+        while skill_list.len() <= skill_idx {
             let mut empty_skill = IndexMap::new();
             empty_skill.insert("Rank".to_string(), GffValue::Byte(0));
             skill_list.push(empty_skill);
         }
 
-        let skill_entry = &mut skill_list[skill_id.0 as usize];
+        let skill_entry = &mut skill_list[skill_idx];
         let current_rank = skill_entry
             .get("Rank")
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
         skill_entry.insert(
             "Rank".to_string(),
-            GffValue::Byte((current_rank + rank_delta) as u8),
+            GffValue::Byte((current_rank + delta).max(0) as u8),
         );
 
         entry.insert("SkillList".to_string(), GffValue::ListOwned(skill_list));
-        self.set_list("LvlStatList", lvl_stat_list);
     }
 
     /// Record an ability score increase in the first unspent level-up slot.

@@ -488,7 +488,10 @@
     "armorCheck": "Penalizador Armadura",
     "cancel": "Cancelar",
     "resetConfirmMessage": "¿Restablecer rangos a 0? Los puntos serán devueltos.",
-    "fromFeatsItemsOrOtherBonuses": "De dotes, objetos u otros bonos"
+    "fromFeatsItemsOrOtherBonuses": "De dotes, objetos u otros bonos",
+    "levellingAs": "Subiendo nivel como",
+    "levellingAsHint": "Los rangos nuevos se compran como la clase del último nivel. Solo sus habilidades cuestan 1 punto por rango; el límite de rangos sigue contando todas las clases.",
+    "crossClassLegend": "Habilidad transclásea para {class} (cuesta 2 puntos por rango)"
   },
   "gameState": {
     "tabs": {

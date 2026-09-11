@@ -489,7 +489,10 @@
     "armorCheck": "Armor Check",
     "cancel": "Cancel",
     "resetConfirmMessage": "Reset all skill ranks to 0? Points will be refunded.",
-    "fromFeatsItemsOrOtherBonuses": "From feats, items, or other bonuses"
+    "fromFeatsItemsOrOtherBonuses": "From feats, items, or other bonuses",
+    "levellingAs": "Levelling as",
+    "levellingAsHint": "New ranks are bought as the class taken at the last level. Only that class's skills cost 1 point per rank; the rank cap still counts every class.",
+    "crossClassLegend": "Cross-class skill for {class} (costs 2 points per rank)"
   },
   "gameState": {
     "tabs": {

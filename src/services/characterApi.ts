@@ -953,6 +953,8 @@ export class CharacterAPI {
             cross_class_skills: Array<{id: number; name: string; current_ranks: number; max_ranks: number; total_modifier: number; is_class_skill: boolean; untrained: boolean}>;
             total_available: number;
             spent_points: number;
+            levelling_class_id: number | null;
+            levelling_class_name: string | null;
         }>('get_skills_state');
 
         return {

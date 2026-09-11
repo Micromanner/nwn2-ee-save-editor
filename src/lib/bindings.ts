@@ -593,6 +593,9 @@ export interface SkillsState {
   cross_class_skills: SkillSummaryEntry[];
   total_available: number;
   spent_points: number;
+  /** Class new ranks are bought as (the class taken at the last level). */
+  levelling_class_id: number | null;
+  levelling_class_name: string | null;
 }
 
 export interface SkillChangeResult {

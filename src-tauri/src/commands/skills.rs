@@ -20,6 +20,9 @@ pub struct SkillsStateResponse {
     pub cross_class_skills: Vec<SkillSummaryEntry>,
     pub total_available: i32,
     pub spent_points: i32,
+    /// Class new ranks are bought as (the class taken at the last level).
+    pub levelling_class_id: Option<i32>,
+    pub levelling_class_name: Option<String>,
 }
 
 #[tauri::command]
@@ -105,12 +108,16 @@ pub async fn get_skills_state(state: State<'_, AppState>) -> CommandResult<Skill
 
     let available_points = character.get_available_skill_points();
     let total_spent = character.calculate_total_spent_with_costs(&game_data);
+    let levelling_class = character.levelling_class();
 
     Ok(SkillsStateResponse {
         class_skills,
         cross_class_skills,
         total_available: available_points + total_spent,
         spent_points: total_spent,
+        levelling_class_id: levelling_class.map(|class_id| class_id.0),
+        levelling_class_name: levelling_class
+            .map(|class_id| character.get_class_name(class_id, &game_data)),
     })
 }
 
@@ -123,23 +130,15 @@ pub async fn set_skill_rank(
     let game_data = state.game_data.read();
     let mut session = state.session.write();
 
-    let (old_ranks, old_cost, new_cost, skill_label) = {
+    let (old_ranks, points_spent, skill_label) = {
         let character = session
             .character
             .as_ref()
             .ok_or(CommandError::NoCharacterLoaded)?;
         let old_ranks = character.skill_rank(SkillId(skill_id));
-        let has_able_learner = character.has_feat(FeatId(ABLE_LEARNER_FEAT_ID));
-        let old_cost = character.calculate_skill_cost(
-            SkillId(skill_id),
-            old_ranks,
-            has_able_learner,
-            &game_data,
-        );
-        let new_cost =
-            character.calculate_skill_cost(SkillId(skill_id), ranks, has_able_learner, &game_data);
+        let points_spent = character.skill_change_cost(SkillId(skill_id), ranks, &game_data);
         let skill_label = character.get_skill_name(SkillId(skill_id), &game_data);
-        (old_ranks, old_cost, new_cost, skill_label)
+        (old_ranks, points_spent, skill_label)
     };
 
     session.record_history(format!("Set {skill_label} to rank {ranks}"));
@@ -148,20 +147,11 @@ pub async fn set_skill_rank(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    // Instead of raw set_skill_rank, calculate point difference and deduct
-    let points_spent = new_cost - old_cost;
-    let mut current_unspent = character.get_available_skill_points();
+    // The pool is clamped at zero: the tab reports overdraw instead of refusing the edit.
+    let current_unspent = (character.get_available_skill_points() - points_spent).max(0);
 
-    current_unspent -= points_spent;
-    if current_unspent < 0 {
-        current_unspent = 0; // Prevent going negative in the backend storage
-    }
-
-    // Set the rank
     character.set_skill_rank(SkillId(skill_id), ranks)?;
     character.set_available_skill_points(current_unspent);
-
-    let points_spent = new_cost - old_cost;
 
     Ok(SkillChangeResult {
         skill_id: SkillId(skill_id),

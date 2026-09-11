@@ -63,3 +63,9 @@ mod dump_roster_flags;
 
 #[path = "debugging/diagnose_pending_spells.rs"]
 mod diagnose_pending_spells;
+
+#[path = "debugging/dump_level_skill_history.rs"]
+mod dump_level_skill_history;
+
+#[path = "debugging/verify_skill_take_back.rs"]
+mod verify_skill_take_back;
