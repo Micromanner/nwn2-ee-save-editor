@@ -67,26 +67,9 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
 
   return (
     <div>
-      <div style={{ padding: '14px 16px 12px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {iconUrl && (
-              <img
-                src={iconUrl}
-                alt=""
-                width={40}
-                height={40}
-                style={{ borderRadius: 4, flexShrink: 0 }}
-              />
-            )}
-            <div>
-            <H4 style={{ margin: 0, color: T.text, overflowWrap: 'anywhere' }}>{renderNwn2Markup(name)}</H4>
-            <span style={{ color: T.textMuted }}>
-              {equipped ? `${item.slot} \u00b7 ${baseItemName}` : baseItemName}
-            </span>
-            </div>
-          </div>
-          {equipped && (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: `1px solid ${T.borderLight}` }}>
+        {equipped && (
+          <>
             <ButtonGroup minimal>
               <Button icon={<GameIcon icon={GiQuillInk} size={14} />} small text={t('common.edit')} style={{ color: T.textMuted }} onClick={onEdit} />
               <Button icon="exchange" small text={t('inventory.transformItem')} style={{ color: T.textMuted }} onClick={onTransform} />
@@ -97,10 +80,12 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
                 style={{ color: T.textMuted }}
                 onClick={() => onUnequip?.(item.slot)}
               />
-              <Button icon="trash" small intent="danger" text={t('inventory.destroy')} />
             </ButtonGroup>
-          )}
-          {!equipped && (
+            <Button minimal icon="trash" small intent="danger" text={t('inventory.destroy')} />
+          </>
+        )}
+        {!equipped && (
+          <>
             <ButtonGroup minimal>
               <Button icon={<GameIcon icon={GiQuillInk} size={14} />} small text={t('common.edit')} style={{ color: T.textMuted }}
                 onClick={() => isPlot ? setPendingPlotAction('edit') : onEdit?.()}
@@ -120,15 +105,35 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
                   }}
                 />
               )}
-              <Button
-                icon="trash"
-                small
-                intent="danger"
-                text={t('inventory.delete')}
-                onClick={() => setDeleteConfirmOpen(true)}
-              />
             </ButtonGroup>
+            <Button
+              minimal
+              icon="trash"
+              small
+              intent="danger"
+              text={t('inventory.delete')}
+              onClick={() => setDeleteConfirmOpen(true)}
+            />
+          </>
+        )}
+      </div>
+      <div style={{ padding: '14px 16px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {iconUrl && (
+            <img
+              src={iconUrl}
+              alt=""
+              width={40}
+              height={40}
+              style={{ borderRadius: 4, flexShrink: 0 }}
+            />
           )}
+          <div style={{ minWidth: 0 }}>
+            <H4 style={{ margin: 0, color: T.text, overflowWrap: 'anywhere' }}>{renderNwn2Markup(name)}</H4>
+            <span style={{ color: T.textMuted }}>
+              {equipped ? `${item.slot} · ${baseItemName}` : baseItemName}
+            </span>
+          </div>
         </div>
       </div>
 
