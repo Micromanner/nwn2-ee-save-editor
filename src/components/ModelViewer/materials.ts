@@ -392,8 +392,12 @@ export async function createMaterial(
 ): Promise<THREE.MeshPhysicalMaterial> {
   const rawLevel = materialData.specular_level;
   const specLevel = rawLevel !== undefined && Number.isFinite(rawLevel) ? Math.max(rawLevel, 0) : 0;
+  // The engine culls back faces. NWN2 capes, bracers and boots are modelled
+  // as two coincident layers with opposed normals (P_HHF_CL_Cloak02: 123 of
+  // 212 vertices have such a twin), so DoubleSide makes the inner layer
+  // z-fight with the outer one and the cape shimmers as it animates.
   const mat = new THREE.MeshPhysicalMaterial({
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
     roughness: powerToRoughness(materialData.specular_power),
     metalness: 0.0,
     specularColor: new THREE.Color(...(materialData.specular_color ?? [1, 1, 1])),

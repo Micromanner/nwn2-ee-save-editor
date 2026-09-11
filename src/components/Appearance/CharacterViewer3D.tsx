@@ -14,9 +14,9 @@ type PartType = 'head' | 'hair' | 'fhair' | 'wings' | 'tail' | 'helm' | 'body' |
 
 // The shader G/B swap cancels data-order differences, not a mask property:
 // head tints arrive in UI order (eyebrows/eyes swapped vs the GFF), and item
-// tints (armor, cloak, helm) use the item convention. Chest-armor tints are
-// additionally pre-swapped in getTintColors so the net mapping matches
-// ItemViewer3D and the game. Raw-GFF-order tints (hair, body tint for
+// tints (armor, cloak, helm) use the item convention. Chest-armor and cloak
+// tints are additionally pre-swapped in getTintColors so the net mapping
+// matches ItemViewer3D and the game. Raw-GFF-order tints (hair, body tint for
 // tail/wings) need no swap.
 function needsShaderGBSwap(group: string): boolean {
   return group === 'head' || group === 'body' || group === 'cloak' || group === 'helm';
@@ -96,12 +96,15 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
     const bodyTintColors = tintChannelsToColors(tintBodyRef.current);
     const white: TintColors = { channel1: [1, 1, 1], channel2: [1, 1, 1], channel3: [1, 1, 1] };
     const fhairColors: TintColors = { channel1: hairColors.channel1, channel2: [1, 1, 1], channel3: [1, 1, 1] };
-    const cloakColors = tintCloakRef.current ? tintChannelsToColors(tintCloakRef.current) : white;
-    // Chest-armor tints arrive in raw GFF order; mask channels 2 and 3 are
-    // swapped relative to the shader's armor convention, so pre-swap exactly
-    // like ItemViewer3D does (verified in-game: Harper Agent Leathers renders
-    // green, 2026-09-04). Accessory override_tints are NOT swapped here - the
-    // backend already hands them over in the order the shader expects.
+    // Chest-armor and cloak tints arrive in raw GFF order; mask channels 2 and
+    // 3 are swapped relative to the shader's item convention, so pre-swap
+    // exactly like ItemViewer3D does (verified in-game: Harper Agent Leathers
+    // renders green, 2026-09-04; City Watch Cloak is blue, not white).
+    // Accessory override_tints are NOT swapped here - the backend already
+    // hands them over in the order the shader expects.
+    const cloakColors = tintCloakRef.current
+      ? tintChannelsToColors(swapItemTints(tintCloakRef.current))
+      : white;
     const armorColors = tintArmorRef.current
       ? tintChannelsToColors(swapItemTints(tintArmorRef.current))
       : white;

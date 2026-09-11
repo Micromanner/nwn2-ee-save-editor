@@ -2,7 +2,9 @@ import { useCallback } from 'react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { inventoryAPI, EquipItemRequest, UnequipItemRequest, UpdateItemRequest } from '@/services/inventoryApi';
 
-const EQUIP_DEPENDENT_SUBSYSTEMS = ['abilityScores', 'combat', 'saves', 'skills'] as const;
+// 'appearance' carries the equipped armor/cloak/helm tints the 3D viewer
+// reads; without it, equipping a cloak rebuilds the mesh with a stale tint.
+const EQUIP_DEPENDENT_SUBSYSTEMS = ['abilityScores', 'combat', 'saves', 'skills', 'appearance'] as const;
 
 export function useInventoryManagement() {
   const { character, invalidateSubsystems } = useCharacterContext();
