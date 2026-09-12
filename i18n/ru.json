@@ -554,10 +554,21 @@
         "unresolved_module": "Модуль не разрешён",
         "graph_failed": "Ошибка графа",
         "journal_read_failed": "Ошибка чтения журнала",
-        "bridge_unavailable": "Мост к тулсету недоступен"
+        "enhanced_edition_required": "Мост к тулсету недоступен",
+        "platform_unsupported": "Мост к тулсету недоступен"
       },
       "failedToLoad": "Не удалось загрузить граф квестов",
-      "loadingTitle": "Загрузка данных квестов"
+      "loadingTitle": "Загрузка данных квестов",
+      "unavailable": {
+        "enhanced_edition_required": {
+          "title": "Для редактирования квестов требуется NWN2 Enhanced Edition",
+          "description": "Эта функция читает данные квестов через 64-битные DLL тулсета игры, которые поставляются только с Enhanced Edition. Оригинальная установка NWN2 содержит только 32-битные DLL, поэтому квесты здесь показать нельзя."
+        },
+        "platform_unsupported": {
+          "title": "Редактирование квестов доступно только в Windows",
+          "description": "Эта функция запускает DLL тулсета игры, которые работают только в Windows."
+        }
+      }
     },
     "companions": {
       "failedToLoad": "Ошибка загрузки спутников",

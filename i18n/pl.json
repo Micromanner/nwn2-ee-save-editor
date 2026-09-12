@@ -556,10 +556,21 @@
         "unresolved_module": "Moduł nierozwiązany",
         "graph_failed": "Błąd grafu",
         "journal_read_failed": "Błąd odczytu dziennika",
-        "bridge_unavailable": "Mostek narzędziowy niedostępny"
+        "enhanced_edition_required": "Mostek narzędziowy niedostępny",
+        "platform_unsupported": "Mostek narzędziowy niedostępny"
       },
       "failedToLoad": "Nie udało się wczytać grafu zadań",
-      "loadingTitle": "Wczytywanie danych zadań"
+      "loadingTitle": "Wczytywanie danych zadań",
+      "unavailable": {
+        "enhanced_edition_required": {
+          "title": "Edycja zadań wymaga NWN2 Enhanced Edition",
+          "description": "Ta funkcja odczytuje dane zadań przez 64-bitowe biblioteki DLL toolsetu gry, dostępne tylko w Enhanced Edition. Oryginalna instalacja NWN2 zawiera wyłącznie 32-bitowe biblioteki DLL, dlatego zadania nie mogą być tutaj wyświetlone."
+        },
+        "platform_unsupported": {
+          "title": "Edycja zadań jest dostępna tylko w systemie Windows",
+          "description": "Ta funkcja uruchamia biblioteki DLL toolsetu gry, które działają tylko w systemie Windows."
+        }
+      }
     },
     "companions": {
       "failedToLoad": "Nie udało się wczytać towarzyszy",

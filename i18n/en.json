@@ -706,10 +706,21 @@
         "unresolved_module": "Module not found",
         "graph_failed": "Could not read module",
         "journal_read_failed": "Could not read journal",
-        "bridge_unavailable": "Toolset bridge not available"
+        "enhanced_edition_required": "Toolset bridge not available",
+        "platform_unsupported": "Toolset bridge not available"
       },
       "failedToLoad": "Failed to load quests",
-      "loadingTitle": "Loading quest data"
+      "loadingTitle": "Loading quest data",
+      "unavailable": {
+        "enhanced_edition_required": {
+          "title": "Quest editing requires NWN2 Enhanced Edition",
+          "description": "This feature reads quest data through the game's 64-bit toolset DLLs, which only ship with the Enhanced Edition. The original NWN2 install only contains 32-bit DLLs, so quests cannot be shown here."
+        },
+        "platform_unsupported": {
+          "title": "Quest editing is only available on Windows",
+          "description": "This feature runs the game's toolset DLLs, which only work on Windows."
+        }
+      }
     },
     "companions": {
       "failedToLoad": "Failed to load companions",

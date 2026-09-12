@@ -445,11 +445,12 @@ fn flatten_module_vars(module_id: &str, vars: &ModuleVariables) -> Vec<LiveModul
 /// run — original NWN2 installs (32-bit toolset DLLs that our 64-bit
 /// bridge can't load) and non-Windows platforms. The graph keeps the live
 /// state we can read without the bridge (globals.xml, current module variables)
-/// and emits a single `BridgeUnavailable` orphan note explaining the gap.
+/// and emits a single orphan note of the given kind explaining the gap.
 pub fn build_without_bridge(
     handler: &SaveGameHandler,
     current_module: &ModuleInfo,
     current_module_vars: &ModuleVariables,
+    kind: OrphanKind,
     explanation: String,
 ) -> SaveGraph {
     let current_module_id = current_module.current_module.clone();
@@ -467,7 +468,7 @@ pub fn build_without_bridge(
         globals,
         current_module_variables: flatten_module_vars(&current_module_id, current_module_vars),
         orphans: vec![OrphanNote {
-            kind: OrphanKind::BridgeUnavailable,
+            kind,
             message: explanation,
         }],
     }

@@ -554,10 +554,21 @@
         "unresolved_module": "Module non résolu",
         "graph_failed": "Échec du graphe",
         "journal_read_failed": "Échec de lecture du journal",
-        "bridge_unavailable": "Pont du toolset indisponible"
+        "enhanced_edition_required": "Pont du toolset indisponible",
+        "platform_unsupported": "Pont du toolset indisponible"
       },
       "failedToLoad": "Échec du chargement du graphe de quêtes",
-      "loadingTitle": "Chargement des données de quêtes"
+      "loadingTitle": "Chargement des données de quêtes",
+      "unavailable": {
+        "enhanced_edition_required": {
+          "title": "L'édition des quêtes nécessite NWN2 Enhanced Edition",
+          "description": "Cette fonction lit les données de quêtes via les DLL 64 bits du toolset du jeu, fournies uniquement avec l'Enhanced Edition. L'installation originale de NWN2 ne contient que des DLL 32 bits, les quêtes ne peuvent donc pas être affichées ici."
+        },
+        "platform_unsupported": {
+          "title": "L'édition des quêtes n'est disponible que sous Windows",
+          "description": "Cette fonction exécute les DLL du toolset du jeu, qui ne fonctionnent que sous Windows."
+        }
+      }
     },
     "companions": {
       "failedToLoad": "Échec du chargement des compagnons",

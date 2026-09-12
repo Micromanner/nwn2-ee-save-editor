@@ -7,7 +7,7 @@ use crate::commands::campaign::cached_module_info;
 use crate::commands::{CommandError, CommandResult};
 use crate::services::save_graph::editing::{PendingQuestEdit, QuestPreview};
 use crate::services::save_graph::{
-    self, BuildContext, QuestGraphProgress, SaveGraph, SaveGraphSummary, TransitionNode,
+    self, BuildContext, OrphanKind, QuestGraphProgress, SaveGraph, SaveGraphSummary, TransitionNode,
 };
 use crate::services::toolset_bridge::{self, BridgeError};
 use crate::state::AppState;
@@ -251,7 +251,13 @@ fn ensure_quest_graph(
     let is_ee_install = state.paths.read().is_enhanced_edition();
     if !is_ee_install {
         let explanation = "Quest graph requires NWN2 Enhanced Edition. The original NWN2 install ships 32-bit toolset DLLs that this editor's 64-bit toolset bridge cannot load. Live module variables and globals are still shown above.".to_string();
-        let graph = degraded_graph(state, &module_info, &module_vars, explanation)?;
+        let graph = degraded_graph(
+            state,
+            &module_info,
+            &module_vars,
+            OrphanKind::EnhancedEditionRequired,
+            explanation,
+        )?;
         let shared = Arc::new(graph);
         state.session.write().quest_graph_cache = Some(shared.clone());
         return Ok(shared);
@@ -264,6 +270,7 @@ fn ensure_quest_graph(
                 state,
                 &module_info,
                 &module_vars,
+                OrphanKind::PlatformUnsupported,
                 format!("Quest graph is Windows-only. {msg}"),
             )?;
             let shared = Arc::new(graph);
@@ -326,6 +333,7 @@ fn degraded_graph(
     state: &State<'_, AppState>,
     module_info: &crate::services::campaign::content::ModuleInfo,
     module_vars: &crate::services::campaign::content::ModuleVariables,
+    kind: OrphanKind,
     explanation: String,
 ) -> CommandResult<SaveGraph> {
     let session = state.session.read();
@@ -337,6 +345,7 @@ fn degraded_graph(
         handler,
         module_info,
         module_vars,
+        kind,
         explanation,
     ))
 }

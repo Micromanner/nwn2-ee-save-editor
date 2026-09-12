@@ -5,7 +5,8 @@ export type OrphanKind =
   | 'unresolved_module'
   | 'graph_failed'
   | 'journal_read_failed'
-  | 'bridge_unavailable';
+  | 'enhanced_edition_required'
+  | 'platform_unsupported';
 
 export type FunctorKind =
   | 'journal'

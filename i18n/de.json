@@ -555,10 +555,21 @@
         "unresolved_module": "Modul nicht gefunden",
         "graph_failed": "Modul konnte nicht gelesen werden",
         "journal_read_failed": "Tagebuch konnte nicht gelesen werden",
-        "bridge_unavailable": "Toolset-Bridge nicht verfügbar"
+        "enhanced_edition_required": "Toolset-Bridge nicht verfügbar",
+        "platform_unsupported": "Toolset-Bridge nicht verfügbar"
       },
       "failedToLoad": "Quests konnten nicht geladen werden",
-      "loadingTitle": "Quest-Daten werden geladen"
+      "loadingTitle": "Quest-Daten werden geladen",
+      "unavailable": {
+        "enhanced_edition_required": {
+          "title": "Quest-Bearbeitung benötigt NWN2 Enhanced Edition",
+          "description": "Diese Funktion liest Quest-Daten über die 64-Bit-Toolset-DLLs des Spiels, die nur mit der Enhanced Edition ausgeliefert werden. Die originale NWN2-Installation enthält nur 32-Bit-DLLs, daher können hier keine Quests angezeigt werden."
+        },
+        "platform_unsupported": {
+          "title": "Quest-Bearbeitung ist nur unter Windows verfügbar",
+          "description": "Diese Funktion führt die Toolset-DLLs des Spiels aus, die nur unter Windows funktionieren."
+        }
+      }
     },
     "companions": {
       "failedToLoad": "Gefährten konnten nicht geladen werden",

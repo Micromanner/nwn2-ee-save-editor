@@ -556,10 +556,21 @@
         "unresolved_module": "Módulo no encontrado",
         "graph_failed": "No se pudo leer el módulo",
         "journal_read_failed": "No se pudo leer el diario",
-        "bridge_unavailable": "Puente del toolset no disponible"
+        "enhanced_edition_required": "Puente del toolset no disponible",
+        "platform_unsupported": "Puente del toolset no disponible"
       },
       "failedToLoad": "Error al cargar misiones",
-      "loadingTitle": "Cargando datos de misiones"
+      "loadingTitle": "Cargando datos de misiones",
+      "unavailable": {
+        "enhanced_edition_required": {
+          "title": "La edición de misiones requiere NWN2 Enhanced Edition",
+          "description": "Esta función lee los datos de misiones a través de las DLL de 64 bits del toolset del juego, que solo se incluyen con la Enhanced Edition. La instalación original de NWN2 solo contiene DLL de 32 bits, por lo que aquí no se pueden mostrar misiones."
+        },
+        "platform_unsupported": {
+          "title": "La edición de misiones solo está disponible en Windows",
+          "description": "Esta función ejecuta las DLL del toolset del juego, que solo funcionan en Windows."
+        }
+      }
     },
     "companions": {
       "failedToLoad": "Error al cargar compañeros",

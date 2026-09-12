@@ -62,11 +62,18 @@ export function QuestsTab() {
 
   if (!graph && error) return <NonIdealState title={t('gameState.quests.failedToLoad')}
     action={<Button onClick={refreshData}>{t('gameState.quests.edit.refresh')}</Button>} />;
-  if (!graph) return <div style={{ padding: 48 }}>
-    <p>{t('gameState.quests.loadingTitle')}</p>
+  if (!graph) return <div style={{ padding: '96px 48px', maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
+    <div className="t-semibold" style={{ marginBottom: 16 }}>
+      {t('gameState.quests.loadingTitle')}{progress?.message ? `: ${progress.message}` : ''}
+    </div>
     <ProgressBar value={(progress?.progress ?? 0) / 100} />
-    <p>{progress?.message}</p>
   </div>;
+  const blocker = graph.orphans.find(o => o.kind === 'enhanced_edition_required' || o.kind === 'platform_unsupported');
+  if (blocker) return <NonIdealState
+    icon="warning-sign"
+    title={t(`gameState.quests.unavailable.${blocker.kind}.title`)}
+    description={t(`gameState.quests.unavailable.${blocker.kind}.description`)}
+  />;
   const quests = graph.quests.map(q => ({ ...q, pending_state: pending.find(p => p.tag === q.tag)?.target }));
   const questNames = new Map(quests.map(q => [q.tag, questDisplayName(q)]));
   const effectiveTag = selectedTag ?? quests[0]?.tag ?? null;

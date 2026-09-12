@@ -147,9 +147,11 @@ pub enum OrphanKind {
     UnresolvedModule,
     GraphFailed,
     JournalReadFailed,
-    /// The toolset bridge cannot run in this environment (e.g. a 32-bit-only
-    /// original NWN2 install on a 64-bit bridge, or a non-Windows platform).
-    BridgeUnavailable,
+    /// The install is original NWN2: its 32-bit toolset DLLs cannot be loaded
+    /// by the 64-bit toolset bridge.
+    EnhancedEditionRequired,
+    /// The toolset bridge runtime is gated off on this platform (non-Windows).
+    PlatformUnsupported,
 }
 
 /// Progress reported by the aggregator while building a `SaveGraph`. Stored on
