@@ -205,8 +205,11 @@ impl AccessorySlot {
             Self::RtShoulder => Some("RArm110"),
             Self::LtArm => Some("LArm010"),
             Self::RtArm => Some("RArm110"),
-            Self::LtElbow => Some("LArm011"),
-            Self::RtElbow => Some("RArm111"),
+            // Elbow cops parent to the forearm bone, whose origin IS the
+            // elbow joint. `*Arm011` is the mid-humerus twist bone 15.6cm
+            // up the upper arm, which floated the cop above the elbow.
+            Self::LtElbow => Some("LArm02"),
+            Self::RtElbow => Some("RArm12"),
             Self::LtBracer => Some("LArm02"),
             Self::RtBracer => Some("RArm12"),
             Self::LtLeg => Some("LLeg1"),
@@ -1613,8 +1616,8 @@ mod tests {
             (RtShoulder, "RArm110"),
             (LtArm, "LArm010"),
             (RtArm, "RArm110"),
-            (LtElbow, "LArm011"),
-            (RtElbow, "RArm111"),
+            (LtElbow, "LArm02"),
+            (RtElbow, "RArm12"),
             (LtBracer, "LArm02"),
             (RtBracer, "RArm12"),
             (LtLeg, "LLeg1"),
@@ -1641,6 +1644,7 @@ mod tests {
         assert_eq!(resref_bone("A_EEM_LUpArm14"), Some("LArm010"));
         assert_eq!(resref_bone("A_EEM_RUpArm12"), Some("RArm110"));
         assert_eq!(resref_bone("A_EEM_LBracer17"), Some("LArm02"));
+        assert_eq!(resref_bone("A_HHM_RElbow1"), Some("RArm12"));
         assert_eq!(resref_bone("A_EEM_RKnee11"), Some("RLeg2"));
         assert_eq!(resref_bone("A_EEM_LLowLeg11"), Some("LLeg2"));
         // Non-accessory resrefs → None.
