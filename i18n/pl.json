@@ -996,7 +996,7 @@
     }
   },
   "roster": {
-    "party": "Drużyna",
+    "title": "Skład",
     "player": "Gracz",
     "levelLine": "Poziom {level}",
     "unsavedTitle": "Niezapisane zmiany",

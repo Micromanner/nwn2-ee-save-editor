@@ -995,7 +995,7 @@
     }
   },
   "roster": {
-    "party": "Отряд",
+    "title": "Состав",
     "player": "Игрок",
     "levelLine": "Уровень {level}",
     "unsavedTitle": "Несохранённые изменения",

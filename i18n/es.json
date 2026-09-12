@@ -989,7 +989,7 @@
     "material": "Material"
   },
   "roster": {
-    "party": "Grupo",
+    "title": "Plantilla",
     "player": "Jugador",
     "levelLine": "Nivel {level}",
     "syncWarning": "Compañero guardado, pero no se pudo actualizar la caché del grupo.",

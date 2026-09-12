@@ -1166,7 +1166,7 @@
     "hasCustomColors": "Custom colors"
   },
   "roster": {
-    "party": "Party",
+    "title": "Roster",
     "player": "Player",
     "levelLine": "Level {level}",
     "syncWarning": "Companion saved, but the party roster cache could not be updated.",

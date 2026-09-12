@@ -988,7 +988,7 @@
     "material": "Material"
   },
   "roster": {
-    "party": "Gruppe",
+    "title": "Kader",
     "player": "Spieler",
     "levelLine": "Stufe {level}",
     "syncWarning": "Begleiter gespeichert, aber der Gruppen-Cache konnte nicht aktualisiert werden.",

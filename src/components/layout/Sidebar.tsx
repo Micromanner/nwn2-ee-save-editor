@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { IconType } from 'react-icons';
-import { GiVisoredHelm, GiMirrorMirror, GiFist, GiLayeredArmor, GiSkills, GiStarMedal, GiSpellBook, GiSwapBag, GiEarthAmerica, GiCube } from 'react-icons/gi';
+import { GiVisoredHelm, GiMirrorMirror, GiFist, GiLayeredArmor, GiSkills, GiStarMedal, GiSpellBook, GiSwapBag, GiEarthAmerica, GiCube, GiThreeFriends } from 'react-icons/gi';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useIcon, fetchIcon } from '@/hooks/useIcon';
@@ -18,6 +18,7 @@ const NAV_ITEMS: { id: string; icon: IconType; gameIcon: string | null; labelKey
   { id: 'spells', icon: GiSpellBook, gameIcon: 'b_spellbook', labelKey: 'navigation.spells' },
   { id: 'inventory', icon: GiSwapBag, gameIcon: 'ia_inventory', labelKey: 'navigation.inventory' },
   { id: 'gamestate', icon: GiEarthAmerica, gameIcon: 'b_journal', labelKey: 'navigation.gameState' },
+  { id: 'party', icon: GiThreeFriends, gameIcon: 'b_partyselect', labelKey: 'navigation.party' },
   { id: 'models', icon: GiCube, gameIcon: 'is_trueseeing', labelKey: 'navigation.models' },
 ];
 

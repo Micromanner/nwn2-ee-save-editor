@@ -994,7 +994,7 @@
     }
   },
   "roster": {
-    "party": "Groupe",
+    "title": "Effectif",
     "player": "Joueur",
     "levelLine": "Niveau {level}",
     "unsavedTitle": "Modifications non enregistrées",

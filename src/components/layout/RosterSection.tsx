@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { GiThreeFriends } from 'react-icons/gi';
 import { T } from '../theme';
-import { GameIcon } from '../shared/GameIcon';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useIcon } from '@/hooks/useIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-
-const PARTY_GAME_ICON = 'b_partyselect';
 
 type SwitchTarget = { kind: 'player' } | { kind: 'companion'; rosName: string };
 
@@ -60,9 +56,8 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
   const { handleError } = useErrorHandler();
   const {
     character, roster, activeSource, playerName: storedPlayerName, playerClassId,
-    isPreloading, isMetadataLoading, switchToCompanion, switchToPlayer, sessionKind,
+    isPreloading, isMetadataLoading, switchToCompanion, switchToPlayer,
   } = useCharacterContext();
-  const partyIconUrl = useIcon(PARTY_GAME_ICON);
   const [classIcons, setClassIcons] = useState<Record<number, string | null>>({});
   const [isSwitching, setIsSwitching] = useState(false);
 
@@ -129,31 +124,12 @@ export function RosterSection({ activeTab, onTabChange }: RosterSectionProps) {
 
 
   return (
-    <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {sessionKind !== 'vault' && (
-        <button
-          onClick={() => onTabChange('party')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            width: '100%', padding: '8px 16px',
-            border: 'none', cursor: 'pointer',
-            background: activeTab === 'party' ? 'rgba(160,82,45,0.12)' : 'transparent',
-            color: activeTab === 'party' ? T.sidebarAccent : T.sidebarText,
-            textAlign: 'left',
-            borderLeft: activeTab === 'party' ? `2px solid ${T.sidebarAccent}` : '2px solid transparent',
-            transition: 'all 0.15s',
-          }}
-        >
-          {partyIconUrl ? (
-            <img src={partyIconUrl} alt="" style={{ width: 'var(--icon-nav)', height: 'var(--icon-nav)', borderRadius: 2, flexShrink: 0 }} />
-          ) : (
-            <GameIcon icon={GiThreeFriends} style={{ width: 'var(--icon-nav)', height: 'var(--icon-nav)', flexShrink: 0 }} />
-          )}
-          {t('navigation.party')}
-        </button>
-      )}
-
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+    <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', margin: '0 0 8px' }}>
+        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+        <span style={{ color: T.sidebarText, opacity: 0.7, fontSize: 'var(--font-sm)' }}>{t('roster.title')}</span>
+        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+      </div>
 
       <div className="sidebar-scroll" style={{ overflowY: 'auto', minHeight: 0 }}>
         <button
