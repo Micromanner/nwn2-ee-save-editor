@@ -89,8 +89,9 @@ pub struct AggregatedModule {
 #[derive(Debug, Clone, Serialize)]
 pub struct QuestAggregate {
     pub tag: String,
-    /// Category metadata from the first module that declares this tag. Later
-    /// re-declarations are ignored for display; the `defined_in` list records them.
+    /// Category metadata from the campaign journal or the first module that declares
+    /// this tag. Later re-declarations are ignored for display; the `defined_in` list
+    /// records the declaring modules (empty for campaign-only quests).
     pub category: JournalCategory,
     pub defined_in: Vec<String>,
     /// Current state int from the player's VarTable (`NW_JOURNAL_ENTRY<tag>`).

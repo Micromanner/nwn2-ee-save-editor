@@ -32,6 +32,25 @@ fn list_modules_parses_oc_campaign() {
 
     assert_eq!(result.start_module, "0_Tutorial");
     assert!(result.journal_synch);
+    let reward = result
+        .journal
+        .categories
+        .iter()
+        .find(|c| c.tag == "MarshalReward")
+        .expect("campaign module.jrl declares MarshalReward");
+    assert_eq!(reward.source, "campaign");
+    assert!(
+        reward.name.ends_with("Marshal Cormick's Reward"),
+        "{}",
+        reward.name
+    );
+    let done = reward
+        .entries
+        .iter()
+        .find(|e| e.id == 11)
+        .expect("entry 11");
+    assert!(done.is_final);
+    assert!(done.text.contains("received the reward"), "{}", done.text);
     // OC ships with more than a handful of modules — exact count is 18 at the time of writing,
     // but we assert a lower bound to tolerate patch changes.
     assert!(

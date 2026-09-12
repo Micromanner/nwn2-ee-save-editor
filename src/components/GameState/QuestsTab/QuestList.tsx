@@ -129,7 +129,7 @@ export function QuestList({
           </td>
           <td style={{ textAlign: 'right' }}>{q.category.xp || 0}</td>
           <td title={resolveMany(q.defined_in)} style={{ color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {q.defined_in.length === 0 ? '-' : resolveMany(q.defined_in)}
+            {q.defined_in.length > 0 ? resolveMany(q.defined_in) : q.category.source === 'campaign' ? t('gameState.quests.edit.campaign') : '-'}
           </td>
         </tr>
       );

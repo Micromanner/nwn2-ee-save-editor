@@ -18,10 +18,36 @@ impl GraphCache {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos() as i128)
             .unwrap_or(0);
-        Ok(Self {
+        let cache = Self {
             dir: cache_dir,
             bridge_mtime_ns,
-        })
+        };
+        cache.prune_stale();
+        Ok(cache)
+    }
+
+    /// Every key hashes the bridge exe mtime, so a graph written before the current
+    /// bridge build can never be hit again. Drop those instead of letting each
+    /// release leave a full stale set behind.
+    fn prune_stale(&self) {
+        let Ok(entries) = fs::read_dir(&self.dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let written_ns = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_nanos() as i128);
+            if written_ns.is_some_and(|ns| ns < self.bridge_mtime_ns) {
+                let _ = fs::remove_file(&path);
+            }
+        }
     }
 
     pub fn key(&self, module_path: &Path) -> std::io::Result<String> {

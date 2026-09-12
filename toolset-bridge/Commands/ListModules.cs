@@ -58,6 +58,7 @@ public static class ListModules
             StartModule = root.GetStringSafe("StartModule"),
             JournalSynch = GetInt(root, "JournalSynch") != 0,
             Modules = new List<CampaignModuleEntry>(),
+            Journal = Adapters.JournalAdapter.ReadFile(Path.Combine(camFolder, "module.jrl"), "campaign"),
         };
 
         var modNames = root.GetListSafe("ModNames");
@@ -117,6 +118,8 @@ public sealed class CampaignModulesShape
     [JsonProperty("start_module")] public string StartModule { get; set; } = "";
     [JsonProperty("journal_synch")] public bool JournalSynch { get; set; }
     [JsonProperty("modules")] public List<CampaignModuleEntry> Modules { get; set; } = new();
+    // Campaign-level journal (`<campaign>/module.jrl`); empty when the campaign has none.
+    [JsonProperty("journal")] public ToolsetBridge.Schema.JournalShape Journal { get; set; } = new();
 }
 
 public sealed class CampaignModuleEntry

@@ -90,7 +90,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
         });
     }
 
-    let (campaign_summary, module_entries) = match campaign_cam_path.as_deref() {
+    let (campaign_summary, module_entries, campaign_journal) = match campaign_cam_path.as_deref() {
         Some(cam_path) => match ctx.client.list_modules(cam_path) {
             Ok(list) => {
                 let summary = CampaignSummary {
@@ -103,7 +103,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                     journal_synch: list.journal_synch,
                     current_module_id: current_module_id.clone(),
                 };
-                (summary, list.modules)
+                (summary, list.modules, list.journal.categories)
             }
             Err(e) => {
                 warn!("list_modules failed for {}: {e}", cam_path.display());
@@ -114,11 +114,13 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 (
                     single_module_fallback(&campaign_id, &current_module_id),
                     Vec::new(),
+                    Vec::new(),
                 )
             }
         },
         None => (
             single_module_fallback(&campaign_id, &current_module_id),
+            Vec::new(),
             Vec::new(),
         ),
     };
@@ -126,6 +128,9 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
     report("campaign", 5.0, "Listing modules…".to_string());
 
     let mut quests: HashMap<String, QuestAggregate> = HashMap::new();
+    for category in &campaign_journal {
+        merge_category(&mut quests, category, None);
+    }
     let mut modules_out: Vec<AggregatedModule> = Vec::with_capacity(module_entries.len());
 
     let module_total = module_entries.len();
@@ -199,7 +204,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             if seen_tags.insert(category.tag.as_str()) {
                 tags_in_module.push(category.tag.clone());
             }
-            merge_category(&mut quests, category, &entry.name);
+            merge_category(&mut quests, category, Some(&entry.name));
         }
         for node in &graph.convo.nodes {
             collect_transitions(node, &entry.name, &mut quests);
@@ -305,22 +310,34 @@ fn fabricated_category(tag: &str, source: &str) -> JournalCategory {
     }
 }
 
+fn is_fabricated(category: &JournalCategory) -> bool {
+    category.source == SOURCE_LIVE_ONLY || category.source == SOURCE_TRANSITION_ONLY
+}
+
+/// `module_name` is `None` for the campaign-level journal, which declares the quest
+/// without tying it to a module. A declared category always replaces a fabricated one,
+/// so a quest first seen through dialogue transitions still gets its real text.
 fn merge_category(
     quests: &mut HashMap<String, QuestAggregate>,
     category: &JournalCategory,
-    module_name: &str,
+    module_name: Option<&str>,
 ) {
     quests
         .entry(category.tag.clone())
         .and_modify(|existing| {
-            if !existing.defined_in.iter().any(|m| m == module_name) {
+            if is_fabricated(&existing.category) {
+                existing.category = category.clone();
+            }
+            if let Some(module_name) = module_name
+                && !existing.defined_in.iter().any(|m| m == module_name)
+            {
                 existing.defined_in.push(module_name.to_string());
             }
         })
         .or_insert_with(|| QuestAggregate {
             tag: category.tag.clone(),
             category: category.clone(),
-            defined_in: vec![module_name.to_string()],
+            defined_in: module_name.map(str::to_string).into_iter().collect(),
             live_state: None,
             transitions: Vec::new(),
         });
@@ -453,5 +470,64 @@ pub fn build_without_bridge(
             kind: OrphanKind::BridgeUnavailable,
             message: explanation,
         }],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::toolset_bridge::JournalEntry;
+
+    fn declared(tag: &str, source: &str) -> JournalCategory {
+        JournalCategory {
+            tag: tag.into(),
+            name: format!("{tag} name"),
+            priority: "Medium".into(),
+            xp: 50,
+            source: source.into(),
+            entries: vec![JournalEntry {
+                id: 1,
+                text: "started".into(),
+                is_final: false,
+            }],
+        }
+    }
+
+    #[test]
+    fn declared_category_replaces_fabricated_one() {
+        let mut quests = HashMap::new();
+        quests.insert(
+            "q".to_string(),
+            QuestAggregate {
+                tag: "q".into(),
+                category: fabricated_category("q", SOURCE_TRANSITION_ONLY),
+                defined_in: Vec::new(),
+                live_state: Some(1),
+                transitions: Vec::new(),
+            },
+        );
+
+        merge_category(&mut quests, &declared("q", "campaign"), None);
+
+        let quest = &quests["q"];
+        assert_eq!(quest.category.source, "campaign");
+        assert_eq!(quest.category.entries.len(), 1);
+        assert_eq!(quest.live_state, Some(1));
+        assert!(quest.defined_in.is_empty());
+    }
+
+    #[test]
+    fn module_declaration_keeps_campaign_category_and_records_module() {
+        let mut quests = HashMap::new();
+        merge_category(&mut quests, &declared("q", "campaign"), None);
+        let mut module_copy = declared("q", "module");
+        module_copy.xp = 999;
+        merge_category(&mut quests, &module_copy, Some("1000_neverwinter_a1"));
+        merge_category(&mut quests, &module_copy, Some("1000_neverwinter_a1"));
+
+        let quest = &quests["q"];
+        assert_eq!(quest.category.source, "campaign");
+        assert_eq!(quest.category.xp, 50);
+        assert_eq!(quest.defined_in, vec!["1000_neverwinter_a1".to_string()]);
     }
 }

@@ -9,6 +9,10 @@ pub struct CampaignModules {
     pub start_module: String,
     pub journal_synch: bool,
     pub modules: Vec<CampaignModuleEntry>,
+    /// Campaign-level `module.jrl`. Campaigns (OC, MotB, SoZ) keep their quest
+    /// journal here rather than inside the member modules.
+    #[serde(default)]
+    pub journal: JournalData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

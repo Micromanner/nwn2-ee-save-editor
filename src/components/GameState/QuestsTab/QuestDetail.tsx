@@ -89,7 +89,7 @@ export function QuestDetail({
           <span className="t-semibold" style={{ color: T.text }}>{String(quest.category.xp || 0)}</span>
 
           <span style={{ color: T.textMuted }}>{t('gameState.quests.list.module')}</span>
-          <span className="t-semibold" style={{ color: T.text }}>{quest.defined_in.length === 0 ? '-' : resolveMany(quest.defined_in)}</span>
+          <span className="t-semibold" style={{ color: T.text }}>{quest.defined_in.length > 0 ? resolveMany(quest.defined_in) : quest.category.source === 'campaign' ? t('gameState.quests.edit.campaign') : '-'}</span>
         </div>
         {technical && <div className="t-mono" style={{ color: T.textMuted, marginTop: 8 }}>
           {quest.tag}
