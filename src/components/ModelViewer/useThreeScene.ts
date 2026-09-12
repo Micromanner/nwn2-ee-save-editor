@@ -24,6 +24,25 @@ export function getEnvMap(scene: THREE.Scene | null | undefined): THREE.Texture 
   return (scene?.userData.envMap as THREE.Texture | undefined) ?? null;
 }
 
+function createRadialAlphaTexture(): THREE.CanvasTexture {
+  const size = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  // Smoothstep falloff sampled densely; a two-stop gradient bands visibly.
+  for (let i = 0; i <= 32; i++) {
+    const t = i / 32;
+    const v = 1 - t * t * (3 - 2 * t);
+    const c = Math.round(v * 255);
+    grad.addColorStop(t, `rgb(${c},${c},${c})`);
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+
 export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRefs {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -43,8 +62,9 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     scene.userData.shadingMode = DEFAULT_SHADING_MODE;
     sceneRef.current = scene;
 
-    const sky = createSkyObject();
-    scene.add(sky);
+    // Dark neutral backdrop: the bright sky made in-game-accurate colors read
+    // muddy by simultaneous contrast. The sky still feeds the 0x08 env map.
+    scene.background = new THREE.Color(0x202024);
 
     const rect = container.getBoundingClientRect();
     const w = rect.width || 500;
@@ -57,8 +77,8 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(w, h);
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.8;
+    renderer.toneMapping = THREE.LinearToneMapping;
+    renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(renderer.domElement);
@@ -87,8 +107,8 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     controlsRef.current = controls;
 
     // -- Lighting --
-    const sun = new THREE.DirectionalLight(0xffe0b2, 1.5);
-    sun.position.set(250, 500, -400);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.set(250, 500, 400);
     sun.castShadow = true;
     sun.shadow.mapSize.width = 2048;
     sun.shadow.mapSize.height = 2048;
@@ -110,17 +130,15 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     rimLight.position.set(0, 100, -200);
     scene.add(rimLight);
 
-    // Neutral-white counter-light mirroring the warm sun, plus a hemisphere
-    // wash, so the shadowed side stays readable and the gloss/spec mask is
-    // visible off-key without tinting the albedo. Was item-viewer-only until
-    // 2026-09-04; the character viewer's single warm key crushed everything
-    // facing away from it.
-    const backLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    backLight.position.set(-250, 500, 400);
+    // Weak counter-light opposite the key so the shadowed side keeps a hint
+    // of the gloss/spec mask; the hemisphere carries the fill, matching the
+    // game's high ambient-to-sun ratio.
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    backLight.position.set(-250, 500, -400);
     scene.add(backLight);
     scene.add(backLight.target);
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 2.0);
     scene.add(hemiLight);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.0);
@@ -134,6 +152,28 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
     ground.name = '__ground_shadow';
     ground.receiveShadow = true;
     scene.add(ground);
+
+    // Visible studio floor under the shadow catcher: a disc slightly lighter
+    // than the backdrop that fades out radially, so the character has a
+    // ground reference and horizon without a hard edge. Child of the shadow
+    // plane so fitting/clearing/GTAO hiding carry it along.
+    const floorGeom = new THREE.CircleGeometry(1000, 64);
+    floorGeom.rotateX(-Math.PI / 2);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x34343a,
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      alphaMap: createRadialAlphaTexture(),
+      depthWrite: false,
+      // Sub-level noise before 8-bit quantisation; the fade spans ~20 grey
+      // levels over hundreds of pixels and bands into visible rings otherwise.
+      dithering: true,
+    });
+    const floor = new THREE.Mesh(floorGeom, floorMat);
+    floor.position.y = -0.5;
+    floor.receiveShadow = true;
+    ground.add(floor);
 
     // -- Render loop --
     const animate = () => {
@@ -186,6 +226,7 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
 
     const renderTarget = new THREE.WebGLRenderTarget(w, h, {
       samples: 4,
+      type: THREE.HalfFloatType,
     });
     const composer = new EffectComposer(renderer, renderTarget);
     const renderPass = new RenderPass(scene, camera);
@@ -198,7 +239,7 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
       scale: 1,
       distanceFallOff: 1,
     } as Record<string, number>);
-    gtaoPass.blendIntensity = 1.5;
+    gtaoPass.blendIntensity = 0.5;
     composer.addPass(gtaoPass);
 
     const outputPass = new OutputPass();
@@ -238,7 +279,7 @@ export function useThreeScene(onAnimate?: (scene: THREE.Scene) => void): SceneRe
 
 export function clearSceneModels(scene: THREE.Scene) {
   const toRemove = scene.children.filter(
-    (c) => !(c instanceof THREE.Light) && c.name !== '__ground_shadow' && !('isSky' in c),
+    (c) => !(c instanceof THREE.Light) && c.name !== '__ground_shadow',
   );
   toRemove.forEach((c) => scene.remove(c));
 

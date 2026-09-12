@@ -16,6 +16,8 @@ export interface TintChannelsRaw {
   channel3: { r: number; g: number; b: number; a: number };
 }
 
+/// Raw sRGB bytes scaled to 0..1, NOT linearized: the shader reproduces the
+/// engine's gamma-space blend and linearizes the resulting factor itself.
 export function tintChannelsToColors(tc: TintChannelsRaw): TintColors {
   return {
     channel1: [tc.channel1.r / 255, tc.channel1.g / 255, tc.channel1.b / 255],
@@ -193,7 +195,7 @@ function injectTintShader(
   // first's compiled program — so the face renders with the hair's swap and
   // the eyebrows get driven by the eye channel. Keying on swapGB keeps the two
   // channel orderings in separate programs.
-  mat.customProgramCacheKey = () => `nwn2tint_${swapGB ? 'gb' : 'rgb'}`;
+  mat.customProgramCacheKey = () => `nwn2tint_srgb_${swapGB ? 'gb' : 'rgb'}`;
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tintMap = uniforms.tintMap;
@@ -224,10 +226,18 @@ uniform vec3 tintColor3;
   #endif
   vec4 tintMask = texture2D(tintMap, tintUv);
   // EE LightingPS: weighted sum, with alpha blending against untinted albedo.
+  // The engine does this in sRGB space against the sRGB texel, so the
+  // factor is built from the raw sRGB tint colors and linearized afterwards;
+  // blending in linear space leaves a grey floor under every tinted color.
   vec3 tint = tintColor1 * tintMask.r
             + tintColor2 * tintMask.${ch2}
             + tintColor3 * tintMask.${ch3};
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * tint, tintMask.a);
+  vec3 factor = mix(vec3(1.0), tint, tintMask.a);
+  vec3 factorLinear = mix(
+    pow((factor + 0.055) / 1.055, vec3(2.4)),
+    factor / 12.92,
+    vec3(lessThanEqual(factor, vec3(0.04045))));
+  diffuseColor.rgb *= factorLinear;
 }
 `,
     );
@@ -277,6 +287,9 @@ export const SPECULAR = {
   // The engine multiplies the diffuse map by the MDB diffuse_color (plate
   // uses values down to 0.14). A/B toggle for calibration.
   DIFFUSE_COLOR_ENABLED: true,
+  // Global trim on the game-style Blinn highlight (authored spec_level x
+  // spec_color); 1 = authored strength.
+  GAME_SPECULAR_SCALE: 0.7,
 };
 
 export type ShadingMode = 'physical' | 'game';
@@ -425,7 +438,11 @@ export async function createMaterial(
   ]);
   const normal = parsedNormal ? buildTexture(parsedNormal) : null;
 
+  // NWN2 diffuse/glow DDS are authored in sRGB; without the tag three.js
+  // treats them as linear and gamma-encodes them a second time on output
+  // (lifted midtones, drained saturation). Normal and tint masks stay linear.
   if (diffuse) {
+    diffuse.colorSpace = THREE.SRGBColorSpace;
     mat.map = diffuse;
   }
 
@@ -437,6 +454,7 @@ export async function createMaterial(
     }
     injectTintShader(mat, tintTex, tintColors, swapGB);
   } else if (!diffuse && tintTex) {
+    tintTex.colorSpace = THREE.SRGBColorSpace;
     mat.map = tintTex;
   }
 
@@ -459,6 +477,7 @@ export async function createMaterial(
   }
 
   if (glow) {
+    glow.colorSpace = THREE.SRGBColorSpace;
     mat.emissiveMap = glow;
     mat.emissive = new THREE.Color(1, 1, 1);
   }
@@ -478,7 +497,9 @@ export async function createMaterial(
   const power = materialData.specular_power;
   injectGameLighting(
     mat,
-    new THREE.Color(...(materialData.specular_color ?? [1, 1, 1])).multiplyScalar(specLevel),
+    new THREE.Color(...(materialData.specular_color ?? [1, 1, 1])).multiplyScalar(
+      specLevel * SPECULAR.GAME_SPECULAR_SCALE,
+    ),
     power !== undefined && Number.isFinite(power) && power > 0 ? power : 1,
   );
 

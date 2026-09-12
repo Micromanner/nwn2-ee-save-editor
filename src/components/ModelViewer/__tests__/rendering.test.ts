@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildMesh } from '../meshBuilder';
-import { createMaterial, ddsMeanAlpha, updateTintUniforms } from '../materials';
+import { SPECULAR, createMaterial, ddsMeanAlpha, updateTintUniforms } from '../materials';
 import type { MeshData } from '../types';
 
 // One 4x4 block: DXT1 (8 data bytes) or DXT5 with a flat alpha (16 data bytes,
@@ -62,11 +62,12 @@ describe('MDB rendering', () => {
     material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
     const compactShader = shader.fragmentShader.replace(/\s+/g, ' ');
     expect(compactShader).toContain(`vec3 tint = tintColor1 * tintMask.r + tintColor2 * tintMask.${swapGB ? 'b' : 'g'} + tintColor3 * tintMask.${swapGB ? 'g' : 'b'};`);
-    expect(compactShader).toContain('diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * tint, tintMask.a);');
+    expect(compactShader).toContain('vec3 factor = mix(vec3(1.0), tint, tintMask.a);');
+    expect(compactShader).toContain('diffuseColor.rgb *= factorLinear;');
     expect(shader.uniforms.tintColor2.value.toArray()).toEqual(colors.channel2);
     expect(shader.uniforms.nwn2GameStyle).toBe(material.userData.lightingUniforms.nwn2GameStyle);
     expect(shader.fragmentShader).toContain('#define RE_Direct RE_Direct_NWN2');
-    expect(material.customProgramCacheKey()).toBe(`nwn2tint_${swapGB ? 'gb' : 'rgb'}_nwn2lighting_v2`);
+    expect(material.customProgramCacheKey()).toBe(`nwn2tint_srgb_${swapGB ? 'gb' : 'rgb'}_nwn2lighting_v2`);
     material.map?.dispose();
     shader.uniforms.tintMap.value.dispose();
     material.dispose();
@@ -95,7 +96,7 @@ describe('MDB rendering', () => {
     const uniforms = material.userData.lightingUniforms;
     expect(material.specularIntensity).toBeCloseTo(8.1);
     expect(material.specularIntensityMap).toBe(material.normalMap);
-    expect(uniforms.nwn2Specular.value.r).toBeCloseTo(0.405);
+    expect(uniforms.nwn2Specular.value.r).toBeCloseTo(0.405 * SPECULAR.GAME_SPECULAR_SCALE);
     expect(uniforms.nwn2SpecularPower.value).toBe(10);
     render();
     expect(uniforms.nwn2GameStyle.value).toBe(0);
