@@ -100,6 +100,10 @@ table.bp6-html-table.bp6-interactive tbody tr:hover td {
 .bp6-dialog {
   background: #faf7f2;
 }
+.bp6-dialog.file-browser-dialog {
+  transform: none !important;
+  transition: none !important;
+}
 .bp6-dialog-header {
   background: #f5f0e8;
   border-bottom: 1px solid #d9d0c1;

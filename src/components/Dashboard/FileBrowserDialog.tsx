@@ -93,7 +93,7 @@ export function FileBrowserDialog({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.height > 0) {
-          setContainerHeight(entry.contentRect.height);
+          setContainerHeight(Math.floor(entry.contentRect.height));
         }
       }
     });
@@ -393,7 +393,17 @@ export function FileBrowserDialog({
         isOpen={isOpen}
         onClose={onClose}
         title={title}
-        style={{ width: 'min(1400px, 95vw)', height: '80vh', paddingBottom: 0, background: T.surface, display: 'flex', flexDirection: 'column' as const }}
+        className="file-browser-dialog"
+        transitionDuration={0}
+        style={{
+          width: 'round(nearest, min(1400px, 95vw), 2px)',
+          height: 'round(nearest, 80vh, 2px)',
+          paddingBottom: 0,
+          background: T.surface,
+          display: 'flex',
+          flexDirection: 'column' as const,
+          transform: 'none',
+        }}
         canOutsideClickClose
       >
         <DialogBody useOverflowScrollContainer={false} style={{ padding: 0, margin: 0, background: T.surface, display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 }}>
