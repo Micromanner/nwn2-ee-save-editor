@@ -28,7 +28,8 @@ interface RendererState {
   camera: THREE.PerspectiveCamera;
   /// Back + hemisphere fill for item shots; washes faces out, so portraits
   /// swap them for the character viewer's rim light (sun is shared).
-  itemLights: THREE.Light[];
+  sun: THREE.DirectionalLight;
+  hemi: THREE.HemisphereLight;
   portraitLights: THREE.Light[];
 }
 
@@ -47,8 +48,10 @@ function initRenderer(): RendererState {
   });
   renderer.setSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, false);
   renderer.setPixelRatio(1);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.8;
+  // Same output as the character viewer: no filmic curve, textures are
+  // already sRGB-decoded and tints blended like the engine (2026-09-12).
+  renderer.toneMapping = THREE.LinearToneMapping;
+  renderer.toneMappingExposure = 1.0;
 
   // On context loss the renderer is unusable; drop the singleton so the next
   // job rebuilds it from scratch.
@@ -63,23 +66,17 @@ function initRenderer(): RendererState {
 
   const scene = new THREE.Scene();
   scene.userData.shadingMode = DEFAULT_SHADING_MODE;
-  const sun = new THREE.DirectionalLight(0xffe0b2, 1.5);
+  // Shared rig mirroring useThreeScene: white key on the camera side (-z),
+  // weak counter-light behind, hemisphere carrying the fill.
+  const sun = new THREE.DirectionalLight(0xffffff, 1.4);
   sun.position.set(250, 500, -400);
   scene.add(sun);
-  const back = new THREE.DirectionalLight(0xffffff, 1.5);
+  const back = new THREE.DirectionalLight(0xffffff, 0.3);
   back.position.set(-250, 500, 400);
   scene.add(back);
-  const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 2.0);
   scene.add(hemi);
-  // Portrait rig: own key (portraits render without the filmic tone map, so
-  // the shared 1.5 sun would blow out), soft cool fill lifting the shadow
-  // side of the face, back rim separating hair from the dark card background.
-  const pkey = new THREE.DirectionalLight(0xffe0b2, 1.85);
-  pkey.position.set(250, 500, -400);
-  scene.add(pkey);
-  const fill = new THREE.DirectionalLight(0xbfd4e0, 0.6);
-  fill.position.set(-250, 200, -300);
-  scene.add(fill);
+  // Portraits add a back rim separating hair from the dark card background.
   const rim = new THREE.DirectionalLight(0xffffff, 0.5);
   rim.position.set(-100, 300, 350);
   scene.add(rim);
@@ -90,8 +87,9 @@ function initRenderer(): RendererState {
     renderer,
     scene,
     camera,
-    itemLights: [sun, back, hemi],
-    portraitLights: [pkey, fill, rim],
+    sun,
+    hemi,
+    portraitLights: [rim],
   };
 }
 
@@ -211,15 +209,12 @@ export async function renderModelThumbnail(
 ): Promise<string> {
   if (modelData.meshes.length === 0) return '';
 
-  const { renderer, scene, camera, itemLights, portraitLights } = (state ??= initRenderer());
-  for (const light of itemLights) light.visible = framing !== 'portrait';
+  const { renderer, scene, camera, sun, hemi, portraitLights } = (state ??= initRenderer());
   for (const light of portraitLights) light.visible = framing === 'portrait';
-  // Portraits skip the filmic curve: ACES flattens and desaturates skin into
-  // a waxy look; the game's own portrait renderer has no filmic tone map.
-  // Materials are created fresh per job, so they compile under this setting.
-  renderer.toneMapping =
-    framing === 'portrait' ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = framing === 'portrait' ? 1.0 : 0.8;
+  // A face crop needs more key than fill to keep its shape; the viewer's
+  // flat game-like ratio stays for full items.
+  sun.intensity = framing === 'portrait' ? 1.9 : 1.4;
+  hemi.intensity = framing === 'portrait' ? 1.2 : 2.0;
 
   const group = new THREE.Group();
   const start = performance.now();
