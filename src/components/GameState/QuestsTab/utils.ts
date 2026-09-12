@@ -27,7 +27,7 @@ export function conflictingEdits(preview: QuestPreview | null, selected: number[
 
 export function questStates(quest: QuestSummary, transitions: TransitionNode[]) {
   return [...new Set([...quest.category.entries.map(e => e.id), ...transitions.map(tr => tr.new_state),
-    ...(quest.live_state == null ? [] : [quest.live_state]), ...(quest.pending_state == null ? [] : [quest.pending_state])])]
+    ...(quest.live_state == null ? [] : [quest.live_state])])]
     .sort((a, b) => a - b);
 }
 

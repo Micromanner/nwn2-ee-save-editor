@@ -27,12 +27,12 @@ describe('quest edit conflicts', () => {
 });
 
 describe('quest states', () => {
-  it('includes unknown saved progress, pending zero, and transition-only outcomes', () => {
-    const quest: QuestSummary = { tag: 'q', live_state: 77, pending_state: 0, defined_in: [], transition_count: 1,
+  it('includes unknown saved progress and transition-only outcomes', () => {
+    const quest: QuestSummary = { tag: 'q', live_state: 77, defined_in: [], transition_count: 1,
       category: { tag: 'q', name: 'Quest', priority: '', xp: 0, source: '', entries: [{ id: 20, text: 'Final', final: true }] } };
     const transition: TransitionNode = { module: 'm', dlg: 'd', node: 0, new_state: 10,
       text_strref: null, actions: [], co_authored_globals: [], co_authored_locals: [], gating_conditions: [] };
-    expect(questStates(quest, [transition, transition])).toEqual([0, 10, 20, 77]);
+    expect(questStates(quest, [transition, transition])).toEqual([10, 20, 77]);
     expect(quest.live_state).toBe(77);
   });
 });

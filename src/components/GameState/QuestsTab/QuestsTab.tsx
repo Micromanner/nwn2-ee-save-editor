@@ -12,6 +12,10 @@ import { QuestList } from './QuestList';
 import { QuestDetail } from './QuestDetail';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { T } from '../../theme';
+import { GameIcon } from '../../shared/GameIcon';
+import { GiAnticlockwiseRotation } from 'react-icons/gi';
+
+const MODIFIED = '#d97706';
 import { questDisplayName } from './utils';
 
 export function QuestsTab() {
@@ -74,7 +78,10 @@ export function QuestsTab() {
     title={t(`gameState.quests.unavailable.${blocker.kind}.title`)}
     description={t(`gameState.quests.unavailable.${blocker.kind}.description`)}
   />;
-  const quests = graph.quests.map(q => ({ ...q, pending_state: pending.find(p => p.tag === q.tag)?.target }));
+  const quests = graph.quests.map(q => {
+    const staged = pending.find(p => p.tag === q.tag)?.target;
+    return { ...q, live_state: staged ?? q.live_state, pending_state: staged };
+  });
   const questNames = new Map(quests.map(q => [q.tag, questDisplayName(q)]));
   const effectiveTag = selectedTag ?? quests[0]?.tag ?? null;
   const selectedQuest = quests.find(q => q.tag === effectiveTag) ?? null;
@@ -82,16 +89,17 @@ export function QuestsTab() {
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <CampaignContextCard campaign={graph.campaign} modules={graph.modules} orphans={graph.orphans} />
     {error && <Button onClick={refreshData}>{t('gameState.quests.edit.refresh')}</Button>}
-    {pending.length > 0 && <Card>
-      <strong>{t('gameState.quests.edit.pendingTitle')}</strong>
-      <p>{t('gameState.quests.edit.stagingExplanation')}</p>
-      {pending.map(edit => <details key={edit.tag} style={{ marginBottom: 8 }}>
-        <summary>{questNames.get(edit.tag) ?? edit.tag}: {display(edit.saved_state)} → {edit.target}</summary>
-        {edit.source && <p>{resolveModule(edit.source.module)} / {edit.source.dlg} / {edit.source.node}</p>}
-        {edit.writes.map((w, i) => <p key={i}>{w.key.module ? resolveModule(w.key.module) : t('gameState.quests.edit.campaign')} / {w.key.name} ({w.key.value_type}): {display(w.saved)} → {display(w.after)}</p>)}
-        <Button small disabled={busy} onClick={() => void discard(edit.tag)}>{t('gameState.quests.edit.discard')}</Button>
-      </details>)}
-      <Button small disabled={busy} onClick={() => void discard(null)}>{t('gameState.quests.edit.discardAll')}</Button>
+    {pending.length > 0 && <Card style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px' }}>
+        <span className="t-bold" style={{ color: T.textMuted }}>{t('gameState.quests.edit.pendingTitle', { count: pending.length })}</span>
+        <Button small minimal icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} style={{ color: MODIFIED }} disabled={busy} onClick={() => void discard(null)}>{t('gameState.quests.edit.discardAll')}</Button>
+      </div>
+      {pending.map(edit => <div key={edit.tag} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 16px', borderTop: `1px solid ${T.borderLight}` }}>
+        <span className="t-semibold" style={{ color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{questNames.get(edit.tag) ?? edit.tag}</span>
+        <span className="t-mono" style={{ color: T.text }}>{display(edit.saved_state)} → {edit.target}</span>
+        {edit.source && <span style={{ color: T.textMuted }}>{resolveModule(edit.source.module)} / {edit.source.dlg} / {edit.source.node}</span>}
+        <Button small minimal icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} style={{ color: MODIFIED }} disabled={busy} onClick={() => void discard(edit.tag)} title={t('gameState.quests.edit.discard')} />
+      </div>)}
     </Card>}
     <Card style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
       <div style={{ display: 'flex', minHeight: 480, maxHeight: 'calc(100vh - 280px)' }}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Callout, Icon, NonIdealState, Switch, Tag, Tooltip } from '@blueprintjs/core';
+import { Button, Icon, NonIdealState, Switch, Tag, Tooltip } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
 import { GiScrollQuill } from 'react-icons/gi';
 import { T } from '../../theme';
@@ -99,11 +99,6 @@ export function QuestDetail({
       </div>
 
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-        {quest.pending_state !== undefined && (
-          <Callout intent="primary" style={{ marginBottom: 12 }}>
-            {t('gameState.quests.detail.pendingBanner', { entry: entryLabel(quest.pending_state) })}
-          </Callout>
-        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <span className="t-bold" style={{ color: T.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {t('gameState.quests.detail.entries')}
@@ -118,7 +113,6 @@ export function QuestDetail({
         {states.map(state => {
             const definition = quest.category.entries.find(e => e.id === state);
             const isCurrent = state === quest.live_state;
-            const isPending = state === quest.pending_state;
             const routes = (loadedTransitions ?? []).filter(tr => tr.new_state === state);
             return <div key={state} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', borderTop: `1px solid ${T.borderLight}`, padding: '8px 0' }}>
               <span className="t-mono" style={{ color: T.textMuted, minWidth: 28, textAlign: 'right', paddingTop: 1 }}>{state}</span>
@@ -127,13 +121,12 @@ export function QuestDetail({
                   {definition?.text || t('gameState.quests.edit.undefinedState')}
                 </span>
                 {isCurrent && <Tag minimal intent="primary" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.current')}</Tag>}
-                {isPending && <Tag minimal intent="warning" style={{ marginLeft: 6 }}>{t('gameState.quests.edit.pending')}</Tag>}
                 {definition?.final && <Tag minimal intent="success" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.endsQuest')}</Tag>}
                 {technical && <div style={{ marginTop: 6 }}>
                   <TransitionsList quest={quest} transitions={routes} tlk={tlk} modules={graph.modules} />
                 </div>}
               </div>
-              <Button small intent="primary" disabled={isCurrent && !isPending} onClick={() => setTarget(state)} style={{ flexShrink: 0 }}>
+              <Button small intent="primary" disabled={isCurrent} onClick={() => setTarget(state)} style={{ flexShrink: 0 }}>
                 {t('gameState.quests.edit.jump')}
               </Button>
             </div>;
