@@ -286,6 +286,7 @@ export interface ModuleSummary {
 export interface ModuleInfo {
   module_name: string;
   area_name: string;
+  area_name_strref: number;
   campaign: string;
   entry_area: string;
   module_description: string;

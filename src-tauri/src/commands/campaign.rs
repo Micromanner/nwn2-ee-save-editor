@@ -1,7 +1,9 @@
 use crate::commands::{CommandError, CommandResult};
 use crate::parsers::xml::{CompanionStatus, FullSummary, XmlData};
 use crate::services::campaign::CampaignManager;
-use crate::services::campaign::content::{ModuleInfo, ModuleSummary, ModuleVariables};
+use crate::services::campaign::content::{
+    ModuleInfo, ModuleSummary, ModuleVariables, area_name_from_resref, strip_area_code,
+};
 use crate::services::campaign::settings::{CampaignBackupInfo, CampaignSettings};
 use crate::state::AppState;
 use std::collections::HashMap;
@@ -43,7 +45,16 @@ pub fn cached_module_info(
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    let result = CampaignManager::get_module_info(handler, &paths).map_err(CommandError::from)?;
+    let mut result =
+        CampaignManager::get_module_info(handler, &paths).map_err(CommandError::from)?;
+    let info = &mut result.0;
+    info.area_name = state
+        .game_data
+        .read()
+        .get_string(info.area_name_strref)
+        .map(|s| strip_area_code(&s).to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| area_name_from_resref(&info.area_name));
     session.module_info_cache = Some(result.clone());
     Ok(result)
 }

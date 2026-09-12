@@ -33,12 +33,41 @@ fn test_campaign_manager_read_operations() {
     let (info, vars) =
         CampaignManager::get_module_info(&handler, &paths).expect("Failed to get module info");
     assert!(!info.module_name.is_empty());
+    assert_eq!(
+        info.area_name, "{1019}tombs",
+        "player AreaId should map to the current area, not the module entry area"
+    );
+    assert!(
+        info.area_name_strref >= 0,
+        "area {} should resolve its .are Name strref",
+        info.area_name
+    );
     assert!(!vars.integers.is_empty() || !vars.strings.is_empty() || !vars.floats.is_empty());
 
     // Test analyze_quest_progress
     let overview =
         CampaignManager::analyze_quest_progress(&handler).expect("Failed to analyze quests");
     assert!(overview.active_count + overview.completed_count > 0);
+}
+
+#[test]
+fn area_name_fallback_drops_numeric_prefix() {
+    use app_lib::services::campaign::content::area_name_from_resref;
+    assert_eq!(area_name_from_resref("1100_west_harbor"), "West Harbor");
+    assert_eq!(area_name_from_resref("1008gentry"), "Gentry");
+    assert_eq!(area_name_from_resref("1234"), "1234");
+    assert_eq!(area_name_from_resref("{1013}merchant q"), "Merchant Q");
+}
+
+#[test]
+fn strip_area_code_removes_brace_prefix() {
+    use app_lib::services::campaign::content::strip_area_code;
+    assert_eq!(
+        strip_area_code("{1008}Lord Dalren's House"),
+        "Lord Dalren's House"
+    );
+    assert_eq!(strip_area_code("West Harbor"), "West Harbor");
+    assert_eq!(strip_area_code("{abc}Keep"), "{abc}Keep");
 }
 
 #[test]

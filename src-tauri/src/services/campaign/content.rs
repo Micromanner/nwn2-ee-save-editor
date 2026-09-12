@@ -16,6 +16,7 @@ use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 
 use crate::config::NWN2Paths;
 use crate::services::campaign::backup::backup_module_z;
+use crate::services::resource_manager::module_loader::find_module_path;
 use crate::services::savegame_handler::SaveGameHandler;
 
 /// True if the path's extension is `z` regardless of case.
@@ -62,7 +63,12 @@ fn apply_var_entry_update(
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModuleInfo {
     pub module_name: String,
+    /// Display name of the area the PC stands in (falls back to the module
+    /// entry area); starts as the raw resref and is resolved through
+    /// `area_name_strref` once a TLK is available.
     pub area_name: String,
+    /// `Name` strref of that area's `.are`, -1 if absent.
+    pub area_name_strref: i32,
     pub campaign: String,
     pub entry_area: String,
     pub module_description: String,
@@ -89,6 +95,7 @@ pub fn extract_module_info(
 ) -> Result<(ModuleInfo, ModuleVariables), String> {
     let current_module_id = handler.extract_current_module().unwrap_or_default();
     let save_dir = handler.save_dir();
+    let player_area_id = player_area_id(handler);
 
     info!("ContentManager: Current module is '{}'", current_module_id);
 
@@ -122,7 +129,8 @@ pub fn extract_module_info(
                 "ContentManager: Parsing current module .z file: {}",
                 file_stem
             );
-            if let Ok(res) = parse_module_z_file(z_file, &current_module_id, paths) {
+            if let Ok(res) = parse_module_z_file(z_file, &current_module_id, paths, player_area_id)
+            {
                 found_module_info = Some(res.0);
                 found_module_vars = Some(res.1);
                 break;
@@ -138,7 +146,7 @@ pub fn extract_module_info(
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
         info!("ContentManager: Fallback to parsing: {}", file_stem);
-        if let Ok(res) = parse_module_z_file(z_file, &file_stem, paths) {
+        if let Ok(res) = parse_module_z_file(z_file, &file_stem, paths, None) {
             found_module_info = Some(res.0);
             found_module_vars = Some(res.1);
         }
@@ -172,7 +180,7 @@ pub fn list_modules(
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default();
-                let name = match parse_module_z_file(&path, &file_stem, paths) {
+                let name = match parse_module_z_file(&path, &file_stem, paths, None) {
                     Ok((info, _)) => {
                         if info.module_name.is_empty() {
                             file_stem.clone()
@@ -207,13 +215,61 @@ pub fn extract_module_info_by_id(
 ) -> Result<(ModuleInfo, ModuleVariables), String> {
     let save_dir = handler.save_dir();
     let z_path = find_module_z_file(save_dir, module_id)?;
-    parse_module_z_file(&z_path, module_id, paths)
+    let is_current = handler
+        .extract_current_module()
+        .is_ok_and(|current| current.eq_ignore_ascii_case(module_id));
+    let player_area_id = if is_current {
+        player_area_id(handler)
+    } else {
+        None
+    };
+    parse_module_z_file(&z_path, module_id, paths, player_area_id)
+}
+
+/// `Mod_PlayerList[0].AreaId` from `playerlist.ifo`: the object id of the
+/// area the PC is standing in, matched against `module.ifo` `Mod_Area_list`.
+fn player_area_id(handler: &SaveGameHandler) -> Option<u32> {
+    let bytes = handler.extract_player_data().ok()?;
+    let gff = GffParser::from_bytes(bytes).ok()?;
+    let root = gff.read_struct_fields(0).ok()?;
+    let Some(GffValue::List(players)) = root.get("Mod_PlayerList") else {
+        return None;
+    };
+    let player = players.first()?.force_load();
+    match player.get("AreaId") {
+        Some(GffValue::Dword(id)) => Some(*id),
+        Some(GffValue::Int(id)) => Some(*id as u32),
+        _ => None,
+    }
+}
+
+/// Resref of the area whose `Mod_Area_list` `ObjectId` matches `area_id`.
+fn area_resref_by_object_id(root: &IndexMap<String, GffValue<'_>>, area_id: u32) -> Option<String> {
+    let GffValue::List(areas) = root.get("Mod_Area_list")? else {
+        return None;
+    };
+    areas.iter().find_map(|area| {
+        let fields = area.force_load();
+        let matches = match fields.get("ObjectId") {
+            Some(GffValue::Dword(id)) => *id == area_id,
+            Some(GffValue::Int(id)) => *id as u32 == area_id,
+            _ => false,
+        };
+        if !matches {
+            return None;
+        }
+        match fields.get("Area_Name") {
+            Some(GffValue::ResRef(s) | GffValue::String(s)) => Some(s.to_string()),
+            _ => None,
+        }
+    })
 }
 
 fn parse_module_z_file(
     path: &Path,
     module_id: &str,
     nwn2_paths: &NWN2Paths,
+    player_area_id: Option<u32>,
 ) -> Result<(ModuleInfo, ModuleVariables), String> {
     let decompressed = decompress_z_file(path)?;
 
@@ -260,6 +316,11 @@ fn parse_module_z_file(
     let module_name = get_string("Mod_Name");
     let module_description = get_string("Mod_Description");
     let entry_area = get_string("Mod_Entry_Area");
+    let current_area = player_area_id
+        .and_then(|id| area_resref_by_object_id(&root, id))
+        .unwrap_or_else(|| entry_area.clone());
+    let area_name_strref =
+        read_area_name_strref(&mut erf_parser, module_id, &current_area, nwn2_paths);
     let campaign_id = match root.get("Campaign_ID") {
         Some(GffValue::Void(bytes)) => hex::encode(bytes),
         Some(GffValue::String(s) | GffValue::ResRef(s)) => s.to_string(),
@@ -304,7 +365,8 @@ fn parse_module_z_file(
         } else {
             module_name
         },
-        area_name: entry_area.clone(),
+        area_name: current_area,
+        area_name_strref,
         campaign,
         entry_area,
         module_description,
@@ -605,6 +667,91 @@ pub fn prepare_module_variable_updates(
     );
 
     Ok((z_path, compressed))
+}
+
+/// Read the `Name` strref of `<area>.are`. Original-NWN2 saves carry the
+/// `.are` inside the module state ERF; EE saves do not, so fall back to the
+/// installed module (`Modules/<id>.mod` or a campaign folder). -1 when the
+/// area file or field is missing.
+fn read_area_name_strref(
+    save_erf: &mut ErfParser,
+    module_id: &str,
+    area: &str,
+    nwn2_paths: &NWN2Paths,
+) -> i32 {
+    if area.is_empty() {
+        return -1;
+    }
+    let file_name = format!("{area}.are");
+    if let Ok(bytes) = save_erf.extract_resource(&file_name) {
+        return area_name_strref_from_gff(bytes);
+    }
+
+    let install_modules = nwn2_paths.game_folder().map(|g| g.join("Modules"));
+    let Some(module_path) = find_module_path(
+        module_id,
+        nwn2_paths.custom_module_folders(),
+        nwn2_paths.modules_dir().as_ref(),
+        install_modules.as_ref(),
+        nwn2_paths.campaigns().as_ref(),
+    ) else {
+        return -1;
+    };
+
+    let bytes = if module_path.is_dir() {
+        fs::read(module_path.join(&file_name)).ok()
+    } else {
+        let mut erf = ErfParser::new();
+        erf.read(&module_path)
+            .ok()
+            .and_then(|()| erf.extract_resource(&file_name).ok())
+    };
+    bytes.map_or(-1, area_name_strref_from_gff)
+}
+
+fn area_name_strref_from_gff(bytes: Vec<u8>) -> i32 {
+    let Ok(gff) = GffParser::from_bytes(bytes) else {
+        return -1;
+    };
+    let Ok(root) = gff.read_struct_fields(0) else {
+        return -1;
+    };
+    match root.get("Name") {
+        Some(GffValue::LocString(ls)) => ls.string_ref,
+        _ => -1,
+    }
+}
+
+/// Drop the toolset's `{1008}` area-code prefix that OC area names and
+/// resrefs carry (`{1008}Lord Dalren's House` -> `Lord Dalren's House`).
+pub fn strip_area_code(name: &str) -> &str {
+    let trimmed = name.trim_start();
+    match trimmed
+        .strip_prefix('{')
+        .and_then(|rest| rest.split_once('}'))
+    {
+        Some((code, rest)) if code.chars().all(|c| c.is_ascii_digit()) => rest.trim_start(),
+        _ => trimmed,
+    }
+}
+
+/// Human-readable fallback for an area resref: drops the numeric area-code
+/// prefix (`1100_west_harbor` -> `West Harbor`).
+pub fn area_name_from_resref(resref: &str) -> String {
+    let resref = strip_area_code(resref);
+    let stem = resref.trim_start_matches(|c: char| c.is_ascii_digit() || c == '_');
+    let stem = if stem.is_empty() { resref } else { stem };
+    stem.split(['_', ' '])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut chars = w.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn decompress_z_file(path: &Path) -> Result<Vec<u8>, String> {
