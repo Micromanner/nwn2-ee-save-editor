@@ -1,3 +1,5 @@
+import { formatDateTime } from '@/utils/dateFormat';
+
 export const T = {
   bg: '#f0eadd',
   surface: '#faf7f2',
@@ -66,7 +68,7 @@ export function formatBytes(bytes: number) {
 export function formatUnixSeconds(dateString: string) {
   const ts = parseFloat(dateString);
   if (isNaN(ts)) return '-';
-  return new Date(ts * 1000).toLocaleString();
+  return formatDateTime(ts * 1000);
 }
 
 const NOISE_SVG = encodeURIComponent(

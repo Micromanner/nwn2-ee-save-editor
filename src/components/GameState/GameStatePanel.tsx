@@ -7,6 +7,7 @@ import { Popover } from '@blueprintjs/core';
 import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiBackwardTime, GiInfo, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T, formatBytes } from '../theme';
+import { formatDateTime } from '@/utils/dateFormat';
 import { KVRow, ParchmentDialog, StepInput, LoadingState } from '../shared';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -106,7 +107,7 @@ function RestoreBackupDialog({
                     {b.filename}
                   </div>
                   <div style={{ color: T.textMuted, marginTop: 2 }}>
-                    {new Date(b.created).toLocaleString()} &mdash; {formatBytes(b.size_bytes)}
+                    {formatDateTime(b.created)} &mdash; {formatBytes(b.size_bytes)}
                   </div>
                 </div>
               </div>
@@ -605,15 +606,7 @@ function ModuleInfoSection({ characterId, onModuleIdChange }: { characterId: num
     if (!selectedModuleId) return;
     setIsLoading(true);
     gameStateAPI.getModuleById(characterId, selectedModuleId)
-      .then(data => setModuleInfo({
-        module_name: data.module_name,
-        area_name: data.area_name,
-        campaign: data.campaign,
-        entry_area: data.entry_area,
-        module_description: data.module_description,
-        campaign_id: data.campaign_id,
-        current_module: data.current_module,
-      }))
+      .then(data => setModuleInfo(data))
       .catch(handleError)
       .finally(() => setIsLoading(false));
   }, [characterId, selectedModuleId, handleError]);

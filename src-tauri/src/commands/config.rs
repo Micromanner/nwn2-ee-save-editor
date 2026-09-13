@@ -13,6 +13,9 @@ pub struct AppConfigResponse {
     pub backup_count: u32,
     pub auto_close_on_launch: bool,
     pub show_launch_dialog: bool,
+    /// BCP 47 tag of the OS regional format (Windows user locale, `LANG` on
+    /// Linux), for date and number formatting independent of the UI language.
+    pub system_locale: String,
 }
 
 #[tauri::command]
@@ -32,7 +35,18 @@ fn build_response(config: &crate::config::AppConfig) -> AppConfigResponse {
         backup_count: config.backup_count,
         auto_close_on_launch: config.auto_close_on_launch,
         show_launch_dialog: config.show_launch_dialog,
+        system_locale: system_locale(),
     }
+}
+
+/// `NWN2EE_LOCALE` overrides the OS regional format for testing other
+/// regions' date formats without changing system settings.
+fn system_locale() -> String {
+    std::env::var("NWN2EE_LOCALE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(sys_locale::get_locale)
+        .unwrap_or_else(|| "en-US".to_string())
 }
 
 #[derive(Debug, Clone, Deserialize)]

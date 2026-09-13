@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { IntlProvider } from 'react-intl';
+import { setDateLocale } from '@/utils/dateFormat';
 
 type LocaleContextType = {
   locale: string;
@@ -51,8 +52,9 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    invoke<{ language: string }>('get_app_config')
+    invoke<{ language: string; system_locale: string }>('get_app_config')
       .then((config) => {
+        setDateLocale(config.system_locale);
         setLocaleState(config.language);
         return loadMessages(config.language);
       })

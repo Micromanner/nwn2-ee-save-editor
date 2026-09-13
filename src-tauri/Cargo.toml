@@ -131,6 +131,7 @@ tower-http = { version = "0.6.8", features = ["cors"] }
 tokio-stream = "0.1.18"
 rand = "0.10.0"
 tempfile = "3.13"
+sys-locale = "0.3"
 
 
 [target.'cfg(windows)'.dependencies]

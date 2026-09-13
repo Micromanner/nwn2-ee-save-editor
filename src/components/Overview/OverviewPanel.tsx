@@ -12,6 +12,7 @@ import { PetsSection } from './PetsSection';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
 import { display, formatModifier, formatNumber } from '@/utils/dataHelpers';
+import { formatDate } from '@/utils/dateFormat';
 import { invoke } from '@tauri-apps/api/core';
 
 const ALIGNMENT_GRID = [
@@ -275,8 +276,8 @@ export function OverviewPanel() {
     ? t('overview.gameTimeValue', { year: gt.year, month: gt.month, day: gt.day, hour: gt.hour })
     : null;
   const lastSavedStr = character.lastSaved
-    ? (() => { try { return new Date(character.lastSaved!).toLocaleDateString(); } catch { return character.lastSaved; } })()
-    : character.lastSavedTimestamp != null ? new Date(character.lastSavedTimestamp * 1000).toLocaleDateString()
+    ? formatDate(character.lastSaved)
+    : character.lastSavedTimestamp != null ? formatDate(character.lastSavedTimestamp * 1000)
     : null;
 
   const questDetails = character.questDetails;
