@@ -35,7 +35,7 @@ export interface CleanupResponse {
   errors: string[];
 }
 
-export type BackupReason = 'load' | 'pre_save' | 'pre_restore' | 'manual';
+export type BackupReason = 'load' | 'pre_restore' | 'manual';
 
 export interface CharacterChanges {
   name: string;
@@ -125,9 +125,5 @@ export class BackupAPI {
 
   static async deleteBackups(backupPaths: string[]): Promise<number> {
     return await invoke<number>('delete_backups', { backupPaths });
-  }
-
-  static formatTimestamp(timestamp: string): string {
-    return new Date(timestamp).toLocaleString();
   }
 }

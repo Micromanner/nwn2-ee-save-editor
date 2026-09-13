@@ -5,6 +5,7 @@ import { ParchmentDialog } from '../shared/ParchmentDialog';
 import { T, formatUnixSeconds } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { display } from '@/utils/dataHelpers';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { BackupManifest, BackupReason, SaveRecord } from '@/services/backupApi';
 import type { FileInfo } from './FileBrowserDialog';
 
@@ -16,7 +17,6 @@ interface BackupDetailsDialogProps {
 
 const REASON_KEYS: Record<BackupReason, string> = {
   load: 'fileBrowser.reasonLoad',
-  pre_save: 'fileBrowser.reasonPreSave',
   pre_restore: 'fileBrowser.reasonPreRestore',
   manual: 'fileBrowser.reasonManual',
 };
@@ -69,7 +69,7 @@ export function BackupDetailsDialog({ isOpen, onClose, file }: BackupDetailsDial
   const renderRecord = (record: SaveRecord, index: number) => (
     <div key={index}>
       <div style={sectionHeaderStyle}>
-        {t('fileBrowser.savedAt')}: {new Date(record.saved_at).toLocaleString()}
+        {t('fileBrowser.savedAt')}: {formatDateTime(record.saved_at)}
       </div>
       {record.characters.length > 0 && section(
         `${index}-characters`,

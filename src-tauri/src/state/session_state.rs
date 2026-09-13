@@ -14,7 +14,7 @@ use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
 use crate::services::savegame_handler::backup_manifest::{
-    self, BackupReason, CharacterChanges, PartyChange, QuestChange, SaveRecord,
+    self, CharacterChanges, PartyChange, QuestChange, SaveRecord,
 };
 use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 use crate::state::standalone_bic;
@@ -373,12 +373,6 @@ impl SessionState {
                 self.primary_player_index
                     .unwrap_or(self.selected_player_index),
             )?;
-            let path = crate::services::savegame_handler::backup::create_backup(
-                handler.save_dir(),
-                BackupReason::PreSave,
-            )
-            .map_err(|e| e.to_string())?;
-            self.session_backups.push(path);
         }
         let record = self.build_save_record(game_data);
         let mut active = self.character.take().ok_or("No character loaded")?;

@@ -81,7 +81,6 @@
     "detailsIntro": "Restaurer ce backup annule les modifications suivantes :",
     "savedAt": "Enregistré",
     "reasonLoad": "Au chargement",
-    "reasonPreSave": "Avant la sauvegarde",
     "reasonPreRestore": "Avant la restauration",
     "reasonManual": "Manuel",
     "partyAdded": "ajouté au groupe",

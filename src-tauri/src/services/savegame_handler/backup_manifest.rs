@@ -16,7 +16,6 @@ const MANIFEST_VERSION: u32 = 1;
 pub enum BackupReason {
     #[default]
     Load,
-    PreSave,
     PreRestore,
     Manual,
 }
@@ -134,16 +133,16 @@ mod tests {
     #[test]
     fn initial_then_two_appends_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        write_initial(dir.path(), BackupReason::PreSave);
+        write_initial(dir.path(), BackupReason::Manual);
         let initial = read(dir.path()).unwrap();
-        assert_eq!(initial.reason, BackupReason::PreSave);
+        assert_eq!(initial.reason, BackupReason::Manual);
         assert!(initial.saves.is_empty());
 
         append_save(dir.path(), &record("Set gold to 5000"));
         append_save(dir.path(), &record("Set experience to 1"));
         let manifest = read(dir.path()).unwrap();
         assert_eq!(manifest.version, 1);
-        assert_eq!(manifest.reason, BackupReason::PreSave);
+        assert_eq!(manifest.reason, BackupReason::Manual);
         assert_eq!(manifest.saves.len(), 2);
         assert_eq!(
             manifest.saves[1].characters[0].changes[0],

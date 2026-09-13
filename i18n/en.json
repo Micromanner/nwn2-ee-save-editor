@@ -81,7 +81,6 @@
     "detailsIntro": "Restoring this backup undoes the following changes:",
     "savedAt": "Saved",
     "reasonLoad": "On load",
-    "reasonPreSave": "Before save",
     "reasonPreRestore": "Before restore",
     "reasonManual": "Manual",
     "partyAdded": "added to party",
@@ -553,13 +552,13 @@
         "journalOnly": "Only change the journal text, nothing else",
         "journalOnlyHint": "For when the quest already happened in the game and only your journal is out of date. The game itself will not react: NPCs keep their current dialogue.",
         "asIf": "The editor will make it as if you played this line:",
-        "youSaid": "You: \"{text}\"",
-        "noRoutes": "No dialogue line reaches this entry; a script sets it in-game. Only the journal entry can be written.",
         "pickLine": "Several lines in the game lead here, and they set different things. Pick the one you would have played:",
         "outcome": {
           "none": "This line sets no game flags on its own; the journal entry is the only change.",
           "sets": "Sets {flags}"
         },
+        "youSaid": "You: \"{text}\"",
+        "noRoutes": "No dialogue line reaches this entry; a script sets it in-game. Only the journal entry can be written.",
         "derivedFrom": "from {script}",
         "decodedCalls": "Also does in-game",
         "decodedConditional": "May also set {name} = {value}, depending on other game state; not applied",
