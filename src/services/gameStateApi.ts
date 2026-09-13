@@ -289,6 +289,7 @@ export interface ModuleInfo {
   area_name_strref: number;
   campaign: string;
   entry_area: string;
+  entry_area_strref: number;
   module_description: string;
   campaign_id: string;
   current_module?: string;

@@ -47,16 +47,24 @@ pub fn cached_module_info(
         .ok_or(CommandError::NoCharacterLoaded)?;
     let mut result =
         CampaignManager::get_module_info(handler, &paths).map_err(CommandError::from)?;
-    let info = &mut result.0;
-    info.area_name = state
-        .game_data
-        .read()
-        .get_string(info.area_name_strref)
-        .map(|s| strip_area_code(&s).to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| area_name_from_resref(&info.area_name));
+    resolve_area_names(&mut result.0, state);
     session.module_info_cache = Some(result.clone());
     Ok(result)
+}
+
+/// Replace the raw area resrefs with their TLK names (area-code prefix
+/// stripped), falling back to a title-cased resref.
+fn resolve_area_names(info: &mut ModuleInfo, state: &State<'_, AppState>) {
+    let game_data = state.game_data.read();
+    let resolve = |strref: i32, resref: &str| {
+        game_data
+            .get_string(strref)
+            .map(|s| strip_area_code(&s).to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| area_name_from_resref(resref))
+    };
+    info.area_name = resolve(info.area_name_strref, &info.area_name);
+    info.entry_area = resolve(info.entry_area_strref, &info.entry_area);
 }
 
 #[tauri::command]
@@ -88,7 +96,10 @@ pub async fn get_module_info_by_id(
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::get_module_info_by_id(handler, &paths, &module_id).map_err(CommandError::from)
+    let mut result = CampaignManager::get_module_info_by_id(handler, &paths, &module_id)
+        .map_err(CommandError::from)?;
+    resolve_area_names(&mut result.0, &state);
+    Ok(result)
 }
 
 #[tauri::command]

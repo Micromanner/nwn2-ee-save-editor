@@ -70,7 +70,10 @@ pub struct ModuleInfo {
     /// `Name` strref of that area's `.are`, -1 if absent.
     pub area_name_strref: i32,
     pub campaign: String,
+    /// Module entry area; raw resref until resolved through `entry_area_strref`.
     pub entry_area: String,
+    /// `Name` strref of the entry area's `.are`, -1 if absent.
+    pub entry_area_strref: i32,
     pub module_description: String,
     pub campaign_id: String,
     pub current_module: String,
@@ -321,6 +324,8 @@ fn parse_module_z_file(
         .unwrap_or_else(|| entry_area.clone());
     let area_name_strref =
         read_area_name_strref(&mut erf_parser, module_id, &current_area, nwn2_paths);
+    let entry_area_strref =
+        read_area_name_strref(&mut erf_parser, module_id, &entry_area, nwn2_paths);
     let campaign_id = match root.get("Campaign_ID") {
         Some(GffValue::Void(bytes)) => hex::encode(bytes),
         Some(GffValue::String(s) | GffValue::ResRef(s)) => s.to_string(),
@@ -369,6 +374,7 @@ fn parse_module_z_file(
         area_name_strref,
         campaign,
         entry_area,
+        entry_area_strref,
         module_description,
         campaign_id,
         current_module: module_id.to_string(),
