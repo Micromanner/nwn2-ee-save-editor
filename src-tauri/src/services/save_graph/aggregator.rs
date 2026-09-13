@@ -19,9 +19,11 @@ use crate::services::toolset_bridge::{
 
 use super::journal_reader::read_live_journal;
 use super::module_name::read_module_display_name;
+use super::script_decoder::{DecodedWrite, decode_action};
+use super::script_source::ScriptSources;
 use super::types::{
-    AggregatedModule, CampaignSummary, LiveModuleVar, ModuleVarValue, OrphanKind, OrphanNote,
-    QuestAggregate, QuestGraphProgress, SaveGraph, TransitionNode,
+    AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
+    OrphanNote, QuestAggregate, QuestGraphProgress, SaveGraph, TransitionNode,
 };
 
 /// Synthetic functor script name the bridge emits for `NWN2ConversationConnector.Quest`
@@ -206,8 +208,23 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             }
             merge_category(&mut quests, category, Some(&entry.name));
         }
+        let mut scripts = ScriptSources::open(
+            std::path::Path::new(&entry.resolved_path),
+            campaign_summary
+                .campaign_path
+                .as_deref()
+                .map(std::path::Path::new),
+        );
+        let mut by_dlg: HashMap<&str, HashMap<i32, &ConvoNode>> = HashMap::new();
         for node in &graph.convo.nodes {
-            collect_transitions(node, &entry.name, &mut quests);
+            by_dlg
+                .entry(node.dlg.as_str())
+                .or_default()
+                .insert(node.node, node);
+        }
+        for node in &graph.convo.nodes {
+            let siblings = &by_dlg[node.dlg.as_str()];
+            collect_transitions(node, &entry.name, &mut quests, &mut scripts, siblings);
         }
 
         modules_out.push(AggregatedModule {
@@ -347,12 +364,23 @@ fn collect_transitions(
     node: &ConvoNode,
     module_name: &str,
     quests: &mut HashMap<String, QuestAggregate>,
+    scripts: &mut ScriptSources,
+    siblings: &HashMap<i32, &ConvoNode>,
 ) {
+    if !node
+        .actions
+        .iter()
+        .any(|a| extract_journal_transition(a).is_some())
+    {
+        return;
+    }
+    let actions = expand_wrapper_scripts(&node.actions, scripts);
+    let follow_up = follow_up_subgraph(node, siblings, scripts);
     // Partition once per node — every transition on this node reuses the same
     // co-authored snapshot, so avoid N×2 walks of node.actions inside the loop.
     let mut co_globals: Vec<ConvoFunctor> = Vec::new();
     let mut co_locals: Vec<ConvoFunctor> = Vec::new();
-    for action in &node.actions {
+    for action in &actions {
         if action.kind.is_global() {
             co_globals.push(action.clone());
         } else if action.kind == FunctorKind::ModuleLocal {
@@ -367,7 +395,7 @@ fn collect_transitions(
         Some(node.text_strref)
     };
 
-    for action in &node.actions {
+    for action in &actions {
         let Some((tag, new_state)) = extract_journal_transition(action) else {
             continue;
         };
@@ -379,16 +407,152 @@ fn collect_transitions(
             transitions: Vec::new(),
         });
         entry.transitions.push(TransitionNode {
-            actions: node.actions.clone(),
+            actions: actions.clone(),
             module: module_name.to_string(),
             dlg: node.dlg.clone(),
             node: node.node,
+            speaker: node.speaker.clone(),
             new_state,
             text_strref,
             co_authored_globals: co_globals.clone(),
             co_authored_locals: co_locals.clone(),
             gating_conditions: node.conditions.clone(),
+            is_player: node.is_player(),
+            debug: is_debug_dialogue(&node.dlg),
+            children: node.children.clone(),
+            follow_up: follow_up.clone(),
         });
+    }
+}
+
+/// Developer conversations shipped in the modules (`10_cheater`, `00_cdebug`):
+/// reachable only through toolset-placed test NPCs, never in normal play.
+fn is_debug_dialogue(dlg: &str) -> bool {
+    let lower = dlg.to_ascii_lowercase();
+    lower.contains("cheat") || lower.contains("debug")
+}
+
+/// Bound on how far a conversation is followed after a transition line.
+const FOLLOW_UP_MAX_DEPTH: usize = 24;
+const FOLLOW_UP_MAX_NODES: usize = 96;
+
+/// The lines the game can play after `start` without another real player decision:
+/// NPC lines are expanded (the engine picks the first whose conditions pass), and
+/// a lone player reply is expanded too. Where several player replies are offered
+/// they are included as leaves so the preview can report the choice.
+fn follow_up_subgraph(
+    start: &ConvoNode,
+    siblings: &HashMap<i32, &ConvoNode>,
+    scripts: &mut ScriptSources,
+) -> Vec<FollowNode> {
+    let mut out = Vec::new();
+    let mut seen: HashSet<i32> = HashSet::from([start.node]);
+    let mut frontier: Vec<(i32, usize, bool)> = start
+        .children
+        .iter()
+        .map(|id| (*id, 1, start.is_player() || start.children.len() == 1))
+        .collect();
+    while let Some((id, depth, expand)) = frontier.pop() {
+        if !seen.insert(id) || out.len() >= FOLLOW_UP_MAX_NODES {
+            continue;
+        }
+        let Some(node) = siblings.get(&id) else {
+            continue;
+        };
+        let expand_children = expand && depth < FOLLOW_UP_MAX_DEPTH;
+        if expand_children {
+            // Children of an NPC line are player replies: expand only a lone one.
+            let lone = node.children.len() == 1;
+            for child in node.children.iter().rev() {
+                frontier.push((*child, depth + 1, node.is_player() || lone));
+            }
+        }
+        out.push(FollowNode {
+            node: node.node,
+            is_player: node.is_player(),
+            has_text: node.has_text,
+            speaker: node.speaker.clone(),
+            text_strref: (node.text_strref >= 0).then_some(node.text_strref),
+            conditions: node.conditions.clone(),
+            actions: expand_wrapper_scripts(&node.actions, scripts),
+            children: if expand_children {
+                node.children.clone()
+            } else {
+                Vec::new()
+            },
+        });
+    }
+    out
+}
+
+/// Decode custom action scripts whose source ships with the module and splice the
+/// plain variable writes they perform in right after the original functor, in the
+/// `ga_global_*` / `ga_local_*` shape `editing::decode_assignment` understands.
+/// The original functor keeps the full decode for the UI.
+fn expand_wrapper_scripts(
+    actions: &[ConvoFunctor],
+    scripts: &mut ScriptSources,
+) -> Vec<ConvoFunctor> {
+    let mut out = Vec::with_capacity(actions.len());
+    for action in actions {
+        if action.kind != FunctorKind::Custom || action.script.is_empty() {
+            out.push(action.clone());
+            continue;
+        }
+        let decoded = scripts
+            .source(&action.script)
+            .and_then(|src| decode_action(src, &action.params));
+        let Some(decoded) = decoded else {
+            out.push(action.clone());
+            continue;
+        };
+        let call = format!(
+            "{}({})",
+            action.script,
+            action
+                .params
+                .iter()
+                .map(|p| p
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| p.to_string()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let writes = decoded.writes.clone();
+        out.push(ConvoFunctor {
+            decoded: Some(decoded),
+            ..action.clone()
+        });
+        out.extend(writes.iter().map(|w| synthesized_functor(w, &call)));
+    }
+    out
+}
+
+fn synthesized_functor(write: &DecodedWrite, call: &str) -> ConvoFunctor {
+    let (kind, script) = match (write.module_local, write.value_type.as_str()) {
+        (true, "float") => (FunctorKind::ModuleLocal, "ga_local_float"),
+        (true, "string") => (FunctorKind::ModuleLocal, "ga_local_string"),
+        (true, _) => (FunctorKind::ModuleLocal, "ga_local_int"),
+        (false, "float") => (FunctorKind::GlobalFloat, "ga_global_float"),
+        (false, "string") => (FunctorKind::GlobalString, "ga_global_string"),
+        (false, _) => (FunctorKind::GlobalInt, "ga_global_int"),
+    };
+    let mut params = vec![
+        serde_json::Value::from(write.name.as_str()),
+        serde_json::Value::from(write.value.as_str()),
+    ];
+    if write.module_local {
+        params.push(serde_json::Value::from("$MODULE"));
+    }
+    ConvoFunctor {
+        kind,
+        script: script.into(),
+        params,
+        derived_from: Some(call.to_string()),
+        decoded: None,
+        negate: false,
+        join: String::new(),
     }
 }
 

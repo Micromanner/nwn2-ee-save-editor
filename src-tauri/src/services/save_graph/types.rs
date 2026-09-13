@@ -106,6 +106,9 @@ pub struct TransitionNode {
     pub module: String,
     pub dlg: String,
     pub node: i32,
+    /// Speaker tag of the line; empty for the conversation owner or the player.
+    #[serde(default)]
+    pub speaker: String,
     pub new_state: u32,
     /// Conversation-node `text_strref` from the bridge's `ConvoNode` (stock
     /// `dialog.tlk` only; caller resolves via `tlk_get_strings`). `None` when the
@@ -117,6 +120,32 @@ pub struct TransitionNode {
     pub co_authored_locals: Vec<ConvoFunctor>,
     /// Full condition list on the node — whatever gates entry into this transition.
     pub gating_conditions: Vec<ConvoFunctor>,
+    /// Whether this is a player reply (children are NPC lines) or an NPC line.
+    #[serde(default)]
+    pub is_player: bool,
+    /// The line lives in a developer cheat/debug conversation no player can start.
+    #[serde(default)]
+    pub debug: bool,
+    /// Ids of the lines that can follow this one; resolved through `follow_up`.
+    #[serde(default)]
+    pub children: Vec<i32>,
+    /// The lines reachable after this one without a further player decision,
+    /// plus the candidates at the point where one is needed. The preview walks
+    /// this with the save's variables to find what the game would have run.
+    #[serde(default)]
+    pub follow_up: Vec<FollowNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FollowNode {
+    pub node: i32,
+    pub is_player: bool,
+    pub has_text: bool,
+    pub speaker: String,
+    pub text_strref: Option<i32>,
+    pub conditions: Vec<ConvoFunctor>,
+    pub actions: Vec<ConvoFunctor>,
+    pub children: Vec<i32>,
 }
 
 #[derive(Debug, Clone, Serialize)]

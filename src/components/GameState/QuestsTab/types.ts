@@ -32,10 +32,44 @@ export interface JournalCategory {
   entries: JournalEntry[];
 }
 
+export interface DecodedWrite {
+  module_local: boolean;
+  value_type: string;
+  name: string;
+  value: string;
+}
+
+/** Static decode of a custom script's branch (`save_graph::script_decoder`). */
+export interface ScriptDecode {
+  writes: DecodedWrite[];
+  conditional_writes: DecodedWrite[];
+  calls: string[];
+  unresolved: string[];
+}
+
 export interface ConvoFunctor {
   kind: FunctorKind;
   script: string;
   params: unknown[];
+  /** Wrapper script call this functor was synthesized from, e.g. `10a_caleb_state(1)`. */
+  derived_from?: string;
+  decoded?: ScriptDecode;
+  /** Conditions only: toolset "Not" checkbox. */
+  negate?: boolean;
+  /** Conditions only: "and" / "or" with the next condition. */
+  join?: string;
+}
+
+/** A line reachable after a transition without another player decision. */
+export interface FollowNode {
+  node: number;
+  is_player: boolean;
+  has_text: boolean;
+  speaker: string;
+  text_strref: number | null;
+  conditions: ConvoFunctor[];
+  actions: ConvoFunctor[];
+  children: number[];
 }
 
 export interface TransitionNode {
@@ -48,6 +82,11 @@ export interface TransitionNode {
   co_authored_globals: ConvoFunctor[];
   co_authored_locals: ConvoFunctor[];
   gating_conditions: ConvoFunctor[];
+  is_player: boolean;
+  debug: boolean;
+  speaker: string;
+  children: number[];
+  follow_up: FollowNode[];
 }
 
 /// Lightweight per-quest row returned by `save_get_quest_graph`. Transitions
@@ -74,6 +113,38 @@ export interface VariableWrite {
   before: string | number | null;
   after: string | number;
   action_index: number;
+  derived_from?: string;
+  /** Node id of the follow-up line this write comes from; absent for the chosen line. */
+  line?: number;
+}
+
+/** `save_summarize_quest_routes`: one line reaching the target entry, with its outcome signature. */
+export interface RouteSummary {
+  route: number;
+  module: string;
+  speaker: string;
+  is_player: boolean;
+  text_strref: number | null;
+  debug: boolean;
+  signature: string;
+  writes: { name: string; after: string | number }[];
+  write_count: number;
+  followed_count: number;
+}
+
+export interface FollowedLine {
+  node: number;
+  is_player: boolean;
+  has_text: boolean;
+  speaker: string;
+  text_strref: number | null;
+}
+
+export interface FollowStop {
+  reason: 'end' | 'player_choice' | 'unknown_condition' | 'depth';
+  node?: number;
+  conditions?: ConvoFunctor[];
+  choices: number;
 }
 
 export interface QuestPreview {
@@ -84,7 +155,9 @@ export interface QuestPreview {
   before_state: number | null;
   route: number | null;
   writes: VariableWrite[];
-  effects: { action: ConvoFunctor; reason: string }[];
+  effects: { action: ConvoFunctor; reason: string; line?: number }[];
+  followed?: FollowedLine[];
+  follow_stop?: FollowStop;
 }
 
 export interface PendingQuestEdit {

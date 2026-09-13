@@ -865,9 +865,11 @@ fn find_module_z_file(save_dir: &Path, module_id: &str) -> Result<PathBuf, Strin
             let path = entry.path();
             if path.is_file()
                 && has_z_extension(&path)
+                // campaign.cam names modules `1000_Neverwinter_A1`; the save writes
+                // `1000_neverwinter_a1.z`.
                 && path
                     .file_stem()
-                    .is_some_and(|s| s.to_string_lossy() == module_id)
+                    .is_some_and(|s| s.to_string_lossy().eq_ignore_ascii_case(module_id))
             {
                 return Ok(path);
             }

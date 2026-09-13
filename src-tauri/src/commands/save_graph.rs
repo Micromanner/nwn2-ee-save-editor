@@ -73,6 +73,34 @@ pub async fn save_preview_quest_edit(
 }
 
 #[tauri::command]
+pub async fn save_summarize_quest_routes(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    tag: String,
+    target: u32,
+) -> CommandResult<Vec<crate::services::save_graph::editing::RouteSummary>> {
+    let graph = ensure_quest_graph(&app, &state)?;
+    let session = state.session.read();
+    let handler = session
+        .savegame_handler
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+    session
+        .quest_edits
+        .summarize_routes(
+            &graph,
+            handler,
+            &state.paths.read(),
+            session
+                .primary_player_index
+                .unwrap_or(session.selected_player_index),
+            &tag,
+            target,
+        )
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
 pub async fn save_stage_quest_edit(
     app: AppHandle,
     state: State<'_, AppState>,

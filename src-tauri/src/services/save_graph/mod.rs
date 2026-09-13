@@ -10,10 +10,13 @@ pub mod editing;
 mod journal_reader;
 pub use journal_reader::read_live_journal;
 mod module_name;
+pub mod script_decoder;
+mod script_source;
 mod types;
 
 pub use aggregator::{BuildContext, build, build_without_bridge};
 pub use types::{
-    AggregatedModule, CampaignSummary, LiveModuleVar, ModuleVarValue, OrphanKind, OrphanNote,
-    QuestAggregate, QuestGraphProgress, QuestSummary, SaveGraph, SaveGraphSummary, TransitionNode,
+    AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
+    OrphanNote, QuestAggregate, QuestGraphProgress, QuestSummary, SaveGraph, SaveGraphSummary,
+    TransitionNode,
 };

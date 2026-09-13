@@ -346,6 +346,7 @@ pub fn run() {
             // Save Graph (aggregated quest view across save + campaign modules)
             crate::commands::save_graph::save_get_quest_graph,
             crate::commands::save_graph::save_preview_quest_edit,
+            crate::commands::save_graph::save_summarize_quest_routes,
             crate::commands::save_graph::save_stage_quest_edit,
             crate::commands::save_graph::save_list_quest_edits,
             crate::commands::save_graph::save_get_quest_variables,

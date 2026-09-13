@@ -115,10 +115,25 @@ pub struct ConvoNode {
     pub node: i32,
     pub speaker: String,
     pub text_strref: i32,
+    /// `StartingEntry` / `Entry` (NPC line) / `Reply` (player line).
+    #[serde(default, rename = "type")]
+    pub node_type: String,
+    /// False for empty "continue" replies and NPC lines without text.
+    #[serde(default)]
+    pub has_text: bool,
+    /// Connector ids of the lines that can follow this one, in authored order.
+    #[serde(default)]
+    pub children: Vec<i32>,
     #[serde(default)]
     pub actions: Vec<ConvoFunctor>,
     #[serde(default)]
     pub conditions: Vec<ConvoFunctor>,
+}
+
+impl ConvoNode {
+    pub fn is_player(&self) -> bool {
+        self.node_type.eq_ignore_ascii_case("Reply")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +142,20 @@ pub struct ConvoFunctor {
     pub script: String,
     #[serde(default)]
     pub params: Vec<serde_json::Value>,
+    /// Set on functors the aggregator synthesized from a decoded wrapper script,
+    /// e.g. `"10a_caleb_state(1)"`; never emitted by the bridge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_from: Option<String>,
+    /// Static decode of a custom script's branch (see `save_graph::script_decoder`);
+    /// `None` when no source ships or the functor is not a custom script.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decoded: Option<crate::services::save_graph::script_decoder::ScriptDecode>,
+    /// Conditions only: the toolset "Not" checkbox inverts the script result.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub negate: bool,
+    /// Conditions only: `"and"` / `"or"`, how this condition combines with the next.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub join: String,
 }
 
 /// Classification of an Action or Condition functor on a conversation node.

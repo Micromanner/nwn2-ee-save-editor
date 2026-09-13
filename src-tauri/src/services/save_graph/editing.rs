@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::{SaveGraph, TransitionNode, read_live_journal};
+use super::{FollowNode, SaveGraph, TransitionNode, read_live_journal};
 use crate::config::NWN2Paths;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::services::campaign::{CampaignManager, content};
@@ -28,12 +28,67 @@ pub struct VariableWrite {
     pub before: Option<Value>,
     pub after: Value,
     pub action_index: usize,
+    /// The wrapper script call this write was decoded from, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_from: Option<String>,
+    /// Follow-up line (node id in `QuestPreview::followed`) this write comes from;
+    /// `None` for the chosen line itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ActionEffect {
     pub action: ConvoFunctor,
     pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<i32>,
+}
+
+/// One dialogue line that reaches a target entry, with the outcome of choosing it
+/// reduced to a signature so the UI can collapse lines with identical effects.
+#[derive(Debug, Clone, Serialize)]
+pub struct RouteSummary {
+    pub route: usize,
+    pub module: String,
+    pub speaker: String,
+    pub is_player: bool,
+    pub text_strref: Option<i32>,
+    pub debug: bool,
+    /// Sorted `scope/name=value` writes: the only outcome a player can tell apart.
+    pub signature: String,
+    /// The flags this line (and the lines the game plays after it) would set.
+    pub writes: Vec<RouteWrite>,
+    pub write_count: usize,
+    pub followed_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RouteWrite {
+    pub name: String,
+    pub after: Value,
+}
+
+/// A line the game would play after the chosen one without another player decision.
+#[derive(Debug, Clone, Serialize)]
+pub struct FollowedLine {
+    pub node: i32,
+    pub is_player: bool,
+    pub has_text: bool,
+    pub speaker: String,
+    pub text_strref: Option<i32>,
+}
+
+/// Why the preview stopped following the conversation.
+#[derive(Debug, Clone, Serialize)]
+pub struct FollowStop {
+    /// `end`, `player_choice`, `unknown_condition`, `depth`.
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<i32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<ConvoFunctor>,
+    pub choices: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -46,6 +101,10 @@ pub struct QuestPreview {
     pub route: Option<usize>,
     pub writes: Vec<VariableWrite>,
     pub effects: Vec<ActionEffect>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub followed: Vec<FollowedLine>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_stop: Option<FollowStop>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -118,6 +177,8 @@ impl QuestEdits {
             route,
             writes: Vec::new(),
             effects: Vec::new(),
+            followed: Vec::new(),
+            follow_stop: None,
         };
         let mut reader = VariableReader::new(handler, paths);
         if let Some(index) = route {
@@ -126,35 +187,80 @@ impl QuestEdits {
                 .get(index)
                 .filter(|tr| tr.new_state == target)
                 .ok_or("The selected route does not reach this state")?;
+            // The chosen line first, then every line the game plays after it.
+            let mut lines: Vec<(Option<i32>, &[ConvoFunctor])> = vec![(None, &tr.actions)];
+            let (followed, stop) = follow_conversation(tr, &mut reader)?;
+            for node in &followed {
+                lines.push((Some(node.node), &node.actions));
+            }
+            result.followed = followed
+                .iter()
+                .map(|n| FollowedLine {
+                    node: n.node,
+                    is_player: n.is_player,
+                    has_text: n.has_text,
+                    speaker: n.speaker.clone(),
+                    text_strref: n.text_strref,
+                })
+                .collect();
+            result.follow_stop = Some(stop);
             let mut candidates = Vec::new();
-            for (action_index, action) in tr.actions.iter().enumerate() {
-                match decode_assignment(action, &tr.module) {
-                    Ok((key, after)) => match reader.read(&key) {
-                        Ok(saved) => {
-                            let before = self
-                                .pending
-                                .iter()
-                                .flat_map(|p| &p.writes)
-                                .rfind(|w| w.key == key)
-                                .map(|w| w.after.clone())
-                                .or(saved.clone());
-                            candidates.push(VariableWrite {
-                                key,
-                                saved,
-                                before,
-                                after,
-                                action_index,
+            let mut all_actions: Vec<ConvoFunctor> = Vec::new();
+            for (line, actions) in lines {
+                for action in actions {
+                    let action_index = all_actions.len();
+                    all_actions.push(action.clone());
+                    if line.is_some()
+                        && let Some((other_tag, state)) = journal_transition(action)
+                    {
+                        if other_tag != tag || state != target {
+                            result.effects.push(ActionEffect {
+                                action: action.clone(),
+                                reason: "follow_up_journal".into(),
+                                line,
                             });
                         }
-                        Err(_) => result.effects.push(ActionEffect {
+                        continue;
+                    }
+                    match decode_assignment(action, &tr.module) {
+                        Ok((key, change)) => match reader.read(&key) {
+                            Ok(saved) => {
+                                let before = self
+                                    .pending
+                                    .iter()
+                                    .flat_map(|p| &p.writes)
+                                    .rfind(|w| w.key == key)
+                                    .map(|w| w.after.clone())
+                                    .or(saved.clone());
+                                let after = match change {
+                                    Change::Set(value) => value,
+                                    Change::Add(delta) => Value::from(
+                                        before.as_ref().and_then(Value::as_i64).unwrap_or(0)
+                                            + delta,
+                                    ),
+                                };
+                                candidates.push(VariableWrite {
+                                    key,
+                                    saved,
+                                    before,
+                                    after,
+                                    action_index,
+                                    derived_from: action.derived_from.clone(),
+                                    line,
+                                });
+                            }
+                            Err(_) => result.effects.push(ActionEffect {
+                                action: action.clone(),
+                                reason: "unavailable_target".into(),
+                                line,
+                            }),
+                        },
+                        Err(reason) => result.effects.push(ActionEffect {
                             action: action.clone(),
-                            reason: "unavailable_target".into(),
+                            reason: reason.into(),
+                            line,
                         }),
-                    },
-                    Err(reason) => result.effects.push(ActionEffect {
-                        action: action.clone(),
-                        reason: reason.into(),
-                    }),
+                    }
                 }
             }
             // Multiple writes to one variable have ordering semantics; don't offer a subset.
@@ -163,8 +269,9 @@ impl QuestEdits {
                     result.writes.push(candidate.clone());
                 } else {
                     result.effects.push(ActionEffect {
-                        action: tr.actions[candidate.action_index].clone(),
+                        action: all_actions[candidate.action_index].clone(),
                         reason: "multiple_assignments".into(),
+                        line: candidate.line,
                     });
                 }
             }
@@ -175,6 +282,63 @@ impl QuestEdits {
         hash.update(serde_json::to_vec(&result).map_err(|e| e.to_string())?);
         result.revision = format!("{:x}", hash.finalize());
         Ok(result)
+    }
+
+    /// Preview every line that reaches `target` and reduce each to a `RouteSummary`.
+    pub fn summarize_routes(
+        &self,
+        graph: &SaveGraph,
+        handler: &SaveGameHandler,
+        paths: &NWN2Paths,
+        player: usize,
+        tag: &str,
+        target: u32,
+    ) -> Result<Vec<RouteSummary>, String> {
+        let quest = graph
+            .quests
+            .iter()
+            .find(|q| q.tag == tag)
+            .ok_or("Quest is no longer available")?;
+        let mut out = Vec::new();
+        for (route, tr) in quest.transitions.iter().enumerate() {
+            if tr.new_state != target {
+                continue;
+            }
+            let preview = self.preview(graph, handler, paths, player, tag, target, Some(route))?;
+            let mut writes: Vec<String> = preview
+                .writes
+                .iter()
+                .map(|w| {
+                    format!(
+                        "{}/{}={}",
+                        w.key.module.as_deref().unwrap_or(""),
+                        w.key.name,
+                        w.after
+                    )
+                })
+                .collect();
+            writes.sort();
+            out.push(RouteSummary {
+                route,
+                module: tr.module.clone(),
+                speaker: tr.speaker.clone(),
+                is_player: tr.is_player,
+                text_strref: tr.text_strref,
+                debug: tr.debug,
+                signature: writes.join(";"),
+                writes: preview
+                    .writes
+                    .iter()
+                    .map(|w| RouteWrite {
+                        name: w.key.name.clone(),
+                        after: w.after.clone(),
+                    })
+                    .collect(),
+                write_count: preview.writes.len(),
+                followed_count: preview.followed.len(),
+            });
+        }
+        Ok(out)
     }
 
     pub fn stage(
@@ -382,19 +546,228 @@ impl<'a> VariableReader<'a> {
     }
 }
 
+/// `ga_journal(tag, state)` / connector quest tuple on an action.
+fn journal_transition(action: &ConvoFunctor) -> Option<(String, u32)> {
+    let script = action.script.to_ascii_lowercase();
+    if script != "ga_journal" && script != "__connector_quest_tuple__" {
+        return None;
+    }
+    let tag = action.params.first()?.as_str()?.to_string();
+    let state = action
+        .params
+        .get(1)?
+        .as_i64()
+        .and_then(|n| u32::try_from(n).ok())?;
+    Some((tag, state))
+}
+
+const FOLLOW_LIMIT: usize = 32;
+
+/// Walk the lines the game plays after `tr` the way the engine does: after a
+/// player line the first NPC line whose conditions pass; after an NPC line the
+/// only offered reply. Stops at a real player choice, at a condition the editor
+/// cannot evaluate, or at the end of the conversation.
+fn follow_conversation<'a>(
+    tr: &'a TransitionNode,
+    reader: &mut VariableReader<'_>,
+) -> Result<(Vec<&'a FollowNode>, FollowStop), String> {
+    let by_id: BTreeMap<i32, &FollowNode> = tr.follow_up.iter().map(|n| (n.node, n)).collect();
+    let mut followed: Vec<&FollowNode> = Vec::new();
+    let mut children = &tr.children;
+    let mut from_player = tr.is_player;
+    let stop = loop {
+        if followed.len() >= FOLLOW_LIMIT {
+            break FollowStop {
+                reason: "depth".into(),
+                node: None,
+                conditions: Vec::new(),
+                choices: 0,
+            };
+        }
+        let candidates: Vec<&FollowNode> = children
+            .iter()
+            .filter_map(|id| by_id.get(id).copied())
+            .collect();
+        if candidates.is_empty() {
+            break FollowStop {
+                reason: "end".into(),
+                node: None,
+                conditions: Vec::new(),
+                choices: 0,
+            };
+        }
+        let mut passing: Vec<&FollowNode> = Vec::new();
+        let mut unknown: Option<&FollowNode> = None;
+        for candidate in &candidates {
+            match evaluate_conditions(&candidate.conditions, reader, &tr.module)? {
+                Some(true) => {
+                    passing.push(candidate);
+                    if from_player {
+                        break;
+                    }
+                }
+                Some(false) => {}
+                None => {
+                    unknown = Some(candidate);
+                    break;
+                }
+            }
+        }
+        if let Some(node) = unknown {
+            break FollowStop {
+                reason: "unknown_condition".into(),
+                node: Some(node.node),
+                conditions: node.conditions.clone(),
+                choices: 0,
+            };
+        }
+        let next = match passing.as_slice() {
+            [] => {
+                break FollowStop {
+                    reason: "end".into(),
+                    node: None,
+                    conditions: Vec::new(),
+                    choices: 0,
+                };
+            }
+            [only] => *only,
+            many => {
+                break FollowStop {
+                    reason: "player_choice".into(),
+                    node: None,
+                    conditions: Vec::new(),
+                    choices: many.len(),
+                };
+            }
+        };
+        if followed.iter().any(|n| n.node == next.node) {
+            break FollowStop {
+                reason: "depth".into(),
+                node: Some(next.node),
+                conditions: Vec::new(),
+                choices: 0,
+            };
+        }
+        followed.push(next);
+        children = &next.children;
+        from_player = next.is_player;
+    };
+    Ok((followed, stop))
+}
+
+/// Evaluate a node's condition list against the save. `None` when any condition
+/// uses a script the editor cannot evaluate.
+fn evaluate_conditions(
+    conditions: &[ConvoFunctor],
+    reader: &mut VariableReader<'_>,
+    module: &str,
+) -> Result<Option<bool>, String> {
+    let mut result: Option<bool> = None;
+    let mut join_with_or = false;
+    for condition in conditions {
+        let Some(value) = evaluate_condition(condition, reader, module)? else {
+            return Ok(None);
+        };
+        let value = value != condition.negate;
+        result = Some(match result {
+            None => value,
+            Some(acc) if join_with_or => acc || value,
+            Some(acc) => acc && value,
+        });
+        join_with_or = condition.join.eq_ignore_ascii_case("or");
+    }
+    Ok(Some(result.unwrap_or(true)))
+}
+
+fn evaluate_condition(
+    condition: &ConvoFunctor,
+    reader: &mut VariableReader<'_>,
+    module: &str,
+) -> Result<Option<bool>, String> {
+    let script = condition.script.to_ascii_lowercase();
+    let local = match script.as_str() {
+        "gc_global_int" => false,
+        "gc_local_int" => true,
+        _ => return Ok(None),
+    };
+    if local && condition.params.get(2).and_then(Value::as_str) != Some("$MODULE") {
+        return Ok(None);
+    }
+    let Some(name) = condition.params.first().and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let Some(check) = condition.params.get(1).and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let key = VariableKey {
+        module: local.then(|| module.to_string()),
+        name: name.into(),
+        value_type: "int".into(),
+    };
+    // A module the save has never visited has no variables the editor can read;
+    // treat its checks as undecidable rather than failing the whole preview.
+    let Ok(value) = reader.read(&key) else {
+        return Ok(None);
+    };
+    let current = value.and_then(|v| v.as_i64()).unwrap_or(0);
+    Ok(compare_check(current, check))
+}
+
+/// `ginc_var_ops` check syntax: `"1"`, `"=1"`, `">0"`, `"<=2"`, `"!=3"`.
+fn compare_check(current: i64, check: &str) -> Option<bool> {
+    let check = check.trim();
+    let (op, rest) = ["!=", "<=", ">=", "<", ">", "=", "!"]
+        .iter()
+        .find_map(|op| check.strip_prefix(op).map(|rest| (*op, rest)))
+        .unwrap_or(("=", check));
+    let target: i64 = rest.trim().parse().ok()?;
+    Some(match op {
+        "!=" | "!" => current != target,
+        "<=" => current <= target,
+        ">=" => current >= target,
+        "<" => current < target,
+        ">" => current > target,
+        _ => current == target,
+    })
+}
+
+/// What an assignment action does to its variable, per `ginc_var_ops`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Change {
+    Set(Value),
+    /// `"+3"`, `"-1"`, `"++"`: applied to the current value at preview time.
+    Add(i64),
+}
+
+/// NWScript `StringToInt`: leading integer, anything else is 0.
+fn string_to_int(raw: &str) -> Option<i64> {
+    let raw = raw.trim_start();
+    let end = raw
+        .char_indices()
+        .take_while(|(i, c)| c.is_ascii_digit() || (*i == 0 && (*c == '-' || *c == '+')))
+        .map(|(i, c)| i + c.len_utf8())
+        .last()
+        .unwrap_or(0);
+    match &raw[..end] {
+        "" | "+" | "-" => Some(0),
+        digits => digits.parse::<i32>().ok().map(i64::from),
+    }
+}
+
 pub fn decode_assignment(
     action: &ConvoFunctor,
     module: &str,
-) -> Result<(VariableKey, Value), &'static str> {
+) -> Result<(VariableKey, Change), &'static str> {
     let script = action.script.to_ascii_lowercase();
     let kind = match script.as_str() {
         "ga_global_int" | "ga_local_int" => "int",
-        "ga_global_float" => "float",
-        "ga_global_string" => "string",
+        "ga_global_float" | "ga_local_float" => "float",
+        "ga_global_string" | "ga_local_string" => "string",
         "ga_journal" | "__connector_quest_tuple__" => return Err("journal_action"),
+        _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };
-    let local = script == "ga_local_int";
+    let local = script.starts_with("ga_local_");
     if local && action.params.get(2).and_then(Value::as_str) != Some("$MODULE") {
         return Err("object_target");
     }
@@ -410,11 +783,22 @@ pub fn decode_assignment(
         .and_then(Value::as_str)
         .ok_or("invalid_assignment")?;
     let after = if kind == "string" {
-        Value::from(raw)
-    } else {
-        if raw.is_empty() || raw.starts_with(['+', '-']) {
+        Change::Set(Value::from(raw))
+    } else if raw.is_empty() {
+        return Err("unsupported_expression");
+    } else if let Some(delta) = raw.strip_prefix(['+', '-']) {
+        // GetChangeComponents: "+3" adds 3; "+", "++", "+-" add 1 (same for "-").
+        if kind != "int" {
             return Err("arithmetic_action");
         }
+        let sign = if raw.starts_with('-') { -1 } else { 1 };
+        let magnitude = if delta.is_empty() || delta.starts_with(['+', '-']) {
+            1
+        } else {
+            delta.parse::<i32>().map_err(|_| "invalid_assignment")?
+        };
+        Change::Add(sign * i64::from(magnitude))
+    } else {
         let number = raw.strip_prefix('=').unwrap_or(raw);
         // ginc_var_ops.GetChangeComponents treats a signed operand after '=' as 1.
         // Leave those surprising expressions for the engine instead of guessing intent.
@@ -422,13 +806,16 @@ pub fn decode_assignment(
             if number.starts_with(['+', '-']) || number.is_empty() {
                 return Err("unsupported_expression");
             }
-            Value::from(number.parse::<i32>().map_err(|_| "invalid_assignment")?)
+            // Non-numeric text (e.g. ">0") reaches StringToInt in-game and becomes 0.
+            Change::Set(Value::from(
+                string_to_int(number).ok_or("invalid_assignment")?,
+            ))
         } else {
             let value = number.parse::<f32>().map_err(|_| "invalid_assignment")?;
             if !value.is_finite() {
                 return Err("invalid_assignment");
             }
-            Value::from(value)
+            Change::Set(Value::from(value))
         }
     };
     Ok((
@@ -518,27 +905,45 @@ mod tests {
             kind: FunctorKind::Custom,
             script: script.into(),
             params: params.as_array().unwrap().clone(),
+            derived_from: None,
+            decoded: None,
+            negate: false,
+            join: String::new(),
         }
     }
 
     #[test]
     fn assignments_follow_installed_wrapper_semantics() {
         for (script, params, expected) in [
-            ("ga_global_int", json!(["x", "=5"]), json!(5)),
-            ("ga_global_int", json!(["x", "0"]), json!(0)),
-            ("ga_global_float", json!(["x", "=-2.5"]), json!(-2.5)),
+            ("ga_global_int", json!(["x", "=5"]), Change::Set(json!(5))),
+            ("ga_global_int", json!(["x", "0"]), Change::Set(json!(0))),
+            ("ga_global_int", json!(["x", ">0"]), Change::Set(json!(0))),
+            ("ga_global_int", json!(["x", "+4"]), Change::Add(4)),
+            ("ga_global_int", json!(["x", "-4"]), Change::Add(-4)),
+            ("ga_global_int", json!(["x", "++"]), Change::Add(1)),
+            ("ga_global_int", json!(["x", "-"]), Change::Add(-1)),
+            (
+                "ga_global_float",
+                json!(["x", "=-2.5"]),
+                Change::Set(json!(-2.5)),
+            ),
             (
                 "ga_global_string",
                 json!(["x", "+anything"]),
-                json!("+anything"),
+                Change::Set(json!("+anything")),
             ),
-            ("ga_local_int", json!(["x", "5", "$MODULE"]), json!(5)),
+            (
+                "ga_local_int",
+                json!(["x", "5", "$MODULE"]),
+                Change::Set(json!(5)),
+            ),
         ] {
             let (key, value) = decode_assignment(&action(script, params), "module_a").unwrap();
             assert_eq!(value, expected);
             assert_eq!(key.module.is_some(), script == "ga_local_int");
         }
-        for expression in ["+4", "-4", "", "++", "--", "=-4", "=", "2147483648"] {
+        assert!(decode_assignment(&action("ga_global_float", json!(["x", "+1"])), "m").is_err());
+        for expression in ["", "=-4", "=", "2147483648"] {
             assert!(
                 decode_assignment(&action("ga_global_int", json!(["x", expression])), "m").is_err(),
                 "{expression}"
@@ -615,6 +1020,7 @@ mod tests {
             &fixture_handler().1,
             &crate::services::campaign::content::ModuleInfo::default(),
             &crate::services::campaign::content::ModuleVariables::default(),
+            crate::services::save_graph::OrphanKind::PlatformUnsupported,
             String::new(),
         )
     }
@@ -636,14 +1042,205 @@ mod tests {
                 module: "not_visited".into(),
                 dlg: "dialogue".into(),
                 node: 1,
+                speaker: String::new(),
                 new_state: 20,
                 text_strref: None,
                 actions,
                 co_authored_globals: Vec::new(),
                 co_authored_locals: Vec::new(),
                 gating_conditions: Vec::new(),
+                is_player: true,
+                debug: false,
+                children: Vec::new(),
+                follow_up: Vec::new(),
             }],
         });
+    }
+
+    fn follow(
+        node: i32,
+        is_player: bool,
+        has_text: bool,
+        conditions: Vec<ConvoFunctor>,
+        actions: Vec<ConvoFunctor>,
+        children: Vec<i32>,
+    ) -> FollowNode {
+        FollowNode {
+            node,
+            is_player,
+            has_text,
+            speaker: String::new(),
+            text_strref: None,
+            conditions,
+            actions,
+            children,
+        }
+    }
+
+    fn condition(script: &str, params: Value, negate: bool, join: &str) -> ConvoFunctor {
+        ConvoFunctor {
+            negate,
+            join: join.into(),
+            ..action(script, params)
+        }
+    }
+
+    /// Shape of Cormick's "Sign me up" branch: two NPC replies, the first gated on a
+    /// global, both funnelling through an empty continue reply into the line that
+    /// sets the Watch flag; then a real player choice.
+    fn cormick_like(graph: &mut SaveGraph) {
+        add_quest(
+            graph,
+            "test",
+            vec![action("__connector_quest_tuple__", json!(["test", 20]))],
+        );
+        let tr = &mut graph.quests.last_mut().unwrap().transitions[0];
+        tr.children = vec![10, 11];
+        tr.follow_up = vec![
+            follow(
+                10,
+                false,
+                true,
+                vec![condition(
+                    "gc_global_int",
+                    json!(["friendly", "1"]),
+                    false,
+                    "",
+                )],
+                Vec::new(),
+                vec![20],
+            ),
+            follow(11, false, true, Vec::new(), Vec::new(), vec![21]),
+            follow(20, true, false, Vec::new(), Vec::new(), vec![30]),
+            follow(21, true, false, Vec::new(), Vec::new(), vec![30]),
+            follow(
+                30,
+                false,
+                true,
+                Vec::new(),
+                vec![
+                    action("ga_global_int", json!(["joined", "1"])),
+                    action("ga_global_int", json!(["visits", "++"])),
+                    action("__connector_quest_tuple__", json!(["other", 5])),
+                ],
+                vec![40, 41],
+            ),
+            follow(
+                40,
+                true,
+                true,
+                Vec::new(),
+                vec![action("ga_global_int", json!(["never", "1"]))],
+                Vec::new(),
+            ),
+            follow(41, true, true, Vec::new(), Vec::new(), Vec::new()),
+        ];
+    }
+
+    #[test]
+    fn preview_follows_the_conversation_the_engine_would_play() {
+        let (dir, handler) = fixture_handler();
+        std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>visits</Name><Value>2</Value></Integer></Integers></Globals>").unwrap();
+        let mut graph = graph();
+        cormick_like(&mut graph);
+        let edits = QuestEdits::default();
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        // `friendly` is absent (0), so the ungated second reply plays.
+        assert_eq!(
+            preview.followed.iter().map(|l| l.node).collect::<Vec<_>>(),
+            vec![11, 21, 30]
+        );
+        let stop = preview.follow_stop.as_ref().unwrap();
+        assert_eq!(stop.reason, "player_choice");
+        assert_eq!(stop.choices, 2);
+        let writes: Vec<_> = preview
+            .writes
+            .iter()
+            .map(|w| (w.key.name.as_str(), w.after.clone(), w.line))
+            .collect();
+        assert_eq!(
+            writes,
+            vec![
+                ("joined", json!(1), Some(30)),
+                ("visits", json!(3), Some(30))
+            ]
+        );
+        assert!(
+            preview
+                .effects
+                .iter()
+                .any(|e| e.reason == "follow_up_journal" && e.line == Some(30))
+        );
+
+        // With the gate satisfied the first reply wins; negation flips it back.
+        std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>friendly</Name><Value>1</Value></Integer></Integers></Globals>").unwrap();
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        assert_eq!(
+            preview.followed.iter().map(|l| l.node).collect::<Vec<_>>(),
+            vec![10, 20, 30]
+        );
+        graph.quests[0].transitions[0].follow_up[0].conditions[0].negate = true;
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        assert_eq!(preview.followed[0].node, 11);
+
+        // A condition the editor cannot evaluate stops the walk before that line.
+        graph.quests[0].transitions[0].follow_up[0].conditions[0] =
+            condition("10c_brelaina_ck", json!([20]), false, "");
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        assert!(preview.followed.is_empty());
+        let stop = preview.follow_stop.as_ref().unwrap();
+        assert_eq!(stop.reason, "unknown_condition");
+        assert_eq!(stop.node, Some(10));
+        assert!(preview.writes.is_empty());
+    }
+
+    #[test]
+    fn condition_checks_follow_ginc_var_ops_and_join_order() {
+        assert_eq!(compare_check(3, "3"), Some(true));
+        assert_eq!(compare_check(3, "=3"), Some(true));
+        assert_eq!(compare_check(3, ">2"), Some(true));
+        assert_eq!(compare_check(3, ">=4"), Some(false));
+        assert_eq!(compare_check(3, "<4"), Some(true));
+        assert_eq!(compare_check(3, "<=2"), Some(false));
+        assert_eq!(compare_check(3, "!=3"), Some(false));
+        assert_eq!(compare_check(3, "!3"), Some(false));
+        assert_eq!(compare_check(3, "abc"), None);
+
+        let (dir, handler) = fixture_handler();
+        std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>a</Name><Value>1</Value></Integer></Integers></Globals>").unwrap();
+        let paths = NWN2Paths::new();
+        let mut reader = VariableReader::new(&handler, &paths);
+        // `a == 1 OR b == 1` then `AND c == 1`: (true || false) && false.
+        let conditions = vec![
+            condition("gc_global_int", json!(["a", "1"]), false, "or"),
+            condition("gc_global_int", json!(["b", "1"]), false, "and"),
+            condition("gc_global_int", json!(["c", "1"]), false, "and"),
+        ];
+        assert_eq!(
+            evaluate_conditions(&conditions, &mut reader, "m").unwrap(),
+            Some(false)
+        );
+        assert_eq!(
+            evaluate_conditions(&conditions[..2], &mut reader, "m").unwrap(),
+            Some(true)
+        );
+        assert_eq!(
+            evaluate_conditions(&[], &mut reader, "m").unwrap(),
+            Some(true)
+        );
+        let object_local = condition("gc_local_int", json!(["a", "1", "npc"]), false, "");
+        assert_eq!(
+            evaluate_conditions(&[object_local], &mut reader, "m").unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -668,9 +1265,13 @@ mod tests {
         let preview = edits
             .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
             .unwrap();
-        assert_eq!(preview.writes.len(), 3);
+        assert_eq!(preview.writes.len(), 4);
         assert_eq!(preview.writes[0].saved, Some(json!(1)));
-        assert_eq!(preview.effects.len(), 3);
+        // "+3" on an absent variable: the engine adds to 0.
+        assert_eq!(preview.writes[3].key.name, "delta");
+        assert_eq!(preview.writes[3].saved, None);
+        assert_eq!(preview.writes[3].after, json!(3));
+        assert_eq!(preview.effects.len(), 2);
         assert!(
             preview
                 .effects
@@ -855,6 +1456,8 @@ mod tests {
                 before: Some(json!(*saved)),
                 after: json!(target),
                 action_index: 0,
+                derived_from: None,
+                line: None,
             }],
         });
         edits.validate_saved(&handler, &paths, 0).unwrap();

@@ -6,6 +6,7 @@ import type { TlkResolver } from '@/hooks/useTlkResolver';
 import type { AggregatedModule, ConvoFunctor, QuestSummary, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { describeScript, formatRawCall, isJournalConnector } from './scriptDescriptions';
+import { dialogueText } from './utils';
 
 function formatParam(param: unknown): string {
   if (param == null) return 'null';
@@ -101,7 +102,7 @@ function TransitionGroup({
   const [expanded, setExpanded] = useState(false);
   const rep = group.representative;
   const isMulti = group.members.length > 1;
-  const lineText = tlk.resolve(rep.text_strref);
+  const lineText = dialogueText(tlk.resolve(rep.text_strref));
 
   return (
     <div style={{ padding: '8px 10px', borderTop: isFirst ? 'none' : `1px dashed ${T.borderLight}` }}>

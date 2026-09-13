@@ -43,6 +43,9 @@ public static class ConversationAdapter
                     TextStrref = conn.Line?.Text?.StringRefValid == true
                         ? (int)conn.Line.Text.StringRef
                         : -1,
+                    Type = conn.Type.ToString(),
+                    HasText = !string.IsNullOrEmpty(conn.Line?.Text?.ToString()),
+                    Children = ChildIds(conn.Line),
                     Actions = ToEntries(conn.Actions),
                     Conditions = ToEntries(conn.Conditions),
                 };
@@ -70,6 +73,18 @@ public static class ConversationAdapter
         return shape;
     }
 
+    private static List<int> ChildIds(NWN2Toolset.NWN2.Data.ConversationData.NWN2ConversationLine? line)
+    {
+        var ids = new List<int>();
+        if (line?.Children == null) return ids;
+        foreach (var obj in line.Children)
+        {
+            if (obj is NWN2Toolset.NWN2.Data.ConversationData.NWN2ConversationConnector child)
+                ids.Add(child.ConnectorID?.ID ?? -1);
+        }
+        return ids;
+    }
+
     private static List<ConvoFunctorEntry> ToEntries(System.Collections.IEnumerable? functors)
     {
         var result = new List<ConvoFunctorEntry>();
@@ -79,11 +94,17 @@ public static class ConversationAdapter
         {
             if (obj is not NWN2Toolset.NWN2.Data.NWN2ScriptFunctor f) continue;
             var script = f.Script?.ResRef.Value ?? "";
+            // The toolset keeps empty functor slots; they gate nothing.
+            if (string.IsNullOrEmpty(script)) continue;
             result.Add(new ConvoFunctorEntry
             {
                 Kind = FunctorClassifier.Classify(script),
                 Script = script,
                 Params = ExtractParams(f.Parameters),
+                Negate = f.GetType().GetProperty("Not")?.GetValue(f) as bool? ?? false,
+                Join = f.GetType().GetProperties()
+                    .FirstOrDefault(p => p.PropertyType.Name == "NWN2ConditionalType")
+                    ?.GetValue(f)?.ToString()?.ToLowerInvariant() ?? "",
             });
         }
         return result;

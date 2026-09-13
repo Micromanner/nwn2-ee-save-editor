@@ -39,6 +39,16 @@ export function questStatus(q: QuestSummary): QuestStatus {
 }
 
 /** Journal names carry a toolset prefix like `{1000}` or `{CUT!}` that players never see in-game. */
+/**
+ * Dialogue text as the game shows it: `{stage directions}` and the leading
+ * `|designer note|` markers are hidden in-game.
+ */
+export function dialogueText(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const text = raw.replace(/\{[^}]*\}/g, '').replace(/^\s*(\|[^|]*\|\s*)+/, '').trim();
+  return text.length > 0 ? text : null;
+}
+
 export function questDisplayName(q: QuestSummary) {
   return (q.category.name || '').replace(/^\{[^}]*\}\s*/, '') || q.tag;
 }

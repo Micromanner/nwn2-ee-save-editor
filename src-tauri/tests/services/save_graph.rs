@@ -9,6 +9,7 @@ use app_lib::services::campaign::content::extract_module_info;
 use app_lib::services::save_graph::{self, BuildContext};
 use app_lib::services::savegame_handler::SaveGameHandler;
 use app_lib::services::toolset_bridge::BridgeClient;
+use serde_json::json;
 use tempfile::TempDir;
 
 #[path = "../common/mod.rs"]
@@ -84,6 +85,89 @@ fn save_graph_builds_on_classic_campaign() {
         quests_with_live_state > 0,
         "expected at least one quest with a live VarTable entry"
     );
+
+    // The campaign journal declares the OC quests (no module journal does).
+    let reward = graph
+        .quests
+        .iter()
+        .find(|q| q.tag == "MarshalReward")
+        .expect("MarshalReward from the campaign module.jrl");
+    assert_eq!(reward.category.source, "campaign");
+    assert!(
+        reward
+            .category
+            .entries
+            .iter()
+            .any(|e| e.id == 11 && e.is_final)
+    );
+
+    // Docks dialogue drives NPC state through wrapper scripts; the aggregator
+    // decodes them from the shipped .nss and synthesizes the global writes.
+    let blacklake = graph
+        .quests
+        .iter()
+        .find(|q| q.tag == "choosefaction")
+        .expect("choosefaction quest");
+    let caleb = blacklake
+        .transitions
+        .iter()
+        .find(|tr| tr.dlg == "10_caleb" && tr.new_state == 20)
+        .expect("Caleb line that sets choosefaction 20");
+    let wrapper = caleb
+        .actions
+        .iter()
+        .find(|a| a.script == "10a_caleb_state")
+        .expect("10a_caleb_state action");
+    let decoded = wrapper.decoded.as_ref().expect("wrapper decoded from .nss");
+    assert!(
+        decoded.calls.iter().any(|c| c == "SetLocked"),
+        "{decoded:?}"
+    );
+    let synthesized: Vec<_> = caleb
+        .actions
+        .iter()
+        .filter(|a| a.derived_from.as_deref() == Some("10a_caleb_state(1)"))
+        .map(|a| (a.script.as_str(), a.params.clone()))
+        .collect();
+    assert_eq!(
+        synthesized,
+        vec![
+            ("ga_global_int", vec![json!("CalebState"), json!("1")]),
+            ("ga_global_int", vec![json!("gbWatch"), json!("0")]),
+        ]
+    );
+    assert!(
+        caleb
+            .co_authored_globals
+            .iter()
+            .any(|a| a.params.first() == Some(&json!("CalebState")))
+    );
+
+    // Cormick's "Sign me up" line carries no flags itself; the Watch flag sits two
+    // lines later on Cormick's reply, reachable through an empty continue reply.
+    let cormick = blacklake
+        .transitions
+        .iter()
+        .find(|tr| tr.dlg == "10_cormick" && tr.new_state == 30)
+        .expect("Cormick line that sets choosefaction 30");
+    assert!(cormick.is_player);
+    assert_eq!(cormick.children.len(), 2);
+    let watch_line = cormick
+        .follow_up
+        .iter()
+        .find(|n| {
+            n.actions
+                .iter()
+                .any(|a| a.params.first() == Some(&json!("00_bSand_Watch")))
+        })
+        .expect("follow-up line setting 00_bSand_Watch");
+    assert!(!watch_line.is_player);
+    let continue_line = cormick
+        .follow_up
+        .iter()
+        .find(|n| n.children.contains(&watch_line.node))
+        .expect("continue reply leading to the Watch line");
+    assert!(continue_line.is_player && !continue_line.has_text);
 }
 
 #[test]

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { conflictingEdits, questStates } from './utils';
-import type { PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode, VariableWrite } from './types';
+import { conflictingEdits, dialogueText, questStates } from './utils';
+import { groupRoutes } from './QuestEditDialog';
+import type { RouteSummary, PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode, VariableWrite } from './types';
 
 const write = (module: string | null, after: number): VariableWrite => ({
   key: { module, name: 'progress', value_type: 'int' }, saved: 1, before: 1, after, action_index: 0,
@@ -31,8 +32,50 @@ describe('quest states', () => {
     const quest: QuestSummary = { tag: 'q', live_state: 77, defined_in: [], transition_count: 1,
       category: { tag: 'q', name: 'Quest', priority: '', xp: 0, source: '', entries: [{ id: 20, text: 'Final', final: true }] } };
     const transition: TransitionNode = { module: 'm', dlg: 'd', node: 0, new_state: 10,
-      text_strref: null, actions: [], co_authored_globals: [], co_authored_locals: [], gating_conditions: [] };
+      text_strref: null, actions: [], co_authored_globals: [], co_authored_locals: [], gating_conditions: [],
+      is_player: false, debug: false, speaker: '', children: [], follow_up: [] };
     expect(questStates(quest, [transition, transition])).toEqual([10, 20, 77]);
     expect(quest.live_state).toBe(77);
+  });
+});
+
+describe('groupRoutes', () => {
+  const line = (over: Partial<RouteSummary>): RouteSummary => ({ route: 0, module: 'a1', speaker: '', is_player: true, text_strref: 1,
+    debug: false, signature: 'x=1|end', writes: [], write_count: 1, followed_count: 0, ...over });
+
+  it('collapses same-outcome lines, puts the current module first, hides cheat dialogues', () => {
+    const grouped = groupRoutes([
+      line({ route: 0, module: 'mq', signature: 'x=1|end' }),
+      line({ route: 1, module: 'a1', signature: 'x=1|end' }),
+      line({ route: 2, module: 'a1', signature: 'x=1|end', text_strref: 2 }),
+      line({ route: 3, module: 'a1', signature: 'x=2|end' }),
+      line({ route: 4, module: 'a1', debug: true }),
+    ], 'a1');
+    // Route 0 (other module) has the same outcome as route 1 and is folded into it.
+    expect(grouped.map(o => o.route)).toEqual([1, 3]);
+    expect(grouped.map(o => o.showModule)).toEqual([false, false]);
+  });
+
+  it('shows the module only when the same speaker has different outcomes per module', () => {
+    const grouped = groupRoutes([
+      line({ route: 0, module: 'a1', signature: 'x=1|end' }),
+      line({ route: 1, module: 'mq', signature: 'x=2|end' }),
+    ], 'a1');
+    expect(grouped.map(o => o.showModule)).toEqual([true, true]);
+  });
+
+  it('falls back to cheat dialogues when nothing else reaches the entry', () => {
+    const grouped = groupRoutes([line({ route: 4, debug: true })], null);
+    expect(grouped.map(o => o.route)).toEqual([4]);
+    expect(grouped[0].showModule).toBe(false);
+  });
+});
+
+describe('dialogueText', () => {
+  it('hides designer notes and stage directions the game never shows', () => {
+    expect(dialogueText('| Good Response |No reward is necessary.')).toBe('No reward is necessary.');
+    expect(dialogueText('|Player helped at Fort Locke|{Very happy}Well, look who it is.')).toBe('Well, look who it is.');
+    expect(dialogueText('{Cormick nods}')).toBeNull();
+    expect(dialogueText(null)).toBeNull();
   });
 });
