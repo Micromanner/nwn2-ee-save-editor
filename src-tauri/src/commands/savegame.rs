@@ -134,24 +134,62 @@ pub async fn get_save_info(
 }
 
 #[tauri::command]
-pub async fn delete_backup(state: State<'_, AppState>, backup_path: String) -> CommandResult<bool> {
-    let _session = state.session.read();
-    let path = PathBuf::from(&backup_path);
+pub async fn delete_backup(
+    _state: State<'_, AppState>,
+    backup_path: String,
+) -> CommandResult<bool> {
+    tokio::task::spawn_blocking(move || {
+        let path = PathBuf::from(&backup_path);
 
-    if !path.exists() {
-        return Err(CommandError::NotFound {
-            item: format!("Backup path: {backup_path}"),
-        });
-    }
+        if !path.exists() {
+            return Err(CommandError::NotFound {
+                item: format!("Backup path: {backup_path}"),
+            });
+        }
 
-    if !path.is_dir() {
-        return Err(CommandError::FileError {
-            message: "Backup path is not a directory".to_string(),
-            path: Some(backup_path),
-            diagnostics_path: None,
-        });
-    }
+        if !path.is_dir() {
+            return Err(CommandError::FileError {
+                message: "Backup path is not a directory".to_string(),
+                path: Some(backup_path),
+                diagnostics_path: None,
+            });
+        }
 
-    std::fs::remove_dir_all(&path)?;
-    Ok(true)
+        std::fs::remove_dir_all(&path)?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| CommandError::Internal(e.to_string()))?
+}
+
+#[tauri::command]
+pub async fn delete_backups(
+    _state: State<'_, AppState>,
+    backup_paths: Vec<String>,
+) -> CommandResult<usize> {
+    tokio::task::spawn_blocking(move || {
+        use rayon::prelude::*;
+
+        let deleted_count = backup_paths
+            .par_iter()
+            .filter_map(|backup_path| {
+                let path = PathBuf::from(backup_path);
+                if path.exists() && path.is_dir() {
+                    match std::fs::remove_dir_all(&path) {
+                        Ok(()) => Some(1),
+                        Err(err) => {
+                            tracing::warn!("Failed to delete backup dir {}: {err}", path.display());
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            })
+            .sum();
+
+        Ok(deleted_count)
+    })
+    .await
+    .map_err(|e| CommandError::Internal(e.to_string()))?
 }

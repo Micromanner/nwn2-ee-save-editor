@@ -4,7 +4,7 @@ import InfiniteLoader from 'react-window-infinite-loader';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Button, Dialog, DialogBody, DialogFooter,
+  Button, ButtonGroup, Checkbox, Dialog, DialogBody, DialogFooter, Divider,
   Icon, Spinner, NonIdealState,
 } from '@blueprintjs/core';
 import { GiOpenFolder, GiExitDoor, GiFullFolder, GiFoldedPaper, GiBrokenShield, GiMagnifyingGlass } from 'react-icons/gi';
@@ -14,7 +14,7 @@ import { LoadingState } from '../shared';
 import { display, formatNumber } from '@/utils/dataHelpers';
 import { T, formatBytes } from '../theme';
 
-type SortField = 'name' | 'date' | 'size' | 'character_name';
+type SortField = 'name' | 'date' | 'size' | 'character_name' | 'save_name';
 type SortDirection = 'asc' | 'desc';
 
 export interface FileInfo {
@@ -43,6 +43,7 @@ interface FileBrowserDialogProps {
   currentPath?: string;
   onPathChange?: (path: string) => void;
   onDeleteBackup?: (file: FileInfo) => Promise<void>;
+  onDeleteBackups?: (files: FileInfo[]) => Promise<void>;
   canRestore?: boolean;
   refreshKey?: number;
   demoFiles?: FileInfo[];
@@ -59,6 +60,7 @@ export function FileBrowserDialog({
   currentPath = '',
   onPathChange,
   onDeleteBackup,
+  onDeleteBackups,
   canRestore = true,
   refreshKey = 0,
   demoFiles,
@@ -70,11 +72,13 @@ export function FileBrowserDialog({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
-  const [sortField, setSortField] = useState<SortField>('character_name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const listRef = useRef<List>(null);
   const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
   const previousRefreshKey = useRef(refreshKey);
@@ -130,7 +134,7 @@ export function FileBrowserDialog({
         if (backupRootPath === '') {
           setBackupRootPath(currentPath);
         }
-        const isSaveFolder = !currentPath.replace(/\\/g, '/').replace(/\/$/, '').endsWith('/backups');
+        const isSaveFolder = !currentPath.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase().endsWith('/backups');
         const fileInfos: FileInfo[] = backups.map(b => ({
           name: b.name,
           path: b.path,
@@ -219,7 +223,12 @@ export function FileBrowserDialog({
           setFiles([]);
           setTotalFiles(0);
           setSelectedFile(null);
+          setSelectedPaths(new Set());
           lastPath.current = currentPath;
+        }
+        if (refreshRequested) {
+          setSelectedPaths(new Set());
+          setSelectedFile(null);
         }
         previousRefreshKey.current = refreshKey;
         loadFiles(true);
@@ -242,12 +251,14 @@ export function FileBrowserDialog({
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection(field === 'character_name' ? 'asc' : 'desc');
     }
   };
 
+  const isBackupMode = mode === 'manage-backups';
+
   const sortedFiles = useMemo(() => {
-    const filtered = mode === 'manage-backups'
+    const filtered = isBackupMode
       ? files.filter(f => f.name.toLowerCase() !== 'campaign_backups')
       : files;
 
@@ -255,17 +266,114 @@ export function FileBrowserDialog({
       if (a.is_directory !== b.is_directory) return a.is_directory ? -1 : 1;
       let cmp = 0;
       switch (sortField) {
-        case 'name': cmp = a.name.localeCompare(b.name); break;
-        case 'date': cmp = parseFloat(a.modified) - parseFloat(b.modified); break;
-        case 'size': cmp = a.size - b.size; break;
+        case 'name':
+          cmp = (a.display_name || a.name).localeCompare(b.display_name || b.name, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'date':
+          cmp = parseFloat(a.modified) - parseFloat(b.modified);
+          break;
+        case 'size':
+          cmp = a.size - b.size;
+          break;
         case 'character_name':
-          cmp = (a.character_name || '').localeCompare(b.character_name || '');
+          cmp = (a.character_name || '').localeCompare(b.character_name || '', undefined, { numeric: true, sensitivity: 'base' });
+          if (cmp === 0) return parseFloat(b.modified) - parseFloat(a.modified);
+          break;
+        case 'save_name':
+          cmp = (a.save_name || a.display_name || a.name).localeCompare(b.save_name || b.display_name || b.name, undefined, { numeric: true, sensitivity: 'base' });
           if (cmp === 0) return parseFloat(b.modified) - parseFloat(a.modified);
           break;
       }
       return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [files, sortField, sortDirection, mode]);
+  }, [files, sortField, sortDirection, isBackupMode]);
+
+  const handleToggleSelect = (path: string) => {
+    setSelectedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedPaths.size === sortedFiles.length) {
+      setSelectedPaths(new Set());
+    } else {
+      setSelectedPaths(new Set(sortedFiles.map(f => f.path)));
+    }
+  };
+
+  const handleSelectExceptNewest = () => {
+    const byDateDesc = [...sortedFiles].sort((a, b) => parseFloat(b.modified) - parseFloat(a.modified));
+    const older = byDateDesc.slice(1).map(f => f.path);
+    setSelectedPaths(new Set(older));
+  };
+
+  const handleSelectOlderThan3 = () => {
+    const byDateDesc = [...sortedFiles].sort((a, b) => parseFloat(b.modified) - parseFloat(a.modified));
+    const older = byDateDesc.slice(3).map(f => f.path);
+    setSelectedPaths(new Set(older));
+  };
+
+  const selectedFilesList = useMemo(() => {
+    if (selectedPaths.size > 0) {
+      return sortedFiles.filter(f => selectedPaths.has(f.path));
+    }
+    return selectedFile ? [selectedFile] : [];
+  }, [sortedFiles, selectedPaths, selectedFile]);
+
+  const selectedTotalBytes = useMemo(() => {
+    return selectedFilesList.reduce((sum, f) => sum + (f.size || 0), 0);
+  }, [selectedFilesList]);
+
+  const totalListedBytes = useMemo(() => {
+    return files.reduce((sum, f) => sum + (f.size || 0), 0);
+  }, [files]);
+
+  const summaryLabel = useMemo(() => {
+    const count = files.length;
+    const size = formatBytes(totalListedBytes);
+    if (mode === 'manage-backups') {
+      return t('fileBrowser.totalBackupsSummary', { count, size });
+    }
+    if (mode === 'load-vault') {
+      return t('fileBrowser.totalVaultSummary', { count, size });
+    }
+    if (files.length < totalFiles) {
+      return t('fileBrowser.itemCount', {
+        loaded: formatNumber(files.length),
+        total: formatNumber(totalFiles),
+      });
+    }
+    return t('fileBrowser.totalSavesSummary', { count, size });
+  }, [mode, files.length, totalFiles, totalListedBytes, t]);
+
+  const handleDeleteExecute = async () => {
+    if (selectedFilesList.length === 0) return;
+    setIsDeleting(true);
+    try {
+      if (onDeleteBackups) {
+        await onDeleteBackups(selectedFilesList);
+      } else if (onDeleteBackup) {
+        for (const f of selectedFilesList) {
+          await onDeleteBackup(f);
+        }
+      }
+      setSelectedPaths(new Set());
+      setSelectedFile(null);
+      setShowDeleteConfirm(false);
+    } catch (err) {
+      console.error('Failed to delete backup(s):', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete backup(s)');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const ts = parseFloat(dateString);
@@ -343,30 +451,66 @@ export function FileBrowserDialog({
   };
 
   const footerLeft = (
-    <span style={{ color: T.textMuted }}>
-      {t('fileBrowser.itemCount', {
-        loaded: formatNumber(files.length),
-        total: formatNumber(totalFiles),
-      })}
-    </span>
-  );
-
-  const footerActions = (
-    <>
-      {mode === 'manage-backups' && !isBackupRoot && selectedFile && onDeleteBackup && (
+    <div>
+      {mode === 'manage-backups' && !isBackupRoot && (
         <Button
-          intent="danger"
           minimal
-          text={t('fileBrowser.delete')}
-          onClick={async () => {
-            const fileName = selectedFile.name;
-            await onDeleteBackup(selectedFile);
-            setSuccessMessage(`Backup "${fileName}" deleted successfully`);
-            setTimeout(() => setSuccessMessage(null), 3000);
+          icon={<GameIcon icon={GiExitDoor} size={14} />}
+          text={t('fileBrowser.back')}
+          onClick={() => {
+            setSelectedFile(null);
+            onPathChange?.(backupRootPath);
           }}
         />
       )}
-      {mode === 'manage-backups' && isBackupRoot && (
+    </div>
+  );
+
+  const footerActions = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {isBackupMode && (
+        <>
+          <ButtonGroup minimal>
+            <Button
+              text={selectedPaths.size === sortedFiles.length && sortedFiles.length > 0
+                ? t('fileBrowser.deselectAll')
+                : t('fileBrowser.selectAll')}
+              disabled={sortedFiles.length === 0}
+              onClick={handleToggleSelectAll}
+            />
+            {!isBackupRoot && sortedFiles.length > 1 && (
+              <Button
+                text={t('fileBrowser.selectExceptNewest')}
+                onClick={handleSelectExceptNewest}
+              />
+            )}
+            {!isBackupRoot && sortedFiles.length > 3 && (
+              <Button
+                text={t('fileBrowser.selectOlderThan3')}
+                onClick={handleSelectOlderThan3}
+              />
+            )}
+          </ButtonGroup>
+          <Divider style={{ height: 20, margin: '0 6px' }} />
+        </>
+      )}
+      <Button text={t('fileBrowser.cancel')} onClick={onClose} />
+      {isBackupMode && (onDeleteBackup || onDeleteBackups) && (
+        selectedPaths.size > 0 ? (
+          <Button
+            intent="danger"
+            text={t('fileBrowser.deleteSelected', { count: selectedPaths.size })}
+            onClick={() => setShowDeleteConfirm(true)}
+          />
+        ) : selectedFile ? (
+          <Button
+            intent="danger"
+            text={isBackupRoot ? t('fileBrowser.deleteSaveBackups') : t('fileBrowser.delete')}
+            onClick={() => setShowDeleteConfirm(true)}
+          />
+        ) : null
+      )}
+      {isBackupMode && isBackupRoot && (
         <Button
           intent="primary"
           text={t('fileBrowser.open')}
@@ -375,7 +519,7 @@ export function FileBrowserDialog({
           style={{ background: T.accent }}
         />
       )}
-      {(mode === 'load-saves' || mode === 'load-vault' || (mode === 'manage-backups' && !isBackupRoot && canRestore)) && (
+      {(mode === 'load-saves' || mode === 'load-vault' || (isBackupMode && !isBackupRoot && canRestore)) && (
         <Button
           intent="primary"
           text={actionLabel}
@@ -384,7 +528,7 @@ export function FileBrowserDialog({
           style={{ background: T.accent }}
         />
       )}
-    </>
+    </div>
   );
 
   return (
@@ -410,7 +554,7 @@ export function FileBrowserDialog({
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 12,
             padding: '8px 16px',
             borderBottom: `1px solid ${T.borderLight}`,
             background: T.surfaceAlt,
@@ -426,41 +570,30 @@ export function FileBrowserDialog({
             }}>
               {currentPath || t('fileBrowser.defaultLocation')}
             </span>
-            {mode === 'manage-backups' && !isBackupRoot && (
-              <Button
-                minimal
-                small
-                icon={<GameIcon icon={GiExitDoor} size={14} />}
-                text={t('fileBrowser.back')}
-                onClick={() => {
-                  setSelectedFile(null);
-                  onPathChange?.(backupRootPath);
-                }}
-              />
-            )}
-            {mode !== 'manage-backups' && (
-              <Button
-                minimal
-                small
-                icon={<GameIcon icon={GiOpenFolder} size={14} />}
-                text={t('fileBrowser.changeLocation')}
-                onClick={handleChangeLocation}
-              />
-            )}
-          </div>
-
-          {successMessage && (
-            <div style={{
-              margin: '8px 16px 0',
-              padding: '6px 10px',
-              borderRadius: 3,
-              background: 'rgba(46, 125, 50, 0.1)',
-              border: `1px solid ${T.positive}`,
-              color: T.positive,
-            }}>
-              {successMessage}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              {isBackupMode && selectedPaths.size > 0 ? (
+                <span style={{ color: T.accent, fontWeight: 600, fontSize: 13 }}>
+                  {t('fileBrowser.selectedCount', {
+                    count: selectedPaths.size,
+                    size: formatBytes(selectedTotalBytes),
+                  })}
+                </span>
+              ) : (
+                <span style={{ color: T.textMuted, fontSize: 13 }}>
+                  {summaryLabel}
+                </span>
+              )}
+              {mode !== 'manage-backups' && (
+                <Button
+                  minimal
+                  small
+                  icon={<GameIcon icon={GiOpenFolder} size={14} />}
+                  text={t('fileBrowser.changeLocation')}
+                  onClick={handleChangeLocation}
+                />
+              )}
             </div>
-          )}
+          </div>
 
           <div className="t-bold" style={{
             display: 'flex',
@@ -471,6 +604,16 @@ export function FileBrowserDialog({
             color: T.textMuted,
             userSelect: 'none',
           }}>
+            {isBackupMode && (
+              <div style={{ width: 32, display: 'flex', alignItems: 'center' }}>
+                <Checkbox
+                  style={{ margin: 0 }}
+                  checked={sortedFiles.length > 0 && selectedPaths.size === sortedFiles.length}
+                  indeterminate={selectedPaths.size > 0 && selectedPaths.size < sortedFiles.length}
+                  onChange={handleToggleSelectAll}
+                />
+              </div>
+            )}
             <div
               style={{ ...(isVault ? { flex: 3 } : { width: 260 }), cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
               onClick={() => handleSort('name')}
@@ -485,8 +628,11 @@ export function FileBrowserDialog({
                 >
                   {t('fileBrowser.character')} {renderSortIcon('character_name')}
                 </div>
-                <div style={{ flex: 1 }}>
-                  {t('fileBrowser.saveName')}
+                <div
+                  style={{ flex: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  onClick={() => handleSort('save_name')}
+                >
+                  {t('fileBrowser.saveName')} {renderSortIcon('save_name')}
                 </div>
               </>
             )}
@@ -571,6 +717,18 @@ export function FileBrowserDialog({
                             }
                           }}
                         >
+                          {isBackupMode && (
+                            <div
+                              style={{ width: 32, display: 'flex', alignItems: 'center' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Checkbox
+                                style={{ margin: 0 }}
+                                checked={selectedPaths.has(file.path)}
+                                onChange={() => handleToggleSelect(file.path)}
+                              />
+                            </div>
+                          )}
                           <div style={{ ...(isVault ? { flex: 3 } : { width: 260 }), display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
                             <GameIcon
                               icon={file.is_directory ? GiFullFolder : GiFoldedPaper}
@@ -636,12 +794,7 @@ export function FileBrowserDialog({
 
         <DialogFooter
           style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}` }}
-          actions={
-            <>
-              <Button text={t('fileBrowser.cancel')} onClick={onClose} />
-              {footerActions}
-            </>
-          }
+          actions={footerActions}
         >
           {footerLeft}
         </DialogFooter>
@@ -651,6 +804,7 @@ export function FileBrowserDialog({
         isOpen={showRestoreConfirm && !!selectedFile}
         onClose={() => setShowRestoreConfirm(false)}
         title={t('fileBrowser.confirmRestore')}
+        transitionDuration={0}
         style={{ width: 440, paddingBottom: 0, background: T.surface }}
       >
         <DialogBody style={{ background: T.surface, margin: 0, padding: 16 }}>
@@ -677,6 +831,53 @@ export function FileBrowserDialog({
                 text={t('fileBrowser.restoreBackup')}
                 onClick={handleRestoreConfirmed}
                 style={{ background: T.accent }}
+              />
+            </>
+          }
+        />
+      </Dialog>
+
+      <Dialog
+        isOpen={showDeleteConfirm && selectedFilesList.length > 0}
+        onClose={() => !isDeleting && setShowDeleteConfirm(false)}
+        title={t('fileBrowser.confirmDelete')}
+        transitionDuration={0}
+        style={{ width: 460, paddingBottom: 0, background: T.surface }}
+      >
+        <DialogBody style={{ background: T.surface, margin: 0, padding: 16 }}>
+          <p className="t-body" style={{ color: T.text, margin: 0 }}>
+            {isBackupRoot
+              ? t('fileBrowser.confirmDeleteRootMessage', {
+                  count: selectedFilesList.length,
+                  size: formatBytes(selectedTotalBytes),
+                })
+              : t('fileBrowser.confirmDeleteMessage', {
+                  count: selectedFilesList.length,
+                  size: formatBytes(selectedTotalBytes),
+                })}
+          </p>
+          <p className="t-body t-medium" style={{
+            color: T.negative,
+            marginTop: 12,
+            marginBottom: 0,
+          }}>
+            {t('fileBrowser.confirmDeleteWarning')}
+          </p>
+        </DialogBody>
+        <DialogFooter
+          style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}` }}
+          actions={
+            <>
+              <Button
+                text={t('fileBrowser.cancel')}
+                disabled={isDeleting}
+                onClick={() => setShowDeleteConfirm(false)}
+              />
+              <Button
+                intent="danger"
+                text={t('fileBrowser.delete')}
+                loading={isDeleting}
+                onClick={handleDeleteExecute}
               />
             </>
           }

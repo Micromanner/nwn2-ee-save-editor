@@ -273,6 +273,7 @@ pub fn run() {
             crate::commands::savegame::list_save_files,
             crate::commands::savegame::get_save_info,
             crate::commands::savegame::delete_backup,
+            crate::commands::savegame::delete_backups,
             // GameData
             crate::commands::gamedata::get_tlk_string,
             crate::commands::gamedata::tlk_get_strings,

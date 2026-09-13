@@ -88,6 +88,10 @@ export class BackupAPI {
     return await invoke<boolean>('delete_backup', { backupPath });
   }
 
+  static async deleteBackups(backupPaths: string[]): Promise<number> {
+    return await invoke<number>('delete_backups', { backupPaths });
+  }
+
   static formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
   }

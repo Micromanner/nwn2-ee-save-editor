@@ -724,6 +724,24 @@ fn find_newest_inner_backup(save_folder: &std::path::Path) -> Option<std::path::
     newest.map(|(_, p)| p)
 }
 
+fn calculate_dir_size_recursive(path: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if let Ok(ft) = entry.file_type() {
+                if ft.is_file() {
+                    if let Ok(meta) = entry.metadata() {
+                        total += meta.len();
+                    }
+                } else if ft.is_dir() {
+                    total += calculate_dir_size_recursive(&entry.path());
+                }
+            }
+        }
+    }
+    total
+}
+
 #[tauri::command]
 pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, String> {
     use std::time::SystemTime;
@@ -738,8 +756,8 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
         return Err("Path is not a directory".to_string());
     }
 
-    let is_root_backups = path.replace('\\', "/").ends_with("/backups")
-        || path.replace('\\', "/").ends_with("/backups/");
+    let norm = path.replace('\\', "/").to_lowercase();
+    let is_root_backups = norm.ends_with("/backups") || norm.ends_with("/backups/");
 
     let mut backups = Vec::new();
 
@@ -786,18 +804,8 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
             Some(entry_path.clone())
         };
 
-        let (size, character_name, save_name) = match &source_path {
+        let (character_name, save_name) = match &source_path {
             Some(src) => {
-                let mut size: u64 = 0;
-                if let Ok(dir_entries) = std::fs::read_dir(src) {
-                    for f in dir_entries.flatten() {
-                        if f.file_type().is_ok_and(|ft| ft.is_file())
-                            && let Ok(meta) = f.metadata()
-                        {
-                            size += meta.len();
-                        }
-                    }
-                }
                 let character_name = PlayerInfo::get_player_name(src.join("playerinfo.bin")).ok();
                 let save_name_raw = read_save_display_name(src, "");
                 let save_name = if save_name_raw.is_empty() {
@@ -805,9 +813,25 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
                 } else {
                     Some(save_name_raw)
                 };
-                (size, character_name, save_name)
+                (character_name, save_name)
             }
-            None => (0u64, None, None),
+            None => (None, None),
+        };
+
+        let size = if is_root_backups {
+            calculate_dir_size_recursive(&entry_path)
+        } else {
+            let mut size: u64 = 0;
+            if let Ok(dir_entries) = std::fs::read_dir(&entry_path) {
+                for f in dir_entries.flatten() {
+                    if f.file_type().is_ok_and(|ft| ft.is_file())
+                        && let Ok(meta) = f.metadata()
+                    {
+                        size += meta.len();
+                    }
+                }
+            }
+            size
         };
 
         backups.push(BrowseBackupEntry {

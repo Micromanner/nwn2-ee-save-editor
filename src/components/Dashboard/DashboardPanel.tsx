@@ -372,6 +372,22 @@ export default function DashboardPanel() {
             handleError(error);
           }
         }}
+        onDeleteBackups={async (files) => {
+          try {
+            const paths = files.map(f => f.path);
+            const count = await BackupAPI.deleteBackups(paths);
+            if (count === 0 && paths.length > 0) {
+              showToast(t('fileBrowser.deleteFailed'), 'error');
+            } else if (count < paths.length) {
+              showToast(t('fileBrowser.backupsDeleted', { count }), 'warning');
+            } else {
+              showToast(t('fileBrowser.backupsDeleted', { count }), 'success');
+            }
+            setBackupRefreshKey(prev => prev + 1);
+          } catch (error) {
+            handleError(error);
+          }
+        }}
         onDeleteBackup={async (file) => {
           try {
             await BackupAPI.deleteBackup(file.path);
