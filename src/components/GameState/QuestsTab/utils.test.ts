@@ -40,8 +40,8 @@ describe('quest states', () => {
 });
 
 describe('groupRoutes', () => {
-  const line = (over: Partial<RouteSummary>): RouteSummary => ({ route: 0, module: 'a1', speaker: '', is_player: true, text_strref: 1,
-    debug: false, signature: 'x=1|end', writes: [], write_count: 1, followed_count: 0, ...over });
+  const line = (over: Partial<RouteSummary>): RouteSummary => ({ route: 0, module: 'a1', dlg: 'd', speaker: '', is_player: true, text_strref: 1,
+    debug: false, signature: 'x=1|end', writes: [], effects: [], write_count: 1, followed_count: 0, ...over });
 
   it('collapses same-outcome lines, puts the current module first, hides cheat dialogues', () => {
     const grouped = groupRoutes([
@@ -58,10 +58,35 @@ describe('groupRoutes', () => {
 
   it('shows the module only when the same speaker has different outcomes per module', () => {
     const grouped = groupRoutes([
-      line({ route: 0, module: 'a1', signature: 'x=1|end' }),
-      line({ route: 1, module: 'mq', signature: 'x=2|end' }),
+      line({ route: 0, module: 'a1', signature: 'x=1|end', text_strref: 1 }),
+      line({ route: 1, module: 'mq', signature: 'x=2|end', text_strref: 2 }),
     ], 'a1');
     expect(grouped.map(o => o.showModule)).toEqual([true, true]);
+  });
+
+  it('prefers the current module when the same spoken line exists elsewhere with other flags', () => {
+    const grouped = groupRoutes([
+      line({ route: 0, module: 'mq', signature: 'faulk=2|end', text_strref: 5 }),
+      line({ route: 1, module: 'a1', signature: 'faulk=2;sal=2|end', text_strref: 5 }),
+      line({ route: 2, module: 'mq', signature: 'other=1|end', text_strref: 9 }),
+    ], 'a1');
+    expect(grouped.map(o => o.route)).toEqual([1, 2]);
+  });
+
+  it('keeps the line the player chose over a silent branch with the same outcome', () => {
+    const grouped = groupRoutes([
+      line({ route: 0, module: 'a1', signature: 'x=1|end', text_strref: null, spoken: { node: 1, is_player: false, speaker: 'caleb', text_strref: 3 } }),
+      line({ route: 1, module: 'a1', signature: 'x=1|end', text_strref: 5, spoken: { node: 2, is_player: true, speaker: '', text_strref: 5 } }),
+    ], 'a1');
+    expect(grouped.map(o => o.route)).toEqual([1]);
+  });
+
+  it('labels a silent reply by the line the player saw', () => {
+    const grouped = groupRoutes([
+      line({ route: 0, module: 'mq', signature: 'x=1|end', text_strref: null, spoken: { node: 3, is_player: true, speaker: '', text_strref: 7 } }),
+      line({ route: 1, module: 'a1', signature: 'x=2|end', text_strref: null, spoken: { node: 4, is_player: true, speaker: '', text_strref: 7 } }),
+    ], 'a1');
+    expect(grouped.map(o => o.route)).toEqual([1]);
   });
 
   it('falls back to cheat dialogues when nothing else reaches the entry', () => {

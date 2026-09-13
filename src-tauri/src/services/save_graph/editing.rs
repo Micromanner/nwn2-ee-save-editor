@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::{FollowNode, SaveGraph, TransitionNode, read_live_journal};
+use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
 use crate::config::NWN2Paths;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::services::campaign::{CampaignManager, content};
@@ -51,16 +51,43 @@ pub struct ActionEffect {
 pub struct RouteSummary {
     pub route: usize,
     pub module: String,
+    pub dlg: String,
     pub speaker: String,
     pub is_player: bool,
     pub text_strref: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoken: Option<SpokenLine>,
     pub debug: bool,
-    /// Sorted `scope/name=value` writes: the only outcome a player can tell apart.
+    /// Sorted writes and actions: the outcome a player can tell apart.
     pub signature: String,
     /// The flags this line (and the lines the game plays after it) would set.
     pub writes: Vec<RouteWrite>,
+    /// Everything else the game does on this route (rewards, alignment, doors...).
+    pub effects: Vec<ConvoFunctor>,
     pub write_count: usize,
     pub followed_count: usize,
+}
+
+/// A later entry of the same quest and the lines that reach it, with whether the
+/// save (after this edit) already satisfies each line's conditions.
+#[derive(Debug, Clone, Serialize)]
+pub struct NextStep {
+    pub state: u32,
+    pub lines: Vec<NextLine>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NextLine {
+    pub route: usize,
+    pub module: String,
+    pub dlg: String,
+    pub speaker: String,
+    pub is_player: bool,
+    pub text_strref: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoken: Option<SpokenLine>,
+    /// `open` (conditions pass after this edit), `closed`, or `unknown`.
+    pub gate: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -105,6 +132,10 @@ pub struct QuestPreview {
     pub followed: Vec<FollowedLine>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow_stop: Option<FollowStop>,
+    /// Other entries of this quest reachable through dialogue, evaluated against
+    /// the save as it will be after this edit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next_steps: Vec<NextStep>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,8 +210,18 @@ impl QuestEdits {
             effects: Vec::new(),
             followed: Vec::new(),
             follow_stop: None,
+            next_steps: Vec::new(),
         };
         let mut reader = VariableReader::new(handler, paths);
+        let mut journal: BTreeMap<String, u32> = read_live_journal(handler, player)?
+            .into_iter()
+            .map(|q| (q.tag, q.state))
+            .collect();
+        for edit in &self.pending {
+            journal.insert(edit.tag.clone(), edit.target);
+        }
+        journal.insert(tag.to_string(), target);
+        reader.journal = Some(journal);
         if let Some(index) = route {
             let tr = quest
                 .transitions
@@ -276,6 +317,19 @@ impl QuestEdits {
                 }
             }
         }
+        // What comes next: the other entries' lines, evaluated against the save as
+        // it will be once this edit and the pending ones are written.
+        for write in self.pending.iter().flat_map(|p| &p.writes) {
+            reader
+                .overlay
+                .insert(write.key.clone(), write.after.clone());
+        }
+        for write in &result.writes {
+            reader
+                .overlay
+                .insert(write.key.clone(), write.after.clone());
+        }
+        result.next_steps = next_steps(quest, graph, target, &mut reader)?;
         let mut hash = Sha256::new();
         hash.update(self.generation.to_le_bytes());
         hash.update(&bytes);
@@ -318,12 +372,32 @@ impl QuestEdits {
                 })
                 .collect();
             writes.sort();
+            let effects: Vec<ConvoFunctor> = preview
+                .effects
+                .iter()
+                .filter(|e| e.reason != "journal_action")
+                .map(|e| e.action.clone())
+                .collect();
+            let mut effect_keys: Vec<String> = effects
+                .iter()
+                .map(|a| {
+                    format!(
+                        "{}({})",
+                        a.script.to_ascii_lowercase(),
+                        Value::from(a.params.clone())
+                    )
+                })
+                .collect();
+            effect_keys.sort();
+            writes.extend(effect_keys);
             out.push(RouteSummary {
                 route,
                 module: tr.module.clone(),
+                dlg: tr.dlg.clone(),
                 speaker: tr.speaker.clone(),
                 is_player: tr.is_player,
                 text_strref: tr.text_strref,
+                spoken: tr.spoken.clone(),
                 debug: tr.debug,
                 signature: writes.join(";"),
                 writes: preview
@@ -334,6 +408,7 @@ impl QuestEdits {
                         after: w.after.clone(),
                     })
                     .collect(),
+                effects,
                 write_count: preview.writes.len(),
                 followed_count: preview.followed.len(),
             });
@@ -500,6 +575,10 @@ pub struct VariableReader<'a> {
     paths: &'a NWN2Paths,
     globals: Option<Result<crate::parsers::xml::XmlData, String>>,
     modules: BTreeMap<String, Result<content::ModuleVariables, String>>,
+    /// Values that take precedence over the save: pending and previewed writes.
+    pub overlay: BTreeMap<VariableKey, Value>,
+    /// Journal states (tag -> entry) for `gc_journal_entry`; `None` = unknown.
+    pub journal: Option<BTreeMap<String, u32>>,
 }
 
 impl<'a> VariableReader<'a> {
@@ -509,10 +588,15 @@ impl<'a> VariableReader<'a> {
             paths,
             globals: None,
             modules: BTreeMap::new(),
+            overlay: BTreeMap::new(),
+            journal: None,
         }
     }
 
     pub fn read(&mut self, key: &VariableKey) -> Result<Option<Value>, String> {
+        if let Some(value) = self.overlay.get(key) {
+            return Ok(Some(value.clone()));
+        }
         if let Some(module) = &key.module {
             let vars = self
                 .modules
@@ -562,6 +646,75 @@ fn journal_transition(action: &ConvoFunctor) -> Option<(String, u32)> {
 }
 
 const FOLLOW_LIMIT: usize = 32;
+const NEXT_LINES_PER_STATE: usize = 3;
+
+/// The quest's other entries and the playable lines reaching them, each line
+/// checked against the reader (which carries this edit's writes as an overlay).
+/// One line per speaker and text, the current module and open gates first.
+fn next_steps(
+    quest: &super::QuestAggregate,
+    graph: &SaveGraph,
+    target: u32,
+    reader: &mut VariableReader<'_>,
+) -> Result<Vec<NextStep>, String> {
+    let current_module = graph
+        .modules
+        .iter()
+        .find(|m| m.is_current)
+        .map(|m| m.name.as_str());
+    let gate_rank = |gate: &str| match gate {
+        "open" => 0,
+        "unknown" => 1,
+        _ => 2,
+    };
+    let mut by_state: BTreeMap<u32, Vec<NextLine>> = BTreeMap::new();
+    for (route, tr) in quest.transitions.iter().enumerate() {
+        if tr.new_state == target || tr.debug {
+            continue;
+        }
+        let gate = match evaluate_conditions(&tr.gating_conditions, reader, &tr.module)? {
+            Some(true) => "open",
+            Some(false) => "closed",
+            None => "unknown",
+        };
+        by_state.entry(tr.new_state).or_default().push(NextLine {
+            route,
+            module: tr.module.clone(),
+            dlg: tr.dlg.clone(),
+            speaker: tr.speaker.clone(),
+            is_player: tr.is_player,
+            text_strref: tr.text_strref,
+            spoken: tr.spoken.clone(),
+            gate: gate.into(),
+        });
+    }
+    Ok(by_state
+        .into_iter()
+        .map(|(state, mut lines)| {
+            lines.sort_by_key(|l| {
+                (
+                    gate_rank(&l.gate),
+                    Some(l.module.as_str()) != current_module,
+                    l.route,
+                )
+            });
+            let mut seen: BTreeSet<(String, bool, Option<i32>)> = BTreeSet::new();
+            let lines = lines
+                .into_iter()
+                .filter(|l| {
+                    let spoken = l.spoken.as_ref();
+                    seen.insert((
+                        spoken.map_or(l.speaker.clone(), |s| s.speaker.clone()),
+                        spoken.map_or(l.is_player, |s| s.is_player),
+                        spoken.map_or(l.text_strref, |s| Some(s.text_strref)),
+                    ))
+                })
+                .take(NEXT_LINES_PER_STATE)
+                .collect();
+            NextStep { state, lines }
+        })
+        .collect())
+}
 
 /// Walk the lines the game plays after `tr` the way the engine does: after a
 /// player line the first NPC line whose conditions pass; after an NPC line the
@@ -685,6 +838,19 @@ fn evaluate_condition(
     module: &str,
 ) -> Result<Option<bool>, String> {
     let script = condition.script.to_ascii_lowercase();
+    if script == "gc_journal_entry" {
+        let (Some(quest), Some(check)) = (
+            condition.params.first().and_then(Value::as_str),
+            condition.params.get(1).and_then(Value::as_str),
+        ) else {
+            return Ok(None);
+        };
+        let Some(journal) = &reader.journal else {
+            return Ok(None);
+        };
+        let current = journal.get(quest).copied().unwrap_or(0);
+        return Ok(compare_check(i64::from(current), check));
+    }
     let local = match script.as_str() {
         "gc_global_int" => false,
         "gc_local_int" => true,
@@ -1051,6 +1217,7 @@ mod tests {
                 gating_conditions: Vec::new(),
                 is_player: true,
                 debug: false,
+                spoken: None,
                 children: Vec::new(),
                 follow_up: Vec::new(),
             }],
@@ -1513,5 +1680,105 @@ mod tests {
             count > 0,
             "Fixture must contain engine-authored journal variables"
         );
+    }
+
+    #[test]
+    fn next_steps_are_gated_on_the_save_after_the_edit() {
+        let (dir, handler) = fixture_handler();
+        std::fs::write(
+            dir.path().join("globals.xml"),
+            "<Globals><Integers></Integers></Globals>",
+        )
+        .unwrap();
+        let mut graph = graph();
+        cormick_like(&mut graph);
+        let quest = graph.quests.last_mut().unwrap();
+        let base = quest.transitions[0].clone();
+        // Entry 30 needs the flag this edit's follow-up sets; entry 40 needs entry 30
+        // in the journal; entry 50 is a debug line and stays hidden.
+        quest.transitions.push(TransitionNode {
+            new_state: 30,
+            actions: vec![action("__connector_quest_tuple__", json!(["test", 30]))],
+            gating_conditions: vec![condition(
+                "gc_global_int",
+                json!(["joined", "1"]),
+                false,
+                "",
+            )],
+            spoken: Some(SpokenLine {
+                node: 7,
+                is_player: false,
+                speaker: "cormick".into(),
+                text_strref: 123,
+            }),
+            follow_up: Vec::new(),
+            children: Vec::new(),
+            ..base.clone()
+        });
+        quest.transitions.push(TransitionNode {
+            new_state: 40,
+            actions: vec![action("__connector_quest_tuple__", json!(["test", 40]))],
+            gating_conditions: vec![condition(
+                "gc_journal_entry",
+                json!(["test", ">=30"]),
+                false,
+                "",
+            )],
+            follow_up: Vec::new(),
+            children: Vec::new(),
+            ..base.clone()
+        });
+        quest.transitions.push(TransitionNode {
+            new_state: 50,
+            debug: true,
+            actions: vec![action("__connector_quest_tuple__", json!(["test", 50]))],
+            follow_up: Vec::new(),
+            children: Vec::new(),
+            ..base.clone()
+        });
+        let edits = QuestEdits::default();
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        let steps: Vec<(u32, &str)> = preview
+            .next_steps
+            .iter()
+            .map(|s| (s.state, s.lines[0].gate.as_str()))
+            .collect();
+        assert_eq!(steps, vec![(30, "open"), (40, "closed")]);
+        assert_eq!(
+            preview.next_steps[0].lines[0]
+                .spoken
+                .as_ref()
+                .map(|s| s.text_strref),
+            Some(123)
+        );
+        // Without the route nothing sets `joined`, so entry 30 stays closed.
+        let journal_only = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, None)
+            .unwrap();
+        assert_eq!(journal_only.next_steps[0].lines[0].gate, "closed");
+    }
+
+    #[test]
+    fn route_summaries_carry_effects_in_the_signature() {
+        let (_dir, handler) = fixture_handler();
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("__connector_quest_tuple__", json!(["test", 20])),
+                action("ga_alignment", json!([-3, 0])),
+            ],
+        );
+        let edits = QuestEdits::default();
+        let routes = edits
+            .summarize_routes(&graph, &handler, &NWN2Paths::new(), 0, "test", 20)
+            .unwrap();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].effects.len(), 1);
+        assert_eq!(routes[0].effects[0].script, "ga_alignment");
+        assert!(routes[0].signature.contains("ga_alignment([-3,0])"));
     }
 }

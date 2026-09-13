@@ -18,5 +18,5 @@ pub use aggregator::{BuildContext, build, build_without_bridge};
 pub use types::{
     AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
     OrphanNote, QuestAggregate, QuestGraphProgress, QuestSummary, SaveGraph, SaveGraphSummary,
-    TransitionNode,
+    SpokenLine, TransitionNode,
 };

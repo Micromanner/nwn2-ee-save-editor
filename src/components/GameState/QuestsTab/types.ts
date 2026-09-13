@@ -72,6 +72,14 @@ export interface FollowNode {
   children: number[];
 }
 
+/** The line the player saw: a journal write often sits on an empty reply below it. */
+export interface SpokenLine {
+  node: number;
+  is_player: boolean;
+  speaker: string;
+  text_strref: number;
+}
+
 export interface TransitionNode {
   actions: ConvoFunctor[];
   module: string;
@@ -85,6 +93,7 @@ export interface TransitionNode {
   is_player: boolean;
   debug: boolean;
   speaker: string;
+  spoken?: SpokenLine;
   children: number[];
   follow_up: FollowNode[];
 }
@@ -122,14 +131,35 @@ export interface VariableWrite {
 export interface RouteSummary {
   route: number;
   module: string;
+  dlg: string;
   speaker: string;
   is_player: boolean;
   text_strref: number | null;
+  spoken?: SpokenLine;
   debug: boolean;
   signature: string;
   writes: { name: string; after: string | number }[];
+  /** Everything else the game does on this route: rewards, alignment, doors. */
+  effects: ConvoFunctor[];
   write_count: number;
   followed_count: number;
+}
+
+/** A later entry of the quest and the lines that reach it, gated against the save after the edit. */
+export interface NextStep {
+  state: number;
+  lines: NextLine[];
+}
+
+export interface NextLine {
+  route: number;
+  module: string;
+  dlg: string;
+  speaker: string;
+  is_player: boolean;
+  text_strref: number | null;
+  spoken?: SpokenLine;
+  gate: 'open' | 'closed' | 'unknown';
 }
 
 export interface FollowedLine {
@@ -158,6 +188,7 @@ export interface QuestPreview {
   effects: { action: ConvoFunctor; reason: string; line?: number }[];
   followed?: FollowedLine[];
   follow_stop?: FollowStop;
+  next_steps?: NextStep[];
 }
 
 export interface PendingQuestEdit {

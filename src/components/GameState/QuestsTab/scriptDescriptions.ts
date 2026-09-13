@@ -98,6 +98,43 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
   gc_is_night: [],
 };
 
+/** Stock scripts whose effect lands on the player or the party rather than the world. */
+const CHARACTER_SCRIPTS = new Set([
+  'ga_give_xp', 'ga_give_quest_xp', 'ga_give_partial_quest_xp', 'ga_give_gold', 'ga_take_gold',
+  'ga_give_item', 'ga_take_item', 'ga_destroy_item', 'ga_alignment', 'ga_influence',
+  'ga_give_feat', 'ga_remove_feat', 'ga_heal_pc', 'ga_heal_party', 'ga_roster_party_add',
+  'ga_party_add', 'ga_roster_party_remove', 'ga_roster_selectable', 'ga_henchman_add', 'ga_henchman_remove',
+]);
+
+/** Engine calls decoded out of module wrapper scripts that touch the player or party. */
+const CHARACTER_ENGINE_CALLS = new Set([
+  'adjustalignment', 'givegoldtocreature', 'takegoldfromcreature', 'givexptocreature',
+  'createitemonobject', 'adjustinfluence', 'addhenchman', 'removehenchman',
+]);
+
+export type EffectBucket = 'character' | 'world';
+
+/** Whether a dialogue action changes the player/party or the game world. */
+export function effectBucket(f: ConvoFunctor): EffectBucket {
+  return CHARACTER_SCRIPTS.has(f.script.toLowerCase()) ? 'character' : 'world';
+}
+
+/** Same split for a raw engine call string from a decoded script (`SetLocked` or `10_x("a", 1)`). */
+export function engineCallBucket(call: string): EffectBucket {
+  return CHARACTER_ENGINE_CALLS.has(engineCallName(call)) ? 'character' : 'world';
+}
+
+function engineCallName(call: string) {
+  return call.split('(')[0].trim().toLowerCase();
+}
+
+/** Plain-language sentence for a decoded engine call; the raw call when it has arguments or is unknown. */
+export function describeEngineCall(call: string, t: (key: string) => string): string {
+  const name = engineCallName(call);
+  if (call.includes('(') || !CHARACTER_ENGINE_CALLS.has(name)) return call;
+  return t(`gameState.quests.engineCalls.${name}`);
+}
+
 /** The engine-internal functor the graph builder synthesizes for the journal write itself. */
 export function isJournalConnector(f: ConvoFunctor) {
   return f.kind === 'journal' || f.script === '__connector_quest_tuple__';

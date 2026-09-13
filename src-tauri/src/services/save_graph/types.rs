@@ -126,6 +126,10 @@ pub struct TransitionNode {
     /// The line lives in a developer cheat/debug conversation no player can start.
     #[serde(default)]
     pub debug: bool,
+    /// The nearest line with text at or above this one: what the player actually
+    /// saw. Journal writes often sit on empty "continue" replies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoken: Option<SpokenLine>,
     /// Ids of the lines that can follow this one; resolved through `follow_up`.
     #[serde(default)]
     pub children: Vec<i32>,
@@ -134,6 +138,15 @@ pub struct TransitionNode {
     /// this with the save's variables to find what the game would have run.
     #[serde(default)]
     pub follow_up: Vec<FollowNode>,
+}
+
+/// A line with text, as shown to the player.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SpokenLine {
+    pub node: i32,
+    pub is_player: bool,
+    pub speaker: String,
+    pub text_strref: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -23,7 +23,7 @@ use super::script_decoder::{DecodedWrite, decode_action};
 use super::script_source::ScriptSources;
 use super::types::{
     AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
-    OrphanNote, QuestAggregate, QuestGraphProgress, SaveGraph, TransitionNode,
+    OrphanNote, QuestAggregate, QuestGraphProgress, SaveGraph, SpokenLine, TransitionNode,
 };
 
 /// Synthetic functor script name the bridge emits for `NWN2ConversationConnector.Quest`
@@ -222,9 +222,24 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 .or_default()
                 .insert(node.node, node);
         }
+        let mut parents: HashMap<&str, HashMap<i32, i32>> = HashMap::new();
+        for node in &graph.convo.nodes {
+            let map = parents.entry(node.dlg.as_str()).or_default();
+            for child in &node.children {
+                map.entry(*child).or_insert(node.node);
+            }
+        }
         for node in &graph.convo.nodes {
             let siblings = &by_dlg[node.dlg.as_str()];
-            collect_transitions(node, &entry.name, &mut quests, &mut scripts, siblings);
+            let spoken = spoken_line(node, siblings, &parents[node.dlg.as_str()]);
+            collect_transitions(
+                node,
+                &entry.name,
+                &mut quests,
+                &mut scripts,
+                siblings,
+                spoken,
+            );
         }
 
         modules_out.push(AggregatedModule {
@@ -366,6 +381,7 @@ fn collect_transitions(
     quests: &mut HashMap<String, QuestAggregate>,
     scripts: &mut ScriptSources,
     siblings: &HashMap<i32, &ConvoNode>,
+    spoken: Option<SpokenLine>,
 ) {
     if !node
         .actions
@@ -419,9 +435,35 @@ fn collect_transitions(
             gating_conditions: node.conditions.clone(),
             is_player: node.is_player(),
             debug: is_debug_dialogue(&node.dlg),
+            spoken: spoken.clone(),
             children: node.children.clone(),
             follow_up: follow_up.clone(),
         });
+    }
+}
+
+/// The line the player saw for `node`: itself when it has text, otherwise the
+/// closest ancestor with text (a journal write often sits on an empty reply).
+fn spoken_line(
+    node: &ConvoNode,
+    siblings: &HashMap<i32, &ConvoNode>,
+    parents: &HashMap<i32, i32>,
+) -> Option<SpokenLine> {
+    let mut current = node;
+    let mut seen: HashSet<i32> = HashSet::new();
+    loop {
+        if current.has_text && current.text_strref >= 0 {
+            return Some(SpokenLine {
+                node: current.node,
+                is_player: current.is_player(),
+                speaker: current.speaker.clone(),
+                text_strref: current.text_strref,
+            });
+        }
+        if !seen.insert(current.node) {
+            return None;
+        }
+        current = siblings.get(parents.get(&current.node)?)?;
     }
 }
 

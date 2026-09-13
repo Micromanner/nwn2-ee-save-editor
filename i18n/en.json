@@ -551,44 +551,12 @@
         "effective": "With pending edits",
         "journalOnly": "Only change the journal text, nothing else",
         "journalOnlyHint": "For when the quest already happened in the game and only your journal is out of date. The game itself will not react: NPCs keep their current dialogue.",
-        "asIf": "The editor will make it as if you played this line:",
-        "pickLine": "Several lines in the game lead here, and they set different things. Pick the one you would have played:",
-        "outcome": {
-          "none": "This line sets no game flags on its own; the journal entry is the only change.",
-          "sets": "Sets {flags}"
-        },
-        "youSaid": "You: \"{text}\"",
         "noRoutes": "No dialogue line reaches this entry; a script sets it in-game. Only the journal entry can be written.",
-        "derivedFrom": "from {script}",
-        "decodedCalls": "Also does in-game",
-        "decodedConditional": "May also set {name} = {value}, depending on other game state; not applied",
-        "decodedUnresolved": "Sets a value the editor cannot work out",
-        "follow": {
-          "title": "The conversation then continues with",
-          "none": "Nothing else plays after this line.",
-          "you": "You",
-          "npc": "NPC",
-          "continue": "(continue)",
-          "silent": "(no text, actions only)",
-          "fromLine": "on the line {line}",
-          "stop": {
-            "end": "The conversation ends there.",
-            "player_choice": "Then the game offers you {choices} replies. The editor stops here: whatever those replies do is not included, because it would depend on which one you pick.",
-            "unknown_condition": "Which line comes next depends on a script the editor cannot evaluate, so the editor stops here and nothing after this point is included.",
-            "depth": "The conversation goes on further than the editor follows; later lines are not included."
-          }
-        },
-        "route": "How this happens in the game",
-        "writes": "What this edit writes",
         "journal": "Journal entry",
         "newEntry": "New",
         "campaign": "Campaign",
-        "journalWrite": "Quest {tag}: entry {before} → {target}",
         "replace": "Replace these conflicting pending quest edits entirely: {quests}",
-        "effects": "Actions the editor will not perform",
         "authoredActions": "Actions on this line",
-        "afterLoad": "After loading",
-        "loadExplanation": "The editor writes the journal entry and the selected variables. It does not run dialogue actions or hand out their rewards. The game may react to these values when the save loads or later; those reactions have not been verified. A completed journal entry does not mean its in-game outcome has happened.",
         "stagingExplanation": "Changes stay in memory until you use Save. Quest edits are separate from character Undo; discard them here before saving.",
         "apply": "Apply",
         "refresh": "Refresh preview",
@@ -610,7 +578,49 @@
           "invalid_assignment": "The editor cannot tell what value this action sets.",
           "arithmetic_action": "This adds to or subtracts from the current value instead of setting it, so the editor does not perform it.",
           "unsupported_expression": "This uses a special script expression the editor does not perform."
-        }
+        },
+        "route": "How this happens in the game",
+        "asIf": "The editor will make it as if you played this line:",
+        "pickLine": "Several lines lead here with different outcomes. Pick the one whose outcome you want:",
+        "youSaid": "You: \"{text}\"",
+        "npcSaid": "{who}: \"{text}\"",
+        "npc": "NPC",
+        "laterInConversation": "later in the same conversation",
+        "outcome": {
+          "none": "No rewards, costs or story flags on this line; only the journal changes.",
+          "flagsOnly": "Sets {count, plural, one {# story flag} other {# story flags}}, no rewards or costs",
+          "andFlags": " · {count, plural, one {# story flag} other {# story flags}}"
+        },
+        "rewards": "Rewards and costs at this point",
+        "rewardsNone": "No rewards, costs or party changes on this line.",
+        "rewardsNote": "The editor does not hand these out. Change gold, XP, alignment, items or influence yourself on the character tabs if you want them.",
+        "writes": "Story flags the editor writes",
+        "derivedFrom": "via {script}",
+        "writesNote": "These are what the game checks to decide what NPCs say next.",
+        "stop": {
+          "player_choice": "After this the game offers {choices} replies. What those do depends on your pick and is not included.",
+          "unknown_condition": "What the game plays after this depends on a script the editor cannot check; anything later is not included.",
+          "depth": "The conversation goes on further than the editor follows; later lines are not included."
+        },
+        "world": "The game would also do this here",
+        "worldNote": "Not performed by the editor: doors, map notes, spawns and cutscenes stay as they are in the save.",
+        "worldShow": "Show {count, plural, one {# action} other {# actions}}",
+        "worldHide": "Hide",
+        "decodedConditional": "May also set {name} = {value}, depending on other game state",
+        "decodedUnresolved": "Sets a value the editor cannot work out: {call}",
+        "next": "What comes next",
+        "nextNone": "No dialogue line leads on from this entry.",
+        "nextEnds": "This entry ends the quest.",
+        "nextTalk": "Talk to {who}: \"{text}\"",
+        "nextSay": "Say: \"{text}\"",
+        "nextNoText": "A silent line in {dlg}",
+        "gate": {
+          "open": "possible right after this edit",
+          "closed": "needs more of the story first",
+          "unknown": "depends on a script the editor cannot check"
+        },
+        "afterLoad": "After loading",
+        "loadExplanation": "The editor writes the journal entry and the story flags above. It does not run the dialogue, so rewards and world changes listed here do not happen. NPCs react to the flags the next time you talk to them."
       },
       "title": "Quests",
       "campaignContext": {
@@ -754,6 +764,16 @@
         "gc_deity": "Deity is {deity}",
         "gc_num_comps": "Number of companions {check}",
         "gc_is_night": "It is night"
+      },
+      "engineCalls": {
+        "adjustalignment": "Shifts alignment (amount decided in the script)",
+        "givegoldtocreature": "Gives gold (amount decided in the script)",
+        "takegoldfromcreature": "Takes gold (amount decided in the script)",
+        "givexptocreature": "Awards XP (amount decided in the script)",
+        "createitemonobject": "Gives an item (decided in the script)",
+        "adjustinfluence": "Changes companion influence (amount decided in the script)",
+        "addhenchman": "Adds a follower",
+        "removehenchman": "Removes a follower"
       },
       "scriptTarget": {
         "owner": "the speaker",

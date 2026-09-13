@@ -140,7 +140,7 @@ export function QuestDetail({
         <LiveOverlay tag={quest.tag} pending={pending} modules={graph.modules} />
       </div>}
       {target !== null && <QuestEditDialog key={`${quest.tag}:${target}`} quest={quest} target={target} modules={graph.modules}
-        transitions={loadedTransitions ?? []} pending={pending} tlk={tlk} onClose={() => setTarget(null)} onApplied={onApplied} />}
+        pending={pending} tlk={tlk} onClose={() => setTarget(null)} onApplied={onApplied} />}
     </div>
   );
 }
