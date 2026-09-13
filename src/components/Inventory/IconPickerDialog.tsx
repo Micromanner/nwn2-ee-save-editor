@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Button, InputGroup } from '@blueprintjs/core';
-import { FixedSizeGrid, GridChildComponentProps } from 'react-window';
+import { Grid, CellComponentProps } from 'react-window';
 import { invoke } from '@tauri-apps/api/core';
 import { ParchmentDialog, LoadingState } from '../shared';
 import { T } from '../theme';
@@ -192,7 +192,7 @@ export function IconPickerDialog({ isOpen, onClose, onPick, initialResref }: Ico
   const columnCount = Math.max(1, Math.floor(gridWidth / TILE));
   const rowCount = Math.ceil(filtered.length / columnCount);
 
-  const Cell = useCallback(({ columnIndex, rowIndex, style }: GridChildComponentProps) => {
+  const Cell = useCallback(({ columnIndex, rowIndex, style }: CellComponentProps) => {
     const index = rowIndex * columnCount + columnIndex;
     if (index >= filtered.length) return null;
     const option = filtered[index];
@@ -278,17 +278,16 @@ export function IconPickerDialog({ isOpen, onClose, onPick, initialResref }: Ico
               {t('inventory.noIconsMatch')}
             </div>
           ) : (
-            <FixedSizeGrid
+            <Grid
+              style={{ width: gridWidth, height: gridHeight }}
               columnCount={columnCount}
               columnWidth={TILE}
               rowCount={rowCount}
               rowHeight={TILE}
-              width={gridWidth}
-              height={gridHeight}
-              overscanRowCount={2}
-            >
-              {Cell}
-            </FixedSizeGrid>
+              cellComponent={Cell}
+              cellProps={{}}
+              overscanCount={2}
+            />
           )}
         </div>
       </div>

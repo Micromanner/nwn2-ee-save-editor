@@ -64,7 +64,7 @@ impl GraphCache {
         h.update(mtime_ns.to_le_bytes());
         h.update(size.to_le_bytes());
         h.update(self.bridge_mtime_ns.to_le_bytes());
-        Ok(format!("{:x}", h.finalize()))
+        Ok(hex::encode(h.finalize()))
     }
 
     pub fn path(&self, key: &str) -> PathBuf {

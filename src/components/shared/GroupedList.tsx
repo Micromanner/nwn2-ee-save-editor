@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Icon } from '@blueprintjs/core';
-import { VariableSizeList } from 'react-window';
+import { List, RowComponentProps } from 'react-window';
 import { T } from '../theme';
 import { useFontSize } from '@/providers/FontSizeProvider';
 
@@ -35,7 +35,6 @@ export function GroupedList<T extends { id: number }>({ sections, selectedId, on
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [containerHeight, setContainerHeight] = useState(400);
   const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
-  const listRef = useRef<VariableSizeList>(null);
 
   useEffect(() => {
     if (!containerNode) return;
@@ -55,11 +54,6 @@ export function GroupedList<T extends { id: number }>({ sections, selectedId, on
       return next;
     });
   }, []);
-
-  // Reset list cache when collapsed state, sections, or font size change
-  useEffect(() => {
-    listRef.current?.resetAfterIndex(0);
-  }, [collapsed, sections, heights]);
 
   const flatRows: FlatRow<T>[] = useMemo(() => {
     const rows: FlatRow<T>[] = [];
@@ -85,7 +79,7 @@ export function GroupedList<T extends { id: number }>({ sections, selectedId, on
     return flatRows[index].type === 'header' ? heights.header : heights.item;
   }, [flatRows, heights]);
 
-  const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+  const Row = useCallback(({ index, style }: RowComponentProps) => {
     const row = flatRows[index];
     if (row.type === 'header') {
       const isCollapsed = collapsed.has(row.sectionKey);
@@ -129,16 +123,14 @@ export function GroupedList<T extends { id: number }>({ sections, selectedId, on
 
   return (
     <div ref={setContainerNode} style={{ height: '100%' }}>
-      <VariableSizeList
-        ref={listRef}
-        height={containerHeight}
-        width="100%"
-        itemCount={flatRows.length}
-        itemSize={getItemSize}
+      <List
+        style={{ height: containerHeight, width: '100%' }}
+        rowCount={flatRows.length}
+        rowHeight={getItemSize}
+        rowComponent={Row}
+        rowProps={{}}
         overscanCount={20}
-      >
-        {Row}
-      </VariableSizeList>
+      />
     </div>
   );
 }

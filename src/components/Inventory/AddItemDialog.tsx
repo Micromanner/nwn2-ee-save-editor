@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Button, ButtonGroup, InputGroup, Menu, MenuItem, Popover, Tab, Tabs } from '@blueprintjs/core';
 import { GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
-import { FixedSizeList as List } from 'react-window';
+import { List, RowComponentProps } from 'react-window';
 import { ParchmentDialog, LoadingState } from '../shared';
 import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
@@ -252,7 +252,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
 
   const activeSubCategories = tab === 'base' ? availableBaseSubCategories : availableTemplateSubCategories;
 
-  const BaseRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+  const BaseRow = useCallback(({ index, style }: RowComponentProps) => {
     const item = filteredBase[index];
     const selected = selectedBaseId === item.id;
     return (
@@ -275,7 +275,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
     );
   }, [filteredBase, selectedBaseId]);
 
-  const TemplateRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+  const TemplateRow = useCallback(({ index, style }: RowComponentProps) => {
     const item = filteredTemplates[index];
     const selected = selectedResref === item.resref;
     return (
@@ -411,13 +411,12 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
             <LoadingState height={listHeight} text={tab === 'base' ? t('inventory.loadingBaseItems') : t('inventory.loadingTemplates')} />
           ) : itemCount > 0 ? (
             <List
-              height={listHeight}
-              itemCount={itemCount}
-              itemSize={ROW_HEIGHT}
-              width={listWidth}
-            >
-              {tab === 'base' ? BaseRow : TemplateRow}
-            </List>
+              style={{ height: listHeight, width: listWidth }}
+              rowCount={itemCount}
+              rowHeight={ROW_HEIGHT}
+              rowComponent={tab === 'base' ? BaseRow : TemplateRow}
+              rowProps={{}}
+            />
           ) : (
             <div style={{ padding: 32, textAlign: 'center', color: T.textMuted }}>{t('inventory.noItemsMatch')}</div>
           )}

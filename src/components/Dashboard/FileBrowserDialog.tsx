@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FixedSizeList as List, ListOnItemsRenderedProps } from 'react-window';
-import InfiniteLoader from 'react-window-infinite-loader';
+import { List, RowComponentProps, useListRef } from 'react-window';
+import { useInfiniteLoader } from 'react-window-infinite-loader';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import {
@@ -106,7 +106,7 @@ export function FileBrowserDialog({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
-  const listRef = useRef<List>(null);
+  const listRef = useListRef(null);
   const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
   const previousRefreshKey = useRef(refreshKey);
   const lastPath = useRef(currentPath);
@@ -262,7 +262,7 @@ export function FileBrowserDialog({
         previousRefreshKey.current = refreshKey;
         loadFiles(true);
       } else {
-        listRef.current?.scrollTo(0);
+        listRef.current?.scrollToRow({ index: 0 });
       }
     }
     return () => { abortControllerRef.current?.abort(); };
@@ -316,6 +316,108 @@ export function FileBrowserDialog({
       return sortDirection === 'asc' ? cmp : -cmp;
     });
   }, [files, sortField, sortDirection, isBackupMode]);
+
+  const rowCount = mode === 'load-saves' ? totalFiles : sortedFiles.length;
+  const onRowsRendered = useInfiniteLoader({
+    isRowLoaded: isItemLoaded,
+    loadMoreRows: loadMoreItems,
+    rowCount,
+    threshold: 5,
+  });
+
+  const FileRow = ({ index, style }: RowComponentProps) => {
+    const file = sortedFiles[index];
+    if (!file) {
+      return (
+        <div style={{ ...style, padding: '0 16px' }}>
+          <LoadingState variant="inline" text={t('fileBrowser.loadingMore')} />
+        </div>
+      );
+    }
+
+    const isSelected = selectedFile?.path === file.path;
+
+    return (
+      <div
+        style={{
+          ...style,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 16px',
+          cursor: 'pointer',
+          borderBottom: `1px solid ${T.borderLight}`,
+          borderLeft: isSelected ? `3px solid ${T.accent}` : '3px solid transparent',
+          background: isSelected ? 'rgba(160, 82, 45, 0.08)' : 'transparent',
+
+
+        }}
+        onClick={() => handleFileClick(file)}
+        onDoubleClick={() => {
+          if (mode === 'manage-backups' && file.is_directory) {
+            setSelectedFile(null);
+            onPathChange?.(file.path);
+          } else if (onSelectFile) {
+            setSelectedFile(file);
+            if (mode === 'manage-backups') {
+              setShowRestoreConfirm(true);
+            } else {
+              onSelectFile(file);
+              onClose();
+            }
+          }
+        }}
+      >
+        {isBackupMode && (
+          <div
+            style={{ width: 32, display: 'flex', alignItems: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              style={{ margin: 0 }}
+              checked={selectedPaths.has(file.path)}
+              onChange={() => handleToggleSelect(file.path)}
+            />
+          </div>
+        )}
+        <div style={{ ...(isVault ? { flex: 3 } : { width: 260 }), display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+          <GameIcon
+            icon={file.is_directory ? GiFullFolder : GiFoldedPaper}
+            size={14}
+            color={T.textMuted}
+          />
+          <span className="t-medium" style={{
+            color: isSelected ? T.accent : T.text,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {display(file.display_name || file.name)}
+          </span>
+        </div>
+        {!isVault && (
+          <>
+            <div style={{ width: 240, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {display(file.character_name)}
+            </div>
+            <div style={{ flex: 1, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {display(file.save_name)}
+            </div>
+            {isBackupMode && !isBackupRoot && (
+              <div style={{ width: 220, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {summarizeChanges(file.changes, t)}
+              </div>
+            )}
+          </>
+        )}
+        <div style={{ width: 160, color: T.textMuted }}>
+          {formatUnixSeconds(file.modified)}
+        </div>
+        <div style={{ width: 120, paddingLeft: 24, color: T.textMuted }}>
+          {formatBytes(file.size)}
+        </div>
+      </div>
+    );
+  };
 
   const handleToggleSelect = (path: string) => {
     setSelectedPaths(prev => {
@@ -693,119 +795,16 @@ export function FileBrowserDialog({
             ) : sortedFiles.length === 0 ? (
               <NonIdealState icon={<GameIcon icon={GiMagnifyingGlass} size={40} />} description={t('fileBrowser.noFiles')} />
             ) : (
-              <InfiniteLoader
-                key={currentPath}
-                isItemLoaded={isItemLoaded}
-                itemCount={mode === 'load-saves' ? totalFiles : sortedFiles.length}
-                loadMoreItems={loadMoreItems}
-                threshold={5}
-              >
-                {({ onItemsRendered, ref }: { onItemsRendered: (props: ListOnItemsRenderedProps) => void; ref: (r: List | null) => void }) => (
-                  <List
-                    key={`list-${currentPath}`}
-                    ref={(node) => { listRef.current = node; ref(node); }}
-                    height={containerHeight}
-                    itemCount={mode === 'load-saves' ? totalFiles : sortedFiles.length}
-                    itemSize={ROW_HEIGHT}
-                    onItemsRendered={onItemsRendered}
-                    width="100%"
-                  >
-                    {({ index, style }) => {
-                      const file = sortedFiles[index];
-                      if (!file) {
-                        return (
-                          <div style={{ ...style, padding: '0 16px' }}>
-                            <LoadingState variant="inline" text={t('fileBrowser.loadingMore')} />
-                          </div>
-                        );
-                      }
-
-                      const isSelected = selectedFile?.path === file.path;
-
-                      return (
-                        <div
-                          style={{
-                            ...style,
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: '0 16px',
-                            cursor: 'pointer',
-                            borderBottom: `1px solid ${T.borderLight}`,
-                            borderLeft: isSelected ? `3px solid ${T.accent}` : '3px solid transparent',
-                            background: isSelected ? 'rgba(160, 82, 45, 0.08)' : 'transparent',
-
-
-                          }}
-                          onClick={() => handleFileClick(file)}
-                          onDoubleClick={() => {
-                            if (mode === 'manage-backups' && file.is_directory) {
-                              setSelectedFile(null);
-                              onPathChange?.(file.path);
-                            } else if (onSelectFile) {
-                              setSelectedFile(file);
-                              if (mode === 'manage-backups') {
-                                setShowRestoreConfirm(true);
-                              } else {
-                                onSelectFile(file);
-                                onClose();
-                              }
-                            }
-                          }}
-                        >
-                          {isBackupMode && (
-                            <div
-                              style={{ width: 32, display: 'flex', alignItems: 'center' }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Checkbox
-                                style={{ margin: 0 }}
-                                checked={selectedPaths.has(file.path)}
-                                onChange={() => handleToggleSelect(file.path)}
-                              />
-                            </div>
-                          )}
-                          <div style={{ ...(isVault ? { flex: 3 } : { width: 260 }), display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                            <GameIcon
-                              icon={file.is_directory ? GiFullFolder : GiFoldedPaper}
-                              size={14}
-                              color={T.textMuted}
-                            />
-                            <span className="t-medium" style={{
-                              color: isSelected ? T.accent : T.text,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {display(file.display_name || file.name)}
-                            </span>
-                          </div>
-                          {!isVault && (
-                            <>
-                              <div style={{ width: 240, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {display(file.character_name)}
-                              </div>
-                              <div style={{ flex: 1, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {display(file.save_name)}
-                              </div>
-                              {isBackupMode && !isBackupRoot && (
-                                <div style={{ width: 220, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {summarizeChanges(file.changes, t)}
-                                </div>
-                              )}
-                            </>
-                          )}
-                          <div style={{ width: 160, color: T.textMuted }}>
-                            {formatUnixSeconds(file.modified)}
-                          </div>
-                          <div style={{ width: 120, paddingLeft: 24, color: T.textMuted }}>
-                            {formatBytes(file.size)}
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </List>
-                )}
-              </InfiniteLoader>
+              <List
+                key={`list-${currentPath}`}
+                listRef={listRef}
+                style={{ height: containerHeight, width: '100%' }}
+                rowCount={rowCount}
+                rowHeight={ROW_HEIGHT}
+                rowComponent={FileRow}
+                rowProps={{}}
+                onRowsRendered={onRowsRendered}
+              />
             )}
 
             {loadingMore && files.length > 0 && (

@@ -280,7 +280,7 @@ impl QuestEdits {
         hash.update(self.generation.to_le_bytes());
         hash.update(&bytes);
         hash.update(serde_json::to_vec(&result).map_err(|e| e.to_string())?);
-        result.revision = format!("{:x}", hash.finalize());
+        result.revision = hex::encode(hash.finalize());
         Ok(result)
     }
 

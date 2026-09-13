@@ -26,7 +26,7 @@ pub struct ZipEntryLocation {
 
 impl ZipEntryLocation {
     /// `None` for compression methods `read_entry` cannot handle.
-    pub fn from_raw_entry(file: &ZipFile<'_>) -> Option<Self> {
+    pub fn from_raw_entry<R: Read + ?Sized>(file: &ZipFile<'_, R>) -> Option<Self> {
         let deflated = match file.compression() {
             CompressionMethod::Stored => false,
             CompressionMethod::Deflated => true,

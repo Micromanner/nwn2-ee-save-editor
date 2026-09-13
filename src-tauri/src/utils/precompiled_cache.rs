@@ -151,7 +151,7 @@ impl CacheBuilder {
         }
 
         let result = hasher.finalize();
-        Ok(format!("{result:x}")[..16].to_string())
+        Ok(hex::encode(result)[..16].to_string())
     }
 
     fn write_cache_section(&self, name: &str, section: &CacheSection) -> Result<(), String> {

@@ -444,11 +444,14 @@ pub async fn get_available_templates(
 
         for (resref, internal_path, source) in files {
             if let Ok(entry) = archive.by_name(internal_path) {
+                let Some(data_start) = entry.data_start() else {
+                    continue;
+                };
                 jobs.push(DecompJob {
                     zip_path: zip_path.clone(),
                     resref: resref.clone(),
                     source: source.clone(),
-                    data_start: entry.data_start(),
+                    data_start,
                     compressed_size: entry.compressed_size(),
                     uncompressed_size: entry.size() as usize,
                     is_stored: entry.compression() == zip::CompressionMethod::Stored,

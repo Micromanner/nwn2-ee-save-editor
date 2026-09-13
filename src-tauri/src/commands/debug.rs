@@ -402,7 +402,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
 }
 
 #[tauri::command]
-#[specta::specta]
 pub async fn export_debug_log(state: State<'_, AppState>) -> CommandResult<String> {
     info!("Exporting debug log");
 

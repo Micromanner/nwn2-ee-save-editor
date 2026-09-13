@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { InputGroup, NonIdealState, Tag } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
 import { GiBrokenShield, GiCube, GiMagnifyingGlass } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
-import { FixedSizeList as List, ListChildComponentProps } from 'react-window';
+import { List, RowComponentProps } from 'react-window';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { AssetViewer3D } from './AssetViewer3D';
@@ -22,7 +22,7 @@ interface RowData {
 
 const ROW_HEIGHT = 28;
 
-const Row = memo(({ index, style, data }: ListChildComponentProps<RowData>) => {
+function Row({ index, style, ...data }: RowComponentProps<RowData>) {
   const m = data.items[index];
   return (
     <div
@@ -41,7 +41,7 @@ const Row = memo(({ index, style, data }: ListChildComponentProps<RowData>) => {
       <Tag minimal className="t-xs" style={{ flexShrink: 0 }}>{m.zip_source}</Tag>
     </div>
   );
-});
+}
 
 function useContainerHeight() {
   const [height, setHeight] = useState(0);
@@ -130,14 +130,12 @@ export function ModelBrowser() {
           }}
         >
           <List
-            height={listHeight || 400}
-            itemCount={filtered.length}
-            itemSize={ROW_HEIGHT}
-            itemData={itemData}
-            width="100%"
-          >
-            {Row}
-          </List>
+            style={{ height: listHeight || 400, width: '100%' }}
+            rowCount={filtered.length}
+            rowHeight={ROW_HEIGHT}
+            rowComponent={Row}
+            rowProps={itemData}
+          />
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
