@@ -78,6 +78,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   const { characterId } = useCharacterContext();
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshPart, setRefreshPart] = useState<{ partIndex: number; key: number } | null>(null);
+  const [refreshAccessory, setRefreshAccessory] = useState<{ slot: AccessorySlot; key: number } | null>(null);
   const [hoveredChannel, setHoveredChannel] = useState<keyof TintChannels | null>(null);
   const [hoveredTarget, setHoveredTarget] = useState<AccessorySlot | null>(null);
   const [hoveredSlot, setHoveredSlot] = useState<AccessorySlot | null>(null);
@@ -193,7 +194,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
       ...appearance,
       accessories: { ...appearance.accessories, [key]: { id, tints } },
     });
-    setRefreshKey(k => k + 1);
+    setRefreshAccessory({ slot, key: Date.now() });
   }, [appearance, customTintSlots, onChange]);
 
   const pairedSlotOf = useCallback((slot: AccessorySlot): AccessorySlot | null => {
@@ -316,6 +317,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
           baseItemId={baseItemId}
           refreshKey={refreshKey}
           refreshPart={refreshPart}
+          refreshAccessory={refreshAccessory}
           highlightChannel={hoveredChannel}
           highlightTarget={hoveredTarget}
           selectedAccessorySlot={hoveredSlot}

@@ -417,10 +417,6 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
       const data: ModelData = await invoke('load_character_part', { part });
       const tintMap = getTintColors();
 
-      const old = modelGroup.getObjectByName(partGroupName(part));
-      if (old) old.removeFromParent();
-      disposeAttachedMixer(part);
-
       // Reconcile the secondary skeleton for parts that ride the body mixer
       // (cape via 'cloak', synced tail/wings). Body/head/etc. never change
       // their skeleton mid-session, so only these parts touch secondary skeletons.
@@ -456,19 +452,27 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
         }
       }
 
+      // Build the replacement (texture loads included) before touching the
+      // scene, so the old part stays visible until the new one can be swapped
+      // in within a single frame.
       const attached = data.attached_parts?.find((p) => p.name === part);
-      if (attached) {
-        const built = await buildAttachedPart(attached, tintMap);
-        if (built) {
-          const primary = skeletonsRef.current.get('primary');
-          const bone = built.attachBone
-            ? primary?.rootBone.getObjectByName(built.attachBone)
-            : null;
-          (bone ?? modelGroup).add(built.group);
-          if (built.mixer) attachedMixersRef.current.set(part, built.mixer);
-        }
-      } else if (data.meshes.length > 0) {
-        const newGroup = await buildPartGroup(data.meshes, part, tintMap);
+      const builtAttached = attached ? await buildAttachedPart(attached, tintMap) : null;
+      const newGroup = !attached && data.meshes.length > 0
+        ? await buildPartGroup(data.meshes, part, tintMap)
+        : null;
+
+      const old = modelGroup.getObjectByName(partGroupName(part));
+      if (old) old.removeFromParent();
+      disposeAttachedMixer(part);
+
+      if (builtAttached) {
+        const primary = skeletonsRef.current.get('primary');
+        const bone = builtAttached.attachBone
+          ? primary?.rootBone.getObjectByName(builtAttached.attachBone)
+          : null;
+        (bone ?? modelGroup).add(builtAttached.group);
+        if (builtAttached.mixer) attachedMixersRef.current.set(part, builtAttached.mixer);
+      } else if (newGroup) {
         modelGroup.add(newGroup);
       }
 

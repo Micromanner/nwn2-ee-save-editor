@@ -30,6 +30,8 @@ interface ItemViewer3DProps {
   baseItemId: number;
   refreshKey: number;
   refreshPart: { partIndex: number; key: number } | null;
+  // Swap one accessory slot in place (mesh id from the current appearance).
+  refreshAccessory: { slot: AccessorySlot; key: number } | null;
   // Tint channel to flood with the highlight color (UI-only): shows the user
   // which area of the model a color picker actually affects while hovered.
   highlightChannel?: keyof TintChannels | null;
@@ -120,6 +122,7 @@ export function ItemViewer3D({
   baseItemId,
   refreshKey,
   refreshPart,
+  refreshAccessory,
   highlightChannel,
   highlightTarget,
   selectedAccessorySlot,
@@ -273,6 +276,40 @@ export function ItemViewer3D({
     }
   }, [sceneRef, baseItemId, effectiveMasterTints]);
 
+  const replaceAccessory = useCallback(async (slot: AccessorySlot) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const model = scene.getObjectByName('__model');
+    if (!model) return;
+
+    // Collect the slot's current meshes before building: the replacement is
+    // hung on its bone while it is built, so a later traverse would sweep it up.
+    const old: THREE.Object3D[] = [];
+    model.traverse((obj) => {
+      if (obj.userData.accessorySlot === slot) old.push(obj);
+    });
+
+    const slotData = appearanceRef.current.accessories[ACCESSORY_FIELD[slot]];
+    const id = slotData?.id ?? 0;
+    try {
+      let newGroup: THREE.Group | null = null;
+      if (id > 0 && slotData) {
+        const data = await invoke<ModelData>('load_accessory_model', { slot, id, tints: slotData.tints });
+        const rootBone = model.children.find((c): c is THREE.Bone => c instanceof THREE.Bone);
+        const skeleton = (model.getObjectByProperty('isSkinnedMesh', true) as THREE.SkinnedMesh | undefined)?.skeleton;
+        const tintColors = tintChannelsToColors(swapItemTints(effectiveMasterTints()));
+        const glovesTintColors = tintChannelsToColors(cosmeticGlovesTints(effectiveMasterTints()));
+        newGroup = await buildPartGroup(data.meshes, `acc_${slot}`, tintColors, glovesTintColors,
+          skeleton, rootBone, getEnvMap(sceneRef.current));
+      }
+
+      for (const obj of old) obj.removeFromParent();
+      if (newGroup) model.add(newGroup);
+    } catch (err: any) {
+      console.error(`Failed to load accessory ${slot}:`, err);
+    }
+  }, [sceneRef, effectiveMasterTints]);
+
   // The pose hint arrives with the appearance options, i.e. usually after the
   // first load. It changes both the rotation and the camera, so allow one
   // re-frame when it lands.
@@ -289,6 +326,15 @@ export function ItemViewer3D({
     if (!refreshPart) return;
     replacePart(refreshPart.partIndex);
   }, [refreshPart, replacePart]);
+
+  // Swaps run one after another: a second click before the first finished
+  // would otherwise collect the same old meshes and leave a duplicate behind.
+  const accessorySwapRef = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    if (!refreshAccessory) return;
+    const { slot } = refreshAccessory;
+    accessorySwapRef.current = accessorySwapRef.current.then(() => replaceAccessory(slot));
+  }, [refreshAccessory, replaceAccessory]);
 
   useEffect(() => {
     if (!sceneRef.current) return;

@@ -233,8 +233,9 @@ pub async fn load_item_part(
         .map_err(|e| format!("Failed to load part '{resref}': {e}"))
 }
 
-/// One accessory mesh on its own (no body, no bone attachment) for the
-/// per-slot thumbnail gallery, tinted the way the item viewer tints it.
+/// One accessory mesh on its own (no body) for the per-slot thumbnail
+/// gallery and for swapping a single slot in the item viewer, tinted the way
+/// the viewer tints it and tagged with the slot's bone.
 #[tauri::command]
 pub async fn load_accessory_model(
     state: State<'_, AppState>,
@@ -253,8 +254,10 @@ pub async fn load_accessory_model(
     let mut data = model_loader::load_model_static(&rm, &resref, "item", "item")
         .map_err(|e| format!("Failed to load accessory '{resref}': {e}"))?;
     let tints = swap_tint_2_3(&tints);
+    let attach_bone = slot.attach_bone().map(str::to_string);
     for m in &mut data.meshes {
         m.accessory_slot = Some(slot);
+        m.attach_bone = attach_bone.clone();
         m.override_tints = Some(tints.clone());
     }
     Ok(data)
