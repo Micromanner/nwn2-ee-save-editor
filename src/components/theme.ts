@@ -63,6 +63,12 @@ export function formatBytes(bytes: number) {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
+export function formatUnixSeconds(dateString: string) {
+  const ts = parseFloat(dateString);
+  if (isNaN(ts)) return '-';
+  return new Date(ts * 1000).toLocaleString();
+}
+
 const NOISE_SVG = encodeURIComponent(
   `<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(#n)' opacity='0.15'/></svg>`
 );

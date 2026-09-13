@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod backup_manifest;
 pub mod error;
 
 use std::collections::HashMap;
@@ -272,6 +273,8 @@ pub struct SaveGameHandler {
     zip_path: PathBuf,
     format: SaveFormat,
     validate: bool,
+    /// Backup taken by [`Self::new`] before any edit of this session.
+    load_backup_path: Option<PathBuf>,
     temp_files: Vec<PathBuf>,
     /// `Some` while a batch is open: zip-bound `update_file` writes are staged
     /// here and flushed by [`Self::commit_batch`] in one archive rewrite.
@@ -304,15 +307,22 @@ impl SaveGameHandler {
 
         let format = SaveFormat::detect(&save_dir)?;
 
-        if create_load_backup && !backup::has_backup_been_created(&save_dir) {
-            backup::create_backup(&save_dir)?;
-        }
+        let load_backup_path = if create_load_backup && !backup::has_backup_been_created(&save_dir)
+        {
+            Some(backup::create_backup(
+                &save_dir,
+                backup_manifest::BackupReason::Load,
+            )?)
+        } else {
+            None
+        };
 
         Ok(Self {
             save_dir,
             zip_path,
             format,
             validate,
+            load_backup_path,
             temp_files: Vec::new(),
             pending_zip_updates: None,
             pending_disk_updates: indexmap::IndexMap::new(),
@@ -1139,6 +1149,10 @@ impl SaveGameHandler {
         backup::infer_save_path_from_backup(backup_path)
     }
 
+    pub fn load_backup_path(&self) -> Option<&Path> {
+        self.load_backup_path.as_deref()
+    }
+
     pub fn save_dir(&self) -> &Path {
         &self.save_dir
     }
@@ -1220,6 +1234,7 @@ mod tests {
             zip_path: PathBuf::from("/test/resgff.zip"),
             format: SaveFormat::Ee,
             validate: true,
+            load_backup_path: None,
             temp_files: Vec::new(),
             pending_zip_updates: None,
             pending_disk_updates: indexmap::IndexMap::new(),

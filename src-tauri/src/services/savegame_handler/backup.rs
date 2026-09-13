@@ -9,6 +9,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
+use super::backup_manifest::{self, BackupReason};
 use super::error::{SaveGameError, SaveGameResult};
 
 static BACKUP_CREATED_FOR_SAVES: LazyLock<Mutex<HashSet<PathBuf>>> =
@@ -75,7 +76,7 @@ pub fn clear_backup_tracking() {
     }
 }
 
-pub fn create_backup(save_dir: &Path) -> SaveGameResult<PathBuf> {
+pub fn create_backup(save_dir: &Path, reason: BackupReason) -> SaveGameResult<PathBuf> {
     if !save_dir.exists() {
         return Err(SaveGameError::NotFound {
             path: save_dir.to_path_buf(),
@@ -90,6 +91,7 @@ pub fn create_backup(save_dir: &Path) -> SaveGameResult<PathBuf> {
     let backup_path = backup_dir.join(&backup_name);
 
     copy_directory_filtered(save_dir, &backup_path, &["backups"])?;
+    backup_manifest::write_initial(&backup_path, reason);
 
     mark_backup_created(save_dir);
 
@@ -110,6 +112,7 @@ pub fn create_pre_restore_backup(save_dir: &Path) -> SaveGameResult<PathBuf> {
     let backup_path = backup_dir.join(&backup_name);
 
     copy_directory_filtered(save_dir, &backup_path, &["backups"])?;
+    backup_manifest::write_initial(&backup_path, BackupReason::PreRestore);
 
     info!(
         "Created pre-restore backup: {} -> {}",
@@ -367,6 +370,9 @@ fn copy_directory_filtered(src: &Path, dst: &Path, skip_dirs: &[&str]) -> SaveGa
             }
             count += copy_directory_filtered(&src_path, &dst_path, skip_dirs)?;
         } else {
+            if entry.file_name() == backup_manifest::MANIFEST_FILE {
+                continue;
+            }
             fs::copy(&src_path, &dst_path)?;
             count += 1;
         }

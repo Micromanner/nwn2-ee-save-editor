@@ -16,12 +16,16 @@ pub async fn list_backups(state: State<'_, AppState>) -> CommandResult<Vec<Backu
 
 #[tauri::command]
 pub async fn create_backup(state: State<'_, AppState>) -> CommandResult<()> {
-    let session = state.session.read();
+    let mut session = state.session.write();
     let handler = session
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    crate::services::savegame_handler::backup::create_backup(handler.save_dir())?;
+    let path = crate::services::savegame_handler::backup::create_backup(
+        handler.save_dir(),
+        crate::services::savegame_handler::backup_manifest::BackupReason::Manual,
+    )?;
+    session.track_session_backup(path);
     Ok(())
 }
 

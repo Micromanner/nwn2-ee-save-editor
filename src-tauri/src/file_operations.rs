@@ -7,6 +7,7 @@ use tauri_plugin_shell::ShellExt;
 
 use crate::services::playerinfo::PlayerInfo;
 use crate::services::savegame_handler::SaveGameHandler;
+use crate::services::savegame_handler::backup_manifest::BackupManifest;
 use crate::state::AppState;
 
 /// Return true if the directory looks like a valid NWN2 save in either format.
@@ -692,6 +693,9 @@ pub struct BrowseBackupEntry {
     pub created_at: i64,
     pub character_name: Option<String>,
     pub save_name: Option<String>,
+    /// Editor change record; `None` at the root level and for backups that
+    /// predate manifests.
+    pub changes: Option<BackupManifest>,
 }
 
 fn find_newest_inner_backup(save_folder: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -834,6 +838,12 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
             size
         };
 
+        let changes = if is_root_backups {
+            None
+        } else {
+            crate::services::savegame_handler::backup_manifest::read(&entry_path)
+        };
+
         backups.push(BrowseBackupEntry {
             name,
             path: entry_path.to_string_lossy().to_string(),
@@ -842,6 +852,7 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
             created_at,
             character_name,
             save_name,
+            changes,
         });
     }
 

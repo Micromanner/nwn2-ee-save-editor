@@ -12,7 +12,9 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { GameIcon } from '../shared/GameIcon';
 import { LoadingState } from '../shared';
 import { display, formatNumber } from '@/utils/dataHelpers';
-import { T, formatBytes } from '../theme';
+import { T, formatBytes, formatUnixSeconds } from '../theme';
+import type { BackupManifest } from '@/services/backupApi';
+import { BackupDetailsDialog } from './BackupDetailsDialog';
 
 type SortField = 'name' | 'date' | 'size' | 'character_name' | 'save_name';
 type SortDirection = 'asc' | 'desc';
@@ -26,6 +28,30 @@ export interface FileInfo {
   save_name?: string;
   character_name?: string;
   display_name?: string;
+  changes?: BackupManifest | null;
+}
+
+function summarizeChanges(manifest: BackupManifest | null | undefined, t: (key: string, values?: Record<string, unknown>) => string): string {
+  if (!manifest) return t('fileBrowser.changesUnknown');
+  if (manifest.saves.length === 0) return t('fileBrowser.changesNone');
+
+  let characterCount = 0;
+  let questCount = 0;
+  let partyCount = 0;
+  for (const record of manifest.saves) {
+    for (const character of record.characters) {
+      characterCount += character.changes.length;
+    }
+    questCount += record.quests.length;
+    partyCount += record.party.length;
+  }
+
+  const parts: string[] = [];
+  if (characterCount > 0) parts.push(t('fileBrowser.changesCharacters', { count: characterCount }));
+  if (questCount > 0) parts.push(t('fileBrowser.changesQuests', { count: questCount }));
+  if (partyCount > 0) parts.push(t('fileBrowser.changesParty', { count: partyCount }));
+
+  return parts.length > 0 ? parts.join(', ') : t('fileBrowser.changesNone');
 }
 
 interface FileListResponse {
@@ -74,6 +100,7 @@ export function FileBrowserDialog({
   const [error, setError] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -129,6 +156,7 @@ export function FileBrowserDialog({
           created_at: number;
           character_name: string | null;
           save_name: string | null;
+          changes: BackupManifest | null;
         }
         const backups = await invoke<BrowseBackupEntry[]>('browse_backups', { path: currentPath });
         if (backupRootPath === '') {
@@ -143,6 +171,7 @@ export function FileBrowserDialog({
           is_directory: !isSaveFolder,
           save_name: b.save_name ?? (b.timestamp ? `Backup ${b.timestamp}` : undefined),
           character_name: b.character_name ?? undefined,
+          changes: b.changes,
         }));
         setFiles(fileInfos);
         setTotalFiles(fileInfos.length);
@@ -375,12 +404,6 @@ export function FileBrowserDialog({
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const ts = parseFloat(dateString);
-    if (isNaN(ts)) return '-';
-    return new Date(ts * 1000).toLocaleString();
-  };
-
   const handleFileClick = (file: FileInfo) => setSelectedFile(file);
 
   const handleConfirm = () => {
@@ -495,6 +518,13 @@ export function FileBrowserDialog({
         </>
       )}
       <Button text={t('fileBrowser.cancel')} onClick={onClose} />
+      {isBackupMode && !isBackupRoot && (
+        <Button
+          text={t('fileBrowser.details')}
+          disabled={!selectedFile}
+          onClick={() => setShowDetailsDialog(true)}
+        />
+      )}
       {isBackupMode && (onDeleteBackup || onDeleteBackups) && (
         selectedPaths.size > 0 ? (
           <Button
@@ -634,6 +664,11 @@ export function FileBrowserDialog({
                 >
                   {t('fileBrowser.saveName')} {renderSortIcon('save_name')}
                 </div>
+                {isBackupMode && !isBackupRoot && (
+                  <div style={{ width: 220 }}>
+                    {t('fileBrowser.changes')}
+                  </div>
+                )}
               </>
             )}
             <div
@@ -752,10 +787,15 @@ export function FileBrowserDialog({
                               <div style={{ flex: 1, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {display(file.save_name)}
                               </div>
+                              {isBackupMode && !isBackupRoot && (
+                                <div style={{ width: 220, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {summarizeChanges(file.changes, t)}
+                                </div>
+                              )}
                             </>
                           )}
                           <div style={{ width: 160, color: T.textMuted }}>
-                            {formatDate(file.modified)}
+                            {formatUnixSeconds(file.modified)}
                           </div>
                           <div style={{ width: 120, paddingLeft: 24, color: T.textMuted }}>
                             {formatBytes(file.size)}
@@ -820,6 +860,9 @@ export function FileBrowserDialog({
           }}>
             {t('fileBrowser.confirmRestoreWarning')}
           </p>
+          <p className="t-body" style={{ color: T.textMuted, marginTop: 12, marginBottom: 0 }}>
+            {summarizeChanges(selectedFile?.changes, t)}
+          </p>
         </DialogBody>
         <DialogFooter
           style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}` }}
@@ -883,6 +926,12 @@ export function FileBrowserDialog({
           }
         />
       </Dialog>
+
+      <BackupDetailsDialog
+        isOpen={showDetailsDialog}
+        onClose={() => setShowDetailsDialog(false)}
+        file={selectedFile}
+      />
     </>
   );
 }

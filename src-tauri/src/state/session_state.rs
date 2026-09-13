@@ -13,6 +13,9 @@ use crate::services::item_property_decoder::ItemPropertyDecoder;
 use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
+use crate::services::savegame_handler::backup_manifest::{
+    self, BackupReason, CharacterChanges, PartyChange, QuestChange, SaveRecord,
+};
 use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
 use crate::state::standalone_bic;
 
@@ -91,6 +94,12 @@ pub struct SessionState {
     /// Staged party-membership changes (lowercased ros_name -> desired
     /// in_party), held in memory until `save_character` flushes them.
     staged_party: std::collections::HashMap<String, bool>,
+    /// Backup directories taken during this session (load, pre-save, manual).
+    /// Every successful save appends its change record to each of them.
+    session_backups: Vec<PathBuf>,
+    /// Every history label of this session in order, never popped: undo and
+    /// redo append their own entries. Feeds the backup manifests on save.
+    change_log: Vec<(CharacterSource, String)>,
 }
 
 impl SessionState {
@@ -121,6 +130,8 @@ impl SessionState {
             standalone_backup_done: false,
             parked: Vec::new(),
             staged_party: std::collections::HashMap::new(),
+            session_backups: Vec::new(),
+            change_log: Vec::new(),
         }
     }
 
@@ -280,6 +291,13 @@ impl SessionState {
         self.staged_party.clear();
         self.quest_edits.clear();
         self.clear_history();
+        if let Some(path) = self
+            .savegame_handler
+            .as_ref()
+            .and_then(|h| h.load_backup_path())
+        {
+            self.session_backups.push(path.to_path_buf());
+        }
 
         info!("Character loaded successfully");
         Ok(())
@@ -355,9 +373,14 @@ impl SessionState {
                 self.primary_player_index
                     .unwrap_or(self.selected_player_index),
             )?;
-            crate::services::savegame_handler::backup::create_backup(handler.save_dir())
-                .map_err(|e| e.to_string())?;
+            let path = crate::services::savegame_handler::backup::create_backup(
+                handler.save_dir(),
+                BackupReason::PreSave,
+            )
+            .map_err(|e| e.to_string())?;
+            self.session_backups.push(path);
         }
+        let record = self.build_save_record(game_data);
         let mut active = self.character.take().ok_or("No character loaded")?;
         if let Some(handler) = self.savegame_handler.as_mut() {
             handler.begin_batch();
@@ -439,6 +462,12 @@ impl SessionState {
         }
         self.quest_edits.clear();
         self.module_info_cache = None;
+        if !record.is_empty() {
+            for dir in &self.session_backups {
+                backup_manifest::append_save(dir, &record);
+            }
+        }
+        self.change_log.clear();
 
         if !errors.is_empty() {
             if !warnings.is_empty() {
@@ -652,6 +681,8 @@ impl SessionState {
             gff_snapshot: character.clone_gff(),
             modified_snapshot: character.is_modified(),
         };
+        self.change_log
+            .push((self.character_source.clone(), entry.label.clone()));
         self.history.undo_stack.push_back(entry);
         if self.history.undo_stack.len() > HISTORY_LIMIT {
             self.history.undo_stack.pop_front();
@@ -659,9 +690,103 @@ impl SessionState {
         self.history.redo_stack.clear();
     }
 
+    pub fn track_session_backup(&mut self, path: PathBuf) {
+        self.session_backups.push(path);
+    }
+
+    /// Everything this save will write, described for the backup manifests:
+    /// history labels per character, pending quest edits and staged party
+    /// changes. Built before the save mutates any of them.
+    fn build_save_record(&self, game_data: &GameData) -> SaveRecord {
+        let mut characters: Vec<CharacterChanges> = Vec::new();
+        for (source, label) in &self.change_log {
+            let ros_name = match source {
+                CharacterSource::Companion { ros_name } => Some(ros_name.clone()),
+                CharacterSource::Player | CharacterSource::Standalone => None,
+            };
+            if let Some(existing) = characters.iter_mut().find(|c| c.ros_name == ros_name) {
+                existing.changes.push(label.clone());
+                continue;
+            }
+            let character = if *source == self.character_source {
+                self.character.as_ref()
+            } else {
+                self.parked
+                    .iter()
+                    .find(|(s, _, _)| s == source)
+                    .map(|(_, c, _)| c)
+            };
+            let name = character.map_or_else(
+                || ros_name.clone().unwrap_or_default(),
+                |c| crate::character::resolved_full_name(c, game_data),
+            );
+            characters.push(CharacterChanges {
+                name,
+                ros_name,
+                changes: vec![label.clone()],
+            });
+        }
+
+        let quests = self
+            .quest_edits
+            .pending
+            .iter()
+            .map(|edit| {
+                let category = self.quest_graph_cache.as_ref().and_then(|graph| {
+                    graph
+                        .quests
+                        .iter()
+                        .find(|q| q.tag == edit.tag)
+                        .map(|q| &q.category)
+                });
+                QuestChange {
+                    tag: edit.tag.clone(),
+                    name: category
+                        .map(|c| c.name.clone())
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| edit.tag.clone()),
+                    from_state: edit.saved_state,
+                    to_state: edit.target,
+                    state_text: category.and_then(|c| {
+                        c.entries
+                            .iter()
+                            .find(|e| u32::try_from(e.id).ok() == Some(edit.target))
+                            .map(|e| e.text.clone())
+                    }),
+                }
+            })
+            .collect();
+
+        let party = if self.staged_party.is_empty() {
+            Vec::new()
+        } else {
+            let roster = self.list_roster().unwrap_or_default();
+            self.staged_party
+                .iter()
+                .map(|(ros_name, in_party)| PartyChange {
+                    ros_name: ros_name.clone(),
+                    name: roster
+                        .iter()
+                        .find(|r| r.ros_name.eq_ignore_ascii_case(ros_name))
+                        .map(|r| r.char_name.clone()),
+                    in_party: *in_party,
+                })
+                .collect()
+        };
+
+        SaveRecord {
+            saved_at: chrono::Local::now().to_rfc3339(),
+            characters,
+            quests,
+            party,
+        }
+    }
+
     pub fn undo(&mut self) -> Option<String> {
         let entry = self.history.undo_stack.pop_back()?;
         let label = entry.label.clone();
+        self.change_log
+            .push((self.character_source.clone(), format!("Undo: {label}")));
         let redo_entry = self.character.as_ref().map(|ch| HistoryEntry {
             label: label.clone(),
             gff_snapshot: ch.clone_gff(),
@@ -679,6 +804,8 @@ impl SessionState {
     pub fn redo(&mut self) -> Option<String> {
         let entry = self.history.redo_stack.pop()?;
         let label = entry.label.clone();
+        self.change_log
+            .push((self.character_source.clone(), format!("Redo: {label}")));
         let undo_entry = self.character.as_ref().map(|ch| HistoryEntry {
             label: label.clone(),
             gff_snapshot: ch.clone_gff(),
@@ -696,6 +823,8 @@ impl SessionState {
     pub fn clear_history(&mut self) {
         self.history.undo_stack.clear();
         self.history.redo_stack.clear();
+        self.change_log.clear();
+        self.session_backups.clear();
     }
 
     pub fn can_undo(&self) -> bool {

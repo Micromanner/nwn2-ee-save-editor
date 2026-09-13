@@ -35,6 +35,41 @@ export interface CleanupResponse {
   errors: string[];
 }
 
+export type BackupReason = 'load' | 'pre_save' | 'pre_restore' | 'manual';
+
+export interface CharacterChanges {
+  name: string;
+  ros_name: string | null;
+  changes: string[];
+}
+
+export interface QuestChange {
+  tag: string;
+  name: string;
+  from_state: number | null;
+  to_state: number;
+  state_text: string | null;
+}
+
+export interface PartyChange {
+  ros_name: string;
+  name: string | null;
+  in_party: boolean;
+}
+
+export interface SaveRecord {
+  saved_at: string;
+  characters: CharacterChanges[];
+  quests: QuestChange[];
+  party: PartyChange[];
+}
+
+export interface BackupManifest {
+  version: number;
+  reason: BackupReason;
+  saves: SaveRecord[];
+}
+
 export class BackupAPI {
   static async listBackups(characterId: number): Promise<BackupsResponse> {
     const backups = await invoke<any[]>('list_backups');

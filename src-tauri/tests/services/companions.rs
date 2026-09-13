@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 
 use app_lib::config::NWN2Paths;
 use app_lib::services::ResourceManager;
+use app_lib::services::savegame_handler::backup;
 use app_lib::state::session_state::{CharacterSource, SessionState};
 
 fn saves_dir() -> PathBuf {
@@ -523,4 +524,80 @@ fn staged_party_membership_counts_as_dirty_and_flushes_on_save() {
         .expect("entry survives save");
     assert_eq!(after.in_party, !was_in_party);
     assert_eq!(after.staged_in_party, None);
+}
+
+#[test]
+fn save_appends_change_record_to_load_backup_manifest() {
+    use app_lib::services::savegame_handler::backup_manifest;
+
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+
+    let backups_dir = backup::get_backup_dir_for_save(&save_path);
+    let load_backup = std::fs::read_dir(&backups_dir)
+        .expect("backups dir")
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.is_dir())
+        .expect("load backup created");
+    let initial = backup_manifest::read(&load_backup).expect("initial manifest");
+    assert_eq!(initial.reason, backup_manifest::BackupReason::Load);
+    assert!(initial.saves.is_empty());
+
+    session.record_history("Set gold to 5000");
+    session.undo();
+    session.load_companion("khelgar").expect("load khelgar");
+    session.record_history("Set strength to 18");
+    let roster = session.list_roster().expect("roster");
+    let (name, was_in_party) = {
+        let entry = roster.first().expect("roster entry");
+        (entry.ros_name.clone(), entry.in_party)
+    };
+    session
+        .stage_party_membership(&[(name.clone(), !was_in_party)])
+        .expect("stage membership");
+
+    session.save_character(&empty_game_data(), 3).expect("save");
+
+    let manifest = backup_manifest::read(&load_backup).expect("manifest after save");
+    assert_eq!(manifest.saves.len(), 1);
+    let record = &manifest.saves[0];
+    assert!(!record.saved_at.is_empty());
+
+    let player = record
+        .characters
+        .iter()
+        .find(|c| c.ros_name.is_none())
+        .expect("player changes");
+    assert_eq!(
+        player.changes,
+        vec![
+            "Set gold to 5000".to_string(),
+            "Undo: Set gold to 5000".to_string()
+        ]
+    );
+    let khelgar = record
+        .characters
+        .iter()
+        .find(|c| c.ros_name.as_deref() == Some("khelgar"))
+        .expect("khelgar changes");
+    assert_eq!(khelgar.changes, vec!["Set strength to 18".to_string()]);
+
+    assert_eq!(record.party.len(), 1);
+    assert!(record.party[0].ros_name.eq_ignore_ascii_case(&name));
+    assert_eq!(record.party[0].in_party, !was_in_party);
+    assert!(record.quests.is_empty());
+
+    // Nothing pending after the save: a second save with no edits adds no record.
+    session
+        .save_character(&empty_game_data(), 3)
+        .expect("second save");
+    assert_eq!(
+        backup_manifest::read(&load_backup)
+            .expect("manifest")
+            .saves
+            .len(),
+        1
+    );
 }
