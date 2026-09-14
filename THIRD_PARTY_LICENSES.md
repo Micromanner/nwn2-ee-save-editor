@@ -247,19 +247,7 @@ DEALINGS IN THE SOFTWARE.
 
 The `toolset-bridge.exe` helper bundled on Windows links against managed DLLs shipped with Neverwinter Nights 2: Enhanced Edition at runtime. Those DLLs (Obsidian / Aspyr property) are **never redistributed** by this project — they are resolved from the user's own NWN2:EE install via `AppDomain.AssemblyResolve`. A legally-obtained NWN2:EE install is required for quest data extraction.
 
-The bridge binary itself is shipped with two MIT-licensed NuGet dependencies that are redistributed as peer DLLs:
-
-### Newtonsoft.Json
-
-- Copyright 2007 James Newton-King
-- Source: https://github.com/JamesNK/Newtonsoft.Json
-- License: MIT
-
-### Lib.Harmony (HarmonyLib)
-
-- Copyright 2017 Andreas Pardeike
-- Source: https://github.com/pardeike/Harmony
-- License: MIT
+The bridge binary itself has no third-party dependencies.
 
 ### MIT License
 

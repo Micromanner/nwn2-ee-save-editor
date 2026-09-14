@@ -22,7 +22,6 @@ export default defineConfig({
       'react-window',
       '@tauri-apps/api',
       '@tauri-apps/plugin-dialog',
-      '@tauri-apps/plugin-http',
       '@radix-ui/react-tabs',
       '@radix-ui/react-select',
       '@radix-ui/react-checkbox',

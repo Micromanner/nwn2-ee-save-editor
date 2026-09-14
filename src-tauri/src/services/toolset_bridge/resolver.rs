@@ -90,14 +90,6 @@ mod embedded {
             "toolset-bridge.exe.config",
             include_bytes!("../../../../toolset-bridge/dist/toolset-bridge.exe.config"),
         ),
-        (
-            "0Harmony.dll",
-            include_bytes!("../../../../toolset-bridge/dist/0Harmony.dll"),
-        ),
-        (
-            "Newtonsoft.Json.dll",
-            include_bytes!("../../../../toolset-bridge/dist/Newtonsoft.Json.dll"),
-        ),
     ];
 
     const BIN_SUBDIR: &str = "bin";

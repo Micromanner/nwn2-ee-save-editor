@@ -21,7 +21,7 @@ public static class ArgParser
     private static readonly HashSet<string> KnownSubcommands =
         new(StringComparer.OrdinalIgnoreCase) { "journal", "faction", "module", "convo", "graph", "list-modules", "serve" };
 
-    // Subcommands that skip the heavy toolset init (ResourceManager, TLK, Harmony patches).
+    // Subcommands that skip the heavy toolset init (ResourceManager, TLK, detour init).
     // They still require --nwn2-install because OEIShared.dll hosts the GFF reader they use.
     public static readonly HashSet<string> NoToolsetInitSubcommands =
         new(StringComparer.OrdinalIgnoreCase) { "list-modules" };

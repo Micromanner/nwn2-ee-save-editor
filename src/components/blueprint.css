@@ -1,9 +1,5 @@
 @import '@blueprintjs/core/lib/css/blueprint.css';
-@import '@blueprintjs/icons/lib/css/blueprint-icons.css';
-@import '@fontsource/ibm-plex-serif/400.css';
-@import '@fontsource/ibm-plex-serif/500.css';
-@import '@fontsource/ibm-plex-serif/600.css';
-@import '@fontsource/ibm-plex-serif/700.css';
+@import './fonts.css';
 
 .bp-app {
   font-family: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;

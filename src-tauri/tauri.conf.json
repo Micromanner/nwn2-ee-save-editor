@@ -23,7 +23,6 @@
         "resizable": true,
         "fullscreen": false,
         "maximizable": true,
-        "devtools": true,
         "decorations": false,
         "titleBarStyle": "Overlay",
         "label": "main",

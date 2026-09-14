@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
-import { fetch } from '@tauri-apps/plugin-http';
 
 const RELEASES_API = 'https://api.github.com/repos/Micromanner/nwn2-ee-save-editor/releases/latest';
 

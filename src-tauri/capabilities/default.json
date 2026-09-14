@@ -20,15 +20,6 @@
     "process:allow-exit",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save",
-    "http:default",
-    {
-      "identifier": "http:allow-fetch",
-      "allow": [
-        { "url": "http://localhost/*" },
-        { "url": "http://127.0.0.1/*" },
-        { "url": "https://api.github.com/repos/Micromanner/nwn2-ee-save-editor/releases/latest" }
-      ]
-    }
+    "dialog:allow-save"
   ]
 }

@@ -1,13 +1,11 @@
 using System;
 using System.IO;
 using System.Text;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using ToolsetBridge.Adapters;
 
 namespace ToolsetBridge.Commands;
 
-/// Long-lived NDJSON request loop. Resource-manager init, Harmony patches, and
+/// Long-lived NDJSON request loop. Resource-manager init, the CustomTalkFile detour, and
 /// TLK load are paid once in `Program.cs` before we start reading stdin; each
 /// request re-uses the warm process, amortizing ~1s of setup across N modules.
 ///
@@ -36,8 +34,8 @@ public static class Serve
             Timing.Start();
             try
             {
-                var req = JObject.Parse(line);
-                var op = (string?)req["op"];
+                var req = Json.ParseFlatObject(line);
+                req.TryGetValue("op", out var op);
                 if (string.IsNullOrEmpty(op))
                 {
                     EmitError("request missing 'op' field");
@@ -47,10 +45,12 @@ public static class Serve
                 switch (op)
                 {
                     case "graph":
-                        HandleGraph((string?)req["module"] ?? "");
+                        req.TryGetValue("module", out var module);
+                        HandleGraph(module ?? "");
                         break;
                     case "list_modules":
-                        HandleListModules((string?)req["campaign"] ?? "", nwn2Install);
+                        req.TryGetValue("campaign", out var campaign);
+                        HandleListModules(campaign ?? "", nwn2Install);
                         break;
                     case "shutdown":
                         Log.Info("serve: shutdown requested");
@@ -94,7 +94,7 @@ public static class Serve
         }
 
         var output = Graph.Compute(ctx);
-        var json = Timing.Measure("serialize", () => JsonConvert.SerializeObject(output, Formatting.None));
+        var json = Timing.Measure("serialize", () => Json.Serialize(output, indented: false));
         EmitOkRaw(json);
     }
 
@@ -113,7 +113,7 @@ public static class Serve
             return;
         }
 
-        var json = JsonConvert.SerializeObject(data, Formatting.None);
+        var json = Json.Serialize(data, indented: false);
         EmitOkRaw(json);
     }
 
@@ -132,6 +132,6 @@ public static class Serve
     private static void EmitError(string message)
     {
         var envelope = new { ok = false, error = message };
-        Console.Out.WriteLine(JsonConvert.SerializeObject(envelope, Formatting.None));
+        Console.Out.WriteLine(Json.Serialize(envelope, indented: false));
     }
 }

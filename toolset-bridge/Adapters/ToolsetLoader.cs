@@ -53,10 +53,9 @@ public static class ToolsetLoader
             TalkTable.Instance.Open(BWLanguages.BWLanguage.English);
         });
 
-        // ModuleInfo setters reach NWN2ToolsetMainForm.App.DefaultPropertyGrid from
-        // OEIUnserialize. Those code paths are patched out in GuiStubPatches so they
-        // just assign the backing private field and return. No MainForm needed.
-        Timing.Measure("harmony_patch", () => GuiStubPatches.Apply());
+        // NWN2ModuleInformation.set_CustomTalkFile reaches NWN2ToolsetMainForm.App from
+        // OEIUnserialize; GuiStubPatches detours it to a plain field assignment.
+        Timing.Measure("gui_stub_patch", () => GuiStubPatches.Apply());
 
         s_resourceManagerReady = true;
     }
@@ -69,10 +68,7 @@ public static class ToolsetLoader
             throw new FileNotFoundException($"module path not found: {modulePath}");
 
         var module = new NWN2GameModule(bDoNothing: true);
-        if (isFile)
-            module.OpenModuleFile(modulePath);
-        else
-            module.OpenModuleDirectory(modulePath);
+        HeadlessModuleOpen.Open(module, modulePath, isFile);
 
         var haks = module.ModuleInfo?.HakPaks?
             .Cast<object>()

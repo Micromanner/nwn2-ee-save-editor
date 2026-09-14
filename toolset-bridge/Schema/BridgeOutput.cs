@@ -1,20 +1,19 @@
 using System.Collections.Generic;
-using Newtonsoft.Json;
 
 namespace ToolsetBridge.Schema;
 
 public sealed class BridgeOutput
 {
-    [JsonProperty("module")] public ModuleInfo Module { get; set; } = new();
-    [JsonProperty("journal")] public JournalShape Journal { get; set; } = new();
-    [JsonProperty("factions")] public List<FactionShape> Factions { get; set; } = new();
-    [JsonProperty("module_variables")] public List<ModuleVariableShape> ModuleVariables { get; set; } = new();
-    [JsonProperty("convo")] public ConvoShape Convo { get; set; } = new();
+    [JsonName("module")] public ModuleInfo Module { get; set; } = new();
+    [JsonName("journal")] public JournalShape Journal { get; set; } = new();
+    [JsonName("factions")] public List<FactionShape> Factions { get; set; } = new();
+    [JsonName("module_variables")] public List<ModuleVariableShape> ModuleVariables { get; set; } = new();
+    [JsonName("convo")] public ConvoShape Convo { get; set; } = new();
 }
 
 public sealed class ModuleInfo
 {
-    [JsonProperty("path")] public string Path { get; set; } = "";
-    [JsonProperty("name")] public string Name { get; set; } = "";
-    [JsonProperty("haks")] public IReadOnlyList<string> Haks { get; set; } = System.Array.Empty<string>();
+    [JsonName("path")] public string Path { get; set; } = "";
+    [JsonName("name")] public string Name { get; set; } = "";
+    [JsonName("haks")] public IReadOnlyList<string> Haks { get; set; } = System.Array.Empty<string>();
 }

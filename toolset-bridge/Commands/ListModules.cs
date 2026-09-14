@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
 using OEIShared.IO.GFF;
 
 namespace ToolsetBridge.Commands;
@@ -11,12 +10,12 @@ public static class ListModules
 {
     // Resolves a campaign.cam (either given directly or via its folder) and emits the
     // ordered list of module names it references, plus its start module. Pure GFF parse —
-    // no ResourceManager, TLK, or Harmony init required.
+    // no ResourceManager, TLK, or detour init required.
     public static int Run(string campaignPath, string nwn2Install, string outPath)
     {
         var result = Compute(campaignPath, nwn2Install);
         if (result == null) return ExitCodes.LoadFailed;
-        var json = JsonConvert.SerializeObject(result, Formatting.Indented);
+        var json = Json.Serialize(result, indented: true);
         CommandOutput.Write(outPath, json);
         return ExitCodes.Ok;
     }
@@ -112,20 +111,20 @@ public static class ListModules
 
 public sealed class CampaignModulesShape
 {
-    [JsonProperty("campaign_path")] public string CampaignPath { get; set; } = "";
-    [JsonProperty("campaign_file")] public string CampaignFile { get; set; } = "";
-    [JsonProperty("display_name")] public string DisplayName { get; set; } = "";
-    [JsonProperty("start_module")] public string StartModule { get; set; } = "";
-    [JsonProperty("journal_synch")] public bool JournalSynch { get; set; }
-    [JsonProperty("modules")] public List<CampaignModuleEntry> Modules { get; set; } = new();
+    [JsonName("campaign_path")] public string CampaignPath { get; set; } = "";
+    [JsonName("campaign_file")] public string CampaignFile { get; set; } = "";
+    [JsonName("display_name")] public string DisplayName { get; set; } = "";
+    [JsonName("start_module")] public string StartModule { get; set; } = "";
+    [JsonName("journal_synch")] public bool JournalSynch { get; set; }
+    [JsonName("modules")] public List<CampaignModuleEntry> Modules { get; set; } = new();
     // Campaign-level journal (`<campaign>/module.jrl`); empty when the campaign has none.
-    [JsonProperty("journal")] public ToolsetBridge.Schema.JournalShape Journal { get; set; } = new();
+    [JsonName("journal")] public ToolsetBridge.Schema.JournalShape Journal { get; set; } = new();
 }
 
 public sealed class CampaignModuleEntry
 {
-    [JsonProperty("name")] public string Name { get; set; } = "";
-    [JsonProperty("resolved_path")] public string ResolvedPath { get; set; } = "";
+    [JsonName("name")] public string Name { get; set; } = "";
+    [JsonName("resolved_path")] public string ResolvedPath { get; set; } = "";
     // "campaign" = found in campaign folder, "unresolved" = not found locally.
-    [JsonProperty("resolution_kind")] public string ResolutionKind { get; set; } = "unresolved";
+    [JsonName("resolution_kind")] public string ResolutionKind { get; set; } = "unresolved";
 }

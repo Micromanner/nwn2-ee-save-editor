@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using ToolsetBridge.Adapters;
 using ToolsetBridge.Schema;
 
@@ -9,7 +8,7 @@ public static class Graph
     public static int Run(LoadedContext ctx, string outPath)
     {
         var output = Compute(ctx);
-        var json = Timing.Measure("serialize", () => JsonConvert.SerializeObject(output, Formatting.Indented));
+        var json = Timing.Measure("serialize", () => Json.Serialize(output, indented: true));
         Timing.Measure("write_out", () => CommandOutput.Write(outPath, json));
         return ExitCodes.Ok;
     }

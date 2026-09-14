@@ -12,8 +12,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 

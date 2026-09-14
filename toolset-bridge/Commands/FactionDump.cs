@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using ToolsetBridge.Adapters;
 
 namespace ToolsetBridge.Commands;
@@ -9,7 +8,7 @@ public static class FactionDump
     {
         var factions = FactionAdapter.Read(ctx);
         var wrapped = new { factions };
-        var json = JsonConvert.SerializeObject(wrapped, Formatting.Indented);
+        var json = Json.Serialize(wrapped, indented: true);
         CommandOutput.Write(outPath, json);
         return ExitCodes.Ok;
     }

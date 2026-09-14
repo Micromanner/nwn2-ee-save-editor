@@ -58,7 +58,6 @@ toolset-bridge/*.json
 toolset-bridge/README.md
 !toolset-bridge/dist/
 !toolset-bridge/dist/*.exe
-!toolset-bridge/dist/*.dll
 !toolset-bridge/dist/*.config
 
 # Claude

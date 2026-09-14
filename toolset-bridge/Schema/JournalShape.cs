@@ -1,26 +1,25 @@
 using System.Collections.Generic;
-using Newtonsoft.Json;
 
 namespace ToolsetBridge.Schema;
 
 public sealed class JournalShape
 {
-    [JsonProperty("categories")] public List<JournalCategory> Categories { get; set; } = new();
+    [JsonName("categories")] public List<JournalCategory> Categories { get; set; } = new();
 }
 
 public sealed class JournalCategory
 {
-    [JsonProperty("tag")] public string Tag { get; set; } = "";
-    [JsonProperty("name")] public string Name { get; set; } = "";
-    [JsonProperty("priority")] public string Priority { get; set; } = "";
-    [JsonProperty("xp")] public int Xp { get; set; }
-    [JsonProperty("source")] public string Source { get; set; } = "";
-    [JsonProperty("entries")] public List<JournalEntry> Entries { get; set; } = new();
+    [JsonName("tag")] public string Tag { get; set; } = "";
+    [JsonName("name")] public string Name { get; set; } = "";
+    [JsonName("priority")] public string Priority { get; set; } = "";
+    [JsonName("xp")] public int Xp { get; set; }
+    [JsonName("source")] public string Source { get; set; } = "";
+    [JsonName("entries")] public List<JournalEntry> Entries { get; set; } = new();
 }
 
 public sealed class JournalEntry
 {
-    [JsonProperty("id")] public int Id { get; set; }
-    [JsonProperty("text")] public string Text { get; set; } = "";
-    [JsonProperty("final")] public bool Final { get; set; }
+    [JsonName("id")] public int Id { get; set; }
+    [JsonName("text")] public string Text { get; set; } = "";
+    [JsonName("final")] public bool Final { get; set; }
 }

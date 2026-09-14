@@ -47,7 +47,7 @@ struct Envelope {
 
 /// Long-lived bridge process. One `serve` child is spawned lazily on first
 /// request and reused for every subsequent call, amortizing the ~1s of toolset
-/// init (ResourceManager + Harmony patches + TLK open) across all modules in
+/// init (ResourceManager + GUI stub detour + TLK open) across all modules in
 /// a session.
 pub struct BridgeClient {
     bridge_exe: PathBuf,
