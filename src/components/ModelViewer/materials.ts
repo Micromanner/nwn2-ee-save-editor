@@ -78,6 +78,9 @@ function buildTexture(dds: ParsedDds): THREE.CompressedTexture {
   texture.needsUpdate = true;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  // Trilinear alone smears the mip chain at distance and at grazing angles
+  // (faces went blurry when zoomed out); three.js clamps to the GPU maximum.
+  texture.anisotropy = 16;
   return texture;
 }
 
