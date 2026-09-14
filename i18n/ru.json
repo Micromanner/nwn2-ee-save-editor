@@ -154,8 +154,6 @@
     "skillPoints": "Очки навыков",
     "totalFeats": "Всего фитов",
     "knownSpells": "Известные заклинания",
-    "questsCompleted": "Завершено квестов",
-    "activeQuests": "Активные задания",
     "genderLabel": "Пол",
     "gender": {
       "male": "Мужской",
@@ -200,8 +198,6 @@
     "module": "Модуль",
     "difficulty": "Сложность",
     "gameTime": "Игровое время",
-    "questProgress": "Прогресс квестов",
-    "completion": "Завершение",
     "actValue": "Акт {act}",
     "gameTimeValue": "Г{year} М{month} Д{day}, Час {hour}"
   },

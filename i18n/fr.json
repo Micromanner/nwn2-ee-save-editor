@@ -154,8 +154,6 @@
     "skillPoints": "Points de Compétence",
     "totalFeats": "Dons Totaux",
     "knownSpells": "Sorts Connus",
-    "questsCompleted": "Quêtes Terminées",
-    "activeQuests": "Quêtes Actives",
     "genderLabel": "Sexe",
     "gender": {
       "male": "Mâle",
@@ -200,8 +198,6 @@
     "module": "Module",
     "difficulty": "Difficulté",
     "gameTime": "Temps de Jeu",
-    "questProgress": "Progression Quêtes",
-    "completion": "Terminé",
     "actValue": "Acte {act}",
     "gameTimeValue": "A{year} M{month} J{day}, Heure {hour}"
   },

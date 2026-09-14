@@ -280,11 +280,6 @@ export function OverviewPanel() {
     : character.lastSavedTimestamp != null ? formatDate(character.lastSavedTimestamp * 1000)
     : null;
 
-  const questDetails = character.questDetails;
-  const completedQuests = questDetails?.summary.completed_quests ?? character.completedQuests ?? 0;
-  const activeQuests = questDetails?.summary.active_quests ?? character.currentQuests ?? 0;
-  const completionRate = questDetails?.progress_stats.total_completion_rate;
-
   return (
     <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
 
@@ -401,17 +396,6 @@ export function OverviewPanel() {
             <KVRow label={t('overview.difficulty')} value={display(difficultyLabel)} />
             <KVRow label={t('character.lastSaved')} value={display(lastSavedStr)} />
             <KVRow label={t('overview.gameTime')} value={display(gameTimeStr)} />
-          </div>
-        </div>
-
-        <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '10px 16px' }}>
-          <div className="t-section" style={{ marginBottom: 8 }}>{t('overview.questProgress')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 16px' }}>
-            <KVRow label={t('character.questsCompleted')} value={display(completedQuests)} />
-            <KVRow label={t('character.activeQuests')} value={display(activeQuests)} />
-            {completionRate != null && (
-              <KVRow label={t('overview.completion')} value={`${Math.round(completionRate)}%`} />
-            )}
           </div>
         </div>
       </Card>

@@ -49,7 +49,6 @@ export const CHARACTER = {
     location: 'Crossroad Keep - Courtyard',
     playTime: '48h 23m',
     language: 'English',
-    questProgress: { completed: 14, active: 4, completionRate: 78 },
   },
 };
 

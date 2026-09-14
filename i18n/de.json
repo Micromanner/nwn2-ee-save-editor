@@ -167,8 +167,6 @@
     "skillPoints": "Fertigkeitspunkte",
     "totalFeats": "Talente gesamt",
     "knownSpells": "Bekannte Zauber",
-    "questsCompleted": "Quests abgeschlossen",
-    "activeQuests": "Aktive Quests",
     "genderLabel": "Geschlecht"
   },
   "overview": {
@@ -198,8 +196,6 @@
     "module": "Modul",
     "difficulty": "Schwierigkeit",
     "gameTime": "Spielzeit",
-    "questProgress": "Quest-Fortschritt",
-    "completion": "Abschluss",
     "actValue": "Akt {act}",
     "gameTimeValue": "J{year} M{month} T{day}, Stunde {hour}"
   },

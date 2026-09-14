@@ -167,8 +167,6 @@
     "skillPoints": "Puntos de Habilidad",
     "totalFeats": "Total de Dotes",
     "knownSpells": "Hechizos Conocidos",
-    "questsCompleted": "Misiones Completadas",
-    "activeQuests": "Misiones Activas",
     "genderLabel": "Género"
   },
   "overview": {
@@ -198,8 +196,6 @@
     "module": "Módulo",
     "difficulty": "Dificultad",
     "gameTime": "Tiempo de Juego",
-    "questProgress": "Progreso de Misiones",
-    "completion": "Completado",
     "actValue": "Acto {act}",
     "gameTimeValue": "A{year} M{month} D{day}, Hora {hour}"
   },

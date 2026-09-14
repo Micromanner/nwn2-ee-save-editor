@@ -437,8 +437,6 @@ export interface CharacterData {
   // Ability modifiers from overview dashboard
   abilityModifiers?: { Str: number; Dex: number; Con: number; Int: number; Wis: number; Cha: number };
   // Campaign stats
-  completedQuests?: number;
-  currentQuests?: number;
   journalEntries?: number;
   companionsRecruited?: number;
   deaths?: number;
@@ -455,26 +453,6 @@ export interface CharacterData {
   companionStatus?: Record<string, {name: string, influence: number, status: string, influence_found: boolean}>;
   hiddenStatistics?: Record<string, number>;
   storyMilestones?: Record<string, {name: string, milestones: Array<{description: string, completed: boolean, variable: string}>}>;
-  questDetails?: {
-    summary: {
-      completed_quests: number;
-      active_quests: number;
-      total_quest_variables: number;
-      completed_quest_list: string[];
-      active_quest_list: string[];
-    };
-    categories: Record<string, {
-      name: string;
-      completed: string[];
-      active: string[];
-    }>;
-    progress_stats: {
-      total_completion_rate: number;
-      main_story_progress: number;
-      companion_progress: number;
-      exploration_progress: number;
-    };
-  };
   // Session & locale data
   detectedLanguage?: string;
   languageId?: number;

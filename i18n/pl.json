@@ -156,8 +156,6 @@
     "skillPoints": "Punkty Umiejętności",
     "totalFeats": "Suma Atutów",
     "knownSpells": "Znane Czary",
-    "questsCompleted": "Ukończone Zadania",
-    "activeQuests": "Aktywne Zadania",
     "genderLabel": "Płeć",
     "gender": {
       "male": "Mężczyzna",
@@ -202,8 +200,6 @@
     "module": "Moduł",
     "difficulty": "Trudność",
     "gameTime": "Czas Gry",
-    "questProgress": "Postęp Zadań",
-    "completion": "Ukończono",
     "actValue": "Akt {act}",
     "gameTimeValue": "R{year} M{month} D{day}, Godzina {hour}"
   },

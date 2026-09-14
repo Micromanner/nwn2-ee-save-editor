@@ -154,8 +154,6 @@
     "skillPoints": "Skill Points",
     "totalFeats": "Total Feats",
     "knownSpells": "Known Spells",
-    "questsCompleted": "Quests Completed",
-    "activeQuests": "Active Quests",
     "genderLabel": "Gender",
     "gender": {
       "male": "Male",
@@ -200,8 +198,6 @@
     "module": "Module",
     "difficulty": "Difficulty",
     "gameTime": "Game Time",
-    "questProgress": "Quest Progress",
-    "completion": "Completion",
     "actValue": "Act {act}",
     "gameTimeValue": "Y{year} M{month} D{day}, Hour {hour}"
   },
