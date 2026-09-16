@@ -10,6 +10,7 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
   ga_give_quest_xp: ['quest'],
   ga_give_partial_quest_xp: ['quest', 'percent'],
   ga_give_xp: ['xp'],
+  ga_xp_award_2da_entry: ['award'],
   ga_global_int: ['name', 'change'],
   ga_global_string: ['name', 'change'],
   ga_global_float: ['name', 'change'],
@@ -102,7 +103,7 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
 
 /** Stock scripts whose effect lands on the player or the party rather than the world. */
 const CHARACTER_SCRIPTS = new Set([
-  'ga_give_xp', 'ga_give_quest_xp', 'ga_give_partial_quest_xp', 'ga_give_gold', 'ga_take_gold',
+  'ga_give_xp', 'ga_give_quest_xp', 'ga_give_partial_quest_xp', 'ga_xp_award_2da_entry', 'ga_give_gold', 'ga_take_gold',
   'ga_give_item', 'ga_take_item', 'ga_destroy_item', 'ga_alignment', 'ga_influence',
   'ka_influence_magnitude', 'ka_influence_set',
   'ga_give_feat', 'ga_remove_feat', 'ga_heal_pc', 'ga_heal_party', 'ga_roster_party_add',
@@ -144,6 +145,25 @@ function motbCompanionTag(code: string) {
 export function influenceCompanion(variable: string): string | null {
   if (!variable.startsWith(INFLUENCE_PREFIX)) return null;
   return companionName(variable.slice(INFLUENCE_PREFIX.length));
+}
+
+/** `VariableKey.value_type` of writes that land on the player character (gold, XP) rather than a story flag. */
+export const CHARACTER_TYPE = 'character';
+
+export type RewardKind = 'gold' | 'xp';
+
+/** Which player field a write changes, null for story flags and influence. */
+export function rewardKind(key: { name: string; value_type: string }): RewardKind | null {
+  if (key.value_type !== CHARACTER_TYPE) return null;
+  if (key.name === 'Gold') return 'gold';
+  if (key.name === 'Experience') return 'xp';
+  return null;
+}
+
+/** "+500" / "-120" for a reward delta. */
+export function signedDelta(before: string | number | null, after: string | number) {
+  const delta = Number(after) - Number(before ?? 0);
+  return delta >= 0 ? `+${delta}` : String(delta);
 }
 
 /** Whether a dialogue action changes the player/party or the game world. */

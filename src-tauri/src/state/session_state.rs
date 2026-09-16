@@ -422,15 +422,18 @@ impl SessionState {
             }
         };
 
+        let mut rewarded_fields = Vec::new();
         if let Some(handler) = self.savegame_handler.as_mut() {
-            if errors.is_empty()
-                && let Err(e) = self.quest_edits.flush(
+            if errors.is_empty() {
+                match self.quest_edits.flush(
                     handler,
                     self.primary_player_index
                         .unwrap_or(self.selected_player_index),
-                )
-            {
-                errors.push(e);
+                    self.primary_player_index.is_some(),
+                ) {
+                    Ok(written) => rewarded_fields = written,
+                    Err(e) => errors.push(e),
+                }
             }
             if !errors.is_empty() {
                 handler.abort_batch();
@@ -450,6 +453,20 @@ impl SessionState {
         }
         for idx in saved_parked {
             self.parked[idx].1.mark_saved();
+        }
+        // Quest rewards landed in the save on top of the serialized player; mirror them
+        // into the loaded player so the character tabs match without a reload.
+        if !rewarded_fields.is_empty()
+            && self
+                .primary_player_index
+                .unwrap_or(self.selected_player_index)
+                == self.selected_player_index
+            && let Some(player) = self.player_character_mut()
+        {
+            for (name, value) in rewarded_fields {
+                player.gff_mut().insert(name, value);
+            }
+            player.mark_saved();
         }
         if flushed_party {
             self.staged_party.clear();
@@ -1022,6 +1039,17 @@ impl SessionState {
         );
         self.activate(CharacterSource::Player, character, History::default());
         Ok(())
+    }
+
+    /// The player character wherever it currently lives (active or parked).
+    fn player_character_mut(&mut self) -> Option<&mut Character> {
+        if self.character_source == CharacterSource::Player {
+            return self.character.as_mut();
+        }
+        self.parked
+            .iter_mut()
+            .find(|(source, _, _)| *source == CharacterSource::Player)
+            .map(|(_, character, _)| character)
     }
 
     fn take_parked(&mut self, source: &CharacterSource) -> Option<(Character, History)> {

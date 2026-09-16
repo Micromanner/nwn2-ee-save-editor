@@ -184,6 +184,7 @@ pub async fn save_get_quest_variables(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     let mut keys = std::collections::BTreeSet::new();
+    let tables = save_graph::editing::RewardTables::from_graph(&graph);
     for tr in &quest.transitions {
         for action in tr.actions.iter().chain(&tr.gating_conditions) {
             use crate::services::toolset_bridge::FunctorKind;
@@ -193,7 +194,10 @@ pub async fn save_get_quest_variables(
                 FunctorKind::GlobalString => "string",
                 FunctorKind::GlobalBool => "bool",
                 _ => {
-                    if let Ok((key, _)) = save_graph::editing::decode_assignment(action, &tr.module)
+                    // Gold and XP are shown with the rewards in the edit dialog, not as story variables.
+                    if let Ok((key, _)) =
+                        save_graph::editing::decode_action(action, &tr.module, &tables)
+                        && key.value_type != save_graph::editing::CHARACTER_TYPE
                     {
                         keys.insert(key);
                     }
@@ -210,7 +214,13 @@ pub async fn save_get_quest_variables(
         }
     }
     let paths = state.paths.read();
-    let mut reader = save_graph::editing::VariableReader::new(handler, &paths);
+    let mut reader = save_graph::editing::VariableReader::new(
+        handler,
+        &paths,
+        session
+            .primary_player_index
+            .unwrap_or(session.selected_player_index),
+    );
     Ok(keys
         .into_iter()
         .map(|key| {

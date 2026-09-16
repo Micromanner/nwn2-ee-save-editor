@@ -8,7 +8,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, questDisplayName } from './utils';
-import { describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isJournalConnector } from './scriptDescriptions';
+import { describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isJournalConnector, rewardKind, signedDelta } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -75,9 +75,10 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
 
   // Every flag on the route is written: a partial replay is not a state the game can reach.
   const selected = preview ? preview.writes.map((_, index) => index) : [];
-  // Influence globals are written like any other flag but shown with the rewards.
+  // Gold, XP and influence are written like any other flag but shown with the rewards.
+  const rewardWrites = preview ? preview.writes.filter(write => rewardKind(write.key)) : [];
   const influenceWrites = preview ? preview.writes.filter(write => influenceCompanion(write.key.name)) : [];
-  const flagWrites = preview ? preview.writes.filter(write => !influenceCompanion(write.key.name)) : [];
+  const flagWrites = preview ? preview.writes.filter(write => !rewardKind(write.key) && !influenceCompanion(write.key.name)) : [];
   const conflicts = conflictingEdits(preview, selected, pending);
   const apply = async () => {
     if (!preview || busy) return;
@@ -126,12 +127,17 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     return option.showModule ? `${line} (${resolveModule(option.module)})` : line;
   };
   const optionOutcome = (option: RouteOption) => {
-    const rewards = option.effects.filter(f => effectBucket(f) === 'character').map(f => describeScript(f, t) ?? formatRawCall(f));
+    const rewards: string[] = [];
+    for (const write of option.writes) {
+      const kind = rewardKind(write);
+      if (kind) rewards.push(t(`gameState.quests.edit.${kind}Outcome`, { after: write.after }));
+    }
+    rewards.push(...option.effects.filter(f => effectBucket(f) === 'character').map(f => describeScript(f, t) ?? formatRawCall(f)));
     for (const write of option.writes) {
       const companion = influenceCompanion(write.name);
       if (companion) rewards.push(t('gameState.quests.edit.influenceOutcome', { companion, after: write.after }));
     }
-    const count = option.writes.filter(write => !influenceCompanion(write.name)).length;
+    const count = option.writes.filter(write => !rewardKind(write) && !influenceCompanion(write.name)).length;
     if (rewards.length === 0) return count === 0 ? t('gameState.quests.edit.outcome.none') : t('gameState.quests.edit.outcome.flagsOnly', { count });
     return rewards.join(', ') + (count > 0 ? t('gameState.quests.edit.outcome.andFlags', { count }) : '');
   };
@@ -198,10 +204,14 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       {failed && <Button onClick={() => setRefresh(r => r + 1)}>{t('gameState.quests.edit.refresh')}</Button>}
       {preview && effects && <>
         {preview.route != null && section(t('gameState.quests.edit.rewards'), <>
-          {effects.character.length === 0 && influenceWrites.length === 0
+          {effects.character.length === 0 && influenceWrites.length === 0 && rewardWrites.length === 0
             ? <p style={{ margin: 0, color: T.textMuted }}>{t('gameState.quests.edit.rewardsNone')}</p>
             : <>
               <ul style={{ margin: 0, paddingLeft: 18, color: T.text }}>
+                {rewardWrites.map((write, i) => <li key={`reward-${i}`}>
+                  {t(`gameState.quests.edit.${rewardKind(write.key)}Applied`, { delta: signedDelta(write.before, write.after) })}
+                  {' '}<span className="t-mono">{display(write.before)} → {display(write.after)}</span>
+                </li>)}
                 {influenceWrites.map((write, i) => <li key={`influence-${i}`}>
                   {t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) })}
                   {' '}<span className="t-mono">{display(write.before)} → {display(write.after)}</span>

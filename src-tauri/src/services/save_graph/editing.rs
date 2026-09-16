@@ -1,4 +1,6 @@
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -8,6 +10,7 @@ use sha2::{Digest, Sha256};
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
 use crate::config::NWN2Paths;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
+use crate::parsers::tda::TDAParser;
 use crate::services::campaign::{CampaignManager, content};
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::toolset_bridge::ConvoFunctor;
@@ -93,6 +96,7 @@ pub struct NextLine {
 #[derive(Debug, Clone, Serialize)]
 pub struct RouteWrite {
     pub name: String,
+    pub value_type: String,
     pub after: Value,
 }
 
@@ -212,7 +216,8 @@ impl QuestEdits {
             follow_stop: None,
             next_steps: Vec::new(),
         };
-        let mut reader = VariableReader::new(handler, paths);
+        let mut reader = VariableReader::new(handler, paths, player);
+        let tables = RewardTables::from_graph(graph);
         let mut journal: BTreeMap<String, u32> = read_live_journal(handler, player)?
             .into_iter()
             .map(|q| (q.tag, q.state))
@@ -263,7 +268,7 @@ impl QuestEdits {
                         }
                         continue;
                     }
-                    match decode_assignment(action, &tr.module) {
+                    match decode_action(action, &tr.module, &tables) {
                         Ok((key, change)) => match reader.read(&key) {
                             Ok(saved) => {
                                 let before = self
@@ -399,6 +404,7 @@ impl QuestEdits {
                     .iter()
                     .map(|w| RouteWrite {
                         name: w.key.name.clone(),
+                        value_type: w.key.value_type.clone(),
                         after: w.after.clone(),
                     })
                     .collect(),
@@ -473,7 +479,7 @@ impl QuestEdits {
         player: usize,
     ) -> Result<(), String> {
         let journal = read_live_journal(handler, player)?;
-        let mut reader = VariableReader::new(handler, paths);
+        let mut reader = VariableReader::new(handler, paths, player);
         for edit in &self.pending {
             if journal.iter().find(|j| j.tag == edit.tag).map(|j| j.state) != edit.saved_state {
                 return Err(format!(
@@ -493,23 +499,61 @@ impl QuestEdits {
         Ok(())
     }
 
-    pub fn flush(&self, handler: &mut SaveGameHandler, player: usize) -> Result<(), String> {
+    /// Write every pending edit into the save. Gold and XP rewards are added to the
+    /// player as already staged in this batch (so character-tab edits survive) and to
+    /// `player.bic` when `primary` is set; the fields written are returned so the
+    /// caller can bring an in-memory player up to date.
+    pub fn flush(
+        &self,
+        handler: &mut SaveGameHandler,
+        player: usize,
+        primary: bool,
+    ) -> Result<WrittenFields, String> {
         if self.pending.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let journal: Vec<_> = self
             .pending
             .iter()
             .map(|p| (p.tag.clone(), p.target))
             .collect();
+        let mut rewards: Vec<(String, i64)> = Vec::new();
+        for write in self
+            .pending
+            .iter()
+            .flat_map(|p| &p.writes)
+            .filter(|w| w.key.value_type == CHARACTER_TYPE)
+        {
+            let delta = write.after.as_i64().unwrap_or(0)
+                - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
+            match rewards.iter_mut().find(|(name, _)| *name == write.key.name) {
+                Some((_, total)) => *total += delta,
+                None => rewards.push((write.key.name.clone(), delta)),
+            }
+        }
         let bytes = handler.extract_player_data().map_err(|e| e.to_string())?;
         let bytes = write_journal(&bytes, player, &journal)?;
+        let (bytes, written) = add_player_rewards(&bytes, player, &rewards)?;
         handler
             .update_file("playerlist.ifo", &bytes)
             .map_err(|e| e.to_string())?;
+        if primary
+            && !rewards.is_empty()
+            && let Some(bic) = handler.extract_player_bic().map_err(|e| e.to_string())?
+        {
+            let bic = add_bic_rewards(&bic, &rewards)?;
+            handler
+                .update_file("player.bic", &bic)
+                .map_err(|e| e.to_string())?;
+        }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
-        for write in self.pending.iter().flat_map(|p| &p.writes) {
+        for write in self
+            .pending
+            .iter()
+            .flat_map(|p| &p.writes)
+            .filter(|w| w.key.value_type != CHARACTER_TYPE)
+        {
             let value = write
                 .after
                 .as_str()
@@ -560,15 +604,18 @@ impl QuestEdits {
                 .update_file(name, &bytes)
                 .map_err(|e| e.to_string())?;
         }
-        Ok(())
+        Ok(written)
     }
 }
 
 pub struct VariableReader<'a> {
     handler: &'a SaveGameHandler,
     paths: &'a NWN2Paths,
+    player: usize,
     globals: Option<Result<crate::parsers::xml::XmlData, String>>,
     modules: BTreeMap<String, Result<content::ModuleVariables, String>>,
+    /// The player's struct in `playerlist.ifo`, for `CHARACTER_TYPE` keys.
+    player_fields: Option<Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
     /// Values that take precedence over the save: pending and previewed writes.
     pub overlay: BTreeMap<VariableKey, Value>,
     /// Journal states (tag -> entry) for `gc_journal_entry`; `None` = unknown.
@@ -576,12 +623,14 @@ pub struct VariableReader<'a> {
 }
 
 impl<'a> VariableReader<'a> {
-    pub fn new(handler: &'a SaveGameHandler, paths: &'a NWN2Paths) -> Self {
+    pub fn new(handler: &'a SaveGameHandler, paths: &'a NWN2Paths, player: usize) -> Self {
         Self {
             handler,
             paths,
+            player,
             globals: None,
             modules: BTreeMap::new(),
+            player_fields: None,
             overlay: BTreeMap::new(),
             journal: None,
         }
@@ -590,6 +639,20 @@ impl<'a> VariableReader<'a> {
     pub fn read(&mut self, key: &VariableKey) -> Result<Option<Value>, String> {
         if let Some(value) = self.overlay.get(key) {
             return Ok(Some(value.clone()));
+        }
+        if key.value_type == CHARACTER_TYPE {
+            let fields = self
+                .player_fields
+                .get_or_insert_with(|| {
+                    let bytes = self
+                        .handler
+                        .extract_player_data()
+                        .map_err(|e| e.to_string())?;
+                    player_struct(&bytes, self.player)
+                })
+                .as_ref()
+                .map_err(Clone::clone)?;
+            return Ok(fields.get(&key.name).and_then(gff_integer).map(Value::from));
         }
         if let Some(module) = &key.module {
             let vars = self
@@ -1047,6 +1110,135 @@ fn decode_influence(
     }
 }
 
+/// `VariableKey::value_type` of the player-struct fields reward scripts change.
+pub const CHARACTER_TYPE: &str = "character";
+const GOLD: &str = "Gold";
+const EXPERIENCE: &str = "Experience";
+
+fn character_key(name: &str) -> VariableKey {
+    VariableKey {
+        module: None,
+        name: name.into(),
+        value_type: CHARACTER_TYPE.into(),
+    }
+}
+
+/// Gold is a DWORD, XP an INT; neither drops below 0 in the engine.
+fn reward(name: &str, delta: i64) -> Result<(VariableKey, Change), &'static str> {
+    if delta == 0 {
+        return Err("no_effect");
+    }
+    let max = if name == GOLD {
+        i64::from(u32::MAX)
+    } else {
+        i64::from(i32::MAX)
+    };
+    Ok((
+        character_key(name),
+        Change::AddClamped { delta, min: 0, max },
+    ))
+}
+
+/// `ga_give_gold` / `ga_take_gold` / `ga_give_xp` on the PC speaker. The party flag only
+/// reaches other PCs in multiplayer; companions get their XP from the engine's party share.
+fn decode_reward(
+    script: &str,
+    action: &ConvoFunctor,
+) -> Result<(VariableKey, Change), &'static str> {
+    let amount = int_param(action, 0).ok_or("invalid_assignment")?;
+    if amount == 0 {
+        return Err("no_effect");
+    }
+    match script {
+        "ga_give_gold" if amount > 0 => reward(GOLD, amount),
+        "ga_take_gold" if amount > 0 => reward(GOLD, -amount),
+        "ga_give_gold" | "ga_take_gold" => Err("invalid_assignment"),
+        "ga_give_xp" => reward(EXPERIENCE, amount),
+        _ => Err("unsupported_action"),
+    }
+}
+
+/// Campaign-side numbers the quest XP scripts look up at runtime.
+pub struct RewardTables {
+    /// Journal category XP by lowercase quest tag (`GetJournalQuestExperience`).
+    quest_xp: BTreeMap<String, i64>,
+    /// Campaign folder holding `k_xp_awards.2da` (`ga_xp_award_2da_entry`).
+    campaign_path: Option<PathBuf>,
+    xp_awards: OnceCell<Option<TDAParser>>,
+}
+
+impl RewardTables {
+    pub fn from_graph(graph: &SaveGraph) -> Self {
+        Self {
+            quest_xp: graph
+                .quests
+                .iter()
+                .map(|q| (q.tag.to_ascii_lowercase(), i64::from(q.category.xp)))
+                .collect(),
+            campaign_path: graph.campaign.campaign_path.as_deref().map(PathBuf::from),
+            xp_awards: OnceCell::new(),
+        }
+    }
+
+    #[cfg(test)]
+    fn empty() -> Self {
+        Self {
+            quest_xp: BTreeMap::new(),
+            campaign_path: None,
+            xp_awards: OnceCell::new(),
+        }
+    }
+
+    fn quest_xp(&self, tag: &str) -> Option<i64> {
+        self.quest_xp.get(&tag.to_ascii_lowercase()).copied()
+    }
+
+    /// `k_xp_awards.2da` row `XP`, read the way `ginc_journal.AwardXP` does (`StringToInt`).
+    fn xp_award(&self, row: i64) -> Option<i64> {
+        let table = self
+            .xp_awards
+            .get_or_init(|| load_2da(self.campaign_path.as_deref()?.join("k_xp_awards.2da")))
+            .as_ref()?;
+        let row = usize::try_from(row).ok()?;
+        let cell = table.get_cell_by_name(row, "XP").ok()?;
+        Some(string_to_int(cell.unwrap_or("")).unwrap_or(0))
+    }
+}
+
+fn load_2da(path: PathBuf) -> Option<TDAParser> {
+    let mut parser = TDAParser::new();
+    parser.parse_from_file(&path).ok()?;
+    Some(parser)
+}
+
+/// `decode_assignment` plus the reward scripts whose amount lives outside the dialogue:
+/// `ga_give_quest_xp(tag)` awards the journal category XP, `ga_xp_award_2da_entry(row)`
+/// the campaign's `k_xp_awards.2da` entry.
+pub fn decode_action(
+    action: &ConvoFunctor,
+    module: &str,
+    tables: &RewardTables,
+) -> Result<(VariableKey, Change), &'static str> {
+    let script = action.script.to_ascii_lowercase();
+    match script.as_str() {
+        "ga_give_quest_xp" => {
+            let tag = action
+                .params
+                .first()
+                .and_then(Value::as_str)
+                .ok_or("invalid_assignment")?;
+            let xp = tables.quest_xp(tag).ok_or("unavailable_target")?;
+            reward(EXPERIENCE, xp)
+        }
+        "ga_xp_award_2da_entry" => {
+            let row = int_param(action, 0).ok_or("invalid_assignment")?;
+            let xp = tables.xp_award(row).ok_or("unavailable_target")?;
+            reward(EXPERIENCE, xp)
+        }
+        _ => decode_assignment(action, module),
+    }
+}
+
 /// NWScript `StringToInt`: leading integer, anything else is 0.
 fn string_to_int(raw: &str) -> Option<i64> {
     let raw = raw.trim_start();
@@ -1075,6 +1267,7 @@ pub fn decode_assignment(
         "ga_influence" | "ka_influence_magnitude" | "ka_influence_set" => {
             return decode_influence(&script, action);
         }
+        "ga_give_gold" | "ga_take_gold" | "ga_give_xp" => return decode_reward(&script, action),
         _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };
@@ -1137,6 +1330,110 @@ pub fn decode_assignment(
         },
         after,
     ))
+}
+
+fn gff_integer(value: &GffValue) -> Option<i64> {
+    Some(match value {
+        GffValue::Byte(v) => i64::from(*v),
+        GffValue::Word(v) => i64::from(*v),
+        GffValue::Short(v) => i64::from(*v),
+        GffValue::Dword(v) => i64::from(*v),
+        GffValue::Int(v) => i64::from(*v),
+        GffValue::Dword64(v) => i64::try_from(*v).ok()?,
+        GffValue::Int64(v) => *v,
+        _ => return None,
+    })
+}
+
+fn owned_root(bytes: &[u8]) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
+    let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
+    Ok(parser
+        .read_struct_fields(0)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned()))
+        .collect())
+}
+
+/// The player's own struct out of `playerlist.ifo` (`Mod_PlayerList[player]`).
+fn player_struct(
+    bytes: &[u8],
+    player: usize,
+) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
+    let mut root = owned_root(bytes)?;
+    let Some(GffValue::ListOwned(mut players)) = root.swap_remove("Mod_PlayerList") else {
+        return Err("Mod_PlayerList missing".into());
+    };
+    if players.len() <= player {
+        return Err("Primary player missing".into());
+    }
+    Ok(players.swap_remove(player))
+}
+
+/// Add `delta` to an integer field, floored at 0 and kept in the field's own GFF type.
+fn add_to_field(
+    fields: &mut indexmap::IndexMap<String, GffValue<'static>>,
+    name: &str,
+    delta: i64,
+) -> Result<GffValue<'static>, String> {
+    let current = fields.get(name);
+    let before = match current {
+        Some(value) => {
+            gff_integer(value).ok_or_else(|| format!("{name} is not an integer field"))?
+        }
+        None => 0,
+    };
+    let after = (before + delta).max(0);
+    let value = match current {
+        Some(GffValue::Int(_)) => GffValue::Int(i32::try_from(after).unwrap_or(i32::MAX)),
+        Some(GffValue::Dword(_)) => GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX)),
+        Some(GffValue::Int64(_)) => GffValue::Int64(after),
+        Some(GffValue::Dword64(_)) => GffValue::Dword64(u64::try_from(after).unwrap_or(0)),
+        None if name == GOLD => GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX)),
+        None => GffValue::Int(i32::try_from(after).unwrap_or(i32::MAX)),
+        Some(_) => return Err(format!("{name} has an unexpected storage type")),
+    };
+    fields.insert(name.into(), value.clone());
+    Ok(value)
+}
+
+/// Player fields as written by a reward flush: `(field name, value)`.
+pub type WrittenFields = Vec<(String, GffValue<'static>)>;
+
+/// Apply reward deltas to the player's struct in `playerlist.ifo`; returns the new bytes
+/// and the fields as written.
+pub fn add_player_rewards(
+    bytes: &[u8],
+    player: usize,
+    rewards: &[(String, i64)],
+) -> Result<(Vec<u8>, WrittenFields), String> {
+    if rewards.is_empty() {
+        return Ok((bytes.to_vec(), Vec::new()));
+    }
+    let mut root = owned_root(bytes)?;
+    let Some(GffValue::ListOwned(players)) = root.get_mut("Mod_PlayerList") else {
+        return Err("Mod_PlayerList missing".into());
+    };
+    let fields = players.get_mut(player).ok_or("Primary player missing")?;
+    let mut written = Vec::with_capacity(rewards.len());
+    for (name, delta) in rewards {
+        written.push((name.clone(), add_to_field(fields, name, *delta)?));
+    }
+    let bytes = GffWriter::new("IFO ", "V3.2")
+        .write(root)
+        .map_err(|e| e.to_string())?;
+    Ok((bytes, written))
+}
+
+/// Same deltas on the root struct of `player.bic`.
+pub fn add_bic_rewards(bytes: &[u8], rewards: &[(String, i64)]) -> Result<Vec<u8>, String> {
+    let mut root = owned_root(bytes)?;
+    for (name, delta) in rewards {
+        add_to_field(&mut root, name, *delta)?;
+    }
+    GffWriter::new("BIC ", "V3.2")
+        .write(root)
+        .map_err(|e| e.to_string())
 }
 
 pub fn write_journal(
@@ -1263,6 +1560,209 @@ mod tests {
             decode_assignment(&action("ka_influence_set", json!(["dove", 150])), "m").unwrap();
         assert_eq!(key.name, "00_nInfluencedove");
         assert_eq!(change, Change::Set(json!(100)));
+    }
+
+    #[test]
+    fn reward_scripts_add_gold_and_xp_to_the_player() {
+        let (key, change) =
+            decode_assignment(&action("ga_give_gold", json!([500, 0])), "m").unwrap();
+        assert_eq!(key, character_key("Gold"));
+        assert_eq!(change.apply(Some(&json!(100))), json!(600));
+        assert_eq!(change.apply(None), json!(500));
+        let (key, change) =
+            decode_assignment(&action("ga_take_gold", json!(["500", 1])), "m").unwrap();
+        assert_eq!(key.name, "Gold");
+        assert_eq!(change.apply(Some(&json!(200))), json!(0));
+        let (key, change) = decode_assignment(&action("ga_give_xp", json!(["250"])), "m").unwrap();
+        assert_eq!(key, character_key("Experience"));
+        assert_eq!(change.apply(Some(&json!(1000))), json!(1250));
+        let (_, change) = decode_assignment(&action("ga_give_xp", json!([-5000])), "m").unwrap();
+        assert_eq!(change.apply(Some(&json!(1000))), json!(0));
+        assert_eq!(
+            decode_assignment(&action("ga_give_gold", json!([0])), "m"),
+            Err("no_effect")
+        );
+        assert!(decode_assignment(&action("ga_give_gold", json!([-5])), "m").is_err());
+        assert!(decode_assignment(&action("ga_take_gold", json!([])), "m").is_err());
+
+        let mut graph = graph();
+        add_quest(&mut graph, "Paid", Vec::new());
+        graph.quests[0].category.xp = 300;
+        let tables = RewardTables::from_graph(&graph);
+        let (key, change) =
+            decode_action(&action("ga_give_quest_xp", json!(["paid"])), "m", &tables).unwrap();
+        assert_eq!(key, character_key("Experience"));
+        assert_eq!(change.apply(Some(&json!(10))), json!(310));
+        assert_eq!(
+            decode_action(&action("ga_give_quest_xp", json!(["other"])), "m", &tables),
+            Err("unavailable_target")
+        );
+        assert_eq!(
+            decode_action(
+                &action("ga_xp_award_2da_entry", json!([3, 0])),
+                "m",
+                &tables
+            ),
+            Err("unavailable_target")
+        );
+        assert!(
+            decode_action(
+                &action("ga_global_int", json!(["x", "5"])),
+                "m",
+                &RewardTables::empty()
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn xp_awards_come_from_the_campaign_2da() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("k_xp_awards.2da"),
+            "2DA V2.0\n\n\tXP\tDescStrRef\tDescriptionText\n0\t100\t****\t****\n1\t1000\t178881\ttext\n",
+        )
+        .unwrap();
+        let mut graph = graph();
+        graph.campaign.campaign_path = Some(dir.path().to_string_lossy().into_owned());
+        let tables = RewardTables::from_graph(&graph);
+        let (key, change) = decode_action(
+            &action("ga_xp_award_2da_entry", json!([1, 0])),
+            "m",
+            &tables,
+        )
+        .unwrap();
+        assert_eq!(key, character_key("Experience"));
+        assert_eq!(change.apply(Some(&json!(5))), json!(1005));
+        assert_eq!(
+            decode_action(
+                &action("ga_xp_award_2da_entry", json!([7, 0])),
+                "m",
+                &tables
+            ),
+            Err("unavailable_target")
+        );
+    }
+
+    fn rich_fixture_handler(gold: u32, xp: i32) -> (tempfile::TempDir, SaveGameHandler) {
+        use std::io::Write;
+        let mut player = owned_players(&playerlist()).swap_remove(0);
+        player.insert("Gold".into(), GffValue::Dword(gold));
+        player.insert("Experience".into(), GffValue::Int(xp));
+        let playerlist = GffWriter::new("IFO ", "V3.2")
+            .write(
+                indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player.clone()]) },
+            )
+            .unwrap();
+        player.swap_remove("VarTable");
+        let bic = GffWriter::new("BIC ", "V3.2").write(player).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let file = std::fs::File::create(dir.path().join("resgff.zip")).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file("playerlist.ifo", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(&playerlist).unwrap();
+        zip.start_file("player.bic", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(&bic).unwrap();
+        zip.finish().unwrap();
+        let handler = SaveGameHandler::new(dir.path(), false, false).unwrap();
+        (dir, handler)
+    }
+
+    fn player_gold_and_xp(handler: &SaveGameHandler) -> (i64, i64, i64, i64) {
+        let list = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
+        let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
+        (
+            gff_integer(&list["Gold"]).unwrap(),
+            gff_integer(&list["Experience"]).unwrap(),
+            gff_integer(&bic["Gold"]).unwrap(),
+            gff_integer(&bic["Experience"]).unwrap(),
+        )
+    }
+
+    #[test]
+    fn rewards_are_previewed_from_the_save_and_added_on_top_of_the_staged_player() {
+        let (_dir, mut handler) = rich_fixture_handler(100, 1000);
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("ga_give_gold", json!([500, 0])),
+                action("ga_give_xp", json!([250, 0])),
+            ],
+        );
+        let mut edits = QuestEdits::default();
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        assert!(preview.effects.is_empty(), "{:?}", preview.effects);
+        let gold = preview
+            .writes
+            .iter()
+            .find(|w| w.key.name == "Gold")
+            .unwrap();
+        assert_eq!(gold.key.value_type, CHARACTER_TYPE);
+        assert_eq!(
+            (gold.saved.clone(), gold.before.clone(), gold.after.clone()),
+            (Some(json!(100)), Some(json!(100)), json!(600))
+        );
+        let xp = preview
+            .writes
+            .iter()
+            .find(|w| w.key.name == "Experience")
+            .unwrap();
+        assert_eq!(xp.after, json!(1250));
+        let all: Vec<usize> = (0..preview.writes.len()).collect();
+        edits.stage(preview, &graph, &all, false).unwrap();
+        edits
+            .validate_saved(&handler, &NWN2Paths::new(), 0)
+            .unwrap();
+
+        // The character tabs saved their own gold edit first in the same batch.
+        handler.begin_batch();
+        let mut player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
+        player.insert("Gold".into(), GffValue::Dword(150));
+        let staged = GffWriter::new("IFO ", "V3.2")
+            .write(indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player]) })
+            .unwrap();
+        handler.update_file("playerlist.ifo", &staged).unwrap();
+        let written = edits.flush(&mut handler, 0, true).unwrap();
+        handler.commit_batch().unwrap();
+        assert_eq!(
+            format!("{written:?}"),
+            format!(
+                "{:?}",
+                vec![
+                    ("Gold".to_string(), GffValue::Dword(650)),
+                    ("Experience".to_string(), GffValue::Int(1250)),
+                ]
+            )
+        );
+        assert_eq!(player_gold_and_xp(&handler), (650, 1250, 600, 1250));
+        assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 20);
+    }
+
+    #[test]
+    fn taking_gold_never_goes_below_zero() {
+        let (_dir, mut handler) = rich_fixture_handler(200, 0);
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![action("ga_take_gold", json!([500, 0]))],
+        );
+        let mut edits = QuestEdits::default();
+        let preview = edits
+            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .unwrap();
+        assert_eq!(preview.writes[0].after, json!(0));
+        edits.stage(preview, &graph, &[0], false).unwrap();
+        handler.begin_batch();
+        edits.flush(&mut handler, 0, true).unwrap();
+        handler.commit_batch().unwrap();
+        assert_eq!(player_gold_and_xp(&handler), (0, 0, 0, 0));
     }
 
     #[test]
@@ -1571,7 +2071,7 @@ mod tests {
         let (dir, handler) = fixture_handler();
         std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>a</Name><Value>1</Value></Integer></Integers></Globals>").unwrap();
         let paths = NWN2Paths::new();
-        let mut reader = VariableReader::new(&handler, &paths);
+        let mut reader = VariableReader::new(&handler, &paths, 0);
         // `a == 1 OR b == 1` then `AND c == 1`: (true || false) && false.
         let conditions = vec![
             condition("gc_global_int", json!(["a", "1"]), false, "or"),
@@ -1635,7 +2135,7 @@ mod tests {
         let revision = preview.revision.clone();
         edits.stage(preview, &graph, &[0, 2], false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0).unwrap();
+        edits.flush(&mut handler, 0, false).unwrap();
         assert!(
             std::fs::read_to_string(&globals)
                 .unwrap()
@@ -1746,7 +2246,7 @@ mod tests {
             .validate_saved(&handler, &NWN2Paths::new(), 0)
             .unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0).unwrap();
+        edits.flush(&mut handler, 0, false).unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("resgff.zip")).unwrap(),
             original
@@ -1754,7 +2254,7 @@ mod tests {
         handler.abort_batch();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 10);
         handler.begin_batch();
-        edits.flush(&mut handler, 0).unwrap();
+        edits.flush(&mut handler, 0, false).unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 20);
         assert!(
@@ -1816,7 +2316,7 @@ mod tests {
         });
         edits.validate_saved(&handler, &paths, 0).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0).unwrap();
+        edits.flush(&mut handler, 0, false).unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("module_a.z")).unwrap(),
             original
