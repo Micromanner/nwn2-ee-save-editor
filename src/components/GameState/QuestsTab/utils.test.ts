@@ -75,16 +75,16 @@ describe('groupRoutes', () => {
 
   it('keeps the line the player chose over a silent branch with the same outcome', () => {
     const grouped = groupRoutes([
-      line({ route: 0, module: 'a1', signature: 'x=1|end', text_strref: null, spoken: { node: 1, is_player: false, speaker: 'caleb', text_strref: 3 } }),
-      line({ route: 1, module: 'a1', signature: 'x=1|end', text_strref: 5, spoken: { node: 2, is_player: true, speaker: '', text_strref: 5 } }),
+      line({ route: 0, module: 'a1', signature: 'x=1|end', text_strref: null, spoken: { node: 1, is_player: false, speaker: 'caleb', text_strref: 3, conditions: [] } }),
+      line({ route: 1, module: 'a1', signature: 'x=1|end', text_strref: 5, spoken: { node: 2, is_player: true, speaker: '', text_strref: 5, conditions: [] } }),
     ], 'a1');
     expect(grouped.map(o => o.route)).toEqual([1]);
   });
 
   it('labels a silent reply by the line the player saw', () => {
     const grouped = groupRoutes([
-      line({ route: 0, module: 'mq', signature: 'x=1|end', text_strref: null, spoken: { node: 3, is_player: true, speaker: '', text_strref: 7 } }),
-      line({ route: 1, module: 'a1', signature: 'x=2|end', text_strref: null, spoken: { node: 4, is_player: true, speaker: '', text_strref: 7 } }),
+      line({ route: 0, module: 'mq', signature: 'x=1|end', text_strref: null, spoken: { node: 3, is_player: true, speaker: '', text_strref: 7, conditions: [] } }),
+      line({ route: 1, module: 'a1', signature: 'x=2|end', text_strref: null, spoken: { node: 4, is_player: true, speaker: '', text_strref: 7, conditions: [] } }),
     ], 'a1');
     expect(grouped.map(o => o.route)).toEqual([1]);
   });

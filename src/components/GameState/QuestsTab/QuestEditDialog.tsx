@@ -11,6 +11,7 @@ import { conflictingEdits, dialogueText, questDisplayName } from './utils';
 import { describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, isJournalConnector } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
+import { useSpeakerNameResolver } from './useSpeakerNameResolver';
 import { T } from '../../theme';
 
 const ENTRY_TEXT_LIMIT = 140;
@@ -23,6 +24,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const t = useTranslations();
   const { handleError } = useErrorHandler();
   const { resolve: resolveModule } = useModuleNameResolver(modules);
+  const speakers = useSpeakerNameResolver(modules, tlk);
   const [route, setRoute] = useState<number | null>(null);
   const [options, setOptions] = useState<RouteOption[] | null>(null);
   const [preview, setPreview] = useState<QuestPreview | null>(null);
@@ -43,7 +45,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       .then(summaries => {
         if (!active) return;
         const grouped = groupRoutes(summaries, currentModule);
-        tlk.prime(grouped.map(o => (o.spoken ?? o).text_strref));
+        tlk.prime([...grouped.map(o => (o.spoken ?? o).text_strref), ...speakers.strrefs(grouped.map(o => ({ ...(o.spoken ?? o), dlg: o.dlg, module: o.module })))]);
         setOptions(grouped);
         setRoute(grouped.length > 0 ? grouped[0].route : -1);
       })
@@ -60,7 +62,9 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     invoke<QuestPreview>('save_preview_quest_edit', { tag: quest.tag, target, route: route < 0 ? null : route })
       .then(result => {
         if (!active) return;
-        tlk.prime((result.next_steps ?? []).flatMap(step => step.lines.map(line => (line.spoken ?? line).text_strref)));
+        const lines = (result.next_steps ?? []).flatMap(step => step.lines);
+        tlk.prime([...lines.map(line => (line.spoken ?? line).text_strref),
+          ...speakers.strrefs(lines.map(line => ({ ...(line.spoken ?? line), dlg: line.dlg, module: line.module })))]);
         setPreview(result);
       })
       .catch(error => { if (active) { setFailed(true); handleError(error); } })
@@ -84,14 +88,35 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     finally { setBusy(false); }
   };
 
-  // An empty speaker tag means the conversation owner; the dialogue file is the closest name we have.
-  const speakerName = (speaker: string, dlg: string) => speaker || dlg || t('gameState.quests.edit.npc');
-  const spokenLabel = (line: { is_player: boolean; speaker: string; dlg: string; text_strref: number | null; spoken?: SpokenLine }) => {
+  // Blueprint name first; without one the tag, or for the conversation owner (empty tag) the dialogue file.
+  const speakerName = (speaker: string, dlg: string, module: string) =>
+    speakers.resolve({ speaker, dlg, module }) || speaker || dlg || t('gameState.quests.edit.npc');
+  const spokenLabel = (line: { is_player: boolean; speaker: string; dlg: string; module: string; text_strref: number | null; spoken?: SpokenLine }) => {
     const shown = line.spoken ?? line;
     const text = dialogueText(tlk.resolve(shown.text_strref)) ?? t('gameState.quests.detail.noText');
     return shown.is_player
       ? t('gameState.quests.edit.youSaid', { text })
-      : t('gameState.quests.edit.npcSaid', { who: speakerName(shown.speaker, line.dlg), text });
+      : t('gameState.quests.edit.npcSaid', { who: speakerName(shown.speaker, line.dlg, line.module), text });
+  };
+  // A player reply is a choice the editor replays; an NPC line fires by itself once its conditions hold.
+  const routeIntro = (option: RouteOption) => {
+    const shown = option.spoken ?? option;
+    if (shown.is_player) return t('gameState.quests.edit.asIf');
+    const who = speakers.resolve({ speaker: shown.speaker, dlg: option.dlg, module: option.module }) || shown.speaker;
+    return who ? t('gameState.quests.edit.asIfHeard', { who }) : t('gameState.quests.edit.asIfHeardOwner');
+  };
+  const quotedText = (option: RouteOption) => {
+    const text = dialogueText(tlk.resolve((option.spoken ?? option).text_strref)) ?? t('gameState.quests.detail.noText');
+    const quoted = `"${text}"`;
+    return option.showModule ? `${quoted} (${resolveModule(option.module)})` : quoted;
+  };
+  const conditionsLine = (option: RouteOption) => {
+    const conditions = (option.spoken?.conditions ?? []).map(c => {
+      const text = describeScript(c, t) ?? formatRawCall(c);
+      return c.negate ? t('gameState.quests.edit.not', { condition: text }) : text;
+    });
+    if (conditions.length === 0) return null;
+    return <div style={{ color: T.textMuted }}>{t('gameState.quests.edit.onlyWhen', { conditions: conditions.join(', ') })}</div>;
   };
   const optionLabel = (option: RouteOption) => {
     const line = spokenLabel(option);
@@ -140,13 +165,15 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
         {options == null && <Spinner size={16} />}
         {options != null && options.length === 0 && <p style={{ margin: 0, color: T.textMuted }}>{t('gameState.quests.edit.noRoutes')}</p>}
         {options != null && options.length === 1 && route === options[0].route && <div style={{ color: T.text }}>
-          <p style={{ margin: 0 }}>{t('gameState.quests.edit.asIf')} <span style={{ fontStyle: 'italic' }}>{optionLabel(options[0])}</span></p>
+          <p style={{ margin: 0 }}>{routeIntro(options[0])} <span style={{ fontStyle: 'italic' }}>{quotedText(options[0])}</span></p>
+          {conditionsLine(options[0])}
         </div>}
         {options != null && options.length > 1 && <>
           <p style={{ margin: '0 0 6px', color: T.textMuted }}>{t('gameState.quests.edit.pickLine')}</p>
           <RadioGroup selectedValue={route ?? -1} onChange={e => setRoute(Number(e.currentTarget.value))} disabled={busy}>
             {options.map(option => <Radio key={option.route} value={option.route}>
               <span style={{ fontStyle: 'italic' }}>{optionLabel(option)}</span>
+              {conditionsLine(option)}
               <div style={{ color: T.textMuted }}>{optionOutcome(option)}</div>
             </Radio>)}
           </RadioGroup>
@@ -246,7 +273,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     if (!text) return translate('gameState.quests.edit.nextNoText', { dlg: line.module });
     return shown.is_player
       ? translate('gameState.quests.edit.nextSay', { text })
-      : translate('gameState.quests.edit.nextTalk', { who: speakerName(shown.speaker, line.dlg), text });
+      : translate('gameState.quests.edit.nextTalk', { who: speakerName(shown.speaker, line.dlg, line.module), text });
   }
 
   /** Everything the game does on the route besides the flag writes, in plain words, split by who it touches. */

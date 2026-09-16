@@ -3,6 +3,8 @@ use serde::Serialize;
 use crate::parsers::xml::XmlData;
 use crate::services::toolset_bridge::{ConvoFunctor, JournalCategory, ResolutionKind};
 
+use super::creature_names::SpeakerName;
+
 /// Full aggregated graph kept server-side (cached in `SessionState`). Per-quest
 /// `transitions` can balloon into multi-MB payloads across a long campaign, so the
 /// IPC response uses the `SaveGraphSummary` projection and clients fetch
@@ -84,6 +86,9 @@ pub struct AggregatedModule {
     pub is_current: bool,
     /// Quest tags this module declares in its journal. Ordered by first-seen.
     pub journal_category_tags: Vec<String>,
+    /// Creature display names keyed by lowercase tag, from the module's `.utc`
+    /// blueprints and area `.git` instances. Empty when the module is unresolved.
+    pub speaker_names: Vec<SpeakerName>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -141,12 +146,16 @@ pub struct TransitionNode {
 }
 
 /// A line with text, as shown to the player.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SpokenLine {
     pub node: i32,
     pub is_player: bool,
     pub speaker: String,
     pub text_strref: i32,
+    /// Conditions on the way from this line down to the write, this line included:
+    /// what the save must satisfy for the game to get there.
+    #[serde(default)]
+    pub conditions: Vec<ConvoFunctor>,
 }
 
 #[derive(Debug, Clone, Serialize)]

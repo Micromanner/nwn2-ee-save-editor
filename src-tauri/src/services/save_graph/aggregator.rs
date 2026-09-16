@@ -17,6 +17,7 @@ use crate::services::toolset_bridge::{
     BridgeClient, ConvoFunctor, ConvoNode, FunctorKind, JournalCategory, ResolutionKind,
 };
 
+use super::creature_names::read_speaker_names;
 use super::journal_reader::read_live_journal;
 use super::module_name::read_module_display_name;
 use super::script_decoder::{DecodedWrite, decode_action};
@@ -173,6 +174,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 resolution_kind: entry.resolution_kind,
                 is_current: names_match(&entry.name, &current_module_id),
                 journal_category_tags: Vec::new(),
+                speaker_names: Vec::new(),
             });
             continue;
         }
@@ -195,6 +197,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                     resolution_kind: entry.resolution_kind,
                     is_current: names_match(&entry.name, &current_module_id),
                     journal_category_tags: Vec::new(),
+                    speaker_names: Vec::new(),
                 });
                 continue;
             }
@@ -249,6 +252,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             resolution_kind: entry.resolution_kind,
             is_current: names_match(&entry.name, &current_module_id),
             journal_category_tags: tags_in_module,
+            speaker_names: read_speaker_names(std::path::Path::new(&entry.resolved_path)),
         });
     }
 
@@ -442,8 +446,12 @@ fn collect_transitions(
     }
 }
 
-/// The line the player saw for `node`: itself when it has text, otherwise the
-/// closest ancestor with text (a journal write often sits on an empty reply).
+/// The choice that led to `node`: the nearest player reply with text on the way up,
+/// since only the player picks lines and NPC entries follow on their own. A starting
+/// entry ends the walk (the conversation begins there; its parents are links back
+/// from later branches). Without a choice it is the nearest line with text, `node`
+/// itself included. Conditions are gathered along the way, except the player
+/// reply's own (gendered text variants and the like gate the wording, not the outcome).
 fn spoken_line(
     node: &ConvoNode,
     siblings: &HashMap<i32, &ConvoNode>,
@@ -451,19 +459,33 @@ fn spoken_line(
 ) -> Option<SpokenLine> {
     let mut current = node;
     let mut seen: HashSet<i32> = HashSet::new();
+    let mut nearest_text: Option<SpokenLine> = None;
+    let mut conditions: Vec<ConvoFunctor> = Vec::new();
     loop {
+        let is_player = current.is_player();
+        if !is_player {
+            conditions.extend(current.conditions.iter().cloned());
+        }
         if current.has_text && current.text_strref >= 0 {
-            return Some(SpokenLine {
+            let line = SpokenLine {
                 node: current.node,
-                is_player: current.is_player(),
+                is_player,
                 speaker: current.speaker.clone(),
                 text_strref: current.text_strref,
-            });
+                conditions: conditions.clone(),
+            };
+            if is_player {
+                return Some(line);
+            }
+            nearest_text.get_or_insert(line);
         }
-        if !seen.insert(current.node) {
-            return None;
+        if current.node_type.eq_ignore_ascii_case("StartingEntry") || !seen.insert(current.node) {
+            return nearest_text;
         }
-        current = siblings.get(parents.get(&current.node)?)?;
+        let Some(parent) = parents.get(&current.node).and_then(|p| siblings.get(p)) else {
+            return nearest_text;
+        };
+        current = parent;
     }
 }
 
@@ -684,6 +706,113 @@ pub fn build_without_bridge(
 mod tests {
     use super::*;
     use crate::services::toolset_bridge::JournalEntry;
+
+    fn convo(
+        node: i32,
+        node_type: &str,
+        speaker: &str,
+        text_strref: i32,
+        children: &[i32],
+    ) -> ConvoNode {
+        ConvoNode {
+            dlg: "10_hlam".into(),
+            node,
+            speaker: speaker.into(),
+            text_strref,
+            node_type: node_type.into(),
+            has_text: text_strref >= 0,
+            children: children.to_vec(),
+            actions: Vec::new(),
+            conditions: Vec::new(),
+        }
+    }
+
+    fn spoken_for(nodes: &[ConvoNode], target: i32) -> Option<SpokenLine> {
+        let siblings: HashMap<i32, &ConvoNode> = nodes.iter().map(|n| (n.node, n)).collect();
+        let mut parents = HashMap::new();
+        for n in nodes {
+            for c in &n.children {
+                parents.entry(*c).or_insert(n.node);
+            }
+        }
+        spoken_line(siblings[&target], &siblings, &parents)
+    }
+
+    /// Khelgar Vision Quest entry 40 (Merchant Quarter `10_hlam`): the write sits on
+    /// Khelgar's own line, two NPC lines below the player's actual choice.
+    #[test]
+    fn spoken_line_is_the_player_choice_above_companion_lines() {
+        let mut nodes = [
+            convo(1, "Reply", "", 100, &[2]),
+            convo(2, "Entry", "khelgar", 101, &[3]),
+            convo(3, "Reply", "", -1, &[4]),
+            convo(4, "Entry", "khelgar", 102, &[]),
+        ];
+        nodes[1].conditions.push(ConvoFunctor {
+            kind: crate::services::toolset_bridge::FunctorKind::Custom,
+            script: "gc_influence".into(),
+            params: vec![serde_json::json!(1), serde_json::json!(">10")],
+            derived_from: None,
+            decoded: None,
+            negate: false,
+            join: String::new(),
+        });
+        let spoken = spoken_for(&nodes, 4).unwrap();
+        assert_eq!((spoken.node, spoken.is_player), (1, true));
+        assert_eq!(spoken.conditions.len(), 1);
+        assert_eq!(spoken.conditions[0].script, "gc_influence");
+    }
+
+    /// Khelgar Vision Quest entry 20: the write sits on the monks' gated opening line,
+    /// which later branches link back to; the link must not become "the choice".
+    #[test]
+    fn spoken_line_stops_at_a_starting_entry() {
+        let mut nodes = [
+            convo(1, "StartingEntry", "", 100, &[2]),
+            convo(2, "Reply", "", 101, &[3]),
+            convo(3, "Entry", "", 102, &[4]),
+            convo(4, "Reply", "", -1, &[1]),
+        ];
+        nodes[0].conditions.push(ConvoFunctor {
+            kind: crate::services::toolset_bridge::FunctorKind::Custom,
+            script: "gc_global_int".into(),
+            params: vec![
+                serde_json::json!("10_nkhelgarvqstate"),
+                serde_json::json!("3"),
+            ],
+            derived_from: None,
+            decoded: None,
+            negate: false,
+            join: String::new(),
+        });
+        nodes[1].conditions.push(ConvoFunctor {
+            kind: crate::services::toolset_bridge::FunctorKind::Custom,
+            script: "gc_is_male".into(),
+            params: Vec::new(),
+            derived_from: None,
+            decoded: None,
+            negate: false,
+            join: String::new(),
+        });
+        let spoken = spoken_for(&nodes, 1).unwrap();
+        assert_eq!((spoken.node, spoken.is_player), (1, false));
+        assert_eq!(spoken.conditions.len(), 1);
+        assert_eq!(spoken.conditions[0].script, "gc_global_int");
+        let from_reply = spoken_for(&nodes, 2).unwrap();
+        assert_eq!(from_reply.node, 2);
+        assert!(from_reply.conditions.is_empty());
+    }
+
+    #[test]
+    fn spoken_line_falls_back_to_the_nearest_npc_line_without_a_choice() {
+        let nodes = [
+            convo(1, "StartingEntry", "", 100, &[2]),
+            convo(2, "Reply", "", -1, &[3]),
+            convo(3, "Entry", "khelgar", 102, &[]),
+        ];
+        let spoken = spoken_for(&nodes, 3).unwrap();
+        assert_eq!((spoken.node, spoken.is_player), (3, false));
+    }
 
     fn declared(tag: &str, source: &str) -> JournalCategory {
         JournalCategory {

@@ -78,6 +78,7 @@ export interface SpokenLine {
   is_player: boolean;
   speaker: string;
   text_strref: number;
+  conditions: ConvoFunctor[];
 }
 
 export interface TransitionNode {
@@ -199,6 +200,15 @@ export interface PendingQuestEdit {
   writes: VariableWrite[];
 }
 
+export interface SpeakerName {
+  tag: string;
+  first: string;
+  last: string;
+  first_strref: number | null;
+  last_strref: number | null;
+  conversation: string;
+}
+
 export interface AggregatedModule {
   name: string;
   display_name: string;
@@ -206,6 +216,7 @@ export interface AggregatedModule {
   resolution_kind: ResolutionKind;
   is_current: boolean;
   journal_category_tags: string[];
+  speaker_names: SpeakerName[];
 }
 
 export interface CampaignSummary {

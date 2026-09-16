@@ -1710,6 +1710,7 @@ mod tests {
                 is_player: false,
                 speaker: "cormick".into(),
                 text_strref: 123,
+                conditions: Vec::new(),
             }),
             follow_up: Vec::new(),
             children: Vec::new(),
