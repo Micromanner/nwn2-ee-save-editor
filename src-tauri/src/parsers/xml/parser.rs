@@ -176,7 +176,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
         CompanionDefinition {
             campaign: Campaign::Oc,
             name: "Ammon Jerro",
-            influence_var: "00_nInfluenceammon",
+            influence_var: "00_nInfluenceammon_jerro",
             ros_name: None,
         },
     );
@@ -221,7 +221,7 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
         CompanionDefinition {
             campaign: Campaign::MotB,
             name: "Kaelyn the Dove",
-            influence_var: "00_nInfluencekaelyn",
+            influence_var: "00_nInfluencedove",
             ros_name: Some("dove"),
         },
     );

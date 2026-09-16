@@ -8,7 +8,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, questDisplayName } from './utils';
-import { describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, isJournalConnector } from './scriptDescriptions';
+import { describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isJournalConnector } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -75,6 +75,9 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
 
   // Every flag on the route is written: a partial replay is not a state the game can reach.
   const selected = preview ? preview.writes.map((_, index) => index) : [];
+  // Influence globals are written like any other flag but shown with the rewards.
+  const influenceWrites = preview ? preview.writes.filter(write => influenceCompanion(write.key.name)) : [];
+  const flagWrites = preview ? preview.writes.filter(write => !influenceCompanion(write.key.name)) : [];
   const conflicts = conflictingEdits(preview, selected, pending);
   const apply = async () => {
     if (!preview || busy) return;
@@ -124,7 +127,11 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   };
   const optionOutcome = (option: RouteOption) => {
     const rewards = option.effects.filter(f => effectBucket(f) === 'character').map(f => describeScript(f, t) ?? formatRawCall(f));
-    const count = option.writes.length;
+    for (const write of option.writes) {
+      const companion = influenceCompanion(write.name);
+      if (companion) rewards.push(t('gameState.quests.edit.influenceOutcome', { companion, after: write.after }));
+    }
+    const count = option.writes.filter(write => !influenceCompanion(write.name)).length;
     if (rewards.length === 0) return count === 0 ? t('gameState.quests.edit.outcome.none') : t('gameState.quests.edit.outcome.flagsOnly', { count });
     return rewards.join(', ') + (count > 0 ? t('gameState.quests.edit.outcome.andFlags', { count }) : '');
   };
@@ -191,13 +198,17 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       {failed && <Button onClick={() => setRefresh(r => r + 1)}>{t('gameState.quests.edit.refresh')}</Button>}
       {preview && effects && <>
         {preview.route != null && section(t('gameState.quests.edit.rewards'), <>
-          {effects.character.length === 0
+          {effects.character.length === 0 && influenceWrites.length === 0
             ? <p style={{ margin: 0, color: T.textMuted }}>{t('gameState.quests.edit.rewardsNone')}</p>
             : <>
               <ul style={{ margin: 0, paddingLeft: 18, color: T.text }}>
+                {influenceWrites.map((write, i) => <li key={`influence-${i}`}>
+                  {t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) })}
+                  {' '}<span className="t-mono">{display(write.before)} → {display(write.after)}</span>
+                </li>)}
                 {effects.character.map((item, i) => <li key={i}>{item}</li>)}
               </ul>
-              <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.rewardsNote')}</p>
+              {effects.character.length > 0 && <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.rewardsNote')}</p>}
             </>}
         </>)}
 
@@ -206,7 +217,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             <span className="t-semibold" style={{ color: T.text }}>{t('gameState.quests.edit.journal')}</span>
             <span className="t-mono" style={{ color: T.text }}>{display(preview.before_state)} → {target}</span>
             <span />
-            {preview.writes.map((write, index) => {
+            {flagWrites.map((write, index) => {
               const provenance = [moduleLabel(write.key.module), write.key.value_type];
               if (write.derived_from) provenance.push(t('gameState.quests.edit.derivedFrom', { script: write.derived_from }));
               if (write.line != null) provenance.push(t('gameState.quests.edit.laterInConversation'));
@@ -217,7 +228,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
               </Fragment>;
             })}
           </div>
-          {preview.writes.length > 0 && <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.writesNote')}</p>}
+          {flagWrites.length > 0 && <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.writesNote')}</p>}
           {preview.follow_stop && preview.follow_stop.reason !== 'end' && <p style={{ margin: '6px 0 0', color: T.textMuted }}>
             {t(`gameState.quests.edit.stop.${preview.follow_stop.reason}`, { choices: preview.follow_stop.choices })}
           </p>}

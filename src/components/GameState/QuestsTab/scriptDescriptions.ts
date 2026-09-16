@@ -42,6 +42,8 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
   ga_start_convo: ['target', 'conversation'],
   ga_alignment: ['amount', 'axis'],
   ga_influence: ['companion', 'change'],
+  ka_influence_magnitude: ['companion', 'magnitude'],
+  ka_influence_set: ['companion', 'value'],
   ga_heal_pc: ['percent'],
   ga_heal_party: ['percent'],
   ga_give_feat: ['target', 'feat'],
@@ -102,6 +104,7 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
 const CHARACTER_SCRIPTS = new Set([
   'ga_give_xp', 'ga_give_quest_xp', 'ga_give_partial_quest_xp', 'ga_give_gold', 'ga_take_gold',
   'ga_give_item', 'ga_take_item', 'ga_destroy_item', 'ga_alignment', 'ga_influence',
+  'ka_influence_magnitude', 'ka_influence_set',
   'ga_give_feat', 'ga_remove_feat', 'ga_heal_pc', 'ga_heal_party', 'ga_roster_party_add',
   'ga_party_add', 'ga_roster_party_remove', 'ga_roster_selectable', 'ga_henchman_add', 'ga_henchman_remove',
 ]);
@@ -113,6 +116,35 @@ const CHARACTER_ENGINE_CALLS = new Set([
 ]);
 
 export type EffectBucket = 'character' | 'world';
+
+const INFLUENCE_PREFIX = '00_nInfluence';
+
+/** `ga_influence` companion numbers (OC `kinc_companion.GetCompanionTagByNumber`). */
+const OC_COMPANION_TAGS: Record<number, string> = {
+  1: 'khelgar', 2: 'neeshka', 3: 'elanee', 4: 'qara', 5: 'sand', 6: 'grobnar', 7: 'casavir',
+  8: 'bishop', 9: 'shandra', 10: 'construct', 11: 'zhjaeve', 12: 'ammon_jerro', 13: 'npc_bevil',
+};
+
+const COMPANION_NAMES: Record<string, string> = {
+  ammon_jerro: 'Ammon Jerro', npc_bevil: 'Bevil', dove: 'Kaelyn the Dove', oneofmany: 'One of Many',
+};
+
+function companionName(tag: string) {
+  return COMPANION_NAMES[tag] ?? tag.charAt(0).toUpperCase() + tag.slice(1);
+}
+
+/** MotB `kinc_companion.GetCompanionTagByCode`: the first letter of the code, "one..." is One of Many. */
+function motbCompanionTag(code: string) {
+  const lower = code.trim().toLowerCase();
+  if (lower.startsWith('one')) return 'oneofmany';
+  return { s: 'safiya', g: 'gann', o: 'okku', d: 'dove' }[lower.charAt(0)] ?? code;
+}
+
+/** The companion behind an influence global (`00_nInfluencekhelgar` -> "Khelgar"), null for other variables. */
+export function influenceCompanion(variable: string): string | null {
+  if (!variable.startsWith(INFLUENCE_PREFIX)) return null;
+  return companionName(variable.slice(INFLUENCE_PREFIX.length));
+}
 
 /** Whether a dialogue action changes the player/party or the game world. */
 export function effectBucket(f: ConvoFunctor): EffectBucket {
@@ -171,6 +203,8 @@ export function describeScript(
     const text = raw == null ? '' : String(raw);
     if (name === 'change' || name === 'check') values[name] = formatChange(text);
     else if (name === 'target') values[name] = formatTarget(text, t);
+    else if (name === 'companion' && script === 'ga_influence') values[name] = companionName(OC_COMPANION_TAGS[Number(text)] ?? text);
+    else if (name === 'companion' && script.startsWith('ka_influence')) values[name] = companionName(motbCompanionTag(text));
     else values[name] = text;
   });
   return t(`gameState.quests.scripts.${script}`, values);

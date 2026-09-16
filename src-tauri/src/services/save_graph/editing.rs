@@ -273,13 +273,7 @@ impl QuestEdits {
                                     .rfind(|w| w.key == key)
                                     .map(|w| w.after.clone())
                                     .or(saved.clone());
-                                let after = match change {
-                                    Change::Set(value) => value,
-                                    Change::Add(delta) => Value::from(
-                                        before.as_ref().and_then(Value::as_i64).unwrap_or(0)
-                                            + delta,
-                                    ),
-                                };
+                                let after = change.apply(before.as_ref());
                                 candidates.push(VariableWrite {
                                     key,
                                     saved,
@@ -903,6 +897,154 @@ pub enum Change {
     Set(Value),
     /// `"+3"`, `"-1"`, `"++"`: applied to the current value at preview time.
     Add(i64),
+    /// Influence scripts: added to the current value, then capped the way
+    /// `kinc_companion` caps it (`INFLUENCE_MIN`/`INFLUENCE_MAX`).
+    AddClamped {
+        delta: i64,
+        min: i64,
+        max: i64,
+    },
+}
+
+impl Change {
+    pub fn apply(&self, before: Option<&Value>) -> Value {
+        let current = || before.and_then(Value::as_i64).unwrap_or(0);
+        match self {
+            Change::Set(value) => value.clone(),
+            Change::Add(delta) => Value::from(current() + delta),
+            Change::AddClamped { delta, min, max } => {
+                Value::from((current() + delta).clamp(*min, *max))
+            }
+        }
+    }
+}
+
+const INFLUENCE_PREFIX: &str = "00_nInfluence";
+const INFLUENCE_MIN: i64 = -100;
+const INFLUENCE_MAX: i64 = 100;
+
+/// `ginc_companion.INFLUENCE_PREFIX + tag`: the global the influence scripts write.
+pub fn influence_variable(tag: &str) -> String {
+    format!("{INFLUENCE_PREFIX}{tag}")
+}
+
+/// OC `kinc_companion.GetCompanionTagByNumber`, the `nCompanion` table of `ga_influence`.
+fn oc_companion_tag(number: i64) -> Option<&'static str> {
+    Some(match number {
+        1 => "khelgar",
+        2 => "neeshka",
+        3 => "elanee",
+        4 => "qara",
+        5 => "sand",
+        6 => "grobnar",
+        7 => "casavir",
+        8 => "bishop",
+        9 => "shandra",
+        10 => "construct",
+        11 => "zhjaeve",
+        12 => "ammon_jerro",
+        13 => "npc_bevil",
+        _ => return None,
+    })
+}
+
+/// MotB `kinc_companion.GetCompanionTagByCode`: only the first letter of the code counts,
+/// except that "one..." is One of Many rather than Okku.
+fn motb_companion_tag(code: &str) -> Option<&'static str> {
+    let code = code.trim().to_ascii_lowercase();
+    Some(match code.chars().next()? {
+        's' => "safiya",
+        'g' => "gann",
+        'o' if code.starts_with("one") => "oneofmany",
+        'o' => "okku",
+        'd' => "dove",
+        _ => return None,
+    })
+}
+
+/// MotB `kinc_companion.MagnitudeConversion`: magnitude 1..5 in influence points.
+fn motb_magnitude(magnitude: i64) -> Option<i64> {
+    let points = match magnitude.abs() {
+        1 => 6,
+        2 => 11,
+        3 => 15,
+        4 => 25,
+        5 => 35,
+        _ => return None,
+    };
+    Some(points * magnitude.signum())
+}
+
+/// MotB `SetInfluenceByCode`: Safiya never drops below disillusioned.
+fn motb_influence_min(tag: &str) -> i64 {
+    if tag == "safiya" { -75 } else { INFLUENCE_MIN }
+}
+
+/// Int script parameters arrive as numbers, string-typed ones through `StringToInt`.
+fn int_param(action: &ConvoFunctor, index: usize) -> Option<i64> {
+    match action.params.get(index)? {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => string_to_int(s),
+        _ => None,
+    }
+}
+
+fn influence_key(tag: &str) -> VariableKey {
+    VariableKey {
+        module: None,
+        name: influence_variable(tag),
+        value_type: "int".into(),
+    }
+}
+
+/// `ga_influence` (OC), `ka_influence_magnitude` / `ka_influence_set` (MotB): each ends in
+/// one clamped `SetGlobalInt` on the companion's influence global. The MotB band effects
+/// (feats, leaving the party) are re-derived by `DoInfluenceEffects` when the companion spawns.
+fn decode_influence(
+    script: &str,
+    action: &ConvoFunctor,
+) -> Result<(VariableKey, Change), &'static str> {
+    match script {
+        "ga_influence" => {
+            let tag = int_param(action, 0)
+                .and_then(oc_companion_tag)
+                .ok_or("invalid_assignment")?;
+            let delta = int_param(action, 1).ok_or("invalid_assignment")?;
+            if delta == 0 {
+                return Err("invalid_assignment");
+            }
+            Ok((
+                influence_key(tag),
+                Change::AddClamped {
+                    delta,
+                    min: INFLUENCE_MIN,
+                    max: INFLUENCE_MAX,
+                },
+            ))
+        }
+        "ka_influence_magnitude" | "ka_influence_set" => {
+            let tag = action
+                .params
+                .first()
+                .and_then(Value::as_str)
+                .and_then(motb_companion_tag)
+                .ok_or("invalid_assignment")?;
+            let amount = int_param(action, 1).ok_or("invalid_assignment")?;
+            let min = motb_influence_min(tag);
+            let change = if script == "ka_influence_set" {
+                Change::Set(Value::from(amount.clamp(min, INFLUENCE_MAX)))
+            } else {
+                let delta = motb_magnitude(amount).ok_or("invalid_assignment")?;
+                Change::AddClamped {
+                    delta,
+                    min,
+                    max: INFLUENCE_MAX,
+                }
+            };
+            Ok((influence_key(tag), change))
+        }
+        _ => Err("unsupported_action"),
+    }
 }
 
 /// NWScript `StringToInt`: leading integer, anything else is 0.
@@ -930,6 +1072,9 @@ pub fn decode_assignment(
         "ga_global_float" | "ga_local_float" => "float",
         "ga_global_string" | "ga_local_string" => "string",
         "ga_journal" | "__connector_quest_tuple__" => return Err("journal_action"),
+        "ga_influence" | "ka_influence_magnitude" | "ka_influence_set" => {
+            return decode_influence(&script, action);
+        }
         _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };
@@ -1076,6 +1221,48 @@ mod tests {
             negate: false,
             join: String::new(),
         }
+    }
+
+    #[test]
+    fn influence_scripts_write_the_capped_companion_global() {
+        let (key, change) =
+            decode_assignment(&action("ga_influence", json!([12, 5])), "m").unwrap();
+        assert_eq!(key.module, None);
+        assert_eq!(key.name, "00_nInfluenceammon_jerro");
+        assert_eq!(key.value_type, "int");
+        assert_eq!(change.apply(Some(&json!(97))), json!(100));
+        assert_eq!(change.apply(None), json!(5));
+        let (_, change) =
+            decode_assignment(&action("ga_influence", json!(["1", "-30"])), "m").unwrap();
+        assert_eq!(change.apply(Some(&json!(-80))), json!(-100));
+        assert!(decode_assignment(&action("ga_influence", json!([1, 0])), "m").is_err());
+        assert!(decode_assignment(&action("ga_influence", json!([14, 1])), "m").is_err());
+
+        let (key, change) = decode_assignment(
+            &action("ka_influence_magnitude", json!(["Safiya", -5])),
+            "m",
+        )
+        .unwrap();
+        assert_eq!(key.name, "00_nInfluencesafiya");
+        assert_eq!(change.apply(Some(&json!(-50))), json!(-75));
+        let (key, change) = decode_assignment(
+            &action("ka_influence_magnitude", json!(["oneofmany", 3])),
+            "m",
+        )
+        .unwrap();
+        assert_eq!(key.name, "00_nInfluenceoneofmany");
+        assert_eq!(change.apply(Some(&json!(10))), json!(25));
+        let (key, _) =
+            decode_assignment(&action("ka_influence_magnitude", json!(["o", 1])), "m").unwrap();
+        assert_eq!(key.name, "00_nInfluenceokku");
+        assert!(
+            decode_assignment(&action("ka_influence_magnitude", json!(["gann", 6])), "m").is_err()
+        );
+
+        let (key, change) =
+            decode_assignment(&action("ka_influence_set", json!(["dove", 150])), "m").unwrap();
+        assert_eq!(key.name, "00_nInfluencedove");
+        assert_eq!(change, Change::Set(json!(100)));
     }
 
     #[test]
