@@ -8,6 +8,9 @@ export default defineConfig({
   server: {
     port: 24314,
     strictPort: true,
+      watch: {
+    ignored: ['**/src-tauri/**'],
+  },
   },
   build: {
     outDir: 'out',

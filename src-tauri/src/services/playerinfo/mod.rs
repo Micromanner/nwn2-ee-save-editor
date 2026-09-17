@@ -6,7 +6,7 @@ use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use encoding_rs::{UTF_8, WINDOWS_1252};
+use encoding_rs::{UTF_8, WINDOWS_1251, WINDOWS_1252};
 use indexmap::IndexMap;
 use tracing::{debug, warn};
 
@@ -22,6 +22,23 @@ pub use types::{PlayerClassEntry, PlayerInfoData};
 pub struct PlayerInfo {
     pub file_path: Option<std::path::PathBuf>,
     pub data: PlayerInfoData,
+}
+
+fn decode_nwn_string(bytes: &[u8]) -> String {
+    // Русская NWN2:EE локализация хранит игровой текст в UTF-8.
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_owned();
+    }
+
+    // Для старых русских сохранений возможна Windows-1251.
+    let (cp1251_text, _, cp1251_errors) = WINDOWS_1251.decode(bytes);
+    if !cp1251_errors {
+        return cp1251_text.into_owned();
+    }
+
+    // Fallback для английских / западноевропейских legacy-сейвов.
+    let (cp1252_text, _, _) = WINDOWS_1252.decode(bytes);
+    cp1252_text.into_owned()
 }
 
 impl PlayerInfo {
@@ -106,13 +123,7 @@ impl PlayerInfo {
         let mut name_bytes = vec![0u8; length];
         file.read_exact(&mut name_bytes)?;
 
-        let (decoded, _, had_errors) = WINDOWS_1252.decode(&name_bytes);
-        if had_errors {
-            let (utf8_decoded, _, _) = UTF_8.decode(&name_bytes);
-            Ok(utf8_decoded.into_owned())
-        } else {
-            Ok(decoded.into_owned())
-        }
+        Ok(decode_nwn_string(&name_bytes))
     }
 
     pub fn update_from_gff_data(
@@ -363,18 +374,11 @@ fn read_string(cursor: &mut Cursor<&[u8]>) -> PlayerInfoResult<String> {
     let mut bytes = vec![0u8; len];
     cursor.read_exact(&mut bytes)?;
 
-    let (decoded, _, had_errors) = WINDOWS_1252.decode(&bytes);
-    if had_errors {
-        let (utf8_decoded, _, _) = UTF_8.decode(&bytes);
-        Ok(utf8_decoded.into_owned())
-    } else {
-        Ok(decoded.into_owned())
-    }
+    Ok(decode_nwn_string(&bytes))
 }
 
 fn write_string(writer: &mut impl Write, s: &str) -> PlayerInfoResult<()> {
-    let (encoded, _, _) = WINDOWS_1252.encode(s);
-    let bytes = encoded.as_ref();
+    let bytes = s.as_bytes();
 
     writer.write_u32::<LittleEndian>(bytes.len() as u32)?;
     writer.write_all(bytes)?;
@@ -434,6 +438,18 @@ fn law_chaos_to_axis(law_chaos: u8) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_utf8_cyrillic_string_encoding() {
+        let mut buffer = Vec::new();
+
+        write_string(&mut buffer, "Квартал Доков").unwrap();
+
+        let mut cursor = Cursor::new(buffer.as_slice());
+        let result = read_string(&mut cursor).unwrap();
+
+        assert_eq!(result, "Квартал Доков");
+    }
 
     #[test]
     fn test_new_playerinfo() {

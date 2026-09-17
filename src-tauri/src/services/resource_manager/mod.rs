@@ -389,6 +389,9 @@ impl ResourceManager {
     async fn load_base_tlk(&mut self) -> ResourceManagerResult<()> {
         let paths = self.paths.read().await;
         let base_tlk_path = paths.dialog_tlk();
+        let russian_tlk_path = paths
+        .game_folder()
+        .map(|game_dir| game_dir.join("localization").join("russian").join("dialog.tlk"));
         let documents_folder = paths.documents_folder().cloned();
         let workshop_folder = paths.steam_workshop_folder().cloned();
         drop(paths);
@@ -396,8 +399,34 @@ impl ResourceManager {
         let mut best_parser: Option<TLKParser> = None;
         let mut best_source = String::new();
 
+        // Prefer the Russian game localization when it is installed.
+        if let Some(ref tlk_path) = russian_tlk_path
+            && tlk_path.exists()
+        {
+            match module_loader::load_tlk(tlk_path) {
+                Ok(parser) => {
+                    info!(
+                        "Found Russian TLK: {} ({} entries)",
+                        tlk_path.display(),
+                        parser.string_count()
+                    );
+
+                    best_source = tlk_path.display().to_string();
+                    best_parser = Some(parser);
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to parse Russian TLK {}: {}",
+                        tlk_path.display(),
+                        e
+                    );
+                }
+            }
+        }
+
         // Load base dialog.tlk
-        if let Some(ref tlk_path) = base_tlk_path
+        if best_parser.is_none()
+            && let Some(ref tlk_path) = base_tlk_path
             && tlk_path.exists()
         {
             match module_loader::load_tlk(tlk_path) {
