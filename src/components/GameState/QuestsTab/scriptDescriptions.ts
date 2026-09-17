@@ -149,15 +149,50 @@ export function influenceCompanion(variable: string): string | null {
 
 /** `VariableKey.value_type` of writes that land on the player character (gold, XP) rather than a story flag. */
 export const CHARACTER_TYPE = 'character';
+/** `VariableKey.value_type` of an item handed to the player: `name` is the blueprint resref, the value the quantity. */
+export const ITEM_TYPE = 'item';
 
-export type RewardKind = 'gold' | 'xp';
+export function isItemWrite(key: { value_type: string }) {
+  return key.value_type === ITEM_TYPE;
+}
+
+export type RewardKind = 'gold' | 'xp' | 'goodEvil' | 'lawChaos';
 
 /** Which player field a write changes, null for story flags and influence. */
 export function rewardKind(key: { name: string; value_type: string }): RewardKind | null {
   if (key.value_type !== CHARACTER_TYPE) return null;
   if (key.name === 'Gold') return 'gold';
   if (key.name === 'Experience') return 'xp';
+  if (key.name === 'GoodEvil') return 'goodEvil';
+  if (key.name === 'LawfulChaotic') return 'lawChaos';
   return null;
+}
+
+/** `VariableKey.value_type` of an integer local on the player character (e.g. the share of quest XP already paid). */
+export const PC_LOCAL_TYPE = 'pc_local';
+
+/** World actions a player would notice missing: party, faction, deaths, area and module changes. */
+const MAJOR_WORLD_SCRIPTS = new Set([
+  'ga_destroy', 'ga_death', 'ga_attack', 'ga_faction_join', 'ga_jump', 'ga_jump_players', 'ga_load_mod', 'ga_end_game',
+  'ga_roster_party_add', 'ga_party_add', 'ga_roster_party_remove', 'ga_roster_selectable', 'ga_roster_add_blueprint',
+  'ga_henchman_add', 'ga_henchman_remove', 'ga_start_convo', 'ga_take_item', 'ga_destroy_item',
+]);
+const MAJOR_ENGINE_CALLS = new Set([
+  'destroyobject', 'changetostandardfaction', 'changefaction', 'addhenchman', 'removehenchman',
+  'actionstartconversation', 'jumptoobject', 'jumptolocation', 'actionjumptoobject', 'actionjumptolocation',
+]);
+
+export function isMajorWorldScript(f: ConvoFunctor) {
+  return MAJOR_WORLD_SCRIPTS.has(f.script.toLowerCase());
+}
+
+export function isMajorEngineCall(call: string) {
+  return MAJOR_ENGINE_CALLS.has(engineCallName(call));
+}
+
+/** The in-game console line that runs a dialogue action on the player: `rs script(a,b)`, no quotes, no spaces. */
+export function consoleCommand(f: ConvoFunctor) {
+  return `rs ${f.script}(${f.params.map(p => String(p)).join(',')})`;
 }
 
 /** "+500" / "-120" for a reward delta. */

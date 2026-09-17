@@ -9,6 +9,7 @@ mod aggregator;
 mod creature_names;
 pub use creature_names::SpeakerName;
 pub mod editing;
+pub mod item_blueprints;
 mod journal_reader;
 pub use journal_reader::read_live_journal;
 mod module_name;

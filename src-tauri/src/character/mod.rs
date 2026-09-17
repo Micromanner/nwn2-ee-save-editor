@@ -47,6 +47,7 @@ pub use feats::{
     FeatSummary, FeatType, FeatsState, PrerequisiteResult,
 };
 pub use identity::{Alignment, resolve_localized_name, resolved_full_name};
+pub(crate) use inventory::typed_stack_size;
 pub use inventory::{
     AddItemResult, BasicItemInfo, EncumbranceInfo, EquipResult, EquipmentSlot, EquipmentSummary,
     FullEncumbrance, FullEquippedItem, FullInventoryItem, FullInventorySummary, InventoryItem,

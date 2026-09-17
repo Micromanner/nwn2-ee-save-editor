@@ -51,6 +51,8 @@ pub async fn save_preview_quest_edit(
     route: Option<usize>,
 ) -> CommandResult<QuestPreview> {
     let graph = ensure_quest_graph(&app, &state)?;
+    let resources = state.resource_manager.read().await;
+    let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
     let session = state.session.read();
     let handler = session
         .savegame_handler
@@ -60,6 +62,7 @@ pub async fn save_preview_quest_edit(
         .quest_edits
         .preview(
             &graph,
+            &tables,
             handler,
             &state.paths.read(),
             session
@@ -80,6 +83,8 @@ pub async fn save_summarize_quest_routes(
     target: u32,
 ) -> CommandResult<Vec<crate::services::save_graph::editing::RouteSummary>> {
     let graph = ensure_quest_graph(&app, &state)?;
+    let resources = state.resource_manager.read().await;
+    let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
     let session = state.session.read();
     let handler = session
         .savegame_handler
@@ -89,6 +94,7 @@ pub async fn save_summarize_quest_routes(
         .quest_edits
         .summarize_routes(
             &graph,
+            &tables,
             handler,
             &state.paths.read(),
             session
@@ -112,6 +118,8 @@ pub async fn save_stage_quest_edit(
     replace: bool,
 ) -> CommandResult<Vec<PendingQuestEdit>> {
     let graph = ensure_quest_graph(&app, &state)?;
+    let resources = state.resource_manager.read().await;
+    let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
     let mut session = state.session.write();
     let handler = session
         .savegame_handler
@@ -121,6 +129,7 @@ pub async fn save_stage_quest_edit(
         .quest_edits
         .preview(
             &graph,
+            &tables,
             handler,
             &state.paths.read(),
             session
@@ -184,7 +193,7 @@ pub async fn save_get_quest_variables(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     let mut keys = std::collections::BTreeSet::new();
-    let tables = save_graph::editing::RewardTables::from_graph(&graph);
+    let tables = save_graph::editing::RewardTables::from_graph(&graph, None);
     for tr in &quest.transitions {
         for action in tr.actions.iter().chain(&tr.gating_conditions) {
             use crate::services::toolset_bridge::FunctorKind;
@@ -198,6 +207,8 @@ pub async fn save_get_quest_variables(
                     if let Ok((key, _)) =
                         save_graph::editing::decode_action(action, &tr.module, &tables)
                         && key.value_type != save_graph::editing::CHARACTER_TYPE
+                        && key.value_type != save_graph::editing::ITEM_TYPE
+                        && key.value_type != save_graph::editing::PC_LOCAL_TYPE
                     {
                         keys.insert(key);
                     }

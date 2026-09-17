@@ -430,6 +430,7 @@ impl SessionState {
                     self.primary_player_index
                         .unwrap_or(self.selected_player_index),
                     self.primary_player_index.is_some(),
+                    game_data,
                 ) {
                     Ok(written) => rewarded_fields = written,
                     Err(e) => errors.push(e),
@@ -1656,6 +1657,7 @@ mod tests {
                 saved_state: Some(10),
                 source: None,
                 writes: Vec::new(),
+                blueprints: std::collections::BTreeMap::new(),
             });
         let data = GameData::new(Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::new(),

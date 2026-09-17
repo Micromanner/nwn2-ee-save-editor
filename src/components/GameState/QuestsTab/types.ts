@@ -123,6 +123,9 @@ export interface VariableWrite {
   before: string | number | null;
   after: string | number;
   action_index: number;
+  /** Item writes: the blueprint's embedded display name, or the TLK strref of it. */
+  label?: string;
+  label_strref?: number;
   derived_from?: string;
   /** Node id of the follow-up line this write comes from; absent for the chosen line. */
   line?: number;
@@ -139,7 +142,7 @@ export interface RouteSummary {
   spoken?: SpokenLine;
   debug: boolean;
   signature: string;
-  writes: { name: string; value_type: string; after: string | number }[];
+  writes: { name: string; value_type: string; after: string | number; label?: string; label_strref?: number }[];
   /** Everything else the game does on this route: rewards, alignment, doors. */
   effects: ConvoFunctor[];
   write_count: number;

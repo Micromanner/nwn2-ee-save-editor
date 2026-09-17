@@ -9,7 +9,7 @@ import { useTlkResolver } from '@/hooks/useTlkResolver';
 import type { QuestTransitionsResolver } from '@/hooks/useQuestTransitions';
 import type { PendingQuestEdit, QuestSummary, SaveGraph, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
-import { effectiveSource, questDisplayName, questStates, questStatus } from './utils';
+import { effectiveSource, journalText, questDisplayName, questStates, questStatus } from './utils';
 import { TransitionsList } from './TransitionsList';
 import { LiveOverlay } from './LiveOverlay';
 import { QuestEditDialog } from './QuestEditDialog';
@@ -81,7 +81,7 @@ export function QuestDetail({
             <span style={{ color: T.textMuted }}>{t('gameState.quests.list.currentEntry')}</span>
             <span style={{ color: T.text }}>
               <span className="t-semibold">{entryLabel(quest.live_state)}</span>
-              {currentEntry && <>: {currentEntry.text}</>}
+              {journalText(currentEntry?.text) && <>: {journalText(currentEntry?.text)}</>}
             </span>
           </>}
 
@@ -118,7 +118,7 @@ export function QuestDetail({
               <span className="t-mono" style={{ color: T.textMuted, minWidth: 28, textAlign: 'right', paddingTop: 1 }}>{state}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ color: definition ? T.text : T.textMuted, fontStyle: definition ? 'normal' : 'italic' }}>
-                  {definition?.text || t('gameState.quests.edit.undefinedState')}
+                  {journalText(definition?.text) || t('gameState.quests.edit.undefinedState')}
                 </span>
                 {isCurrent && <Tag minimal intent="primary" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.current')}</Tag>}
                 {definition?.final && <Tag minimal intent="success" style={{ marginLeft: 6 }}>{t('gameState.quests.detail.endsQuest')}</Tag>}

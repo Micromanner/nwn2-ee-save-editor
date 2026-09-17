@@ -3264,7 +3264,10 @@ fn mark_identified(item: &mut IndexMap<String, GffValue<'static>>) {
 /// `StackSize` on a real .uti/.bic item is a Word. Preserve the field's existing
 /// GFF type when replacing a value already on an item (the engine is
 /// type-strict), and default to Word when there is nothing to preserve.
-fn typed_stack_size(existing: Option<&GffValue<'static>>, value: i32) -> GffValue<'static> {
+pub(crate) fn typed_stack_size(
+    existing: Option<&GffValue<'static>>,
+    value: i32,
+) -> GffValue<'static> {
     match existing {
         Some(GffValue::Byte(_)) => GffValue::Byte(value as u8),
         Some(GffValue::Short(_)) => GffValue::Short(value as i16),

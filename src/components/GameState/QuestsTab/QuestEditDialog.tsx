@@ -1,14 +1,14 @@
 import { Fragment, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Button, Checkbox, Radio, RadioGroup, Spinner } from '@blueprintjs/core';
+import { Button, Checkbox, Radio, RadioGroup, Spinner, Tag } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { ParchmentDialog } from '@/components/shared/ParchmentDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
-import { conflictingEdits, dialogueText, questDisplayName } from './utils';
-import { describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isJournalConnector, rewardKind, signedDelta } from './scriptDescriptions';
+import { conflictingEdits, dialogueText, journalText, questDisplayName } from './utils';
+import { PC_LOCAL_TYPE, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isItemWrite, isJournalConnector, isMajorEngineCall, isMajorWorldScript, rewardKind, signedDelta } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -63,7 +63,8 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       .then(result => {
         if (!active) return;
         const lines = (result.next_steps ?? []).flatMap(step => step.lines);
-        tlk.prime([...lines.map(line => (line.spoken ?? line).text_strref),
+        tlk.prime([...result.writes.map(write => write.label_strref),
+          ...lines.map(line => (line.spoken ?? line).text_strref),
           ...speakers.strrefs(lines.map(line => ({ ...(line.spoken ?? line), dlg: line.dlg, module: line.module })))]);
         setPreview(result);
       })
@@ -77,8 +78,12 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const selected = preview ? preview.writes.map((_, index) => index) : [];
   // Gold, XP and influence are written like any other flag but shown with the rewards.
   const rewardWrites = preview ? preview.writes.filter(write => rewardKind(write.key)) : [];
+  const itemWrites = preview ? preview.writes.filter(write => isItemWrite(write.key)) : [];
   const influenceWrites = preview ? preview.writes.filter(write => influenceCompanion(write.key.name)) : [];
-  const flagWrites = preview ? preview.writes.filter(write => !rewardKind(write.key) && !influenceCompanion(write.key.name)) : [];
+  const flagWrites = preview ? preview.writes.filter(write => !rewardKind(write.key) && !isItemWrite(write.key) && !influenceCompanion(write.key.name)) : [];
+  // Blueprint name, TLK name, or the resref when neither resolves.
+  const itemName = (write: { name: string; label?: string; label_strref?: number }) =>
+    write.label ?? (write.label_strref != null ? tlk.resolve(write.label_strref) : undefined) ?? write.name;
   const conflicts = conflictingEdits(preview, selected, pending);
   const apply = async () => {
     if (!preview || busy) return;
@@ -132,12 +137,15 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       const kind = rewardKind(write);
       if (kind) rewards.push(t(`gameState.quests.edit.${kind}Outcome`, { after: write.after }));
     }
+    for (const write of option.writes) {
+      if (isItemWrite(write)) rewards.push(t('gameState.quests.edit.itemOutcome', { item: itemName(write), quantity: write.after }));
+    }
     rewards.push(...option.effects.filter(f => effectBucket(f) === 'character').map(f => describeScript(f, t) ?? formatRawCall(f)));
     for (const write of option.writes) {
       const companion = influenceCompanion(write.name);
       if (companion) rewards.push(t('gameState.quests.edit.influenceOutcome', { companion, after: write.after }));
     }
-    const count = option.writes.filter(write => !rewardKind(write) && !influenceCompanion(write.name)).length;
+    const count = option.writes.filter(write => !rewardKind(write) && !isItemWrite(write) && !influenceCompanion(write.name)).length;
     if (rewards.length === 0) return count === 0 ? t('gameState.quests.edit.outcome.none') : t('gameState.quests.edit.outcome.flagsOnly', { count });
     return rewards.join(', ') + (count > 0 ? t('gameState.quests.edit.outcome.andFlags', { count }) : '');
   };
@@ -146,10 +154,14 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     {body}
   </div>;
   const moduleLabel = (module: string | null) => module ? resolveModule(module) : t('gameState.quests.edit.campaign');
-  const entryText = (id: number) => quest.category.entries.find(e => e.id === id)?.text;
+  const entryText = (id: number) => journalText(quest.category.entries.find(e => e.id === id)?.text);
   const clip = (text: string | undefined) => text && text.length > ENTRY_TEXT_LIMIT ? `${text.slice(0, ENTRY_TEXT_LIMIT)}…` : text;
 
   const effects = preview ? splitEffects(preview) : null;
+  // What the editor cannot apply, as console lines; the journal is written directly and other quests are set separately.
+  const consoleLines = preview ? [...new Set(preview.effects
+    .filter(e => !isJournalConnector(e.action) && e.reason !== 'journal_action' && e.reason !== 'follow_up_journal')
+    .map(e => consoleCommand(e.action)))] : [];
   const targetEntry = quest.category.entries.find(e => e.id === target);
   // Entries are ids, not a state machine; a higher id is the only usable "later" signal.
   const nextSteps = (preview?.next_steps ?? []).filter(step => step.state > target && step.state !== preview?.before_state);
@@ -204,13 +216,16 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       {failed && <Button onClick={() => setRefresh(r => r + 1)}>{t('gameState.quests.edit.refresh')}</Button>}
       {preview && effects && <>
         {preview.route != null && section(t('gameState.quests.edit.rewards'), <>
-          {effects.character.length === 0 && influenceWrites.length === 0 && rewardWrites.length === 0
+          {effects.character.length === 0 && influenceWrites.length === 0 && rewardWrites.length === 0 && itemWrites.length === 0
             ? <p style={{ margin: 0, color: T.textMuted }}>{t('gameState.quests.edit.rewardsNone')}</p>
             : <>
               <ul style={{ margin: 0, paddingLeft: 18, color: T.text }}>
                 {rewardWrites.map((write, i) => <li key={`reward-${i}`}>
                   {t(`gameState.quests.edit.${rewardKind(write.key)}Applied`, { delta: signedDelta(write.before, write.after) })}
                   {' '}<span className="t-mono">{display(write.before)} → {display(write.after)}</span>
+                </li>)}
+                {itemWrites.map((write, i) => <li key={`item-${i}`}>
+                  {t('gameState.quests.edit.itemApplied', { item: itemName({ ...write, name: write.key.name }), quantity: write.after })}
                 </li>)}
                 {influenceWrites.map((write, i) => <li key={`influence-${i}`}>
                   {t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) })}
@@ -228,7 +243,9 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             <span className="t-mono" style={{ color: T.text }}>{display(preview.before_state)} → {target}</span>
             <span />
             {flagWrites.map((write, index) => {
-              const provenance = [moduleLabel(write.key.module), write.key.value_type];
+              const provenance = write.key.value_type === PC_LOCAL_TYPE
+                ? [t('gameState.quests.edit.pcLocal')]
+                : [moduleLabel(write.key.module), write.key.value_type];
               if (write.derived_from) provenance.push(t('gameState.quests.edit.derivedFrom', { script: write.derived_from }));
               if (write.line != null) provenance.push(t('gameState.quests.edit.laterInConversation'));
               return <Fragment key={index}>
@@ -259,8 +276,18 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             {showWorld ? t('gameState.quests.edit.worldHide') : t('gameState.quests.edit.worldShow', { count: effects.world.length })}
           </Button>
           {showWorld && <ul style={{ margin: '4px 0 0', paddingLeft: 18, color: T.text }}>
-            {effects.world.map((item, i) => <li key={i}>{item}</li>)}
+            {effects.world.map((item, i) => <li key={i}>
+              {item.text}
+              {item.major && <Tag minimal intent="warning" style={{ marginLeft: 6 }}>{t('gameState.quests.edit.worldMajor')}</Tag>}
+            </li>)}
           </ul>}
+        </>)}
+
+        {consoleLines.length > 0 && section(t('gameState.quests.edit.console'), <>
+          <p style={{ margin: '0 0 6px', color: T.textMuted }}>{t('gameState.quests.edit.consoleNote')}</p>
+          <pre className="t-mono" style={{ margin: 0, padding: '6px 10px', background: `${T.borderLight}55`, borderRadius: 4, whiteSpace: 'pre-wrap', color: T.text }}>
+            {['DebugMode 1', ...consoleLines].join('\n')}
+          </pre>
         </>)}
 
         {section(t('gameState.quests.edit.next'), targetEntry?.final
@@ -300,18 +327,21 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   /** Everything the game does on the route besides the flag writes, in plain words, split by who it touches. */
   function splitEffects(p: QuestPreview) {
     const character: string[] = [];
-    const world: string[] = [];
-    const push = (bucket: 'character' | 'world', text: string) => {
-      const list = bucket === 'character' ? character : world;
-      if (!list.includes(text)) list.push(text);
+    const world: { text: string; major: boolean }[] = [];
+    const push = (bucket: 'character' | 'world', text: string, major = false) => {
+      if (bucket === 'character') {
+        if (!character.includes(text)) character.push(text);
+      } else if (!world.some(w => w.text === text)) {
+        world.push({ text, major });
+      }
     };
     for (const effect of p.effects) {
       const f: ConvoFunctor = effect.action;
       if (isJournalConnector(f) && effect.reason === 'journal_action') continue;
-      if (effect.reason !== 'decoded_script') push(effectBucket(f), describeScript(f, t) ?? formatRawCall(f));
+      if (effect.reason !== 'decoded_script') push(effectBucket(f), describeScript(f, t) ?? formatRawCall(f), isMajorWorldScript(f));
       const decoded = f.decoded;
       if (!decoded) continue;
-      for (const call of decoded.calls) push(engineCallBucket(call), describeEngineCall(call, t));
+      for (const call of decoded.calls) push(engineCallBucket(call), describeEngineCall(call, t), isMajorEngineCall(call));
       for (const w of decoded.conditional_writes) push('world', t('gameState.quests.edit.decodedConditional', { name: w.name, value: w.value }));
       for (const call of decoded.unresolved) push('world', t('gameState.quests.edit.decodedUnresolved', { call }));
     }

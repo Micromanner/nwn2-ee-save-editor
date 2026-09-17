@@ -1,17 +1,22 @@
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
+use crate::character::Character;
 use crate::config::NWN2Paths;
+use crate::loaders::GameData;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::parsers::tda::TDAParser;
 use crate::services::campaign::{CampaignManager, content};
+use crate::services::resource_manager::ResourceManager;
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::toolset_bridge::ConvoFunctor;
 
@@ -31,6 +36,12 @@ pub struct VariableWrite {
     pub before: Option<Value>,
     pub after: Value,
     pub action_index: usize,
+    /// Display name of an `ITEM_TYPE` write's blueprint, when embedded in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// TLK strref of that name when it is not embedded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_strref: Option<i32>,
     /// The wrapper script call this write was decoded from, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub derived_from: Option<String>,
@@ -98,6 +109,10 @@ pub struct RouteWrite {
     pub name: String,
     pub value_type: String,
     pub after: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_strref: Option<i32>,
 }
 
 /// A line the game would play after the chosen one without another player decision.
@@ -140,6 +155,9 @@ pub struct QuestPreview {
     /// the save as it will be after this edit.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub next_steps: Vec<NextStep>,
+    /// Blueprints of the `ITEM_TYPE` writes by resref, carried to the staged edit.
+    #[serde(skip)]
+    pub blueprints: BTreeMap<String, Arc<ItemBlueprint>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -149,6 +167,8 @@ pub struct PendingQuestEdit {
     pub saved_state: Option<u32>,
     pub source: Option<TransitionNode>,
     pub writes: Vec<VariableWrite>,
+    #[serde(skip)]
+    pub blueprints: BTreeMap<String, Arc<ItemBlueprint>>,
 }
 
 pub struct QuestEdits {
@@ -178,6 +198,7 @@ impl QuestEdits {
     pub fn preview(
         &self,
         graph: &SaveGraph,
+        tables: &RewardTables,
         handler: &SaveGameHandler,
         paths: &NWN2Paths,
         player: usize,
@@ -215,9 +236,9 @@ impl QuestEdits {
             followed: Vec::new(),
             follow_stop: None,
             next_steps: Vec::new(),
+            blueprints: BTreeMap::new(),
         };
         let mut reader = VariableReader::new(handler, paths, player);
-        let tables = RewardTables::from_graph(graph);
         let mut journal: BTreeMap<String, u32> = read_live_journal(handler, player)?
             .into_iter()
             .map(|q| (q.tag, q.state))
@@ -250,7 +271,7 @@ impl QuestEdits {
                 })
                 .collect();
             result.follow_stop = Some(stop);
-            let mut candidates = Vec::new();
+            let mut candidates: Vec<VariableWrite> = Vec::new();
             let mut all_actions: Vec<ConvoFunctor> = Vec::new();
             for (line, actions) in lines {
                 for action in actions {
@@ -268,41 +289,86 @@ impl QuestEdits {
                         }
                         continue;
                     }
-                    match decode_action(action, &tr.module, &tables) {
-                        Ok((key, change)) => match reader.read(&key) {
-                            Ok(saved) => {
-                                let before = self
-                                    .pending
+                    // Pending edits and earlier writes of this preview win over the save.
+                    let mut current = |key: &VariableKey| {
+                        candidates
+                            .iter()
+                            .rfind(|w| w.key == *key)
+                            .map(|w| w.after.clone())
+                            .or_else(|| {
+                                self.pending
                                     .iter()
                                     .flat_map(|p| &p.writes)
-                                    .rfind(|w| w.key == key)
+                                    .rfind(|w| w.key == *key)
                                     .map(|w| w.after.clone())
-                                    .or(saved.clone());
-                                let after = change.apply(before.as_ref());
-                                candidates.push(VariableWrite {
-                                    key,
-                                    saved,
-                                    before,
-                                    after,
-                                    action_index,
-                                    derived_from: action.derived_from.clone(),
-                                    line,
-                                });
-                            }
-                            Err(_) => result.effects.push(ActionEffect {
+                            })
+                            .or_else(|| reader.read(key).ok().flatten())
+                            .and_then(|v| v.as_i64())
+                    };
+                    let writes = match decode_writes(action, &tr.module, tables, &mut current) {
+                        Ok(writes) => writes,
+                        Err(reason) => {
+                            result.effects.push(ActionEffect {
+                                action: action.clone(),
+                                reason: reason.into(),
+                                line,
+                            });
+                            continue;
+                        }
+                    };
+                    for (key, change) in writes {
+                        let Ok(saved) = reader.read(&key) else {
+                            result.effects.push(ActionEffect {
                                 action: action.clone(),
                                 reason: "unavailable_target".into(),
                                 line,
-                            }),
-                        },
-                        Err(reason) => result.effects.push(ActionEffect {
-                            action: action.clone(),
-                            reason: reason.into(),
+                            });
+                            continue;
+                        };
+                        let before = self
+                            .pending
+                            .iter()
+                            .flat_map(|p| &p.writes)
+                            .rfind(|w| w.key == key)
+                            .map(|w| w.after.clone())
+                            .or(saved.clone());
+                        let after = change.apply(before.as_ref());
+                        let blueprint = (key.value_type == ITEM_TYPE)
+                            .then(|| tables.item(&tr.module, &key.name))
+                            .flatten();
+                        if let Some(blueprint) = &blueprint {
+                            result
+                                .blueprints
+                                .insert(key.name.clone(), blueprint.clone());
+                        }
+                        candidates.push(VariableWrite {
+                            key,
+                            saved,
+                            before,
+                            after,
+                            action_index,
+                            label: blueprint.as_ref().and_then(|b| b.name.clone()),
+                            label_strref: blueprint.as_ref().and_then(|b| b.name_strref),
+                            derived_from: action.derived_from.clone(),
                             line,
-                        }),
+                        });
                     }
                 }
             }
+            // Items add up the way repeated CreateItemOnObject calls do.
+            let mut merged: Vec<VariableWrite> = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                if candidate.key.value_type == ITEM_TYPE
+                    && let Some(earlier) = merged.iter_mut().find(|w| w.key == candidate.key)
+                {
+                    let total =
+                        earlier.after.as_i64().unwrap_or(0) + candidate.after.as_i64().unwrap_or(0);
+                    earlier.after = Value::from(total);
+                    continue;
+                }
+                merged.push(candidate);
+            }
+            let candidates = merged;
             // Multiple writes to one variable have ordering semantics; don't offer a subset.
             for candidate in &candidates {
                 if candidates.iter().filter(|w| w.key == candidate.key).count() == 1 {
@@ -341,6 +407,7 @@ impl QuestEdits {
     pub fn summarize_routes(
         &self,
         graph: &SaveGraph,
+        tables: &RewardTables,
         handler: &SaveGameHandler,
         paths: &NWN2Paths,
         player: usize,
@@ -357,7 +424,16 @@ impl QuestEdits {
             if tr.new_state != target {
                 continue;
             }
-            let preview = self.preview(graph, handler, paths, player, tag, target, Some(route))?;
+            let preview = self.preview(
+                graph,
+                tables,
+                handler,
+                paths,
+                player,
+                tag,
+                target,
+                Some(route),
+            )?;
             let mut writes: Vec<String> = preview
                 .writes
                 .iter()
@@ -406,6 +482,8 @@ impl QuestEdits {
                         name: w.key.name.clone(),
                         value_type: w.key.value_type.clone(),
                         after: w.after.clone(),
+                        label: w.label.clone(),
+                        label_strref: w.label_strref,
                     })
                     .collect(),
                 effects,
@@ -437,9 +515,11 @@ impl QuestEdits {
             .filter(|p| {
                 p.tag != preview.tag
                     && p.writes.iter().any(|old| {
-                        writes
-                            .iter()
-                            .any(|new| old.key == new.key && old.after != new.after)
+                        writes.iter().any(|new| {
+                            old.key == new.key
+                                && old.after != new.after
+                                && old.key.value_type != ITEM_TYPE
+                        })
                     })
             })
             .map(|p| p.tag.clone())
@@ -461,12 +541,22 @@ impl QuestEdits {
                 .get(i)
                 .cloned()
         });
+        let blueprints = preview
+            .blueprints
+            .into_iter()
+            .filter(|(resref, _)| {
+                writes
+                    .iter()
+                    .any(|w| w.key.value_type == ITEM_TYPE && w.key.name == *resref)
+            })
+            .collect();
         self.pending.push(PendingQuestEdit {
             tag: preview.tag,
             target: preview.target,
             saved_state: preview.saved_state,
             source,
             writes,
+            blueprints,
         });
         self.generation = NEXT_SESSION.fetch_add(1, Ordering::Relaxed);
         Ok(())
@@ -508,52 +598,67 @@ impl QuestEdits {
         handler: &mut SaveGameHandler,
         player: usize,
         primary: bool,
+        game_data: &GameData,
     ) -> Result<WrittenFields, String> {
         if self.pending.is_empty() {
             return Ok(Vec::new());
         }
-        let journal: Vec<_> = self
+        let mut locals: Vec<(String, i64)> = self
             .pending
             .iter()
-            .map(|p| (p.tag.clone(), p.target))
+            .map(|p| (journal_variable(&p.tag), i64::from(p.target)))
             .collect();
         let mut rewards: Vec<(String, i64)> = Vec::new();
-        for write in self
-            .pending
-            .iter()
-            .flat_map(|p| &p.writes)
-            .filter(|w| w.key.value_type == CHARACTER_TYPE)
-        {
-            let delta = write.after.as_i64().unwrap_or(0)
-                - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
-            match rewards.iter_mut().find(|(name, _)| *name == write.key.name) {
-                Some((_, total)) => *total += delta,
-                None => rewards.push((write.key.name.clone(), delta)),
+        let mut items: Vec<(Arc<ItemBlueprint>, i64)> = Vec::new();
+        for edit in &self.pending {
+            for write in &edit.writes {
+                if write.key.value_type == PC_LOCAL_TYPE {
+                    let value = write.after.as_i64().ok_or("PC local is not an integer")?;
+                    locals.push((write.key.name.clone(), value));
+                } else if write.key.value_type == CHARACTER_TYPE {
+                    let delta = write.after.as_i64().unwrap_or(0)
+                        - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
+                    match rewards.iter_mut().find(|(name, _)| *name == write.key.name) {
+                        Some((_, total)) => *total += delta,
+                        None => rewards.push((write.key.name.clone(), delta)),
+                    }
+                } else if write.key.value_type == ITEM_TYPE {
+                    let blueprint = edit
+                        .blueprints
+                        .get(&write.key.name)
+                        .ok_or_else(|| format!("Item blueprint {} missing", write.key.name))?;
+                    let quantity = write.after.as_i64().unwrap_or(0);
+                    if quantity > 0 {
+                        items.push((blueprint.clone(), quantity));
+                    }
+                }
             }
         }
         let bytes = handler.extract_player_data().map_err(|e| e.to_string())?;
-        let bytes = write_journal(&bytes, player, &journal)?;
-        let (bytes, written) = add_player_rewards(&bytes, player, &rewards)?;
+        let bytes = write_pc_int_locals(&bytes, player, &locals)?;
+        let (bytes, mut written) = add_player_rewards(&bytes, player, &rewards)?;
+        let (bytes, item_list) = give_player_items(&bytes, player, &items, game_data)?;
+        written.extend(item_list);
         handler
             .update_file("playerlist.ifo", &bytes)
             .map_err(|e| e.to_string())?;
         if primary
-            && !rewards.is_empty()
+            && (!rewards.is_empty() || !items.is_empty())
             && let Some(bic) = handler.extract_player_bic().map_err(|e| e.to_string())?
         {
             let bic = add_bic_rewards(&bic, &rewards)?;
+            let bic = give_bic_items(&bic, &items, game_data)?;
             handler
                 .update_file("player.bic", &bic)
                 .map_err(|e| e.to_string())?;
         }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
-        for write in self
-            .pending
-            .iter()
-            .flat_map(|p| &p.writes)
-            .filter(|w| w.key.value_type != CHARACTER_TYPE)
-        {
+        for write in self.pending.iter().flat_map(|p| &p.writes).filter(|w| {
+            w.key.value_type != CHARACTER_TYPE
+                && w.key.value_type != ITEM_TYPE
+                && w.key.value_type != PC_LOCAL_TYPE
+        }) {
             let value = write
                 .after
                 .as_str()
@@ -637,10 +742,13 @@ impl<'a> VariableReader<'a> {
     }
 
     pub fn read(&mut self, key: &VariableKey) -> Result<Option<Value>, String> {
+        if key.value_type == ITEM_TYPE {
+            return Ok(None);
+        }
         if let Some(value) = self.overlay.get(key) {
             return Ok(Some(value.clone()));
         }
-        if key.value_type == CHARACTER_TYPE {
+        if key.value_type == CHARACTER_TYPE || key.value_type == PC_LOCAL_TYPE {
             let fields = self
                 .player_fields
                 .get_or_insert_with(|| {
@@ -652,6 +760,9 @@ impl<'a> VariableReader<'a> {
                 })
                 .as_ref()
                 .map_err(Clone::clone)?;
+            if key.value_type == PC_LOCAL_TYPE {
+                return Ok(pc_int_local(fields, &key.name));
+            }
             return Ok(fields.get(&key.name).and_then(gff_integer).map(Value::from));
         }
         if let Some(module) = &key.module {
@@ -1112,8 +1223,22 @@ fn decode_influence(
 
 /// `VariableKey::value_type` of the player-struct fields reward scripts change.
 pub const CHARACTER_TYPE: &str = "character";
+/// `VariableKey::value_type` of an item handed to the player: `name` is the
+/// blueprint resref, the value the quantity.
+pub const ITEM_TYPE: &str = "item";
+/// `VariableKey::value_type` of an integer local on the PC (`VarTable` of the
+/// player's struct), e.g. the `<tag>_XP_QPR` share of quest XP already paid.
+pub const PC_LOCAL_TYPE: &str = "pc_local";
 const GOLD: &str = "Gold";
 const EXPERIENCE: &str = "Experience";
+const GOOD_EVIL: &str = "GoodEvil";
+const LAWFUL_CHAOTIC: &str = "LawfulChaotic";
+/// `ginc_journal.QPR_SUFFIX`.
+const QPR_SUFFIX: &str = "_XP_QPR";
+
+fn is_alignment_field(name: &str) -> bool {
+    name == GOOD_EVIL || name == LAWFUL_CHAOTIC
+}
 
 fn character_key(name: &str) -> VariableKey {
     VariableKey {
@@ -1158,17 +1283,117 @@ fn decode_reward(
     }
 }
 
-/// Campaign-side numbers the quest XP scripts look up at runtime.
-pub struct RewardTables {
+/// `ga_alignment(iActType, bLawChaosAxis)` per `ginc_alignment`: act types 1..4 shift
+/// by 1, 3, 10 or 70 points towards good/lawful (negative towards evil/chaotic); the
+/// engine keeps both axes within 0..100.
+fn decode_alignment(action: &ConvoFunctor) -> Result<(VariableKey, Change), &'static str> {
+    let act = int_param(action, 0).ok_or("invalid_assignment")?;
+    let magnitude = match act.abs() {
+        1 => 1,
+        2 => 3,
+        3 => 10,
+        4 => 70,
+        _ => return Err("no_effect"),
+    };
+    let field = if int_param(action, 1).unwrap_or(0) == 0 {
+        GOOD_EVIL
+    } else {
+        LAWFUL_CHAOTIC
+    };
+    Ok((
+        character_key(field),
+        Change::AddClamped {
+            delta: magnitude * act.signum(),
+            min: 0,
+            max: 100,
+        },
+    ))
+}
+
+/// `ga_give_partial_quest_xp(tag, percent)` per `ginc_journal.RewardCappedQuestXP`: the
+/// share already paid is the PC local `<tag>_XP_QPR`; the award is capped at 100% in
+/// total, the XP is `quest XP * share / 100` and the share paid is tracked.
+fn decode_partial_quest_xp(
+    action: &ConvoFunctor,
+    tables: &RewardTables,
+    rewarded: i64,
+) -> Result<Vec<(VariableKey, Change)>, &'static str> {
+    let tag = action
+        .params
+        .first()
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or("invalid_assignment")?;
+    let quest_xp = tables.quest_xp(tag).ok_or("unavailable_target")?;
+    let mut percent = int_param(action, 1).ok_or("invalid_assignment")?;
+    if rewarded + percent > 100 {
+        percent = 100 - rewarded;
+        if percent < 0 {
+            return Err("no_effect");
+        }
+    }
+    let xp = quest_xp * percent / 100;
+    let mut writes = Vec::new();
+    if xp != 0 {
+        writes.push(reward(EXPERIENCE, xp)?);
+    }
+    if percent != 0 {
+        writes.push((
+            VariableKey {
+                module: None,
+                name: format!("{tag}{QPR_SUFFIX}"),
+                value_type: PC_LOCAL_TYPE.into(),
+            },
+            Change::Add(percent),
+        ));
+    }
+    if writes.is_empty() {
+        return Err("no_effect");
+    }
+    Ok(writes)
+}
+
+/// `decode_action` for every write of an action: `ga_give_partial_quest_xp` changes
+/// XP and the paid share together and needs the share's current value from `current`.
+pub fn decode_writes(
+    action: &ConvoFunctor,
+    module: &str,
+    tables: &RewardTables,
+    current: &mut dyn FnMut(&VariableKey) -> Option<i64>,
+) -> Result<Vec<(VariableKey, Change)>, &'static str> {
+    if action
+        .script
+        .eq_ignore_ascii_case("ga_give_partial_quest_xp")
+    {
+        let tag = action
+            .params
+            .first()
+            .and_then(Value::as_str)
+            .ok_or("invalid_assignment")?;
+        let rewarded = current(&VariableKey {
+            module: None,
+            name: format!("{tag}{QPR_SUFFIX}"),
+            value_type: PC_LOCAL_TYPE.into(),
+        })
+        .unwrap_or(0);
+        return decode_partial_quest_xp(action, tables, rewarded);
+    }
+    decode_action(action, module, tables).map(|write| vec![write])
+}
+
+/// Campaign-side data the reward scripts look up at runtime.
+pub struct RewardTables<'a> {
     /// Journal category XP by lowercase quest tag (`GetJournalQuestExperience`).
     quest_xp: BTreeMap<String, i64>,
     /// Campaign folder holding `k_xp_awards.2da` (`ga_xp_award_2da_entry`).
     campaign_path: Option<PathBuf>,
     xp_awards: OnceCell<Option<TDAParser>>,
+    /// Item blueprints for `ga_give_item`.
+    items: ItemBlueprints<'a>,
 }
 
-impl RewardTables {
-    pub fn from_graph(graph: &SaveGraph) -> Self {
+impl<'a> RewardTables<'a> {
+    pub fn from_graph(graph: &SaveGraph, resources: Option<&'a ResourceManager>) -> Self {
         Self {
             quest_xp: graph
                 .quests
@@ -1177,6 +1402,7 @@ impl RewardTables {
                 .collect(),
             campaign_path: graph.campaign.campaign_path.as_deref().map(PathBuf::from),
             xp_awards: OnceCell::new(),
+            items: ItemBlueprints::new(graph, resources),
         }
     }
 
@@ -1186,7 +1412,12 @@ impl RewardTables {
             quest_xp: BTreeMap::new(),
             campaign_path: None,
             xp_awards: OnceCell::new(),
+            items: ItemBlueprints::detached(),
         }
+    }
+
+    fn item(&self, module: &str, resref: &str) -> Option<Arc<ItemBlueprint>> {
+        self.items.get(module, resref)
     }
 
     fn quest_xp(&self, tag: &str) -> Option<i64> {
@@ -1221,6 +1452,30 @@ pub fn decode_action(
 ) -> Result<(VariableKey, Change), &'static str> {
     let script = action.script.to_ascii_lowercase();
     match script.as_str() {
+        // `ga_give_item(sTemplate, nQuantity, bAllPartyMembers)`: nQuantity below 1 is 1;
+        // the party flag only reaches other PCs in multiplayer.
+        "ga_give_item" => {
+            let resref = action
+                .params
+                .first()
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or("invalid_assignment")?
+                .to_ascii_lowercase();
+            let quantity = int_param(action, 1).unwrap_or(1).max(1);
+            if tables.item(module, &resref).is_none() {
+                return Err("unknown_item");
+            }
+            Ok((
+                VariableKey {
+                    module: None,
+                    name: resref,
+                    value_type: ITEM_TYPE.into(),
+                },
+                Change::Set(Value::from(quantity)),
+            ))
+        }
         "ga_give_quest_xp" => {
             let tag = action
                 .params
@@ -1268,6 +1523,7 @@ pub fn decode_assignment(
             return decode_influence(&script, action);
         }
         "ga_give_gold" | "ga_take_gold" | "ga_give_xp" => return decode_reward(&script, action),
+        "ga_alignment" => return decode_alignment(action),
         _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };
@@ -1383,13 +1639,22 @@ fn add_to_field(
         }
         None => 0,
     };
-    let after = (before + delta).max(0);
+    let max = if is_alignment_field(name) {
+        100
+    } else {
+        i64::MAX
+    };
+    let after = (before + delta).clamp(0, max);
     let value = match current {
+        Some(GffValue::Byte(_)) => GffValue::Byte(u8::try_from(after).unwrap_or(u8::MAX)),
+        Some(GffValue::Word(_)) => GffValue::Word(u16::try_from(after).unwrap_or(u16::MAX)),
+        Some(GffValue::Short(_)) => GffValue::Short(i16::try_from(after).unwrap_or(i16::MAX)),
         Some(GffValue::Int(_)) => GffValue::Int(i32::try_from(after).unwrap_or(i32::MAX)),
         Some(GffValue::Dword(_)) => GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX)),
         Some(GffValue::Int64(_)) => GffValue::Int64(after),
         Some(GffValue::Dword64(_)) => GffValue::Dword64(u64::try_from(after).unwrap_or(0)),
         None if name == GOLD => GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX)),
+        None if is_alignment_field(name) => GffValue::Byte(u8::try_from(after).unwrap_or(100)),
         None => GffValue::Int(i32::try_from(after).unwrap_or(i32::MAX)),
         Some(_) => return Err(format!("{name} has an unexpected storage type")),
     };
@@ -1436,10 +1701,134 @@ pub fn add_bic_rewards(bytes: &[u8], rewards: &[(String, i64)]) -> Result<Vec<u8
         .map_err(|e| e.to_string())
 }
 
+/// Put the reward items into the player's `ItemList` in `playerlist.ifo`; returns the
+/// new bytes and the list as written.
+pub fn give_player_items(
+    bytes: &[u8],
+    player: usize,
+    items: &[(Arc<ItemBlueprint>, i64)],
+    game_data: &GameData,
+) -> Result<(Vec<u8>, WrittenFields), String> {
+    if items.is_empty() {
+        return Ok((bytes.to_vec(), Vec::new()));
+    }
+    let mut root = owned_root(bytes)?;
+    let Some(GffValue::ListOwned(players)) = root.get_mut("Mod_PlayerList") else {
+        return Err("Mod_PlayerList missing".into());
+    };
+    let slot = players.get_mut(player).ok_or("Primary player missing")?;
+    let fields = give_items(std::mem::take(slot), items, game_data)?;
+    let list = fields
+        .get("ItemList")
+        .cloned()
+        .ok_or("ItemList missing after adding items")?;
+    *slot = fields;
+    let bytes = GffWriter::new("IFO ", "V3.2")
+        .write(root)
+        .map_err(|e| e.to_string())?;
+    Ok((bytes, vec![("ItemList".into(), list)]))
+}
+
+/// Same items into the root struct of `player.bic`.
+pub fn give_bic_items(
+    bytes: &[u8],
+    items: &[(Arc<ItemBlueprint>, i64)],
+    game_data: &GameData,
+) -> Result<Vec<u8>, String> {
+    if items.is_empty() {
+        return Ok(bytes.to_vec());
+    }
+    let root = give_items(owned_root(bytes)?, items, game_data)?;
+    GffWriter::new("BIC ", "V3.2")
+        .write(root)
+        .map_err(|e| e.to_string())
+}
+
+/// `CreateItemOnObject` one at a time, the way `ga_give_item` loops: stackable items
+/// fill stacks up to `baseitems.Stacking`, everything else is one entry per copy. Uses
+/// the Inventory tab's add path so identification and stacking match.
+fn give_items(
+    fields: indexmap::IndexMap<String, GffValue<'static>>,
+    items: &[(Arc<ItemBlueprint>, i64)],
+    game_data: &GameData,
+) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
+    let mut character = Character::from_gff(fields);
+    for (blueprint, quantity) in items {
+        let base_item = blueprint
+            .fields
+            .get("BaseItem")
+            .and_then(gff_integer)
+            .and_then(|v| i32::try_from(v).ok())
+            .unwrap_or(0);
+        let max_stack = character
+            .get_base_item_data(base_item, game_data)
+            .map_or(1, |d| d.max_stack)
+            .max(1);
+        let mut remaining = *quantity;
+        while remaining > 0 {
+            let count = remaining.min(i64::from(max_stack));
+            let mut item = blueprint.fields.clone();
+            if max_stack > 1 {
+                item.insert(
+                    "StackSize".into(),
+                    crate::character::typed_stack_size(
+                        item.get("StackSize"),
+                        i32::try_from(count).unwrap_or(i32::MAX),
+                    ),
+                );
+            }
+            character
+                .add_item_from_struct(item, game_data)
+                .map_err(|e| e.to_string())?;
+            remaining -= count;
+        }
+    }
+    Ok(character.into_gff())
+}
+
+/// The PC local the journal keeps a quest's state in.
+fn journal_variable(tag: &str) -> String {
+    format!("NW_JOURNAL_ENTRY{tag}")
+}
+
+/// Value of the integer local `name` on the player's struct, `None` when unset.
+fn pc_int_local(
+    fields: &indexmap::IndexMap<String, GffValue<'static>>,
+    name: &str,
+) -> Option<Value> {
+    let GffValue::ListOwned(vars) = fields.get("VarTable")? else {
+        return None;
+    };
+    vars.iter()
+        .find(|v| matches!(v.get("Name"), Some(GffValue::String(n)) if n.as_ref() == name))
+        .filter(|v| matches!(v.get("Type"), Some(GffValue::Dword(1) | GffValue::Int(1))))
+        .and_then(|v| v.get("Value"))
+        .and_then(gff_integer)
+        .map(Value::from)
+}
+
 pub fn write_journal(
     bytes: &[u8],
     player: usize,
     edits: &[(String, u32)],
+) -> Result<Vec<u8>, String> {
+    let locals: Vec<_> = edits
+        .iter()
+        .map(|(tag, state)| (journal_variable(tag), i64::from(*state)))
+        .collect();
+    if edits.iter().any(|(tag, _)| tag.is_empty()) {
+        return Err("Empty quest tag".into());
+    }
+    write_pc_int_locals(bytes, player, &locals)
+}
+
+/// Set integer locals on the player's struct in `playerlist.ifo`, keeping the storage
+/// type of existing entries and creating missing ones the way the engine does
+/// (`Type` 1, `Value` INT).
+pub fn write_pc_int_locals(
+    bytes: &[u8],
+    player: usize,
+    edits: &[(String, i64)],
 ) -> Result<Vec<u8>, String> {
     let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
     let mut root: indexmap::IndexMap<_, _> = parser
@@ -1458,11 +1847,7 @@ pub fn write_journal(
     let GffValue::ListOwned(vars) = vars else {
         return Err("Invalid player VarTable".into());
     };
-    for (tag, state) in edits {
-        if tag.is_empty() {
-            return Err("Empty quest tag".into());
-        }
-        let name = format!("NW_JOURNAL_ENTRY{tag}");
+    for (name, state) in edits {
         let indices: Vec<_> = vars
             .iter()
             .enumerate()
@@ -1472,25 +1857,27 @@ pub fn write_journal(
             .map(|(i, _)| i)
             .collect();
         if indices.len() > 1 {
-            return Err(format!("Duplicate journal variable: {tag}"));
+            return Err(format!("Duplicate player variable: {name}"));
         }
         if let Some(&index) = indices.first() {
             let var = &mut vars[index];
             if !matches!(var.get("Type"), Some(GffValue::Dword(1) | GffValue::Int(1))) {
-                return Err("Journal variable is not an integer local".into());
+                return Err(format!("Player variable {name} is not an integer local"));
             }
             let value = match var.get("Value") {
                 Some(GffValue::Int(_)) => {
-                    GffValue::Int(i32::try_from(*state).map_err(|_| "State exceeds INT range")?)
+                    GffValue::Int(i32::try_from(*state).map_err(|_| "Value exceeds INT range")?)
                 }
-                Some(GffValue::Dword(_)) => GffValue::Dword(*state),
-                _ => return Err("Unsupported journal state storage type".into()),
+                Some(GffValue::Dword(_)) => {
+                    GffValue::Dword(u32::try_from(*state).map_err(|_| "Value exceeds DWORD range")?)
+                }
+                _ => return Err(format!("Unsupported storage type for {name}")),
             };
             var.insert("Value".into(), value);
         } else {
-            let value = i32::try_from(*state).map_err(|_| "New state exceeds INT range")?;
+            let value = i32::try_from(*state).map_err(|_| "New value exceeds INT range")?;
             vars.push(indexmap::indexmap! {
-                "Name".into() => GffValue::String(name.into()),
+                "Name".into() => GffValue::String(name.clone().into()),
                 "Type".into() => GffValue::Dword(1),
                 "Value".into() => GffValue::Int(value),
             });
@@ -1507,6 +1894,12 @@ mod tests {
     use crate::services::toolset_bridge::FunctorKind;
     use indexmap::indexmap;
     use serde_json::json;
+
+    fn game_data() -> GameData {
+        GameData::new(Arc::new(std::sync::RwLock::new(
+            crate::parsers::tlk::TLKParser::new(),
+        )))
+    }
 
     fn action(script: &str, params: Value) -> ConvoFunctor {
         ConvoFunctor {
@@ -1588,7 +1981,7 @@ mod tests {
         let mut graph = graph();
         add_quest(&mut graph, "Paid", Vec::new());
         graph.quests[0].category.xp = 300;
-        let tables = RewardTables::from_graph(&graph);
+        let tables = RewardTables::from_graph(&graph, None);
         let (key, change) =
             decode_action(&action("ga_give_quest_xp", json!(["paid"])), "m", &tables).unwrap();
         assert_eq!(key, character_key("Experience"));
@@ -1625,7 +2018,7 @@ mod tests {
         .unwrap();
         let mut graph = graph();
         graph.campaign.campaign_path = Some(dir.path().to_string_lossy().into_owned());
-        let tables = RewardTables::from_graph(&graph);
+        let tables = RewardTables::from_graph(&graph, None);
         let (key, change) = decode_action(
             &action("ga_xp_award_2da_entry", json!([1, 0])),
             "m",
@@ -1695,7 +2088,16 @@ mod tests {
         );
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert!(preview.effects.is_empty(), "{:?}", preview.effects);
         let gold = preview
@@ -1728,7 +2130,7 @@ mod tests {
             .write(indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player]) })
             .unwrap();
         handler.update_file("playerlist.ifo", &staged).unwrap();
-        let written = edits.flush(&mut handler, 0, true).unwrap();
+        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(
             format!("{written:?}"),
@@ -1755,14 +2157,292 @@ mod tests {
         );
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert_eq!(preview.writes[0].after, json!(0));
         edits.stage(preview, &graph, &[0], false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, true).unwrap();
+        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(player_gold_and_xp(&handler), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn items_are_given_from_blueprints_into_both_player_files() {
+        use crate::parsers::gff::{LocalizedString, LocalizedSubstring};
+        let (_dir, mut handler) = rich_fixture_handler(0, 0);
+        let campaign = tempfile::tempdir().unwrap();
+        let blueprint = GffWriter::new("UTI ", "V3.2")
+            .write(indexmap! {
+                "BaseItem".into() => GffValue::Int(12),
+                "Tag".into() => GffValue::String("qe_sword".into()),
+                "Identified".into() => GffValue::Byte(0),
+                "LocalizedName".into() => GffValue::LocString(LocalizedString {
+                    string_ref: -1,
+                    substrings: vec![LocalizedSubstring {
+                        string: "Quest Sword".into(),
+                        language: 0,
+                        gender: 0,
+                    }],
+                }),
+            })
+            .unwrap();
+        std::fs::write(campaign.path().join("qe_sword.uti"), blueprint).unwrap();
+        let mut graph = graph();
+        graph.campaign.campaign_path = Some(campaign.path().display().to_string());
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("ga_give_item", json!(["QE_Sword", 2, 0])),
+                action("ga_give_item", json!(["qe_sword", 0, 0])),
+                action("ga_give_item", json!(["missing_item", 1, 0])),
+            ],
+        );
+        let mut edits = QuestEdits::default();
+        let tables = RewardTables::from_graph(&graph, None);
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        assert_eq!(preview.effects.len(), 1, "{:?}", preview.effects);
+        assert_eq!(preview.effects[0].reason, "unknown_item");
+        assert_eq!(preview.writes.len(), 1, "{:?}", preview.writes);
+        let item = &preview.writes[0];
+        assert_eq!(item.key.value_type, ITEM_TYPE);
+        assert_eq!(item.key.name, "qe_sword");
+        assert_eq!((item.before.clone(), item.after.clone()), (None, json!(3)));
+        assert_eq!(item.label.as_deref(), Some("Quest Sword"));
+        assert_eq!(item.label_strref, None);
+        edits.stage(preview, &graph, &[0], false).unwrap();
+        assert!(edits.pending[0].blueprints.contains_key("qe_sword"));
+        edits
+            .validate_saved(&handler, &NWN2Paths::new(), 0)
+            .unwrap();
+
+        handler.begin_batch();
+        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+        let swords = |list: &GffValue<'static>| match list {
+            GffValue::ListOwned(items) => items
+                .iter()
+                .filter(|i| {
+                    matches!(i.get("Tag"), Some(GffValue::String(t)) if t == "qe_sword")
+                        && matches!(i.get("Identified"), Some(GffValue::Byte(1)))
+                })
+                .count(),
+            _ => 0,
+        };
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].0, "ItemList");
+        assert_eq!(swords(&written[0].1), 3);
+        let player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
+        assert_eq!(swords(&player["ItemList"]), 3);
+        let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
+        assert_eq!(swords(&bic["ItemList"]), 3);
+        assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 20);
+    }
+
+    #[test]
+    fn alignment_acts_shift_the_axis_by_the_ginc_alignment_table() {
+        for (act, axis, field, delta) in [
+            (1, 0, "GoodEvil", 1),
+            (-2, 0, "GoodEvil", -3),
+            (3, 1, "LawfulChaotic", 10),
+            (-4, 1, "LawfulChaotic", -70),
+        ] {
+            let (key, change) =
+                decode_assignment(&action("ga_alignment", json!([act, axis])), "m").unwrap();
+            assert_eq!(key, character_key(field));
+            assert_eq!(
+                change,
+                Change::AddClamped {
+                    delta,
+                    min: 0,
+                    max: 100
+                }
+            );
+        }
+        let (_, change) = decode_assignment(&action("ga_alignment", json!([4, 0])), "m").unwrap();
+        assert_eq!(change.apply(Some(&json!(50))), json!(100));
+        assert_eq!(
+            decode_assignment(&action("ga_alignment", json!([0, 0])), "m"),
+            Err("no_effect")
+        );
+
+        let (_dir, mut handler) = rich_fixture_handler(0, 0);
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![action("ga_alignment", json!([3, 1]))],
+        );
+        let mut edits = QuestEdits::default();
+        let tables = RewardTables::from_graph(&graph, None);
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        let write = &preview.writes[0];
+        let saved = write.saved.as_ref().and_then(Value::as_i64).unwrap_or(0);
+        assert_eq!(write.after, json!((saved + 10).min(100)));
+        let bic_before = owned_root(&handler.extract_player_bic().unwrap().unwrap())
+            .unwrap()
+            .get("LawfulChaotic")
+            .and_then(gff_integer)
+            .unwrap_or(0);
+        edits.stage(preview, &graph, &[0], false).unwrap();
+        handler.begin_batch();
+        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+        assert_eq!(written[0].0, "LawfulChaotic");
+        assert!(
+            matches!(written[0].1, GffValue::Byte(_)),
+            "{:?}",
+            written[0].1
+        );
+        let player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
+        assert_eq!(
+            gff_integer(&player["LawfulChaotic"]).unwrap(),
+            (saved + 10).min(100)
+        );
+        let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
+        assert_eq!(
+            gff_integer(&bic["LawfulChaotic"]).unwrap(),
+            (bic_before + 10).min(100)
+        );
+    }
+
+    #[test]
+    fn partial_quest_xp_is_capped_by_the_share_already_paid() {
+        let (_dir, mut handler) = rich_fixture_handler(0, 1000);
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("ga_give_partial_quest_xp", json!(["test", 60])),
+                action("ga_give_partial_quest_xp", json!(["test", 60])),
+            ],
+        );
+        graph.quests[0].category.xp = 500;
+        let mut edits = QuestEdits::default();
+        let tables = RewardTables::from_graph(&graph, None);
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        // Both calls write XP and the paid share, so neither variable is offered alone.
+        assert!(preview.writes.is_empty(), "{:?}", preview.writes);
+        assert_eq!(preview.effects.len(), 4);
+        assert!(
+            preview
+                .effects
+                .iter()
+                .all(|e| e.reason == "multiple_assignments")
+        );
+
+        graph.quests[0].transitions[0].actions.pop();
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        let xp = preview
+            .writes
+            .iter()
+            .find(|w| w.key.name == "Experience")
+            .unwrap();
+        assert_eq!(xp.after, json!(1300));
+        let share = preview
+            .writes
+            .iter()
+            .find(|w| w.key.value_type == PC_LOCAL_TYPE)
+            .unwrap();
+        assert_eq!(
+            (
+                share.key.name.as_str(),
+                share.before.clone(),
+                share.after.clone()
+            ),
+            ("test_XP_QPR", None, json!(60))
+        );
+        let all: Vec<usize> = (0..preview.writes.len()).collect();
+        edits.stage(preview, &graph, &all, false).unwrap();
+        handler.begin_batch();
+        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+        assert_eq!(player_gold_and_xp(&handler).1, 1300);
+
+        // A second 60% after saving is capped at the remaining 40%.
+        let edits = QuestEdits::default();
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        let xp = preview
+            .writes
+            .iter()
+            .find(|w| w.key.name == "Experience")
+            .unwrap();
+        assert_eq!(xp.after, json!(1500));
+        let share = preview
+            .writes
+            .iter()
+            .find(|w| w.key.value_type == PC_LOCAL_TYPE)
+            .unwrap();
+        assert_eq!(
+            (share.before.clone(), share.after.clone()),
+            (Some(json!(60)), json!(100))
+        );
     }
 
     #[test]
@@ -1999,7 +2679,16 @@ mod tests {
         cormick_like(&mut graph);
         let edits = QuestEdits::default();
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         // `friendly` is absent (0), so the ungated second reply plays.
         assert_eq!(
@@ -2031,7 +2720,16 @@ mod tests {
         // With the gate satisfied the first reply wins; negation flips it back.
         std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>friendly</Name><Value>1</Value></Integer></Integers></Globals>").unwrap();
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert_eq!(
             preview.followed.iter().map(|l| l.node).collect::<Vec<_>>(),
@@ -2039,7 +2737,16 @@ mod tests {
         );
         graph.quests[0].transitions[0].follow_up[0].conditions[0].negate = true;
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert_eq!(preview.followed[0].node, 11);
 
@@ -2047,7 +2754,16 @@ mod tests {
         graph.quests[0].transitions[0].follow_up[0].conditions[0] =
             condition("10c_brelaina_ck", json!([20]), false, "");
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert!(preview.followed.is_empty());
         let stop = preview.follow_stop.as_ref().unwrap();
@@ -2117,7 +2833,16 @@ mod tests {
         );
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert_eq!(preview.writes.len(), 4);
         assert_eq!(preview.writes[0].saved, Some(json!(1)));
@@ -2135,7 +2860,7 @@ mod tests {
         let revision = preview.revision.clone();
         edits.stage(preview, &graph, &[0, 2], false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false).unwrap();
+        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
         assert!(
             std::fs::read_to_string(&globals)
                 .unwrap()
@@ -2161,7 +2886,16 @@ mod tests {
         edits.clear();
         assert_ne!(
             edits
-                .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+                .preview(
+                    &graph,
+                    &RewardTables::from_graph(&graph, None),
+                    &handler,
+                    &NWN2Paths::new(),
+                    0,
+                    "test",
+                    20,
+                    Some(0)
+                )
                 .unwrap()
                 .revision,
             revision
@@ -2185,11 +2919,29 @@ mod tests {
         );
         let mut edits = QuestEdits::default();
         let first = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         edits.stage(first, &graph, &[0], false).unwrap();
         let second = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "other", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "other",
+                20,
+                Some(0),
+            )
             .unwrap();
         assert_eq!(second.writes[0].before, Some(json!(5)));
         assert!(edits.stage(second.clone(), &graph, &[0], false).is_err());
@@ -2200,7 +2952,16 @@ mod tests {
         edits.discard(Some("other"));
         assert_eq!(
             edits
-                .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+                .preview(
+                    &graph,
+                    &RewardTables::from_graph(&graph, None),
+                    &handler,
+                    &NWN2Paths::new(),
+                    0,
+                    "test",
+                    20,
+                    Some(0)
+                )
                 .unwrap()
                 .writes[0]
                 .before,
@@ -2229,7 +2990,16 @@ mod tests {
             transitions: Vec::new(),
         });
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, None)
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                None,
+            )
             .unwrap();
         let revision = preview.revision.clone();
         edits.stage(preview, &graph, &[], false).unwrap();
@@ -2238,7 +3008,16 @@ mod tests {
             original
         );
         let next = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, None)
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                None,
+            )
             .unwrap();
         assert_ne!(next.revision, revision);
         assert_eq!(next.before_state, Some(20));
@@ -2246,7 +3025,7 @@ mod tests {
             .validate_saved(&handler, &NWN2Paths::new(), 0)
             .unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false).unwrap();
+        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("resgff.zip")).unwrap(),
             original
@@ -2254,7 +3033,7 @@ mod tests {
         handler.abort_batch();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 10);
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false).unwrap();
+        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 20);
         assert!(
@@ -2310,13 +3089,16 @@ mod tests {
                 before: Some(json!(*saved)),
                 after: json!(target),
                 action_index: 0,
+                label: None,
+                label_strref: None,
                 derived_from: None,
                 line: None,
             }],
+            blueprints: BTreeMap::new(),
         });
         edits.validate_saved(&handler, &paths, 0).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false).unwrap();
+        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("module_a.z")).unwrap(),
             original
@@ -2426,7 +3208,16 @@ mod tests {
         });
         let edits = QuestEdits::default();
         let preview = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, Some(0))
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
             .unwrap();
         let steps: Vec<(u32, &str)> = preview
             .next_steps
@@ -2443,7 +3234,16 @@ mod tests {
         );
         // Without the route nothing sets `joined`, so entry 30 stays closed.
         let journal_only = edits
-            .preview(&graph, &handler, &NWN2Paths::new(), 0, "test", 20, None)
+            .preview(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                None,
+            )
             .unwrap();
         assert_eq!(journal_only.next_steps[0].lines[0].gate, "closed");
     }
@@ -2457,16 +3257,24 @@ mod tests {
             "test",
             vec![
                 action("__connector_quest_tuple__", json!(["test", 20])),
-                action("ga_alignment", json!([-3, 0])),
+                action("ga_destroy", json!(["door_a", 0])),
             ],
         );
         let edits = QuestEdits::default();
         let routes = edits
-            .summarize_routes(&graph, &handler, &NWN2Paths::new(), 0, "test", 20)
+            .summarize_routes(
+                &graph,
+                &RewardTables::from_graph(&graph, None),
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+            )
             .unwrap();
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].effects.len(), 1);
-        assert_eq!(routes[0].effects[0].script, "ga_alignment");
-        assert!(routes[0].signature.contains("ga_alignment([-3,0])"));
+        assert_eq!(routes[0].effects[0].script, "ga_destroy");
+        assert!(routes[0].signature.contains("ga_destroy([\"door_a\",0])"));
     }
 }

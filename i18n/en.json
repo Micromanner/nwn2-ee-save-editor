@@ -553,7 +553,7 @@
         "campaign": "Campaign",
         "replace": "Replace these conflicting pending quest edits entirely: {quests}",
         "authoredActions": "Actions on this line",
-        "stagingExplanation": "Changes stay in memory until you use Save. Quest edits are separate from character Undo; discard them here before saving.",
+        "stagingExplanation": "Quest changes are kept until you press Save. Character Undo does not affect them; use Discard here to drop them before saving.",
         "apply": "Apply",
         "refresh": "Refresh preview",
         "pendingTitle": "Unsaved quest changes ({count})",
@@ -574,7 +574,8 @@
           "invalid_assignment": "The value this action sets cannot be worked out.",
           "arithmetic_action": "This adds to or subtracts from the current value instead of setting it, so it is not performed.",
           "unsupported_expression": "This uses a special script expression that is not performed.",
-          "no_effect": "This action changes nothing (its amount is 0)."
+          "no_effect": "This action changes nothing (its amount is 0).",
+          "unknown_item": "The item blueprint this action hands out is not in the module, campaign or game data, so it is not given."
         },
         "route": "How this happens in the game",
         "asIf": "Triggered by your reply",
@@ -594,9 +595,16 @@
         },
         "rewards": "Rewards and costs at this point",
         "rewardsNone": "No rewards, costs or party changes on this line.",
-        "rewardsNote": "Not handed out. Change alignment, items or feats on the character tabs.",
+        "rewardsNote": "Not handed out. Change feats on the character tabs.",
         "goldApplied": "Gold {delta}",
         "xpApplied": "XP {delta}",
+        "itemApplied": "Item {item} ×{quantity} added to the inventory",
+        "itemOutcome": "{item} ×{quantity}",
+        "goodEvilApplied": "Good/Evil {delta}",
+        "lawChaosApplied": "Law/Chaos {delta}",
+        "goodEvilOutcome": "Good/Evil becomes {after}",
+        "lawChaosOutcome": "Law/Chaos becomes {after}",
+        "pcLocal": "on your character",
         "goldOutcome": "Gold becomes {after}",
         "xpOutcome": "XP becomes {after}",
         "influenceApplied": "Influence with {companion}",
@@ -613,6 +621,9 @@
         "worldNote": "Not performed: doors, map notes, spawns and cutscenes stay as they are in the save.",
         "worldShow": "Show {count, plural, one {# action} other {# actions}}",
         "worldHide": "Hide",
+        "worldMajor": "Changes the story",
+        "console": "Run in the game instead",
+        "consoleNote": "To have the game perform the actions that are not applied here: load the save, open the console and type these lines. The scripts run on your character; a line that targets the NPC by default runs on you instead.",
         "decodedConditional": "May also set {name} = {value}, depending on other game state",
         "decodedUnresolved": "Sets a value that cannot be worked out: {call}",
         "next": "What comes next",
@@ -627,7 +638,7 @@
           "unknown": "depends on a script that cannot be checked"
         },
         "afterLoad": "After loading",
-        "loadExplanation": "The journal entry, the story flags, and any gold, XP or influence above are written. The dialogue does not run, so other rewards and world changes listed here do not happen. NPCs react to the flags the next time you talk to them."
+        "loadExplanation": "The journal entry, the story flags, and the gold, XP, items, alignment and influence shown above are written into the save. The conversation itself is not played, so other scripted events on this line are not applied. Because the story flags are set, NPCs will treat the conversation as already finished."
       },
       "title": "Quests",
       "campaignContext": {
