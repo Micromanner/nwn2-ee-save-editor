@@ -107,18 +107,6 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       ? t('gameState.quests.edit.youSaid', { text })
       : t('gameState.quests.edit.npcSaid', { who: speakerName(shown.speaker, line.dlg, line.module), text });
   };
-  // A player reply is a choice the editor replays; an NPC line fires by itself once its conditions hold.
-  const routeIntro = (option: RouteOption) => {
-    const shown = option.spoken ?? option;
-    if (shown.is_player) return t('gameState.quests.edit.asIf');
-    const who = speakers.resolve({ speaker: shown.speaker, dlg: option.dlg, module: option.module }) || shown.speaker;
-    return who ? t('gameState.quests.edit.asIfHeard', { who }) : t('gameState.quests.edit.asIfHeardOwner');
-  };
-  const quotedText = (option: RouteOption) => {
-    const text = dialogueText(tlk.resolve((option.spoken ?? option).text_strref)) ?? t('gameState.quests.detail.noText');
-    const quoted = `"${text}"`;
-    return option.showModule ? `${quoted} (${resolveModule(option.module)})` : quoted;
-  };
   const conditionsLine = (option: RouteOption) => {
     const conditions = (option.spoken?.conditions ?? []).map(c => {
       const text = describeScript(c, t) ?? formatRawCall(c);
@@ -149,6 +137,19 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     if (rewards.length === 0) return count === 0 ? t('gameState.quests.edit.outcome.none') : t('gameState.quests.edit.outcome.flagsOnly', { count });
     return rewards.join(', ') + (count > 0 ? t('gameState.quests.edit.outcome.andFlags', { count }) : '');
   };
+  // Columns: label | before | arrow | after | delta | note. Numbers right-aligned so the arrows stack.
+  const changeRow = (key: string, label: string, before: string | number | null, after: string | number, options: { delta?: boolean; note?: string } = {}) => {
+    const delta = options.delta && typeof before === 'number' && typeof after === 'number' ? signedDelta(before, after) : '';
+    return <Fragment key={key}>
+      <span style={{ color: T.text }}>{label}</span>
+      <span className="t-mono" style={{ color: before == null ? T.textMuted : T.text, textAlign: 'right' }}>{before == null ? t('gameState.quests.edit.unset') : before}</span>
+      <span className="t-mono" style={{ color: T.textMuted }}>→</span>
+      <span className="t-mono" style={{ color: T.text, textAlign: 'right' }}>{after}</span>
+      <span className="t-mono" style={{ color: T.textMuted, textAlign: 'right' }}>{delta}</span>
+      <span style={{ color: T.textMuted }}>{options.note ?? ''}</span>
+    </Fragment>;
+  };
+  const rowGap = (key: string) => <div key={key} style={{ gridColumn: '1 / -1', height: 4 }} />;
   const section = (title: string, body: ReactNode) => <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '10px 0' }}>
     <div className="t-bold" style={{ color: T.textMuted, marginBottom: 6 }}>{title}</div>
     {body}
@@ -190,14 +191,14 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
         {options == null && <Spinner size={16} />}
         {options != null && options.length === 0 && <p style={{ margin: 0, color: T.textMuted }}>{t('gameState.quests.edit.noRoutes')}</p>}
         {options != null && options.length === 1 && route === options[0].route && <div style={{ color: T.text }}>
-          <p style={{ margin: 0 }}>{routeIntro(options[0])} <span style={{ fontStyle: 'italic' }}>{quotedText(options[0])}</span></p>
+          <p style={{ margin: 0 }}>{optionLabel(options[0])}</p>
           {conditionsLine(options[0])}
         </div>}
         {options != null && options.length > 1 && <>
           <p style={{ margin: '0 0 6px', color: T.textMuted }}>{t('gameState.quests.edit.pickLine')}</p>
           <RadioGroup selectedValue={route ?? -1} onChange={e => setRoute(Number(e.currentTarget.value))} disabled={busy}>
             {options.map(option => <Radio key={option.route} value={option.route}>
-              <span style={{ fontStyle: 'italic' }}>{optionLabel(option)}</span>
+              <span>{optionLabel(option)}</span>
               {conditionsLine(option)}
               <div style={{ color: T.textMuted }}>{optionOutcome(option)}</div>
             </Radio>)}
@@ -215,47 +216,25 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       {loading && <Spinner size={24} />}
       {failed && <Button onClick={() => setRefresh(r => r + 1)}>{t('gameState.quests.edit.refresh')}</Button>}
       {preview && effects && <>
-        {preview.route != null && section(t('gameState.quests.edit.rewards'), <>
-          {effects.character.length === 0 && influenceWrites.length === 0 && rewardWrites.length === 0 && itemWrites.length === 0
-            ? <p style={{ margin: 0, color: T.textMuted }}>{t('gameState.quests.edit.rewardsNone')}</p>
-            : <>
-              <ul style={{ margin: 0, paddingLeft: 18, color: T.text }}>
-                {rewardWrites.map((write, i) => <li key={`reward-${i}`}>
-                  {t(`gameState.quests.edit.${rewardKind(write.key)}Applied`, { delta: signedDelta(write.before, write.after) })}
-                  {' '}<span className="t-mono">{display(write.before)} → {display(write.after)}</span>
-                </li>)}
-                {itemWrites.map((write, i) => <li key={`item-${i}`}>
-                  {t('gameState.quests.edit.itemApplied', { item: itemName({ ...write, name: write.key.name }), quantity: write.after })}
-                </li>)}
-                {influenceWrites.map((write, i) => <li key={`influence-${i}`}>
-                  {t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) })}
-                  {' '}<span className="t-mono">{display(write.before)} → {display(write.after)}</span>
-                </li>)}
-                {effects.character.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-              {effects.character.length > 0 && <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.rewardsNote')}</p>}
-            </>}
-        </>)}
-
-        {section(t('gameState.quests.edit.writes'), <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr', columnGap: 12, rowGap: 4, alignItems: 'baseline' }}>
-            <span className="t-semibold" style={{ color: T.text }}>{t('gameState.quests.edit.journal')}</span>
-            <span className="t-mono" style={{ color: T.text }}>{display(preview.before_state)} → {target}</span>
-            <span />
+        {section(t('gameState.quests.edit.changes'), <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto auto auto 1fr', columnGap: 10, rowGap: 4, alignItems: 'baseline' }}>
+            {rewardWrites.map((write, i) => changeRow(`reward-${i}`, t(`gameState.quests.edit.${rewardKind(write.key)}Applied`), write.before, write.after, { delta: true }))}
+            {itemWrites.map((write, i) => changeRow(`item-${i}`, itemName({ ...write, name: write.key.name }), write.before, write.after, { delta: true }))}
+            {influenceWrites.map((write, i) => changeRow(`influence-${i}`, t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) }), write.before, write.after, { delta: true }))}
+            {effects.character.map((item, i) => <Fragment key={`effect-${i}`}>
+              <span style={{ color: T.text }}>{item}</span>
+              <span style={{ color: T.textMuted, gridColumn: '2 / 6' }}>{t('gameState.quests.edit.notApplied')}</span>
+              <span style={{ color: T.textMuted }}>{t('gameState.quests.edit.rewardsNote')}</span>
+            </Fragment>)}
+            {(rewardWrites.length + itemWrites.length + influenceWrites.length + effects.character.length) > 0 && rowGap('gap')}
+            {changeRow('journal', t('gameState.quests.edit.journal'), preview.before_state, target, { note: quest.tag })}
             {flagWrites.map((write, index) => {
-              const provenance = write.key.value_type === PC_LOCAL_TYPE
-                ? [t('gameState.quests.edit.pcLocal')]
-                : [moduleLabel(write.key.module), write.key.value_type];
-              if (write.derived_from) provenance.push(t('gameState.quests.edit.derivedFrom', { script: write.derived_from }));
-              if (write.line != null) provenance.push(t('gameState.quests.edit.laterInConversation'));
-              return <Fragment key={index}>
-                <span className="t-semibold" style={{ color: T.text }}>{write.key.name}</span>
-                <span className="t-mono" style={{ color: T.text }}>{display(write.before)} → {display(write.after)}</span>
-                <span style={{ color: T.textMuted }}>{provenance.join(' · ')}</span>
-              </Fragment>;
+              const note = [write.key.value_type === PC_LOCAL_TYPE ? t('gameState.quests.edit.pcLocal') : moduleLabel(write.key.module)];
+              if (write.derived_from) note.push(t('gameState.quests.edit.derivedFrom', { script: write.derived_from }));
+              if (write.line != null) note.push(t('gameState.quests.edit.laterInConversation'));
+              return changeRow(`flag-${index}`, write.key.name, write.before, write.after, { note: note.join(' · ') });
             })}
           </div>
-          {flagWrites.length > 0 && <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.writesNote')}</p>}
           {preview.follow_stop && preview.follow_stop.reason !== 'end' && <p style={{ margin: '6px 0 0', color: T.textMuted }}>
             {t(`gameState.quests.edit.stop.${preview.follow_stop.reason}`, { choices: preview.follow_stop.choices })}
           </p>}
@@ -307,10 +286,6 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             </ul>
           </div>))}
 
-        {section(t('gameState.quests.edit.afterLoad'), <div style={{ color: T.text, lineHeight: 1.5 }}>
-          <p style={{ margin: '0 0 6px' }}>{t('gameState.quests.edit.loadExplanation')}</p>
-          <p style={{ margin: 0 }}>{t('gameState.quests.edit.stagingExplanation')}</p>
-        </div>)}
       </>}
     </div>
   </ParchmentDialog>;
