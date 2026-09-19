@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DecodedWrite {
@@ -56,14 +56,30 @@ impl ScriptDecode {
     }
 }
 
+/// Named constants a script can see: `nwscript` and its `#include` chain.
+#[derive(Debug, Clone, Default)]
+pub struct ScriptConstants {
+    pub ints: HashMap<String, i64>,
+    pub strings: HashMap<String, String>,
+}
+
 /// Decode the `void main(...)` branch a dialogue action functor would run.
 /// `params` are the functor's parameters in declaration order. Returns `None`
 /// when the source has no `main` function.
-pub fn decode_action(source: &str, params: &[Value]) -> Option<ScriptDecode> {
-    decode_function(source, "main", params)
+pub fn decode_action(
+    source: &str,
+    params: &[Value],
+    constants: &ScriptConstants,
+) -> Option<ScriptDecode> {
+    decode_function(source, "main", params, constants)
 }
 
-fn decode_function(source: &str, function: &str, params: &[Value]) -> Option<ScriptDecode> {
+fn decode_function(
+    source: &str,
+    function: &str,
+    params: &[Value],
+    constants: &ScriptConstants,
+) -> Option<ScriptDecode> {
     let tokens = tokenize(source);
     let (param_names, body) = find_function(&tokens, function)?;
     let mut parser = Parser {
@@ -79,6 +95,8 @@ fn decode_function(source: &str, function: &str, params: &[Value]) -> Option<Scr
             .collect(),
         module_aliases: HashSet::new(),
         pc_aliases: HashSet::new(),
+        object_tags: HashMap::new(),
+        constants,
         out: ScriptDecode::default(),
     };
     interpret(&stmts, &mut ctx, false);
@@ -551,12 +569,16 @@ fn split_args(tokens: &[Token]) -> Vec<Vec<Token>> {
     args
 }
 
-struct Context {
+struct Context<'a> {
     params: Vec<(String, Value)>,
     module_aliases: HashSet<String>,
     /// Variables holding the player: assigned from `GetFirstPC()` / `GetPCSpeaker()`
     /// (also the `GetPCSpeaker()==OBJECT_INVALID?OBJECT_SELF:GetPCSpeaker()` idiom).
     pc_aliases: HashSet<String>,
+    /// Variables holding a creature found by tag: `GetObjectByTag("khelgar")`,
+    /// `GetNearestObjectByTag("okku", oPC)`, `ginc_param_const.GetTarget(TAG_KHELGAR)`.
+    object_tags: HashMap<String, String>,
+    constants: &'a ScriptConstants,
     out: ScriptDecode,
 }
 
@@ -568,7 +590,7 @@ const ALIGNMENT_CHAOTIC: i64 = 3;
 const ALIGNMENT_GOOD: i64 = 4;
 const ALIGNMENT_EVIL: i64 = 5;
 
-impl Context {
+impl Context<'_> {
     fn param(&self, name: &str) -> Option<&Value> {
         self.params.iter().find(|(n, _)| n == name).map(|(_, v)| v)
     }
@@ -597,8 +619,8 @@ impl Context {
         }
     }
 
-    /// Integer argument: literal, `TRUE`/`FALSE`, `ALIGNMENT_*` constant or a numeric
-    /// parameter of the script.
+    /// Integer argument: literal, `TRUE`/`FALSE`, `ALIGNMENT_*` constant, a numeric
+    /// parameter of the script or a constant from its includes / `nwscript`.
     fn int_arg(&self, expr: &[Token]) -> Option<i64> {
         match expr {
             [Token::Num(n)] => n.parse().ok(),
@@ -612,12 +634,52 @@ impl Context {
                 "ALIGNMENT_CHAOTIC" => Some(ALIGNMENT_CHAOTIC),
                 "ALIGNMENT_GOOD" => Some(ALIGNMENT_GOOD),
                 "ALIGNMENT_EVIL" => Some(ALIGNMENT_EVIL),
-                _ => self.param(word).and_then(Value::as_i64),
+                _ => self
+                    .param(word)
+                    .and_then(Value::as_i64)
+                    .or_else(|| self.constants.ints.get(word).copied()),
             },
             _ => None,
         }
     }
+
+    /// String argument: literal, a string parameter of the script or a constant.
+    fn str_arg(&self, expr: &[Token]) -> Option<String> {
+        match expr {
+            [Token::Str(s)] => Some(s.clone()),
+            [Token::Ident(word)] => self
+                .param(word)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| self.constants.strings.get(word).cloned()),
+            _ => None,
+        }
+    }
+
+    /// The creature tag an expression resolves to: a tag lookup call or a variable
+    /// assigned from one.
+    fn object_tag(&self, expr: &[Token]) -> Option<String> {
+        match expr {
+            [Token::Ident(f), Token::Punct(open), rest @ ..] if open == "(" => {
+                let lower = f.to_ascii_lowercase();
+                if !TAG_LOOKUPS.contains(&lower.as_str()) {
+                    return None;
+                }
+                let close = rest
+                    .iter()
+                    .rposition(|t| matches!(t, Token::Punct(p) if p == ")"))?;
+                let args = split_args(&rest[..close]);
+                let tag = self.str_arg(args.first()?)?;
+                (!tag.is_empty()).then_some(tag)
+            }
+            [Token::Ident(name)] => self.object_tags.get(name).cloned(),
+            _ => None,
+        }
+    }
 }
+
+/// Calls whose first argument is the tag of the creature they return.
+const TAG_LOOKUPS: &[&str] = &["getobjectbytag", "getnearestobjectbytag", "gettarget"];
 
 /// Engine calls `player_action` translates when they target the player.
 const PLAYER_CALLS: &[&str] = &[
@@ -630,18 +692,27 @@ const PLAYER_CALLS: &[&str] = &[
     "featremove",
 ];
 
-/// Alignment shifts and feat changes on the player, translated to the dialogue
-/// action the editor applies. `None` when the target is not the player or an
-/// argument is not statically known; the call is then listed like any other.
+/// Alignment shifts and feat changes on the player or a creature found by tag,
+/// translated to the dialogue action the editor applies: the player's form, or the
+/// same with the tag as the target parameter (`ga_give_feat("okku", ...)`,
+/// `AdjustAlignment(alignment, shift, "khelgar")`). `None` when the target is
+/// neither or an argument is not statically known; the call is then listed like
+/// any other.
 fn player_action(name: &str, args: &[Vec<Token>], ctx: &Context) -> Option<DecodedAction> {
     let target = args.first()?;
-    if !ctx.is_pc(target) {
-        return None;
-    }
+    let tag = if ctx.is_pc(target) {
+        String::new()
+    } else {
+        ctx.object_tag(target)?
+    };
     let int = |index: usize| ctx.int_arg(args.get(index)?);
     let action = |script: &str, params: Vec<i64>| DecodedAction {
         script: script.into(),
-        params: params.into_iter().map(Value::from).collect(),
+        params: params
+            .into_iter()
+            .map(Value::from)
+            .chain((!tag.is_empty()).then(|| Value::from(tag.clone())))
+            .collect(),
     };
     Some(match name.to_ascii_lowercase().as_str() {
         "adjustalignment" => action("AdjustAlignment", vec![int(1)?, int(2)?]),
@@ -663,14 +734,14 @@ fn player_action(name: &str, args: &[Vec<Token>], ctx: &Context) -> Option<Decod
         "featadd" => DecodedAction {
             script: "ga_give_feat".into(),
             params: vec![
-                Value::from(""),
+                Value::from(tag.clone()),
                 Value::from(int(1)?),
                 Value::from(int(2).unwrap_or(0)),
             ],
         },
         "featremove" => DecodedAction {
             script: "ga_remove_feat".into(),
-            params: vec![Value::from(""), Value::from(int(1)?)],
+            params: vec![Value::from(tag.clone()), Value::from(int(1)?)],
         },
         _ => return None,
     })
@@ -700,6 +771,14 @@ fn interpret(stmts: &[Stmt], ctx: &mut Context, conditional: bool) {
                 }
                 if ctx.is_pc(expr) {
                     ctx.pc_aliases.insert(name.clone());
+                }
+                match ctx.object_tag(expr) {
+                    Some(tag) => {
+                        ctx.object_tags.insert(name.clone(), tag);
+                    }
+                    None => {
+                        ctx.object_tags.remove(name);
+                    }
                 }
             }
             Stmt::Block(body) => interpret(body, ctx, conditional),
@@ -988,7 +1067,7 @@ void main(int nDialogNode)
 
     #[test]
     fn selects_the_case_matching_the_parameter() {
-        let decoded = decode_action(CALEB_STATE, &[json!(1)]).unwrap();
+        let decoded = decode_action(CALEB_STATE, &[json!(1)], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded.writes,
             vec![write("CalebState", "1"), write("gbWatch", "0")]
@@ -1000,14 +1079,14 @@ void main(int nDialogNode)
 
     #[test]
     fn unbraced_case_body() {
-        let decoded = decode_action(CALEB_STATE, &[json!(2)]).unwrap();
+        let decoded = decode_action(CALEB_STATE, &[json!(2)], &ScriptConstants::default()).unwrap();
         assert_eq!(decoded.writes, vec![write("CalebState", "2")]);
         assert!(decoded.calls.is_empty());
     }
 
     #[test]
     fn fallthrough_labels_conditionals_relative_and_delayed_writes() {
-        let decoded = decode_action(CALEB_STATE, &[json!(9)]).unwrap();
+        let decoded = decode_action(CALEB_STATE, &[json!(9)], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded.writes,
             vec![write("CalebState", "+1"), write("Delayed", "5")]
@@ -1018,13 +1097,14 @@ void main(int nDialogNode)
 
     #[test]
     fn default_case_passes_the_parameter_through() {
-        let decoded = decode_action(CALEB_STATE, &[json!(42)]).unwrap();
+        let decoded =
+            decode_action(CALEB_STATE, &[json!(42)], &ScriptConstants::default()).unwrap();
         assert_eq!(decoded.writes, vec![write("CalebState", "42")]);
     }
 
     #[test]
     fn unknown_parameter_makes_every_case_conditional() {
-        let decoded = decode_action(CALEB_STATE, &[]).unwrap();
+        let decoded = decode_action(CALEB_STATE, &[], &ScriptConstants::default()).unwrap();
         assert!(decoded.writes.is_empty());
         assert!(
             decoded
@@ -1060,7 +1140,8 @@ void main(int nFeat, int bCheckReq)
     FeatRemove(oPC, 1705);
 }
 "#;
-        let decoded_script = decode_action(src, &[json!(1705), json!(0)]).unwrap();
+        let decoded_script =
+            decode_action(src, &[json!(1705), json!(0)], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded_script.actions,
             vec![
@@ -1077,18 +1158,18 @@ void main(int nFeat, int bCheckReq)
         assert!(decoded_script.calls.is_empty());
     }
 
-    /// Other targets, unknown amounts and conditional branches stay plain calls.
+    /// Unknown targets, unknown amounts and conditional branches stay plain calls.
     #[test]
     fn alignment_and_feat_calls_outside_the_player_or_a_branch_stay_calls() {
         let src = r#"
 void main(int nDialogNode)
 {
     object oPC = GetFirstPC();
-    object oKhelgar = GetObjectByTag("khelgar");
+    object oDoor = GetNearestObject(OBJECT_TYPE_DOOR);
     int nAdjustment = 3;
-    AdjustAlignment(oKhelgar, ALIGNMENT_LAWFUL, 50);
+    AdjustAlignment(oDoor, ALIGNMENT_LAWFUL, 50);
     AdjustAlignment(oPC, ALIGNMENT_GOOD, nAdjustment);
-    FeatAdd(oKhelgar, 1833, TRUE);
+    FeatAdd(oDoor, 1833, TRUE);
     FeatAdd(oPC, FEAT_KNOCKDOWN, FALSE);
     if (GetLocalInt(GetModule(), "TollRoadResult") == 1)
     {
@@ -1096,16 +1177,65 @@ void main(int nDialogNode)
     }
 }
 "#;
-        let decoded_script = decode_action(src, &[json!(1)]).unwrap();
+        let decoded_script = decode_action(src, &[json!(1)], &ScriptConstants::default()).unwrap();
         assert!(decoded_script.actions.is_empty());
         assert_eq!(
             decoded_script.calls,
             vec![
-                "AdjustAlignment(oKhelgar, ALIGNMENT_LAWFUL, 50)",
+                "AdjustAlignment(oDoor, ALIGNMENT_LAWFUL, 50)",
                 "AdjustAlignment(oPC, ALIGNMENT_GOOD, nAdjustment)",
-                "FeatAdd(oKhelgar, 1833, TRUE)",
+                "FeatAdd(oDoor, 1833, TRUE)",
                 "FeatAdd(oPC, FEAT_KNOCKDOWN, FALSE)",
                 "AdjustAlignment(oPC, ALIGNMENT_LAWFUL, 5)",
+            ]
+        );
+    }
+
+    /// Creatures found by tag (OC `GetTarget(TAG_KHELGAR)`, MotB
+    /// `GetNearestObjectByTag("okku", oPC)`) get the tag as target parameter;
+    /// `FEAT_*` names resolve through the `nwscript` constants.
+    #[test]
+    fn alignment_and_feat_calls_on_tagged_companions_carry_the_tag() {
+        let src = r#"
+#include "kinc_companion"
+void main()
+{
+    object oPC = GetSpiritEater();
+    object oKhelgar = GetTarget(TAG_KHELGAR);
+    object oOkku = GetNearestObjectByTag("okku", oPC);
+    AdjustAlignment(oKhelgar, ALIGNMENT_LAWFUL, 50);
+    FeatRemove(oOkku, FEAT_WEAPON_PROFICIENCY_MARTIAL);
+    FeatAdd(oOkku, FEAT_UNKNOWN_TO_US, TRUE);
+    oOkku = GetNearestObject(OBJECT_TYPE_CREATURE);
+    FeatRemove(oOkku, 45);
+}
+"#;
+        let mut constants = ScriptConstants::default();
+        constants
+            .strings
+            .insert("TAG_KHELGAR".into(), "khelgar".into());
+        constants
+            .ints
+            .insert("FEAT_WEAPON_PROFICIENCY_MARTIAL".into(), 45);
+        let decoded_script = decode_action(src, &[], &constants).unwrap();
+        assert_eq!(
+            decoded_script.actions,
+            vec![
+                DecodedAction {
+                    script: "AdjustAlignment".into(),
+                    params: vec![json!(2), json!(50), json!("khelgar")],
+                },
+                DecodedAction {
+                    script: "ga_remove_feat".into(),
+                    params: vec![json!("okku"), json!(45)],
+                },
+            ]
+        );
+        assert_eq!(
+            decoded_script.calls,
+            vec![
+                "FeatAdd(oOkku, FEAT_UNKNOWN_TO_US, TRUE)",
+                "FeatRemove(oOkku, 45)"
             ]
         );
     }
@@ -1124,7 +1254,7 @@ void main()
     SetGlobalInt("Bad", GetLocalInt(OBJECT_SELF, "x"));
 }
 "#;
-        let decoded = decode_action(src, &[]).unwrap();
+        let decoded = decode_action(src, &[], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded.writes,
             vec![
@@ -1174,6 +1304,6 @@ int StartingConditional()
     return FALSE;
 }
 "#;
-        assert!(decode_action(src, &[]).is_none());
+        assert!(decode_action(src, &[], &ScriptConstants::default()).is_none());
     }
 }

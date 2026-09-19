@@ -422,7 +422,7 @@ impl SessionState {
             }
         };
 
-        let mut rewarded_fields = Vec::new();
+        let mut rewarded_fields = crate::services::save_graph::editing::FlushedWrites::default();
         if let Some(handler) = self.savegame_handler.as_mut() {
             if errors.is_empty() {
                 match self.quest_edits.flush(
@@ -457,17 +457,38 @@ impl SessionState {
         }
         // Quest rewards landed in the save on top of the serialized player; mirror them
         // into the loaded player so the character tabs match without a reload.
-        if !rewarded_fields.is_empty()
+        if !rewarded_fields.player.is_empty()
             && self
                 .primary_player_index
                 .unwrap_or(self.selected_player_index)
                 == self.selected_player_index
             && let Some(player) = self.player_character_mut()
         {
-            for (name, value) in rewarded_fields {
+            for (name, value) in rewarded_fields.player {
                 player.gff_mut().insert(name, value);
             }
             player.mark_saved();
+        }
+        // Same for companions loaded in this session, or their next save would put
+        // the pre-quest alignment and feats back.
+        for (ros_name, fields) in rewarded_fields.companions {
+            let matches = |source: &CharacterSource| matches!(source, CharacterSource::Companion { ros_name: name } if name.eq_ignore_ascii_case(&ros_name));
+            let loaded = self
+                .parked
+                .iter_mut()
+                .filter(|(source, _, _)| matches(source))
+                .map(|(_, character, _)| character)
+                .chain(
+                    matches(&self.character_source)
+                        .then_some(self.character.as_mut())
+                        .flatten(),
+                );
+            for character in loaded {
+                for (name, value) in &fields {
+                    character.gff_mut().insert(name.clone(), value.clone());
+                }
+                character.mark_saved();
+            }
         }
         if flushed_party {
             self.staged_party.clear();

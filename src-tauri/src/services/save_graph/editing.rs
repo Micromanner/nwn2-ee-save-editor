@@ -345,6 +345,9 @@ impl QuestEdits {
                         }
                         let label_strref = if key.value_type == FEAT_TYPE {
                             tables.feat_name_strref(&key.name)
+                        } else if key.value_type == COMPANION_FEAT_TYPE {
+                            split_companion_key(&key.name)
+                                .and_then(|(_, feat)| tables.feat_name_strref(feat))
                         } else {
                             blueprint.as_ref().and_then(|b| b.name_strref)
                         };
@@ -606,9 +609,9 @@ impl QuestEdits {
         player: usize,
         primary: bool,
         game_data: &GameData,
-    ) -> Result<WrittenFields, String> {
+    ) -> Result<FlushedWrites, String> {
         if self.pending.is_empty() {
-            return Ok(Vec::new());
+            return Ok(FlushedWrites::default());
         }
         let mut locals: Vec<(String, i64)> = self
             .pending
@@ -620,9 +623,31 @@ impl QuestEdits {
         let mut feats: Vec<(i32, bool)> = Vec::new();
         let mut party: Vec<(String, bool)> = Vec::new();
         let mut selectable: Vec<(String, bool)> = Vec::new();
+        let mut companion_rewards: BTreeMap<String, Vec<(String, i64)>> = BTreeMap::new();
+        let mut companion_feats: BTreeMap<String, Vec<(i32, bool)>> = BTreeMap::new();
         for edit in &self.pending {
             for write in &edit.writes {
-                if write.key.value_type == PARTY_TYPE || write.key.value_type == SELECTABLE_TYPE {
+                if write.key.value_type == COMPANION_CHARACTER_TYPE {
+                    let (ros_name, field) =
+                        split_companion_key(&write.key.name).ok_or("Invalid companion key")?;
+                    let delta = write.after.as_i64().unwrap_or(0)
+                        - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
+                    let rewards = companion_rewards.entry(ros_name.to_string()).or_default();
+                    match rewards.iter_mut().find(|(name, _)| name == field) {
+                        Some((_, total)) => *total += delta,
+                        None => rewards.push((field.to_string(), delta)),
+                    }
+                } else if write.key.value_type == COMPANION_FEAT_TYPE {
+                    let (ros_name, feat) =
+                        split_companion_key(&write.key.name).ok_or("Invalid companion key")?;
+                    let feat = feat.parse::<i32>().map_err(|_| "Invalid feat id")?;
+                    let owned = write.after.as_i64().unwrap_or(0) != 0;
+                    let feats = companion_feats.entry(ros_name.to_string()).or_default();
+                    feats.retain(|(id, _)| *id != feat);
+                    feats.push((feat, owned));
+                } else if write.key.value_type == PARTY_TYPE
+                    || write.key.value_type == SELECTABLE_TYPE
+                {
                     let flags = if write.key.value_type == PARTY_TYPE {
                         &mut party
                     } else {
@@ -691,6 +716,32 @@ impl QuestEdits {
         if !selectable.is_empty() {
             roster::apply_selectable(handler, &selectable)?;
         }
+        let mut companions = Vec::new();
+        let ros_names: BTreeSet<&String> = companion_rewards
+            .keys()
+            .chain(companion_feats.keys())
+            .collect();
+        for ros_name in ros_names {
+            let stored = handler
+                .companion_stored_name(ros_name)
+                .map_err(|e| e.to_string())?;
+            let bytes = handler.extract_file(&stored).map_err(|e| e.to_string())?;
+            let (bytes, fields) = update_companion(
+                &bytes,
+                companion_rewards
+                    .get(ros_name)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+                companion_feats
+                    .get(ros_name)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+            )?;
+            handler
+                .update_file(&stored, &bytes)
+                .map_err(|e| e.to_string())?;
+            companions.push((ros_name.clone(), fields));
+        }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
         for write in self.pending.iter().flat_map(|p| &p.writes).filter(|w| {
@@ -700,6 +751,8 @@ impl QuestEdits {
                 && w.key.value_type != FEAT_TYPE
                 && w.key.value_type != PARTY_TYPE
                 && w.key.value_type != SELECTABLE_TYPE
+                && w.key.value_type != COMPANION_CHARACTER_TYPE
+                && w.key.value_type != COMPANION_FEAT_TYPE
         }) {
             let value = write
                 .after
@@ -751,7 +804,10 @@ impl QuestEdits {
                 .update_file(name, &bytes)
                 .map_err(|e| e.to_string())?;
         }
-        Ok(written)
+        Ok(FlushedWrites {
+            player: written,
+            companions,
+        })
     }
 }
 
@@ -765,6 +821,8 @@ pub struct VariableReader<'a> {
     player_fields: Option<Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
     /// `roster.rst` members, for `PARTY_TYPE` / `SELECTABLE_TYPE` keys.
     roster: Option<Result<Vec<RosterMember>, String>>,
+    /// Root structs of companion `.ros` files by lowercase roster name.
+    companions: BTreeMap<String, Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
     /// Values that take precedence over the save: pending and previewed writes.
     pub overlay: BTreeMap<VariableKey, Value>,
     /// Journal states (tag -> entry) for `gc_journal_entry`; `None` = unknown.
@@ -781,6 +839,7 @@ impl<'a> VariableReader<'a> {
             modules: BTreeMap::new(),
             player_fields: None,
             roster: None,
+            companions: BTreeMap::new(),
             overlay: BTreeMap::new(),
             journal: None,
         }
@@ -816,6 +875,31 @@ impl<'a> VariableReader<'a> {
                 return Ok(Some(Value::from(i64::from(has_feat(fields, feat)))));
             }
             return Ok(fields.get(&key.name).and_then(gff_integer).map(Value::from));
+        }
+        if key.value_type == COMPANION_CHARACTER_TYPE || key.value_type == COMPANION_FEAT_TYPE {
+            let (ros_name, field) =
+                split_companion_key(&key.name).ok_or("Invalid companion key")?;
+            let fields = self
+                .companions
+                .entry(ros_name.to_string())
+                .or_insert_with(|| {
+                    let stored = self
+                        .handler
+                        .companion_stored_name(ros_name)
+                        .map_err(|e| e.to_string())?;
+                    let bytes = self
+                        .handler
+                        .extract_file(&stored)
+                        .map_err(|e| e.to_string())?;
+                    owned_root(&bytes)
+                })
+                .as_ref()
+                .map_err(Clone::clone)?;
+            if key.value_type == COMPANION_FEAT_TYPE {
+                let feat = field.parse::<i64>().map_err(|_| "Invalid feat id")?;
+                return Ok(Some(Value::from(i64::from(has_feat(fields, feat)))));
+            }
+            return Ok(fields.get(field).and_then(gff_integer).map(Value::from));
         }
         if key.value_type == PARTY_TYPE || key.value_type == SELECTABLE_TYPE {
             let members = self
@@ -1315,6 +1399,12 @@ pub const PARTY_TYPE: &str = "party";
 /// `VariableKey::value_type` of a companion's `RosSelectable` flag: `name` is
 /// the roster name, the value 1 (pickable on the party screen) or 0 (locked).
 pub const SELECTABLE_TYPE: &str = "selectable";
+/// `VariableKey::value_type` of an alignment field on a companion's `.ros`:
+/// `name` is `<roster name>/<field>` (`khelgar/LawfulChaotic`).
+pub const COMPANION_CHARACTER_TYPE: &str = "companion_character";
+/// `VariableKey::value_type` of a feat on a companion's `.ros`: `name` is
+/// `<roster name>/<feat.2da row>`, the value 1 (in `FeatList`) or 0.
+pub const COMPANION_FEAT_TYPE: &str = "companion_feat";
 const GOLD: &str = "Gold";
 const EXPERIENCE: &str = "Experience";
 const GOOD_EVIL: &str = "GoodEvil";
@@ -1332,6 +1422,38 @@ fn character_key(name: &str) -> VariableKey {
         name: name.into(),
         value_type: CHARACTER_TYPE.into(),
     }
+}
+
+/// Key of `field` on the player, or on the companion `target` (a creature tag,
+/// matched against roster names) when it is not empty.
+fn creature_key(target: &str, field: &str) -> VariableKey {
+    if target.is_empty() {
+        character_key(field)
+    } else {
+        VariableKey {
+            module: None,
+            name: format!("{}/{field}", target.to_ascii_lowercase()),
+            value_type: COMPANION_CHARACTER_TYPE.into(),
+        }
+    }
+}
+
+/// `<roster name>/<field>` of a companion key.
+pub fn split_companion_key(name: &str) -> Option<(&str, &str)> {
+    name.split_once('/')
+}
+
+/// A script target as a creature tag: empty for the PC speaker; `$`-targets other
+/// than the PC (`$OWNER`, `$OBJECT_SELF`, ...) are not creatures we can reach.
+fn target_tag(target: &str) -> Result<&str, &'static str> {
+    let target = target.trim();
+    if target.is_empty() || target == "$PC_SPEAKER" {
+        return Ok("");
+    }
+    if target.starts_with('$') {
+        return Err("object_target");
+    }
+    Ok(target)
 }
 
 /// Gold is a DWORD, XP an INT; neither drops below 0 in the engine.
@@ -1400,28 +1522,26 @@ fn decode_alignment(action: &ConvoFunctor) -> Result<(VariableKey, Change), &'st
 /// nFeat, bAllPartyMembers)`: an empty target is the PC speaker; the party flag only
 /// reaches other PCs in multiplayer. The prerequisite check is not reproduced.
 fn decode_feat(script: &str, action: &ConvoFunctor) -> Result<(VariableKey, Change), &'static str> {
-    let target = action
-        .params
-        .first()
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim();
-    if !(target.is_empty() || target == "$PC_SPEAKER") {
-        return Err("object_target");
-    }
+    let target = target_tag(action.params.first().and_then(Value::as_str).unwrap_or(""))?;
     let feat = int_param(action, 1).ok_or("invalid_assignment")?;
     if feat < 0 {
         return Err("invalid_assignment");
     }
     let owned = i64::from(script == "ga_give_feat");
-    Ok((
+    let key = if target.is_empty() {
         VariableKey {
             module: None,
             name: feat.to_string(),
             value_type: FEAT_TYPE.into(),
-        },
-        Change::Set(Value::from(owned)),
-    ))
+        }
+    } else {
+        VariableKey {
+            module: None,
+            name: format!("{}/{feat}", target.to_ascii_lowercase()),
+            value_type: COMPANION_FEAT_TYPE.into(),
+        }
+    };
+    Ok((key, Change::Set(Value::from(owned))))
 }
 
 /// `ga_roster_party_add` / `ga_party_add` (join the PC's party), `ga_roster_party_remove`
@@ -1459,8 +1579,10 @@ fn decode_party(
 }
 
 /// nwscript `AdjustAlignment(oSubject, nAlignment, nShift)` decoded out of a wrapper
-/// script: `ALIGNMENT_LAWFUL/CHAOTIC/GOOD/EVIL` shift one axis, `ALIGNMENT_ALL` adds
-/// the shift to both and `ALIGNMENT_NEUTRAL` moves both towards 50, never past it.
+/// script as `(nAlignment, nShift[, tag])`: `ALIGNMENT_LAWFUL/CHAOTIC/GOOD/EVIL` shift
+/// one axis, `ALIGNMENT_ALL` adds the shift to both and `ALIGNMENT_NEUTRAL` moves
+/// both towards 50, never past it. A third parameter names the companion instead
+/// of the player.
 fn decode_alignment_points(
     action: &ConvoFunctor,
     current: &mut dyn FnMut(&VariableKey) -> Option<i64>,
@@ -1470,9 +1592,10 @@ fn decode_alignment_points(
     if shift <= 0 {
         return Err("no_effect");
     }
+    let target = target_tag(action.params.get(2).and_then(Value::as_str).unwrap_or(""))?;
     let clamped = |field: &str, delta: i64| {
         (
-            character_key(field),
+            creature_key(target, field),
             Change::AddClamped {
                 delta,
                 min: 0,
@@ -1485,7 +1608,7 @@ fn decode_alignment_points(
         1 => [LAWFUL_CHAOTIC, GOOD_EVIL]
             .into_iter()
             .filter_map(|field| {
-                let value = current(&character_key(field)).unwrap_or(50);
+                let value = current(&creature_key(target, field)).unwrap_or(50);
                 let delta = (50 - value).clamp(-shift, shift);
                 (delta != 0).then(|| clamped(field, delta))
             })
@@ -1887,6 +2010,14 @@ fn add_to_field(
 /// Player fields as written by a reward flush: `(field name, value)`.
 pub type WrittenFields = Vec<(String, GffValue<'static>)>;
 
+/// Everything a quest flush wrote onto creatures, for mirroring into loaded characters.
+#[derive(Debug, Default)]
+pub struct FlushedWrites {
+    pub player: WrittenFields,
+    /// Per companion (lowercase roster name) fields written to its `.ros`.
+    pub companions: Vec<(String, WrittenFields)>,
+}
+
 /// Apply reward deltas to the player's struct in `playerlist.ifo`; returns the new bytes
 /// and the fields as written.
 pub fn add_player_rewards(
@@ -2042,6 +2173,43 @@ pub fn set_player_feats(
         .write(root)
         .map_err(|e| e.to_string())?;
     Ok((bytes, vec![("FeatList".into(), list)]))
+}
+
+/// Alignment deltas and feat changes on a companion's `.ros` root, keeping the
+/// file's type, version and root struct id; returns the new bytes and the fields
+/// as written.
+fn update_companion(
+    bytes: &[u8],
+    rewards: &[(String, i64)],
+    feats: &[(i32, bool)],
+) -> Result<(Vec<u8>, WrittenFields), String> {
+    let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
+    let file_type = parser.file_type.clone();
+    let file_version = parser.file_version.clone();
+    let root_struct_id = parser.get_struct_id(0).map_err(|e| e.to_string())?;
+    let mut root: indexmap::IndexMap<String, GffValue<'static>> = parser
+        .read_struct_fields(0)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned()))
+        .collect();
+    let mut written = Vec::new();
+    for (name, delta) in rewards {
+        let value = add_to_field(&mut root, name, *delta)?;
+        written.push((name.clone(), value));
+    }
+    if !feats.is_empty() {
+        root = set_feats(root, feats);
+        let list = root
+            .get("FeatList")
+            .cloned()
+            .ok_or("FeatList missing after changing feats")?;
+        written.push(("FeatList".into(), list));
+    }
+    let bytes = GffWriter::new(&file_type, &file_version)
+        .write_with_struct_id(root, root_struct_id)
+        .map_err(|e| e.to_string())?;
+    Ok((bytes, written))
 }
 
 /// Same feat changes on the root struct of `player.bic`.
@@ -2384,7 +2552,17 @@ mod tests {
             .unwrap();
         let ros = |faction: u16| {
             GffWriter::new("ROS ", "V3.2")
-                .write(indexmap! { "FactionID".into() => GffValue::Word(faction) })
+                .write_with_struct_id(
+                    indexmap! {
+                        "FactionID".into() => GffValue::Word(faction),
+                        "LawfulChaotic".into() => GffValue::Byte(20),
+                        "GoodEvil".into() => GffValue::Byte(60),
+                        "FeatList".into() => GffValue::ListOwned(vec![
+                            indexmap! { "Feat".into() => GffValue::Word(45) },
+                        ]),
+                    },
+                    0xFFFF_FFFF,
+                )
                 .unwrap()
         };
         let dir = tempfile::tempdir().unwrap();
@@ -2412,6 +2590,92 @@ mod tests {
             GffValue::Word(v) => v,
             ref other => panic!("FactionID is {other:?}"),
         }
+    }
+
+    /// The OC Khelgar monk line (`AdjustAlignment(oKhelgar, ALIGNMENT_LAWFUL, 50)`) and
+    /// MotB's `FeatRemove(oOkku, FEAT_WEAPON_PROFICIENCY_MARTIAL)` reach the `.ros`;
+    /// the write survives the file type, version and root struct id.
+    #[test]
+    fn companion_alignment_and_feats_are_written_to_the_ros() {
+        let (_dir, mut handler) = roster_fixture_handler();
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("AdjustAlignment", json!([2, 50, "Khelgar"])),
+                action("ga_remove_feat", json!(["neeshka", 45])),
+                action("ga_give_feat", json!(["neeshka", 1705, 0])),
+                action("ga_give_feat", json!(["nobody", 1705, 0])),
+                action("ga_give_feat", json!(["$OWNER", 1705, 0])),
+            ],
+        );
+        let tables = RewardTables::from_graph(&graph, None);
+        let mut edits = QuestEdits::default();
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        let reasons: Vec<&str> = preview.effects.iter().map(|e| e.reason.as_str()).collect();
+        assert_eq!(reasons, vec!["unavailable_target", "object_target"]);
+        let write = |value_type: &str, name: &str| {
+            preview
+                .writes
+                .iter()
+                .find(|w| w.key.value_type == value_type && w.key.name == name)
+                .unwrap()
+        };
+        let lawful = write(COMPANION_CHARACTER_TYPE, "khelgar/LawfulChaotic");
+        assert_eq!(
+            (lawful.before.clone(), lawful.after.clone()),
+            (Some(json!(20)), json!(70))
+        );
+        let removed = write(COMPANION_FEAT_TYPE, "neeshka/45");
+        assert_eq!(
+            (removed.before.clone(), removed.after.clone()),
+            (Some(json!(1)), json!(0))
+        );
+        let added = write(COMPANION_FEAT_TYPE, "neeshka/1705");
+        assert_eq!(
+            (added.before.clone(), added.after.clone()),
+            (Some(json!(0)), json!(1))
+        );
+
+        let all: Vec<usize> = (0..preview.writes.len()).collect();
+        edits.stage(preview, &graph, &all, false).unwrap();
+        handler.begin_batch();
+        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+        assert!(written.player.is_empty());
+        assert_eq!(written.companions.len(), 2);
+        assert_eq!(written.companions[0].0, "khelgar");
+        assert_eq!(written.companions[0].1[0].0, "LawfulChaotic");
+        assert_eq!(gff_integer(&written.companions[0].1[0].1), Some(70));
+
+        let ros = |name: &str| {
+            let stored = handler.companion_stored_name(name).unwrap();
+            let bytes = handler.extract_file(&stored).unwrap();
+            let parser = GffParser::from_bytes(bytes.clone()).unwrap();
+            assert_eq!(parser.file_type, "ROS ");
+            assert_eq!(parser.get_struct_id(0).unwrap(), 0xFFFF_FFFF);
+            owned_root(&bytes).unwrap()
+        };
+        let khelgar = ros("khelgar");
+        assert_eq!(gff_integer(&khelgar["LawfulChaotic"]), Some(70));
+        assert!(matches!(khelgar["LawfulChaotic"], GffValue::Byte(_)));
+        assert_eq!(gff_integer(&khelgar["GoodEvil"]), Some(60));
+        assert_eq!(gff_integer(&khelgar["FactionID"]), Some(9));
+        let neeshka = ros("neeshka");
+        assert!(!has_feat(&neeshka, 45) && has_feat(&neeshka, 1705));
+        assert_eq!(gff_integer(&neeshka["LawfulChaotic"]), Some(20));
     }
 
     #[test]
@@ -2549,7 +2813,10 @@ mod tests {
             .write(indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player]) })
             .unwrap();
         handler.update_file("playerlist.ifo", &staged).unwrap();
-        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        let written = edits
+            .flush(&mut handler, 0, true, &game_data())
+            .unwrap()
+            .player;
         handler.commit_batch().unwrap();
         assert_eq!(
             format!("{written:?}"),
@@ -2657,7 +2924,10 @@ mod tests {
             .unwrap();
 
         handler.begin_batch();
-        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        let written = edits
+            .flush(&mut handler, 0, true, &game_data())
+            .unwrap()
+            .player;
         handler.commit_batch().unwrap();
         let swords = |list: &GffValue<'static>| match list {
             GffValue::ListOwned(items) => items
@@ -2719,8 +2989,15 @@ mod tests {
         .unwrap();
         assert_eq!(key.name, "1705");
         assert_eq!(change.apply(Some(&json!(1))), json!(0));
+        let (key, change) =
+            decode_assignment(&action("ga_give_feat", json!(["Khelgar", 1833, 1])), "m").unwrap();
         assert_eq!(
-            decode_assignment(&action("ga_give_feat", json!(["khelgar", 1833, 1])), "m"),
+            (key.value_type.as_str(), key.name.as_str()),
+            (COMPANION_FEAT_TYPE, "khelgar/1833")
+        );
+        assert_eq!(change.apply(None), json!(1));
+        assert_eq!(
+            decode_assignment(&action("ga_give_feat", json!(["$OWNER", 1833, 1])), "m"),
             Err("object_target")
         );
         assert_eq!(
@@ -2845,7 +3122,10 @@ mod tests {
         let all: Vec<usize> = (0..preview.writes.len()).collect();
         edits.stage(preview, &grant, &all, false).unwrap();
         handler.begin_batch();
-        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        let written = edits
+            .flush(&mut handler, 0, true, &game_data())
+            .unwrap()
+            .player;
         handler.commit_batch().unwrap();
         assert!(written.iter().any(|(name, _)| name == "FeatList"));
         let player = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
@@ -2919,7 +3199,10 @@ mod tests {
             .unwrap_or(0);
         edits.stage(preview, &graph, &[0], false).unwrap();
         handler.begin_batch();
-        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        let written = edits
+            .flush(&mut handler, 0, true, &game_data())
+            .unwrap()
+            .player;
         handler.commit_batch().unwrap();
         assert_eq!(written[0].0, "LawfulChaotic");
         assert!(

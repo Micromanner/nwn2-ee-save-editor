@@ -71,10 +71,12 @@ fn dump_quest_decodes() {
                     continue;
                 };
                 decoded_scripts.insert(action.script.clone());
-                let interesting = decoded.calls.iter().any(|c| {
-                    c.to_ascii_lowercase().contains("alignment")
-                        || c.to_ascii_lowercase().contains("feat")
-                });
+                let mentions = |text: &str| {
+                    let lower = text.to_ascii_lowercase();
+                    lower.contains("alignment") || lower.contains("feat")
+                };
+                let interesting = decoded.calls.iter().any(|c| mentions(c))
+                    || decoded.actions.iter().any(|a| mentions(&a.script));
                 if !interesting {
                     continue;
                 }

@@ -173,6 +173,22 @@ export function isPartyWrite(key: { value_type: string }) {
   return key.value_type === PARTY_TYPE || key.value_type === SELECTABLE_TYPE;
 }
 
+/** `VariableKey.value_type` of an alignment field on a companion: `name` is `<roster name>/<field>`. */
+export const COMPANION_CHARACTER_TYPE = 'companion_character';
+/** `VariableKey.value_type` of a feat on a companion: `name` is `<roster name>/<feat.2da row>`, the value 1 (owned) or 0. */
+export const COMPANION_FEAT_TYPE = 'companion_feat';
+
+export function isCompanionWrite(key: { value_type: string }) {
+  return key.value_type === COMPANION_CHARACTER_TYPE || key.value_type === COMPANION_FEAT_TYPE;
+}
+
+/** The companion and the field or feat row of a companion write. */
+export function companionKey(name: string): { companion: string; field: string } {
+  const slash = name.indexOf('/');
+  if (slash < 0) return { companion: companionName(name), field: '' };
+  return { companion: companionName(name.slice(0, slash)), field: name.slice(slash + 1) };
+}
+
 export type RewardKind = 'gold' | 'xp' | 'goodEvil' | 'lawChaos';
 
 /** Which player field a write changes, null for story flags and influence. */

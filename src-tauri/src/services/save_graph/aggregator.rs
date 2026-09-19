@@ -217,6 +217,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 .campaign_path
                 .as_deref()
                 .map(std::path::Path::new),
+            ctx.paths.game_folder().map(std::path::PathBuf::as_path),
         );
         let mut by_dlg: HashMap<&str, HashMap<i32, &ConvoNode>> = HashMap::new();
         for node in &graph.convo.nodes {
@@ -565,7 +566,11 @@ fn expand_wrapper_scripts(
         }
         let decoded = scripts
             .source(&action.script)
-            .and_then(|src| decode_action(src, &action.params));
+            .map(str::to_string)
+            .and_then(|src| {
+                let constants = scripts.constants(&action.script);
+                decode_action(&src, &action.params, &constants)
+            });
         let Some(decoded) = decoded else {
             out.push(action.clone());
             continue;
