@@ -8,7 +8,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, journalText, questDisplayName } from './utils';
-import { PC_LOCAL_TYPE, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemWrite, isJournalConnector, isMajorEngineCall, isMajorWorldScript, rewardKind, signedDelta } from './scriptDescriptions';
+import { PC_LOCAL_TYPE, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemWrite, isJournalConnector, isMajorEngineCall, isMajorWorldScript, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -81,7 +81,8 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const itemWrites = preview ? preview.writes.filter(write => isItemWrite(write.key)) : [];
   const influenceWrites = preview ? preview.writes.filter(write => influenceCompanion(write.key.name)) : [];
   const featWrites = preview ? preview.writes.filter(write => isFeatWrite(write.key)) : [];
-  const flagWrites = preview ? preview.writes.filter(write => !rewardKind(write.key) && !isItemWrite(write.key) && !isFeatWrite(write.key) && !influenceCompanion(write.key.name)) : [];
+  const partyWrites = preview ? preview.writes.filter(write => isPartyWrite(write.key)) : [];
+  const flagWrites = preview ? preview.writes.filter(write => !rewardKind(write.key) && !isItemWrite(write.key) && !isFeatWrite(write.key) && !isPartyWrite(write.key) && !influenceCompanion(write.key.name)) : [];
   // Blueprint name, TLK name, or the resref when neither resolves.
   const itemName = (write: { name: string; label?: string; label_strref?: number }) =>
     write.label ?? (write.label_strref != null ? tlk.resolve(write.label_strref) : undefined) ?? write.name;
@@ -89,6 +90,12 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const featName = (write: { name: string; label_strref?: number }) =>
     (write.label_strref != null ? tlk.resolve(write.label_strref)?.replace(/<\/?(color|b|i)[^>]*>/gi, '').trim() : undefined) || `#${write.name}`;
   const featState = (value: string | number | null) => Number(value) ? t('gameState.quests.edit.featOwned') : t('gameState.quests.edit.featMissing');
+  const partyLabel = (key: { name: string; value_type: string }) =>
+    t(key.value_type === PARTY_TYPE ? 'gameState.quests.edit.partyApplied' : 'gameState.quests.edit.selectableApplied', { companion: companionName(key.name) });
+  const partyState = (key: { value_type: string }, value: string | number | null) => {
+    if (key.value_type === PARTY_TYPE) return Number(value) ? t('gameState.quests.edit.inParty') : t('gameState.quests.edit.benched');
+    return Number(value) ? t('gameState.quests.edit.selectable') : t('gameState.quests.edit.locked');
+  };
   const conflicts = conflictingEdits(preview, selected, pending);
   const apply = async () => {
     if (!preview || busy) return;
@@ -136,12 +143,15 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     for (const write of option.writes) {
       if (isFeatWrite(write)) rewards.push(t('gameState.quests.edit.featOutcome', { feat: featName(write) }));
     }
+    for (const write of option.writes) {
+      if (isPartyWrite(write)) rewards.push(`${partyLabel(write)} ${partyState(write, write.after)}`);
+    }
     rewards.push(...option.effects.filter(f => effectBucket(f) === 'character').map(f => describeScript(f, t) ?? formatRawCall(f)));
     for (const write of option.writes) {
       const companion = influenceCompanion(write.name);
       if (companion) rewards.push(t('gameState.quests.edit.influenceOutcome', { companion, after: write.after }));
     }
-    const count = option.writes.filter(write => !rewardKind(write) && !isItemWrite(write) && !isFeatWrite(write) && !influenceCompanion(write.name)).length;
+    const count = option.writes.filter(write => !rewardKind(write) && !isItemWrite(write) && !isFeatWrite(write) && !isPartyWrite(write) && !influenceCompanion(write.name)).length;
     if (rewards.length === 0) return count === 0 ? t('gameState.quests.edit.outcome.none') : t('gameState.quests.edit.outcome.flagsOnly', { count });
     return rewards.join(', ') + (count > 0 ? t('gameState.quests.edit.outcome.andFlags', { count }) : '');
   };
@@ -232,12 +242,13 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             {itemWrites.map((write, i) => changeRow(`item-${i}`, itemName({ ...write, name: write.key.name }), write.before, write.after, { delta: true }))}
             {influenceWrites.map((write, i) => changeRow(`influence-${i}`, t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) }), write.before, write.after, { delta: true }))}
             {featWrites.map((write, i) => changeRow(`feat-${i}`, t('gameState.quests.edit.featApplied', { feat: featName({ ...write, name: write.key.name }) }), featState(write.before), featState(write.after), write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {}))}
+            {partyWrites.map((write, i) => changeRow(`party-${i}`, partyLabel(write.key), partyState(write.key, write.before), partyState(write.key, write.after), write.line != null ? { note: t('gameState.quests.edit.laterInConversation') } : {}))}
             {effects.character.map((item, i) => <Fragment key={`effect-${i}`}>
               <span style={{ color: T.text }}>{item}</span>
               <span style={{ color: T.textMuted, gridColumn: '2 / 6' }}>{t('gameState.quests.edit.notApplied')}</span>
               <span style={{ color: T.textMuted }}>{t('gameState.quests.edit.rewardsNote')}</span>
             </Fragment>)}
-            {(rewardWrites.length + itemWrites.length + influenceWrites.length + featWrites.length + effects.character.length) > 0 && rowGap('gap')}
+            {(rewardWrites.length + itemWrites.length + influenceWrites.length + featWrites.length + partyWrites.length + effects.character.length) > 0 && rowGap('gap')}
             {changeRow('journal', t('gameState.quests.edit.journal'), preview.before_state, target, { note: quest.tag })}
             {flagWrites.map((write, index) => {
               const note = [write.key.value_type === PC_LOCAL_TYPE ? t('gameState.quests.edit.pcLocal') : moduleLabel(write.key.module)];

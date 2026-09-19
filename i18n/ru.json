@@ -665,6 +665,12 @@
         "featOutcome": "Навык (feat) {feat}",
         "featOwned": "есть",
         "featMissing": "нет",
+        "partyApplied": "Отряд {companion}",
+        "selectableApplied": "Экран отряда {companion}",
+        "inParty": "в отряде",
+        "benched": "в резерве",
+        "selectable": "доступен",
+        "locked": "заблокирован",
         "derivedFrom": "через {script}",
         "stop": {
           "player_choice": "Останавливается на выборе ({choices} реплик)",

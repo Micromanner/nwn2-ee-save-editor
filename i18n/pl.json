@@ -667,6 +667,12 @@
         "featOutcome": "Atut {feat}",
         "featOwned": "posiadany",
         "featMissing": "brak",
+        "partyApplied": "Drużyna {companion}",
+        "selectableApplied": "Ekran drużyny {companion}",
+        "inParty": "w drużynie",
+        "benched": "w rezerwie",
+        "selectable": "do wyboru",
+        "locked": "zablokowany",
         "derivedFrom": "przez {script}",
         "stop": {
           "player_choice": "Zatrzymuje się przy wyborze ({choices} odpowiedzi)",

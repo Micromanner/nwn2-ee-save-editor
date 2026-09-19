@@ -667,6 +667,12 @@
         "featOutcome": "Dote {feat}",
         "featOwned": "obtenida",
         "featMissing": "no obtenida",
+        "partyApplied": "Grupo {companion}",
+        "selectableApplied": "Pantalla de grupo {companion}",
+        "inParty": "en el grupo",
+        "benched": "en reserva",
+        "selectable": "seleccionable",
+        "locked": "bloqueado",
         "derivedFrom": "vía {script}",
         "stop": {
           "player_choice": "Se detiene en una elección ({choices} respuestas)",

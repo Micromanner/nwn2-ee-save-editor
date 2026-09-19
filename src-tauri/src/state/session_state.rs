@@ -1187,11 +1187,6 @@ impl SessionState {
         self.apply_party_membership(&desired)
     }
 
-    /// Change which companions are in the active party. Writes `RosAvailable`
-    /// in roster.rst (the record the engine reads on load) and mirrors the
-    /// matching `FactionID` into each changed `.ros`. Only members whose
-    /// desired state differs from the file are touched. Returns a warning
-    /// string when the roster changed but the faction mirror failed.
     fn apply_party_membership(
         &mut self,
         desired: &[(String, bool)],
@@ -1200,69 +1195,7 @@ impl SessionState {
             .savegame_handler
             .as_mut()
             .ok_or("No active save handler")?;
-        let Some((stored_name, bytes)) = handler
-            .extract_roster()
-            .map_err(|e| format!("Failed to read roster: {e}"))?
-        else {
-            return Err("Save has no roster file".into());
-        };
-
-        let members = crate::services::roster::parse_roster_members(bytes.clone())?;
-        let changes: Vec<(String, bool)> = desired
-            .iter()
-            .filter(|(name, in_party)| {
-                members
-                    .iter()
-                    .any(|m| m.ros_name.eq_ignore_ascii_case(name) && m.available == *in_party)
-            })
-            .cloned()
-            .collect();
-        if changes.is_empty() {
-            return Ok(None);
-        }
-
-        let updated = crate::services::roster::set_party_membership(bytes, &changes)?;
-        handler
-            .update_file(&stored_name, &updated)
-            .map_err(|e| format!("Failed to write roster: {e}"))?;
-
-        // Mirror the membership into each changed .ros FactionID. The engine
-        // does not read it for membership, but writes it itself on save; a
-        // failure here leaves a cosmetic inconsistency, not a broken party.
-        let mut warnings = Vec::new();
-        let Some(party_faction) = pc_party_faction(handler) else {
-            warn!("Could not read PC party faction from playerlist.ifo");
-            return Ok(Some("faction sync skipped".into()));
-        };
-        for (ros_name, in_party) in &changes {
-            let faction = if *in_party {
-                party_faction
-            } else {
-                crate::services::roster::BENCHED_FACTION
-            };
-            let result = handler
-                .companion_stored_name(ros_name)
-                .map_err(|e| e.to_string())
-                .and_then(|stored| {
-                    let ros = handler.extract_file(&stored).map_err(|e| e.to_string())?;
-                    let bytes = crate::services::roster::set_faction_id(ros, faction)?;
-                    handler
-                        .update_file(&stored, &bytes)
-                        .map_err(|e| e.to_string())
-                });
-            if let Err(e) = result {
-                warn!("Faction sync failed for {ros_name}: {e}");
-                warnings.push(ros_name.clone());
-            }
-        }
-        if warnings.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(format!(
-                "faction sync failed: {}",
-                warnings.join(", ")
-            )))
-        }
+        crate::services::roster::apply_party_membership(handler, desired)
     }
 
     #[instrument(name = "SessionState::export_to_localvault", skip(self, paths))]
@@ -1452,23 +1385,6 @@ fn read_player_fields(
     read_playerlist_entry_from_entries(&entries, selected_index)
 }
 
-/// The PC's dynamic party faction id (`Mod_PlayerList[0].FactionID`, one past
-/// the module's saved faction table). Party members' `.ros` carry this value;
-/// benched companions carry [`crate::services::roster::BENCHED_FACTION`].
-fn pc_party_faction(handler: &SaveGameHandler) -> Option<u16> {
-    let data = handler.extract_player_data().ok()?;
-    let gff = GffParser::from_bytes(data).ok()?;
-    let entries = read_playerlist_entries(gff).ok()?;
-    match entries.first()?.get("FactionID")? {
-        GffValue::Byte(v) => Some(u16::from(*v)),
-        GffValue::Word(v) => Some(*v),
-        GffValue::Short(v) => u16::try_from(*v).ok(),
-        GffValue::Dword(v) => u16::try_from(*v).ok(),
-        GffValue::Int(v) => u16::try_from(*v).ok(),
-        _ => None,
-    }
-}
-
 /// FactionID a companion's `.ros` should carry per the roster's membership
 /// record; `None` when the roster or playerlist can't be read.
 fn companion_faction_from_roster(handler: &SaveGameHandler, ros_name: &str) -> Option<u16> {
@@ -1480,7 +1396,7 @@ fn companion_faction_from_roster(handler: &SaveGameHandler, ros_name: &str) -> O
     if member.available {
         Some(crate::services::roster::BENCHED_FACTION)
     } else {
-        pc_party_faction(handler)
+        crate::services::roster::pc_party_faction(handler)
     }
 }
 

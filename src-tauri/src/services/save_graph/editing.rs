@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use tracing::warn;
 
 use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
@@ -17,6 +18,7 @@ use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::parsers::tda::TDAParser;
 use crate::services::campaign::{CampaignManager, content};
 use crate::services::resource_manager::ResourceManager;
+use crate::services::roster::{self, RosterMember};
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::toolset_bridge::ConvoFunctor;
 
@@ -616,9 +618,20 @@ impl QuestEdits {
         let mut rewards: Vec<(String, i64)> = Vec::new();
         let mut items: Vec<(Arc<ItemBlueprint>, i64)> = Vec::new();
         let mut feats: Vec<(i32, bool)> = Vec::new();
+        let mut party: Vec<(String, bool)> = Vec::new();
+        let mut selectable: Vec<(String, bool)> = Vec::new();
         for edit in &self.pending {
             for write in &edit.writes {
-                if write.key.value_type == PC_LOCAL_TYPE {
+                if write.key.value_type == PARTY_TYPE || write.key.value_type == SELECTABLE_TYPE {
+                    let flags = if write.key.value_type == PARTY_TYPE {
+                        &mut party
+                    } else {
+                        &mut selectable
+                    };
+                    let value = write.after.as_i64().unwrap_or(0) != 0;
+                    flags.retain(|(name, _)| !name.eq_ignore_ascii_case(&write.key.name));
+                    flags.push((write.key.name.clone(), value));
+                } else if write.key.value_type == PC_LOCAL_TYPE {
                     let value = write.after.as_i64().ok_or("PC local is not an integer")?;
                     locals.push((write.key.name.clone(), value));
                 } else if write.key.value_type == FEAT_TYPE {
@@ -670,6 +683,14 @@ impl QuestEdits {
                 .update_file("player.bic", &bic)
                 .map_err(|e| e.to_string())?;
         }
+        if !party.is_empty()
+            && let Some(warning) = roster::apply_party_membership(handler, &party)?
+        {
+            warn!("Quest party write: {warning}");
+        }
+        if !selectable.is_empty() {
+            roster::apply_selectable(handler, &selectable)?;
+        }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
         for write in self.pending.iter().flat_map(|p| &p.writes).filter(|w| {
@@ -677,6 +698,8 @@ impl QuestEdits {
                 && w.key.value_type != ITEM_TYPE
                 && w.key.value_type != PC_LOCAL_TYPE
                 && w.key.value_type != FEAT_TYPE
+                && w.key.value_type != PARTY_TYPE
+                && w.key.value_type != SELECTABLE_TYPE
         }) {
             let value = write
                 .after
@@ -740,6 +763,8 @@ pub struct VariableReader<'a> {
     modules: BTreeMap<String, Result<content::ModuleVariables, String>>,
     /// The player's struct in `playerlist.ifo`, for `CHARACTER_TYPE` keys.
     player_fields: Option<Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
+    /// `roster.rst` members, for `PARTY_TYPE` / `SELECTABLE_TYPE` keys.
+    roster: Option<Result<Vec<RosterMember>, String>>,
     /// Values that take precedence over the save: pending and previewed writes.
     pub overlay: BTreeMap<VariableKey, Value>,
     /// Journal states (tag -> entry) for `gc_journal_entry`; `None` = unknown.
@@ -755,6 +780,7 @@ impl<'a> VariableReader<'a> {
             globals: None,
             modules: BTreeMap::new(),
             player_fields: None,
+            roster: None,
             overlay: BTreeMap::new(),
             journal: None,
         }
@@ -790,6 +816,30 @@ impl<'a> VariableReader<'a> {
                 return Ok(Some(Value::from(i64::from(has_feat(fields, feat)))));
             }
             return Ok(fields.get(&key.name).and_then(gff_integer).map(Value::from));
+        }
+        if key.value_type == PARTY_TYPE || key.value_type == SELECTABLE_TYPE {
+            let members = self
+                .roster
+                .get_or_insert_with(|| {
+                    let (_, bytes) = self
+                        .handler
+                        .extract_roster()
+                        .map_err(|e| e.to_string())?
+                        .ok_or("Save has no roster file")?;
+                    roster::parse_roster_members(bytes)
+                })
+                .as_ref()
+                .map_err(Clone::clone)?;
+            let member = members
+                .iter()
+                .find(|m| m.ros_name.eq_ignore_ascii_case(&key.name))
+                .ok_or_else(|| format!("Roster member {} not found", key.name))?;
+            let value = if key.value_type == PARTY_TYPE {
+                !member.available
+            } else {
+                member.selectable
+            };
+            return Ok(Some(Value::from(i64::from(value))));
         }
         if let Some(module) = &key.module {
             let vars = self
@@ -1258,6 +1308,13 @@ pub const PC_LOCAL_TYPE: &str = "pc_local";
 /// `VariableKey::value_type` of a feat on the PC: `name` is the `feat.2da` row,
 /// the value 1 (in `FeatList`) or 0.
 pub const FEAT_TYPE: &str = "feat";
+/// `VariableKey::value_type` of a companion's party membership: `name` is the
+/// roster name (`RosName`, lowercase), the value 1 (in the active party) or 0
+/// (benched). Written as `RosAvailable` in `roster.rst` plus the `.ros` faction.
+pub const PARTY_TYPE: &str = "party";
+/// `VariableKey::value_type` of a companion's `RosSelectable` flag: `name` is
+/// the roster name, the value 1 (pickable on the party screen) or 0 (locked).
+pub const SELECTABLE_TYPE: &str = "selectable";
 const GOLD: &str = "Gold";
 const EXPERIENCE: &str = "Experience";
 const GOOD_EVIL: &str = "GoodEvil";
@@ -1364,6 +1421,40 @@ fn decode_feat(script: &str, action: &ConvoFunctor) -> Result<(VariableKey, Chan
             value_type: FEAT_TYPE.into(),
         },
         Change::Set(Value::from(owned)),
+    ))
+}
+
+/// `ga_roster_party_add` / `ga_party_add` (join the PC's party), `ga_roster_party_remove`
+/// (bench) and `ga_roster_selectable` (party-screen lock). Roster names are matched
+/// case-insensitively against `roster.rst`; an unknown member fails at read time.
+/// The party limit (`RosPartyLimit`) is not enforced, exactly like `ga_party_add`.
+fn decode_party(
+    script: &str,
+    action: &ConvoFunctor,
+) -> Result<(VariableKey, Change), &'static str> {
+    let name = action
+        .params
+        .first()
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or("invalid_assignment")?;
+    let (value_type, value) = match script {
+        "ga_roster_party_add" | "ga_party_add" => (PARTY_TYPE, 1),
+        "ga_roster_party_remove" => (PARTY_TYPE, 0),
+        "ga_roster_selectable" => (
+            SELECTABLE_TYPE,
+            i64::from(int_param(action, 1).ok_or("invalid_assignment")? != 0),
+        ),
+        _ => return Err("unsupported_action"),
+    };
+    Ok((
+        VariableKey {
+            module: None,
+            name: name.to_ascii_lowercase(),
+            value_type: value_type.into(),
+        },
+        Change::Set(Value::from(value)),
     ))
 }
 
@@ -1651,6 +1742,10 @@ pub fn decode_assignment(
         "ga_give_gold" | "ga_take_gold" | "ga_give_xp" => return decode_reward(&script, action),
         "ga_alignment" => return decode_alignment(action),
         "ga_give_feat" | "ga_remove_feat" => return decode_feat(&script, action),
+        "ga_roster_party_add"
+        | "ga_party_add"
+        | "ga_roster_party_remove"
+        | "ga_roster_selectable" => return decode_party(&script, action),
         _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };
@@ -2257,6 +2352,134 @@ mod tests {
         zip.finish().unwrap();
         let handler = SaveGameHandler::new(dir.path(), false, false).unwrap();
         (dir, handler)
+    }
+
+    /// The rich fixture plus a two-member `roster.rst` (khelgar in the party and
+    /// selectable, neeshka benched) and a `.ros` per member carrying the faction
+    /// the roster state implies. The PC's party faction is set to 9.
+    fn roster_fixture_handler() -> (tempfile::TempDir, SaveGameHandler) {
+        use std::io::Write;
+        let mut player = owned_players(&playerlist()).swap_remove(0);
+        player.insert("FactionID".into(), GffValue::Word(9));
+        let playerlist = GffWriter::new("IFO ", "V3.2")
+            .write(indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player]) })
+            .unwrap();
+        let member = |name: &str,
+                      available: i32,
+                      selectable: i32|
+         -> indexmap::IndexMap<String, GffValue<'static>> {
+            indexmap! {
+                "RosName".into() => GffValue::String(name.to_string().into()),
+                "RosAvailable".into() => GffValue::Int(available),
+                "RosSelectable".into() => GffValue::Int(selectable),
+            }
+        };
+        let roster = GffWriter::new("RST ", "V3.2")
+            .write(indexmap! {
+                "RosMembers".into() => GffValue::ListOwned(vec![
+                    member("khelgar", 0, 1),
+                    member("neeshka", 1, 1),
+                ]),
+            })
+            .unwrap();
+        let ros = |faction: u16| {
+            GffWriter::new("ROS ", "V3.2")
+                .write(indexmap! { "FactionID".into() => GffValue::Word(faction) })
+                .unwrap()
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let file = std::fs::File::create(dir.path().join("resgff.zip")).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, bytes) in [
+            ("playerlist.ifo", playerlist),
+            ("roster.rst", roster),
+            ("khelgar.ros", ros(9)),
+            ("neeshka.ros", ros(roster::BENCHED_FACTION)),
+        ] {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(&bytes).unwrap();
+        }
+        zip.finish().unwrap();
+        let handler = SaveGameHandler::new(dir.path(), false, false).unwrap();
+        (dir, handler)
+    }
+
+    fn ros_faction(handler: &SaveGameHandler, ros_name: &str) -> u16 {
+        let stored = handler.companion_stored_name(ros_name).unwrap();
+        let root = owned_root(&handler.extract_file(&stored).unwrap()).unwrap();
+        match root["FactionID"] {
+            GffValue::Word(v) => v,
+            ref other => panic!("FactionID is {other:?}"),
+        }
+    }
+
+    #[test]
+    fn party_scripts_write_the_roster_and_mirror_the_ros_faction() {
+        let (_dir, mut handler) = roster_fixture_handler();
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("ga_roster_party_add", json!(["Neeshka"])),
+                action("ga_roster_party_remove", json!(["khelgar", ""])),
+                action("ga_roster_selectable", json!(["khelgar", 0])),
+                action("ga_roster_party_add", json!(["nobody"])),
+            ],
+        );
+        let tables = RewardTables::from_graph(&graph, None);
+        let mut edits = QuestEdits::default();
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        assert_eq!(preview.effects.len(), 1, "{:?}", preview.effects);
+        assert_eq!(preview.effects[0].reason, "unavailable_target");
+        let write = |value_type: &str, name: &str| {
+            preview
+                .writes
+                .iter()
+                .find(|w| w.key.value_type == value_type && w.key.name == name)
+                .unwrap()
+        };
+        let joins = write(PARTY_TYPE, "neeshka");
+        assert_eq!(
+            (joins.before.clone(), joins.after.clone()),
+            (Some(json!(0)), json!(1))
+        );
+        let leaves = write(PARTY_TYPE, "khelgar");
+        assert_eq!(
+            (leaves.before.clone(), leaves.after.clone()),
+            (Some(json!(1)), json!(0))
+        );
+        let locked = write(SELECTABLE_TYPE, "khelgar");
+        assert_eq!(
+            (locked.before.clone(), locked.after.clone()),
+            (Some(json!(1)), json!(0))
+        );
+
+        let all: Vec<usize> = (0..preview.writes.len()).collect();
+        edits.stage(preview, &graph, &all, false).unwrap();
+        handler.begin_batch();
+        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+
+        let (_, bytes) = handler.extract_roster().unwrap().unwrap();
+        let members = roster::parse_roster_members(bytes).unwrap();
+        let member = |name: &str| members.iter().find(|m| m.ros_name == name).unwrap();
+        assert!(member("khelgar").available && !member("khelgar").selectable);
+        assert!(!member("neeshka").available && member("neeshka").selectable);
+        assert_eq!(ros_faction(&handler, "khelgar"), roster::BENCHED_FACTION);
+        assert_eq!(ros_faction(&handler, "neeshka"), 9);
     }
 
     fn player_gold_and_xp(handler: &SaveGameHandler) -> (i64, i64, i64, i64) {

@@ -665,6 +665,12 @@
         "featOutcome": "Don {feat}",
         "featOwned": "acquis",
         "featMissing": "non acquis",
+        "partyApplied": "Groupe {companion}",
+        "selectableApplied": "Écran du groupe {companion}",
+        "inParty": "dans le groupe",
+        "benched": "en réserve",
+        "selectable": "sélectionnable",
+        "locked": "verrouillé",
         "derivedFrom": "via {script}",
         "stop": {
           "player_choice": "S'arrête à un choix ({choices} répliques)",

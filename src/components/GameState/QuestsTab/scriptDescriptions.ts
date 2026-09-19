@@ -131,7 +131,7 @@ const COMPANION_NAMES: Record<string, string> = {
   ammon_jerro: 'Ammon Jerro', npc_bevil: 'Bevil', dove: 'Kaelyn the Dove', oneofmany: 'One of Many',
 };
 
-function companionName(tag: string) {
+export function companionName(tag: string) {
   return COMPANION_NAMES[tag] ?? tag.charAt(0).toUpperCase() + tag.slice(1);
 }
 
@@ -162,6 +162,15 @@ export const FEAT_TYPE = 'feat';
 
 export function isFeatWrite(key: { value_type: string }) {
   return key.value_type === FEAT_TYPE;
+}
+
+/** `VariableKey.value_type` of a companion's party membership: `name` is the roster name, the value 1 (in party) or 0 (benched). */
+export const PARTY_TYPE = 'party';
+/** `VariableKey.value_type` of a companion's party-screen lock: `name` is the roster name, the value 1 (selectable) or 0 (locked). */
+export const SELECTABLE_TYPE = 'selectable';
+
+export function isPartyWrite(key: { value_type: string }) {
+  return key.value_type === PARTY_TYPE || key.value_type === SELECTABLE_TYPE;
 }
 
 export type RewardKind = 'gold' | 'xp' | 'goodEvil' | 'lawChaos';

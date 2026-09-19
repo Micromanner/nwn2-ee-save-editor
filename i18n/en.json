@@ -595,6 +595,12 @@
         "featOutcome": "Feat {feat}",
         "featOwned": "owned",
         "featMissing": "not owned",
+        "partyApplied": "Party {companion}",
+        "selectableApplied": "Party screen {companion}",
+        "inParty": "in party",
+        "benched": "benched",
+        "selectable": "selectable",
+        "locked": "locked",
         "derivedFrom": "via {script}",
         "stop": {
           "player_choice": "Stops at a choice ({choices} replies)",

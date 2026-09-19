@@ -1,8 +1,10 @@
 //! Parse and update the party roster file (`roster.rst` / `ROSTER.rst`).
 
 use indexmap::IndexMap;
+use tracing::warn;
 
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
+use crate::services::savegame_handler::SaveGameHandler;
 
 pub struct RosterMember {
     pub ros_name: String,
@@ -13,6 +15,9 @@ pub struct RosterMember {
     /// active party, 1 = benched/available for recruitment (in-game verified
     /// 2026-08-31; flipping it swaps party members on the next load).
     pub available: bool,
+    /// `RosSelectable`: 0 = locked (forced member or unrecruitable on the
+    /// party screen), 1 = the player may pick them. Absent counts as selectable.
+    pub selectable: bool,
     pub campaign_npc: bool,
     pub gender: Option<i32>,
     /// `RosRace` mirrors the creature's `Subrace` byte (a `racialsubtypes.2da` row).
@@ -84,6 +89,7 @@ pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String>
             char_name,
             classes,
             available: entry.get("RosAvailable").and_then(gff_int).unwrap_or(0) != 0,
+            selectable: entry.get("RosSelectable").and_then(gff_int).unwrap_or(1) != 0,
             campaign_npc: entry.get("RosCampaignNPC").and_then(gff_int).unwrap_or(0) != 0,
             gender: entry.get("RosGender").and_then(gff_int).map(|v| v as i32),
             subrace: entry.get("RosRace").and_then(gff_int).map(|v| v as i32),
@@ -168,10 +174,32 @@ pub fn parse_party_limit(bytes: Vec<u8>) -> Result<Option<i32>, String> {
 }
 
 /// Set `RosAvailable` for each `(ros_name, in_party)` change (in party = 0,
-/// benched = 1), preserving the file's numeric GFF variant and creating the
-/// field as Int (the engine's type) on entries that lack it. Errors if any
-/// named member is missing from the roster.
+/// benched = 1). See [`set_member_int`].
 pub fn set_party_membership(bytes: Vec<u8>, changes: &[(String, bool)]) -> Result<Vec<u8>, String> {
+    let values: Vec<(String, i64)> = changes
+        .iter()
+        .map(|(name, in_party)| (name.clone(), i64::from(!in_party)))
+        .collect();
+    set_member_int(bytes, "RosAvailable", &values)
+}
+
+/// Set `RosSelectable` for each `(ros_name, selectable)` change. See [`set_member_int`].
+pub fn set_selectable(bytes: Vec<u8>, changes: &[(String, bool)]) -> Result<Vec<u8>, String> {
+    let values: Vec<(String, i64)> = changes
+        .iter()
+        .map(|(name, selectable)| (name.clone(), i64::from(*selectable)))
+        .collect();
+    set_member_int(bytes, "RosSelectable", &values)
+}
+
+/// Write an integer `field` on each named `RosMembers` entry, preserving the
+/// file's numeric GFF variant and creating the field as Int (the engine's type)
+/// on entries that lack it. Errors if any named member is missing from the roster.
+fn set_member_int(
+    bytes: Vec<u8>,
+    field: &str,
+    changes: &[(String, i64)],
+) -> Result<Vec<u8>, String> {
     let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
     let file_type = parser.file_type.clone();
     let file_version = parser.file_version.clone();
@@ -194,15 +222,17 @@ pub fn set_party_membership(bytes: Vec<u8>, changes: &[(String, bool)]) -> Resul
         let Some(name) = entry.get("RosName").and_then(gff_str) else {
             continue;
         };
-        let Some((_, in_party)) = changes.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name))
-        else {
+        let Some((_, value)) = changes.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name)) else {
             continue;
         };
         missing.retain(|n| !n.eq_ignore_ascii_case(&name));
-        if entry.contains_key("RosAvailable") {
-            set_int_preserving_type(entry, "RosAvailable", i64::from(!in_party));
+        if entry.contains_key(field) {
+            set_int_preserving_type(entry, field, *value);
         } else {
-            entry.insert("RosAvailable".into(), GffValue::Int(i32::from(!in_party)));
+            entry.insert(
+                field.into(),
+                GffValue::Int((*value).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32),
+            );
         }
     }
     if !missing.is_empty() {
@@ -212,6 +242,132 @@ pub fn set_party_membership(bytes: Vec<u8>, changes: &[(String, bool)]) -> Resul
     GffWriter::new(&file_type, &file_version)
         .write_with_struct_id(root, root_struct_id)
         .map_err(|e| format!("roster serialization error: {e}"))
+}
+
+/// The PC's dynamic party faction id (`Mod_PlayerList[0].FactionID`, one past
+/// the module's saved faction table). Party members' `.ros` carry this value;
+/// benched companions carry [`BENCHED_FACTION`].
+pub fn pc_party_faction(handler: &SaveGameHandler) -> Option<u16> {
+    let data = handler.extract_player_data().ok()?;
+    let gff = GffParser::from_bytes(data).ok()?;
+    let root = gff.read_struct_fields(0).ok()?;
+    let GffValue::List(players) = root.get("Mod_PlayerList")? else {
+        return None;
+    };
+    let first = players.first()?.force_load();
+    match first.get("FactionID")? {
+        GffValue::Byte(v) => Some(u16::from(*v)),
+        GffValue::Word(v) => Some(*v),
+        GffValue::Short(v) => u16::try_from(*v).ok(),
+        GffValue::Dword(v) => u16::try_from(*v).ok(),
+        GffValue::Int(v) => u16::try_from(*v).ok(),
+        _ => None,
+    }
+}
+
+/// Change which companions are in the active party, in the save or the open
+/// batch. Writes `RosAvailable` in roster.rst (the record the engine reads on
+/// load) and mirrors the matching `FactionID` into each changed `.ros`. Only
+/// members whose desired state differs from the file are touched. Returns a
+/// warning string when the roster changed but the faction mirror failed.
+pub fn apply_party_membership(
+    handler: &mut SaveGameHandler,
+    desired: &[(String, bool)],
+) -> Result<Option<String>, String> {
+    let Some((stored_name, bytes)) = handler
+        .extract_roster()
+        .map_err(|e| format!("Failed to read roster: {e}"))?
+    else {
+        return Err("Save has no roster file".into());
+    };
+
+    let members = parse_roster_members(bytes.clone())?;
+    let changes: Vec<(String, bool)> = desired
+        .iter()
+        .filter(|(name, in_party)| {
+            members
+                .iter()
+                .any(|m| m.ros_name.eq_ignore_ascii_case(name) && m.available == *in_party)
+        })
+        .cloned()
+        .collect();
+    if changes.is_empty() {
+        return Ok(None);
+    }
+
+    let updated = set_party_membership(bytes, &changes)?;
+    handler
+        .update_file(&stored_name, &updated)
+        .map_err(|e| format!("Failed to write roster: {e}"))?;
+
+    // Mirror the membership into each changed .ros FactionID. The engine
+    // does not read it for membership, but writes it itself on save; a
+    // failure here leaves a cosmetic inconsistency, not a broken party.
+    let mut warnings = Vec::new();
+    let Some(party_faction) = pc_party_faction(handler) else {
+        warn!("Could not read PC party faction from playerlist.ifo");
+        return Ok(Some("faction sync skipped".into()));
+    };
+    for (ros_name, in_party) in &changes {
+        let faction = if *in_party {
+            party_faction
+        } else {
+            BENCHED_FACTION
+        };
+        let result = handler
+            .companion_stored_name(ros_name)
+            .map_err(|e| e.to_string())
+            .and_then(|stored| {
+                let ros = handler.extract_file(&stored).map_err(|e| e.to_string())?;
+                let bytes = set_faction_id(ros, faction)?;
+                handler
+                    .update_file(&stored, &bytes)
+                    .map_err(|e| e.to_string())
+            });
+        if let Err(e) = result {
+            warn!("Faction sync failed for {ros_name}: {e}");
+            warnings.push(ros_name.clone());
+        }
+    }
+    if warnings.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(format!(
+            "faction sync failed: {}",
+            warnings.join(", ")
+        )))
+    }
+}
+
+/// Set `RosSelectable` on the named members, in the save or the open batch.
+/// Members already in the desired state are left untouched.
+pub fn apply_selectable(
+    handler: &mut SaveGameHandler,
+    desired: &[(String, bool)],
+) -> Result<(), String> {
+    let Some((stored_name, bytes)) = handler
+        .extract_roster()
+        .map_err(|e| format!("Failed to read roster: {e}"))?
+    else {
+        return Err("Save has no roster file".into());
+    };
+    let members = parse_roster_members(bytes.clone())?;
+    let changes: Vec<(String, bool)> = desired
+        .iter()
+        .filter(|(name, selectable)| {
+            members
+                .iter()
+                .any(|m| m.ros_name.eq_ignore_ascii_case(name) && m.selectable != *selectable)
+        })
+        .cloned()
+        .collect();
+    if changes.is_empty() {
+        return Ok(());
+    }
+    let updated = set_selectable(bytes, &changes)?;
+    handler
+        .update_file(&stored_name, &updated)
+        .map_err(|e| format!("Failed to write roster: {e}"))
 }
 
 /// Rewrite the root `FactionID` of a creature GFF (a `.ros`). Membership is

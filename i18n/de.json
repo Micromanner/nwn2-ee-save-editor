@@ -666,6 +666,12 @@
         "featOutcome": "Talent {feat}",
         "featOwned": "vorhanden",
         "featMissing": "nicht vorhanden",
+        "partyApplied": "Gruppe {companion}",
+        "selectableApplied": "Gruppenbildschirm {companion}",
+        "inParty": "in der Gruppe",
+        "benched": "wartet",
+        "selectable": "wählbar",
+        "locked": "gesperrt",
         "derivedFrom": "über {script}",
         "stop": {
           "player_choice": "Stoppt bei einer Wahl ({choices} Antworten)",
