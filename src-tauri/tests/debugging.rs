@@ -69,3 +69,6 @@ mod dump_level_skill_history;
 
 #[path = "debugging/verify_skill_take_back.rs"]
 mod verify_skill_take_back;
+
+#[path = "debugging/dump_quest_decodes.rs"]
+mod dump_quest_decodes;

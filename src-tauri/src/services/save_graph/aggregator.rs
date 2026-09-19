@@ -584,11 +584,21 @@ fn expand_wrapper_scripts(
                 .join(", ")
         );
         let writes = decoded.writes.clone();
+        let actions = decoded.actions.clone();
         out.push(ConvoFunctor {
             decoded: Some(decoded),
             ..action.clone()
         });
         out.extend(writes.iter().map(|w| synthesized_functor(w, &call)));
+        out.extend(actions.into_iter().map(|a| ConvoFunctor {
+            kind: FunctorKind::Custom,
+            script: a.script,
+            params: a.params,
+            derived_from: Some(call.clone()),
+            decoded: None,
+            negate: false,
+            join: String::new(),
+        }));
     }
     out
 }

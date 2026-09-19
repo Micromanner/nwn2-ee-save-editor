@@ -39,10 +39,17 @@ export interface DecodedWrite {
   value: string;
 }
 
+/** Alignment shift or feat change on the player, in the shape of the dialogue action the editor applies. */
+export interface DecodedAction {
+  script: string;
+  params: unknown[];
+}
+
 /** Static decode of a custom script's branch (`save_graph::script_decoder`). */
 export interface ScriptDecode {
   writes: DecodedWrite[];
   conditional_writes: DecodedWrite[];
+  actions: DecodedAction[];
   calls: string[];
   unresolved: string[];
 }

@@ -49,6 +49,7 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
   ga_heal_party: ['percent'],
   ga_give_feat: ['target', 'feat'],
   ga_remove_feat: ['target', 'feat'],
+  adjustalignment: ['alignment', 'shift'],
   ga_setplotflag: ['target', 'flag'],
   ga_setimmortal: ['target', 'flag'],
   ga_door_open: ['tag'],
@@ -104,7 +105,7 @@ const STOCK_SCRIPTS: Record<string, string[]> = {
 /** Stock scripts whose effect lands on the player or the party rather than the world. */
 const CHARACTER_SCRIPTS = new Set([
   'ga_give_xp', 'ga_give_quest_xp', 'ga_give_partial_quest_xp', 'ga_xp_award_2da_entry', 'ga_give_gold', 'ga_take_gold',
-  'ga_give_item', 'ga_take_item', 'ga_destroy_item', 'ga_alignment', 'ga_influence',
+  'ga_give_item', 'ga_take_item', 'ga_destroy_item', 'ga_alignment', 'adjustalignment', 'ga_influence',
   'ka_influence_magnitude', 'ka_influence_set',
   'ga_give_feat', 'ga_remove_feat', 'ga_heal_pc', 'ga_heal_party', 'ga_roster_party_add',
   'ga_party_add', 'ga_roster_party_remove', 'ga_roster_selectable', 'ga_henchman_add', 'ga_henchman_remove',
@@ -154,6 +155,13 @@ export const ITEM_TYPE = 'item';
 
 export function isItemWrite(key: { value_type: string }) {
   return key.value_type === ITEM_TYPE;
+}
+
+/** `VariableKey.value_type` of a feat on the player: `name` is the feat.2da row, the value 1 (owned) or 0. */
+export const FEAT_TYPE = 'feat';
+
+export function isFeatWrite(key: { value_type: string }) {
+  return key.value_type === FEAT_TYPE;
 }
 
 export type RewardKind = 'gold' | 'xp' | 'goodEvil' | 'lawChaos';
@@ -215,11 +223,34 @@ function engineCallName(call: string) {
   return call.split('(')[0].trim().toLowerCase();
 }
 
-/** Plain-language sentence for a decoded engine call; the raw call when it has arguments or is unknown. */
-export function describeEngineCall(call: string, t: (key: string) => string): string {
+const ALIGNMENT_CONSTANTS: Record<string, number> = {
+  ALIGNMENT_ALL: 0, ALIGNMENT_NEUTRAL: 1, ALIGNMENT_LAWFUL: 2, ALIGNMENT_CHAOTIC: 3, ALIGNMENT_GOOD: 4, ALIGNMENT_EVIL: 5,
+};
+
+/** NWScript object variables are named `oKhelgar`, `oPC`: the name without its type prefix. */
+function objectVariableName(raw: string) {
+  const m = /^o([A-Z]\w*)$/.exec(raw.trim());
+  return m ? m[1] : raw.trim();
+}
+
+/**
+ * Plain-language sentence for a decoded engine call: known calls without arguments get their
+ * generic text, `AdjustAlignment(target, ALIGNMENT_X, n)` on someone other than the player is
+ * spelled out, everything else is shown raw.
+ */
+export function describeEngineCall(call: string, t: (key: string, values?: Record<string, unknown>) => string): string {
   const name = engineCallName(call);
-  if (call.includes('(') || !CHARACTER_ENGINE_CALLS.has(name)) return call;
-  return t(`gameState.quests.engineCalls.${name}`);
+  if (!CHARACTER_ENGINE_CALLS.has(name)) return call;
+  if (!call.includes('(')) return t(`gameState.quests.engineCalls.${name}`);
+  if (name === 'adjustalignment') {
+    const args = call.slice(call.indexOf('(') + 1, call.lastIndexOf(')')).split(',').map(a => a.trim());
+    const alignment = ALIGNMENT_CONSTANTS[args[1]] ?? Number(args[1]);
+    const shift = Number(args[2]);
+    if (args.length === 3 && Number.isInteger(alignment) && Number.isInteger(shift)) {
+      return t('gameState.quests.engineCalls.adjustalignment_target', { target: objectVariableName(args[0]), alignment, shift });
+    }
+  }
+  return call;
 }
 
 /** The engine-internal functor the graph builder synthesizes for the journal write itself. */
@@ -234,7 +265,11 @@ function formatChange(raw: string) {
   return `= ${raw}`;
 }
 
-function formatTarget(raw: string, t: (key: string) => string) {
+/** Scripts whose empty target is the PC speaker rather than the conversation owner. */
+const PLAYER_DEFAULT_TARGET = new Set(['ga_give_feat', 'ga_remove_feat']);
+
+function formatTarget(raw: string, script: string, t: (key: string) => string) {
+  if (raw === '' && PLAYER_DEFAULT_TARGET.has(script)) return t('gameState.quests.scriptTarget.player');
   if (raw === '' || raw === '$OWNER') return t('gameState.quests.scriptTarget.owner');
   if (raw === '$PC_SPEAKER') return t('gameState.quests.scriptTarget.player');
   return raw;
@@ -257,7 +292,7 @@ export function describeScript(
     const raw = f.params[i];
     const text = raw == null ? '' : String(raw);
     if (name === 'change' || name === 'check') values[name] = formatChange(text);
-    else if (name === 'target') values[name] = formatTarget(text, t);
+    else if (name === 'target') values[name] = formatTarget(text, script, t);
     else if (name === 'companion' && script === 'ga_influence') values[name] = companionName(OC_COMPANION_TAGS[Number(text)] ?? text);
     else if (name === 'companion' && script.startsWith('ka_influence')) values[name] = companionName(motbCompanionTag(text));
     else values[name] = text;

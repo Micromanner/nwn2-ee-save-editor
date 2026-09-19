@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
-use crate::character::Character;
+use crate::character::{Character, FeatId, FeatSource};
 use crate::config::NWN2Paths;
 use crate::loaders::GameData;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
@@ -341,6 +341,11 @@ impl QuestEdits {
                                 .blueprints
                                 .insert(key.name.clone(), blueprint.clone());
                         }
+                        let label_strref = if key.value_type == FEAT_TYPE {
+                            tables.feat_name_strref(&key.name)
+                        } else {
+                            blueprint.as_ref().and_then(|b| b.name_strref)
+                        };
                         candidates.push(VariableWrite {
                             key,
                             saved,
@@ -348,7 +353,7 @@ impl QuestEdits {
                             after,
                             action_index,
                             label: blueprint.as_ref().and_then(|b| b.name.clone()),
-                            label_strref: blueprint.as_ref().and_then(|b| b.name_strref),
+                            label_strref,
                             derived_from: action.derived_from.clone(),
                             line,
                         });
@@ -610,11 +615,21 @@ impl QuestEdits {
             .collect();
         let mut rewards: Vec<(String, i64)> = Vec::new();
         let mut items: Vec<(Arc<ItemBlueprint>, i64)> = Vec::new();
+        let mut feats: Vec<(i32, bool)> = Vec::new();
         for edit in &self.pending {
             for write in &edit.writes {
                 if write.key.value_type == PC_LOCAL_TYPE {
                     let value = write.after.as_i64().ok_or("PC local is not an integer")?;
                     locals.push((write.key.name.clone(), value));
+                } else if write.key.value_type == FEAT_TYPE {
+                    let feat = write
+                        .key
+                        .name
+                        .parse::<i32>()
+                        .map_err(|_| "Invalid feat id")?;
+                    let owned = write.after.as_i64().unwrap_or(0) != 0;
+                    feats.retain(|(id, _)| *id != feat);
+                    feats.push((feat, owned));
                 } else if write.key.value_type == CHARACTER_TYPE {
                     let delta = write.after.as_i64().unwrap_or(0)
                         - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
@@ -639,15 +654,18 @@ impl QuestEdits {
         let (bytes, mut written) = add_player_rewards(&bytes, player, &rewards)?;
         let (bytes, item_list) = give_player_items(&bytes, player, &items, game_data)?;
         written.extend(item_list);
+        let (bytes, feat_list) = set_player_feats(&bytes, player, &feats)?;
+        written.extend(feat_list);
         handler
             .update_file("playerlist.ifo", &bytes)
             .map_err(|e| e.to_string())?;
         if primary
-            && (!rewards.is_empty() || !items.is_empty())
+            && (!rewards.is_empty() || !items.is_empty() || !feats.is_empty())
             && let Some(bic) = handler.extract_player_bic().map_err(|e| e.to_string())?
         {
             let bic = add_bic_rewards(&bic, &rewards)?;
             let bic = give_bic_items(&bic, &items, game_data)?;
+            let bic = set_bic_feats(&bic, &feats)?;
             handler
                 .update_file("player.bic", &bic)
                 .map_err(|e| e.to_string())?;
@@ -658,6 +676,7 @@ impl QuestEdits {
             w.key.value_type != CHARACTER_TYPE
                 && w.key.value_type != ITEM_TYPE
                 && w.key.value_type != PC_LOCAL_TYPE
+                && w.key.value_type != FEAT_TYPE
         }) {
             let value = write
                 .after
@@ -748,7 +767,10 @@ impl<'a> VariableReader<'a> {
         if let Some(value) = self.overlay.get(key) {
             return Ok(Some(value.clone()));
         }
-        if key.value_type == CHARACTER_TYPE || key.value_type == PC_LOCAL_TYPE {
+        if key.value_type == CHARACTER_TYPE
+            || key.value_type == PC_LOCAL_TYPE
+            || key.value_type == FEAT_TYPE
+        {
             let fields = self
                 .player_fields
                 .get_or_insert_with(|| {
@@ -762,6 +784,10 @@ impl<'a> VariableReader<'a> {
                 .map_err(Clone::clone)?;
             if key.value_type == PC_LOCAL_TYPE {
                 return Ok(pc_int_local(fields, &key.name));
+            }
+            if key.value_type == FEAT_TYPE {
+                let feat = key.name.parse::<i64>().map_err(|_| "Invalid feat id")?;
+                return Ok(Some(Value::from(i64::from(has_feat(fields, feat)))));
             }
             return Ok(fields.get(&key.name).and_then(gff_integer).map(Value::from));
         }
@@ -1229,6 +1255,9 @@ pub const ITEM_TYPE: &str = "item";
 /// `VariableKey::value_type` of an integer local on the PC (`VarTable` of the
 /// player's struct), e.g. the `<tag>_XP_QPR` share of quest XP already paid.
 pub const PC_LOCAL_TYPE: &str = "pc_local";
+/// `VariableKey::value_type` of a feat on the PC: `name` is the `feat.2da` row,
+/// the value 1 (in `FeatList`) or 0.
+pub const FEAT_TYPE: &str = "feat";
 const GOLD: &str = "Gold";
 const EXPERIENCE: &str = "Experience";
 const GOOD_EVIL: &str = "GoodEvil";
@@ -1310,6 +1339,78 @@ fn decode_alignment(action: &ConvoFunctor) -> Result<(VariableKey, Change), &'st
     ))
 }
 
+/// `ga_give_feat(sTarg, nFeat, bCheckReq, bAllPartyMembers)` / `ga_remove_feat(sTarg,
+/// nFeat, bAllPartyMembers)`: an empty target is the PC speaker; the party flag only
+/// reaches other PCs in multiplayer. The prerequisite check is not reproduced.
+fn decode_feat(script: &str, action: &ConvoFunctor) -> Result<(VariableKey, Change), &'static str> {
+    let target = action
+        .params
+        .first()
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    if !(target.is_empty() || target == "$PC_SPEAKER") {
+        return Err("object_target");
+    }
+    let feat = int_param(action, 1).ok_or("invalid_assignment")?;
+    if feat < 0 {
+        return Err("invalid_assignment");
+    }
+    let owned = i64::from(script == "ga_give_feat");
+    Ok((
+        VariableKey {
+            module: None,
+            name: feat.to_string(),
+            value_type: FEAT_TYPE.into(),
+        },
+        Change::Set(Value::from(owned)),
+    ))
+}
+
+/// nwscript `AdjustAlignment(oSubject, nAlignment, nShift)` decoded out of a wrapper
+/// script: `ALIGNMENT_LAWFUL/CHAOTIC/GOOD/EVIL` shift one axis, `ALIGNMENT_ALL` adds
+/// the shift to both and `ALIGNMENT_NEUTRAL` moves both towards 50, never past it.
+fn decode_alignment_points(
+    action: &ConvoFunctor,
+    current: &mut dyn FnMut(&VariableKey) -> Option<i64>,
+) -> Result<Vec<(VariableKey, Change)>, &'static str> {
+    let alignment = int_param(action, 0).ok_or("invalid_assignment")?;
+    let shift = int_param(action, 1).ok_or("invalid_assignment")?;
+    if shift <= 0 {
+        return Err("no_effect");
+    }
+    let clamped = |field: &str, delta: i64| {
+        (
+            character_key(field),
+            Change::AddClamped {
+                delta,
+                min: 0,
+                max: 100,
+            },
+        )
+    };
+    let writes = match alignment {
+        0 => vec![clamped(LAWFUL_CHAOTIC, shift), clamped(GOOD_EVIL, shift)],
+        1 => [LAWFUL_CHAOTIC, GOOD_EVIL]
+            .into_iter()
+            .filter_map(|field| {
+                let value = current(&character_key(field)).unwrap_or(50);
+                let delta = (50 - value).clamp(-shift, shift);
+                (delta != 0).then(|| clamped(field, delta))
+            })
+            .collect(),
+        2 => vec![clamped(LAWFUL_CHAOTIC, shift)],
+        3 => vec![clamped(LAWFUL_CHAOTIC, -shift)],
+        4 => vec![clamped(GOOD_EVIL, shift)],
+        5 => vec![clamped(GOOD_EVIL, -shift)],
+        _ => return Err("invalid_assignment"),
+    };
+    if writes.is_empty() {
+        return Err("no_effect");
+    }
+    Ok(writes)
+}
+
 /// `ga_give_partial_quest_xp(tag, percent)` per `ginc_journal.RewardCappedQuestXP`: the
 /// share already paid is the PC local `<tag>_XP_QPR`; the award is capped at 100% in
 /// total, the XP is `quest XP * share / 100` and the share paid is tracked.
@@ -1361,6 +1462,9 @@ pub fn decode_writes(
     tables: &RewardTables,
     current: &mut dyn FnMut(&VariableKey) -> Option<i64>,
 ) -> Result<Vec<(VariableKey, Change)>, &'static str> {
+    if action.script.eq_ignore_ascii_case("AdjustAlignment") {
+        return decode_alignment_points(action, current);
+    }
     if action
         .script
         .eq_ignore_ascii_case("ga_give_partial_quest_xp")
@@ -1390,6 +1494,9 @@ pub struct RewardTables<'a> {
     xp_awards: OnceCell<Option<TDAParser>>,
     /// Item blueprints for `ga_give_item`.
     items: ItemBlueprints<'a>,
+    /// `feat.2da` with overrides, for the names of `ga_give_feat` writes.
+    resources: Option<&'a ResourceManager>,
+    feats: OnceCell<Option<Arc<TDAParser>>>,
 }
 
 impl<'a> RewardTables<'a> {
@@ -1403,6 +1510,8 @@ impl<'a> RewardTables<'a> {
             campaign_path: graph.campaign.campaign_path.as_deref().map(PathBuf::from),
             xp_awards: OnceCell::new(),
             items: ItemBlueprints::new(graph, resources),
+            resources,
+            feats: OnceCell::new(),
         }
     }
 
@@ -1413,11 +1522,28 @@ impl<'a> RewardTables<'a> {
             campaign_path: None,
             xp_awards: OnceCell::new(),
             items: ItemBlueprints::detached(),
+            resources: None,
+            feats: OnceCell::new(),
         }
     }
 
     fn item(&self, module: &str, resref: &str) -> Option<Arc<ItemBlueprint>> {
         self.items.get(module, resref)
+    }
+
+    /// `feat.2da` `FEAT` name strref of a feat row.
+    fn feat_name_strref(&self, feat: &str) -> Option<i32> {
+        let table = self
+            .feats
+            .get_or_init(|| self.resources?.get_2da_with_overrides("feat").ok())
+            .as_ref()?;
+        let row = feat.parse::<usize>().ok()?;
+        table
+            .get_cell_by_name(row, "FEAT")
+            .ok()
+            .flatten()?
+            .parse()
+            .ok()
     }
 
     fn quest_xp(&self, tag: &str) -> Option<i64> {
@@ -1524,6 +1650,7 @@ pub fn decode_assignment(
         }
         "ga_give_gold" | "ga_take_gold" | "ga_give_xp" => return decode_reward(&script, action),
         "ga_alignment" => return decode_alignment(action),
+        "ga_give_feat" | "ga_remove_feat" => return decode_feat(&script, action),
         _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };
@@ -1784,6 +1911,75 @@ fn give_items(
         }
     }
     Ok(character.into_gff())
+}
+
+fn has_feat(fields: &indexmap::IndexMap<String, GffValue<'static>>, feat: i64) -> bool {
+    match fields.get("FeatList") {
+        Some(GffValue::ListOwned(list)) => list
+            .iter()
+            .any(|entry| entry.get("Feat").and_then(gff_integer) == Some(feat)),
+        _ => false,
+    }
+}
+
+/// `FeatAdd` / `FeatRemove` on the player's struct in `playerlist.ifo`; returns the
+/// new bytes and the list as written.
+pub fn set_player_feats(
+    bytes: &[u8],
+    player: usize,
+    feats: &[(i32, bool)],
+) -> Result<(Vec<u8>, WrittenFields), String> {
+    if feats.is_empty() {
+        return Ok((bytes.to_vec(), Vec::new()));
+    }
+    let mut root = owned_root(bytes)?;
+    let Some(GffValue::ListOwned(players)) = root.get_mut("Mod_PlayerList") else {
+        return Err("Mod_PlayerList missing".into());
+    };
+    let slot = players.get_mut(player).ok_or("Primary player missing")?;
+    let fields = set_feats(std::mem::take(slot), feats);
+    let list = fields
+        .get("FeatList")
+        .cloned()
+        .ok_or("FeatList missing after changing feats")?;
+    *slot = fields;
+    let bytes = GffWriter::new("IFO ", "V3.2")
+        .write(root)
+        .map_err(|e| e.to_string())?;
+    Ok((bytes, vec![("FeatList".into(), list)]))
+}
+
+/// Same feat changes on the root struct of `player.bic`.
+pub fn set_bic_feats(bytes: &[u8], feats: &[(i32, bool)]) -> Result<Vec<u8>, String> {
+    if feats.is_empty() {
+        return Ok(bytes.to_vec());
+    }
+    let root = set_feats(owned_root(bytes)?, feats);
+    GffWriter::new("BIC ", "V3.2")
+        .write(root)
+        .map_err(|e| e.to_string())
+}
+
+/// Uses the Feats tab's add/remove path; a feat already in (or absent from) the list
+/// is left alone, as `FeatAdd` / `FeatRemove` do.
+fn set_feats(
+    fields: indexmap::IndexMap<String, GffValue<'static>>,
+    feats: &[(i32, bool)],
+) -> indexmap::IndexMap<String, GffValue<'static>> {
+    let mut character = Character::from_gff(fields);
+    for (feat, owned) in feats {
+        let feat = FeatId(*feat);
+        if *owned {
+            let _ = character.add_feat_with_source(feat, FeatSource::Unknown);
+        } else {
+            let _ = character.remove_feat(feat);
+        }
+    }
+    let mut fields = character.into_gff();
+    fields
+        .entry("FeatList".into())
+        .or_insert_with(|| GffValue::ListOwned(Vec::new()));
+    fields
 }
 
 /// The PC local the journal keeps a quest's state in.
@@ -2282,6 +2478,188 @@ mod tests {
         }
         let (_, change) = decode_assignment(&action("ga_alignment", json!([4, 0])), "m").unwrap();
         assert_eq!(change.apply(Some(&json!(50))), json!(100));
+    }
+
+    #[test]
+    fn feat_scripts_write_the_feat_on_the_player() {
+        let (key, change) =
+            decode_assignment(&action("ga_give_feat", json!(["", 1705, 0, 0])), "m").unwrap();
+        assert_eq!(
+            (key.module, key.name.as_str(), key.value_type.as_str()),
+            (None, "1705", FEAT_TYPE)
+        );
+        assert_eq!(change.apply(Some(&json!(0))), json!(1));
+        let (key, change) = decode_assignment(
+            &action("ga_remove_feat", json!(["$PC_SPEAKER", "1705"])),
+            "m",
+        )
+        .unwrap();
+        assert_eq!(key.name, "1705");
+        assert_eq!(change.apply(Some(&json!(1))), json!(0));
+        assert_eq!(
+            decode_assignment(&action("ga_give_feat", json!(["khelgar", 1833, 1])), "m"),
+            Err("object_target")
+        );
+        assert_eq!(
+            decode_assignment(&action("ga_give_feat", json!(["", -1])), "m"),
+            Err("invalid_assignment")
+        );
+    }
+
+    /// nwscript `AdjustAlignment` out of a wrapper script: axis constants, both axes,
+    /// and the neutral shift that stops at 50.
+    #[test]
+    fn adjust_alignment_points_shift_the_axes() {
+        let tables = RewardTables::empty();
+        let mut current = |key: &VariableKey| match key.name.as_str() {
+            "LawfulChaotic" => Some(10),
+            "GoodEvil" => Some(80),
+            _ => None,
+        };
+        let writes = decode_writes(
+            &action("AdjustAlignment", json!([4, 5])),
+            "m",
+            &tables,
+            &mut current,
+        )
+        .unwrap();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].0, character_key("GoodEvil"));
+        assert_eq!(writes[0].1.apply(Some(&json!(98))), json!(100));
+        let writes = decode_writes(
+            &action("AdjustAlignment", json!([3, 12])),
+            "m",
+            &tables,
+            &mut current,
+        )
+        .unwrap();
+        assert_eq!(writes[0].0, character_key("LawfulChaotic"));
+        assert_eq!(writes[0].1.apply(Some(&json!(10))), json!(0));
+        let writes = decode_writes(
+            &action("AdjustAlignment", json!([0, 3])),
+            "m",
+            &tables,
+            &mut current,
+        )
+        .unwrap();
+        assert_eq!(
+            writes
+                .iter()
+                .map(|(k, _)| k.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["LawfulChaotic", "GoodEvil"]
+        );
+        let writes = decode_writes(
+            &action("AdjustAlignment", json!([1, 15])),
+            "m",
+            &tables,
+            &mut current,
+        )
+        .unwrap();
+        assert_eq!(writes[0].1.apply(Some(&json!(10))), json!(25));
+        assert_eq!(writes[1].1.apply(Some(&json!(80))), json!(65));
+        let mut nearly_neutral = |key: &VariableKey| match key.name.as_str() {
+            "LawfulChaotic" => Some(40),
+            "GoodEvil" => Some(50),
+            _ => None,
+        };
+        let writes = decode_writes(
+            &action("AdjustAlignment", json!([1, 15])),
+            "m",
+            &tables,
+            &mut nearly_neutral,
+        )
+        .unwrap();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].1.apply(Some(&json!(40))), json!(50));
+        assert_eq!(
+            decode_writes(
+                &action("AdjustAlignment", json!([4, 0])),
+                "m",
+                &tables,
+                &mut current
+            ),
+            Err("no_effect")
+        );
+    }
+
+    #[test]
+    fn feats_are_granted_and_removed_in_both_player_files() {
+        let (_dir, mut handler) = rich_fixture_handler(0, 0);
+        let mut grant = graph();
+        add_quest(
+            &mut grant,
+            "test",
+            vec![
+                action("ga_give_feat", json!(["", 1705, 0, 0])),
+                action("ga_give_feat", json!(["", 1714, 0, 0])),
+            ],
+        );
+        let tables = RewardTables::from_graph(&grant, None);
+        let mut edits = QuestEdits::default();
+        let preview = edits
+            .preview(
+                &grant,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        assert!(preview.effects.is_empty(), "{:?}", preview.effects);
+        let feat = preview
+            .writes
+            .iter()
+            .find(|w| w.key.value_type == FEAT_TYPE && w.key.name == "1705")
+            .unwrap();
+        assert_eq!(
+            (feat.before.clone(), feat.after.clone()),
+            (Some(json!(0)), json!(1))
+        );
+        let all: Vec<usize> = (0..preview.writes.len()).collect();
+        edits.stage(preview, &grant, &all, false).unwrap();
+        handler.begin_batch();
+        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+        assert!(written.iter().any(|(name, _)| name == "FeatList"));
+        let player = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
+        let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
+        assert!(has_feat(&player, 1705) && has_feat(&player, 1714));
+        assert!(has_feat(&bic, 1705) && has_feat(&bic, 1714));
+
+        // Removing it again reads the saved feat as owned and drops it from both files.
+        let mut removal = graph();
+        add_quest(
+            &mut removal,
+            "test",
+            vec![action("ga_remove_feat", json!(["", 1705, 0]))],
+        );
+        let mut edits = QuestEdits::default();
+        let preview = edits
+            .preview(
+                &removal,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "test",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        assert_eq!(preview.writes[0].before, Some(json!(1)));
+        assert_eq!(preview.writes[0].after, json!(0));
+        edits.stage(preview, &removal, &[0], false).unwrap();
+        handler.begin_batch();
+        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        handler.commit_batch().unwrap();
+        let player = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
+        let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
+        assert!(!has_feat(&player, 1705) && has_feat(&player, 1714));
+        assert!(!has_feat(&bic, 1705) && has_feat(&bic, 1714));
         assert_eq!(
             decode_assignment(&action("ga_alignment", json!([0, 0])), "m"),
             Err("no_effect")

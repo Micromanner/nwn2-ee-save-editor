@@ -21,12 +21,25 @@ pub struct DecodedWrite {
     pub value: String,
 }
 
+/// An engine call on the player the branch always performs, in the shape of the
+/// dialogue action `editing::decode_writes` applies: `ga_alignment(act, axis)`,
+/// `AdjustAlignment(alignment, shift)`, `ga_give_feat("", feat, check)`,
+/// `ga_remove_feat("", feat)`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DecodedAction {
+    pub script: String,
+    pub params: Vec<Value>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ScriptDecode {
     /// Writes the branch always performs.
     pub writes: Vec<DecodedWrite>,
     /// Writes nested under an `if`/loop in the branch; the editor never applies these.
     pub conditional_writes: Vec<DecodedWrite>,
+    /// Alignment shifts and feat grants on the player the branch always performs.
+    #[serde(default)]
+    pub actions: Vec<DecodedAction>,
     /// Other engine calls in the branch (spawns, doors, cutscenes...), in source order.
     pub calls: Vec<String>,
     /// Variable writes whose value could not be evaluated statically.
@@ -37,6 +50,7 @@ impl ScriptDecode {
     pub fn is_empty(&self) -> bool {
         self.writes.is_empty()
             && self.conditional_writes.is_empty()
+            && self.actions.is_empty()
             && self.calls.is_empty()
             && self.unresolved.is_empty()
     }
@@ -64,6 +78,7 @@ fn decode_function(source: &str, function: &str, params: &[Value]) -> Option<Scr
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect(),
         module_aliases: HashSet::new(),
+        pc_aliases: HashSet::new(),
         out: ScriptDecode::default(),
     };
     interpret(&stmts, &mut ctx, false);
@@ -539,8 +554,19 @@ fn split_args(tokens: &[Token]) -> Vec<Vec<Token>> {
 struct Context {
     params: Vec<(String, Value)>,
     module_aliases: HashSet<String>,
+    /// Variables holding the player: assigned from `GetFirstPC()` / `GetPCSpeaker()`
+    /// (also the `GetPCSpeaker()==OBJECT_INVALID?OBJECT_SELF:GetPCSpeaker()` idiom).
+    pc_aliases: HashSet<String>,
     out: ScriptDecode,
 }
+
+/// `ALIGNMENT_*` constants of nwscript.
+const ALIGNMENT_ALL: i64 = 0;
+const ALIGNMENT_NEUTRAL: i64 = 1;
+const ALIGNMENT_LAWFUL: i64 = 2;
+const ALIGNMENT_CHAOTIC: i64 = 3;
+const ALIGNMENT_GOOD: i64 = 4;
+const ALIGNMENT_EVIL: i64 = 5;
 
 impl Context {
     fn param(&self, name: &str) -> Option<&Value> {
@@ -556,6 +582,98 @@ impl Context {
             _ => false,
         }
     }
+
+    fn is_pc(&self, expr: &[Token]) -> bool {
+        let expr = match expr {
+            [Token::Punct(open), rest @ ..] if open == "(" => rest,
+            _ => expr,
+        };
+        match expr {
+            [Token::Ident(f), Token::Punct(open), ..] if open == "(" => {
+                f.eq_ignore_ascii_case("GetFirstPC") || f.eq_ignore_ascii_case("GetPCSpeaker")
+            }
+            [Token::Ident(name)] => self.pc_aliases.contains(name),
+            _ => false,
+        }
+    }
+
+    /// Integer argument: literal, `TRUE`/`FALSE`, `ALIGNMENT_*` constant or a numeric
+    /// parameter of the script.
+    fn int_arg(&self, expr: &[Token]) -> Option<i64> {
+        match expr {
+            [Token::Num(n)] => n.parse().ok(),
+            [Token::Punct(sign), Token::Num(n)] if sign == "-" => n.parse::<i64>().ok().map(|n| -n),
+            [Token::Ident(word)] => match word.as_str() {
+                "TRUE" => Some(1),
+                "FALSE" => Some(0),
+                "ALIGNMENT_ALL" => Some(ALIGNMENT_ALL),
+                "ALIGNMENT_NEUTRAL" => Some(ALIGNMENT_NEUTRAL),
+                "ALIGNMENT_LAWFUL" => Some(ALIGNMENT_LAWFUL),
+                "ALIGNMENT_CHAOTIC" => Some(ALIGNMENT_CHAOTIC),
+                "ALIGNMENT_GOOD" => Some(ALIGNMENT_GOOD),
+                "ALIGNMENT_EVIL" => Some(ALIGNMENT_EVIL),
+                _ => self.param(word).and_then(Value::as_i64),
+            },
+            _ => None,
+        }
+    }
+}
+
+/// Engine calls `player_action` translates when they target the player.
+const PLAYER_CALLS: &[&str] = &[
+    "adjustalignment",
+    "adjustalignmentgoodevil",
+    "adjustalignmentlawchaos",
+    "goodevilaxisadjustment",
+    "lawchaosaxisadjustment",
+    "featadd",
+    "featremove",
+];
+
+/// Alignment shifts and feat changes on the player, translated to the dialogue
+/// action the editor applies. `None` when the target is not the player or an
+/// argument is not statically known; the call is then listed like any other.
+fn player_action(name: &str, args: &[Vec<Token>], ctx: &Context) -> Option<DecodedAction> {
+    let target = args.first()?;
+    if !ctx.is_pc(target) {
+        return None;
+    }
+    let int = |index: usize| ctx.int_arg(args.get(index)?);
+    let action = |script: &str, params: Vec<i64>| DecodedAction {
+        script: script.into(),
+        params: params.into_iter().map(Value::from).collect(),
+    };
+    Some(match name.to_ascii_lowercase().as_str() {
+        "adjustalignment" => action("AdjustAlignment", vec![int(1)?, int(2)?]),
+        // `ginc_alignment`: a signed point shift on one axis.
+        "adjustalignmentgoodevil" | "adjustalignmentlawchaos" => {
+            let shift = int(1)?;
+            let law_chaos = name.eq_ignore_ascii_case("AdjustAlignmentLawChaos");
+            let alignment = match (law_chaos, shift > 0) {
+                (false, true) => ALIGNMENT_GOOD,
+                (false, false) => ALIGNMENT_EVIL,
+                (true, true) => ALIGNMENT_LAWFUL,
+                (true, false) => ALIGNMENT_CHAOTIC,
+            };
+            action("AdjustAlignment", vec![alignment, shift.abs()])
+        }
+        // `ginc_alignment`: the act-type scale `ga_alignment` uses.
+        "goodevilaxisadjustment" => action("ga_alignment", vec![int(1)?, 0]),
+        "lawchaosaxisadjustment" => action("ga_alignment", vec![int(1)?, 1]),
+        "featadd" => DecodedAction {
+            script: "ga_give_feat".into(),
+            params: vec![
+                Value::from(""),
+                Value::from(int(1)?),
+                Value::from(int(2).unwrap_or(0)),
+            ],
+        },
+        "featremove" => DecodedAction {
+            script: "ga_remove_feat".into(),
+            params: vec![Value::from(""), Value::from(int(1)?)],
+        },
+        _ => return None,
+    })
 }
 
 /// Debug/logging helpers whose presence tells the user nothing.
@@ -579,6 +697,9 @@ fn interpret(stmts: &[Stmt], ctx: &mut Context, conditional: bool) {
             Stmt::Assign { name, expr } => {
                 if ctx.is_module(expr) {
                     ctx.module_aliases.insert(name.clone());
+                }
+                if ctx.is_pc(expr) {
+                    ctx.pc_aliases.insert(name.clone());
                 }
             }
             Stmt::Block(body) => interpret(body, ctx, conditional),
@@ -664,7 +785,25 @@ fn interpret_call(name: &str, args: &[Vec<Token>], ctx: &mut Context, conditiona
             }
         }
         _ if IGNORED_CALLS.contains(&lower.as_str()) => {}
-        _ => push_call(ctx, name.to_string()),
+        _ => {
+            let translated = (!conditional)
+                .then(|| player_action(name, args, ctx))
+                .flatten();
+            match translated {
+                Some(action) => ctx.out.actions.push(action),
+                // Alignment and feat calls the editor cannot apply keep their arguments
+                // so the UI can say whose alignment moves and by how much.
+                None if PLAYER_CALLS.contains(&lower.as_str()) => {
+                    let args = args
+                        .iter()
+                        .map(|a| render(a))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    push_call(ctx, format!("{name}({args})"));
+                }
+                None => push_call(ctx, name.to_string()),
+            }
+        }
     }
 }
 
@@ -892,6 +1031,82 @@ void main(int nDialogNode)
                 .conditional_writes
                 .iter()
                 .any(|w| w.name == "gbWatch")
+        );
+    }
+
+    fn decoded(script: &str, params: Vec<Value>) -> DecodedAction {
+        DecodedAction {
+            script: script.into(),
+            params,
+        }
+    }
+
+    /// Highcliff `a_gerashiftgood.nss`, SoZ `ga_give_feat.nss` and the `ginc_alignment`
+    /// helpers: calls on the player with known arguments become dialogue actions.
+    #[test]
+    fn player_alignment_and_feat_calls_become_actions() {
+        let src = r#"
+void main(int nFeat, int bCheckReq)
+{
+    object oPC = GetFirstPC();
+    object oSpeaker = (GetPCSpeaker()==OBJECT_INVALID?OBJECT_SELF:GetPCSpeaker());
+    AdjustAlignment(oPC, ALIGNMENT_GOOD, 5);
+    AdjustAlignment(GetPCSpeaker(), ALIGNMENT_CHAOTIC, 1);
+    AdjustAlignmentLawChaos(oPC, -2);
+    LawChaosAxisAdjustment(oPC, -1);
+    GoodEvilAxisAdjustment(oSpeaker, 3);
+    FeatAdd(oSpeaker, nFeat, bCheckReq);
+    FeatAdd(oPC, 1714, 0);
+    FeatRemove(oPC, 1705);
+}
+"#;
+        let decoded_script = decode_action(src, &[json!(1705), json!(0)]).unwrap();
+        assert_eq!(
+            decoded_script.actions,
+            vec![
+                decoded("AdjustAlignment", vec![json!(4), json!(5)]),
+                decoded("AdjustAlignment", vec![json!(3), json!(1)]),
+                decoded("AdjustAlignment", vec![json!(3), json!(2)]),
+                decoded("ga_alignment", vec![json!(-1), json!(1)]),
+                decoded("ga_alignment", vec![json!(3), json!(0)]),
+                decoded("ga_give_feat", vec![json!(""), json!(1705), json!(0)]),
+                decoded("ga_give_feat", vec![json!(""), json!(1714), json!(0)]),
+                decoded("ga_remove_feat", vec![json!(""), json!(1705)]),
+            ]
+        );
+        assert!(decoded_script.calls.is_empty());
+    }
+
+    /// Other targets, unknown amounts and conditional branches stay plain calls.
+    #[test]
+    fn alignment_and_feat_calls_outside_the_player_or_a_branch_stay_calls() {
+        let src = r#"
+void main(int nDialogNode)
+{
+    object oPC = GetFirstPC();
+    object oKhelgar = GetObjectByTag("khelgar");
+    int nAdjustment = 3;
+    AdjustAlignment(oKhelgar, ALIGNMENT_LAWFUL, 50);
+    AdjustAlignment(oPC, ALIGNMENT_GOOD, nAdjustment);
+    FeatAdd(oKhelgar, 1833, TRUE);
+    FeatAdd(oPC, FEAT_KNOCKDOWN, FALSE);
+    if (GetLocalInt(GetModule(), "TollRoadResult") == 1)
+    {
+        AdjustAlignment(oPC, ALIGNMENT_LAWFUL, 5);
+    }
+}
+"#;
+        let decoded_script = decode_action(src, &[json!(1)]).unwrap();
+        assert!(decoded_script.actions.is_empty());
+        assert_eq!(
+            decoded_script.calls,
+            vec![
+                "AdjustAlignment(oKhelgar, ALIGNMENT_LAWFUL, 50)",
+                "AdjustAlignment(oPC, ALIGNMENT_GOOD, nAdjustment)",
+                "FeatAdd(oKhelgar, 1833, TRUE)",
+                "FeatAdd(oPC, FEAT_KNOCKDOWN, FALSE)",
+                "AdjustAlignment(oPC, ALIGNMENT_LAWFUL, 5)",
+            ]
         );
     }
 
