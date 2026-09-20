@@ -4,6 +4,7 @@ import { CharacterAPI, CharacterData, LegitimateFeatsResponse, LegitimateSpellsR
 import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/inventoryApi';
 import { CharacterStateAPI } from '@/lib/api/character-state';
 import type { RosterEntryInfo } from '@/lib/api/character-state';
+import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
 import type {
   AbilitiesState,
   AppearanceState,
@@ -432,6 +433,11 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setPlayerName(null);
     setPlayerClassId(null);
   }, []);
+
+  // The backend closes its session when the game paths or the language change.
+  usePathsChangedEvent(() => {
+    void clearCharacter();
+  });
 
   const allSubsystems: SubsystemType[] = ['feats', 'spells', 'skills', 'inventory', 'abilityScores', 'combat', 'saves', 'classes', 'appearance'];
 

@@ -4,10 +4,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use byteorder::{ByteOrder, LittleEndian};
-use encoding_rs::WINDOWS_1252;
 use indexmap::IndexMap;
 use memmap2::Mmap;
 use tracing::{debug, instrument, trace, warn};
+
+use crate::utils::text_encoding::{decode_localized_text, decode_text};
 
 use super::error::GffError;
 use super::types::{GffValue, LazyStruct, LocalizedString, LocalizedSubstring};
@@ -150,8 +151,7 @@ impl GffParser {
         let len = bytes.iter().position(|&b| b == 0).unwrap_or(LABEL_SIZE);
         let label_bytes = &bytes[..len];
 
-        let (cow, _, _) = WINDOWS_1252.decode(label_bytes);
-        Ok(Cow::Owned(cow.into_owned()))
+        Ok(Cow::Owned(decode_text(label_bytes)))
     }
 
     pub fn read_struct_fields<'a>(
@@ -264,16 +264,14 @@ impl GffParser {
         let len_slice = self.get_data_slice(offset, 4)?;
         let len = LittleEndian::read_u32(len_slice) as usize;
         let str_slice = self.get_data_slice(offset + 4, len)?;
-        let (cow, _, _) = WINDOWS_1252.decode(str_slice);
-        Ok(Cow::Owned(cow.into_owned()))
+        Ok(Cow::Owned(decode_text(str_slice)))
     }
 
     fn read_resref<'a>(&self, offset: u32) -> Result<Cow<'a, str>, GffError> {
         let len_slice = self.get_data_slice(offset, 1)?;
         let len = len_slice[0] as usize;
         let str_slice = self.get_data_slice(offset + 1, len)?;
-        let (cow, _, _) = WINDOWS_1252.decode(str_slice);
-        Ok(Cow::Owned(cow.into_owned()))
+        Ok(Cow::Owned(decode_text(str_slice)))
     }
 
     fn read_void<'a>(&self, offset: u32) -> Result<Cow<'a, [u8]>, GffError> {
@@ -297,10 +295,8 @@ impl GffParser {
             let len = LittleEndian::read_u32(&sub_header[4..8]);
 
             let str_slice = self.get_data_slice(current_offset + 8, len as usize)?;
-            let (cow, _, _) = WINDOWS_1252.decode(str_slice);
-
             substrings.push(LocalizedSubstring {
-                string: Cow::Owned(cow.into_owned()),
+                string: Cow::Owned(decode_localized_text(str_slice, id / 2)),
                 language: id / 2,
                 gender: id % 2,
             });

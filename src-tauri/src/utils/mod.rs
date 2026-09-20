@@ -13,3 +13,5 @@ pub use path_discovery::{
 pub use precompiled_cache::{CacheBuilder, CacheManager};
 pub use prerequisite_graph::PrerequisiteGraph;
 pub use zip_content_reader::{ZipContentReader, ZipReadRequest, ZipReadResult};
+
+pub mod text_encoding;

@@ -1,7 +1,10 @@
+use crate::commands::paths::sync_resource_manager_paths;
 use crate::commands::{CommandError, CommandResult};
+use crate::config::{AppConfig, system_locale};
 use crate::state::AppState;
+use crate::utils::text_encoding::{GameLanguage, set_game_language};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 use tracing::{debug, instrument};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,7 +29,7 @@ pub async fn get_app_config(state: State<'_, AppState>) -> CommandResult<AppConf
     Ok(build_response(&config))
 }
 
-fn build_response(config: &crate::config::AppConfig) -> AppConfigResponse {
+fn build_response(config: &AppConfig) -> AppConfigResponse {
     AppConfigResponse {
         theme: config.theme.clone(),
         language: config.language.clone(),
@@ -37,16 +40,6 @@ fn build_response(config: &crate::config::AppConfig) -> AppConfigResponse {
         show_launch_dialog: config.show_launch_dialog,
         system_locale: system_locale(),
     }
-}
-
-/// `NWN2EE_LOCALE` overrides the OS regional format for testing other
-/// regions' date formats without changing system settings.
-fn system_locale() -> String {
-    std::env::var("NWN2EE_LOCALE")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(sys_locale::get_locale)
-        .unwrap_or_else(|| "en-US".to_string())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,41 +53,62 @@ pub struct AppConfigUpdate {
     pub show_launch_dialog: Option<bool>,
 }
 
+impl AppConfigUpdate {
+    fn apply_to(self, config: &mut AppConfig) {
+        if let Some(theme) = self.theme {
+            config.theme = theme;
+        }
+        if let Some(language) = self.language {
+            config.language = language;
+        }
+        if let Some(font_size) = self.font_size {
+            config.font_size = font_size;
+        }
+        if let Some(auto_backup) = self.auto_backup {
+            config.auto_backup = auto_backup;
+        }
+        if let Some(backup_count) = self.backup_count {
+            config.backup_count = backup_count;
+        }
+        if let Some(auto_close) = self.auto_close_on_launch {
+            config.auto_close_on_launch = auto_close;
+        }
+        if let Some(show_dialog) = self.show_launch_dialog {
+            config.show_launch_dialog = show_dialog;
+        }
+    }
+}
+
 #[tauri::command]
-#[instrument(name = "update_app_config", skip(state))]
+#[instrument(name = "update_app_config", skip(app, state))]
 pub async fn update_app_config(
+    app: AppHandle,
     state: State<'_, AppState>,
     updates: AppConfigUpdate,
 ) -> CommandResult<AppConfigResponse> {
     debug!("Updating app configuration: {:?}", updates);
-    let mut config = state.config.write();
+    let (response, changed_language) = {
+        let mut config = state.config.write();
+        let previous = GameLanguage::from_locale(&config.language);
+        updates.apply_to(&mut config);
+        config.save().map_err(|e| CommandError::OperationFailed {
+            operation: "save_app_config".to_string(),
+            reason: e.to_string(),
+        })?;
+        let current = GameLanguage::from_locale(&config.language);
+        (
+            build_response(&config),
+            (current != previous).then_some(current),
+        )
+    };
 
-    if let Some(theme) = updates.theme {
-        config.theme = theme;
-    }
-    if let Some(language) = updates.language {
-        config.language = language;
-    }
-    if let Some(font_size) = updates.font_size {
-        config.font_size = font_size;
-    }
-    if let Some(auto_backup) = updates.auto_backup {
-        config.auto_backup = auto_backup;
-    }
-    if let Some(backup_count) = updates.backup_count {
-        config.backup_count = backup_count;
-    }
-    if let Some(auto_close) = updates.auto_close_on_launch {
-        config.auto_close_on_launch = auto_close;
-    }
-    if let Some(show_dialog) = updates.show_launch_dialog {
-        config.show_launch_dialog = show_dialog;
+    // The game language selects the TLK and VO archives, so it reloads
+    // game data exactly like a game-folder change.
+    if let Some(language) = changed_language {
+        set_game_language(language);
+        let snapshot = state.paths.read().clone();
+        sync_resource_manager_paths(&app, &state, snapshot).await;
     }
 
-    config.save().map_err(|e| CommandError::OperationFailed {
-        operation: "save_app_config".to_string(),
-        reason: e.to_string(),
-    })?;
-
-    Ok(build_response(&config))
+    Ok(response)
 }

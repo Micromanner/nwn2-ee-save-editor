@@ -316,9 +316,11 @@ async fn test_file_multiple_saves() {
 }
 
 /// Round-trip non-ASCII content through parse → write → re-parse and verify
-/// byte-for-byte stability. Guards against UTF-8/Windows-1252 confusion in the
-/// writer: GFF stores Windows-1252, so writing raw UTF-8 bytes would cause
-/// every save to double the byte count of non-ASCII localized strings.
+/// stability. The writer emits UTF-8 (what the EE engine writes) and the
+/// parser decodes UTF-8 before falling back to a code page, so the text must
+/// survive every pass and the bytes must be identical from the second save on.
+/// A parse/write asymmetry here once multiplied every non-ASCII substring per
+/// save cycle into 400MB files.
 #[tokio::test]
 async fn test_roundtrip_non_ascii_locstring_stable() {
     let (_temp_dir, temp_path, bytes) = create_temp_bic("occidiooctavon/occidiooctavon1.bic");
@@ -329,7 +331,8 @@ async fn test_roundtrip_non_ascii_locstring_stable() {
         (4, "Spanish: ¡Qué día! Niño piñata año corazón."),
         (1, "French: Peut-être être élève à côté du café."),
         (3, "Italian: perché città università pietà più."),
-        (5, "Polish with transliteration: opowiesci zlych drow."),
+        (5, "Polish: opowieści złych drowów, źdźbło."),
+        (0, "Russian: Друг Тест, Квартал Доков."),
         (6, "Symbols: © ® ± ¼ ½ ¾ « » ¡ ¿"),
     ];
 
@@ -363,6 +366,7 @@ async fn test_roundtrip_non_ascii_locstring_stable() {
         let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
         writer.write(root_owned).expect("Write #1")
     };
+    let first_written = current_bytes.clone();
 
     let mut byte_lens_by_pass: Vec<Vec<usize>> = Vec::new();
 
@@ -400,6 +404,10 @@ async fn test_roundtrip_non_ascii_locstring_stable() {
         }
         let mut writer = GffWriter::new(&p.file_type, &p.file_version);
         current_bytes = writer.write(next_root).expect("Write");
+        assert_eq!(
+            current_bytes, first_written,
+            "Pass {pass} bytes differ from the first save"
+        );
     }
 
     let first = &byte_lens_by_pass[0];

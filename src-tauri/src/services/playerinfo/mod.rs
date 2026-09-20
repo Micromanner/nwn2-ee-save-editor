@@ -6,9 +6,10 @@ use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use encoding_rs::{UTF_8, WINDOWS_1252};
 use indexmap::IndexMap;
 use tracing::{debug, warn};
+
+use crate::utils::text_encoding::decode_text;
 
 use crate::character::gff_helpers::gff_value_to_u32;
 use crate::character::types::{
@@ -113,13 +114,7 @@ impl PlayerInfo {
         let mut name_bytes = vec![0u8; length];
         file.read_exact(&mut name_bytes)?;
 
-        let (decoded, _, had_errors) = WINDOWS_1252.decode(&name_bytes);
-        if had_errors {
-            let (utf8_decoded, _, _) = UTF_8.decode(&name_bytes);
-            Ok(utf8_decoded.into_owned())
-        } else {
-            Ok(decoded.into_owned())
-        }
+        Ok(decode_text(&name_bytes))
     }
 
     pub fn update_from_gff_data(
@@ -370,18 +365,11 @@ fn read_string(cursor: &mut Cursor<&[u8]>) -> PlayerInfoResult<String> {
     let mut bytes = vec![0u8; len];
     cursor.read_exact(&mut bytes)?;
 
-    let (decoded, _, had_errors) = WINDOWS_1252.decode(&bytes);
-    if had_errors {
-        let (utf8_decoded, _, _) = UTF_8.decode(&bytes);
-        Ok(utf8_decoded.into_owned())
-    } else {
-        Ok(decoded.into_owned())
-    }
+    Ok(decode_text(&bytes))
 }
 
 fn write_string(writer: &mut impl Write, s: &str) -> PlayerInfoResult<()> {
-    let (encoded, _, _) = WINDOWS_1252.encode(s);
-    let bytes = encoded.as_ref();
+    let bytes = s.as_bytes();
 
     writer.write_u32::<LittleEndian>(bytes.len() as u32)?;
     writer.write_all(bytes)?;

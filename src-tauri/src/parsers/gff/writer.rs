@@ -1,21 +1,13 @@
-use std::borrow::Cow;
 use std::io::{Cursor, Write};
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use encoding_rs::WINDOWS_1252;
 use indexmap::IndexMap;
 
 use super::error::GffError;
 use super::types::{GffFieldType, GffValue};
 
-/// Encode a Rust string (UTF-8 internally) to Windows-1252 bytes for GFF storage.
-/// Returns borrowed bytes on the ASCII fast path; mirrors the parser's
-/// `WINDOWS_1252.decode` to guarantee round-trip stability.
-fn encode_w1252(s: &str) -> Cow<'_, [u8]> {
-    let (cow, _, _) = WINDOWS_1252.encode(s);
-    cow
-}
-
+/// Strings are written as UTF-8, which both engines read; the parser decodes
+/// UTF-8 first, so files round-trip byte-identical (`utils::text_encoding`).
 pub struct GffWriter {
     pub file_type: String,
     pub file_version: String,
@@ -218,15 +210,15 @@ impl GffWriter {
             }
             GffValue::String(v) => {
                 let offset = self.field_data.position() as u32;
-                let bytes = encode_w1252(&v);
+                let bytes = v.as_bytes();
                 self.field_data
                     .write_u32::<LittleEndian>(bytes.len() as u32)?;
-                self.field_data.write_all(&bytes)?;
+                self.field_data.write_all(bytes)?;
                 (GffFieldType::String, offset)
             }
             GffValue::ResRef(v) => {
                 let offset = self.field_data.position() as u32;
-                let bytes = encode_w1252(&v);
+                let bytes = v.as_bytes();
                 let len = bytes.len().min(32) as u8;
                 self.field_data.write_u8(len)?;
                 self.field_data.write_all(&bytes[..len as usize])?;
@@ -241,10 +233,10 @@ impl GffWriter {
             GffValue::LocString(v) => {
                 let offset = self.field_data.position() as u32;
 
-                let encoded: Vec<Cow<'_, [u8]>> = v
+                let encoded: Vec<&[u8]> = v
                     .substrings
                     .iter()
-                    .map(|sub| encode_w1252(&sub.string))
+                    .map(|sub| sub.string.as_bytes())
                     .collect();
 
                 let content_size: usize = encoded.iter().map(|b| 8 + b.len()).sum();

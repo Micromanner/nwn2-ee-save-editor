@@ -174,6 +174,7 @@ impl ResourceManager {
             .data()
             .ok_or_else(|| ResourceManagerError::PathNotConfigured("NWN2 data directory".into()))?;
         let game_folder = paths.game_folder().cloned();
+        let localization_folder = paths.localization_folder();
         drop(paths);
 
         // Every archive in the data directory is indexed, so a lookup that
@@ -205,7 +206,8 @@ impl ResourceManager {
                     zip_paths.push(path);
                 }
             }
-            let vo_dir = gf.join("localization/english/data");
+        }
+        if let Some(vo_dir) = localization_folder.map(|dir| dir.join("data")) {
             for name in VO_ZIPS {
                 let p = vo_dir.join(name);
                 if p.exists() {

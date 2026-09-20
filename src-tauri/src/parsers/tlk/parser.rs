@@ -13,6 +13,8 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Instant;
 
+use crate::utils::text_encoding::{decode_localized_text, decode_text};
+
 impl TLKParser {
     /// Parse TLK data from a file path
     pub fn parse_from_file<P: AsRef<Path>>(&mut self, path: P) -> TLKResult<()> {
@@ -272,16 +274,11 @@ impl TLKParser {
         // Extract string bytes
         let string_bytes = &self.string_data[start..end];
 
-        // Convert to UTF-8 string
-        match String::from_utf8(string_bytes.to_vec()) {
-            Ok(string) => Ok(Some(string)),
-            Err(_e) => {
-                // Try to recover with lossy conversion
-                let string = String::from_utf8_lossy(string_bytes).to_string();
-                // Note: We can't modify metadata here as it's immutable, but that's okay for error reporting
-                Ok(Some(string))
-            }
-        }
+        // EE TLKs are UTF-8, pre-EE TLKs use the code page of the header language.
+        Ok(Some(decode_localized_text(
+            string_bytes,
+            self.metadata.language_id,
+        )))
     }
 
     /// Get multiple strings in one batch operation (high performance)
@@ -520,8 +517,7 @@ fn extract_null_terminated_string(bytes: &[u8]) -> Option<String> {
         return None;
     }
 
-    let string_bytes = &bytes[..null_pos];
-    String::from_utf8(string_bytes.to_vec()).ok()
+    Some(decode_text(&bytes[..null_pos]))
 }
 
 /// Calculate match score for search results

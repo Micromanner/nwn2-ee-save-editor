@@ -10,6 +10,7 @@ use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::QuestGraphProgress;
 use crate::services::toolset_bridge::BridgeClient;
 use crate::state::session_state::SessionState;
+use crate::utils::text_encoding::{GameLanguage, set_game_language};
 
 #[derive(Clone, serde::Serialize)]
 pub struct InitStatus {
@@ -55,6 +56,7 @@ impl AppState {
 
         debug!("Loading AppConfig");
         let config = AppConfig::load();
+        set_game_language(GameLanguage::from_locale(&config.language));
         debug!("AppConfig loaded");
 
         debug!("Creating ResourceManager");

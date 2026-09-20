@@ -1,4 +1,4 @@
-use super::super::common::load_test_gff;
+use super::super::common::{fixtures_path, load_test_gff};
 use app_lib::parsers::gff::parser::GffParser;
 use app_lib::parsers::gff::types::GffValue;
 use app_lib::parsers::gff::writer::GffWriter;
@@ -577,4 +577,49 @@ async fn test_gff_enumerate_all_root_fields() {
         };
         println!("  {name}: {type_name}");
     }
+}
+
+/// A save written by a Russian EE client (fixture `saves/Russian_Client`,
+/// 2026-09-19): the engine stores typed names as UTF-8 in both the `.bic`
+/// LocStrings and `playerinfo.bin`, so no code page fallback may touch them,
+/// and writing them back must be byte-identical.
+#[tokio::test]
+async fn test_russian_client_save_names_are_utf8() {
+    use app_lib::services::playerinfo::PlayerInfo;
+    use app_lib::utils::ZipContentReader;
+
+    let fixtures = fixtures_path().join("saves/Russian_Client");
+    let bic = ZipContentReader::new()
+        .read_file_from_zip(
+            fixtures.join("resgff.zip").to_string_lossy().into_owned(),
+            "player.bic".to_string(),
+        )
+        .expect("player.bic in resgff.zip");
+
+    let parser = GffParser::from_bytes(bic).expect("parse player.bic");
+    let root = parser.read_struct_fields(0).expect("root");
+    let name = |field: &str| match root.get(field) {
+        Some(GffValue::LocString(ls)) => ls.substrings[0].string.to_string(),
+        other => panic!("{field}: {other:?}"),
+    };
+    assert_eq!(name("FirstName"), "Друг");
+    assert_eq!(name("LastName"), "Тест");
+
+    let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
+    let root_owned = root
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned()))
+        .collect();
+    let written = writer.write(root_owned).expect("write");
+    let reparsed = GffParser::from_bytes(written).expect("re-parse");
+    let root2 = reparsed.read_struct_fields(0).expect("root");
+    match root2.get("FirstName") {
+        Some(GffValue::LocString(ls)) => assert_eq!(ls.substrings[0].string, "Друг"),
+        other => panic!("FirstName after write: {other:?}"),
+    }
+
+    let info = PlayerInfo::load(fixtures.join("playerinfo.bin")).expect("load playerinfo.bin");
+    assert_eq!(info.data.first_name, "Друг");
+    assert_eq!(info.data.last_name, "Тест");
+    assert_eq!(info.data.subrace, "Человек");
 }

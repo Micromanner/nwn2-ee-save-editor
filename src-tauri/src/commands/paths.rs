@@ -97,7 +97,7 @@ fn build_path_config(paths: &crate::config::NWN2Paths) -> PathConfig {
     }
 }
 
-async fn sync_resource_manager_paths(
+pub(crate) async fn sync_resource_manager_paths(
     app: &AppHandle,
     state: &AppState,
     snapshot: crate::config::NWN2Paths,

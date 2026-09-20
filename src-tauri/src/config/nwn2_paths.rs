@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument};
 
 use crate::utils::path_discovery::discover_nwn2_paths_rust;
+use crate::utils::text_encoding::{GameLanguage, game_language};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PathSource {
@@ -384,8 +385,27 @@ impl NWN2Paths {
         self.game_folder.as_ref().map(|g| g.join("enhanced/Data"))
     }
 
+    /// The base talk table for the editor language: EE ships one per language
+    /// below `localization/`; the root `dialog.tlk` is the fallback.
     pub fn dialog_tlk(&self) -> Option<PathBuf> {
-        self.game_folder.as_ref().map(|g| g.join("dialog.tlk"))
+        let game = self.game_folder.as_ref()?;
+        let localized = self
+            .localization_folder()
+            .map(|dir| dir.join("dialog.tlk"))
+            .filter(|p| p.is_file());
+        Some(localized.unwrap_or_else(|| game.join("dialog.tlk")))
+    }
+
+    /// `localization/<language>` for the editor language when it exists,
+    /// else the English one.
+    pub fn localization_folder(&self) -> Option<PathBuf> {
+        let root = self.game_folder.as_ref()?.join("localization");
+        let wanted = root.join(game_language().localization_folder());
+        if wanted.is_dir() {
+            return Some(wanted);
+        }
+        let english = root.join(GameLanguage::English.localization_folder());
+        english.is_dir().then_some(english)
     }
 
     pub fn saves(&self) -> Option<PathBuf> {
