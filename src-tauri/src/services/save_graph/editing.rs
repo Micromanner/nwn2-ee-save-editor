@@ -110,6 +110,8 @@ pub struct NextLine {
 pub struct RouteWrite {
     pub name: String,
     pub value_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<Value>,
     pub after: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -335,6 +337,10 @@ impl QuestEdits {
                             .map(|w| w.after.clone())
                             .or(saved.clone());
                         let after = change.apply(before.as_ref());
+                        // Nothing of that tag in the backpack: the script is a no-op in-game too.
+                        if key.value_type == ITEM_TAKE_TYPE && before == Some(after.clone()) {
+                            continue;
+                        }
                         let blueprint = (key.value_type == ITEM_TYPE)
                             .then(|| tables.item(&tr.module, &key.name))
                             .flatten();
@@ -343,13 +349,21 @@ impl QuestEdits {
                                 .blueprints
                                 .insert(key.name.clone(), blueprint.clone());
                         }
-                        let label_strref = if key.value_type == FEAT_TYPE {
-                            tables.feat_name_strref(&key.name)
+                        let (label, label_strref) = if key.value_type == ITEM_TAKE_TYPE {
+                            reader.item_label(&key.name)
+                        } else if key.value_type == FEAT_TYPE {
+                            (None, tables.feat_name_strref(&key.name))
                         } else if key.value_type == COMPANION_FEAT_TYPE {
-                            split_companion_key(&key.name)
-                                .and_then(|(_, feat)| tables.feat_name_strref(feat))
+                            (
+                                None,
+                                split_companion_key(&key.name)
+                                    .and_then(|(_, feat)| tables.feat_name_strref(feat)),
+                            )
                         } else {
-                            blueprint.as_ref().and_then(|b| b.name_strref)
+                            (
+                                blueprint.as_ref().and_then(|b| b.name.clone()),
+                                blueprint.as_ref().and_then(|b| b.name_strref),
+                            )
                         };
                         candidates.push(VariableWrite {
                             key,
@@ -357,7 +371,7 @@ impl QuestEdits {
                             before,
                             after,
                             action_index,
-                            label: blueprint.as_ref().and_then(|b| b.name.clone()),
+                            label,
                             label_strref,
                             derived_from: action.derived_from.clone(),
                             line,
@@ -491,6 +505,7 @@ impl QuestEdits {
                     .map(|w| RouteWrite {
                         name: w.key.name.clone(),
                         value_type: w.key.value_type.clone(),
+                        before: w.before.clone(),
                         after: w.after.clone(),
                         label: w.label.clone(),
                         label_strref: w.label_strref,
@@ -529,6 +544,7 @@ impl QuestEdits {
                             old.key == new.key
                                 && old.after != new.after
                                 && old.key.value_type != ITEM_TYPE
+                                && old.key.value_type != ITEM_TAKE_TYPE
                         })
                     })
             })
@@ -620,6 +636,7 @@ impl QuestEdits {
             .collect();
         let mut rewards: Vec<(String, i64)> = Vec::new();
         let mut items: Vec<(Arc<ItemBlueprint>, i64)> = Vec::new();
+        let mut takes: Vec<(String, i64)> = Vec::new();
         let mut feats: Vec<(i32, bool)> = Vec::new();
         let mut party: Vec<(String, bool)> = Vec::new();
         let mut selectable: Vec<(String, bool)> = Vec::new();
@@ -684,13 +701,19 @@ impl QuestEdits {
                     if quantity > 0 {
                         items.push((blueprint.clone(), quantity));
                     }
+                } else if write.key.value_type == ITEM_TAKE_TYPE {
+                    let units = write.before.as_ref().and_then(Value::as_i64).unwrap_or(0)
+                        - write.after.as_i64().unwrap_or(0);
+                    if units > 0 {
+                        takes.push((write.key.name.clone(), units));
+                    }
                 }
             }
         }
         let bytes = handler.extract_player_data().map_err(|e| e.to_string())?;
         let bytes = write_pc_int_locals(&bytes, player, &locals)?;
         let (bytes, mut written) = add_player_rewards(&bytes, player, &rewards)?;
-        let (bytes, item_list) = give_player_items(&bytes, player, &items, game_data)?;
+        let (bytes, item_list) = apply_player_items(&bytes, player, &items, &takes, game_data)?;
         written.extend(item_list);
         let (bytes, feat_list) = set_player_feats(&bytes, player, &feats)?;
         written.extend(feat_list);
@@ -698,11 +721,11 @@ impl QuestEdits {
             .update_file("playerlist.ifo", &bytes)
             .map_err(|e| e.to_string())?;
         if primary
-            && (!rewards.is_empty() || !items.is_empty() || !feats.is_empty())
+            && (!rewards.is_empty() || !items.is_empty() || !takes.is_empty() || !feats.is_empty())
             && let Some(bic) = handler.extract_player_bic().map_err(|e| e.to_string())?
         {
             let bic = add_bic_rewards(&bic, &rewards)?;
-            let bic = give_bic_items(&bic, &items, game_data)?;
+            let bic = apply_bic_items(&bic, &items, &takes, game_data)?;
             let bic = set_bic_feats(&bic, &feats)?;
             handler
                 .update_file("player.bic", &bic)
@@ -744,16 +767,12 @@ impl QuestEdits {
         }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
-        for write in self.pending.iter().flat_map(|p| &p.writes).filter(|w| {
-            w.key.value_type != CHARACTER_TYPE
-                && w.key.value_type != ITEM_TYPE
-                && w.key.value_type != PC_LOCAL_TYPE
-                && w.key.value_type != FEAT_TYPE
-                && w.key.value_type != PARTY_TYPE
-                && w.key.value_type != SELECTABLE_TYPE
-                && w.key.value_type != COMPANION_CHARACTER_TYPE
-                && w.key.value_type != COMPANION_FEAT_TYPE
-        }) {
+        for write in self
+            .pending
+            .iter()
+            .flat_map(|p| &p.writes)
+            .filter(|w| !writes_save_files(&w.key.value_type))
+        {
             let value = write
                 .after
                 .as_str()
@@ -845,6 +864,30 @@ impl<'a> VariableReader<'a> {
         }
     }
 
+    fn player_fields(&mut self) -> Result<&indexmap::IndexMap<String, GffValue<'static>>, String> {
+        self.player_fields
+            .get_or_insert_with(|| {
+                let bytes = self
+                    .handler
+                    .extract_player_data()
+                    .map_err(|e| e.to_string())?;
+                player_struct(&bytes, self.player)
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// Display name of the first backpack item carrying `tag`: embedded text, TLK strref.
+    pub fn item_label(&mut self, tag: &str) -> (Option<String>, Option<i32>) {
+        let Ok(fields) = self.player_fields() else {
+            return (None, None);
+        };
+        backpack_items(fields)
+            .find(|item| item_tag_matches(item, tag))
+            .map(super::item_blueprints::localized_name)
+            .unwrap_or((None, None))
+    }
+
     pub fn read(&mut self, key: &VariableKey) -> Result<Option<Value>, String> {
         if key.value_type == ITEM_TYPE {
             return Ok(None);
@@ -855,18 +898,16 @@ impl<'a> VariableReader<'a> {
         if key.value_type == CHARACTER_TYPE
             || key.value_type == PC_LOCAL_TYPE
             || key.value_type == FEAT_TYPE
+            || key.value_type == ITEM_TAKE_TYPE
         {
-            let fields = self
-                .player_fields
-                .get_or_insert_with(|| {
-                    let bytes = self
-                        .handler
-                        .extract_player_data()
-                        .map_err(|e| e.to_string())?;
-                    player_struct(&bytes, self.player)
-                })
-                .as_ref()
-                .map_err(Clone::clone)?;
+            let fields = self.player_fields()?;
+            if key.value_type == ITEM_TAKE_TYPE {
+                let units: i64 = backpack_items(fields)
+                    .filter(|item| item_tag_matches(item, &key.name))
+                    .map(|item| item_stack_size(item))
+                    .sum();
+                return Ok(Some(Value::from(units)));
+            }
             if key.value_type == PC_LOCAL_TYPE {
                 return Ok(pc_int_local(fields, &key.name));
             }
@@ -1386,6 +1427,10 @@ pub const CHARACTER_TYPE: &str = "character";
 /// `VariableKey::value_type` of an item handed to the player: `name` is the
 /// blueprint resref, the value the quantity.
 pub const ITEM_TYPE: &str = "item";
+/// `VariableKey::value_type` of items taken out of the player's backpack
+/// (`ga_take_item` / `ga_destroy_item`): `name` is the lowercase item tag, the
+/// value how many units of that tag the `ItemList` holds afterwards.
+pub const ITEM_TAKE_TYPE: &str = "item_take";
 /// `VariableKey::value_type` of an integer local on the PC (`VarTable` of the
 /// player's struct), e.g. the `<tag>_XP_QPR` share of quest XP already paid.
 pub const PC_LOCAL_TYPE: &str = "pc_local";
@@ -1407,6 +1452,23 @@ pub const COMPANION_CHARACTER_TYPE: &str = "companion_character";
 pub const COMPANION_FEAT_TYPE: &str = "companion_feat";
 const GOLD: &str = "Gold";
 const EXPERIENCE: &str = "Experience";
+
+/// Write kinds that land in player, roster or companion files rather than in the
+/// campaign's variable stores (`globals.xml`, module variables).
+pub fn writes_save_files(value_type: &str) -> bool {
+    matches!(
+        value_type,
+        CHARACTER_TYPE
+            | ITEM_TYPE
+            | ITEM_TAKE_TYPE
+            | PC_LOCAL_TYPE
+            | FEAT_TYPE
+            | PARTY_TYPE
+            | SELECTABLE_TYPE
+            | COMPANION_CHARACTER_TYPE
+            | COMPANION_FEAT_TYPE
+    )
+}
 const GOOD_EVIL: &str = "GoodEvil";
 const LAWFUL_CHAOTIC: &str = "LawfulChaotic";
 /// `ginc_journal.QPR_SUFFIX`.
@@ -1696,6 +1758,11 @@ pub fn decode_writes(
         .unwrap_or(0);
         return decode_partial_quest_xp(action, tables, rewarded);
     }
+    if action.script.eq_ignore_ascii_case("ga_take_item")
+        || action.script.eq_ignore_ascii_case("ga_destroy_item")
+    {
+        return decode_item_take(action).map(|write| write.into_iter().collect());
+    }
     decode_action(action, module, tables).map(|write| vec![write])
 }
 
@@ -1832,6 +1899,42 @@ pub fn decode_action(
         }
         _ => decode_assignment(action, module),
     }
+}
+
+/// `ga_take_item(sTag, nQuantity, bAllPartyMembers)` / `ga_destroy_item(sTag, nQuantity,
+/// bPCFaction)`: both match the tag in the backpack (`GetFirstItemInInventory`, never the
+/// equipped slots) and a negative quantity means every unit. `ga_take_item` reads 0 as 1,
+/// `ga_destroy_item` does nothing for 0 (`None`). The party flags only reach other PCs
+/// (`ga_take_item`) or companions once the PC runs out (`ga_destroy_item`); the PC's
+/// backpack is the only one written. Units are removed rather than `ga_take_item`'s whole
+/// stacks; both agree on unstackable quest items.
+fn decode_item_take(action: &ConvoFunctor) -> Result<Option<(VariableKey, Change)>, &'static str> {
+    let tag = action
+        .params
+        .first()
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or("invalid_assignment")?
+        .to_ascii_lowercase();
+    let default = i64::from(action.script.eq_ignore_ascii_case("ga_take_item"));
+    let change = match int_param(action, 1).filter(|q| *q != 0).unwrap_or(default) {
+        0 => return Ok(None),
+        q if q < 0 => Change::Set(Value::from(0)),
+        q => Change::AddClamped {
+            delta: -q,
+            min: 0,
+            max: i64::MAX,
+        },
+    };
+    Ok(Some((
+        VariableKey {
+            module: None,
+            name: tag,
+            value_type: ITEM_TAKE_TYPE.into(),
+        },
+        change,
+    )))
 }
 
 /// NWScript `StringToInt`: leading integer, anything else is 0.
@@ -2054,15 +2157,16 @@ pub fn add_bic_rewards(bytes: &[u8], rewards: &[(String, i64)]) -> Result<Vec<u8
         .map_err(|e| e.to_string())
 }
 
-/// Put the reward items into the player's `ItemList` in `playerlist.ifo`; returns the
-/// new bytes and the list as written.
-pub fn give_player_items(
+/// Give the reward items and take the turn-ins in the player's `ItemList` in
+/// `playerlist.ifo`; returns the new bytes and the list as written.
+pub fn apply_player_items(
     bytes: &[u8],
     player: usize,
     items: &[(Arc<ItemBlueprint>, i64)],
+    takes: &[(String, i64)],
     game_data: &GameData,
 ) -> Result<(Vec<u8>, WrittenFields), String> {
-    if items.is_empty() {
+    if items.is_empty() && takes.is_empty() {
         return Ok((bytes.to_vec(), Vec::new()));
     }
     let mut root = owned_root(bytes)?;
@@ -2070,11 +2174,12 @@ pub fn give_player_items(
         return Err("Mod_PlayerList missing".into());
     };
     let slot = players.get_mut(player).ok_or("Primary player missing")?;
-    let fields = give_items(std::mem::take(slot), items, game_data)?;
+    let mut fields = give_items(std::mem::take(slot), items, game_data)?;
+    take_items(&mut fields, takes);
     let list = fields
         .get("ItemList")
         .cloned()
-        .ok_or("ItemList missing after adding items")?;
+        .ok_or("ItemList missing after changing items")?;
     *slot = fields;
     let bytes = GffWriter::new("IFO ", "V3.2")
         .write(root)
@@ -2082,16 +2187,18 @@ pub fn give_player_items(
     Ok((bytes, vec![("ItemList".into(), list)]))
 }
 
-/// Same items into the root struct of `player.bic`.
-pub fn give_bic_items(
+/// Same item changes on the root struct of `player.bic`.
+pub fn apply_bic_items(
     bytes: &[u8],
     items: &[(Arc<ItemBlueprint>, i64)],
+    takes: &[(String, i64)],
     game_data: &GameData,
 ) -> Result<Vec<u8>, String> {
-    if items.is_empty() {
+    if items.is_empty() && takes.is_empty() {
         return Ok(bytes.to_vec());
     }
-    let root = give_items(owned_root(bytes)?, items, game_data)?;
+    let mut root = give_items(owned_root(bytes)?, items, game_data)?;
+    take_items(&mut root, takes);
     GffWriter::new("BIC ", "V3.2")
         .write(root)
         .map_err(|e| e.to_string())
@@ -2137,6 +2244,54 @@ fn give_items(
         }
     }
     Ok(character.into_gff())
+}
+
+fn backpack_items<'f>(
+    fields: &'f indexmap::IndexMap<String, GffValue<'static>>,
+) -> impl Iterator<Item = &'f indexmap::IndexMap<String, GffValue<'static>>> {
+    match fields.get("ItemList") {
+        Some(GffValue::ListOwned(list)) => list.iter(),
+        _ => [].iter(),
+    }
+}
+
+fn item_tag_matches(item: &indexmap::IndexMap<String, GffValue<'static>>, tag: &str) -> bool {
+    matches!(item.get("Tag"), Some(GffValue::String(t)) if t.eq_ignore_ascii_case(tag))
+}
+
+fn item_stack_size(item: &indexmap::IndexMap<String, GffValue<'static>>) -> i64 {
+    item.get("StackSize")
+        .and_then(gff_integer)
+        .unwrap_or(1)
+        .max(1)
+}
+
+/// `ga_destroy_item`'s loop: walk the backpack in order, drop whole stacks of the tag
+/// while they fit into the remaining count, shrink the stack that does not.
+fn take_items(fields: &mut indexmap::IndexMap<String, GffValue<'static>>, takes: &[(String, i64)]) {
+    let Some(GffValue::ListOwned(list)) = fields.get_mut("ItemList") else {
+        return;
+    };
+    for (tag, units) in takes {
+        let mut remaining = *units;
+        list.retain_mut(|item| {
+            if remaining <= 0 || !item_tag_matches(item, tag) {
+                return true;
+            }
+            let stack = item_stack_size(item);
+            if stack <= remaining {
+                remaining -= stack;
+                return false;
+            }
+            let left = i32::try_from(stack - remaining).unwrap_or(i32::MAX);
+            item.insert(
+                "StackSize".into(),
+                crate::character::typed_stack_size(item.get("StackSize"), left),
+            );
+            remaining = 0;
+            true
+        });
+    }
 }
 
 fn has_feat(fields: &indexmap::IndexMap<String, GffValue<'static>>, feat: i64) -> bool {
@@ -2497,10 +2652,19 @@ mod tests {
     }
 
     fn rich_fixture_handler(gold: u32, xp: i32) -> (tempfile::TempDir, SaveGameHandler) {
+        fixture_handler_with(|player| {
+            player.insert("Gold".into(), GffValue::Dword(gold));
+            player.insert("Experience".into(), GffValue::Int(xp));
+        })
+    }
+
+    /// The fixture player with `edit` applied, written as `playerlist.ifo` + `player.bic`.
+    fn fixture_handler_with(
+        edit: impl FnOnce(&mut indexmap::IndexMap<String, GffValue<'static>>),
+    ) -> (tempfile::TempDir, SaveGameHandler) {
         use std::io::Write;
         let mut player = owned_players(&playerlist()).swap_remove(0);
-        player.insert("Gold".into(), GffValue::Dword(gold));
-        player.insert("Experience".into(), GffValue::Int(xp));
+        edit(&mut player);
         let playerlist = GffWriter::new("IFO ", "V3.2")
             .write(
                 indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player.clone()]) },
@@ -3080,6 +3244,152 @@ mod tests {
                 &mut current
             ),
             Err("no_effect")
+        );
+    }
+
+    #[test]
+    fn items_are_taken_by_tag_from_both_player_files() {
+        use crate::parsers::gff::{LocalizedString, LocalizedSubstring};
+        let item =
+            |tag: &str, stack: Option<u16>| -> indexmap::IndexMap<String, GffValue<'static>> {
+                let mut item = indexmap! {
+                    "BaseItem".into() => GffValue::Int(12),
+                    "Tag".into() => GffValue::String(tag.to_string().into()),
+                    "LocalizedName".into() => GffValue::LocString(LocalizedString {
+                        string_ref: 4242,
+                        substrings: vec![LocalizedSubstring {
+                            string: "Bandit Head".into(),
+                            language: 0,
+                            gender: 0,
+                        }],
+                    }),
+                };
+                if let Some(stack) = stack {
+                    item.insert("StackSize".into(), GffValue::Word(stack));
+                }
+                item
+            };
+        let (_dir, mut handler) = fixture_handler_with(|player| {
+            player.insert(
+                "ItemList".into(),
+                GffValue::ListOwned(vec![
+                    item("QE_Head", None),
+                    item("other", Some(3)),
+                    item("qe_head", Some(4)),
+                    item("qe_head", Some(2)),
+                ]),
+            );
+        });
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "take",
+            vec![
+                action("ga_take_item", json!(["QE_Head", 3, 0])),
+                action("ga_destroy_item", json!(["nothing_here", -1, 0])),
+                action("ga_destroy_item", json!(["other", 0, 0])),
+            ],
+        );
+        add_quest(
+            &mut graph,
+            "destroy_all",
+            vec![action("ga_destroy_item", json!(["other", -1, 1]))],
+        );
+        let mut edits = QuestEdits::default();
+        let tables = RewardTables::from_graph(&graph, None);
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "take",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        assert!(preview.effects.is_empty(), "{:?}", preview.effects);
+        assert_eq!(preview.writes.len(), 1, "{:?}", preview.writes);
+        let take = &preview.writes[0];
+        assert_eq!(take.key.value_type, ITEM_TAKE_TYPE);
+        assert_eq!(take.key.name, "qe_head");
+        assert_eq!(
+            (take.before.clone(), take.after.clone()),
+            (Some(json!(7)), json!(4))
+        );
+        assert_eq!(take.label.as_deref(), Some("Bandit Head"));
+        assert_eq!(take.label_strref, Some(4242));
+        edits.stage(preview, &graph, &[0], false).unwrap();
+        let preview = edits
+            .preview(
+                &graph,
+                &tables,
+                &handler,
+                &NWN2Paths::new(),
+                0,
+                "destroy_all",
+                20,
+                Some(0),
+            )
+            .unwrap();
+        assert_eq!(preview.writes.len(), 1, "{:?}", preview.writes);
+        assert_eq!(
+            (
+                preview.writes[0].before.clone(),
+                preview.writes[0].after.clone()
+            ),
+            (Some(json!(3)), json!(0))
+        );
+        edits.stage(preview, &graph, &[0], false).unwrap();
+        edits
+            .validate_saved(&handler, &NWN2Paths::new(), 0)
+            .unwrap();
+
+        handler.begin_batch();
+        let written = edits
+            .flush(&mut handler, 0, true, &game_data())
+            .unwrap()
+            .player;
+        handler.commit_batch().unwrap();
+        let stacks = |list: &GffValue<'static>| match list {
+            GffValue::ListOwned(items) => items
+                .iter()
+                .map(|i| {
+                    (
+                        match i.get("Tag") {
+                            Some(GffValue::String(t)) => t.to_string(),
+                            _ => String::new(),
+                        },
+                        format!("{:?}", i.get("StackSize")),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        let expected = vec![
+            (
+                "qe_head".to_string(),
+                format!("{:?}", Some(GffValue::Word(2))),
+            ),
+            (
+                "qe_head".to_string(),
+                format!("{:?}", Some(GffValue::Word(2))),
+            ),
+        ];
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].0, "ItemList");
+        assert_eq!(stacks(&written[0].1), expected);
+        let player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
+        assert_eq!(stacks(&player["ItemList"]), expected);
+        let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
+        assert_eq!(stacks(&bic["ItemList"]), expected);
+        let journal = read_live_journal(&handler, 0).unwrap();
+        assert!(
+            ["take", "destroy_all"]
+                .iter()
+                .all(|tag| journal.iter().any(|e| e.tag == *tag && e.state == 20)),
+            "{journal:?}"
         );
     }
 

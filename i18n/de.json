@@ -653,6 +653,8 @@
         "goldApplied": "Gold",
         "xpApplied": "EP",
         "itemOutcome": "{item} ×{quantity}",
+        "itemTakeOutcome": "{item} −{quantity}",
+        "itemTaken": "aus dem Rucksack genommen",
         "goodEvilApplied": "Gut/Böse",
         "lawChaosApplied": "Recht/Chaos",
         "goodEvilOutcome": "Gut/Böse {after}",

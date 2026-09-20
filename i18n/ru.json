@@ -652,6 +652,8 @@
         "goldApplied": "Золото",
         "xpApplied": "Опыт",
         "itemOutcome": "{item} ×{quantity}",
+        "itemTakeOutcome": "{item} −{quantity}",
+        "itemTaken": "забран из рюкзака",
         "goodEvilApplied": "Добро/Зло",
         "lawChaosApplied": "Закон/Хаос",
         "goodEvilOutcome": "Добро/Зло {after}",

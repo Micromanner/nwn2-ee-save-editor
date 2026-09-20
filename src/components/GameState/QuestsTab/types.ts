@@ -149,7 +149,7 @@ export interface RouteSummary {
   spoken?: SpokenLine;
   debug: boolean;
   signature: string;
-  writes: { name: string; value_type: string; after: string | number; label?: string; label_strref?: number }[];
+  writes: { name: string; value_type: string; before?: string | number | null; after: string | number; label?: string; label_strref?: number }[];
   /** Everything else the game does on this route: rewards, alignment, doors. */
   effects: ConvoFunctor[];
   write_count: number;

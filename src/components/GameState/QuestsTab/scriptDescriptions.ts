@@ -157,6 +157,18 @@ export function isItemWrite(key: { value_type: string }) {
   return key.value_type === ITEM_TYPE;
 }
 
+/** `VariableKey.value_type` of items taken out of the player's backpack: `name` is the item tag, the value the units left. */
+export const ITEM_TAKE_TYPE = 'item_take';
+
+export function isItemTakeWrite(key: { value_type: string }) {
+  return key.value_type === ITEM_TAKE_TYPE;
+}
+
+/** A story flag: every write the dialog does not show as a reward, item, feat, party or companion change. */
+export function isPlainFlag(key: { name: string; value_type: string }) {
+  return !rewardKind(key) && !isItemWrite(key) && !isItemTakeWrite(key) && !isFeatWrite(key) && !isPartyWrite(key) && !isCompanionWrite(key) && !influenceCompanion(key.name);
+}
+
 /** `VariableKey.value_type` of a feat on the player: `name` is the feat.2da row, the value 1 (owned) or 0. */
 export const FEAT_TYPE = 'feat';
 
@@ -208,7 +220,7 @@ export const PC_LOCAL_TYPE = 'pc_local';
 const MAJOR_WORLD_SCRIPTS = new Set([
   'ga_destroy', 'ga_death', 'ga_attack', 'ga_faction_join', 'ga_jump', 'ga_jump_players', 'ga_load_mod', 'ga_end_game',
   'ga_roster_party_add', 'ga_party_add', 'ga_roster_party_remove', 'ga_roster_selectable', 'ga_roster_add_blueprint',
-  'ga_henchman_add', 'ga_henchman_remove', 'ga_start_convo', 'ga_take_item', 'ga_destroy_item',
+  'ga_henchman_add', 'ga_henchman_remove', 'ga_start_convo',
 ]);
 const MAJOR_ENGINE_CALLS = new Set([
   'destroyobject', 'changetostandardfaction', 'changefaction', 'addhenchman', 'removehenchman',

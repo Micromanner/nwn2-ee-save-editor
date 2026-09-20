@@ -135,8 +135,11 @@ fn parse_blueprint(bytes: &[u8]) -> Option<ItemBlueprint> {
     Some(blueprint_from_fields(fields))
 }
 
-fn blueprint_from_fields(fields: IndexMap<String, GffValue<'static>>) -> ItemBlueprint {
-    let (name, name_strref) = match fields.get("LocalizedName") {
+/// An item struct's `LocalizedName`: embedded text and TLK strref, either may be missing.
+pub(super) fn localized_name(
+    fields: &IndexMap<String, GffValue<'static>>,
+) -> (Option<String>, Option<i32>) {
+    match fields.get("LocalizedName") {
         Some(GffValue::LocString(ls)) => (
             ls.substrings
                 .iter()
@@ -145,7 +148,11 @@ fn blueprint_from_fields(fields: IndexMap<String, GffValue<'static>>) -> ItemBlu
             (ls.string_ref >= 0).then_some(ls.string_ref),
         ),
         _ => (None, None),
-    };
+    }
+}
+
+fn blueprint_from_fields(fields: IndexMap<String, GffValue<'static>>) -> ItemBlueprint {
+    let (name, name_strref) = localized_name(&fields);
     ItemBlueprint {
         fields,
         name,

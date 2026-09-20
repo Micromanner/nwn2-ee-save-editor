@@ -652,6 +652,8 @@
         "goldApplied": "Or",
         "xpApplied": "PX",
         "itemOutcome": "{item} ×{quantity}",
+        "itemTakeOutcome": "{item} −{quantity}",
+        "itemTaken": "retiré du sac",
         "goodEvilApplied": "Bien/Mal",
         "lawChaosApplied": "Loi/Chaos",
         "goodEvilOutcome": "Bien/Mal {after}",
