@@ -199,14 +199,30 @@ export function CharacterViewer3D({ refreshKey, refreshPart, tintHead, tintHair,
     const animations = animationsRef.current;
     if (!animations || animations.length === 0 || skeletonsRef.current.size === 0) return;
 
-    const boneNames = new Set<string>();
+    const bonesByName = new Map<string, THREE.Bone[]>();
     for (const entry of skeletonsRef.current.values()) {
       for (const b of entry.skeleton.bones) {
-        boneNames.add(b.name);
+        const list = bonesByName.get(b.name);
+        if (list) list.push(b);
+        else bonesByName.set(b.name, [b]);
       }
     }
 
-    const clips = buildAnimationClips(animations, boneNames);
+    // Cape and wings share the capewing skeleton, so their bone names collide
+    // and a name-bound track only drives the first match in the scene. Bind
+    // every track to each bone instance by uuid instead.
+    const clips = buildAnimationClips(animations, new Set(bonesByName.keys())).map((clip) => {
+      const tracks = clip.tracks.flatMap((track) => {
+        const dot = track.name.lastIndexOf('.');
+        const bones = bonesByName.get(track.name.slice(0, dot)) ?? [];
+        return bones.map((bone) => {
+          const bound = track.clone();
+          bound.name = `${bone.uuid}${track.name.slice(dot)}`;
+          return bound;
+        });
+      });
+      return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+    });
     if (clips.length === 0) return;
 
     const mixer = new THREE.AnimationMixer(modelGroup);
