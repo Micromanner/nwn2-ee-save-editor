@@ -120,8 +120,8 @@ pub fn decode_dds_rgba(dds_bytes: &[u8]) -> Result<DecodedTexture, String> {
             return Err("Uncompressed DDS truncated".into());
         }
         let mut out = Vec::with_capacity(n * 4);
-        for px in pixel_data[..n * 4].chunks_exact(4) {
-            out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        for &[b, g, r, a] in pixel_data[..n * 4].as_chunks::<4>().0 {
+            out.extend_from_slice(&[r, g, b, a]);
         }
         out
     } else {

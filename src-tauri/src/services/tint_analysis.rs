@@ -66,11 +66,11 @@ pub fn channel_usage(rgba: &[u8]) -> [f32; 3] {
         return [0.0; 3];
     }
     let mut sum = [0.0f64; 3];
-    for px in rgba.chunks_exact(4) {
-        let a = f64::from(px[3]) / 255.0;
-        sum[0] += f64::from(px[0]) / 255.0 * a;
-        sum[1] += f64::from(px[1]) / 255.0 * a;
-        sum[2] += f64::from(px[2]) / 255.0 * a;
+    for &[r, g, b, a] in rgba.as_chunks::<4>().0 {
+        let a = f64::from(a) / 255.0;
+        sum[0] += f64::from(r) / 255.0 * a;
+        sum[1] += f64::from(g) / 255.0 * a;
+        sum[2] += f64::from(b) / 255.0 * a;
     }
     let n = pixels as f64;
     [
