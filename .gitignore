@@ -67,3 +67,4 @@ CLAUDE.md
 .swarm
 .benchmarks/
 .mcp.json
+.playwright-mcp/

@@ -120,21 +120,6 @@ export interface FeatResponse {
   has_feat?: boolean;
 }
 
-export interface FeatsStateResponse {
-  summary: {
-    total: number;
-    class_feats: FeatResponse[];
-    general_feats: FeatResponse[];
-    custom_feats: FeatResponse[];
-    background_feats?: FeatResponse[];
-    domain_feats?: FeatResponse[];
-  };
-  all_feats: FeatResponse[];
-  available_feats: FeatResponse[];
-  legitimate_feats: FeatResponse[];
-  recommended_feats: FeatResponse[];
-}
-
 export interface AvailableFeatsResponse {
   available_feats: FeatResponse[];
   total: number;
@@ -714,28 +699,6 @@ export class CharacterAPI {
     } catch (error) {
       console.error("Error saving character:", error);
       throw error;
-    }
-  }
-
-  static async getCharacterFeats(characterId: number, featType?: number): Promise<FeatsStateResponse> {
-    try {
-        // Rust returns summary and list separately usually, implies we need to aggregate or correct the command
-        // For now, assuming get_feat_summary gives us the big object if mapped, OR we construct it.
-        // Frontend expects: summary, all_feats, available_feats, etc.
-        // We'll construct what we can.
-        
-        const summary = await invoke<any>('get_feat_summary');
-        const feats = await invoke<FeatResponse[]>('get_feat_list');
-        
-        return {
-            summary: summary, // Verify if shape matches
-            all_feats: feats,
-            available_feats: [], // TODO: call get_available_feats
-            legitimate_feats: [], // TODO
-            recommended_feats: []
-        };
-    } catch (error) {
-        throw error;
     }
   }
 
