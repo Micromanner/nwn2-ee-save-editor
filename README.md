@@ -1,8 +1,8 @@
 <h1 align="center">NWN2 Enhanced Edition Save Editor</h1>
 
 <p align="center">
-  A desktop application for editing Neverwinter Nights 2 Enhanced Edition saves.<br/>
-  Built with Tauri, Rust, and Vite. Fully offline, available as a portable <code>.exe</code> or installer.
+  A desktop save editor for Neverwinter Nights 2 Enhanced Edition.<br/>
+  Edit your character, companions, inventory, appearance and quests. Works offline, portable <code>.exe</code> or installer.
 </p>
 
 <p align="center">
@@ -26,88 +26,129 @@
 
 - [Features](#features)
 - [Screenshots](#screenshots)
+- [Supported Saves](#supported-saves)
 - [Requirements](#requirements)
-- [Getting Started](#getting-started)
+- [Known Limitations](#known-limitations)
 - [Building from Source](#building-from-source)
-- [Roadmap](#roadmap)
+- [Credits](#credits)
 
 ## Features
 
-### Character Editing
-- **Ability Scores** - Edit base scores with point-buy tracking, view racial modifiers, level bonuses, and equipment bonuses
-- **Classes & Levels** - Multiclass management, level history tracking and experience points
-- **Feats** - Add/remove feats
-- **Skills** - Edit skills with rank allocation, class skill detection, and skill point budgets
-- **Spells** - Manage known/memorized spells, domain spells, and spell slot calculations
-- **Inventory** - Full equipment management, inventory items, gold, encumbrance, item property editing
-- **Race** - Change race with subrace support and automatic stat adjustments
-- **Appearance** - Customize body parts, phenotype, wings, tails, and colors with live 3D preview
-- **Identity** - Name, biography, alignment, deity, age and gender
-- **Combat Stats** - View attack bonuses, armor class, saving throws, and initiative
-- **Companions** - View and edit party companions
+### Character
+- Name, gender, age, deity, biography, alignment and hit points
+- Ability scores with point-buy respec, racial, level, feat and equipment bonuses shown separately
+- Classes and levels: add, change or remove classes, prestige classes, experience and the full level history
+- Skill ranks with class and cross-class costs and the skill point budget
+- Feats, with missing prerequisites resolved automatically
+- Known and prepared spells, domain spells, filters by class, school and level
+- Race and subrace with ability adjustments applied
+- Animal companion and familiar
+
+### Companions
+- Every companion can be edited like the main character: build, feats, spells, inventory and appearance
+- Move companions between the active party and the reserve
+- Set influence for each companion
+
+### Inventory
+- Equip, unequip, stack and delete items, edit gold
+- Edit name, description, icon and item properties with the values the game itself offers
+- Create items from any base type or add existing item templates, including items from mods
+- Change model variant, material, armor accessories and tints with a live 3D preview
+
+### Appearance
+- Head, hair, facial hair, wings, tail, body size and voice set
+- Skin, eye, eyebrow, hair and tattoo colors
+- Live 3D preview that renders the character with equipped armor and accessories as the game does
+
+### Quests
+- Browse every quest of the campaign with its journal entries, progress and rewards
+- See which dialogue lines lead to each entry and what they change in the game world
+- Jump to any quest state. The editor writes the journal entry, the campaign and module variables and the NPC state flags, so the world reacts as if you had played that line
 
 ### Game State
-- **Campaign Variables and Settings** - Edit global campaign settings and variables
-- **Module Variables** - View and modify module-level state
+- Campaign settings such as level cap, experience cap and companion experience share
+- Campaign and module variables
 
-### Save Management
-- Automatic backup creation before every save
-- Backup restore with safety snapshots
+### Backups
+- Every save is backed up automatically when you first open it and can be restored at any time
+- Each backup lists the changes made since it was taken
 
-### Mod Support
-- HAK pack override chain
-- Steam Workshop integration
-- Custom override directories
+### Mods
+- Steam Workshop mods, override folders, HAK packs and custom TLK files are picked up automatically
+- Custom classes, feats, spells and items appear in the editor like vanilla content
 
-### 3D Model Viewer
-- Browse and preview all in-game 3D models
+### More
+- 3D model browser to search and preview every model in the game data
+- Undo and redo with edit history
+- Import and export standalone characters (`.bic`)
+- Only hard engine limits are enforced. The editor warns where the game itself would crash, such as prestige classes with unmet requirements, and otherwise lets you build what you want
+- Available in English, German, Spanish, French, Polish and Russian
 
 ## Screenshots
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/screenshots/Appearance.png" alt="Appearance"/><br/><sub><b>Appearance</b> — live 3D preview with body parts, tints, wings, tails</sub></td>
-    <td width="50%"><img src=".github/screenshots/Inventory.png" alt="Inventory"/><br/><sub><b>Inventory</b> — equipment, item properties, encumbrance</sub></td>
+    <td width="50%"><img src=".github/screenshots/Dashboard.png" alt="Save picker"/><br/><sub>Save picker: every save with its location and time</sub></td>
+    <td width="50%"><img src=".github/screenshots/Ability.png" alt="Ability scores"/><br/><sub>Ability scores: point buy with every bonus shown separately</sub></td>
   </tr>
   <tr>
-    <td><img src=".github/screenshots/ClassesandLevel.png" alt="Classes and levels"/><br/><sub><b>Classes & Levels</b> — multiclass with level history</sub></td>
-    <td><img src=".github/screenshots/Gamestate.png" alt="Game state"/><br/><sub><b>Game state</b> — campaign and module variables</sub></td>
+    <td><img src=".github/screenshots/Classes.png" alt="Classes and levels"/><br/><sub>Classes and levels: multiclass with level history</sub></td>
+    <td><img src=".github/screenshots/Skills.png" alt="Skills"/><br/><sub>Skills: ranks, costs and the skill point budget</sub></td>
   </tr>
   <tr>
-    <td><img src=".github/screenshots/Backups.png" alt="Backups"/><br/><sub><b>Backups</b> — automatic safety snapshots and restore</sub></td>
-    <td><img src=".github/screenshots/Feats.png" alt="Feats"/><br/><sub><b>Feats</b> — add/remove with prerequisite checks</sub></td>
+    <td><img src=".github/screenshots/Feats.png" alt="Feats"/><br/><sub>Feats: every feat with its prerequisites</sub></td>
+    <td><img src=".github/screenshots/Spells.png" alt="Spells"/><br/><sub>Spells: known and prepared spells by class</sub></td>
+  </tr>
+  <tr>
+    <td><img src=".github/screenshots/Inventory.png" alt="Inventory"/><br/><sub>Inventory: item editor with properties and 3D preview</sub></td>
+    <td><img src=".github/screenshots/Inventory-Appearance.png" alt="Item appearance"/><br/><sub>Item appearance: model variant, tints and armor accessories</sub></td>
+  </tr>
+  <tr>
+    <td><img src=".github/screenshots/Appearance.png" alt="Appearance"/><br/><sub>Appearance: live 3D preview with armor and accessories</sub></td>
+    <td><img src=".github/screenshots/Party.png" alt="Party management"/><br/><sub>Party: active party and reserve</sub></td>
+  </tr>
+  <tr>
+    <td><img src=".github/screenshots/Gamestate-Quest.png" alt="Quests"/><br/><sub>Quests: browse quests and jump to any state</sub></td>
+    <td><img src=".github/screenshots/Backup-Overview.png" alt="Backups"/><br/><sub>Backups: every save backed up automatically</sub></td>
+  </tr>
+  <tr>
+    <td><img src=".github/screenshots/Backup-Details.png" alt="Backup details"/><br/><sub>Backup details: the changes made since each backup</sub></td>
+    <td><img src=".github/screenshots/3D-Model.png" alt="Model browser"/><br/><sub>3D models: browse every model in the game</sub></td>
   </tr>
 </table>
 
+## Supported Saves
+
+- Neverwinter Nights 2 Enhanced Edition saves
+- Original Neverwinter Nights 2 saves
+- Standalone characters (`.bic`)
+- Single-player and multiplayer saves, including saves with several player characters
+
 ## Requirements
 
-- Windows 10+ / Ubuntu
-- Neverwinter Nights 2 Enhanced Edition
+- Windows 10 or later, or Linux (AppImage or Deb)
+- Neverwinter Nights 2 Enhanced Edition or the original Neverwinter Nights 2
+- Quest editing requires Windows and the Enhanced Edition
 
-## Getting Started
+## Known Limitations
 
-1. Download the latest release
-2. Run the `.exe` - game paths are auto-detected
-3. Open a save file and start editing
+- Quest editing needs Windows and the Enhanced Edition, because it uses the 64-bit toolset libraries that only the Enhanced Edition ships
+- Item visual effects are not shown in the 3D preview
 
 ## Building from Source
 
 ```bash
-# Install dependencies
 npm install
-
-# Development
-npm run tauri:dev
-
-# Production build
-npm run tauri:build
+npm run tauri:dev      # development
+npm run tauri:build    # production build
 ```
 
-Requires:
-- Node.js 18+
-- Rust toolchain (stable)
+Requires Node.js 20+ and a stable Rust toolchain. Linux additionally needs the Tauri v2 system packages (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libappindicator3-dev`, `librsvg2-dev`, `patchelf`).
 
-## Roadmap
+## Credits
 
-- Full equipment rendering in the 3D character preview (some equipped items don't yet display correctly)
-- Quest journal editor — browse each quest with its branches and outcomes, see current progress, and jump to any state (currently read-only, Windows only)
+- [nwn2mdk](https://github.com/Arbos/nwn2mdk) by Arbos, the MDB and GR2 format reference for the 3D viewer
+- Scripterron's Java NWN2 Character Editor, used as a save format reference
+- Neverwinter Nights 2 is a product of Obsidian Entertainment; the Enhanced Edition is published by Aspyr Media. This project is not affiliated with or endorsed by either.
+
+Licensed under the [MIT License](LICENSE). Third-party licenses are listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
