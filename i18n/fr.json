@@ -1260,8 +1260,6 @@
     "reserves": "Réserve",
     "reservesEmpty": "Tous les compagnons sont dans le groupe actif.",
     "emptySlot": "Emplacement vide",
-    "male": "Homme",
-    "female": "Femme",
     "influenceLine": "Influence : {value}",
     "addToParty": "Ajouter au groupe",
     "removeFromParty": "Retirer du groupe",

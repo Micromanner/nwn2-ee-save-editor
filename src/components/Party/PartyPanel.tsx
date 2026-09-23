@@ -105,11 +105,12 @@ function CompanionPortrait({ cacheKey, rosName, name, icon }: {
 }
 
 function CompanionCard({
-  entry, classLine, metaLine, influence, fallbackIcon, portraitKey, onToggle,
+  entry, totalLevel, classLine, subraceName, influence, fallbackIcon, portraitKey, onToggle,
 }: {
   entry: RosterEntryInfo;
+  totalLevel: number;
   classLine: string;
-  metaLine: string;
+  subraceName: string | null;
   influence: number | null;
   fallbackIcon: string | null;
   portraitKey: string;
@@ -147,6 +148,18 @@ function CompanionCard({
             name={entry.char_name}
             icon={fallbackIcon}
           />
+          {totalLevel > 0 && (
+            <div
+              className="t-semibold"
+              title={t('roster.levelLine', { level: totalLevel })}
+              style={{
+                position: 'absolute', top: 6, right: 6, minWidth: 24, padding: '2px 6px',
+                borderRadius: 4, textAlign: 'center', color: '#fff', background: T.accent,
+              }}
+            >
+              {totalLevel}
+            </div>
+          )}
           <div
             className="party-card-action"
             style={{
@@ -166,8 +179,8 @@ function CompanionCard({
         <div style={{ color: T.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {classLine}
         </div>
-        {metaLine && (
-          <div style={{ color: T.textMuted }}>{metaLine}</div>
+        {subraceName && (
+          <div style={{ color: T.textMuted }}>{subraceName}</div>
         )}
         {influence != null && (
           <div style={{ color: T.textMuted }}>
@@ -309,7 +322,6 @@ export function PartyPanel() {
   const emptySlots = partyLimit != null ? Math.max(0, partyLimit - activeParty.length) : 0;
 
   const renderCard = (entry: RosterEntryInfo) => {
-    const genderLabel = entry.gender === 0 ? t('roster.male') : entry.gender === 1 ? t('roster.female') : null;
     const totalLevel = entry.classes.reduce((sum, c) => sum + c.level, 0);
     return (
       <CompanionCard
@@ -317,14 +329,11 @@ export function PartyPanel() {
         entry={entry}
         portraitKey={`companion-portrait:${characterId ?? 'none'}:${entry.ros_name.toLowerCase()}`}
         fallbackIcon={entry.classes[0] ? (classIcons[entry.classes[0].class_id] ?? null) : null}
+        totalLevel={totalLevel}
         classLine={entry.classes
           .map(c => `${display(classNames[c.class_id])} ${c.level}`)
           .join(' / ')}
-        metaLine={[
-          totalLevel > 0 ? t('roster.levelLine', { level: totalLevel }) : null,
-          entry.subrace_name,
-          genderLabel,
-        ].filter(Boolean).join(' · ')}
+        subraceName={entry.subrace_name}
         influence={influenceByRos[entry.ros_name.toLowerCase()] ?? null}
         onToggle={() => void toggle(entry)}
       />

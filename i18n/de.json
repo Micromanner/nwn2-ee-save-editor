@@ -1249,8 +1249,6 @@
     "reserves": "Reserve",
     "reservesEmpty": "Alle Gefährten sind in der aktiven Gruppe.",
     "emptySlot": "Leerer Platz",
-    "male": "Männlich",
-    "female": "Weiblich",
     "influenceLine": "Einfluss: {value}",
     "addToParty": "Zur Gruppe hinzufügen",
     "removeFromParty": "Aus der Gruppe entfernen",

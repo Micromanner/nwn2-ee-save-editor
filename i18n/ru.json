@@ -1261,8 +1261,6 @@
     "reserves": "Резерв",
     "reservesEmpty": "Все спутники в активном отряде.",
     "emptySlot": "Пустой слот",
-    "male": "Мужчина",
-    "female": "Женщина",
     "influenceLine": "Влияние: {value}",
     "addToParty": "Добавить в отряд",
     "removeFromParty": "Убрать из отряда",

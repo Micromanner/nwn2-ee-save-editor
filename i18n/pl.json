@@ -1262,8 +1262,6 @@
     "reserves": "Rezerwa",
     "reservesEmpty": "Wszyscy towarzysze są w aktywnej drużynie.",
     "emptySlot": "Wolne miejsce",
-    "male": "Mężczyzna",
-    "female": "Kobieta",
     "influenceLine": "Wpływ: {value}",
     "addToParty": "Dodaj do drużyny",
     "removeFromParty": "Usuń z drużyny",

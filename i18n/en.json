@@ -1277,8 +1277,6 @@
     "reserves": "Reserves",
     "reservesEmpty": "Every companion is in the active party.",
     "emptySlot": "Empty Slot",
-    "male": "Male",
-    "female": "Female",
     "influenceLine": "Influence: {value}",
     "addToParty": "Add to party",
     "removeFromParty": "Remove from party",
