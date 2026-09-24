@@ -215,6 +215,8 @@ export function rewardKind(key: { name: string; value_type: string }): RewardKin
 
 /** `VariableKey.value_type` of an integer local on the player character (e.g. the share of quest XP already paid). */
 export const PC_LOCAL_TYPE = 'pc_local';
+/** PC local the engine keeps a quest's journal entry in, followed by the quest tag. */
+export const JOURNAL_ENTRY_PREFIX = 'NW_JOURNAL_ENTRY';
 
 /** World actions a player would notice missing: party, faction, deaths, area and module changes. */
 const MAJOR_WORLD_SCRIPTS = new Set([

@@ -8,7 +8,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, journalText, questDisplayName } from './utils';
-import { PC_LOCAL_TYPE, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE } from './scriptDescriptions';
+import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -269,10 +269,13 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             {(rewardWrites.length + itemWrites.length + itemTakeWrites.length + influenceWrites.length + featWrites.length + partyWrites.length + companionWrites.length + effects.character.length) > 0 && rowGap('gap')}
             {changeRow('journal', t('gameState.quests.edit.journal'), preview.before_state, target, { note: quest.tag })}
             {flagWrites.map((write, index) => {
-              const note = [write.key.value_type === PC_LOCAL_TYPE ? t('gameState.quests.edit.pcLocal') : moduleLabel(write.key.module)];
+              const pcLocal = write.key.value_type === PC_LOCAL_TYPE;
+              const journal = pcLocal && write.key.name.startsWith(JOURNAL_ENTRY_PREFIX);
+              const note = [journal ? write.key.name.slice(JOURNAL_ENTRY_PREFIX.length)
+                : pcLocal ? t('gameState.quests.edit.pcLocal') : moduleLabel(write.key.module)];
               if (write.derived_from) note.push(t('gameState.quests.edit.derivedFrom', { script: write.derived_from }));
               if (write.line != null) note.push(t('gameState.quests.edit.laterInConversation'));
-              return changeRow(`flag-${index}`, write.key.name, write.before, write.after, { note: note.join(' · ') });
+              return changeRow(`flag-${index}`, journal ? t('gameState.quests.edit.journal') : write.key.name, write.before, write.after, { note: note.join(' · ') });
             })}
           </div>
           {preview.follow_stop && preview.follow_stop.reason !== 'end' && <p style={{ margin: '6px 0 0', color: T.textMuted }}>

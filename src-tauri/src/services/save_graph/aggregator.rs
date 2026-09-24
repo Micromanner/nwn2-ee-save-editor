@@ -575,19 +575,7 @@ fn expand_wrapper_scripts(
             out.push(action.clone());
             continue;
         };
-        let call = format!(
-            "{}({})",
-            action.script,
-            action
-                .params
-                .iter()
-                .map(|p| p
-                    .as_str()
-                    .map(str::to_string)
-                    .unwrap_or_else(|| p.to_string()))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
+        let call = derived_call(action);
         let writes = decoded.writes.clone();
         let actions = decoded.actions.clone();
         out.push(ConvoFunctor {
@@ -606,6 +594,23 @@ fn expand_wrapper_scripts(
         }));
     }
     out
+}
+
+/// The wrapper call a spliced functor's `derived_from` names: `script(a, b)`.
+pub(super) fn derived_call(action: &ConvoFunctor) -> String {
+    format!(
+        "{}({})",
+        action.script,
+        action
+            .params
+            .iter()
+            .map(|p| p
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| p.to_string()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 fn synthesized_functor(write: &DecodedWrite, call: &str) -> ConvoFunctor {

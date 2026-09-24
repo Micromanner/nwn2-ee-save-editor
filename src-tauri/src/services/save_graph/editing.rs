@@ -9,6 +9,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tracing::warn;
 
+use super::aggregator::derived_call;
 use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
 use crate::character::{Character, FeatId, FeatSource};
@@ -281,16 +282,68 @@ impl QuestEdits {
                 for action in actions {
                     let action_index = all_actions.len();
                     all_actions.push(action.clone());
-                    if line.is_some()
-                        && let Some((other_tag, state)) = journal_transition(action)
-                    {
-                        if other_tag != tag || state != target {
+                    if let Some((other_tag, state)) = journal_transition(action) {
+                        if other_tag == tag {
+                            let reason = match line {
+                                None => Some("journal_action"),
+                                Some(_) if state != target => Some("follow_up_journal"),
+                                Some(_) => None,
+                            };
+                            if let Some(reason) = reason {
+                                result.effects.push(ActionEffect {
+                                    action: action.clone(),
+                                    reason: reason.into(),
+                                    line,
+                                });
+                            }
+                            continue;
+                        }
+                        // Another quest's entry on this route: the engine adds it like
+                        // `AddJournalQuestEntry` without override, so it never moves back.
+                        let key = VariableKey {
+                            module: None,
+                            name: journal_variable(&other_tag),
+                            value_type: PC_LOCAL_TYPE.into(),
+                        };
+                        let after = Value::from(state);
+                        if let Some(earlier) = candidates.iter_mut().find(|w| w.key == key) {
+                            if earlier.after.as_u64() < Some(u64::from(state)) {
+                                earlier.after = after;
+                            }
+                            continue;
+                        }
+                        let Ok(saved) = reader.read(&key) else {
                             result.effects.push(ActionEffect {
                                 action: action.clone(),
-                                reason: "follow_up_journal".into(),
+                                reason: "unavailable_target".into(),
                                 line,
                             });
+                            continue;
+                        };
+                        // The journal map already holds the save and the pending quest targets.
+                        let journal = reader.journal.get_or_insert_default();
+                        let before = self
+                            .pending
+                            .iter()
+                            .flat_map(|p| &p.writes)
+                            .rfind(|w| w.key == key)
+                            .map(|w| w.after.clone())
+                            .or_else(|| journal.get(&other_tag).map(|s| Value::from(*s)));
+                        if before.as_ref().and_then(Value::as_u64) >= Some(u64::from(state)) {
+                            continue;
                         }
+                        journal.insert(other_tag, state);
+                        candidates.push(VariableWrite {
+                            key,
+                            saved,
+                            before,
+                            after,
+                            action_index,
+                            label: None,
+                            label_strref: None,
+                            derived_from: None,
+                            line,
+                        });
                         continue;
                     }
                     // Pending edits and earlier writes of this preview win over the save.
@@ -405,6 +458,22 @@ impl QuestEdits {
                     });
                 }
             }
+            // A wrapper applied in full (nothing undecoded, every spliced write and action
+            // applied) leaves nothing to run by hand.
+            let unapplied: BTreeSet<String> = result
+                .effects
+                .iter()
+                .filter_map(|e| e.action.derived_from.clone())
+                .collect();
+            result.effects.retain(|e| {
+                e.reason != "decoded_script"
+                    || !e.action.decoded.as_ref().is_some_and(|d| {
+                        d.calls.is_empty()
+                            && d.conditional_writes.is_empty()
+                            && d.unresolved.is_empty()
+                            && !unapplied.contains(&derived_call(&e.action))
+                    })
+            });
         }
         // What comes next: the other entries' lines, evaluated against the save as
         // it will be once this edit and the pending ones are written.
@@ -3901,14 +3970,15 @@ mod tests {
             writes,
             vec![
                 ("joined", json!(1), Some(30)),
-                ("visits", json!(3), Some(30))
+                ("visits", json!(3), Some(30)),
+                ("NW_JOURNAL_ENTRYother", json!(5), Some(30))
             ]
         );
         assert!(
-            preview
+            !preview
                 .effects
                 .iter()
-                .any(|e| e.reason == "follow_up_journal" && e.line == Some(30))
+                .any(|e| e.reason == "follow_up_journal")
         );
 
         // With the gate satisfied the first reply wins; negation flips it back.
