@@ -10,11 +10,13 @@ use sha2::{Digest, Sha256};
 use tracing::warn;
 
 use super::aggregator::derived_call;
+use super::area_objects::{self, AreaField, ModuleObjects};
 use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
 use crate::character::{Character, FeatId, FeatSource};
 use crate::config::NWN2Paths;
 use crate::loaders::GameData;
+use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::parsers::tda::TDAParser;
 use crate::services::campaign::{CampaignManager, content};
@@ -406,6 +408,8 @@ impl QuestEdits {
                             reader.item_label(&key.name)
                         } else if key.value_type == FEAT_TYPE {
                             (None, tables.feat_name_strref(&key.name))
+                        } else if area_field(&key.value_type).is_some() {
+                            (None, reader.area_object_label(&key))
                         } else if key.value_type == COMPANION_FEAT_TYPE {
                             (
                                 None,
@@ -836,6 +840,23 @@ impl QuestEdits {
         }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
+        let mut area_edits: BTreeMap<String, Vec<(AreaField, String, bool)>> = BTreeMap::new();
+        for write in self.pending.iter().flat_map(|p| &p.writes) {
+            if let Some(field) = area_field(&write.key.value_type) {
+                let module = write
+                    .key
+                    .module
+                    .clone()
+                    .ok_or("Area object without module")?;
+                let edits = area_edits.entry(module).or_default();
+                edits.retain(|(f, tag, _)| !(*f == field && *tag == write.key.name));
+                edits.push((
+                    field,
+                    write.key.name.clone(),
+                    write.after.as_i64().unwrap_or(0) != 0,
+                ));
+            }
+        }
         for write in self
             .pending
             .iter()
@@ -881,9 +902,24 @@ impl QuestEdits {
                 .update_file("globals.xml", parser.to_xml_string()?.as_bytes())
                 .map_err(|e| e.to_string())?;
         }
+        for module in area_edits.keys() {
+            modules.entry(module.clone()).or_default();
+        }
+        let paths = NWN2Paths::new();
         for (module, updates) in modules {
-            let (path, bytes) =
-                content::prepare_module_variable_updates(handler, &updates, Some(&module))?;
+            let edits = area_edits.remove(&module).unwrap_or_default();
+            let (path, bytes) = content::prepare_module_variable_updates(
+                handler,
+                &updates,
+                Some(&module),
+                |save| {
+                    if edits.is_empty() {
+                        return Ok(());
+                    }
+                    let objects = area_objects::installed_module_objects(&paths, &module)?;
+                    area_objects::write_saved(save, &objects, &edits)
+                },
+            )?;
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -911,6 +947,9 @@ pub struct VariableReader<'a> {
     roster: Option<Result<Vec<RosterMember>, String>>,
     /// Root structs of companion `.ros` files by lowercase roster name.
     companions: BTreeMap<String, Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
+    /// Installed doors/map pins and the saved `<module>.z`, by module, for
+    /// `DOOR_LOCK_TYPE` / `MAP_NOTE_TYPE` keys.
+    areas: BTreeMap<String, Result<(ModuleObjects, ErfParser), String>>,
     /// Values that take precedence over the save: pending and previewed writes.
     pub overlay: BTreeMap<VariableKey, Value>,
     /// Journal states (tag -> entry) for `gc_journal_entry`; `None` = unknown.
@@ -928,6 +967,7 @@ impl<'a> VariableReader<'a> {
             player_fields: None,
             roster: None,
             companions: BTreeMap::new(),
+            areas: BTreeMap::new(),
             overlay: BTreeMap::new(),
             journal: None,
         }
@@ -944,6 +984,25 @@ impl<'a> VariableReader<'a> {
             })
             .as_ref()
             .map_err(Clone::clone)
+    }
+
+    fn area_state(&mut self, module: &str) -> Result<(&ModuleObjects, &mut ErfParser), String> {
+        let (handler, paths) = (self.handler, self.paths);
+        match self.areas.entry(module.to_string()).or_insert_with(|| {
+            let objects = area_objects::installed_module_objects(paths, module)?;
+            let (_, save) = content::open_module_state(handler, module)?;
+            Ok((objects, save))
+        }) {
+            Ok((objects, save)) => Ok((objects, save)),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+    /// TLK name of a door or map pin: the pin's note text, else the object's name.
+    pub fn area_object_label(&mut self, key: &VariableKey) -> Option<i32> {
+        let field = area_field(&key.value_type)?;
+        let (objects, _) = self.area_state(key.module.as_deref()?).ok()?;
+        objects.unique(field, &key.name).ok()?.label_strref
     }
 
     /// Display name of the first backpack item carrying `tag`: embedded text, TLK strref.
@@ -1010,6 +1069,13 @@ impl<'a> VariableReader<'a> {
                 return Ok(Some(Value::from(i64::from(has_feat(fields, feat)))));
             }
             return Ok(fields.get(field).and_then(gff_integer).map(Value::from));
+        }
+        if let Some(field) = area_field(&key.value_type) {
+            let module = key.module.as_deref().ok_or("Area object without module")?;
+            let (objects, save) = self.area_state(module)?;
+            let object = objects.unique(field, &key.name)?;
+            return area_objects::read_saved(save, field, &key.name, object)
+                .map(|v| Some(Value::from(v)));
         }
         if key.value_type == PARTY_TYPE || key.value_type == SELECTABLE_TYPE {
             let members = self
@@ -1519,6 +1585,14 @@ pub const COMPANION_CHARACTER_TYPE: &str = "companion_character";
 /// `VariableKey::value_type` of a feat on a companion's `.ros`: `name` is
 /// `<roster name>/<feat.2da row>`, the value 1 (in `FeatList`) or 0.
 pub const COMPANION_FEAT_TYPE: &str = "companion_feat";
+/// `VariableKey::value_type` of a door's lock in the module's saved area state
+/// (`ga_lock`, `SetLocked`): `name` is the lowercase door tag, the value 1
+/// (locked) or 0. Written as `Locked` on the door in the area `.git` of `<module>.z`.
+pub const DOOR_LOCK_TYPE: &str = "door_lock";
+/// `VariableKey::value_type` of a map pin (`ga_mapnote`, `SetMapPinEnabled`):
+/// `name` is the lowercase waypoint tag, the value 1 (shown) or 0. Written as
+/// `MapNoteEnabled` on the waypoint in the area `.git` of `<module>.z`.
+pub const MAP_NOTE_TYPE: &str = "map_note";
 const GOLD: &str = "Gold";
 const EXPERIENCE: &str = "Experience";
 
@@ -1536,7 +1610,17 @@ pub fn writes_save_files(value_type: &str) -> bool {
             | SELECTABLE_TYPE
             | COMPANION_CHARACTER_TYPE
             | COMPANION_FEAT_TYPE
+            | DOOR_LOCK_TYPE
+            | MAP_NOTE_TYPE
     )
+}
+
+fn area_field(value_type: &str) -> Option<AreaField> {
+    match value_type {
+        DOOR_LOCK_TYPE => Some(AreaField::DoorLocked),
+        MAP_NOTE_TYPE => Some(AreaField::MapNoteEnabled),
+        _ => None,
+    }
 }
 const GOOD_EVIL: &str = "GoodEvil";
 const LAWFUL_CHAOTIC: &str = "LawfulChaotic";
@@ -1703,6 +1787,46 @@ fn decode_party(
         VariableKey {
             module: None,
             name: name.to_ascii_lowercase(),
+            value_type: value_type.into(),
+        },
+        Change::Set(Value::from(value)),
+    ))
+}
+
+/// `ga_lock(tag, bLock)`, `ga_door_open(tag)` (unlocks; the swing itself is not
+/// saved state), `ga_door_close(tag, 1)` (locks) and `ga_mapnote(tag, bActive)` on
+/// an object of the line's module. `$OWNER`-style and empty targets are not tags.
+fn decode_area_object(
+    script: &str,
+    action: &ConvoFunctor,
+    module: &str,
+) -> Result<(VariableKey, Change), &'static str> {
+    let tag = action
+        .params
+        .first()
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or("invalid_assignment")?;
+    if tag.starts_with('$') {
+        return Err("object_target");
+    }
+    let flag = |index: usize| {
+        int_param(action, index)
+            .map(|n| i64::from(n != 0))
+            .ok_or("invalid_assignment")
+    };
+    let (value_type, value) = match script {
+        "ga_lock" => (DOOR_LOCK_TYPE, flag(1)?),
+        "ga_door_open" => (DOOR_LOCK_TYPE, 0),
+        "ga_door_close" if int_param(action, 1) == Some(1) => (DOOR_LOCK_TYPE, 1),
+        "ga_mapnote" => (MAP_NOTE_TYPE, flag(1)?),
+        _ => return Err("unsupported_action"),
+    };
+    Ok((
+        VariableKey {
+            module: Some(module.to_string()),
+            name: tag.to_ascii_lowercase(),
             value_type: value_type.into(),
         },
         Change::Set(Value::from(value)),
@@ -2041,6 +2165,9 @@ pub fn decode_assignment(
         | "ga_party_add"
         | "ga_roster_party_remove"
         | "ga_roster_selectable" => return decode_party(&script, action),
+        "ga_lock" | "ga_door_open" | "ga_door_close" | "ga_mapnote" => {
+            return decode_area_object(&script, action, module);
+        }
         _ if action.decoded.is_some() => return Err("decoded_script"),
         _ => return Err("unsupported_action"),
     };

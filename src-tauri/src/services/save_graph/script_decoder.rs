@@ -643,6 +643,19 @@ impl Context<'_> {
         }
     }
 
+    /// Boolean argument: an integer argument, or `a == b` / `a != b` of two of them
+    /// (`10ga_door_set`: `SetLocked(oDoor, nState == 1)`).
+    fn bool_arg(&self, expr: &[Token]) -> Option<bool> {
+        if let Some(at) = expr
+            .iter()
+            .position(|t| matches!(t, Token::Punct(p) if p == "==" || p == "!="))
+        {
+            let equal = self.int_arg(&expr[..at])? == self.int_arg(&expr[at + 1..])?;
+            return Some(equal == is_punct(expr.get(at), "=="));
+        }
+        self.int_arg(expr).map(|n| n != 0)
+    }
+
     /// String argument: literal, a string parameter of the script or a constant.
     fn str_arg(&self, expr: &[Token]) -> Option<String> {
         match expr {
@@ -744,6 +757,22 @@ fn player_action(name: &str, args: &[Vec<Token>], ctx: &Context) -> Option<Decod
             params: vec![Value::from(tag.clone()), Value::from(int(1)?)],
         },
         _ => return None,
+    })
+}
+
+/// Door locks and map pins on an object found by tag, translated to the stock
+/// `ga_lock(tag, flag)` / `ga_mapnote(tag, flag)` the editor applies to the area.
+fn world_action(name: &str, args: &[Vec<Token>], ctx: &Context) -> Option<DecodedAction> {
+    let script = match name.to_ascii_lowercase().as_str() {
+        "setlocked" => "ga_lock",
+        "setmappinenabled" => "ga_mapnote",
+        _ => return None,
+    };
+    let tag = ctx.object_tag(args.first()?)?;
+    let flag = ctx.bool_arg(args.get(1)?)?;
+    Some(DecodedAction {
+        script: script.into(),
+        params: vec![Value::from(tag), Value::from(i64::from(flag))],
     })
 }
 
@@ -866,7 +895,7 @@ fn interpret_call(name: &str, args: &[Vec<Token>], ctx: &mut Context, conditiona
         _ if IGNORED_CALLS.contains(&lower.as_str()) => {}
         _ => {
             let translated = (!conditional)
-                .then(|| player_action(name, args, ctx))
+                .then(|| player_action(name, args, ctx).or_else(|| world_action(name, args, ctx)))
                 .flatten();
             match translated {
                 Some(action) => ctx.out.actions.push(action),
@@ -1073,8 +1102,51 @@ void main(int nDialogNode)
             vec![write("CalebState", "1"), write("gbWatch", "0")]
         );
         assert!(decoded.conditional_writes.is_empty());
-        assert_eq!(decoded.calls, vec!["SetLocked"]);
+        assert!(decoded.calls.is_empty());
+        assert_eq!(
+            decoded.actions,
+            vec![DecodedAction {
+                script: "ga_lock".into(),
+                params: vec![json!("10_hagen_door_ext"), json!(0)],
+            }]
+        );
         assert!(decoded.unresolved.is_empty());
+    }
+
+    #[test]
+    fn door_and_map_pin_wrappers_compare_their_state_parameter() {
+        let door = r#"
+void main(string sTag, int nState)
+{
+    object oDoor = GetObjectByTag(sTag);
+    SetLocked(oDoor, nState == 1);
+}
+"#;
+        let pin = r#"
+void main(string sTag, int nEnable)
+{
+    SetMapPinEnabled(GetObjectByTag(sTag), nEnable == 1);
+}
+"#;
+        let constants = ScriptConstants::default();
+        let door =
+            decode_action(door, &[json!("10_hagen_door_ext"), json!(0)], &constants).unwrap();
+        let pin = decode_action(pin, &[json!("1000_mn_hagen"), json!(1)], &constants).unwrap();
+        assert_eq!(
+            door.actions,
+            vec![DecodedAction {
+                script: "ga_lock".into(),
+                params: vec![json!("10_hagen_door_ext"), json!(0)],
+            }]
+        );
+        assert_eq!(
+            pin.actions,
+            vec![DecodedAction {
+                script: "ga_mapnote".into(),
+                params: vec![json!("1000_mn_hagen"), json!(1)],
+            }]
+        );
+        assert!(door.calls.is_empty() && pin.calls.is_empty());
     }
 
     #[test]

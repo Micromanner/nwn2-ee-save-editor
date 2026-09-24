@@ -209,6 +209,8 @@ pub async fn save_get_quest_variables(
                         && key.value_type != save_graph::editing::CHARACTER_TYPE
                         && key.value_type != save_graph::editing::ITEM_TYPE
                         && key.value_type != save_graph::editing::PC_LOCAL_TYPE
+                        && key.value_type != save_graph::editing::DOOR_LOCK_TYPE
+                        && key.value_type != save_graph::editing::MAP_NOTE_TYPE
                     {
                         keys.insert(key);
                     }

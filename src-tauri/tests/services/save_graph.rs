@@ -119,10 +119,7 @@ fn save_graph_builds_on_classic_campaign() {
         .find(|a| a.script == "10a_caleb_state")
         .expect("10a_caleb_state action");
     let decoded = wrapper.decoded.as_ref().expect("wrapper decoded from .nss");
-    assert!(
-        decoded.calls.iter().any(|c| c == "SetLocked"),
-        "{decoded:?}"
-    );
+    assert!(decoded.calls.is_empty(), "{decoded:?}");
     let synthesized: Vec<_> = caleb
         .actions
         .iter()
@@ -134,6 +131,7 @@ fn save_graph_builds_on_classic_campaign() {
         vec![
             ("ga_global_int", vec![json!("CalebState"), json!("1")]),
             ("ga_global_int", vec![json!("gbWatch"), json!("0")]),
+            ("ga_lock", vec![json!("10_hagen_door_ext"), json!(0)]),
         ]
     );
     assert!(

@@ -6,6 +6,7 @@
 //! The output (`SaveGraph`) is the single payload the quest-state editor UI renders.
 
 mod aggregator;
+pub mod area_objects;
 mod creature_names;
 pub use creature_names::SpeakerName;
 pub mod editing;

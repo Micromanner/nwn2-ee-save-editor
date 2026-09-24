@@ -246,6 +246,9 @@ pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition>
     map
 }
 
+/// `globals.xml` booleans the engine sets once a console cheat ran; they disable achievements.
+const CHEAT_MARKERS: [&str; 2] = ["Cheater", "ShowCheatsWarning"];
+
 pub struct RustXmlParser {
     pub data: XmlData,
 }
@@ -271,6 +274,13 @@ impl RustXmlParser {
         })
     }
 
+    /// Whether the engine flagged this save as cheated (console commands under `DebugMode 1`).
+    pub fn has_cheat_markers(&self) -> bool {
+        CHEAT_MARKERS
+            .iter()
+            .any(|name| self.data.booleans.contains_key(*name))
+    }
+
     pub fn to_xml_string(&self) -> Result<String, String> {
         let mut xml_struct = self.data.to_xml_struct();
 
@@ -278,7 +288,7 @@ impl RustXmlParser {
         xml_struct
             .booleans
             .entries
-            .retain(|entry| entry.name != "Cheater" && entry.name != "ShowCheatsWarning");
+            .retain(|entry| !CHEAT_MARKERS.contains(&entry.name.as_str()));
 
         let mut buffer = String::new();
         let mut ser = quick_xml::se::Serializer::new(&mut buffer);

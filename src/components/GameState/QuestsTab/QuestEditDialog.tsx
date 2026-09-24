@@ -8,7 +8,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, journalText, questDisplayName } from './utils';
-import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE } from './scriptDescriptions';
+import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, isMomentAction, isAreaWrite, DOOR_LOCK_TYPE, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -30,6 +30,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const [preview, setPreview] = useState<QuestPreview | null>(null);
   const [replace, setReplace] = useState(false);
   const [showWorld, setShowWorld] = useState(false);
+  const [showMoments, setShowMoments] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
@@ -84,6 +85,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const featWrites = preview ? preview.writes.filter(write => isFeatWrite(write.key)) : [];
   const partyWrites = preview ? preview.writes.filter(write => isPartyWrite(write.key)) : [];
   const companionWrites = preview ? preview.writes.filter(write => isCompanionWrite(write.key)) : [];
+  const areaWrites = preview ? preview.writes.filter(write => isAreaWrite(write.key)) : [];
   const flagWrites = preview ? preview.writes.filter(write => isPlainFlag(write.key)) : [];
   // Blueprint name, TLK name, or the resref when neither resolves.
   const itemName = (write: { name: string; label?: string; label_strref?: number }) =>
@@ -99,6 +101,15 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     const { companion, field } = companionKey(write.key.name);
     if (write.key.value_type === COMPANION_FEAT_TYPE) return `${companion} · ${t('gameState.quests.edit.featApplied', { feat: featName({ name: field, label_strref: write.label_strref }) })}`;
     return `${companion} · ${t(field === 'GoodEvil' ? 'gameState.quests.edit.goodEvilApplied' : 'gameState.quests.edit.lawChaosApplied')}`;
+  };
+  // "Door: Hagen's House" / "Map pin: Hagen", the tag when the module names neither.
+  const areaLabel = (write: { name: string; value_type: string; label_strref?: number }) => {
+    const name = (write.label_strref != null ? tlk.resolve(write.label_strref) : undefined) || write.name;
+    return t(write.value_type === DOOR_LOCK_TYPE ? 'gameState.quests.edit.doorApplied' : 'gameState.quests.edit.mapNoteApplied', { name });
+  };
+  const areaState = (key: { value_type: string }, value: string | number | null) => {
+    if (key.value_type === DOOR_LOCK_TYPE) return Number(value) ? t('gameState.quests.edit.doorLocked') : t('gameState.quests.edit.doorUnlocked');
+    return Number(value) ? t('gameState.quests.edit.mapNoteShown') : t('gameState.quests.edit.mapNoteHidden');
   };
   const partyState = (key: { value_type: string }, value: string | number | null) => {
     if (key.value_type === PARTY_TYPE) return Number(value) ? t('gameState.quests.edit.inParty') : t('gameState.quests.edit.benched');
@@ -160,6 +171,9 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     for (const write of option.writes) {
       if (isCompanionWrite(write)) rewards.push(write.value_type === COMPANION_FEAT_TYPE ? companionLabel({ key: write, label_strref: write.label_strref }) : `${companionLabel({ key: write })} ${write.after}`);
     }
+    for (const write of option.writes) {
+      if (isAreaWrite(write)) rewards.push(`${areaLabel(write)} ${areaState(write, write.after)}`);
+    }
     rewards.push(...option.effects.filter(f => effectBucket(f) === 'character').map(f => describeScript(f, t) ?? formatRawCall(f)));
     for (const write of option.writes) {
       const companion = influenceCompanion(write.name);
@@ -186,6 +200,9 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     <div className="t-bold" style={{ color: T.textMuted, marginBottom: 6 }}>{title}</div>
     {body}
   </div>;
+  const consoleBlock = (lines: string[]) => <pre className="t-mono" style={{ margin: 0, padding: '6px 10px', background: `${T.borderLight}55`, borderRadius: 4, whiteSpace: 'pre-wrap', color: T.text }}>
+    {['DebugMode 1', ...lines].join('\n')}
+  </pre>;
   const moduleLabel = (module: string | null) => module ? resolveModule(module) : t('gameState.quests.edit.campaign');
   const entryText = (id: number) => journalText(quest.category.entries.find(e => e.id === id)?.text);
   const clip = (text: string | undefined) => text && text.length > ENTRY_TEXT_LIMIT ? `${text.slice(0, ENTRY_TEXT_LIMIT)}…` : text;
@@ -193,10 +210,13 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const effects = preview ? splitEffects(preview) : null;
   // What the editor cannot apply, as console lines; the journal is written directly, other quests are set
   // separately, and engine calls decoded out of a wrapper script are covered by the wrapper's own line.
-  const consoleLines = preview ? [...new Set(preview.effects
+  const consoleActions = preview ? preview.effects
     .filter(e => !isJournalConnector(e.action) && e.reason !== 'journal_action' && e.reason !== 'follow_up_journal'
       && !(e.action.derived_from && e.action.kind === 'custom'))
-    .map(e => consoleCommand(e.action)))] : [];
+    .map(e => e.action) : [];
+  // Cutscene moments, travel and fights are split off: skipping them leaves nothing behind.
+  const consoleLines = [...new Set(consoleActions.filter(f => !isMomentAction(f)).map(consoleCommand))];
+  const momentLines = [...new Set(consoleActions.filter(isMomentAction).map(consoleCommand))];
   const targetEntry = quest.category.entries.find(e => e.id === target);
   // Entries are ids, not a state machine; a higher id is the only usable "later" signal.
   const nextSteps = (preview?.next_steps ?? []).filter(step => step.state > target && step.state !== preview?.before_state);
@@ -261,12 +281,13 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             {companionWrites.map((write, i) => write.key.value_type === COMPANION_FEAT_TYPE
               ? changeRow(`companion-${i}`, companionLabel(write), featState(write.before), featState(write.after), write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {})
               : changeRow(`companion-${i}`, companionLabel(write), write.before, write.after, { delta: true, ...(write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {}) }))}
+            {areaWrites.map((write, i) => changeRow(`area-${i}`, areaLabel({ ...write.key, label_strref: write.label_strref }), areaState(write.key, write.before), areaState(write.key, write.after), { note: [moduleLabel(write.key.module), ...(write.derived_from ? [t('gameState.quests.edit.derivedFrom', { script: write.derived_from })] : [])].join(' · ') }))}
             {effects.character.map((item, i) => <Fragment key={`effect-${i}`}>
               <span style={{ color: T.text }}>{item}</span>
               <span style={{ color: T.textMuted, gridColumn: '2 / 6' }}>{t('gameState.quests.edit.notApplied')}</span>
               <span style={{ color: T.textMuted }}>{t('gameState.quests.edit.rewardsNote')}</span>
             </Fragment>)}
-            {(rewardWrites.length + itemWrites.length + itemTakeWrites.length + influenceWrites.length + featWrites.length + partyWrites.length + companionWrites.length + effects.character.length) > 0 && rowGap('gap')}
+            {(rewardWrites.length + itemWrites.length + itemTakeWrites.length + influenceWrites.length + featWrites.length + partyWrites.length + companionWrites.length + areaWrites.length + effects.character.length) > 0 && rowGap('gap')}
             {changeRow('journal', t('gameState.quests.edit.journal'), preview.before_state, target, { note: quest.tag })}
             {flagWrites.map((write, index) => {
               const pcLocal = write.key.value_type === PC_LOCAL_TYPE;
@@ -305,11 +326,19 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
           </ul>}
         </>)}
 
-        {consoleLines.length > 0 && section(t('gameState.quests.edit.console'), <>
+        {(consoleLines.length + momentLines.length) > 0 && section(t('gameState.quests.edit.console'), <>
           <p style={{ margin: '0 0 6px', color: T.textMuted }}>{t('gameState.quests.edit.consoleNote')}</p>
-          <pre className="t-mono" style={{ margin: 0, padding: '6px 10px', background: `${T.borderLight}55`, borderRadius: 4, whiteSpace: 'pre-wrap', color: T.text }}>
-            {['DebugMode 1', ...consoleLines].join('\n')}
-          </pre>
+          {consoleLines.length > 0 && consoleBlock(consoleLines)}
+          {momentLines.length > 0 && <>
+            <Button small minimal onClick={() => setShowMoments(!showMoments)} style={{ marginLeft: -6, marginTop: consoleLines.length > 0 ? 6 : 0 }}>
+              {showMoments ? t('gameState.quests.edit.momentsHide') : t('gameState.quests.edit.momentsShow', { count: momentLines.length })}
+            </Button>
+            {showMoments && <>
+              <p style={{ margin: '4px 0 6px', color: T.textMuted }}>{t('gameState.quests.edit.momentsNote')}</p>
+              {consoleBlock(momentLines)}
+            </>}
+          </>}
+          <p style={{ margin: '6px 0 0', color: T.textMuted }}>{t('gameState.quests.edit.consoleAchievements')}</p>
         </>)}
 
         {section(t('gameState.quests.edit.next'), targetEntry?.final

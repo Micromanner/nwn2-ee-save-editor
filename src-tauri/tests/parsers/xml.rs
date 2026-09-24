@@ -566,10 +566,16 @@ fn test_cheat_flags_stripped_on_write() {
         parser.data.booleans.contains_key("ShowCheatsWarning"),
         "Parser should load ShowCheatsWarning boolean from XML"
     );
+    assert!(parser.has_cheat_markers());
 
     let written = parser
         .to_xml_string()
         .expect("Failed to serialize globals.xml");
+    assert!(
+        !RustXmlParser::from_string(&written)
+            .expect("Failed to reparse written globals.xml")
+            .has_cheat_markers()
+    );
     assert!(
         !written.contains("<Name>Cheater</Name>"),
         "Cheater boolean must be stripped on write"

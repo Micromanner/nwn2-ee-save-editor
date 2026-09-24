@@ -448,6 +448,11 @@ impl SessionState {
             {
                 errors.push(format!("{SAVENAME_TXT}: {e}"));
             }
+            if errors.is_empty()
+                && let Err(e) = strip_cheat_markers(handler)
+            {
+                errors.push(format!("globals.xml: {e}"));
+            }
             if !errors.is_empty() {
                 handler.abort_batch();
                 return Err(errors.join("\n"));
@@ -1355,6 +1360,21 @@ fn saved_save_name(handler: &SaveGameHandler) -> String {
     std::fs::read_to_string(handler.save_dir().join(SAVENAME_TXT))
         .map(|name| name.trim().to_string())
         .unwrap_or_default()
+}
+
+/// Every save clears the engine's cheat flag, so a save that ran quest console lines
+/// earns achievements again once it passes through the editor.
+fn strip_cheat_markers(handler: &mut SaveGameHandler) -> Result<(), String> {
+    let Ok(xml) = handler.extract_globals_xml() else {
+        return Ok(());
+    };
+    let parser = crate::parsers::xml::RustXmlParser::from_string(&xml)?;
+    if !parser.has_cheat_markers() {
+        return Ok(());
+    }
+    handler
+        .update_file("globals.xml", parser.to_xml_string()?.as_bytes())
+        .map_err(|e| e.to_string())
 }
 
 fn sync_roster(

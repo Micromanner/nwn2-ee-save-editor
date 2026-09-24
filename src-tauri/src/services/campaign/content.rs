@@ -561,7 +561,7 @@ pub fn batch_update_module_variables(
     if updates.is_empty() {
         return Ok(());
     }
-    let (path, bytes) = prepare_module_variable_updates(handler, updates, module_id)?;
+    let (path, bytes) = prepare_module_variable_updates(handler, updates, module_id, |_| Ok(()))?;
     let module = module_id
         .map(str::to_string)
         .unwrap_or(handler.extract_current_module().unwrap_or_default());
@@ -569,27 +569,14 @@ pub fn batch_update_module_variables(
     fs::write(path, bytes).map_err(|e| e.to_string())
 }
 
-pub fn prepare_module_variable_updates(
+/// The saved state of a module (`<module>.z`) as a fully loaded ERF, ready to
+/// edit and re-serialize, with the path it came from.
+pub fn open_module_state(
     handler: &SaveGameHandler,
-    updates: &[(String, String, String)],
-    module_id: Option<&str>,
-) -> Result<(PathBuf, Vec<u8>), String> {
-    let current_module_id = handler.extract_current_module().unwrap_or_default();
-    let target_module = module_id.unwrap_or(&current_module_id);
-    let save_dir = handler.save_dir();
-
-    let z_path = find_module_z_file(save_dir, target_module)?;
-
-    info!(
-        "Batch updating {} module variables in {:?}",
-        updates.len(),
-        z_path
-    );
-
+    module_id: &str,
+) -> Result<(PathBuf, ErfParser), String> {
+    let z_path = find_module_z_file(handler.save_dir(), module_id)?;
     let decompressed = decompress_z_file(&z_path)?;
-
-    info!("Decompressed {} bytes from .z file", decompressed.len());
-
     let mut erf_parser = ErfParser::new();
     erf_parser
         .parse_from_bytes(&decompressed)
@@ -597,7 +584,52 @@ pub fn prepare_module_variable_updates(
     erf_parser
         .load_all_resources()
         .map_err(|e| format!("Failed to load ERF resources: {e}"))?;
+    Ok((z_path, erf_parser))
+}
 
+/// Module variables plus any other edit of the module's saved state (area `.git`s),
+/// in one pass so they cannot overwrite each other.
+pub fn prepare_module_variable_updates(
+    handler: &SaveGameHandler,
+    updates: &[(String, String, String)],
+    module_id: Option<&str>,
+    edit_state: impl FnOnce(&mut ErfParser) -> Result<(), String>,
+) -> Result<(PathBuf, Vec<u8>), String> {
+    let current_module_id = handler.extract_current_module().unwrap_or_default();
+    let target_module = module_id.unwrap_or(&current_module_id);
+    let (z_path, mut erf_parser) = open_module_state(handler, target_module)?;
+
+    info!(
+        "Batch updating {} module variables in {:?}",
+        updates.len(),
+        z_path
+    );
+
+    edit_state(&mut erf_parser)?;
+    if !updates.is_empty() {
+        update_module_ifo_vars(&mut erf_parser, updates)?;
+    }
+
+    let erf_bytes = erf_parser
+        .to_bytes()
+        .map_err(|e| format!("Failed to serialize ERF: {e}"))?;
+
+    let compressed = compress_z_matching_existing(&erf_bytes, &z_path)?;
+
+    info!(
+        "Compressed {} -> {} bytes, writing to {:?}",
+        erf_bytes.len(),
+        compressed.len(),
+        z_path
+    );
+
+    Ok((z_path, compressed))
+}
+
+fn update_module_ifo_vars(
+    erf_parser: &mut ErfParser,
+    updates: &[(String, String, String)],
+) -> Result<(), String> {
     let module_ifo_bytes = erf_parser
         .extract_resource("module.ifo")
         .map_err(|e| format!("module.ifo not found: {e}"))?;
@@ -658,21 +690,7 @@ pub fn prepare_module_variable_updates(
     erf_parser
         .update_resource("module.ifo", new_ifo_bytes)
         .map_err(|e| format!("Failed to update module.ifo in ERF: {e}"))?;
-
-    let erf_bytes = erf_parser
-        .to_bytes()
-        .map_err(|e| format!("Failed to serialize ERF: {e}"))?;
-
-    let compressed = compress_z_matching_existing(&erf_bytes, &z_path)?;
-
-    info!(
-        "Compressed {} -> {} bytes, writing to {:?}",
-        erf_bytes.len(),
-        compressed.len(),
-        z_path
-    );
-
-    Ok((z_path, compressed))
+    Ok(())
 }
 
 /// Read the `Name` strref of `<area>.are`. Original-NWN2 saves carry the

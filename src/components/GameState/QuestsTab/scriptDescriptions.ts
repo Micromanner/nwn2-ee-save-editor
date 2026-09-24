@@ -164,9 +164,18 @@ export function isItemTakeWrite(key: { value_type: string }) {
   return key.value_type === ITEM_TAKE_TYPE;
 }
 
-/** A story flag: every write the dialog does not show as a reward, item, feat, party or companion change. */
+/** A story flag: every write the dialog does not show as a reward, item, feat, party, companion or area change. */
 export function isPlainFlag(key: { name: string; value_type: string }) {
-  return !rewardKind(key) && !isItemWrite(key) && !isItemTakeWrite(key) && !isFeatWrite(key) && !isPartyWrite(key) && !isCompanionWrite(key) && !influenceCompanion(key.name);
+  return !rewardKind(key) && !isItemWrite(key) && !isItemTakeWrite(key) && !isFeatWrite(key) && !isPartyWrite(key) && !isCompanionWrite(key) && !isAreaWrite(key) && !influenceCompanion(key.name);
+}
+
+/** `VariableKey.value_type` of a door's lock in the saved area: `name` is the door tag, the value 1 (locked) or 0. */
+export const DOOR_LOCK_TYPE = 'door_lock';
+/** `VariableKey.value_type` of a map pin in the saved area: `name` is the waypoint tag, the value 1 (shown) or 0. */
+export const MAP_NOTE_TYPE = 'map_note';
+
+export function isAreaWrite(key: { value_type: string }) {
+  return key.value_type === DOOR_LOCK_TYPE || key.value_type === MAP_NOTE_TYPE;
 }
 
 /** `VariableKey.value_type` of a feat on the player: `name` is the feat.2da row, the value 1 (owned) or 0. */
@@ -235,6 +244,34 @@ export function isMajorWorldScript(f: ConvoFunctor) {
 
 export function isMajorEngineCall(call: string) {
   return MAJOR_ENGINE_CALLS.has(engineCallName(call));
+}
+
+/**
+ * Actions that only play out the moment (cutscene, sound, movement, a fight, travel) and leave
+ * no lasting state behind that later dialogue depends on.
+ */
+const MOMENT_SCRIPTS = new Set([
+  'ga_fade', 'ga_fade_to_black', 'ga_fade_from_black', 'ga_play_custom_animation', 'ga_play_animation', 'ga_move',
+  'ga_face_target', 'ga_play_sound', 'ga_sound_object_play', 'ga_sound_object_stop', 'ga_start_convo',
+  'ga_conversation_self', 'ga_party_freeze', 'ga_party_unfreeze', 'ga_heal_pc', 'ga_heal_party', 'ga_open_store',
+  'ga_time_advance', 'ga_attack', 'ga_jump', 'ga_jump_players', 'ga_jump_party_in_formation', 'ga_area_transition',
+  'ga_travel', 'ga_load_mod', 'ga_start_mod', 'ga_end_game',
+]);
+const MOMENT_SCRIPT_PREFIXES = ['ga_music_', 'ga_camera_'];
+const MOMENT_ENGINE_CALLS = new Set([
+  'fadetoblack', 'fadefromblack', 'playcustomanimation', 'actionplayanimation', 'playanimation', 'actionmovetoobject',
+  'actionmovetolocation', 'actionforcemovetoobject', 'actionforcemovetolocation', 'setfacing', 'setfacingpoint',
+  'actionspeakstring', 'speakstring', 'playsound', 'actionstartconversation', 'actionattack', 'jumptoobject',
+  'jumptolocation', 'actionjumptoobject', 'actionjumptolocation', 'startnewmodule', 'loadnewmodule',
+]);
+
+/** Whether skipping this console line only skips a cutscene moment, so running it is usually not needed. */
+export function isMomentAction(f: ConvoFunctor) {
+  const script = f.script.toLowerCase();
+  if (MOMENT_SCRIPTS.has(script) || MOMENT_SCRIPT_PREFIXES.some(prefix => script.startsWith(prefix))) return true;
+  const decoded = f.decoded;
+  if (!decoded || decoded.calls.length === 0 || decoded.conditional_writes.length > 0 || decoded.unresolved.length > 0) return false;
+  return decoded.calls.every(call => MOMENT_ENGINE_CALLS.has(engineCallName(call)));
 }
 
 /** The in-game console line that runs a dialogue action on the player: `rs script(a,b)`, no quotes, no spaces. */
