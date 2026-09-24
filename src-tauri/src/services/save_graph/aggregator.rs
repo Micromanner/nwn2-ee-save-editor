@@ -21,7 +21,7 @@ use super::creature_names::read_speaker_names;
 use super::journal_reader::read_live_journal;
 use super::module_name::read_module_display_name;
 use super::script_decoder::{DecodedWrite, decode_action};
-use super::script_source::ScriptSources;
+use super::script_source::{GameScripts, ScriptSources};
 use super::types::{
     AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
     OrphanNote, QuestAggregate, QuestGraphProgress, SaveGraph, SpokenLine, TransitionNode,
@@ -136,12 +136,25 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
     }
     let mut modules_out: Vec<AggregatedModule> = Vec::with_capacity(module_entries.len());
 
+    let mut game_scripts =
+        GameScripts::open(ctx.paths.game_folder().map(std::path::PathBuf::as_path));
     let module_total = module_entries.len();
-    for (idx, entry) in module_entries.iter().enumerate() {
+    let module_paths: Vec<&std::path::Path> = module_entries
+        .iter()
+        .map(|entry| std::path::Path::new(&entry.resolved_path))
+        .collect();
+    let graphs = ctx.client.graphs(&module_paths, &mut |done| {
+        report(
+            "modules",
+            5.0 + (done as f32 / module_total as f32) * 60.0,
+            format!("Reading modules ({done} of {module_total})"),
+        );
+    });
+    for ((idx, entry), graph) in module_entries.iter().enumerate().zip(graphs) {
         let module_progress = if module_total == 0 {
             85.0
         } else {
-            5.0 + ((idx + 1) as f32 / module_total as f32) * 80.0
+            65.0 + ((idx + 1) as f32 / module_total as f32) * 20.0
         };
 
         let display_name = if entry.resolution_kind == ResolutionKind::Unresolved {
@@ -179,7 +192,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             continue;
         }
 
-        let graph = match ctx.client.graph(std::path::Path::new(&entry.resolved_path)) {
+        let graph = match graph {
             Ok(g) => g,
             Err(e) => {
                 warn!(
@@ -217,7 +230,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 .campaign_path
                 .as_deref()
                 .map(std::path::Path::new),
-            ctx.paths.game_folder().map(std::path::PathBuf::as_path),
+            &mut game_scripts,
         );
         let mut by_dlg: HashMap<&str, HashMap<i32, &ConvoNode>> = HashMap::new();
         for node in &graph.convo.nodes {
@@ -384,7 +397,7 @@ fn collect_transitions(
     node: &ConvoNode,
     module_name: &str,
     quests: &mut HashMap<String, QuestAggregate>,
-    scripts: &mut ScriptSources,
+    scripts: &mut ScriptSources<'_>,
     siblings: &HashMap<i32, &ConvoNode>,
     spoken: Option<SpokenLine>,
 ) {
@@ -508,7 +521,7 @@ const FOLLOW_UP_MAX_NODES: usize = 96;
 fn follow_up_subgraph(
     start: &ConvoNode,
     siblings: &HashMap<i32, &ConvoNode>,
-    scripts: &mut ScriptSources,
+    scripts: &mut ScriptSources<'_>,
 ) -> Vec<FollowNode> {
     let mut out = Vec::new();
     let mut seen: HashSet<i32> = HashSet::from([start.node]);
@@ -556,7 +569,7 @@ fn follow_up_subgraph(
 /// The original functor keeps the full decode for the UI.
 fn expand_wrapper_scripts(
     actions: &[ConvoFunctor],
-    scripts: &mut ScriptSources,
+    scripts: &mut ScriptSources<'_>,
 ) -> Vec<ConvoFunctor> {
     let mut out = Vec::with_capacity(actions.len());
     for action in actions {

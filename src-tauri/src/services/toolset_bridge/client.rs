@@ -1,6 +1,8 @@
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -112,6 +114,65 @@ impl BridgeClient {
     /// Extract the full reference graph (journal, factions, convo, module variables)
     /// for a single `.mod` file. Results are cached on disk by module-file fingerprint.
     pub fn graph(&self, module_path: &Path) -> BridgeResult<ModuleGraph> {
+        self.graph_on(module_path, &mut self.conn.lock())
+    }
+
+    /// [`Self::graph`] for several modules, results in input order, spread over up
+    /// to [`parallel_workers`] threads. The first uses the shared serve process; the
+    /// others start their own on their first cache miss and shut it down when the
+    /// batch is done, so the extra memory (~0.5 GB each) is only held during a cold
+    /// load. `on_done` is called on the calling thread with the number finished.
+    pub fn graphs(
+        &self,
+        module_paths: &[&Path],
+        on_done: &mut dyn FnMut(usize),
+    ) -> Vec<BridgeResult<ModuleGraph>> {
+        let mut results: Vec<Option<BridgeResult<ModuleGraph>>> =
+            module_paths.iter().map(|_| None).collect();
+        let next = AtomicUsize::new(0);
+        let (tx, rx) = mpsc::channel();
+        std::thread::scope(|scope| {
+            for worker in 0..parallel_workers().min(module_paths.len()) {
+                let (tx, next) = (tx.clone(), &next);
+                scope.spawn(move || {
+                    let mut shared;
+                    let mut own = None;
+                    let slot = if worker == 0 {
+                        shared = self.conn.lock();
+                        &mut *shared
+                    } else {
+                        &mut own
+                    };
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(path) = module_paths.get(i) else {
+                            break;
+                        };
+                        if tx.send((i, self.graph_on(path, slot))).is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+            drop(tx);
+            for (done, (i, result)) in rx.into_iter().enumerate() {
+                results[i] = Some(result);
+                on_done(done + 1);
+            }
+        });
+
+        results
+            .into_iter()
+            .map(|r| r.expect("every module fetched"))
+            .collect()
+    }
+
+    /// Cached graph, or a bridge run on `slot` (spawned on first use) for a miss.
+    fn graph_on(
+        &self,
+        module_path: &Path,
+        slot: &mut Option<ServeConnection>,
+    ) -> BridgeResult<ModuleGraph> {
         if !module_path.exists() {
             return Err(BridgeError::InputNotFound(module_path.to_path_buf()));
         }
@@ -127,7 +188,7 @@ impl BridgeClient {
             "op": "graph",
             "module": module_path.to_string_lossy(),
         });
-        let data = self.request(&req)?;
+        let data = self.request_on(slot, &req)?;
         let raw = data.get();
 
         if let Err(e) = self.cache.store(&key, raw) {
@@ -136,32 +197,38 @@ impl BridgeClient {
         Ok(serde_json::from_str(raw)?)
     }
 
+    fn request(&self, op: &serde_json::Value) -> BridgeResult<Box<RawValue>> {
+        self.request_on(&mut self.conn.lock(), op)
+    }
+
     /// Send one request line, read one response line. Retries once after
     /// respawning the child if the pipe looks broken — covers the case where
     /// the previous session's child exited between calls.
-    fn request(&self, op: &serde_json::Value) -> BridgeResult<Box<RawValue>> {
-        let mut guard = self.conn.lock();
-
-        match self.request_on_guard(&mut guard, op) {
+    fn request_on(
+        &self,
+        slot: &mut Option<ServeConnection>,
+        op: &serde_json::Value,
+    ) -> BridgeResult<Box<RawValue>> {
+        match self.request_once(slot, op) {
             Ok(data) => Ok(data),
             Err(BridgeError::ProcessDied(msg)) => {
                 warn!("bridge process died ({msg}); respawning and retrying");
-                *guard = None;
-                self.request_on_guard(&mut guard, op)
+                *slot = None;
+                self.request_once(slot, op)
             }
             Err(e) => Err(e),
         }
     }
 
-    fn request_on_guard(
+    fn request_once(
         &self,
-        guard: &mut parking_lot::MutexGuard<'_, Option<ServeConnection>>,
+        slot: &mut Option<ServeConnection>,
         op: &serde_json::Value,
     ) -> BridgeResult<Box<RawValue>> {
-        if guard.is_none() {
-            **guard = Some(self.spawn_serve()?);
+        if slot.is_none() {
+            *slot = Some(self.spawn_serve()?);
         }
-        let conn = guard.as_mut().expect("connection just ensured");
+        let conn = slot.as_mut().expect("connection just ensured");
 
         let mut req_line = serde_json::to_vec(op)?;
         req_line.push(b'\n');
@@ -225,6 +292,14 @@ impl BridgeClient {
             stdout,
         })
     }
+}
+
+/// Serve processes for a batch of cold modules. Each one keeps a core busy and
+/// peaks around 0.5 GB, so stay at a quarter of the cores and never above three.
+fn parallel_workers() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, |n| n.get() / 4)
+        .clamp(1, 3)
 }
 
 /// Read bridge stderr line-by-line and forward through tracing. Runs on a

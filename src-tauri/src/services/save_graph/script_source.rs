@@ -4,30 +4,102 @@
 //! constants only; the generic `ga_*` family is already classified by the bridge).
 
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use tracing::debug;
 
 use super::script_decoder::ScriptConstants;
 use crate::parsers::erf::{ErfParser, SecurityLimits};
 
-pub struct ScriptSources {
-    archive: Option<ErfParser>,
-    dirs: Vec<PathBuf>,
-    /// `data/scripts.zip`, `scripts_x1.zip`, `scripts_x2.zip` of the install.
-    game_zips: Vec<PathBuf>,
-    /// Lowercase `<script>.nss` stem -> (zip, entry name), later packs winning;
-    /// built on first use.
-    game_index: Option<HashMap<String, (PathBuf, String)>>,
+/// The install's `data/scripts.zip`, `scripts_x1.zip` and `scripts_x2.zip`, shared by
+/// every module of one quest-graph build so the archives are indexed and `nwscript`
+/// is parsed once instead of once per module.
+pub struct GameScripts {
+    zips: Vec<zip::ZipArchive<File>>,
+    /// Lowercase `<script>.nss` stem -> (zip, entry name), later packs winning.
+    index: HashMap<String, (usize, String)>,
     cache: HashMap<String, Option<String>>,
-    game_cache: HashMap<String, Option<String>>,
     nwscript: Option<ScriptConstants>,
-    constants_cache: HashMap<String, ScriptConstants>,
 }
 
-impl ScriptSources {
-    pub fn open(module_path: &Path, campaign_dir: Option<&Path>, game_dir: Option<&Path>) -> Self {
+impl GameScripts {
+    pub fn open(game_dir: Option<&Path>) -> Self {
+        let zips: Vec<_> = game_dir
+            .map(|dir| {
+                ["scripts.zip", "scripts_x1.zip", "scripts_x2.zip"]
+                    .iter()
+                    .filter_map(|name| File::open(dir.join("data").join(name)).ok())
+                    .filter_map(|file| zip::ZipArchive::new(file).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut index = HashMap::new();
+        for (i, zip) in zips.iter().enumerate() {
+            for name in zip.file_names() {
+                let lower = name.to_ascii_lowercase();
+                if let Some(stem) = lower
+                    .rsplit('/')
+                    .next()
+                    .and_then(|f| f.strip_suffix(".nss"))
+                {
+                    index.insert(stem.to_string(), (i, name.to_string()));
+                }
+            }
+        }
+        Self {
+            zips,
+            index,
+            cache: HashMap::new(),
+            nwscript: None,
+        }
+    }
+
+    /// `<script>.nss` out of the archives; `script` must be lowercase.
+    fn script(&mut self, script: &str) -> Option<String> {
+        if let Some(cached) = self.cache.get(script) {
+            return cached.clone();
+        }
+        let found = self.index.get(script).and_then(|(i, name)| {
+            let mut entry = self.zips[*i].by_name(name).ok()?;
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).ok()?;
+            Some(decode_text(&bytes))
+        });
+        self.cache.insert(script.to_string(), found.clone());
+        found
+    }
+
+    fn nwscript(&mut self) -> &ScriptConstants {
+        if self.nwscript.is_none() {
+            let mut constants = ScriptConstants::default();
+            if let Some(src) = self.script("nwscript") {
+                collect_constants(&src, &mut constants);
+            }
+            self.nwscript = Some(constants);
+        }
+        self.nwscript
+            .as_ref()
+            .expect("nwscript constants just parsed")
+    }
+}
+
+pub struct ScriptSources<'a> {
+    archive: Option<ErfParser>,
+    dirs: Vec<PathBuf>,
+    game: &'a mut GameScripts,
+    cache: HashMap<String, Option<String>>,
+    constants_cache: HashMap<String, Arc<ScriptConstants>>,
+}
+
+impl<'a> ScriptSources<'a> {
+    pub fn open(
+        module_path: &Path,
+        campaign_dir: Option<&Path>,
+        game: &'a mut GameScripts,
+    ) -> Self {
         let mut dirs = Vec::new();
         let mut archive = None;
         if module_path.is_dir() {
@@ -48,45 +120,28 @@ impl ScriptSources {
         if let Some(dir) = campaign_dir {
             dirs.push(dir.to_path_buf());
         }
-        let game_zips = game_dir
-            .map(|dir| {
-                ["scripts.zip", "scripts_x1.zip", "scripts_x2.zip"]
-                    .iter()
-                    .map(|name| dir.join("data").join(name))
-                    .filter(|path| path.is_file())
-                    .collect()
-            })
-            .unwrap_or_default();
         Self {
             archive,
             dirs,
-            game_zips,
-            game_index: None,
+            game,
             cache: HashMap::new(),
-            game_cache: HashMap::new(),
-            nwscript: None,
             constants_cache: HashMap::new(),
         }
     }
 
     /// Named constants visible to `script`: `nwscript` (`FEAT_*` and friends) plus
     /// the `const int`/`const string` declarations of its `#include` chain, such as
-    /// the OC's `kinc_companion` `TAG_KHELGAR = "khelgar"`.
-    pub fn constants(&mut self, script: &str) -> ScriptConstants {
+    /// the OC's `kinc_companion` `TAG_KHELGAR = "khelgar"`. Cached per module, since
+    /// a module can ship its own copy of an include.
+    pub fn constants(&mut self, script: &str) -> Arc<ScriptConstants> {
         let key = script.to_ascii_lowercase();
         if let Some(constants) = self.constants_cache.get(&key) {
             return constants.clone();
         }
-        if self.nwscript.is_none() {
-            let mut constants = ScriptConstants::default();
-            if let Some(src) = self.game_script("nwscript") {
-                collect_constants(&src, &mut constants);
-            }
-            self.nwscript = Some(constants);
-        }
-        let mut constants = self.nwscript.clone().unwrap_or_default();
+        let mut constants = self.game.nwscript().clone();
         let mut visited = HashSet::new();
         self.collect_includes(&key, &mut constants, &mut visited);
+        let constants = Arc::new(constants);
         self.constants_cache.insert(key, constants.clone());
         constants
     }
@@ -104,7 +159,7 @@ impl ScriptSources {
         let Some(source) = self
             .source(&key)
             .map(str::to_string)
-            .or_else(|| self.game_script(&key))
+            .or_else(|| self.game.script(&key))
         else {
             return;
         };
@@ -112,46 +167,6 @@ impl ScriptSources {
             self.collect_includes(&include, constants, visited);
         }
         collect_constants(&source, constants);
-    }
-
-    /// `<name>.nss` out of the game's script archives (later packs win).
-    fn game_script(&mut self, script: &str) -> Option<String> {
-        let key = script.to_ascii_lowercase();
-        if let Some(cached) = self.game_cache.get(&key) {
-            return cached.clone();
-        }
-        let index = self.game_index.get_or_insert_with(|| {
-            let mut index = HashMap::new();
-            for path in &self.game_zips {
-                let Ok(file) = std::fs::File::open(path) else {
-                    continue;
-                };
-                let Ok(zip) = zip::ZipArchive::new(file) else {
-                    continue;
-                };
-                for name in zip.file_names() {
-                    let lower = name.to_ascii_lowercase();
-                    if let Some(stem) = lower
-                        .rsplit('/')
-                        .next()
-                        .and_then(|f| f.strip_suffix(".nss"))
-                    {
-                        index.insert(stem.to_string(), (path.clone(), name.to_string()));
-                    }
-                }
-            }
-            index
-        });
-        let found = index.get(&key).and_then(|(path, name)| {
-            let file = std::fs::File::open(path).ok()?;
-            let mut zip = zip::ZipArchive::new(file).ok()?;
-            let mut entry = zip.by_name(name).ok()?;
-            let mut bytes = Vec::new();
-            entry.read_to_end(&mut bytes).ok()?;
-            Some(decode_text(&bytes))
-        });
-        self.game_cache.insert(key, found.clone());
-        found
     }
 
     /// Source text of `<script>.nss`, or `None` when no source ships.
