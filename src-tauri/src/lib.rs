@@ -102,6 +102,8 @@ pub fn run() {
             crate::commands::session::close_character,
             crate::commands::session::get_session_info,
             crate::commands::session::has_unsaved_changes,
+            crate::commands::session::get_save_name,
+            crate::commands::session::set_save_name,
             crate::commands::session::export_to_localvault,
             crate::commands::session::undo,
             crate::commands::session::redo,

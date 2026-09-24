@@ -250,6 +250,26 @@ pub async fn get_session_info(state: State<'_, AppState>) -> CommandResult<Sessi
     })
 }
 
+/// `None` for original-format saves, whose name lives only in the folder name.
+#[tauri::command]
+pub async fn get_save_name(state: State<'_, AppState>) -> CommandResult<Option<String>> {
+    Ok(state.session.read().save_name())
+}
+
+/// Stage a new `savename.txt`; `save_character` writes it. The folder keeps its name.
+#[tauri::command]
+pub async fn set_save_name(state: State<'_, AppState>, name: String) -> CommandResult<()> {
+    state
+        .session
+        .write()
+        .stage_save_name(&name)
+        .map_err(|message| CommandError::FileError {
+            message,
+            path: None,
+            diagnostics_path: None,
+        })
+}
+
 #[tauri::command]
 pub async fn has_unsaved_changes(state: State<'_, AppState>) -> CommandResult<bool> {
     let session = state.session.read();

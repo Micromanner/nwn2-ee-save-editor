@@ -29,6 +29,7 @@ const GLOBALS_XML: &str = "globals.xml";
 const CURRENTMODULE_TXT: &str = "currentmodule.txt";
 const MODULE_IFO: &str = "module.ifo";
 const PLAYERINFO_BIN: &str = "playerinfo.bin";
+pub const SAVENAME_TXT: &str = "savename.txt";
 
 const FILE_HEADERS: &[(&str, &[u8; 4])] = &[
     (".bic", b"BIC "),
@@ -586,6 +587,7 @@ impl SaveGameHandler {
             || filename == MODULE_IFO
             || filename == CURRENTMODULE_TXT
             || filename == PLAYERINFO_BIN
+            || filename == SAVENAME_TXT
             || disk_path.exists();
 
         if self.format == SaveFormat::Original || force_disk {

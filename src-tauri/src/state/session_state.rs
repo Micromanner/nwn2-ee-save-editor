@@ -16,7 +16,7 @@ use crate::services::save_graph::SaveGraph;
 use crate::services::savegame_handler::backup_manifest::{
     self, CharacterChanges, PartyChange, QuestChange, SaveRecord,
 };
-use crate::services::savegame_handler::{PlayerOutputs, SaveGameHandler};
+use crate::services::savegame_handler::{PlayerOutputs, SAVENAME_TXT, SaveFormat, SaveGameHandler};
 use crate::state::standalone_bic;
 
 const HISTORY_LIMIT: usize = 100;
@@ -94,6 +94,9 @@ pub struct SessionState {
     /// Staged party-membership changes (lowercased ros_name -> desired
     /// in_party), held in memory until `save_character` flushes them.
     staged_party: std::collections::HashMap<String, bool>,
+    /// Staged `savename.txt` content, written by `save_character`. The save folder
+    /// is never renamed.
+    staged_save_name: Option<String>,
     /// Backup directories taken during this session (load, pre-save, manual).
     /// Every successful save appends its change record to each of them.
     session_backups: Vec<PathBuf>,
@@ -130,6 +133,7 @@ impl SessionState {
             standalone_backup_done: false,
             parked: Vec::new(),
             staged_party: std::collections::HashMap::new(),
+            staged_save_name: None,
             session_backups: Vec::new(),
             change_log: Vec::new(),
         }
@@ -289,6 +293,7 @@ impl SessionState {
         self.character_source = CharacterSource::Player;
         self.parked.clear();
         self.staged_party.clear();
+        self.staged_save_name = None;
         self.quest_edits.clear();
         self.clear_history();
         if let Some(path) = self
@@ -343,6 +348,7 @@ impl SessionState {
         self.standalone_backup_done = false;
         self.parked.clear();
         self.staged_party.clear();
+        self.staged_save_name = None;
         self.quest_edits.clear();
         self.clear_history();
 
@@ -436,6 +442,12 @@ impl SessionState {
                     Err(e) => errors.push(e),
                 }
             }
+            if errors.is_empty()
+                && let Some(name) = &self.staged_save_name
+                && let Err(e) = handler.update_file(SAVENAME_TXT, name.as_bytes())
+            {
+                errors.push(format!("{SAVENAME_TXT}: {e}"));
+            }
             if !errors.is_empty() {
                 handler.abort_batch();
                 return Err(errors.join("\n"));
@@ -493,6 +505,7 @@ impl SessionState {
         if flushed_party {
             self.staged_party.clear();
         }
+        self.staged_save_name = None;
         self.quest_edits.clear();
         self.module_info_cache = None;
         if !record.is_empty() {
@@ -700,6 +713,7 @@ impl SessionState {
         self.standalone_backup_done = false;
         self.parked.clear();
         self.staged_party.clear();
+        self.staged_save_name = None;
         self.quest_edits.clear();
         self.clear_history();
         crate::services::savegame_handler::backup::clear_backup_tracking();
@@ -952,6 +966,30 @@ impl SessionState {
             || self.parked.iter().any(|(_, c, _)| c.is_modified())
             || !self.staged_party.is_empty()
             || !self.quest_edits.pending.is_empty()
+            || self.staged_save_name.is_some()
+    }
+
+    /// The save's display name from `savename.txt`, staged edits included. `None`
+    /// for original-format saves, which keep the name only in the folder name.
+    pub fn save_name(&self) -> Option<String> {
+        if let Some(name) = &self.staged_save_name {
+            return Some(name.clone());
+        }
+        let handler = self.savegame_handler.as_ref()?;
+        if handler.format() != SaveFormat::Ee {
+            return None;
+        }
+        Some(saved_save_name(handler))
+    }
+
+    pub fn stage_save_name(&mut self, name: &str) -> Result<(), String> {
+        let handler = self.savegame_handler.as_ref().ok_or("No save loaded")?;
+        if handler.format() != SaveFormat::Ee {
+            return Err("Original-format saves have no savename.txt".into());
+        }
+        let name = name.trim();
+        self.staged_save_name = (name != saved_save_name(handler)).then(|| name.to_string());
+        Ok(())
     }
 
     pub fn character(&self) -> Option<&Character> {
@@ -1313,6 +1351,12 @@ fn describe_source(source: &CharacterSource) -> String {
     }
 }
 
+fn saved_save_name(handler: &SaveGameHandler) -> String {
+    std::fs::read_to_string(handler.save_dir().join(SAVENAME_TXT))
+        .map(|name| name.trim().to_string())
+        .unwrap_or_default()
+}
+
 fn sync_roster(
     handler: &mut SaveGameHandler,
     ros_name: &str,
@@ -1600,6 +1644,59 @@ mod tests {
             crate::parsers::tlk::TLKParser::new(),
         )));
         (dir, session, data)
+    }
+
+    #[test]
+    fn save_name_writes_savename_txt_and_keeps_folder() {
+        use indexmap::indexmap;
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let save = dir.path().join("000007 - Old Name");
+        std::fs::create_dir(&save).unwrap();
+        std::fs::write(save.join("savename.txt"), "Old Name").unwrap();
+        let fields = indexmap! { "Str".into() => GffValue::Byte(10) };
+        let root =
+            indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![fields.clone()]) };
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(save.join("resgff.zip")).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("playerlist.ifo", options).unwrap();
+        zip.write_all(&GffWriter::new("IFO ", "V3.2").write(root).unwrap())
+            .unwrap();
+        zip.start_file("player.bic", options).unwrap();
+        zip.write_all(
+            &GffWriter::new("BIC ", "V3.2")
+                .write(fields.clone())
+                .unwrap(),
+        )
+        .unwrap();
+        zip.finish().unwrap();
+
+        let mut session = make_session_with_character(fields);
+        session.save_dir = Some(save.clone());
+        session.savegame_handler = Some(SaveGameHandler::new(save.clone(), false, false).unwrap());
+        session.primary_player_index = Some(0);
+        let data = GameData::new(Arc::new(std::sync::RwLock::new(
+            crate::parsers::tlk::TLKParser::new(),
+        )));
+
+        assert_eq!(session.save_name().as_deref(), Some("Old Name"));
+        session.stage_save_name("  Old Name ").unwrap();
+        assert!(!session.has_unsaved_changes());
+        session.stage_save_name("Jörg's Save").unwrap();
+        assert!(session.has_unsaved_changes());
+        assert_eq!(
+            std::fs::read_to_string(save.join("savename.txt")).unwrap(),
+            "Old Name"
+        );
+
+        session.save_character(&data, 5).unwrap();
+        assert!(!session.has_unsaved_changes());
+        assert_eq!(
+            std::fs::read_to_string(save.join("savename.txt")).unwrap(),
+            "Jörg's Save"
+        );
+        assert!(save.exists());
+        assert_eq!(session.save_name().as_deref(), Some("Jörg's Save"));
     }
 
     #[test]

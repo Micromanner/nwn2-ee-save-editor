@@ -60,6 +60,10 @@ export function OverviewPanel() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
 
+  const [saveName, setSaveName] = useState<string | null>(null);
+  const [saveNameDraft, setSaveNameDraft] = useState('');
+  const [isEditingSaveName, setIsEditingSaveName] = useState(false);
+
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [biography, setBiography] = useState('');
   const [savedBiography, setSavedBiography] = useState('');
@@ -135,6 +139,26 @@ export function OverviewPanel() {
     setLastName(character?.last_name ?? '');
     setIsEditingName(false);
   }, [character]);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => { invoke<string | null>('get_save_name').then(name => { if (active) setSaveName(name); }).catch(handleError); };
+    load();
+    window.addEventListener('save-changed', load);
+    return () => { active = false; window.removeEventListener('save-changed', load); };
+  }, [characterId, handleError]);
+
+  const handleSaveNameSave = useCallback(async () => {
+    const name = saveNameDraft.trim();
+    setIsEditingSaveName(false);
+    if (!name || name === saveName) return;
+    try {
+      await invoke('set_save_name', { name });
+      setSaveName(name);
+    } catch (err) {
+      handleError(err);
+    }
+  }, [saveNameDraft, saveName, handleError]);
 
   const handleBioSave = useCallback(async () => {
     if (!characterId) return;
@@ -386,6 +410,22 @@ export function OverviewPanel() {
 
         <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '10px 16px' }}>
           <div className="t-section" style={{ marginBottom: 8 }}>{t('overview.campaign')}</div>
+          {saveName !== null && (
+            <div style={{ marginBottom: 4 }}>
+              <KVRow label={t('overview.saveName')} value={isEditingSaveName ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <InputGroup small autoFocus value={saveNameDraft} onChange={e => setSaveNameDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveNameSave(); if (e.key === 'Escape') setIsEditingSaveName(false); }} style={{ width: 220 }} />
+                  <Button icon="tick" intent="primary" small onClick={handleSaveNameSave} />
+                  <Button icon="cross" minimal small onClick={() => setIsEditingSaveName(false)} />
+                </span>
+              ) : (
+                <span className="editable-row" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => { setSaveNameDraft(saveName); setIsEditingSaveName(true); }}>
+                  {display(saveName || null)}
+                  <GameIcon icon={GiQuillInk} size={12} style={{ color: T.textMuted }} />
+                </span>
+              )} />
+            </div>
+          )}
           <div style={{ marginBottom: 4 }}>
             <KVRow label={t('overview.campaignName')} value={display(campaignName)} />
           </div>
