@@ -27,6 +27,10 @@ pub fn backup_campaign_variables(handler: &SaveGameHandler) -> Result<(), String
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
     let filename = format!("globals_{timestamp}.xml");
     let dest = backup_dir.join(&filename);
+    // Edits within the same second keep the first backup, the state before them.
+    if dest.exists() {
+        return Ok(());
+    }
 
     fs::copy(&source, &dest).map_err(|e| format!("Failed to backup globals.xml: {e}"))?;
     info!("Created globals.xml backup at {:?}", dest);
@@ -83,6 +87,9 @@ pub fn backup_module_z(handler: &SaveGameHandler, module_id: &str) -> Result<(),
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
     let filename = format!("{module_id}_{timestamp}.{ext}");
     let dest = backup_dir.join(&filename);
+    if dest.exists() {
+        return Ok(());
+    }
 
     fs::copy(&source, &dest).map_err(|e| format!("Failed to backup {module_id}.{ext}: {e}"))?;
     info!("Created module .{} backup at {:?}", ext, dest);

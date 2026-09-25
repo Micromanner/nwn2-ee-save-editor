@@ -262,7 +262,8 @@ export function PartyPanel() {
   // get_companion_influence marks the detected campaign's official companions
   // as "explicit". Anything else (e.g. a story NPC that also has a .ros file)
   // is left out. No campaign detected -> treat every roster entry as recognized.
-  // The same response carries current influence values for the cards.
+  // The same response carries current influence values for the cards; the roster
+  // reloads after every save, which is when quest edits change influence.
   useEffect(() => {
     if (!characterId) {
       setRecognizedRosNames(null);
@@ -288,7 +289,7 @@ export function PartyPanel() {
         setInfluenceByRos({});
       });
     return () => { cancelled = true; };
-  }, [characterId]);
+  }, [characterId, roster]);
 
   const toggle = async (entry: RosterEntryInfo) => {
     try {

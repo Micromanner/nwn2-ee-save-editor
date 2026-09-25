@@ -368,7 +368,11 @@ export default function DashboardPanel() {
             });
             setShowBackupBrowser(false);
             showToast(t('fileBrowser.restoreSuccess'), 'success');
-            await refreshAll();
+            if (loadedSavePath) {
+              await importCharacter(loadedSavePath, loadedPlayerIndex ?? undefined);
+            } else {
+              await refreshAll();
+            }
           } catch (error) {
             handleError(error);
           }

@@ -604,8 +604,10 @@ export class GameStateAPI {
     };
   }
 
-  async getModuleVariables(characterId: number): Promise<ModuleVariablesResponse> {
-    const [, variables] = await invoke<[ModuleInfo, ModuleVariablesResponse]>('get_module_info');
+  async getModuleVariables(characterId: number, moduleId?: string | null): Promise<ModuleVariablesResponse> {
+    const [, variables] = moduleId
+      ? await invoke<[ModuleInfo, ModuleVariablesResponse]>('get_module_info_by_id', { moduleId })
+      : await invoke<[ModuleInfo, ModuleVariablesResponse]>('get_module_info');
     const totalCount = Object.keys(variables.integers).length + Object.keys(variables.strings).length + Object.keys(variables.floats).length;
     return {
       ...variables,

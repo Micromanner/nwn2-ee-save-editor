@@ -194,7 +194,7 @@ pub fn list_modules(
                     Err(_) => file_stem.clone(),
                 };
                 modules.push(ModuleSummary {
-                    is_current: file_stem == current_module_id,
+                    is_current: file_stem.eq_ignore_ascii_case(&current_module_id),
                     id: file_stem,
                     name,
                 });

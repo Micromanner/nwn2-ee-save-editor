@@ -26,7 +26,7 @@ use crate::parsers::xml::{
     CompanionStatus, FullSummary, QuestOverview, XmlData, get_companion_definitions,
 };
 use crate::services::savegame_handler::SaveGameHandler;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 pub struct CampaignManager;
 
@@ -153,7 +153,7 @@ impl CampaignManager {
 
     pub fn get_companion_influence(
         handler: &SaveGameHandler,
-    ) -> Result<HashMap<String, CompanionStatus>, String> {
+    ) -> Result<IndexMap<String, CompanionStatus>, String> {
         let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
         let parser = GlobalsParser::from_string(&xml_content)?;
         let ros_names = handler.list_companions().map_err(|e| e.to_string())?;

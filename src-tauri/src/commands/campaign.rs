@@ -6,7 +6,7 @@ use crate::services::campaign::content::{
 };
 use crate::services::campaign::settings::{CampaignBackupInfo, CampaignSettings};
 use crate::state::AppState;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use tauri::State;
 
 #[tauri::command]
@@ -165,7 +165,7 @@ pub async fn update_campaign_settings(
 #[tauri::command]
 pub async fn get_companion_influence(
     state: State<'_, AppState>,
-) -> CommandResult<HashMap<String, CompanionStatus>> {
+) -> CommandResult<IndexMap<String, CompanionStatus>> {
     let session = state.session.read();
     let handler = session
         .savegame_handler

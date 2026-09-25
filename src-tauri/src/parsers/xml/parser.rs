@@ -1,5 +1,6 @@
 use super::types::{GlobalsXml, XmlData};
 use chrono::{TimeZone, Utc};
+use indexmap::IndexMap;
 use quick_xml::de::from_str;
 use regex::Regex;
 use serde::Serialize;
@@ -88,8 +89,8 @@ pub struct CompanionDefinition {
     pub ros_name: Option<&'static str>,
 }
 
-pub fn get_companion_definitions() -> HashMap<&'static str, CompanionDefinition> {
-    let mut map = HashMap::new();
+pub fn get_companion_definitions() -> IndexMap<&'static str, CompanionDefinition> {
+    let mut map = IndexMap::new();
     map.insert(
         "neeshka",
         CompanionDefinition {
@@ -303,8 +304,8 @@ impl RustXmlParser {
         Ok(result)
     }
 
-    pub fn discover_potential_companions(&self) -> HashMap<String, BTreeMap<String, String>> {
-        let mut discovered = HashMap::new();
+    pub fn discover_potential_companions(&self) -> IndexMap<String, BTreeMap<String, String>> {
+        let mut discovered = IndexMap::new();
         let blacklist_set: HashSet<&str> = BLACKLIST.iter().copied().collect();
         let pattern = get_influence_pattern();
 
@@ -334,8 +335,8 @@ impl RustXmlParser {
     /// influence variable. Recruitment is deliberately not reported: the OC
     /// writes `.ros` files for its whole cast at campaign start and skips the
     /// `*_Joined`/`*Met` globals for most companions.
-    pub fn get_companion_status(&self, ros_names: &[String]) -> HashMap<String, CompanionStatus> {
-        let mut companion_status = HashMap::new();
+    pub fn get_companion_status(&self, ros_names: &[String]) -> IndexMap<String, CompanionStatus> {
+        let mut companion_status = IndexMap::new();
         let defs = get_companion_definitions();
         let in_roster = |comp_id: &str, def: &CompanionDefinition| {
             let ros_name = def.ros_name.unwrap_or(comp_id);
@@ -554,7 +555,7 @@ pub struct QuestOverview {
 #[derive(Serialize)]
 pub struct FullSummary {
     pub general_info: HashMap<String, Option<String>>,
-    pub companion_status: HashMap<String, CompanionStatus>,
+    pub companion_status: IndexMap<String, CompanionStatus>,
     pub quest_overview: QuestOverview,
     pub raw_data_counts: HashMap<String, usize>,
 }

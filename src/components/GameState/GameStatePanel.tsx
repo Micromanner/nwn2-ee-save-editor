@@ -152,7 +152,7 @@ function InfluenceSlider({ value, onChange }: { value: number; onChange: (v: num
   );
 }
 
-function ReputationTab({ characterId }: { characterId: number }) {
+function ReputationTab({ characterId, globalsVersion }: { characterId: number; globalsVersion: number }) {
   const t = useTranslations();
   const [companions, setCompanions] = useState<Record<string, CompanionInfluenceData>>({});
   const initialRef = useRef<Record<string, CompanionInfluenceData> | null>(null);
@@ -160,6 +160,13 @@ function ReputationTab({ characterId }: { characterId: number }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveVersion, setSaveVersion] = useState(0);
+
+  useEffect(() => {
+    const onSave = () => setSaveVersion(v => v + 1);
+    window.addEventListener('save-changed', onSave);
+    return () => window.removeEventListener('save-changed', onSave);
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -167,9 +174,7 @@ function ReputationTab({ characterId }: { characterId: number }) {
     gameStateAPI.getCompanionInfluence(characterId)
       .then(res => {
         setCompanions(res.companions);
-        if (!initialRef.current) {
-          initialRef.current = res.companions;
-        }
+        initialRef.current = res.companions;
         const map: Record<string, number> = {};
         Object.entries(res.companions).forEach(([id, data]) => {
           map[id] = data.influence ?? 0;
@@ -178,7 +183,7 @@ function ReputationTab({ characterId }: { characterId: number }) {
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load companion data'))
       .finally(() => setIsLoading(false));
-  }, [characterId]);
+  }, [characterId, globalsVersion, saveVersion]);
 
   const hasChanges = Object.entries(influences).some(
     ([id, val]) => val !== (initialRef.current?.[id]?.influence ?? 0)
@@ -666,14 +671,16 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const requestRef = useRef(0);
   const loadVars = useCallback(() => {
+    const request = ++requestRef.current;
     setIsLoading(true);
     setError(null);
-    gameStateAPI.getModuleVariables(characterId)
-      .then(data => setVars(data))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load module variables'))
-      .finally(() => setIsLoading(false));
-  }, [characterId]);
+    gameStateAPI.getModuleVariables(characterId, moduleId)
+      .then(data => { if (request === requestRef.current) setVars(data); })
+      .catch(err => { if (request === requestRef.current) setError(err instanceof Error ? err.message : 'Failed to load module variables'); })
+      .finally(() => { if (request === requestRef.current) setIsLoading(false); });
+  }, [characterId, moduleId]);
 
   useEffect(() => { loadVars(); }, [loadVars]);
 
@@ -918,7 +925,7 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
   );
 }
 
-function CampaignVariablesSection({ characterId }: { characterId: number }) {
+function CampaignVariablesSection({ characterId, onGlobalsChanged }: { characterId: number; onGlobalsChanged: () => void }) {
   const t = useTranslations();
   const [vars, setVars] = useState<CampaignVariablesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -944,9 +951,13 @@ function CampaignVariablesSection({ characterId }: { characterId: number }) {
     });
     await gameStateAPI.batchUpdateCampaignVariables(updates);
     loadVars();
+    onGlobalsChanged();
   });
 
-  const backupDialog = useCampaignVariablesBackupDialog(loadVars);
+  const backupDialog = useCampaignVariablesBackupDialog(() => {
+    loadVars();
+    onGlobalsChanged();
+  });
 
   const integers = vars ? recordToVarEntries(vars.integers) : [];
   const strings = vars ? recordToVarEntries(vars.strings) : [];
@@ -991,6 +1002,7 @@ export function GameStatePanel() {
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [pathsVersion, setPathsVersion] = useState(0);
+  const [globalsVersion, setGlobalsVersion] = useState(0);
 
   usePathsChangedEvent(() => setPathsVersion(v => v + 1));
 
@@ -1028,7 +1040,7 @@ export function GameStatePanel() {
           </div>
 
           <div style={{ display: activeTab === 'reputation' ? undefined : 'none' }}>
-            <ReputationTab characterId={characterId} />
+            <ReputationTab characterId={characterId} globalsVersion={globalsVersion} />
           </div>
           <div style={{ display: activeTab === 'moduleVars' ? undefined : 'none' }}>
             <ModuleInfoSection characterId={characterId} onModuleIdChange={setSelectedModuleId} />
@@ -1047,7 +1059,7 @@ export function GameStatePanel() {
         {campaignId && (
           <div style={{ display: activeTab === 'campaignSettings' ? undefined : 'none' }}>
             <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
-              <CampaignVariablesSection characterId={characterId} />
+              <CampaignVariablesSection characterId={characterId} onGlobalsChanged={() => setGlobalsVersion(v => v + 1)} />
             </Card>
           </div>
         )}
