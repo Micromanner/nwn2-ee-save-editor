@@ -252,8 +252,14 @@ enum Stmt {
     },
     /// Bare `{ ... }` block: same conditionality as its parent.
     Block(Vec<Stmt>),
-    /// Body of an `if`/`else`/loop: executed only under a runtime condition.
+    /// Loop body: executed only under a runtime condition.
     Conditional(Vec<Stmt>),
+    /// `if`/`else`: the branch is known when the condition only reads parameters.
+    If {
+        condition: Vec<Token>,
+        then: Vec<Stmt>,
+        otherwise: Vec<Stmt>,
+    },
     Switch {
         subject: Vec<Token>,
         cases: Vec<Case>,
@@ -329,13 +335,19 @@ impl Parser {
                 match lower.as_str() {
                     "if" => {
                         self.pos += 1;
-                        self.skip_parens();
-                        let mut body = self.parse_body();
-                        if is_ident(self.peek(), "else") {
+                        let condition = self.take_parens();
+                        let then = self.parse_body();
+                        let otherwise = if is_ident(self.peek(), "else") {
                             self.pos += 1;
-                            body.extend(self.parse_body());
-                        }
-                        Some(Stmt::Conditional(body))
+                            self.parse_body()
+                        } else {
+                            Vec::new()
+                        };
+                        Some(Stmt::If {
+                            condition,
+                            then,
+                            otherwise,
+                        })
                     }
                     "while" | "for" => {
                         self.pos += 1;
@@ -812,6 +824,18 @@ fn interpret(stmts: &[Stmt], ctx: &mut Context, conditional: bool) {
             }
             Stmt::Block(body) => interpret(body, ctx, conditional),
             Stmt::Conditional(body) => interpret(body, ctx, true),
+            Stmt::If {
+                condition,
+                then,
+                otherwise,
+            } => match ctx.bool_arg(condition) {
+                Some(true) => interpret(then, ctx, conditional),
+                Some(false) => interpret(otherwise, ctx, conditional),
+                None => {
+                    interpret(then, ctx, true);
+                    interpret(otherwise, ctx, true);
+                }
+            },
             Stmt::Switch { subject, cases } => {
                 let selected = match subject.as_slice() {
                     [Token::Ident(name)] => ctx.param(name).and_then(Value::as_i64),
@@ -1113,19 +1137,35 @@ void main(int nDialogNode)
         assert!(decoded.unresolved.is_empty());
     }
 
+    /// `10ga_door_set.nss` and `10_enable_mapnote.nss` in `1000_neverwinter_a1.mod`.
     #[test]
-    fn door_and_map_pin_wrappers_compare_their_state_parameter() {
+    fn door_and_map_pin_wrappers_take_the_branch_of_their_state_parameter() {
         let door = r#"
-void main(string sTag, int nState)
+void main (string sTag, int nState)
 {
-    object oDoor = GetObjectByTag(sTag);
-    SetLocked(oDoor, nState == 1);
+	object oDoor = GetObjectByTag(sTag);
+
+	if (nState == 1)
+	{
+		SetLocked(oDoor, TRUE);
+	}
+	else
+	{
+		SetLocked(oDoor, FALSE);
+	}
 }
 "#;
         let pin = r#"
 void main(string sTag, int nEnable)
 {
-    SetMapPinEnabled(GetObjectByTag(sTag), nEnable == 1);
+	if (nEnable == 1)
+	{
+		SetMapPinEnabled(GetObjectByTag(sTag), TRUE);
+	}
+	else
+	{
+		SetMapPinEnabled(GetObjectByTag(sTag), FALSE);
+	}
 }
 "#;
         let constants = ScriptConstants::default();
