@@ -441,27 +441,28 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
   const allSubsystems: SubsystemType[] = ['feats', 'spells', 'skills', 'inventory', 'abilityScores', 'combat', 'saves', 'classes', 'appearance'];
 
+  // Undo and redo can unstage or restage a quest edit.
   const undo = useCallback(async () => {
     try {
       const result = await CharacterStateAPI.undo();
       if (result.applied) {
-        await invalidateSubsystems(allSubsystems);
+        window.dispatchEvent(new Event('quest-edits-changed'));
       }
     } catch (err) {
       console.error('Undo failed:', err);
     }
-  }, [invalidateSubsystems]);
+  }, []);
 
   const redo = useCallback(async () => {
     try {
       const result = await CharacterStateAPI.redo();
       if (result.applied) {
-        await invalidateSubsystems(allSubsystems);
+        window.dispatchEvent(new Event('quest-edits-changed'));
       }
     } catch (err) {
       console.error('Redo failed:', err);
     }
-  }, [invalidateSubsystems]);
+  }, []);
 
   const loadMetadataInternal = useCallback(async (_id: number) => {
     setIsMetadataLoading(true);
@@ -642,6 +643,17 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       console.error('Failed to refresh character:', err);
     }
   }, [characterId]);
+
+  // Staged quest edits change the loaded player and the roster in memory.
+  useEffect(() => {
+    const onQuestEditsChanged = () => {
+      void refreshCharacter();
+      void invalidateSubsystems(allSubsystems);
+      void refreshRoster();
+    };
+    window.addEventListener('quest-edits-changed', onQuestEditsChanged);
+    return () => window.removeEventListener('quest-edits-changed', onQuestEditsChanged);
+  }, [refreshCharacter, invalidateSubsystems, refreshRoster]);
 
   const updateCharacterPartial = useCallback((data: Partial<CharacterData>) => {
     setCharacter(prev => prev ? { ...prev, ...data } : null);

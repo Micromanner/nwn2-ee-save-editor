@@ -146,8 +146,7 @@ pub async fn save_stage_quest_edit(
         ));
     }
     session
-        .quest_edits
-        .stage(preview, &graph, &selected, replace)
+        .stage_quest_edit(preview, &graph, &selected, replace, &state.game_data.read())
         .map_err(CommandError::from)?;
     Ok(session.quest_edits.pending.clone())
 }
@@ -161,10 +160,12 @@ pub fn save_list_quest_edits(state: State<'_, AppState>) -> Vec<PendingQuestEdit
 pub fn save_discard_quest_edits(
     state: State<'_, AppState>,
     tag: Option<String>,
-) -> Vec<PendingQuestEdit> {
+) -> CommandResult<Vec<PendingQuestEdit>> {
     let mut session = state.session.write();
-    session.quest_edits.discard(tag.as_deref());
-    session.quest_edits.pending.clone()
+    session
+        .discard_quest_edits(tag.as_deref())
+        .map_err(CommandError::from)?;
+    Ok(session.quest_edits.pending.clone())
 }
 
 #[derive(serde::Serialize)]

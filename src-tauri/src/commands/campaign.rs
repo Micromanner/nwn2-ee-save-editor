@@ -26,7 +26,9 @@ pub async fn get_campaign_variables(state: State<'_, AppState>) -> CommandResult
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::get_campaign_variables(handler).map_err(CommandError::from)
+    let mut data = CampaignManager::get_campaign_variables(handler).map_err(CommandError::from)?;
+    session.quest_edits.overlay_globals(&mut data);
+    Ok(data)
 }
 
 pub fn cached_module_info(
@@ -71,7 +73,16 @@ fn resolve_area_names(info: &mut ModuleInfo, state: &State<'_, AppState>) {
 pub async fn get_module_info(
     state: State<'_, AppState>,
 ) -> CommandResult<(ModuleInfo, ModuleVariables)> {
-    cached_module_info(&state)
+    let mut result = cached_module_info(&state)?;
+    let session = state.session.read();
+    if let Some(module) = session
+        .savegame_handler
+        .as_ref()
+        .and_then(|h| h.extract_current_module().ok())
+    {
+        session.quest_edits.overlay_module(&module, &mut result.1);
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -99,6 +110,9 @@ pub async fn get_module_info_by_id(
     let mut result = CampaignManager::get_module_info_by_id(handler, &paths, &module_id)
         .map_err(CommandError::from)?;
     resolve_area_names(&mut result.0, &state);
+    session
+        .quest_edits
+        .overlay_module(&module_id, &mut result.1);
     Ok(result)
 }
 
@@ -171,7 +185,8 @@ pub async fn get_companion_influence(
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::get_companion_influence(handler).map_err(CommandError::from)
+    CampaignManager::get_companion_influence(handler, &session.quest_edits)
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]

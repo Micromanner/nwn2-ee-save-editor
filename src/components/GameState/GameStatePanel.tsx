@@ -163,9 +163,13 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
   const [saveVersion, setSaveVersion] = useState(0);
 
   useEffect(() => {
-    const onSave = () => setSaveVersion(v => v + 1);
-    window.addEventListener('save-changed', onSave);
-    return () => window.removeEventListener('save-changed', onSave);
+    const onChange = () => setSaveVersion(v => v + 1);
+    window.addEventListener('save-changed', onChange);
+    window.addEventListener('quest-edits-changed', onChange);
+    return () => {
+      window.removeEventListener('save-changed', onChange);
+      window.removeEventListener('quest-edits-changed', onChange);
+    };
   }, []);
 
   useEffect(() => {

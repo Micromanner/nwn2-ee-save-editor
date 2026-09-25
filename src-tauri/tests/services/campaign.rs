@@ -1,5 +1,6 @@
 use app_lib::config::NWN2Paths;
 use app_lib::services::campaign::CampaignManager;
+use app_lib::services::save_graph::editing::QuestEdits;
 use app_lib::services::savegame_handler::SaveGameHandler;
 // use std::fs;
 use tempfile::TempDir;
@@ -116,7 +117,8 @@ fn test_campaign_manager_write_operations() {
 fn companion_influence_lists_whole_campaign_cast_from_roster() {
     let handler = SaveGameHandler::new(common::fixtures_path().join("saves/MOTB"), false, false)
         .expect("handler");
-    let companions = CampaignManager::get_companion_influence(&handler).expect("influence");
+    let companions = CampaignManager::get_companion_influence(&handler, &QuestEdits::default())
+        .expect("influence");
 
     let mut ids: Vec<&str> = companions
         .iter()
@@ -139,7 +141,8 @@ fn companion_influence_lists_whole_oc_cast() {
         false,
     )
     .expect("handler");
-    let companions = CampaignManager::get_companion_influence(&handler).expect("influence");
+    let companions = CampaignManager::get_companion_influence(&handler, &QuestEdits::default())
+        .expect("influence");
 
     let explicit = companions
         .values()

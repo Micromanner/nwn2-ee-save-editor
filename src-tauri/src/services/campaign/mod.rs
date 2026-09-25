@@ -25,6 +25,7 @@ use crate::config::NWN2Paths;
 use crate::parsers::xml::{
     CompanionStatus, FullSummary, QuestOverview, XmlData, get_companion_definitions,
 };
+use crate::services::save_graph::editing::QuestEdits;
 use crate::services::savegame_handler::SaveGameHandler;
 use indexmap::IndexMap;
 
@@ -151,11 +152,14 @@ impl CampaignManager {
         Ok(())
     }
 
+    /// Influence as it will be once the pending quest edits are saved.
     pub fn get_companion_influence(
         handler: &SaveGameHandler,
+        quest_edits: &QuestEdits,
     ) -> Result<IndexMap<String, CompanionStatus>, String> {
         let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
-        let parser = GlobalsParser::from_string(&xml_content)?;
+        let mut parser = GlobalsParser::from_string(&xml_content)?;
+        quest_edits.overlay_globals(&mut parser.data);
         let ros_names = handler.list_companions().map_err(|e| e.to_string())?;
         Ok(parser.get_companion_status(&ros_names))
     }

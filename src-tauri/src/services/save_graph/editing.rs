@@ -176,6 +176,54 @@ pub struct PendingQuestEdit {
     pub writes: Vec<VariableWrite>,
     #[serde(skip)]
     pub blueprints: BTreeMap<String, Arc<ItemBlueprint>>,
+    /// What staging changed on the loaded player, to take back on discard; `None`
+    /// when the player is not loaded and `flush` writes the player's changes.
+    #[serde(skip)]
+    pub applied: Option<Vec<MemoryChange>>,
+}
+
+/// One change a staged quest edit made to the loaded player.
+#[derive(Debug, Clone)]
+pub enum MemoryChange {
+    /// Integer field moved by `delta` (after clamping).
+    Field {
+        name: String,
+        delta: i64,
+    },
+    Feat {
+        id: i32,
+        added: bool,
+    },
+    ItemsGiven {
+        tag: String,
+        units: i64,
+    },
+    /// Removed items, each with the removed units as its `StackSize`.
+    ItemsTaken {
+        items: Vec<indexmap::IndexMap<String, GffValue<'static>>>,
+    },
+}
+
+/// A staged variable value as a number; `flush` writes the same text.
+fn variable_number(value: &Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|s| s.trim().parse().ok()))
+}
+
+fn variable_text(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| value.to_string())
+}
+
+/// Write kinds staging applies to the loaded player instead of `flush`.
+pub fn applies_to_player(value_type: &str) -> bool {
+    matches!(
+        value_type,
+        CHARACTER_TYPE | FEAT_TYPE | ITEM_TYPE | ITEM_TAKE_TYPE
+    )
 }
 
 pub struct QuestEdits {
@@ -197,8 +245,85 @@ impl QuestEdits {
         *self = Self::default();
     }
 
-    pub fn discard(&mut self, tag: Option<&str>) {
-        self.pending.retain(|p| tag.is_some_and(|tag| p.tag != tag));
+    /// Remove the pending edit of `tag` (every edit when `None`); returns the removed edits.
+    pub fn discard(&mut self, tag: Option<&str>) -> Vec<PendingQuestEdit> {
+        let (removed, kept) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|p| tag.is_none_or(|tag| p.tag == tag));
+        self.pending = kept;
+        self.generation = NEXT_SESSION.fetch_add(1, Ordering::Relaxed);
+        removed
+    }
+
+    /// Pending story-variable writes in staging order: globals when `module` is `None`,
+    /// else that module's locals.
+    fn pending_variables<'a>(
+        &'a self,
+        module: Option<&'a str>,
+    ) -> impl Iterator<Item = &'a VariableWrite> + 'a {
+        self.pending
+            .iter()
+            .flat_map(|p| &p.writes)
+            .filter(move |w| {
+                matches!(w.key.value_type.as_str(), "int" | "float" | "string")
+                    && match (&w.key.module, module) {
+                        (None, None) => true,
+                        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+                        _ => false,
+                    }
+            })
+    }
+
+    /// `globals.xml` values as they will be once the pending edits are saved.
+    pub fn overlay_globals(&self, data: &mut crate::parsers::xml::XmlData) {
+        for write in self.pending_variables(None) {
+            let name = write.key.name.clone();
+            match write.key.value_type.as_str() {
+                "int" => {
+                    if let Some(v) = variable_number(&write.after) {
+                        data.integers
+                            .insert(name, i32::try_from(v as i64).unwrap_or_default());
+                    }
+                }
+                "float" => {
+                    if let Some(v) = variable_number(&write.after) {
+                        data.floats.insert(name, v as f32);
+                    }
+                }
+                _ => {
+                    data.strings.insert(name, variable_text(&write.after));
+                }
+            }
+        }
+    }
+
+    /// A module's variables as they will be once the pending edits are saved.
+    pub fn overlay_module(&self, module: &str, vars: &mut content::ModuleVariables) {
+        for write in self.pending_variables(Some(module)) {
+            let name = write.key.name.clone();
+            match write.key.value_type.as_str() {
+                "int" => {
+                    if let Some(v) = variable_number(&write.after) {
+                        vars.integers
+                            .insert(name, i32::try_from(v as i64).unwrap_or_default());
+                    }
+                }
+                "float" => {
+                    if let Some(v) = variable_number(&write.after) {
+                        vars.floats.insert(name, v as f32);
+                    }
+                }
+                _ => {
+                    vars.strings.insert(name, variable_text(&write.after));
+                }
+            }
+        }
+    }
+
+    /// Put back an edit taken out by undo.
+    pub fn restore(&mut self, edit: PendingQuestEdit) {
+        self.pending.retain(|p| p.tag != edit.tag);
+        self.pending.push(edit);
         self.generation = NEXT_SESSION.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -598,7 +723,7 @@ impl QuestEdits {
         graph: &SaveGraph,
         selected: &[usize],
         replace: bool,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<PendingQuestEdit>, String> {
         let indices: BTreeSet<_> = selected.iter().copied().collect();
         if indices.iter().any(|i| *i >= preview.writes.len()) {
             return Err("Invalid selected assignment".into());
@@ -629,8 +754,10 @@ impl QuestEdits {
                 conflicts.into_iter().collect::<Vec<_>>().join(", ")
             ));
         }
-        self.pending
-            .retain(|p| p.tag != preview.tag && !conflicts.contains(&p.tag));
+        let (replaced, kept) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|p| p.tag == preview.tag || conflicts.contains(&p.tag));
+        self.pending = kept;
         let source = preview.route.and_then(|i| {
             graph
                 .quests
@@ -656,9 +783,10 @@ impl QuestEdits {
             source,
             writes,
             blueprints,
+            applied: None,
         });
         self.generation = NEXT_SESSION.fetch_add(1, Ordering::Relaxed);
-        Ok(())
+        Ok(replaced)
     }
 
     pub fn validate_saved(
@@ -717,6 +845,9 @@ impl QuestEdits {
         let mut companion_feats: BTreeMap<String, Vec<(i32, bool)>> = BTreeMap::new();
         for edit in &self.pending {
             for write in &edit.writes {
+                if edit.applied.is_some() && applies_to_player(&write.key.value_type) {
+                    continue;
+                }
                 if write.key.value_type == COMPANION_CHARACTER_TYPE {
                     let (ros_name, field) =
                         split_companion_key(&write.key.name).ok_or("Invalid companion key")?;
@@ -2409,6 +2540,15 @@ fn give_items(
     game_data: &GameData,
 ) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
     let mut character = Character::from_gff(fields);
+    give_items_to(&mut character, items, game_data)?;
+    Ok(character.into_gff())
+}
+
+fn give_items_to(
+    character: &mut Character,
+    items: &[(Arc<ItemBlueprint>, i64)],
+    game_data: &GameData,
+) -> Result<(), String> {
     for (blueprint, quantity) in items {
         let base_item = blueprint
             .fields
@@ -2439,7 +2579,7 @@ fn give_items(
             remaining -= count;
         }
     }
-    Ok(character.into_gff())
+    Ok(())
 }
 
 fn backpack_items<'f>(
@@ -2465,28 +2605,149 @@ fn item_stack_size(item: &indexmap::IndexMap<String, GffValue<'static>>) -> i64 
 /// `ga_destroy_item`'s loop: walk the backpack in order, drop whole stacks of the tag
 /// while they fit into the remaining count, shrink the stack that does not.
 fn take_items(fields: &mut indexmap::IndexMap<String, GffValue<'static>>, takes: &[(String, i64)]) {
-    let Some(GffValue::ListOwned(list)) = fields.get_mut("ItemList") else {
-        return;
-    };
     for (tag, units) in takes {
-        let mut remaining = *units;
-        list.retain_mut(|item| {
-            if remaining <= 0 || !item_tag_matches(item, tag) {
-                return true;
+        take_units(fields, tag, *units);
+    }
+}
+
+/// Take `units` of `tag` out of the backpack; returns what was removed, each item
+/// carrying the removed units as its `StackSize`.
+fn take_units(
+    fields: &mut indexmap::IndexMap<String, GffValue<'static>>,
+    tag: &str,
+    units: i64,
+) -> Vec<indexmap::IndexMap<String, GffValue<'static>>> {
+    let mut removed = Vec::new();
+    let Some(GffValue::ListOwned(list)) = fields.get_mut("ItemList") else {
+        return removed;
+    };
+    let mut remaining = units;
+    list.retain_mut(|item| {
+        if remaining <= 0 || !item_tag_matches(item, tag) {
+            return true;
+        }
+        let stack = item_stack_size(item);
+        if stack <= remaining {
+            remaining -= stack;
+            removed.push(item.clone());
+            return false;
+        }
+        let mut taken = item.clone();
+        taken.insert(
+            "StackSize".into(),
+            crate::character::typed_stack_size(
+                item.get("StackSize"),
+                i32::try_from(remaining).unwrap_or(i32::MAX),
+            ),
+        );
+        removed.push(taken);
+        let left = i32::try_from(stack - remaining).unwrap_or(i32::MAX);
+        item.insert(
+            "StackSize".into(),
+            crate::character::typed_stack_size(item.get("StackSize"), left),
+        );
+        remaining = 0;
+        true
+    });
+    removed
+}
+
+/// Apply the player's writes of a staged edit (`applies_to_player`) to the loaded
+/// player the way `flush` would write them; returns the changes for `revert_on_player`.
+pub fn apply_to_player(
+    edit: &PendingQuestEdit,
+    character: &mut Character,
+    game_data: &GameData,
+) -> Result<Vec<MemoryChange>, String> {
+    let mut changes = Vec::new();
+    for write in &edit.writes {
+        match write.key.value_type.as_str() {
+            CHARACTER_TYPE => {
+                let delta = write.after.as_i64().unwrap_or(0)
+                    - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
+                let fields = character.gff_mut();
+                let old = fields
+                    .get(&write.key.name)
+                    .and_then(gff_integer)
+                    .unwrap_or(0);
+                let new = add_to_field(fields, &write.key.name, delta)?;
+                changes.push(MemoryChange::Field {
+                    name: write.key.name.clone(),
+                    delta: gff_integer(&new).unwrap_or(old) - old,
+                });
             }
-            let stack = item_stack_size(item);
-            if stack <= remaining {
-                remaining -= stack;
-                return false;
+            FEAT_TYPE => {
+                let id = write
+                    .key
+                    .name
+                    .parse::<i32>()
+                    .map_err(|_| "Invalid feat id")?;
+                let owned = write.after.as_i64().unwrap_or(0) != 0;
+                if owned != has_feat(character.gff(), i64::from(id)) {
+                    set_feat(character, id, owned);
+                    changes.push(MemoryChange::Feat { id, added: owned });
+                }
             }
-            let left = i32::try_from(stack - remaining).unwrap_or(i32::MAX);
-            item.insert(
-                "StackSize".into(),
-                crate::character::typed_stack_size(item.get("StackSize"), left),
-            );
-            remaining = 0;
-            true
-        });
+            ITEM_TYPE => {
+                let blueprint = edit
+                    .blueprints
+                    .get(&write.key.name)
+                    .ok_or_else(|| format!("Item blueprint {} missing", write.key.name))?;
+                let units = write.after.as_i64().unwrap_or(0);
+                if units > 0 {
+                    give_items_to(character, &[(blueprint.clone(), units)], game_data)?;
+                    let tag = match blueprint.fields.get("Tag") {
+                        Some(GffValue::String(t)) => t.to_string(),
+                        _ => String::new(),
+                    };
+                    changes.push(MemoryChange::ItemsGiven { tag, units });
+                }
+            }
+            ITEM_TAKE_TYPE => {
+                let units = write.before.as_ref().and_then(Value::as_i64).unwrap_or(0)
+                    - write.after.as_i64().unwrap_or(0);
+                if units > 0 {
+                    let items = take_units(character.gff_mut(), &write.key.name, units);
+                    changes.push(MemoryChange::ItemsTaken { items });
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(changes)
+}
+
+/// Take back what `apply_to_player` changed, newest first.
+pub fn revert_on_player(changes: &[MemoryChange], character: &mut Character) -> Result<(), String> {
+    for change in changes.iter().rev() {
+        match change {
+            MemoryChange::Field { name, delta } => {
+                add_to_field(character.gff_mut(), name, -delta)?;
+            }
+            MemoryChange::Feat { id, added } => set_feat(character, *id, !added),
+            MemoryChange::ItemsGiven { tag, units } => {
+                take_units(character.gff_mut(), tag, *units);
+            }
+            MemoryChange::ItemsTaken { items } => {
+                let fields = character.gff_mut();
+                match fields
+                    .entry("ItemList".to_string())
+                    .or_insert_with(|| GffValue::ListOwned(Vec::new()))
+                {
+                    GffValue::ListOwned(list) => list.extend(items.iter().cloned()),
+                    _ => return Err("ItemList is not a list".into()),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn set_feat(character: &mut Character, id: i32, owned: bool) {
+    if owned {
+        let _ = character.add_feat_with_source(FeatId(id), FeatSource::Unknown);
+    } else {
+        let _ = character.remove_feat(FeatId(id));
     }
 }
 
@@ -2582,12 +2843,7 @@ fn set_feats(
 ) -> indexmap::IndexMap<String, GffValue<'static>> {
     let mut character = Character::from_gff(fields);
     for (feat, owned) in feats {
-        let feat = FeatId(*feat);
-        if *owned {
-            let _ = character.add_feat_with_source(feat, FeatSource::Unknown);
-        } else {
-            let _ = character.remove_feat(feat);
-        }
+        set_feat(&mut character, *feat, *owned);
     }
     let mut fields = character.into_gff();
     fields
@@ -3441,6 +3697,87 @@ mod tests {
             ),
             Err("no_effect")
         );
+    }
+
+    #[test]
+    fn staged_player_changes_are_applied_in_memory_and_taken_back_exactly() {
+        let write = |value_type: &str, name: &str, before: Option<i64>, after: i64| VariableWrite {
+            key: VariableKey {
+                module: None,
+                name: name.into(),
+                value_type: value_type.into(),
+            },
+            saved: before.map(Value::from),
+            before: before.map(Value::from),
+            after: Value::from(after),
+            action_index: 0,
+            label: None,
+            label_strref: None,
+            derived_from: None,
+            line: None,
+        };
+        let item = |tag: &str, stack: u16| -> indexmap::IndexMap<String, GffValue<'static>> {
+            indexmap! {
+                "BaseItem".into() => GffValue::Int(12),
+                "Tag".into() => GffValue::String(tag.to_string().into()),
+                "StackSize".into() => GffValue::Word(stack),
+            }
+        };
+        let units = |character: &Character, tag: &str| -> i64 {
+            backpack_items(character.gff())
+                .filter(|i| item_tag_matches(i, tag))
+                .map(item_stack_size)
+                .sum()
+        };
+        let mut character = Character::from_gff(indexmap! {
+            "Gold".into() => GffValue::Dword(100),
+            "GoodEvil".into() => GffValue::Byte(80),
+            "FeatList".into() => GffValue::ListOwned(vec![indexmap! {
+                "Feat".into() => GffValue::Word(10),
+            }]),
+            "ItemList".into() => GffValue::ListOwned(vec![item("qe_head", 4), item("other", 1)]),
+        });
+        let blueprint = Arc::new(ItemBlueprint {
+            fields: item("reward", 1),
+            name: None,
+            name_strref: None,
+        });
+        let edit = PendingQuestEdit {
+            tag: "test".into(),
+            target: 20,
+            saved_state: None,
+            source: None,
+            writes: vec![
+                write(CHARACTER_TYPE, "Gold", Some(100), 150),
+                // Saved at 50, the tab moved it to 80: +45 clamps at 100.
+                write(CHARACTER_TYPE, "GoodEvil", Some(50), 95),
+                write(FEAT_TYPE, "20", Some(0), 1),
+                write(FEAT_TYPE, "10", Some(1), 0),
+                write(ITEM_TAKE_TYPE, "qe_head", Some(4), 1),
+                write(ITEM_TYPE, "reward", None, 2),
+                // Not the player's: left to `flush`.
+                write("int", "SomeGlobal", Some(0), 1),
+            ],
+            blueprints: BTreeMap::from([("reward".to_string(), blueprint)]),
+            applied: None,
+        };
+        let data = game_data();
+        let changes = apply_to_player(&edit, &mut character, &data).unwrap();
+        let int = |c: &Character, name: &str| c.gff().get(name).and_then(gff_integer);
+        assert_eq!(int(&character, "Gold"), Some(150));
+        assert_eq!(int(&character, "GoodEvil"), Some(100));
+        assert!(has_feat(character.gff(), 20) && !has_feat(character.gff(), 10));
+        assert_eq!(units(&character, "qe_head"), 1);
+        assert_eq!(units(&character, "reward"), 2);
+        assert!(character.is_modified());
+
+        revert_on_player(&changes, &mut character).unwrap();
+        assert_eq!(int(&character, "Gold"), Some(100));
+        assert_eq!(int(&character, "GoodEvil"), Some(80));
+        assert!(!has_feat(character.gff(), 20) && has_feat(character.gff(), 10));
+        assert_eq!(units(&character, "qe_head"), 4);
+        assert_eq!(units(&character, "reward"), 0);
+        assert_eq!(units(&character, "other"), 1);
     }
 
     #[test]
@@ -4486,6 +4823,7 @@ mod tests {
                 line: None,
             }],
             blueprints: BTreeMap::new(),
+            applied: None,
         });
         edits.validate_saved(&handler, &paths, 0).unwrap();
         handler.begin_batch();

@@ -32,7 +32,7 @@ export function Navbar({ onBack }: NavbarProps) {
   }, []);
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
-  const { character, playerName, historyState, undo, redo, activeSource, sessionKind, refreshRoster, refreshAll } = useCharacterContext();
+  const { character, playerName, historyState, undo, redo, activeSource, sessionKind } = useCharacterContext();
   const [showSettings, setShowSettings] = useState(false);
   const [showGameLaunch, setShowGameLaunch] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -49,8 +49,6 @@ export function Navbar({ onBack }: NavbarProps) {
       }
       window.dispatchEvent(new Event('save-changed'));
       window.dispatchEvent(new Event('quest-edits-changed'));
-      refreshRoster();
-      void refreshAll();
       showToast(t('actions.saveSuccess'), 'success');
       const config = await invoke<{ show_launch_dialog: boolean }>('get_app_config');
       if (config.show_launch_dialog) {
@@ -61,7 +59,7 @@ export function Navbar({ onBack }: NavbarProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [showToast, t, handleError, refreshRoster, refreshAll]);
+  }, [showToast, t, handleError]);
 
   const handleExport = async () => {
     setIsExporting(true);

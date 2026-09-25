@@ -37,6 +37,15 @@ export function QuestsTab() {
     return () => window.removeEventListener('save-changed', refreshData);
   }, [refreshData]);
 
+  // Undo and redo can unstage or restage an edit.
+  useEffect(() => {
+    const reloadPending = () => {
+      invoke<PendingQuestEdit[]>('save_list_quest_edits').then(setPending).catch(handleError);
+    };
+    window.addEventListener('quest-edits-changed', reloadPending);
+    return () => window.removeEventListener('quest-edits-changed', reloadPending);
+  }, [handleError]);
+
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;

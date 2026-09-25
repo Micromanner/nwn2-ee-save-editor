@@ -13,6 +13,7 @@ use crate::services::item_property_decoder::ItemPropertyDecoder;
 use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
+use crate::services::save_graph::editing::{self, PendingQuestEdit, QuestPreview};
 use crate::services::savegame_handler::backup_manifest::{
     self, CharacterChanges, PartyChange, QuestChange, SaveRecord,
 };
@@ -25,6 +26,8 @@ pub struct HistoryEntry {
     pub label: String,
     gff_snapshot: IndexMap<String, GffValue<'static>>,
     modified_snapshot: bool,
+    /// The quest edit this entry staged (undo stack) or took back (redo stack).
+    quest: Option<PendingQuestEdit>,
 }
 
 /// Undo/redo stacks of one character. Parked together with the character so
@@ -512,6 +515,18 @@ impl SessionState {
         }
         self.staged_save_name = None;
         self.quest_edits.clear();
+        // Written quest edits are no longer pending: their undo entries are plain edits.
+        for history in std::iter::once(&mut self.history)
+            .chain(self.parked.iter_mut().map(|(_, _, history)| history))
+        {
+            for entry in history
+                .undo_stack
+                .iter_mut()
+                .chain(history.redo_stack.iter_mut())
+            {
+                entry.quest = None;
+            }
+        }
         self.module_info_cache = None;
         if !record.is_empty() {
             for dir in &self.session_backups {
@@ -732,6 +747,7 @@ impl SessionState {
             label: label.into(),
             gff_snapshot: character.clone_gff(),
             modified_snapshot: character.is_modified(),
+            quest: None,
         };
         self.change_log
             .push((self.character_source.clone(), entry.label.clone()));
@@ -740,6 +756,124 @@ impl SessionState {
             self.history.undo_stack.pop_front();
         }
         self.history.redo_stack.clear();
+    }
+
+    /// Stage a quest edit and apply its player changes (gold, XP, alignment, feats,
+    /// items) to the loaded player as one undo entry: undo unstages the edit, redo
+    /// stages it again. Edits it replaces are taken back first.
+    pub fn stage_quest_edit(
+        &mut self,
+        preview: QuestPreview,
+        graph: &SaveGraph,
+        selected: &[usize],
+        replace: bool,
+        game_data: &GameData,
+    ) -> Result<(), String> {
+        let replaced = self.quest_edits.stage(preview, graph, selected, replace)?;
+        self.revert_quest_edits(&replaced)?;
+        // The player loaded in memory must be the one the quest edits write to.
+        if self
+            .primary_player_index
+            .unwrap_or(self.selected_player_index)
+            != self.selected_player_index
+        {
+            return Ok(());
+        }
+        let Some(edit) = self.quest_edits.pending.last() else {
+            return Ok(());
+        };
+        if !edit
+            .writes
+            .iter()
+            .any(|w| editing::applies_to_player(&w.key.value_type))
+        {
+            return Ok(());
+        }
+        let name = graph
+            .quests
+            .iter()
+            .find(|q| q.tag == edit.tag)
+            .map(|q| strip_toolset_prefix(&q.category.name))
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| edit.tag.clone());
+        let label = format!("Quest {name}: entry {}", edit.target);
+        let mut edit = edit.clone();
+        let Some((character, history)) = self.player_with_history_mut() else {
+            return Ok(());
+        };
+        let gff_snapshot = character.clone_gff();
+        let modified_snapshot = character.is_modified();
+        match editing::apply_to_player(&edit, character, game_data) {
+            Ok(changes) => edit.applied = Some(changes),
+            Err(e) => {
+                character.restore_snapshot(gff_snapshot, modified_snapshot);
+                self.quest_edits.discard(Some(&edit.tag));
+                return Err(e);
+            }
+        }
+        history.undo_stack.push_back(HistoryEntry {
+            label: label.clone(),
+            gff_snapshot,
+            modified_snapshot,
+            quest: Some(edit.clone()),
+        });
+        if history.undo_stack.len() > HISTORY_LIMIT {
+            history.undo_stack.pop_front();
+        }
+        history.redo_stack.clear();
+        self.change_log.push((CharacterSource::Player, label));
+        self.quest_edits.restore(edit);
+        Ok(())
+    }
+
+    /// Unstage the pending quest edit of `tag` (all when `None`) and take its changes
+    /// back off the loaded player.
+    pub fn discard_quest_edits(&mut self, tag: Option<&str>) -> Result<(), String> {
+        let removed = self.quest_edits.discard(tag);
+        self.revert_quest_edits(&removed)
+    }
+
+    /// Take removed edits' changes back off the player and out of the undo snapshots
+    /// taken after they were staged; their own undo entries go away.
+    fn revert_quest_edits(&mut self, edits: &[PendingQuestEdit]) -> Result<(), String> {
+        for edit in edits {
+            let Some(changes) = &edit.applied else {
+                continue;
+            };
+            let Some((character, history)) = self.player_with_history_mut() else {
+                continue;
+            };
+            editing::revert_on_player(changes, character)?;
+            let marker = history
+                .undo_stack
+                .iter()
+                .position(|e| e.quest.as_ref().is_some_and(|q| q.tag == edit.tag));
+            for entry in history
+                .undo_stack
+                .iter_mut()
+                .skip(marker.map_or(0, |i| i + 1))
+            {
+                let mut snapshot = Character::from_gff(std::mem::take(&mut entry.gff_snapshot));
+                editing::revert_on_player(changes, &mut snapshot)?;
+                entry.gff_snapshot = snapshot.into_gff();
+            }
+            if let Some(i) = marker {
+                history.undo_stack.remove(i);
+            }
+            history.redo_stack.clear();
+        }
+        Ok(())
+    }
+
+    /// The player and its undo history, whether active or parked.
+    fn player_with_history_mut(&mut self) -> Option<(&mut Character, &mut History)> {
+        if self.character_source == CharacterSource::Player {
+            return Some((self.character.as_mut()?, &mut self.history));
+        }
+        self.parked
+            .iter_mut()
+            .find(|(source, _, _)| *source == CharacterSource::Player)
+            .map(|(_, character, history)| (character, history))
     }
 
     pub fn track_session_backup(&mut self, path: PathBuf) {
@@ -839,10 +973,16 @@ impl SessionState {
         let label = entry.label.clone();
         self.change_log
             .push((self.character_source.clone(), format!("Undo: {label}")));
+        // Undoing a quest entry unstages the quest edit; the snapshot takes its
+        // changes back off the player.
+        let quest = entry
+            .quest
+            .and_then(|edit| self.quest_edits.discard(Some(&edit.tag)).pop());
         let redo_entry = self.character.as_ref().map(|ch| HistoryEntry {
             label: label.clone(),
             gff_snapshot: ch.clone_gff(),
             modified_snapshot: ch.is_modified(),
+            quest,
         });
         if let Some(character) = self.character.as_mut() {
             character.restore_snapshot(entry.gff_snapshot, entry.modified_snapshot);
@@ -858,10 +998,14 @@ impl SessionState {
         let label = entry.label.clone();
         self.change_log
             .push((self.character_source.clone(), format!("Redo: {label}")));
+        if let Some(edit) = &entry.quest {
+            self.quest_edits.restore(edit.clone());
+        }
         let undo_entry = self.character.as_ref().map(|ch| HistoryEntry {
             label: label.clone(),
             gff_snapshot: ch.clone_gff(),
             modified_snapshot: ch.is_modified(),
+            quest: entry.quest,
         });
         if let Some(character) = self.character.as_mut() {
             character.restore_snapshot(entry.gff_snapshot, entry.modified_snapshot);
@@ -1174,10 +1318,22 @@ impl SessionState {
                     .any(|c| c.eq_ignore_ascii_case(&m.ros_name))
             })
             .map(|m| RosterListing {
+                // Quest edits are written after the party tab's changes, so theirs win.
                 staged_in_party: self
-                    .staged_party
-                    .get(&m.ros_name.to_ascii_lowercase())
-                    .copied(),
+                    .quest_edits
+                    .pending
+                    .iter()
+                    .flat_map(|p| &p.writes)
+                    .rfind(|w| {
+                        w.key.value_type == editing::PARTY_TYPE
+                            && w.key.name.eq_ignore_ascii_case(&m.ros_name)
+                    })
+                    .map(|w| w.after.as_i64().unwrap_or(0) != 0)
+                    .or_else(|| {
+                        self.staged_party
+                            .get(&m.ros_name.to_ascii_lowercase())
+                            .copied()
+                    }),
                 in_party: !m.available,
                 ros_name: m.ros_name,
                 char_name: m.char_name,
@@ -1360,6 +1516,21 @@ fn saved_save_name(handler: &SaveGameHandler) -> String {
     std::fs::read_to_string(handler.save_dir().join(SAVENAME_TXT))
         .map(|name| name.trim().to_string())
         .unwrap_or_default()
+}
+
+/// A journal category name without the toolset's `{1000}`-style prefixes.
+fn strip_toolset_prefix(name: &str) -> String {
+    let mut out = String::new();
+    let mut depth = 0;
+    for c in name.chars() {
+        match c {
+            '{' => depth += 1,
+            '}' if depth > 0 => depth -= 1,
+            _ if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out.trim().to_string()
 }
 
 /// Every save clears the engine's cheat flag, so a save that ran quest console lines
@@ -1659,6 +1830,7 @@ mod tests {
                 source: None,
                 writes: Vec::new(),
                 blueprints: std::collections::BTreeMap::new(),
+                applied: None,
             });
         let data = GameData::new(Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::new(),
@@ -1742,6 +1914,111 @@ mod tests {
         )
         .unwrap();
         assert_eq!(journal[0].state, 20);
+    }
+
+    #[test]
+    fn staged_quest_rewards_live_in_memory_follow_undo_and_are_saved_once() {
+        use crate::services::save_graph::editing::{CHARACTER_TYPE, VariableKey, VariableWrite};
+        let (_dir, mut session, data) = quest_save_session();
+        session.quest_edits.pending.clear();
+        let graph = crate::services::save_graph::build_without_bridge(
+            session.savegame_handler.as_ref().unwrap(),
+            &ModuleInfo::default(),
+            &ModuleVariables::default(),
+            crate::services::save_graph::OrphanKind::PlatformUnsupported,
+            String::new(),
+        );
+        let preview = || QuestPreview {
+            revision: String::new(),
+            tag: "test".into(),
+            target: 20,
+            saved_state: Some(10),
+            before_state: Some(10),
+            route: None,
+            writes: vec![VariableWrite {
+                key: VariableKey {
+                    module: None,
+                    name: "Gold".into(),
+                    value_type: CHARACTER_TYPE.into(),
+                },
+                saved: None,
+                before: None,
+                after: serde_json::json!(50),
+                action_index: 0,
+                label: None,
+                label_strref: None,
+                derived_from: None,
+                line: None,
+            }],
+            effects: Vec::new(),
+            followed: Vec::new(),
+            follow_stop: None,
+            next_steps: Vec::new(),
+            blueprints: std::collections::BTreeMap::new(),
+        };
+        let gold = |session: &SessionState| {
+            session
+                .character
+                .as_ref()
+                .unwrap()
+                .gff()
+                .get("Gold")
+                .cloned()
+        };
+
+        session
+            .stage_quest_edit(preview(), &graph, &[0], false, &data)
+            .unwrap();
+        assert!(matches!(gold(&session), Some(GffValue::Dword(50))));
+        assert_eq!(session.undo_label(), Some("Quest test: entry 20"));
+
+        session.undo();
+        assert!(session.quest_edits.pending.is_empty());
+        assert!(matches!(gold(&session), None | Some(GffValue::Dword(0))));
+        session.redo();
+        assert_eq!(session.quest_edits.pending.len(), 1);
+        assert!(matches!(gold(&session), Some(GffValue::Dword(50))));
+
+        // A tab edit after staging, then discarding the quest: undoing the tab edit
+        // must not bring the quest's gold back.
+        session.record_history("Tab edit");
+        session
+            .character
+            .as_mut()
+            .unwrap()
+            .gff_mut()
+            .insert("Str".into(), GffValue::Byte(14));
+        session.discard_quest_edits(Some("test")).unwrap();
+        assert!(matches!(gold(&session), Some(GffValue::Dword(0))));
+        session.undo();
+        assert!(matches!(gold(&session), Some(GffValue::Dword(0))));
+        assert!(!session.can_undo(), "the quest's own entry is gone");
+
+        session
+            .stage_quest_edit(preview(), &graph, &[0], false, &data)
+            .unwrap();
+        session.save_character(&data, 5).unwrap();
+        let bytes = session
+            .savegame_handler
+            .as_ref()
+            .unwrap()
+            .extract_player_data()
+            .unwrap();
+        let player = GffParser::from_bytes(bytes)
+            .unwrap()
+            .read_struct_fields(0)
+            .unwrap();
+        let Some(GffValue::List(players)) = player.get("Mod_PlayerList") else {
+            panic!("Mod_PlayerList missing");
+        };
+        assert!(matches!(
+            players[0].force_load().get("Gold"),
+            Some(GffValue::Dword(50))
+        ));
+        assert!(session.quest_edits.pending.is_empty());
+        // After the save the quest entry is a plain edit: undo leaves nothing pending.
+        session.undo();
+        assert!(session.quest_edits.pending.is_empty());
     }
 
     #[test]
