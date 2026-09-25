@@ -30,6 +30,7 @@
     "vaultLocation": "Путь к Vault:",
     "defaultLocation": "Путь по умолчанию",
     "changeLocation": "Изменить путь...",
+    "searchSaveName": "Поиск по имени сохранения...",
     "selectSaveLocation": "Выберите папку с сохранениями",
     "folderName": "Имя папки",
     "characterName": "Имя персонажа",

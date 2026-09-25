@@ -30,6 +30,7 @@
     "vaultLocation": "Vault-Speicherort:",
     "defaultLocation": "Standard-Verzeichnis",
     "changeLocation": "Speicherort ändern...",
+    "searchSaveName": "Speichername suchen...",
     "selectSaveLocation": "Save-Verzeichnis auswählen",
     "folderName": "Ordnername",
     "characterName": "Charaktername",

@@ -536,7 +536,11 @@ pub async fn browse_saves(
     path: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
+    search: Option<String>,
 ) -> Result<BrowseSavesResponse, String> {
+    let search = search
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
     let target_path = match path {
         Some(p) if !p.is_empty() => PathBuf::from(p),
         _ => state
@@ -612,6 +616,16 @@ pub async fn browse_saves(
         } else {
             Some(save_name_raw)
         };
+
+        if let Some(query) = &search
+            && !save_name
+                .as_deref()
+                .unwrap_or(&name)
+                .to_lowercase()
+                .contains(query.as_str())
+        {
+            continue;
+        }
 
         let character_name = read_save_character_name(&entry_path);
 

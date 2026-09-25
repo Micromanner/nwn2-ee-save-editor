@@ -30,6 +30,7 @@
     "vaultLocation": "Emplacement du Vault :",
     "defaultLocation": "Emplacement par défaut",
     "changeLocation": "Modifier l'Emplacement...",
+    "searchSaveName": "Rechercher une sauvegarde...",
     "selectSaveLocation": "Choisir le Dossier de Sauvegarde",
     "folderName": "Nom du Dossier",
     "characterName": "Nom du Personnage",

@@ -5,10 +5,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button, ButtonGroup, Checkbox, Dialog, DialogBody, DialogFooter, Divider,
-  Icon, Spinner, NonIdealState,
+  Icon, InputGroup, Spinner, NonIdealState,
 } from '@blueprintjs/core';
 import { GiOpenFolder, GiExitDoor, GiFullFolder, GiFoldedPaper, GiBrokenShield, GiMagnifyingGlass } from 'react-icons/gi';
 import { useTranslations } from '@/hooks/useTranslations';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { GameIcon } from '../shared/GameIcon';
 import { LoadingState } from '../shared';
 import { display, formatNumber } from '@/utils/dataHelpers';
@@ -77,6 +78,7 @@ interface FileBrowserDialogProps {
 
 const ITEMS_PER_PAGE = 50;
 const ROW_HEIGHT = 40;
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function FileBrowserDialog({
   isOpen,
@@ -106,6 +108,9 @@ export function FileBrowserDialog({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
+  const lastSearch = useRef(debouncedSearch);
   const listRef = useListRef(null);
   const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
   const previousRefreshKey = useRef(refreshKey);
@@ -210,6 +215,7 @@ export function FileBrowserDialog({
           path: currentPath || null,
           limit: ITEMS_PER_PAGE,
           offset: isInitial ? 0 : files.length,
+          search: debouncedSearch || null,
         });
         const fileInfos: FileInfo[] = response.files.map(f => ({
           name: f.name,
@@ -240,14 +246,15 @@ export function FileBrowserDialog({
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [mode, currentPath, onPathChange, files.length, backupRootPath]);
+  }, [mode, currentPath, onPathChange, files.length, backupRootPath, debouncedSearch]);
 
   useEffect(() => {
     if (isOpen) {
       const pathChanged = lastPath.current !== currentPath;
       const refreshRequested = previousRefreshKey.current !== refreshKey;
+      const searchChanged = mode === 'load-saves' && lastSearch.current !== debouncedSearch;
 
-      if (pathChanged || refreshRequested || files.length === 0) {
+      if (pathChanged || refreshRequested || searchChanged || files.length === 0) {
         if (pathChanged) {
           setFiles([]);
           setTotalFiles(0);
@@ -260,6 +267,7 @@ export function FileBrowserDialog({
           setSelectedFile(null);
         }
         previousRefreshKey.current = refreshKey;
+        lastSearch.current = debouncedSearch;
         loadFiles(true);
       } else {
         listRef.current?.scrollToRow({ index: 0 });
@@ -267,7 +275,7 @@ export function FileBrowserDialog({
     }
     return () => { abortControllerRef.current?.abort(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, currentPath, mode, refreshKey]);
+  }, [isOpen, currentPath, mode, refreshKey, debouncedSearch]);
 
   const isItemLoaded = (index: number) => index < files.length;
   const loadMoreItems = () => {
@@ -287,9 +295,11 @@ export function FileBrowserDialog({
   const isBackupMode = mode === 'manage-backups';
 
   const sortedFiles = useMemo(() => {
-    const filtered = isBackupMode
-      ? files.filter(f => f.name.toLowerCase() !== 'campaign_backups')
-      : files;
+    const query = debouncedSearch.trim().toLowerCase();
+    const filtered = files.filter(f =>
+      !(isBackupMode && f.name.toLowerCase() === 'campaign_backups')
+      && (!query || (f.save_name || f.display_name || f.name).toLowerCase().includes(query)),
+    );
 
     return [...filtered].sort((a, b) => {
       if (a.is_directory !== b.is_directory) return a.is_directory ? -1 : 1;
@@ -315,7 +325,7 @@ export function FileBrowserDialog({
       }
       return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [files, sortField, sortDirection, isBackupMode]);
+  }, [files, sortField, sortDirection, isBackupMode, debouncedSearch]);
 
   const rowCount = mode === 'load-saves' ? totalFiles : sortedFiles.length;
   const onRowsRendered = useInfiniteLoader({
@@ -703,6 +713,15 @@ export function FileBrowserDialog({
               {currentPath || t('fileBrowser.defaultLocation')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <InputGroup
+                small
+                leftIcon="search"
+                placeholder={t('fileBrowser.searchSaveName')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                rightElement={search ? <Button icon="cross" minimal small onClick={() => setSearch('')} /> : undefined}
+                style={{ width: 220 }}
+              />
               {isBackupMode && selectedPaths.size > 0 ? (
                 <span style={{ color: T.accent, fontWeight: 600, fontSize: 13 }}>
                   {t('fileBrowser.selectedCount', {

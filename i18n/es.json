@@ -30,6 +30,7 @@
     "vaultLocation": "Ubicación del Vault:",
     "defaultLocation": "Ubicación predeterminada",
     "changeLocation": "Cambiar Ubicación...",
+    "searchSaveName": "Buscar nombre de partida...",
     "selectSaveLocation": "Seleccionar Ubicación de Guardado",
     "folderName": "Nombre de la Carpeta",
     "characterName": "Nombre del Personaje",

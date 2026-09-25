@@ -30,6 +30,7 @@
     "vaultLocation": "Vault Location:",
     "defaultLocation": "Default location",
     "changeLocation": "Change Location...",
+    "searchSaveName": "Search save name...",
     "selectSaveLocation": "Select Save Location",
     "folderName": "Folder Name",
     "characterName": "Character Name",
