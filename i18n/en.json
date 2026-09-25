@@ -79,16 +79,17 @@
     "changesCharacters": "{count, plural, one {# character change} other {# character changes}}",
     "changesQuests": "{count, plural, one {# quest change} other {# quest changes}}",
     "changesParty": "{count, plural, one {# party change} other {# party changes}}",
+    "changesVariables": "{count, plural, one {# variable change} other {# variable changes}}",
     "detailsIntro": "Restoring this backup undoes the following changes:",
     "savedAt": "Saved",
     "reasonLoad": "On load",
     "reasonPreRestore": "Before restore",
-    "reasonManual": "Manual",
     "partyAdded": "added to party",
     "partyBenched": "benched",
     "sectionCharacters": "Characters",
     "sectionQuests": "Quests",
-    "sectionParty": "Party"
+    "sectionParty": "Party",
+    "sectionVariables": "Variables"
   },
   "navigation": {
     "overview": "Overview",

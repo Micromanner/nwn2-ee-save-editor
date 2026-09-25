@@ -15,7 +15,7 @@ use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
 use crate::services::save_graph::editing::{self, PendingQuestEdit, QuestPreview};
 use crate::services::savegame_handler::backup_manifest::{
-    self, CharacterChanges, PartyChange, QuestChange, SaveRecord,
+    self, CharacterChanges, PartyChange, QuestChange, SaveRecord, VariableChange,
 };
 use crate::services::savegame_handler::{PlayerOutputs, SAVENAME_TXT, SaveFormat, SaveGameHandler};
 use crate::state::standalone_bic;
@@ -100,9 +100,6 @@ pub struct SessionState {
     /// Staged `savename.txt` content, written by `save_character`. The save folder
     /// is never renamed.
     staged_save_name: Option<String>,
-    /// Backup directories taken during this session (load, pre-save, manual).
-    /// Every successful save appends its change record to each of them.
-    session_backups: Vec<PathBuf>,
     /// Every history label of this session in order, never popped: undo and
     /// redo append their own entries. Feeds the backup manifests on save.
     change_log: Vec<(CharacterSource, String)>,
@@ -137,7 +134,6 @@ impl SessionState {
             parked: Vec::new(),
             staged_party: std::collections::HashMap::new(),
             staged_save_name: None,
-            session_backups: Vec::new(),
             change_log: Vec::new(),
         }
     }
@@ -147,6 +143,7 @@ impl SessionState {
         &mut self,
         file_path: &str,
         player_index: Option<usize>,
+        create_load_backup: bool,
         report: &mut LoadReport,
     ) -> Result<(), LoadError> {
         info!("Loading character from save file");
@@ -159,8 +156,6 @@ impl SessionState {
         {
             return self.load_standalone_bic(&path, report);
         }
-
-        crate::services::savegame_handler::backup::clear_backup_tracking();
 
         let fatal = |report: &mut LoadReport,
                      stage: LoadStage,
@@ -177,7 +172,7 @@ impl SessionState {
         };
 
         debug!("Creating SaveGameHandler");
-        let handler = SaveGameHandler::new(&path, false, true).map_err(|e| {
+        let handler = SaveGameHandler::new(&path, false, create_load_backup).map_err(|e| {
             fatal(
                 report,
                 LoadStage::SaveOpen,
@@ -289,6 +284,7 @@ impl SessionState {
         self.savegame_handler = Some(handler);
         self.current_file_path = Some(path);
         self.save_dir = Some(save_dir);
+        self.feat_cache = None;
         self.module_info_cache = None;
         self.quest_graph_cache = None;
         self.selected_player_index = selected_player_index;
@@ -299,13 +295,6 @@ impl SessionState {
         self.staged_save_name = None;
         self.quest_edits.clear();
         self.clear_history();
-        if let Some(path) = self
-            .savegame_handler
-            .as_ref()
-            .and_then(|h| h.load_backup_path())
-        {
-            self.session_backups.push(path.to_path_buf());
-        }
 
         info!("Character loaded successfully");
         Ok(())
@@ -318,7 +307,6 @@ impl SessionState {
         report: &mut LoadReport,
     ) -> Result<(), LoadError> {
         info!("Loading standalone character file");
-        crate::services::savegame_handler::backup::clear_backup_tracking();
 
         let fields = standalone_bic::load_fields(path).map_err(|message| {
             warn!("{message}");
@@ -528,11 +516,7 @@ impl SessionState {
             }
         }
         self.module_info_cache = None;
-        if !record.is_empty() {
-            for dir in &self.session_backups {
-                backup_manifest::append_save(dir, &record);
-            }
-        }
+        self.append_to_load_backup(&record);
         self.change_log.clear();
 
         if !errors.is_empty() {
@@ -736,7 +720,6 @@ impl SessionState {
         self.staged_save_name = None;
         self.quest_edits.clear();
         self.clear_history();
-        crate::services::savegame_handler::backup::clear_backup_tracking();
     }
 
     pub fn record_history(&mut self, label: impl Into<String>) {
@@ -876,10 +859,6 @@ impl SessionState {
             .map(|(_, character, history)| (character, history))
     }
 
-    pub fn track_session_backup(&mut self, path: PathBuf) {
-        self.session_backups.push(path);
-    }
-
     /// Everything this save will write, described for the backup manifests:
     /// history labels per character, pending quest edits and staged party
     /// changes. Built before the save mutates any of them.
@@ -965,6 +944,31 @@ impl SessionState {
             characters,
             quests,
             party,
+            variables: Vec::new(),
+        }
+    }
+
+    /// Game-state variables are written to disk immediately, so they are
+    /// recorded on the load backup right away instead of on save.
+    pub fn record_variable_changes(&self, variables: impl IntoIterator<Item = VariableChange>) {
+        self.append_to_load_backup(&SaveRecord {
+            saved_at: chrono::Local::now().to_rfc3339(),
+            variables: variables.into_iter().collect(),
+            ..Default::default()
+        });
+    }
+
+    /// Describe changes written after the load backup in its manifest.
+    fn append_to_load_backup(&self, record: &SaveRecord) {
+        if record.is_empty() {
+            return;
+        }
+        if let Some(dir) = self
+            .savegame_handler
+            .as_ref()
+            .and_then(|h| h.load_backup_path())
+        {
+            backup_manifest::append_save(dir, record);
         }
     }
 
@@ -1020,7 +1024,6 @@ impl SessionState {
         self.history.undo_stack.clear();
         self.history.redo_stack.clear();
         self.change_log.clear();
-        self.session_backups.clear();
     }
 
     pub fn can_undo(&self) -> bool {

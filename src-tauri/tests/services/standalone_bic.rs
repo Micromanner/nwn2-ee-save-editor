@@ -142,7 +142,7 @@ fn session_loads_standalone_bic() {
     let mut report = new_report(&path_str);
 
     session
-        .load_character(&path_str, None, &mut report)
+        .load_character(&path_str, None, true, &mut report)
         .unwrap();
 
     assert!(session.character.is_some());
@@ -161,7 +161,7 @@ fn session_saves_standalone_bic_with_single_backup() {
     let mut session = new_session();
     let mut report = new_report(&path_str);
     session
-        .load_character(&path_str, None, &mut report)
+        .load_character(&path_str, None, true, &mut report)
         .unwrap();
 
     let game_data = empty_game_data();

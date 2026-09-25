@@ -5,6 +5,7 @@ use crate::services::campaign::content::{
     ModuleInfo, ModuleSummary, ModuleVariables, area_name_from_resref, strip_area_code,
 };
 use crate::services::campaign::settings::{CampaignBackupInfo, CampaignSettings};
+use crate::services::savegame_handler::backup_manifest::VariableChange;
 use crate::state::AppState;
 use indexmap::IndexMap;
 use tauri::State;
@@ -127,7 +128,9 @@ pub async fn update_global_int(
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_global_int(handler, &name, value).map_err(CommandError::from)
+    CampaignManager::update_global_int(handler, &name, value).map_err(CommandError::from)?;
+    session.record_variable_changes([VariableChange::new(None, &name, value)]);
+    Ok(())
 }
 
 #[tauri::command]
@@ -141,7 +144,9 @@ pub async fn update_global_float(
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_global_float(handler, &name, value).map_err(CommandError::from)
+    CampaignManager::update_global_float(handler, &name, value).map_err(CommandError::from)?;
+    session.record_variable_changes([VariableChange::new(None, &name, value)]);
+    Ok(())
 }
 
 #[tauri::command]
@@ -155,7 +160,9 @@ pub async fn update_global_string(
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_global_string(handler, &name, &value).map_err(CommandError::from)
+    CampaignManager::update_global_string(handler, &name, &value).map_err(CommandError::from)?;
+    session.record_variable_changes([VariableChange::new(None, &name, value)]);
+    Ok(())
 }
 
 #[tauri::command]
@@ -200,8 +207,11 @@ pub async fn update_companion_influence(
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_companion_influence(handler, &companion_id, new_influence)
-        .map_err(CommandError::from)
+    let variable =
+        CampaignManager::update_companion_influence(handler, &companion_id, new_influence)
+            .map_err(CommandError::from)?;
+    session.record_variable_changes([VariableChange::new(None, variable, new_influence)]);
+    Ok(())
 }
 
 #[tauri::command]
@@ -240,6 +250,7 @@ pub async fn update_module_variable(
     )
     .map_err(CommandError::from)?;
     session.invalidate_module_info_cache();
+    session.record_variable_changes([VariableChange::new(target_module, &variable_name, &value)]);
     Ok(())
 }
 
@@ -268,6 +279,11 @@ pub async fn batch_update_module_variables(
     CampaignManager::batch_update_module_variables(handler, &updates, module_id.as_deref())
         .map_err(CommandError::from)?;
     session.invalidate_module_info_cache();
+    session.record_variable_changes(
+        updates
+            .iter()
+            .map(|(name, value, _)| VariableChange::new(target_module.clone(), name, value)),
+    );
     Ok(())
 }
 
@@ -295,7 +311,14 @@ pub async fn batch_update_campaign_variables(
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::batch_update_campaign_variables(handler, &updates).map_err(CommandError::from)
+    CampaignManager::batch_update_campaign_variables(handler, &updates)
+        .map_err(CommandError::from)?;
+    session.record_variable_changes(
+        updates
+            .iter()
+            .map(|(name, value, _)| VariableChange::new(None, name, value)),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -330,7 +353,9 @@ pub async fn update_campaign_variable(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
     CampaignManager::update_campaign_variable(handler, &variable_name, &value, &variable_type)
-        .map_err(CommandError::from)
+        .map_err(CommandError::from)?;
+    session.record_variable_changes([VariableChange::new(None, &variable_name, &value)]);
+    Ok(())
 }
 
 #[tauri::command]
@@ -359,16 +384,24 @@ pub async fn restore_campaign_variable_backup(
         .map_err(CommandError::from)
 }
 
+/// Backups of `module_id`, or of the current module when `None`.
 #[tauri::command]
 pub async fn list_module_backups(
     state: State<'_, AppState>,
+    module_id: Option<String>,
 ) -> CommandResult<Vec<CampaignBackupInfo>> {
     let session = state.session.read();
     let handler = session
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::list_module_backups(handler).map_err(CommandError::from)
+    let module_id = match module_id {
+        Some(id) => id,
+        None => handler
+            .extract_current_module()
+            .map_err(CommandError::from)?,
+    };
+    CampaignManager::list_module_backups(handler, &module_id).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -376,12 +409,14 @@ pub async fn restore_module_backup(
     state: State<'_, AppState>,
     backup_path: String,
 ) -> CommandResult<()> {
-    let session = state.session.read();
+    let mut session = state.session.write();
     let handler = session
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::restore_module_backup(handler, &backup_path).map_err(CommandError::from)
+    CampaignManager::restore_module_backup(handler, &backup_path).map_err(CommandError::from)?;
+    session.invalidate_module_info_cache();
+    Ok(())
 }
 
 fn check_pending_quest_variable(

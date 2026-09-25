@@ -79,16 +79,17 @@
     "changesCharacters": "{count, plural, one {# изменение персонажа} few {# изменения персонажа} many {# изменений персонажа} other {# изменений персонажа}}",
     "changesQuests": "{count, plural, one {# изменение задания} few {# изменения задания} many {# изменений задания} other {# изменений задания}}",
     "changesParty": "{count, plural, one {# изменение группы} few {# изменения группы} many {# изменений группы} other {# изменений группы}}",
+    "changesVariables": "{count, plural, one {# изменение переменной} few {# изменения переменных} many {# изменений переменных} other {# изменений переменных}}",
     "detailsIntro": "Восстановление этого бэкапа отменит следующие изменения:",
     "savedAt": "Сохранено",
     "reasonLoad": "При загрузке",
     "reasonPreRestore": "Перед восстановлением",
-    "reasonManual": "Вручную",
     "partyAdded": "добавлен в группу",
     "partyBenched": "отправлен в резерв",
     "sectionCharacters": "Персонажи",
     "sectionQuests": "Задания",
-    "sectionParty": "Группа"
+    "sectionParty": "Группа",
+    "sectionVariables": "Переменные"
   },
   "navigation": {
     "overview": "Обзор",

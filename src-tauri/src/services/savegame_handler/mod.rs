@@ -16,7 +16,6 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::parsers::gff::GffParser;
 
-pub use backup::{BackupInfo, CleanupResult, RestoreResult};
 pub use error::{SaveGameError, SaveGameResult};
 
 static NWN2_DATE_TIME: LazyLock<zip::DateTime> =
@@ -308,8 +307,7 @@ impl SaveGameHandler {
 
         let format = SaveFormat::detect(&save_dir)?;
 
-        let load_backup_path = if create_load_backup && !backup::has_backup_been_created(&save_dir)
-        {
+        let load_backup_path = if create_load_backup {
             Some(backup::create_backup(
                 &save_dir,
                 backup_manifest::BackupReason::Load,
@@ -1061,22 +1059,6 @@ impl SaveGameHandler {
         Ok(())
     }
 
-    pub fn list_backups(&self) -> SaveGameResult<Vec<BackupInfo>> {
-        backup::list_backups(&self.save_dir)
-    }
-
-    pub fn restore_from_backup(
-        &mut self,
-        backup_path: &Path,
-        create_pre_restore_backup: bool,
-    ) -> SaveGameResult<RestoreResult> {
-        backup::restore_from_backup(backup_path, &self.save_dir, create_pre_restore_backup)
-    }
-
-    pub fn cleanup_old_backups(&self, keep_count: usize) -> SaveGameResult<CleanupResult> {
-        backup::cleanup_old_backups(&self.save_dir, keep_count)
-    }
-
     pub fn read_character_summary(&self) -> SaveGameResult<Option<CharacterSummary>> {
         let data = match self.extract_player_bic()? {
             Some(d) => d,
@@ -1145,10 +1127,6 @@ impl SaveGameHandler {
                 }))
             }
         }
-    }
-
-    pub fn infer_save_path_from_backup(&self, backup_path: &Path) -> Option<PathBuf> {
-        backup::infer_save_path_from_backup(backup_path)
     }
 
     pub fn load_backup_path(&self) -> Option<&Path> {

@@ -22,6 +22,10 @@ pub async fn save_get_quest_graph(
 ) -> CommandResult<SaveGraphSummary> {
     let graph = ensure_quest_graph(&app, &state)?;
     let mut summary = SaveGraphSummary::from(graph.as_ref());
+    // The cached graph is only rebuilt on load; save state is read live.
+    let (module_info, module_vars) = cached_module_info(&state)?;
+    summary.current_module_variables =
+        save_graph::flatten_module_vars(&module_info.current_module, &module_vars);
     let session = state.session.read();
     let handler = session
         .savegame_handler

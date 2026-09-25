@@ -109,11 +109,6 @@ export type {
   PathInfo,
   PathUpdateResponse,
 
-  // Backup types
-  BackupInfo,
-  RestoreResult,
-  CleanupResult,
-
   // File types
   SaveFile,
   FileInfo,

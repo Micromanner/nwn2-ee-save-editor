@@ -18,7 +18,6 @@ interface BackupDetailsDialogProps {
 const REASON_KEYS: Record<BackupReason, string> = {
   load: 'fileBrowser.reasonLoad',
   pre_restore: 'fileBrowser.reasonPreRestore',
-  manual: 'fileBrowser.reasonManual',
 };
 
 const rowStyle: CSSProperties = {
@@ -31,7 +30,7 @@ const sectionHeaderStyle: CSSProperties = {
   borderBottom: `1px solid ${T.border}`, background: T.surfaceAlt, marginTop: 8,
 };
 
-/// Read-only view of the character/quest/party changes recorded on a backup.
+/// Read-only view of the character/quest/party/variable changes recorded on a backup.
 export function BackupDetailsDialog({ isOpen, onClose, file }: BackupDetailsDialogProps) {
   const t = useTranslations();
   const manifest: BackupManifest | null | undefined = file?.changes;
@@ -119,6 +118,18 @@ export function BackupDetailsDialog({ isOpen, onClose, file }: BackupDetailsDial
           <div key={pi} style={rowStyle}>
             <span>
               {display(party.name ?? party.ros_name)}: {party.in_party ? t('fileBrowser.partyAdded') : t('fileBrowser.partyBenched')}
+            </span>
+          </div>
+        )),
+      )}
+      {record.variables.length > 0 && section(
+        `${index}-variables`,
+        t('fileBrowser.sectionVariables'),
+        record.variables.length,
+        record.variables.map((variable, vi) => (
+          <div key={vi} style={rowStyle}>
+            <span className="t-mono">
+              {variable.module ? `${variable.module}: ` : ''}{variable.name} = {variable.value}
             </span>
           </div>
         )),

@@ -24,7 +24,7 @@ import { formatDateTime } from '@/utils/dateFormat';
 
 export default function DashboardPanel() {
   const t = useTranslations();
-  const { character, importCharacter, refreshAll } = useCharacterContext();
+  const { character, importCharacter, adoptReloadedSave } = useCharacterContext();
   const { handleError } = useErrorHandler();
   const { showToast } = useToast();
 
@@ -361,18 +361,12 @@ export default function DashboardPanel() {
         canRestore
         onSelectFile={async (file) => {
           try {
-            await BackupAPI.restoreFromBackup(0, {
-              backup_path: file.path,
-              confirm_restore: true,
-              create_pre_restore_backup: true,
-            });
+            const reloaded = await BackupAPI.restoreFromBackup(file.path);
             setShowBackupBrowser(false);
-            showToast(t('fileBrowser.restoreSuccess'), 'success');
-            if (loadedSavePath) {
-              await importCharacter(loadedSavePath, loadedPlayerIndex ?? undefined);
-            } else {
-              await refreshAll();
+            if (reloaded) {
+              await adoptReloadedSave();
             }
+            showToast(t('fileBrowser.restoreSuccess'), 'success');
           } catch (error) {
             handleError(error);
           }

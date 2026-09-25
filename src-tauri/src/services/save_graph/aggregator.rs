@@ -677,7 +677,7 @@ fn param_as_u32(v: &serde_json::Value) -> Option<u32> {
     }
 }
 
-fn flatten_module_vars(module_id: &str, vars: &ModuleVariables) -> Vec<LiveModuleVar> {
+pub fn flatten_module_vars(module_id: &str, vars: &ModuleVariables) -> Vec<LiveModuleVar> {
     let int_iter = vars
         .integers
         .iter()

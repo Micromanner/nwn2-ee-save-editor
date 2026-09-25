@@ -79,16 +79,17 @@
     "changesCharacters": "{count, plural, one {# Charakteränderung} other {# Charakteränderungen}}",
     "changesQuests": "{count, plural, one {# Queständerung} other {# Queständerungen}}",
     "changesParty": "{count, plural, one {# Gruppenänderung} other {# Gruppenänderungen}}",
+    "changesVariables": "{count, plural, one {# Variablenänderung} other {# Variablenänderungen}}",
     "detailsIntro": "Das Wiederherstellen dieses Backups macht folgende Änderungen ungeschehen:",
     "savedAt": "Gespeichert",
     "reasonLoad": "Beim Laden",
     "reasonPreRestore": "Vor der Wiederherstellung",
-    "reasonManual": "Manuell",
     "partyAdded": "zur Gruppe hinzugefügt",
     "partyBenched": "auf die Bank gesetzt",
     "sectionCharacters": "Charaktere",
     "sectionQuests": "Quests",
-    "sectionParty": "Gruppe"
+    "sectionParty": "Gruppe",
+    "sectionVariables": "Variablen"
   },
   "navigation": {
     "overview": "Übersicht",

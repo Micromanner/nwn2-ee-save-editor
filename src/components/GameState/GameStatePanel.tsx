@@ -34,7 +34,6 @@ function RestoreBackupDialog({
   backups,
   isLoading,
   isRestoring,
-  error,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -42,7 +41,6 @@ function RestoreBackupDialog({
   backups: CampaignBackupInfo[];
   isLoading: boolean;
   isRestoring: boolean;
-  error: string | null;
 }) {
   const t = useTranslations();
   const [selected, setSelected] = useState<string | null>(null);
@@ -75,11 +73,6 @@ function RestoreBackupDialog({
         <div style={{ padding: '8px 12px', borderBottom: `1px solid ${T.borderLight}`, color: T.textMuted }}>
           {t('common.restoreBackupPrompt')}
         </div>
-        {error && (
-          <div style={{ margin: '8px 12px', padding: '6px 10px', background: '#c6282810', border: `1px solid #c6282840`, borderRadius: 3, color: T.negative }}>
-            {error}
-          </div>
-        )}
         <div style={{ overflowY: 'auto', maxHeight: 380, paddingLeft: 16 }}>
           {isLoading ? (
             <LoadingState height={160} text={t('common.loadingBackups')} />
@@ -107,7 +100,7 @@ function RestoreBackupDialog({
                     {b.filename}
                   </div>
                   <div style={{ color: T.textMuted, marginTop: 2 }}>
-                    {formatDateTime(b.created)} &mdash; {formatBytes(b.size_bytes)}
+                    {formatDateTime(b.created_at * 1000)} &mdash; {formatBytes(b.size_bytes)}
                   </div>
                 </div>
               </div>
@@ -475,20 +468,24 @@ function useVariableEdits(onSaveCallback: (edits: Record<string, string>) => Pro
   return { edits, onEdit, onRevert, onRevertAll, onSave, isSaving, changeCount: Object.keys(edits).length };
 }
 
-function useModuleBackupDialog(onRestored: () => void) {
+function useBackupDialog(
+  listBackups: () => Promise<CampaignBackupInfo[]>,
+  restoreBackup: (path: string) => Promise<void>,
+  onRestored: () => void,
+) {
+  const { handleError } = useErrorHandler();
   const [isOpen, setIsOpen] = useState(false);
   const [backups, setBackups] = useState<CampaignBackupInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const open = () => {
     setIsOpen(true);
     setIsLoading(true);
-    setError(null);
-    gameStateAPI.getModuleBackups()
-      .then(res => setBackups(res.backups))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load backups'))
+    setBackups([]);
+    listBackups()
+      .then(setBackups)
+      .catch(handleError)
       .finally(() => setIsLoading(false));
   };
 
@@ -496,91 +493,18 @@ function useModuleBackupDialog(onRestored: () => void) {
 
   const restore = async (path: string) => {
     setIsRestoring(true);
-    setError(null);
     try {
-      await gameStateAPI.restoreModuleBackup(path);
+      await restoreBackup(path);
       setIsOpen(false);
       onRestored();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore');
+      handleError(err);
     } finally {
       setIsRestoring(false);
     }
   };
 
-  return { isOpen, backups, isLoading, isRestoring, error, open, close, restore };
-}
-
-function useCampaignBackupDialog(campaignId: string, onRestored: () => void) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [backups, setBackups] = useState<CampaignBackupInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const open = () => {
-    setIsOpen(true);
-    setIsLoading(true);
-    setError(null);
-    gameStateAPI.getCampaignBackups(campaignId)
-      .then(res => setBackups(res.backups))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load backups'))
-      .finally(() => setIsLoading(false));
-  };
-
-  const close = () => setIsOpen(false);
-
-  const restore = async (path: string) => {
-    setIsRestoring(true);
-    setError(null);
-    try {
-      await gameStateAPI.restoreCampaignFromBackup(path, campaignId);
-      setIsOpen(false);
-      onRestored();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore');
-    } finally {
-      setIsRestoring(false);
-    }
-  };
-
-  return { isOpen, backups, isLoading, isRestoring, error, open, close, restore };
-}
-
-function useCampaignVariablesBackupDialog(onRestored: () => void) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [backups, setBackups] = useState<CampaignBackupInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const open = () => {
-    setIsOpen(true);
-    setIsLoading(true);
-    setError(null);
-    gameStateAPI.getCampaignVariableBackups()
-      .then(res => setBackups(res.backups))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load backups'))
-      .finally(() => setIsLoading(false));
-  };
-
-  const close = () => setIsOpen(false);
-
-  const restore = async (path: string) => {
-    setIsRestoring(true);
-    setError(null);
-    try {
-      await gameStateAPI.restoreCampaignVariableBackup(path);
-      setIsOpen(false);
-      onRestored();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore');
-    } finally {
-      setIsRestoring(false);
-    }
-  };
-
-  return { isOpen, backups, isLoading, isRestoring, error, open, close, restore };
+  return { isOpen, backups, isLoading, isRestoring, open, close, restore };
 }
 
 function recordToVarEntries(record: Record<string, number | string>): VarEntry[] {
@@ -699,7 +623,11 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
     loadVars();
   });
 
-  const backupDialog = useModuleBackupDialog(loadVars);
+  const backupDialog = useBackupDialog(
+    () => gameStateAPI.getModuleBackups(moduleId),
+    path => gameStateAPI.restoreModuleBackup(path),
+    loadVars,
+  );
 
   const integers = vars ? recordToVarEntries(vars.integers) : [];
   const strings = vars ? recordToVarEntries(vars.strings) : [];
@@ -730,7 +658,6 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
         backups={backupDialog.backups}
         isLoading={backupDialog.isLoading}
         isRestoring={backupDialog.isRestoring}
-        error={backupDialog.error}
       />
     </>
   );
@@ -781,7 +708,11 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
       .catch(() => {});
   }, [characterId]);
 
-  const backupDialog = useCampaignBackupDialog(campaignGuid, reloadSettings);
+  const backupDialog = useBackupDialog(
+    () => gameStateAPI.getCampaignBackups(campaignGuid),
+    path => gameStateAPI.restoreCampaignFromBackup(path, campaignGuid),
+    reloadSettings,
+  );
 
   const hasChanges = settings !== null && (
     levelCap !== (settings.level_cap ?? 0) ||
@@ -923,7 +854,6 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
         backups={backupDialog.backups}
         isLoading={backupDialog.isLoading}
         isRestoring={backupDialog.isRestoring}
-        error={backupDialog.error}
       />
     </>
   );
@@ -958,10 +888,14 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
     onGlobalsChanged();
   });
 
-  const backupDialog = useCampaignVariablesBackupDialog(() => {
-    loadVars();
-    onGlobalsChanged();
-  });
+  const backupDialog = useBackupDialog(
+    () => gameStateAPI.getCampaignVariableBackups(),
+    path => gameStateAPI.restoreCampaignVariableBackup(path),
+    () => {
+      loadVars();
+      onGlobalsChanged();
+    },
+  );
 
   const integers = vars ? recordToVarEntries(vars.integers) : [];
   const strings = vars ? recordToVarEntries(vars.strings) : [];
@@ -992,7 +926,6 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
         backups={backupDialog.backups}
         isLoading={backupDialog.isLoading}
         isRestoring={backupDialog.isRestoring}
-        error={backupDialog.error}
       />
     </>
   );

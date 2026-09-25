@@ -1,5 +1,5 @@
 //! `editor_changes.json` inside a backup directory: which editor changes were
-//! saved after the backup was taken, so the user can tell backups apart when
+//! written after the backup was taken, so the user can tell backups apart when
 //! choosing one to restore.
 
 use std::fs;
@@ -17,14 +17,14 @@ pub enum BackupReason {
     #[default]
     Load,
     PreRestore,
-    Manual,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BackupManifest {
     pub version: u32,
     pub reason: BackupReason,
-    /// One record per successful save made after this backup, oldest first.
+    /// One record per successful save or game-state write made after this
+    /// backup, oldest first.
     pub saves: Vec<SaveRecord>,
 }
 
@@ -35,11 +35,18 @@ pub struct SaveRecord {
     pub characters: Vec<CharacterChanges>,
     pub quests: Vec<QuestChange>,
     pub party: Vec<PartyChange>,
+    /// Campaign and module variables (influence included), written to disk
+    /// immediately rather than on save.
+    #[serde(default)]
+    pub variables: Vec<VariableChange>,
 }
 
 impl SaveRecord {
     pub fn is_empty(&self) -> bool {
-        self.characters.is_empty() && self.quests.is_empty() && self.party.is_empty()
+        self.characters.is_empty()
+            && self.quests.is_empty()
+            && self.party.is_empty()
+            && self.variables.is_empty()
     }
 }
 
@@ -66,6 +73,24 @@ pub struct PartyChange {
     pub ros_name: String,
     pub name: Option<String>,
     pub in_party: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VariableChange {
+    /// `None` for a campaign variable (`globals.xml`).
+    pub module: Option<String>,
+    pub name: String,
+    pub value: String,
+}
+
+impl VariableChange {
+    pub fn new(module: Option<String>, name: &str, value: impl ToString) -> Self {
+        Self {
+            module,
+            name: name.to_string(),
+            value: value.to_string(),
+        }
+    }
 }
 
 pub fn write_initial(backup_dir: &Path, reason: BackupReason) {
@@ -121,6 +146,7 @@ mod tests {
             }],
             quests: vec![],
             party: vec![],
+            variables: vec![],
         }
     }
 
@@ -133,16 +159,16 @@ mod tests {
     #[test]
     fn initial_then_two_appends_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        write_initial(dir.path(), BackupReason::Manual);
+        write_initial(dir.path(), BackupReason::PreRestore);
         let initial = read(dir.path()).unwrap();
-        assert_eq!(initial.reason, BackupReason::Manual);
+        assert_eq!(initial.reason, BackupReason::PreRestore);
         assert!(initial.saves.is_empty());
 
         append_save(dir.path(), &record("Set gold to 5000"));
         append_save(dir.path(), &record("Set experience to 1"));
         let manifest = read(dir.path()).unwrap();
         assert_eq!(manifest.version, 1);
-        assert_eq!(manifest.reason, BackupReason::Manual);
+        assert_eq!(manifest.reason, BackupReason::PreRestore);
         assert_eq!(manifest.saves.len(), 2);
         assert_eq!(
             manifest.saves[1].characters[0].changes[0],
@@ -156,6 +182,13 @@ mod tests {
         let gone = dir.path().join("gone");
         append_save(&gone, &record("x"));
         assert!(!gone.exists());
+    }
+
+    #[test]
+    fn manifest_without_variables_still_parses() {
+        let json = r#"{"version":1,"reason":"load","saves":[{"saved_at":"x","characters":[],"quests":[],"party":[]}]}"#;
+        let manifest: BackupManifest = serde_json::from_str(json).unwrap();
+        assert!(manifest.saves[0].variables.is_empty());
     }
 
     #[test]

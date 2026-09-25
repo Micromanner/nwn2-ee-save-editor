@@ -18,7 +18,7 @@ pub mod script_decoder;
 mod script_source;
 mod types;
 
-pub use aggregator::{BuildContext, build, build_without_bridge};
+pub use aggregator::{BuildContext, build, build_without_bridge, flatten_module_vars};
 pub use types::{
     AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
     OrphanNote, QuestAggregate, QuestGraphProgress, QuestSummary, SaveGraph, SaveGraphSummary,

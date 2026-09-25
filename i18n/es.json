@@ -79,16 +79,17 @@
     "changesCharacters": "{count, plural, one {# cambio de personaje} other {# cambios de personaje}}",
     "changesQuests": "{count, plural, one {# cambio de misión} other {# cambios de misión}}",
     "changesParty": "{count, plural, one {# cambio de grupo} other {# cambios de grupo}}",
+    "changesVariables": "{count, plural, one {# cambio de variable} other {# cambios de variables}}",
     "detailsIntro": "Restaurar esta copia de seguridad deshace los siguientes cambios:",
     "savedAt": "Guardado",
     "reasonLoad": "Al cargar",
     "reasonPreRestore": "Antes de restaurar",
-    "reasonManual": "Manual",
     "partyAdded": "añadido al grupo",
     "partyBenched": "reservado",
     "sectionCharacters": "Personajes",
     "sectionQuests": "Misiones",
-    "sectionParty": "Grupo"
+    "sectionParty": "Grupo",
+    "sectionVariables": "Variables"
   },
   "navigation": {
     "overview": "Resumen",

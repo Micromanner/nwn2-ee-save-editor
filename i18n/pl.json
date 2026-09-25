@@ -79,16 +79,17 @@
     "changesCharacters": "{count, plural, one {# zmiana postaci} few {# zmiany postaci} many {# zmian postaci} other {# zmian postaci}}",
     "changesQuests": "{count, plural, one {# zmiana zadania} few {# zmiany zadania} many {# zmian zadania} other {# zmian zadania}}",
     "changesParty": "{count, plural, one {# zmiana w grupie} few {# zmiany w grupie} many {# zmian w grupie} other {# zmian w grupie}}",
+    "changesVariables": "{count, plural, one {# zmiana zmiennej} few {# zmiany zmiennych} many {# zmian zmiennych} other {# zmian zmiennych}}",
     "detailsIntro": "Przywrócenie tej kopii zapasowej odwraca następujące zmiany:",
     "savedAt": "Zapisano",
     "reasonLoad": "Przy wczytaniu",
     "reasonPreRestore": "Przed przywróceniem",
-    "reasonManual": "Ręcznie",
     "partyAdded": "dołączył do grupy",
     "partyBenched": "odesłany na ławkę",
     "sectionCharacters": "Postacie",
     "sectionQuests": "Zadania",
-    "sectionParty": "Grupa"
+    "sectionParty": "Grupa",
+    "sectionVariables": "Zmienne"
   },
   "navigation": {
     "overview": "Przegląd",

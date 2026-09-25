@@ -1262,29 +1262,6 @@ export interface QuestEntry {
 }
 
 // =============================================================================
-// Backup
-// =============================================================================
-
-export interface BackupInfo {
-  path: string;
-  timestamp: number;
-  size: number;
-  name: string;
-}
-
-export interface RestoreResult {
-  success: boolean;
-  message: string;
-  restored_files: string[];
-}
-
-export interface CleanupResult {
-  success: boolean;
-  deleted_count: number;
-  remaining_count: number;
-}
-
-// =============================================================================
 // Initialization
 // =============================================================================
 

@@ -164,16 +164,18 @@ impl CampaignManager {
         Ok(parser.get_companion_status(&ros_names))
     }
 
+    /// Returns the global the influence is stored in.
     pub fn update_companion_influence(
         handler: &mut SaveGameHandler,
         companion_id: &str,
         new_influence: i32,
-    ) -> Result<(), String> {
+    ) -> Result<&'static str, String> {
         let defs = get_companion_definitions();
         let def = defs
             .get(companion_id)
             .ok_or_else(|| format!("Unknown companion: {companion_id}"))?;
-        Self::update_global_int(handler, def.influence_var, new_influence)
+        Self::update_global_int(handler, def.influence_var, new_influence)?;
+        Ok(def.influence_var)
     }
 
     pub fn update_module_variable(
@@ -293,8 +295,9 @@ impl CampaignManager {
 
     pub fn list_module_backups(
         handler: &SaveGameHandler,
+        module_id: &str,
     ) -> Result<Vec<CampaignBackupInfo>, String> {
-        list_module_bk(handler)
+        list_module_bk(handler, module_id)
     }
 
     pub fn restore_module_backup(

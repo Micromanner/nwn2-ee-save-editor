@@ -9,7 +9,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
+use super::backup::{collect_backups, ensure_backup_in_dir};
 use super::content::find_campaign_path;
+use crate::services::savegame_handler::backup::BACKUP_TIMESTAMP_FORMAT;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CampaignSettings {
@@ -220,7 +222,7 @@ fn backup_campaign_file(
     let backup_dir = get_campaign_backups_dir(paths)?;
     fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
 
-    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+    let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT);
     let safe_name: String = settings
         .display_name
         .chars()
@@ -247,48 +249,9 @@ pub fn list_campaign_backups(
     campaign_id: &str,
     paths: &NWN2Paths,
 ) -> Result<Vec<CampaignBackupInfo>, String> {
-    let backup_dir = get_campaign_backups_dir(paths)?;
-
-    if !backup_dir.exists() {
-        return Ok(Vec::new());
-    }
-
     let guid_prefix: String = campaign_id.chars().take(8).collect();
-    let mut backups = Vec::new();
-
-    for entry in fs::read_dir(&backup_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-
-        if path.is_file() && path.extension().is_some_and(|e| e == "cam") {
-            let filename = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default()
-                .to_string();
-
-            if !guid_prefix.is_empty() && !filename.contains(&guid_prefix) {
-                continue;
-            }
-
-            let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
-            let created_at = metadata
-                .created()
-                .or_else(|_| metadata.modified())
-                .ok()
-                .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_secs() as i64);
-
-            backups.push(CampaignBackupInfo {
-                filename,
-                path: path.to_string_lossy().to_string(),
-                size_bytes: metadata.len(),
-                created_at,
-            });
-        }
-    }
-
-    backups.sort_by_key(|b| std::cmp::Reverse(b.created_at));
+    let mut backups = collect_backups(&get_campaign_backups_dir(paths)?, "cam")?;
+    backups.retain(|b| guid_prefix.is_empty() || b.filename.contains(&guid_prefix));
     Ok(backups)
 }
 
@@ -298,9 +261,7 @@ pub fn restore_campaign_from_backup(
     paths: &NWN2Paths,
 ) -> Result<(), String> {
     let backup = PathBuf::from(backup_path);
-    if !backup.exists() {
-        return Err(format!("Backup file not found: {backup_path}"));
-    }
+    ensure_backup_in_dir(&backup, &get_campaign_backups_dir(paths)?)?;
 
     let campaign_file = find_campaign_path(campaign_id, paths)
         .ok_or_else(|| format!("Campaign file for GUID {campaign_id} not found"))?;

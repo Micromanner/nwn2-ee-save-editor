@@ -79,16 +79,17 @@
     "changesCharacters": "{count, plural, one {# modification de personnage} other {# modifications de personnage}}",
     "changesQuests": "{count, plural, one {# modification de quête} other {# modifications de quête}}",
     "changesParty": "{count, plural, one {# modification de groupe} other {# modifications de groupe}}",
+    "changesVariables": "{count, plural, one {# modification de variable} other {# modifications de variables}}",
     "detailsIntro": "Restaurer ce backup annule les modifications suivantes :",
     "savedAt": "Enregistré",
     "reasonLoad": "Au chargement",
     "reasonPreRestore": "Avant la restauration",
-    "reasonManual": "Manuel",
     "partyAdded": "ajouté au groupe",
     "partyBenched": "mis sur le banc",
     "sectionCharacters": "Personnages",
     "sectionQuests": "Quêtes",
-    "sectionParty": "Groupe"
+    "sectionParty": "Groupe",
+    "sectionVariables": "Variables"
   },
   "navigation": {
     "overview": "Vue d'ensemble",

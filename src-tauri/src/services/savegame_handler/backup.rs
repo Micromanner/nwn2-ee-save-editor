@@ -1,44 +1,27 @@
-use std::collections::HashSet;
+use std::ffi::OsString;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
-use std::sync::Mutex;
 use std::time::SystemTime;
 
 use chrono::Local;
-use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{info, warn};
 
 use super::backup_manifest::{self, BackupReason};
 use super::error::{SaveGameError, SaveGameResult};
 
-static BACKUP_CREATED_FOR_SAVES: LazyLock<Mutex<HashSet<PathBuf>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+pub const BACKUP_TIMESTAMP_FORMAT: &str = "%Y%m%d_%H%M%S";
+/// Folder inside a save that holds the per-file globals/module backups. Full
+/// backups never copy it and restores never touch it.
+pub const INNER_BACKUPS_DIR: &str = "backups";
+const LOAD_PREFIX: &str = "backup_";
+const PRE_RESTORE_PREFIX: &str = "pre_restore_";
+const RESTORE_STAGING_DIR: &str = ".restore_staging";
+const RESTORE_DISPLACED_DIR: &str = ".restore_displaced";
 
-const BACKUP_TIMESTAMP_FORMAT: &str = "%Y%m%d_%H%M%S";
-const DEFAULT_KEEP_COUNT: usize = 5;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackupInfo {
-    pub path: PathBuf,
-    pub timestamp: String,
-    pub size_bytes: u64,
-    pub created_at: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoreResult {
-    pub success: bool,
-    pub pre_restore_backup: Option<PathBuf>,
+    pub pre_restore_backup: PathBuf,
     pub files_restored: usize,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CleanupResult {
-    pub removed_count: usize,
-    pub remaining_count: usize,
-    pub freed_bytes: u64,
 }
 
 pub fn get_backups_dir(save_dir: &Path) -> PathBuf {
@@ -57,23 +40,35 @@ pub fn get_backup_dir_for_save(save_dir: &Path) -> PathBuf {
     backups_root.join(save_name)
 }
 
-pub fn has_backup_been_created(save_path: &Path) -> bool {
-    BACKUP_CREATED_FOR_SAVES
-        .lock()
-        .map(|set| set.contains(save_path))
-        .unwrap_or(false)
+/// Timestamp part of a full-backup folder name, `None` for any other folder.
+pub fn backup_timestamp(dir_name: &str) -> Option<&str> {
+    dir_name
+        .strip_prefix(LOAD_PREFIX)
+        .or_else(|| dir_name.strip_prefix(PRE_RESTORE_PREFIX))
 }
 
-pub fn mark_backup_created(save_path: &Path) {
-    if let Ok(mut set) = BACKUP_CREATED_FOR_SAVES.lock() {
-        set.insert(save_path.to_path_buf());
-    }
+/// Creation time (modification time where unsupported) as Unix seconds, 0 if unknown.
+pub fn created_at_secs(metadata: &fs::Metadata) -> i64 {
+    metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_secs() as i64)
 }
 
-pub fn clear_backup_tracking() {
-    if let Ok(mut set) = BACKUP_CREATED_FOR_SAVES.lock() {
-        set.clear();
-    }
+pub fn dir_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(ft) if ft.is_dir() => dir_size(&entry.path()),
+            Ok(_) => entry.metadata().map_or(0, |m| m.len()),
+            Err(_) => 0,
+        })
+        .sum()
 }
 
 pub fn create_backup(save_dir: &Path, reason: BackupReason) -> SaveGameResult<PathBuf> {
@@ -83,17 +78,15 @@ pub fn create_backup(save_dir: &Path, reason: BackupReason) -> SaveGameResult<Pa
         });
     }
 
-    let backup_dir = get_backup_dir_for_save(save_dir);
-    fs::create_dir_all(&backup_dir)?;
+    let prefix = match reason {
+        BackupReason::Load => LOAD_PREFIX,
+        BackupReason::PreRestore => PRE_RESTORE_PREFIX,
+    };
+    let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT);
+    let backup_path = get_backup_dir_for_save(save_dir).join(format!("{prefix}{timestamp}"));
 
-    let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT).to_string();
-    let backup_name = format!("backup_{timestamp}");
-    let backup_path = backup_dir.join(&backup_name);
-
-    copy_directory_filtered(save_dir, &backup_path, &["backups"])?;
+    copy_save_files(save_dir, &backup_path)?;
     backup_manifest::write_initial(&backup_path, reason);
-
-    mark_backup_created(save_dir);
 
     info!(
         "Created backup: {} -> {}",
@@ -103,90 +96,19 @@ pub fn create_backup(save_dir: &Path, reason: BackupReason) -> SaveGameResult<Pa
     Ok(backup_path)
 }
 
-pub fn create_pre_restore_backup(save_dir: &Path) -> SaveGameResult<PathBuf> {
-    let backup_dir = get_backup_dir_for_save(save_dir);
-    fs::create_dir_all(&backup_dir)?;
-
-    let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT).to_string();
-    let backup_name = format!("pre_restore_{timestamp}");
-    let backup_path = backup_dir.join(&backup_name);
-
-    copy_directory_filtered(save_dir, &backup_path, &["backups"])?;
-    backup_manifest::write_initial(&backup_path, BackupReason::PreRestore);
-
-    info!(
-        "Created pre-restore backup: {} -> {}",
-        save_dir.display(),
-        backup_path.display()
-    );
-    Ok(backup_path)
-}
-
-pub fn list_backups(save_dir: &Path) -> SaveGameResult<Vec<BackupInfo>> {
-    let backup_dir = get_backup_dir_for_save(save_dir);
-
-    if !backup_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut backups = Vec::new();
-
-    for entry in fs::read_dir(&backup_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_dir() {
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default();
-
-            if name.starts_with("backup_") || name.starts_with("pre_restore_") {
-                let timestamp = name
-                    .strip_prefix("backup_")
-                    .or_else(|| name.strip_prefix("pre_restore_"))
-                    .unwrap_or(name)
-                    .to_string();
-
-                let metadata = fs::metadata(&path)?;
-                let created_at = metadata
-                    .created()
-                    .or_else(|_| metadata.modified())
-                    .ok()
-                    .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                    .map_or(0, |d| d.as_secs() as i64);
-
-                let size_bytes = calculate_dir_size(&path);
-
-                backups.push(BackupInfo {
-                    path,
-                    timestamp,
-                    size_bytes,
-                    created_at,
-                });
-            }
-        }
-    }
-
-    backups.sort_by_key(|b| std::cmp::Reverse(b.created_at));
-
-    Ok(backups)
-}
-
-pub fn restore_from_backup(
-    backup_path: &Path,
-    save_dir: &Path,
-    create_pre_restore: bool,
-) -> SaveGameResult<RestoreResult> {
+/// Replace the contents of `save_dir` with `backup_path`, after taking a
+/// pre-restore backup. The backup is copied to a staging folder first and
+/// swapped in by renames, so a failed copy leaves the save untouched and a
+/// failed swap moves the original files back.
+pub fn restore_from_backup(backup_path: &Path, save_dir: &Path) -> SaveGameResult<RestoreResult> {
     if !backup_path.exists() {
         return Err(SaveGameError::NotFound {
             path: backup_path.to_path_buf(),
         });
     }
 
-    // Defense-in-depth: refuse to restore a backup into a save_dir it doesn't
-    // belong to. The backup's parent folder is named after its origin save;
-    // it must match the target save_dir's folder name.
+    // The backup's parent folder is named after its origin save; it must match
+    // the target, or a restore would overwrite an unrelated save.
     let backup_origin = backup_path
         .parent()
         .and_then(|p| p.file_name())
@@ -200,32 +122,33 @@ pub fn restore_from_backup(
         )));
     }
 
-    let pre_restore_backup = if create_pre_restore && save_dir.exists() {
-        Some(create_pre_restore_backup(save_dir)?)
-    } else {
-        None
-    };
+    let pre_restore_backup = create_backup(save_dir, BackupReason::PreRestore)?;
 
-    if save_dir.exists() {
-        // Clear save dir contents but preserve the inner backups/ folder
-        // (module/globals backups live there)
-        for entry in fs::read_dir(save_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                if path.file_name().is_some_and(|n| n == "backups") {
-                    continue;
-                }
-                fs::remove_dir_all(&path)?;
-            } else {
-                fs::remove_file(&path)?;
-            }
+    let work_dir = get_backup_dir_for_save(save_dir);
+    let staging = work_dir.join(RESTORE_STAGING_DIR);
+    let displaced = work_dir.join(RESTORE_DISPLACED_DIR);
+    for leftover in [&staging, &displaced] {
+        if leftover.exists() {
+            fs::remove_dir_all(leftover)?;
         }
-    } else {
-        fs::create_dir_all(save_dir)?;
     }
 
-    let files_restored = copy_directory(backup_path, save_dir)?;
+    let files_restored = match copy_save_files(backup_path, &staging) {
+        Ok(count) => count,
+        Err(e) => {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(e);
+        }
+    };
+    let swapped = swap_save_contents(save_dir, &staging, &displaced);
+    for temp in [&staging, &displaced] {
+        if temp.exists()
+            && let Err(e) = fs::remove_dir_all(temp)
+        {
+            warn!("Failed to remove {}: {e}", temp.display());
+        }
+    }
+    swapped?;
 
     info!(
         "Restored backup: {} -> {} ({} files)",
@@ -235,97 +158,57 @@ pub fn restore_from_backup(
     );
 
     Ok(RestoreResult {
-        success: true,
         pre_restore_backup,
         files_restored,
-        message: format!("Successfully restored {files_restored} files"),
     })
 }
 
-pub fn restore_modules_from_backup(
-    backup_path: &Path,
-    save_dir: &Path,
-) -> SaveGameResult<RestoreResult> {
-    if !backup_path.exists() {
-        return Err(SaveGameError::NotFound {
-            path: backup_path.to_path_buf(),
-        });
+/// Move the save's files (except the inner backups folder) to `displaced`,
+/// then the staged files into the save, undoing both moves on failure.
+fn swap_save_contents(save_dir: &Path, staging: &Path, displaced: &Path) -> SaveGameResult<()> {
+    fs::create_dir_all(displaced)?;
+
+    let mut displaced_names = Vec::new();
+    if let Err(e) = move_entries(save_dir, displaced, &mut displaced_names) {
+        move_back(displaced, save_dir, &displaced_names);
+        return Err(SaveGameError::RestoreFailed(format!(
+            "Could not move the current save files aside, save left unchanged: {e}"
+        )));
     }
 
-    let mut files_restored = 0usize;
-
-    for entry in fs::read_dir(backup_path)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file()
-            && path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("z"))
-        {
-            let filename = path.file_name().unwrap();
-            let dest = save_dir.join(filename);
-            fs::copy(&path, &dest)?;
-            files_restored += 1;
-            debug!("Restored module file: {}", filename.to_string_lossy());
-        }
+    let mut restored_names = Vec::new();
+    if let Err(e) = move_entries(staging, save_dir, &mut restored_names) {
+        move_back(save_dir, staging, &restored_names);
+        move_back(displaced, save_dir, &displaced_names);
+        return Err(SaveGameError::RestoreFailed(format!(
+            "Could not move the restored files into the save, original files put back: {e}"
+        )));
     }
-
-    info!(
-        "Restored {} module .z files from {} -> {}",
-        files_restored,
-        backup_path.display(),
-        save_dir.display()
-    );
-
-    Ok(RestoreResult {
-        success: true,
-        pre_restore_backup: None,
-        files_restored,
-        message: format!("Successfully restored {files_restored} module files"),
-    })
+    Ok(())
 }
 
-pub fn cleanup_old_backups(save_dir: &Path, keep_count: usize) -> SaveGameResult<CleanupResult> {
-    let keep_count = if keep_count == 0 {
-        DEFAULT_KEEP_COUNT
-    } else {
-        keep_count
-    };
-
-    let mut backups = list_backups(save_dir)?;
-
-    if backups.len() <= keep_count {
-        return Ok(CleanupResult {
-            removed_count: 0,
-            remaining_count: backups.len(),
-            freed_bytes: 0,
-        });
+fn move_entries(from: &Path, to: &Path, moved: &mut Vec<OsString>) -> io::Result<()> {
+    for entry in fs::read_dir(from)? {
+        let name = entry?.file_name();
+        if name == INNER_BACKUPS_DIR {
+            continue;
+        }
+        fs::rename(from.join(&name), to.join(&name))?;
+        moved.push(name);
     }
+    Ok(())
+}
 
-    let mut removed_count = 0;
-    let mut freed_bytes = 0u64;
-
-    while backups.len() > keep_count {
-        if let Some(oldest) = backups.pop()
-            && oldest.path.exists()
-        {
-            freed_bytes += oldest.size_bytes;
-            fs::remove_dir_all(&oldest.path)?;
-            removed_count += 1;
-            debug!("Removed old backup: {}", oldest.path.display());
+fn move_back(from: &Path, to: &Path, names: &[OsString]) {
+    for name in names {
+        if let Err(e) = fs::rename(from.join(name), to.join(name)) {
+            warn!(
+                "Failed to move {} back to {}: {e}",
+                from.join(name).display(),
+                to.display()
+            );
         }
     }
-
-    info!(
-        "Cleaned up {} old backups, freed {} bytes",
-        removed_count, freed_bytes
-    );
-
-    Ok(CleanupResult {
-        removed_count,
-        remaining_count: backups.len(),
-        freed_bytes,
-    })
 }
 
 pub fn infer_save_path_from_backup(backup_path: &Path) -> Option<PathBuf> {
@@ -350,52 +233,29 @@ pub fn infer_save_path_from_backup(backup_path: &Path) -> Option<PathBuf> {
     None
 }
 
-fn copy_directory(src: &Path, dst: &Path) -> SaveGameResult<usize> {
-    copy_directory_filtered(src, dst, &[])
-}
-
-fn copy_directory_filtered(src: &Path, dst: &Path, skip_dirs: &[&str]) -> SaveGameResult<usize> {
+/// Copy a save (or backup) folder, skipping the inner backups folder and the
+/// backup manifest. Returns the number of files copied.
+fn copy_save_files(src: &Path, dst: &Path) -> SaveGameResult<usize> {
     fs::create_dir_all(dst)?;
 
     let mut count = 0;
-
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
 
         if src_path.is_dir() {
-            if skip_dirs.iter().any(|&s| entry.file_name() == s) {
+            if entry.file_name() == INNER_BACKUPS_DIR {
                 continue;
             }
-            count += copy_directory_filtered(&src_path, &dst_path, skip_dirs)?;
-        } else {
-            if entry.file_name() == backup_manifest::MANIFEST_FILE {
-                continue;
-            }
+            count += copy_save_files(&src_path, &dst_path)?;
+        } else if entry.file_name() != backup_manifest::MANIFEST_FILE {
             fs::copy(&src_path, &dst_path)?;
             count += 1;
         }
     }
 
     Ok(count)
-}
-
-fn calculate_dir_size(path: &Path) -> u64 {
-    let mut size = 0u64;
-
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                size += calculate_dir_size(&path);
-            } else if let Ok(metadata) = fs::metadata(&path) {
-                size += metadata.len();
-            }
-        }
-    }
-
-    size
 }
 
 #[cfg(test)]
@@ -412,29 +272,22 @@ mod tests {
     }
 
     #[test]
-    fn test_backup_tracking() {
-        clear_backup_tracking();
-
-        let path = PathBuf::from("/test/save");
-        assert!(!has_backup_been_created(&path));
-
-        mark_backup_created(&path);
-        assert!(has_backup_been_created(&path));
-
-        clear_backup_tracking();
-        assert!(!has_backup_been_created(&path));
+    fn test_backup_timestamp() {
+        assert_eq!(
+            backup_timestamp("backup_20260925_120000"),
+            Some("20260925_120000")
+        );
+        assert_eq!(
+            backup_timestamp("pre_restore_20260925_120000"),
+            Some("20260925_120000")
+        );
+        assert_eq!(backup_timestamp(RESTORE_STAGING_DIR), None);
     }
 
     #[test]
     fn test_restore_refuses_cross_save() {
-        let tmp = std::env::temp_dir().join(format!(
-            "nwn2_restore_guard_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let saves_root = tmp.join("saves");
+        let tmp = tempfile::tempdir().unwrap();
+        let saves_root = tmp.path().join("saves");
         let backups_root = saves_root.join("backups");
         let backup_for_b = backups_root.join("b").join("backup_20260425_000000");
         let save_a = saves_root.join("a");
@@ -444,17 +297,46 @@ mod tests {
         fs::write(backup_for_b.join("resgff.zip"), b"b-data").unwrap();
         fs::write(save_a.join("resgff.zip"), b"a-data").unwrap();
 
-        let result = restore_from_backup(&backup_for_b, &save_a, false);
+        let result = restore_from_backup(&backup_for_b, &save_a);
         assert!(
             matches!(result, Err(SaveGameError::RestoreFailed(_))),
-            "cross-save restore should be rejected, got: {result:?}"
+            "cross-save restore should be rejected"
         );
         assert_eq!(
             fs::read(save_a.join("resgff.zip")).unwrap(),
             b"a-data",
             "target save must not be modified when guard trips"
         );
+    }
 
-        fs::remove_dir_all(&tmp).ok();
+    #[test]
+    fn test_restore_replaces_save_and_keeps_inner_backups() {
+        let tmp = tempfile::tempdir().unwrap();
+        let save = tmp.path().join("saves").join("a");
+        let inner = save.join(INNER_BACKUPS_DIR).join("module_backups");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(inner.join("m_20260925_120000.z"), b"old-module").unwrap();
+        fs::write(save.join("globals.xml"), b"original").unwrap();
+
+        let backup = create_backup(&save, BackupReason::Load).unwrap();
+        assert!(!backup.join(INNER_BACKUPS_DIR).exists());
+
+        fs::write(save.join("globals.xml"), b"edited").unwrap();
+        fs::write(save.join("new.z"), b"added after backup").unwrap();
+
+        let result = restore_from_backup(&backup, &save).unwrap();
+
+        assert_eq!(result.files_restored, 1);
+        assert_eq!(fs::read(save.join("globals.xml")).unwrap(), b"original");
+        assert!(!save.join("new.z").exists());
+        assert!(!save.join(backup_manifest::MANIFEST_FILE).exists());
+        assert!(inner.join("m_20260925_120000.z").exists());
+        assert_eq!(
+            fs::read(result.pre_restore_backup.join("globals.xml")).unwrap(),
+            b"edited"
+        );
+        let work_dir = get_backup_dir_for_save(&save);
+        assert!(!work_dir.join(RESTORE_STAGING_DIR).exists());
+        assert!(!work_dir.join(RESTORE_DISPLACED_DIR).exists());
     }
 }

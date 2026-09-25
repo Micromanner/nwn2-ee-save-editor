@@ -265,11 +265,7 @@ pub fn run() {
             crate::commands::combat::get_saving_throws,
             crate::commands::combat::get_save_breakdown,
             // SaveGame
-            crate::commands::savegame::list_backups,
-            crate::commands::savegame::create_backup,
             crate::commands::savegame::restore_backup,
-            crate::commands::savegame::restore_modules_from_backup,
-            crate::commands::savegame::cleanup_backups,
             crate::commands::savegame::list_save_files,
             crate::commands::savegame::get_save_info,
             crate::commands::savegame::delete_backup,

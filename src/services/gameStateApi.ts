@@ -170,18 +170,8 @@ export interface CampaignBackupInfo {
   filename: string;
   path: string;
   size_bytes: number;
-  created: string;
-}
-
-export interface CampaignBackupsResponse {
-  backups: CampaignBackupInfo[];
-  campaign_name: string | null;
-  campaign_guid: string | null;
-}
-
-export interface RestoreCampaignResponse {
-  success: boolean;
-  restored_from: string;
+  /** Unix seconds. */
+  created_at: number;
 }
 
 export interface QuestProgressData {
@@ -455,123 +445,29 @@ export class GameStateAPI {
     await invoke('batch_update_campaign_variables', { updates });
   }
 
-  async getCampaignBackups(campaignId: string): Promise<CampaignBackupsResponse> {
-    try {
-        const backups = await invoke<any[]>('list_campaign_backups', { campaignId });
-        return {
-            backups: backups.map(b => ({
-                filename: b.filename,
-                path: b.path,
-                size_bytes: b.size_bytes || 0,
-                created: b.created_at ? new Date(b.created_at * 1000).toISOString() : new Date().toISOString()
-            })),
-            campaign_name: null,
-            campaign_guid: campaignId
-        };
-    } catch (e) {
-        console.warn("list_campaign_backups failed", e);
-        return { backups: [], campaign_name: null, campaign_guid: null };
-    }
+  async getCampaignBackups(campaignId: string): Promise<CampaignBackupInfo[]> {
+    return invoke<CampaignBackupInfo[]>('list_campaign_backups', { campaignId });
   }
 
-  async getSaveBackups(): Promise<CampaignBackupsResponse> {
-    try {
-        const backups = await invoke<any[]>('list_backups');
-        return {
-            backups: backups.map(b => ({
-                filename: b.filename || b.path.split(/[\\/]/).pop(),
-                path: b.path,
-                size_bytes: b.size_bytes || 0,
-                created: b.created_at ? new Date(b.created_at * 1000).toISOString() : new Date().toISOString()
-            })),
-            campaign_name: "Current Session",
-            campaign_guid: null
-        };
-    } catch (e) {
-        console.warn("list_backups failed", e);
-        return { backups: [], campaign_name: null, campaign_guid: null };
-    }
+  async restoreCampaignFromBackup(backupPath: string, campaignId: string): Promise<void> {
+    await invoke('restore_campaign_backup', { backupPath, campaignId });
   }
 
-  async createBackup(): Promise<void> {
-    await invoke('create_backup');
+  async getCampaignVariableBackups(): Promise<CampaignBackupInfo[]> {
+    return invoke<CampaignBackupInfo[]>('list_campaign_variable_backups');
   }
 
-  async restoreModulesFromBackup(backupPath: string): Promise<RestoreCampaignResponse> {
-    try {
-      await invoke('restore_modules_from_backup', { backupPath });
-      return { success: true, restored_from: backupPath };
-    } catch (e) {
-      throw new Error(String(e));
-    }
+  async restoreCampaignVariableBackup(backupPath: string): Promise<void> {
+    await invoke('restore_campaign_variable_backup', { backupPath });
   }
 
-  async restoreCampaignFromBackup(
-    backupPath: string,
-    campaignId: string
-  ): Promise<RestoreCampaignResponse> {
-      try {
-          await invoke('restore_campaign_backup', { backupPath, campaignId });
-          return { success: true, restored_from: backupPath };
-      } catch (e) {
-          throw new Error(String(e));
-      }
+  /** Backups of `moduleId`, or of the current module when omitted. */
+  async getModuleBackups(moduleId?: string | null): Promise<CampaignBackupInfo[]> {
+    return invoke<CampaignBackupInfo[]>('list_module_backups', { moduleId: moduleId ?? null });
   }
 
-  async getCampaignVariableBackups(): Promise<CampaignBackupsResponse> {
-    try {
-      const backups = await invoke<any[]>('list_campaign_variable_backups');
-      return {
-        backups: backups.map(b => ({
-          filename: b.filename,
-          path: b.path,
-          size_bytes: b.size_bytes || 0,
-          created: b.created_at ? new Date(b.created_at * 1000).toISOString() : new Date().toISOString()
-        })),
-        campaign_name: null,
-        campaign_guid: null
-      };
-    } catch (e) {
-      console.warn('list_campaign_variable_backups failed', e);
-      return { backups: [], campaign_name: null, campaign_guid: null };
-    }
-  }
-
-  async restoreCampaignVariableBackup(backupPath: string): Promise<RestoreCampaignResponse> {
-    try {
-      await invoke('restore_campaign_variable_backup', { backupPath });
-      return { success: true, restored_from: backupPath };
-    } catch (e) {
-      throw new Error(String(e));
-    }
-  }
-
-  async getModuleBackups(): Promise<CampaignBackupsResponse> {
-    try {
-      const backups = await invoke<any[]>('list_module_backups');
-      return {
-        backups: backups.map(b => ({
-          filename: b.filename,
-          path: b.path,
-          size_bytes: b.size_bytes || 0,
-          created: b.created_at ? new Date(b.created_at * 1000).toISOString() : new Date().toISOString()
-        })),
-        campaign_name: null,
-        campaign_guid: null
-      };
-    } catch (e) {
-      console.warn('list_module_backups failed', e);
-      return { backups: [], campaign_name: null, campaign_guid: null };
-    }
-  }
-
-  async restoreModuleBackup(backupPath: string): Promise<RestoreCampaignResponse> {
-    try {
-      await invoke('restore_module_backup', { backupPath });
-      return { success: true, restored_from: backupPath };
-    } catch (e) {
-      throw new Error(String(e));
-    }
+  async restoreModuleBackup(backupPath: string): Promise<void> {
+    await invoke('restore_module_backup', { backupPath });
   }
 
   async getModuleInfo(characterId: number): Promise<ModuleInfo> {

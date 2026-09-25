@@ -39,18 +39,21 @@ function summarizeChanges(manifest: BackupManifest | null | undefined, t: (key: 
   let characterCount = 0;
   let questCount = 0;
   let partyCount = 0;
+  let variableCount = 0;
   for (const record of manifest.saves) {
     for (const character of record.characters) {
       characterCount += character.changes.length;
     }
     questCount += record.quests.length;
     partyCount += record.party.length;
+    variableCount += record.variables.length;
   }
 
   const parts: string[] = [];
   if (characterCount > 0) parts.push(t('fileBrowser.changesCharacters', { count: characterCount }));
   if (questCount > 0) parts.push(t('fileBrowser.changesQuests', { count: questCount }));
   if (partyCount > 0) parts.push(t('fileBrowser.changesParty', { count: partyCount }));
+  if (variableCount > 0) parts.push(t('fileBrowser.changesVariables', { count: variableCount }));
 
   return parts.length > 0 ? parts.join(', ') : t('fileBrowser.changesNone');
 }

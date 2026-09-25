@@ -7,6 +7,7 @@ use tauri_plugin_shell::ShellExt;
 
 use crate::services::playerinfo::PlayerInfo;
 use crate::services::savegame_handler::SaveGameHandler;
+use crate::services::savegame_handler::backup;
 use crate::services::savegame_handler::backup_manifest::BackupManifest;
 use crate::state::AppState;
 
@@ -724,7 +725,7 @@ fn find_newest_inner_backup(save_folder: &std::path::Path) -> Option<std::path::
         }
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !name.starts_with("backup_") && !name.starts_with("pre_restore_") {
+        if backup::backup_timestamp(&name).is_none() {
             continue;
         }
 
@@ -742,28 +743,8 @@ fn find_newest_inner_backup(save_folder: &std::path::Path) -> Option<std::path::
     newest.map(|(_, p)| p)
 }
 
-fn calculate_dir_size_recursive(path: &std::path::Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            if let Ok(ft) = entry.file_type() {
-                if ft.is_file() {
-                    if let Ok(meta) = entry.metadata() {
-                        total += meta.len();
-                    }
-                } else if ft.is_dir() {
-                    total += calculate_dir_size_recursive(&entry.path());
-                }
-            }
-        }
-    }
-    total
-}
-
 #[tauri::command]
 pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, String> {
-    use std::time::SystemTime;
-
     let backup_path = PathBuf::from(&path);
 
     if !backup_path.exists() {
@@ -795,25 +776,14 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
             continue;
         }
 
-        if !is_root_backups && !name.starts_with("backup_") && !name.starts_with("pre_restore_") {
+        let timestamp = backup::backup_timestamp(&name);
+        if !is_root_backups && timestamp.is_none() {
             continue;
         }
+        let timestamp = timestamp.unwrap_or_default().to_string();
 
-        let timestamp = if name.starts_with("backup_") || name.starts_with("pre_restore_") {
-            name.strip_prefix("backup_")
-                .or_else(|| name.strip_prefix("pre_restore_"))
-                .unwrap_or(&name)
-                .to_string()
-        } else {
-            String::new()
-        };
-
-        let metadata = std::fs::metadata(&entry_path).ok();
-        let created_at = metadata
-            .as_ref()
-            .and_then(|m| m.created().or_else(|_| m.modified()).ok())
-            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
+        let created_at = std::fs::metadata(&entry_path)
+            .map(|m| backup::created_at_secs(&m))
             .unwrap_or(0);
 
         let source_path: Option<PathBuf> = if is_root_backups {
@@ -837,7 +807,7 @@ pub async fn browse_backups(path: String) -> Result<Vec<BrowseBackupEntry>, Stri
         };
 
         let size = if is_root_backups {
-            calculate_dir_size_recursive(&entry_path)
+            backup::dir_size(&entry_path)
         } else {
             let mut size: u64 = 0;
             if let Ok(dir_entries) = std::fs::read_dir(&entry_path) {

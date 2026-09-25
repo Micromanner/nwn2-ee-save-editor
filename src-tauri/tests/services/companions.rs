@@ -26,7 +26,7 @@ fn load_save(session: &mut SessionState, save: &str) {
         },
     );
     session
-        .load_character(&path.to_string_lossy(), None, &mut report)
+        .load_character(&path.to_string_lossy(), None, true, &mut report)
         .expect("load save");
 }
 
@@ -175,7 +175,7 @@ fn list_roster_excludes_available_members_without_ros_file() {
         },
     );
     session
-        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report)
         .expect("load save");
 
     let roster = session.list_roster().expect("list roster");
@@ -219,7 +219,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         },
     );
     session
-        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report)
         .expect("load save");
     session.load_companion("khelgar").expect("load companion");
 
@@ -260,7 +260,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
         },
     );
     session2
-        .load_character(&save_path.to_string_lossy(), None, &mut report2)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report2)
         .expect("reload save");
     session2
         .load_companion("khelgar")
@@ -304,7 +304,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
         },
     );
     session
-        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report)
         .expect("load save");
     session.load_companion("khelgar").expect("load companion");
 
@@ -330,7 +330,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
         },
     );
     session2
-        .load_character(&save_path.to_string_lossy(), None, &mut report2)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report2)
         .expect("reload save");
     session2
         .load_companion("khelgar")
@@ -431,7 +431,7 @@ fn save_character_flushes_parked_companion_and_player_edits() {
         },
     );
     session
-        .load_character(&save_path.to_string_lossy(), None, &mut report)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report)
         .expect("load save");
 
     session
@@ -462,7 +462,7 @@ fn save_character_flushes_parked_companion_and_player_edits() {
         },
     );
     session2
-        .load_character(&save_path.to_string_lossy(), None, &mut report2)
+        .load_character(&save_path.to_string_lossy(), None, true, &mut report2)
         .expect("reload save");
     assert_eq!(
         session2
@@ -600,4 +600,34 @@ fn save_appends_change_record_to_load_backup_manifest() {
             .len(),
         1
     );
+}
+
+#[test]
+fn variable_changes_are_recorded_on_the_load_backup_manifest() {
+    use app_lib::services::savegame_handler::backup_manifest::{self, VariableChange};
+
+    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+
+    let load_backup = std::fs::read_dir(backup::get_backup_dir_for_save(&save_path))
+        .expect("backups dir")
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.is_dir())
+        .expect("load backup created");
+
+    session.record_variable_changes(vec![VariableChange {
+        module: None,
+        name: "00_nInfluencekhelgar".into(),
+        value: "50".into(),
+    }]);
+
+    let manifest = backup_manifest::read(&load_backup).expect("manifest");
+    assert_eq!(manifest.saves.len(), 1);
+    let record = &manifest.saves[0];
+    assert!(record.characters.is_empty());
+    assert_eq!(record.variables.len(), 1);
+    assert_eq!(record.variables[0].name, "00_nInfluencekhelgar");
+    assert_eq!(record.variables[0].value, "50");
 }

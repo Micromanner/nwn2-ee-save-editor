@@ -32,7 +32,7 @@ fn fatal_on_nonexistent_file() {
     let mut session = new_session();
     let mut report = new_report(path);
 
-    let result = session.load_character(path, None, &mut report);
+    let result = session.load_character(path, None, true, &mut report);
     assert!(result.is_err());
     assert_eq!(report.status, LoadStatus::Fatal);
     let fatal = report
@@ -55,7 +55,7 @@ fn fatal_on_corrupted_save_directory() {
     let mut session = new_session();
     let mut report = new_report(&path_str);
 
-    let result = session.load_character(&path_str, None, &mut report);
+    let result = session.load_character(&path_str, None, true, &mut report);
     assert!(result.is_err());
     assert_eq!(report.status, LoadStatus::Fatal);
     assert!(report.fatal.is_some());
@@ -77,7 +77,7 @@ fn happy_path_with_classic_campaign_fixture() {
     let mut session = new_session();
     let mut report = new_report(&path_str);
 
-    let result = session.load_character(&path_str, None, &mut report);
+    let result = session.load_character(&path_str, None, true, &mut report);
     assert!(result.is_ok(), "valid save should load: {result:?}");
     assert_eq!(report.status, LoadStatus::Ok);
     assert!(report.warnings.is_empty());

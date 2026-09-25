@@ -26,9 +26,10 @@ pub async fn load_character(
         file_size,
     });
 
+    let create_load_backup = state.config.read().auto_backup;
     let load_result = {
         let mut session = state.session.write();
-        session.load_character(&file_path, player_index, &mut report)
+        session.load_character(&file_path, player_index, create_load_backup, &mut report)
     };
 
     // Snapshot capture walks override/hak/workshop directories — skip on clean

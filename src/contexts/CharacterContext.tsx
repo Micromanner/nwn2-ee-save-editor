@@ -171,6 +171,7 @@ interface CharacterContextState {
   // Actions
   loadCharacter: (characterId: number) => Promise<void>;
   importCharacter: (savePath: string, playerIndex?: number) => Promise<void>;
+  adoptReloadedSave: () => Promise<void>;
   loadSubsystem: (subsystem: SubsystemType, options?: { force?: boolean; silent?: boolean }) => Promise<unknown>;
   updateSubsystem: (subsystem: SubsystemType, data: unknown) => Promise<void>;
   updateSubsystemData: (subsystem: SubsystemType, data: unknown) => void;
@@ -576,43 +577,33 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await refreshHistoryState();
   }, [characterId, loadCharacter, refreshHistoryState]);
 
-  // Import character from save
-  const importCharacter = useCallback(async (savePath: string, playerIndex?: number) => {
+  // Take over the session the backend holds. A fresh id makes id-keyed panels refetch.
+  const adoptSession = useCallback(async (newCharacterId: number, isVault: boolean) => {
+    const characterData = await CharacterAPI.getCharacterState(newCharacterId);
+
+    setCharacter(characterData);
+    setCharacterId(newCharacterId);
+    setSessionKind(isVault ? 'vault' : 'save');
+
+    setSubsystems(initializeSubsystems());
+    setHistoryState(null);
+    setActiveSource({ kind: 'player' });
+    if (isVault) {
+      setRoster([]);
+    } else {
+      refreshRoster();
+    }
+
+    // Load metadata and preload game data in background (non-blocking)
+    loadMetadataInternal(newCharacterId);
+    preloadGameData(newCharacterId);
+  }, [loadMetadataInternal, preloadGameData, refreshRoster]);
+
+  const runSessionLoad = useCallback(async (load: () => Promise<void>) => {
     setIsLoading(true);
     setError(null);
-    
     try {
-      // Step 1: Import the save game (creates backend session)
-      const importResponse = await CharacterAPI.importCharacter(savePath, playerIndex);
-      const newCharacterId = importResponse.id;
-      
-      if (!newCharacterId) {
-        throw new Error('Import successful but no character ID returned');
-      }
-      
-      // Step 2: Fetch complete character state from backend session
-      const characterData = await CharacterAPI.getCharacterState(newCharacterId);
-      
-      // Step 3: Populate frontend context with complete data
-      setCharacter(characterData);
-      setCharacterId(newCharacterId);
-      
-      const isVault = savePath.toLowerCase().endsWith('.bic');
-      setSessionKind(isVault ? 'vault' : 'save');
-
-      // Reset subsystems
-      setSubsystems(initializeSubsystems());
-      setHistoryState(null);
-      setActiveSource({ kind: 'player' });
-      if (isVault) {
-        setRoster([]);
-      } else {
-        refreshRoster();
-      }
-
-      // Load metadata and preload game data in background (non-blocking)
-      loadMetadataInternal(newCharacterId);
-      preloadGameData(newCharacterId);
+      await load();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to import character';
       setError(errorMessage);
@@ -620,7 +611,19 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [loadMetadataInternal, preloadGameData, refreshRoster]);
+  }, []);
+
+  // Import character from save
+  const importCharacter = useCallback((savePath: string, playerIndex?: number) => runSessionLoad(async () => {
+    const importResponse = await CharacterAPI.importCharacter(savePath, playerIndex);
+    await adoptSession(importResponse.id, savePath.toLowerCase().endsWith('.bic'));
+  }), [runSessionLoad, adoptSession]);
+
+  // The backend reloaded the loaded save itself (after a backup restore).
+  const adoptReloadedSave = useCallback(
+    () => runSessionLoad(() => adoptSession(Date.now(), false)),
+    [runSessionLoad, adoptSession],
+  );
 
   const refreshAll = useCallback(async () => {
     if (!characterId) return;
@@ -684,6 +687,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     switchToPlayer,
     loadCharacter,
     importCharacter,
+    adoptReloadedSave,
     loadSubsystem,
     updateSubsystem,
     updateSubsystemData,
