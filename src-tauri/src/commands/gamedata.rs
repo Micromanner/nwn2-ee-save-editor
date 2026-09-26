@@ -303,17 +303,42 @@ pub(crate) async fn load_game_data_impl(state: &AppState) -> CommandResult<bool>
     };
 
     update_init_status(state, "initializing", 5.0, "Loading 2DA tables...");
-    let mut loader = DataModelLoader::with_options(Arc::clone(&state.resource_manager), false);
-
     let status_handle = Arc::clone(&state.init_status);
-    loader.set_progress_callback(Box::new(move |msg, progress| {
-        *status_handle.write() = InitStatus {
-            step: "initializing".to_string(),
-            progress,
-            message: msg.to_string(),
-        };
-    }));
+    rebuild_game_data(
+        state,
+        tlk_parser,
+        Some(Box::new(move |msg, progress| {
+            *status_handle.write() = InitStatus {
+                step: "initializing".to_string(),
+                progress,
+                message: msg.to_string(),
+            };
+        })),
+    )
+    .await?;
+    update_init_status(state, "finalizing", 95.0, "Finalizing...");
 
+    let table_count = state.game_data.read().table_count();
+    info!(
+        "Game data initialization completed: {} tables loaded",
+        table_count
+    );
+
+    update_init_status(state, "ready", 100.0, "Ready");
+    Ok(true)
+}
+
+/// Loads every table through the resource manager into `GameData`, with the
+/// TLKs the manager holds, and drops the caches built from the previous data.
+async fn rebuild_game_data(
+    state: &AppState,
+    tlk_parser: Arc<std::sync::RwLock<crate::parsers::tlk::TLKParser>>,
+    progress: Option<crate::loaders::types::ProgressCallback>,
+) -> CommandResult<()> {
+    let mut loader = DataModelLoader::with_options(Arc::clone(&state.resource_manager), false);
+    if let Some(progress) = progress {
+        loader.set_progress_callback(progress);
+    }
     let loaded_data = loader
         .load_game_data(Arc::clone(&tlk_parser))
         .await
@@ -324,24 +349,51 @@ pub(crate) async fn load_game_data_impl(state: &AppState) -> CommandResult<bool>
                 reason: e.to_string(),
             }
         })?;
+    let custom_tlk = state.resource_manager.read().await.get_custom_tlk_parser();
 
-    update_init_status(state, "finalizing", 95.0, "Finalizing...");
     {
         let mut game_data = state.game_data.write();
         game_data.tables = loaded_data.tables;
         game_data.strings = tlk_parser;
+        game_data.custom_strings = custom_tlk;
         game_data.rule_detector = loaded_data.rule_detector;
         game_data.priority_tables = loaded_data.priority_tables;
     }
+    state.session.write().item_property_decoder =
+        crate::services::item_property_decoder::ItemPropertyDecoder::new(Arc::clone(
+            &state.resource_manager,
+        ));
+    *state.model_list_cache.lock() = None;
+    Ok(())
+}
 
-    let table_count = state.game_data.read().table_count();
-    info!(
-        "Game data initialization completed: {} tables loaded",
-        table_count
-    );
+/// Points the resource manager at a save's module content (module, campaign
+/// folder, HAKs, custom TLK), `None` for vanilla, and rebuilds the game data
+/// when that changes which resources win.
+pub(crate) async fn apply_module_content(
+    state: &AppState,
+    content: Option<crate::services::resource_manager::ModuleContent>,
+) -> CommandResult<()> {
+    if state.resource_manager.read().await.module_content() == content.as_ref() {
+        return Ok(());
+    }
 
-    update_init_status(state, "ready", 100.0, "Ready");
-    Ok(true)
+    let paths = state.paths.read().clone();
+    let scan = tokio::task::spawn_blocking(move || {
+        crate::services::ResourceManager::scan_module_content(&paths, content)
+    })
+    .await
+    .map_err(|e| CommandError::Internal(format!("Module scan failed: {e}")))?;
+
+    let tlk_parser = {
+        let mut rm = state.resource_manager.write().await;
+        rm.set_module_content(scan);
+        rm.get_tlk_parser()
+    };
+    match tlk_parser {
+        Some(tlk_parser) => rebuild_game_data(state, tlk_parser, None).await,
+        None => Ok(()),
+    }
 }
 
 fn update_init_status(state: &AppState, step: &str, progress: f32, message: &str) {

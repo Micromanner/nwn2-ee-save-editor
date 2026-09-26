@@ -105,6 +105,14 @@ impl TLKParser {
         Ok(())
     }
 
+    /// String count from the header alone, without parsing the table.
+    pub fn string_count_of_file<P: AsRef<Path>>(path: P) -> TLKResult<usize> {
+        let mut header = [0u8; 20];
+        File::open(path)?.read_exact(&mut header)?;
+        let parsed = Self::new().parse_header(&mut Cursor::new(&header[..]))?;
+        Ok(parsed.string_count as usize)
+    }
+
     /// Parse TLK header (20 bytes)
     fn parse_header(&self, cursor: &mut Cursor<&[u8]>) -> TLKResult<TLKHeader> {
         // Read file type (4 bytes)
@@ -198,7 +206,7 @@ impl TLKParser {
         let cache_count = count.min(self.entries.len());
 
         for i in 0..cache_count {
-            if let Some(string) = self.get_string_internal(i)? {
+            if let Some(string) = self.read_string(i)? {
                 let symbol = self.interner.get_or_intern(&string);
                 self.string_cache.insert(
                     i,
@@ -227,7 +235,7 @@ impl TLKParser {
         }
 
         // Load from string data
-        let result = self.get_string_internal(str_ref)?;
+        let result = self.read_string(str_ref)?;
 
         // Cache the result if successful
         if let Some(ref string) = result {
@@ -244,10 +252,14 @@ impl TLKParser {
         Ok(result)
     }
 
-    /// Internal string retrieval without caching
-    fn get_string_internal(&self, str_ref: usize) -> TLKResult<Option<String>> {
+    /// String retrieval without caching, so readers only need `&self`.
+    pub fn read_string(&self, str_ref: usize) -> TLKResult<Option<String>> {
         if str_ref >= self.entries.len() {
             return Ok(None);
+        }
+
+        if let Some(cached) = self.string_cache.get(&str_ref) {
+            return Ok(Some(self.interner.resolve(&cached.symbol).to_string()));
         }
 
         let entry = &self.entries[str_ref];

@@ -287,15 +287,9 @@ pub fn installed_module_objects(
     paths: &crate::config::NWN2Paths,
     module: &str,
 ) -> Result<ModuleObjects, String> {
-    let install_modules = paths.game_folder().map(|g| g.join("Modules"));
-    let module_path = crate::services::resource_manager::module_loader::find_module_path(
-        module,
-        paths.custom_module_folders(),
-        paths.modules_dir().as_ref(),
-        install_modules.as_ref(),
-        paths.campaigns().as_ref(),
-    )
-    .ok_or_else(|| format!("Module {module} not installed"))?;
+    let module_path =
+        crate::services::resource_manager::module_loader::find_installed_module(paths, module)
+            .ok_or_else(|| format!("Module {module} not installed"))?;
     Ok(read_module_objects(&module_path))
 }
 

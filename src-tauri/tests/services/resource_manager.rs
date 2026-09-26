@@ -80,3 +80,108 @@ async fn test_resource_manager_initialization() {
     let files = resource_manager.get_available_2da_files();
     println!("Indexed 2da count: {}", files.len());
 }
+
+fn fixture_module(save: &str) -> app_lib::services::ModuleContent {
+    let save_dir = common::fixtures_path().join("saves").join(save);
+    let module_id = std::fs::read_to_string(save_dir.join("currentmodule.txt")).unwrap();
+    app_lib::services::campaign::content::save_module_content(&save_dir, module_id.trim()).unwrap()
+}
+
+fn apply(
+    rm: &mut app_lib::services::ResourceManager,
+    content: Option<app_lib::services::ModuleContent>,
+) {
+    let paths = app_lib::config::NWN2Paths::new();
+    rm.set_module_content(app_lib::services::ResourceManager::scan_module_content(
+        &paths, content,
+    ));
+}
+
+#[tokio::test]
+async fn westgate_save_loads_its_haks_and_custom_tlk() {
+    let context = common::create_test_context().await;
+    let module = fixture_module("Westgate_Campaign");
+    assert_eq!(module.name, "westgate_ar1500");
+    assert_eq!(module.hak_list, ["westgate", "westgate2"]);
+    assert_eq!(module.custom_tlk, "westgate");
+
+    let mut rm = context.resource_manager.write().await;
+    let vanilla_custom_ref = rm.get_string(16_777_216);
+    assert!(vanilla_custom_ref.starts_with("<StrRef:"));
+
+    apply(&mut rm, Some(module.clone()));
+    assert_eq!(rm.module_content(), Some(&module));
+    assert!(rm.resource_source_counts().get("hak").copied().unwrap_or(0) > 0);
+    assert!(
+        rm.resource_source_counts()
+            .get("module")
+            .copied()
+            .unwrap_or(0)
+            > 0
+    );
+    let custom = rm.get_string(16_777_216);
+    assert!(
+        !custom.starts_with("<StrRef:"),
+        "custom TLK strrefs resolve through westgate.tlk"
+    );
+    assert_ne!(
+        rm.get_string(0),
+        custom,
+        "base strrefs keep resolving through dialog.tlk"
+    );
+
+    let hak_2da = rm.get_available_2da_files().into_iter().find(|name| {
+        rm.get_2da(name).is_ok()
+            && !std::sync::Arc::ptr_eq(
+                &rm.get_2da(name).unwrap(),
+                &rm.get_2da_with_overrides(name).unwrap(),
+            )
+    });
+    assert!(
+        hak_2da.is_some(),
+        "some base 2DA must be overridden by the module content"
+    );
+
+    apply(&mut rm, None);
+    assert_eq!(rm.module_content(), None);
+    assert_eq!(rm.resource_source_counts().get("hak"), None);
+    assert_eq!(rm.resource_source_counts().get("module"), None);
+    assert!(rm.get_custom_tlk_parser().is_none());
+    assert_eq!(rm.get_string(16_777_216), vanilla_custom_ref);
+}
+
+#[tokio::test]
+async fn storm_of_zehir_campaign_folder_overrides_base_skills() {
+    let context = common::create_test_context().await;
+    let mut rm = context.resource_manager.write().await;
+    apply(&mut rm, Some(fixture_module("STORM_Campaign")));
+
+    let base = rm.get_2da("skills").unwrap();
+    let resolved = rm.get_2da_with_overrides("skills").unwrap();
+    assert!(
+        !std::sync::Arc::ptr_eq(&base, &resolved),
+        "SoZ ships skills.2da in its campaign folder"
+    );
+}
+
+#[tokio::test]
+async fn directory_module_in_documents_resolves() {
+    let context = common::create_test_context().await;
+    let module = fixture_module("Community_Campaign");
+    assert_eq!(module.name, "poe_intro");
+
+    let mut rm = context.resource_manager.write().await;
+    apply(&mut rm, Some(module));
+    let Some(module_path) = rm.module_path() else {
+        println!("poe_intro is not installed, skipping");
+        return;
+    };
+    assert!(module_path.is_dir());
+    assert!(
+        rm.resource_source_counts()
+            .get("module")
+            .copied()
+            .unwrap_or(0)
+            > 0
+    );
+}

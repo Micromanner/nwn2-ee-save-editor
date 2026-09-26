@@ -6,18 +6,6 @@ pub enum ResourceManagerError {
     #[error("2DA file not found: {name}")]
     TdaNotFound { name: String },
 
-    #[error("Module not found: {name}")]
-    ModuleNotFound { name: String },
-
-    #[error("HAK pack not found: {name}")]
-    HakNotFound { name: String },
-
-    #[error("Campaign not found: {guid}")]
-    CampaignNotFound { guid: String },
-
-    #[error("TLK file not found: {name}")]
-    TlkNotFound { name: String },
-
     #[error("File not found: {0}")]
     FileNotFound(PathBuf),
 
@@ -35,9 +23,6 @@ pub enum ResourceManagerError {
 
     #[error("ZIP error: {0}")]
     ZipError(String),
-
-    #[error("Cache validation failed: {0}")]
-    CacheInvalid(String),
 
     #[error("Resource extraction failed: {resource} from {container}")]
     ExtractionFailed { resource: String, container: String },
@@ -66,12 +51,6 @@ impl From<ResourceManagerError> for crate::error::AppError {
         match err {
             ResourceManagerError::TdaNotFound { name } => {
                 crate::error::AppError::NotFound(format!("2DA: {name}"))
-            }
-            ResourceManagerError::ModuleNotFound { name } => {
-                crate::error::AppError::NotFound(format!("Module: {name}"))
-            }
-            ResourceManagerError::HakNotFound { name } => {
-                crate::error::AppError::NotFound(format!("HAK: {name}"))
             }
             ResourceManagerError::FileNotFound(path) => {
                 crate::error::AppError::PathNotFound(path.display().to_string())

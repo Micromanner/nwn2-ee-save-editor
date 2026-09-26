@@ -44,6 +44,7 @@ pub async fn load_character(
     match load_result {
         Ok(()) => {
             info!("Character loaded successfully via command");
+            sync_module_content(&state).await;
             tokio::spawn(async move {
                 let state = app.state::<AppState>();
 
@@ -220,10 +221,44 @@ pub async fn save_character(
 #[instrument(name = "close_character_command", skip(state))]
 pub async fn close_character(state: State<'_, AppState>) -> CommandResult<bool> {
     info!("Close character command invoked");
-    let mut session = state.session.write();
-    session.close_character();
+    state.session.write().close_character();
+    sync_module_content(&state).await;
     info!("Character closed successfully");
     Ok(true)
+}
+
+/// Points the resource manager at the loaded save's module content; a
+/// standalone `.bic` or a closed session gets none.
+pub(crate) async fn sync_module_content(state: &AppState) {
+    let save = state
+        .session
+        .read()
+        .savegame_handler
+        .as_ref()
+        .map(|handler| {
+            (
+                handler.save_dir().to_path_buf(),
+                handler.extract_current_module(),
+            )
+        });
+    let content = match save {
+        Some((save_dir, Ok(module_id))) => tokio::task::spawn_blocking(move || {
+            crate::services::campaign::content::save_module_content(&save_dir, &module_id)
+        })
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|result| result)
+        .map_err(|e| warn!("No module content for this save: {e}"))
+        .ok(),
+        Some((_, Err(e))) => {
+            warn!("No current module for this save: {e}");
+            None
+        }
+        None => None,
+    };
+    if let Err(e) = super::gamedata::apply_module_content(state, content).await {
+        warn!("Failed to apply module content: {e}");
+    }
 }
 
 #[derive(serde::Serialize, specta::Type)]

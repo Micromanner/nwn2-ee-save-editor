@@ -15,8 +15,8 @@ pub mod tint_analysis;
 pub mod toolset_bridge;
 
 pub use resource_manager::{
-    CacheStats, CampaignInfo, ContainerType, ModuleInfo, OverrideSource, ResourceLocation,
-    ResourceManager, ResourceManagerError, ResourceManagerResult, TemplateInfo,
+    CacheStats, ContainerType, ModuleContent, OverrideSource, ResourceLocation, ResourceManager,
+    ResourceManagerError, ResourceManagerResult,
 };
 
 pub use rule_detector::{ColumnPurpose, RuleDetector, TableType};

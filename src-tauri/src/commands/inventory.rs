@@ -384,22 +384,17 @@ pub async fn get_available_templates(
     let zip_read_start = Instant::now();
 
     let mut grouped: HashMap<PathBuf, Vec<(String, String, String)>> = HashMap::new();
-    let mut directory_files: Vec<(String, PathBuf, String)> = Vec::new();
-    for (resref, info) in &templates {
-        let source = info.source.display_name().to_string();
-        match &info.container_type {
-            crate::services::resource_manager::ContainerType::Zip => {
-                if let Some(internal_path) = &info.internal_path {
-                    grouped
-                        .entry(info.container_path.clone())
-                        .or_default()
-                        .push((resref.clone(), internal_path.clone(), source));
-                }
+    let mut other_templates = Vec::new();
+    for (resref, location) in &templates {
+        let source = location.source.display_name().to_string();
+        match (&location.container_type, &location.internal_path) {
+            (crate::services::resource_manager::ContainerType::Zip, Some(internal_path)) => {
+                grouped
+                    .entry(location.container_path.clone())
+                    .or_default()
+                    .push((resref.clone(), internal_path.clone(), source));
             }
-            crate::services::resource_manager::ContainerType::Directory => {
-                directory_files.push((resref.clone(), info.container_path.clone(), source));
-            }
-            crate::services::resource_manager::ContainerType::Erf => {}
+            _ => other_templates.push((resref.clone(), location.clone(), source)),
         }
     }
 
@@ -501,22 +496,25 @@ pub async fn get_available_templates(
         raw_data.len()
     );
 
-    let dir_read_start = Instant::now();
-    let dir_count = directory_files.len();
-    let dir_raw: Vec<(String, Vec<u8>, String)> = directory_files
-        .par_iter()
-        .filter_map(|(resref, path, source)| {
-            let bytes = std::fs::read(path).ok()?;
-            Some((resref.clone(), bytes, source.clone()))
-        })
-        .collect();
+    let other_read_start = Instant::now();
+    let other_count = other_templates.len();
+    let other_raw: Vec<(String, Vec<u8>, String)> = {
+        let resource_manager = state.resource_manager.read().await;
+        other_templates
+            .par_iter()
+            .filter_map(|(resref, location, source)| {
+                let bytes = resource_manager.read_location(location).ok()?;
+                Some((resref.clone(), bytes, source.clone()))
+            })
+            .collect()
+    };
     tracing::info!(
-        "Directory template read: {:?}, requested: {}, loaded: {}",
-        dir_read_start.elapsed(),
-        dir_count,
-        dir_raw.len()
+        "Directory/ERF template read: {:?}, requested: {}, loaded: {}",
+        other_read_start.elapsed(),
+        other_count,
+        other_raw.len()
     );
-    raw_data.extend(dir_raw);
+    raw_data.extend(other_raw);
 
     let parse_start = Instant::now();
 

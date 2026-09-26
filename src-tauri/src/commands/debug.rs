@@ -61,7 +61,6 @@ pub struct ConfigDebug {
 #[derive(Debug, Serialize, Type)]
 pub struct CacheStatsDebug {
     pub size: usize,
-    pub max_size: usize,
     pub hits: u64,
     pub misses: u64,
     pub hit_ratio: f64,
@@ -70,11 +69,10 @@ pub struct CacheStatsDebug {
 #[derive(Debug, Serialize, Type)]
 pub struct ModuleInfoDebug {
     pub name: String,
-    pub mod_id: String,
     pub custom_tlk: String,
     pub hak_list: Vec<String>,
     pub campaign_id: Option<String>,
-    pub path: String,
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -85,7 +83,6 @@ pub struct ResourcesDebug {
     pub data_zip_count: usize,
     pub resource_sources: std::collections::HashMap<String, usize>,
     pub cache_stats: CacheStatsDebug,
-    pub module_cache_stats: CacheStatsDebug,
     pub module_info: Option<ModuleInfoDebug>,
 }
 
@@ -316,7 +313,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
     let rm = state.resource_manager.read().await;
 
     let cache_stats = rm.get_cache_stats();
-    let module_cache_stats = rm.get_module_cache_stats();
 
     let resources_debug = ResourcesDebug {
         initialized: rm.is_initialized(),
@@ -326,34 +322,24 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
         resource_sources: rm.resource_source_counts(),
         cache_stats: CacheStatsDebug {
             size: cache_stats.size,
-            max_size: cache_stats.max_size,
             hits: cache_stats.hits,
             misses: cache_stats.misses,
             hit_ratio: cache_stats.hit_ratio,
         },
-        module_cache_stats: CacheStatsDebug {
-            size: module_cache_stats.size,
-            max_size: module_cache_stats.max_size,
-            hits: module_cache_stats.hits,
-            misses: module_cache_stats.misses,
-            hit_ratio: module_cache_stats.hit_ratio,
-        },
-        module_info: rm.get_module_info().map(|m| ModuleInfoDebug {
+        module_info: rm.module_content().map(|m| ModuleInfoDebug {
             name: m.name.clone(),
-            mod_id: m.mod_id.clone(),
             custom_tlk: m.custom_tlk.clone(),
             hak_list: m.hak_list.clone(),
             campaign_id: m.campaign_id.clone(),
-            path: redact(&m.path.to_string_lossy()),
+            path: rm.module_path().map(|p| redact(&p.to_string_lossy())),
         }),
     };
 
     // Build game data summary using module info from resource manager
-    let hak_count = rm.get_module_info().map(|m| m.hak_list.len()).unwrap_or(0);
-    let has_custom_tlk = rm
-        .get_module_info()
-        .is_some_and(|m| !m.custom_tlk.is_empty());
-    let has_module = rm.get_module_info().is_some();
+    let module = rm.module_content();
+    let hak_count = module.map_or(0, |m| m.hak_list.len());
+    let has_custom_tlk = module.is_some_and(|m| !m.custom_tlk.is_empty());
+    let has_module = module.is_some();
 
     let summary = if !has_module {
         format!("{table_count} tables loaded (vanilla)")

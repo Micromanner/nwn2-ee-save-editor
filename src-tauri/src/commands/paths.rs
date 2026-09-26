@@ -116,7 +116,6 @@ pub(crate) async fn sync_resource_manager_paths(
         let mut session = state.session.write();
         session.close_character();
     }
-    *state.model_list_cache.lock() = None;
 
     if let Err(err) = crate::commands::gamedata::load_game_data_impl(state).await {
         error!(

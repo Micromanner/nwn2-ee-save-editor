@@ -16,7 +16,7 @@ use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 
 use crate::config::NWN2Paths;
 use crate::services::campaign::backup::backup_module_z;
-use crate::services::resource_manager::module_loader::find_module_path;
+use crate::services::resource_manager::module_loader::find_installed_module;
 use crate::services::savegame_handler::SaveGameHandler;
 
 /// True if the path's extension is `z` regardless of case.
@@ -268,28 +268,80 @@ fn area_resref_by_object_id(root: &IndexMap<String, GffValue<'_>>, area_id: u32)
     })
 }
 
+/// Decompressed `<module>.z` archive and its parsed `module.ifo`.
+fn read_module_ifo(path: &Path) -> Result<(ErfParser, Arc<GffParser>), String> {
+    let decompressed = decompress_z_file(path)?;
+
+    let mut erf_parser = ErfParser::new();
+    erf_parser
+        .parse_from_bytes(&decompressed)
+        .map_err(|e| format!("Failed to parse ERF from .z file: {e}"))?;
+
+    let module_ifo_bytes = erf_parser
+        .extract_resource("module.ifo")
+        .map_err(|e| format!("module.ifo not found in .z file: {e}"))?;
+
+    let gff = GffParser::from_bytes(module_ifo_bytes)
+        .map_err(|e| format!("Failed to parse module.ifo GFF: {e}"))?;
+    Ok((erf_parser, gff))
+}
+
+/// The HAKs, custom TLK and campaign a `module.ifo` root names.
+fn module_content(
+    root: &IndexMap<String, GffValue<'_>>,
+    module_id: &str,
+) -> crate::services::resource_manager::ModuleContent {
+    let campaign_id = match root.get("Campaign_ID") {
+        Some(GffValue::Void(bytes)) => hex::encode(bytes),
+        Some(GffValue::String(s) | GffValue::ResRef(s)) => s.to_string(),
+        _ => String::new(),
+    };
+    let custom_tlk = match root.get("Mod_CustomTlk") {
+        Some(GffValue::String(s) | GffValue::ResRef(s)) => s.to_string(),
+        _ => String::new(),
+    };
+
+    let mut hak_list = Vec::new();
+    if let Some(GffValue::List(haks)) = root.get("Mod_HakList") {
+        for hak_lazy in haks {
+            let fields = hak_lazy.force_load();
+            if let Some(GffValue::String(s) | GffValue::ResRef(s)) = fields.get("Mod_Hak")
+                && !s.is_empty()
+            {
+                hak_list.push(s.to_string());
+            }
+        }
+    }
+
+    crate::services::resource_manager::ModuleContent {
+        name: module_id.to_string(),
+        custom_tlk,
+        hak_list,
+        campaign_id: (!campaign_id.is_empty()).then_some(campaign_id),
+    }
+}
+
+/// The module the save plays in (`currentmodule.txt`), with the HAKs, custom
+/// TLK and campaign named by the `module.ifo` inside its `.z`.
+pub fn save_module_content(
+    save_dir: &Path,
+    module_id: &str,
+) -> Result<crate::services::resource_manager::ModuleContent, String> {
+    let z_path = find_module_z_file(save_dir, module_id)?;
+    let (_, gff) = read_module_ifo(&z_path)?;
+    let root = gff
+        .read_struct_fields(0)
+        .map_err(|e| format!("Failed to read root struct: {e}"))?;
+    Ok(module_content(&root, module_id))
+}
+
 fn parse_module_z_file(
     path: &Path,
     module_id: &str,
     nwn2_paths: &NWN2Paths,
     player_area_id: Option<u32>,
 ) -> Result<(ModuleInfo, ModuleVariables), String> {
-    let decompressed = decompress_z_file(path)?;
-
-    // Parse ERF
-    let mut erf_parser = ErfParser::new();
-    erf_parser
-        .parse_from_bytes(&decompressed)
-        .map_err(|e| format!("Failed to parse ERF from .z file: {e}"))?;
-
-    // Extract module.ifo
-    let module_ifo_bytes = erf_parser
-        .extract_resource("module.ifo")
-        .map_err(|e| format!("module.ifo not found in .z file: {e}"))?;
-
-    // Parse GFF
-    let gff = GffParser::from_bytes(module_ifo_bytes)
-        .map_err(|e| format!("Failed to parse module.ifo GFF: {e}"))?;
+    let (mut erf_parser, gff) = read_module_ifo(path)?;
     let root = gff
         .read_struct_fields(0)
         .map_err(|e| format!("Failed to read root struct: {e}"))?;
@@ -326,11 +378,8 @@ fn parse_module_z_file(
         read_area_name_strref(&mut erf_parser, module_id, &current_area, nwn2_paths);
     let entry_area_strref =
         read_area_name_strref(&mut erf_parser, module_id, &entry_area, nwn2_paths);
-    let campaign_id = match root.get("Campaign_ID") {
-        Some(GffValue::Void(bytes)) => hex::encode(bytes),
-        Some(GffValue::String(s) | GffValue::ResRef(s)) => s.to_string(),
-        _ => String::new(),
-    };
+    let content = module_content(&root, module_id);
+    let campaign_id = content.campaign_id.clone().unwrap_or_default();
 
     let campaign = if campaign_id.is_empty() {
         String::new()
@@ -342,18 +391,6 @@ fn parse_module_z_file(
             )
         })
     };
-
-    let custom_tlk = get_string("Mod_CustomTlk");
-
-    let mut hak_list = Vec::new();
-    if let Some(GffValue::List(haks)) = root.get("Mod_HakList") {
-        for hak_lazy in haks {
-            let fields = hak_lazy.force_load();
-            if let Some(GffValue::String(s)) = fields.get("Mod_Hak") {
-                hak_list.push(s.to_string());
-            }
-        }
-    }
 
     let get_byte = |key: &str| -> u8 {
         match root.get(key) {
@@ -378,8 +415,8 @@ fn parse_module_z_file(
         module_description,
         campaign_id,
         current_module: module_id.to_string(),
-        hak_list,
-        custom_tlk,
+        hak_list: content.hak_list,
+        custom_tlk: content.custom_tlk,
         game_year: get_u32("Mod_StartYear"),
         game_month: get_byte("Mod_StartMonth"),
         game_day: get_byte("Mod_StartDay"),
@@ -711,14 +748,7 @@ fn read_area_name_strref(
         return area_name_strref_from_gff(bytes);
     }
 
-    let install_modules = nwn2_paths.game_folder().map(|g| g.join("Modules"));
-    let Some(module_path) = find_module_path(
-        module_id,
-        nwn2_paths.custom_module_folders(),
-        nwn2_paths.modules_dir().as_ref(),
-        install_modules.as_ref(),
-        nwn2_paths.campaigns().as_ref(),
-    ) else {
+    let Some(module_path) = find_installed_module(nwn2_paths, module_id) else {
         return -1;
     };
 

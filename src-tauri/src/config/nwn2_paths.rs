@@ -430,8 +430,17 @@ impl NWN2Paths {
         self.documents_folder.as_ref().map(|d| d.join("hak"))
     }
 
+    /// Install `hak` folder; shipped content (Westgate) keeps its HAKs here.
+    pub fn install_hak_dir(&self) -> Option<PathBuf> {
+        self.game_folder.as_ref().map(|g| g.join("hak"))
+    }
+
     pub fn modules_dir(&self) -> Option<PathBuf> {
         self.documents_folder.as_ref().map(|d| d.join("modules"))
+    }
+
+    pub fn install_modules_dir(&self) -> Option<PathBuf> {
+        self.game_folder.as_ref().map(|g| g.join("Modules"))
     }
 
     pub fn campaigns(&self) -> Option<PathBuf> {
@@ -564,6 +573,10 @@ impl NWN2Paths {
 
     pub fn tlk_dir(&self) -> Option<PathBuf> {
         self.documents_folder.as_ref().map(|d| d.join("tlk"))
+    }
+
+    pub fn install_tlk_dir(&self) -> Option<PathBuf> {
+        self.game_folder.as_ref().map(|g| g.join("tlk"))
     }
 
     fn reject_builtin_path(&self, path: &Path, kind: &str) -> Result<(), String> {

@@ -77,6 +77,8 @@ impl LoadedTable {
 pub struct GameData {
     pub tables: HashMap<String, LoadedTable>,
     pub strings: Arc<std::sync::RwLock<TLKParser>>,
+    /// The loaded save's module TLK (`Mod_CustomTlk`), if it has one.
+    pub custom_strings: Option<Arc<std::sync::RwLock<TLKParser>>>,
     pub rule_detector: Option<RuleDetector>,
     pub priority_tables: Vec<String>,
 }
@@ -86,6 +88,7 @@ impl GameData {
         Self {
             tables: HashMap::new(),
             strings,
+            custom_strings: None,
             rule_detector: None,
             priority_tables: Vec::new(),
         }
@@ -105,6 +108,7 @@ impl GameData {
 
     pub fn clear(&mut self) {
         self.tables.clear();
+        self.custom_strings = None;
         self.rule_detector = None;
         self.priority_tables.clear();
     }
@@ -114,27 +118,18 @@ impl GameData {
     }
 
     pub fn get_string(&self, str_ref: i32) -> Option<String> {
-        if str_ref < 0 {
-            return None;
-        }
-        let mut tlk = self.strings.write().ok()?;
-        tlk.get_string(str_ref as usize).ok().flatten()
+        crate::parsers::tlk::resolve_strref(
+            Some(&self.strings),
+            self.custom_strings.as_deref(),
+            str_ref,
+        )
     }
 
     pub fn get_strings_batch(&self, str_refs: &[i32]) -> std::collections::HashMap<i32, String> {
-        let mut out = std::collections::HashMap::with_capacity(str_refs.len());
-        let Ok(mut tlk) = self.strings.write() else {
-            return out;
-        };
-        for &str_ref in str_refs {
-            if str_ref < 0 {
-                continue;
-            }
-            if let Ok(Some(value)) = tlk.get_string(str_ref as usize) {
-                out.insert(str_ref, value);
-            }
-        }
-        out
+        str_refs
+            .iter()
+            .filter_map(|&str_ref| Some((str_ref, self.get_string(str_ref)?)))
+            .collect()
     }
 }
 

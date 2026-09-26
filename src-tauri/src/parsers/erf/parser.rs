@@ -354,42 +354,31 @@ impl ErfParser {
     }
 
     pub fn extract_resource(&mut self, name: &str) -> ErfResult<Vec<u8>> {
-        let name_lower = name.to_lowercase();
-
-        // Check if we have the resource
-        if !self.resources.contains_key(&name_lower) {
-            return Err(ErfError::ResourceNotFound {
-                name: name.to_string(),
-            });
-        }
-
-        // Get the entry info (cloned to avoid borrow issues)
-        let entry = self.resources.get(&name_lower).unwrap().entry.clone();
-
-        // Check if data is already cached
-        if let Some(cached_data) = self
-            .resources
-            .get(&name_lower)
-            .and_then(|r| r.data.as_ref())
-        {
-            return Ok(cached_data.clone());
-        }
-
-        // Extract data
-        let data = if let Some(mmap) = &self.mmap {
-            self.extract_from_mmap(mmap, &entry)?
-        } else if let Some(file_data) = &self.file_data {
-            self.extract_from_bytes(file_data, &entry)?
-        } else {
-            return Err(ErfError::corrupted_data("No data source available"));
-        };
-
-        // Cache the data
-        if let Some(resource) = self.resources.get_mut(&name_lower) {
+        let data = self.read_resource(name)?;
+        if let Some(resource) = self.resources.get_mut(&name.to_lowercase()) {
             resource.data = Some(data.clone());
         }
-
         Ok(data)
+    }
+
+    /// Reads a resource without caching it, so a shared parser can serve reads.
+    pub fn read_resource(&self, name: &str) -> ErfResult<Vec<u8>> {
+        let resource =
+            self.resources
+                .get(&name.to_lowercase())
+                .ok_or_else(|| ErfError::ResourceNotFound {
+                    name: name.to_string(),
+                })?;
+
+        if let Some(data) = &resource.data {
+            Ok(data.clone())
+        } else if let Some(mmap) = &self.mmap {
+            self.extract_from_mmap(mmap, &resource.entry)
+        } else if let Some(file_data) = &self.file_data {
+            self.extract_from_bytes(file_data, &resource.entry)
+        } else {
+            Err(ErfError::corrupted_data("No data source available"))
+        }
     }
 
     fn extract_from_mmap(&self, mmap: &Mmap, entry: &ResourceEntry) -> ErfResult<Vec<u8>> {

@@ -11,7 +11,15 @@ pub async fn restore_backup(
     state: State<'_, AppState>,
     backup_path: String,
 ) -> CommandResult<bool> {
-    let backup = PathBuf::from(&backup_path);
+    let reloaded = restore_and_reload(&state, &backup_path)?;
+    if reloaded {
+        super::session::sync_module_content(&state).await;
+    }
+    Ok(reloaded)
+}
+
+fn restore_and_reload(state: &AppState, backup_path: &str) -> CommandResult<bool> {
+    let backup = PathBuf::from(backup_path);
 
     // A backup's target save is determined by its filesystem location
     // (`saves/backups/<save_name>/backup_XXX`), not by whatever save happens to
