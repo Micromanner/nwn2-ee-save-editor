@@ -229,24 +229,25 @@ async fn test_epic_save_progression() {
     let ctx = create_test_context().await;
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
 
-    println!("\n=== Epic Save Progression ===");
-
-    // Epic saves grant +1 to all saves every 2 levels after level 20 (separate from class tables).
-    // L30 = 10 epic levels = +5 epic bonus.
-
-    let character = load_character("occidiooctavon/occidiooctavon4.bic");
-    let total_level = character.total_level();
-    assert_eq!(total_level, 30);
+    // Epic saves come straight from the 60-row class tables, with no separate epic bonus
+    // (verified in-game 2026-09-26: Cleric 21 sheet = cls_savthr_cler row 21 + bonuses).
+    let character = load_character("theconstruct/theconstruct4.bic");
+    assert_eq!(character.total_level(), 30);
+    let table = game_data
+        .get_table("cls_savthr_fight")
+        .expect("fighter save table");
+    let row = |column| {
+        table
+            .get_cell(29, column)
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse::<i32>().ok())
+            .expect("level 30 row")
+    };
 
     let base_saves = character.calculate_base_saves(game_data);
 
-    println!(
-        "L30 Base Saves: F{} R{} W{}",
-        base_saves.fortitude, base_saves.reflex, base_saves.will
-    );
-
-    // L30 with 5 epic bonus + ~6 min class progression = at least 10 total.
-    assert!(base_saves.fortitude >= 10);
-    assert!(base_saves.reflex >= 10);
-    assert!(base_saves.will >= 10);
+    assert_eq!(base_saves.fortitude, row("FortSave"));
+    assert_eq!(base_saves.reflex, row("RefSave"));
+    assert_eq!(base_saves.will, row("WillSave"));
 }

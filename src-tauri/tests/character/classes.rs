@@ -1,5 +1,6 @@
 use super::super::common::{create_test_context, load_test_gff};
-use app_lib::character::{Character, ClassId};
+use app_lib::character::gff_helpers::gff_value_to_i32;
+use app_lib::character::{AbilityIndex, Character, ClassId, FeatId};
 use app_lib::parsers::gff::GffParser;
 
 fn load_character(fixture_path: &str) -> Character {
@@ -520,4 +521,132 @@ async fn test_class_count_consistency() {
             "class_count() should equal class_entries().len()"
         );
     }
+}
+
+#[tokio::test]
+async fn test_level_up_grants_only_automatic_class_feats() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    let cleric = ClassId(2);
+    let epic_spell_feats = [FeatId(874), FeatId(875), FeatId(878)];
+    assert!(epic_spell_feats.iter().all(|f| !character.has_feat(*f)));
+
+    for _ in 0..21 {
+        character.level_up(cleric, game_data).expect("level up");
+    }
+
+    assert_eq!(character.class_level(cleric), 21);
+    for feat in epic_spell_feats {
+        assert!(
+            !character.has_feat(feat),
+            "cls_feat_cler lists feat {} as List 0 (selectable), not granted",
+            feat.0
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_level_up_then_level_down_restores_character() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let original = load_character("occidiooctavon/occidiooctavon1.bic");
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    let fighter = ClassId(4);
+
+    for _ in 0..3 {
+        character.level_up(fighter, game_data).expect("level up");
+    }
+    for _ in 0..3 {
+        character
+            .level_down(fighter, game_data)
+            .expect("level down");
+    }
+
+    let feats = |c: &Character| {
+        let mut ids: Vec<i32> = c.feat_entries().iter().map(|f| f.feat_id.0).collect();
+        ids.sort_unstable();
+        ids
+    };
+    assert_eq!(feats(&character), feats(&original));
+    assert_eq!(character.base_hp(), original.base_hp());
+    assert_eq!(character.max_hp(), original.max_hp());
+    assert_eq!(character.base_attack_bonus(), original.base_attack_bonus());
+    for field in ["fortbonus", "refbonus", "willbonus"] {
+        assert_eq!(character.get_i32(field), original.get_i32(field), "{field}");
+    }
+    assert!(!character.has_field("BAB"));
+}
+
+#[tokio::test]
+async fn test_remove_class_keeps_feats_picked_at_other_class_levels() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    let (rogue, barbarian, deflect_arrows) = (ClassId(8), ClassId(0), FeatId(8));
+    assert!(!character.has_feat(deflect_arrows));
+
+    for _ in 0..5 {
+        character.level_up(rogue, game_data).expect("level up");
+    }
+    character
+        .add_feat(deflect_arrows)
+        .expect("pick feat at a Rogue level");
+    character.level_up(barbarian, game_data).expect("level up");
+
+    character
+        .remove_class(barbarian, game_data)
+        .expect("remove class");
+
+    assert!(
+        character.has_feat(deflect_arrows),
+        "a feat picked at a Rogue level must survive removing Barbarian"
+    );
+}
+
+#[tokio::test]
+async fn test_remove_middle_class_realigns_ability_increases() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    let (fighter, wizard) = (ClassId(4), ClassId(10));
+    let str_before = character.base_ability(AbilityIndex::STR);
+    let int_before = character.base_ability(AbilityIndex::INT);
+
+    character.level_up(fighter, game_data).expect("level up");
+    for _ in 0..6 {
+        character.level_up(wizard, game_data).expect("level up");
+        match character.total_level() {
+            4 => character
+                .set_ability_with_cascades(AbilityIndex::STR, str_before + 1, game_data)
+                .expect("STR increase"),
+            8 => character
+                .set_ability_with_cascades(AbilityIndex::INT, int_before + 1, game_data)
+                .expect("INT increase"),
+            _ => {}
+        }
+    }
+
+    character
+        .remove_class(fighter, game_data)
+        .expect("remove class");
+
+    assert_eq!(character.total_level(), 7);
+    let increases: Vec<(usize, i32)> = character
+        .get_list("LvlStatList")
+        .expect("level history")
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, entry)| {
+            entry
+                .get("LvlStatAbility")
+                .and_then(gff_value_to_i32)
+                .filter(|a| (0..=5).contains(a))
+                .map(|a| (idx, a))
+        })
+        .collect();
+    assert_eq!(increases, vec![(3, 0)], "one increase left, on level 4");
+    assert_eq!(character.base_ability(AbilityIndex::STR), str_before + 1);
+    assert_eq!(character.base_ability(AbilityIndex::INT), int_before);
+    assert!(character.get_available_skill_points() >= 0);
 }

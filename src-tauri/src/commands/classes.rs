@@ -121,62 +121,6 @@ pub async fn set_experience(state: State<'_, AppState>, xp: i32) -> CommandResul
 }
 
 #[tauri::command]
-pub async fn add_class_entry(
-    state: State<'_, AppState>,
-    class_id: i32,
-    level: i32,
-) -> CommandResult<()> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    let class_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_class_name(ClassId(class_id), &game_data)
-    };
-    session.record_history(format!("Add level: {class_label}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    character
-        .add_class_entry(ClassId(class_id), level)
-        .map_err(|e| CommandError::ValidationError {
-            field: "class_entry".to_string(),
-            reason: e.to_string(),
-        })
-}
-
-#[tauri::command]
-pub async fn set_class_level(
-    state: State<'_, AppState>,
-    class_id: i32,
-    new_level: i32,
-) -> CommandResult<()> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    let class_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_class_name(ClassId(class_id), &game_data)
-    };
-    session.record_history(format!("Set {class_label} to level {new_level}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    character
-        .set_class_level(ClassId(class_id), new_level)
-        .map_err(|e| CommandError::ValidationError {
-            field: "class_level".to_string(),
-            reason: e.to_string(),
-        })
-}
-
-#[tauri::command]
 pub async fn remove_class_entry(state: State<'_, AppState>, class_id: i32) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
@@ -236,11 +180,6 @@ pub async fn get_available_prestige_classes(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(character.get_prestige_class_options(&game_data))
-}
-
-#[tauri::command]
-pub async fn decode_alignment_restriction(bits: i32) -> CommandResult<Option<String>> {
-    Ok(AlignmentRestriction(bits).decode_to_string())
 }
 
 #[tauri::command]
@@ -456,7 +395,6 @@ pub async fn get_class_detail(
     let has_divine = row_bool(&class_data, "hasdivine", false);
     let is_prestige =
         row_bool(&class_data, "isprestige", false) || row_int(&class_data, "maxlevel", 0) > 0;
-    let align_restrict = row_int(&class_data, "alignrestrict", 0);
 
     let requirements = Character::get_prestige_requirements(&class_data, &game_data);
 
@@ -552,11 +490,8 @@ pub async fn get_class_detail(
         spell_type,
         max_level: max_level_val,
         is_prestige,
-        alignment_restriction: if align_restrict > 0 {
-            AlignmentRestriction(align_restrict).decode_to_string()
-        } else {
-            None
-        },
+        alignment_restriction: AlignmentRestriction::from_class_row(&class_data)
+            .and_then(|r| r.decode_to_string()),
         prerequisites: requirements,
         prerequisite_status,
         class_skills,

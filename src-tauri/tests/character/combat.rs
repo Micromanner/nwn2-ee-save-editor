@@ -25,6 +25,7 @@ async fn test_bab_across_fixtures() {
         ("ryathstrongarm/ryathstrongarm4.bic", "Ryath L30"),
         ("okkugodofbears/okkugodofbears1.bic", "Okku L1"),
         ("okkugodofbears/okkugodofbears4.bic", "Okku L30"),
+        ("theconstruct/theconstruct4.bic", "Fighter L30"),
     ];
 
     for (path, name) in fixtures {
@@ -34,14 +35,11 @@ async fn test_bab_across_fixtures() {
 
         println!("{name:<15}: Level {level:>2}, BAB {bab:>2}");
 
-        assert!(bab >= 0, "{name} should have non-negative BAB");
-
-        if name.contains("L30") {
-            assert!(
-                bab >= 10,
-                "{name} should have BAB >= 10 at high level, got {bab}"
-            );
-        }
+        assert_eq!(
+            bab,
+            character.base_attack_bonus(),
+            "{name}: calculated BAB must match the game-written BaseAttackBonus"
+        );
     }
 }
 

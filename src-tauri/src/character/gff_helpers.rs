@@ -333,6 +333,7 @@ pub fn gff_value_to_i32(value: &GffValue<'_>) -> Option<i32> {
         GffValue::Int(v) => Some(*v),
         GffValue::Short(v) => Some(i32::from(*v)),
         GffValue::Byte(v) => Some(i32::from(*v)),
+        GffValue::Char(v) => Some(i32::from(*v as i8)),
         GffValue::Dword(v) => Some(*v as i32),
         GffValue::Word(v) => Some(i32::from(*v)),
         GffValue::Int64(v) => Some(*v as i32),

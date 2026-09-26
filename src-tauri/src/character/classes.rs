@@ -7,9 +7,8 @@
 //!
 //! All methods are sync (no async). ClassList structure in GFF:
 //! - ClassList: List of structs
-//!   - Class: Byte (class ID)
+//!   - Class: Int (class ID)
 //!   - ClassLevel: Short (level in that class)
-//!   - SpellCasterLevel: Optional (for spellcasters)
 
 use ahash::AHashMap;
 use indexmap::IndexMap;
@@ -83,6 +82,34 @@ pub enum BabType {
     Full,
     ThreeQuarter,
     Half,
+}
+
+impl BabType {
+    /// Vanilla `AttackBonusTable`s: `CLS_ATK_1` full, `CLS_ATK_2` three quarter, `CLS_ATK_3` half.
+    fn from_table(bab_table_name: &str) -> Self {
+        match bab_table_name.trim().to_lowercase().as_str() {
+            "cls_atk_1" => Self::Full,
+            "cls_atk_3" => Self::Half,
+            _ => Self::ThreeQuarter,
+        }
+    }
+
+    fn progression_name(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::ThreeQuarter => "three_quarter",
+            Self::Half => "half",
+        }
+    }
+
+    /// BAB at `level` when the class's attack bonus table is missing.
+    fn fallback_bab(self, level: i32) -> i32 {
+        match self {
+            Self::Full => level,
+            Self::ThreeQuarter => (level * 3) / 4,
+            Self::Half => level / 2,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -197,68 +224,105 @@ pub struct ClassesState {
     pub level_history: Vec<ResolvedLevelHistoryEntry>,
 }
 
+/// `classes.2da` alignment gate. `AlignRestrict` bits name alignments on the axes selected by
+/// `AlignRstrctType` (0x1 law/chaos, 0x2 good/evil). The named alignments are prohibited, or
+/// required when `InvertRestrict` is 1; a match on any selected axis counts.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Type)]
-pub struct AlignmentRestriction(pub i32);
+pub struct AlignmentRestriction {
+    pub bits: i32,
+    pub axes: i32,
+    pub invert: bool,
+}
 
 impl AlignmentRestriction {
-    pub const LAWFUL: i32 = 0x01;
-    pub const CHAOTIC: i32 = 0x02;
-    pub const GOOD: i32 = 0x04;
-    pub const EVIL: i32 = 0x08;
-    pub const NEUTRAL_LC: i32 = 0x10;
-    pub const NEUTRAL_GE: i32 = 0x20;
+    pub const NEUTRAL: i32 = 0x01;
+    pub const LAWFUL: i32 = 0x02;
+    pub const CHAOTIC: i32 = 0x04;
+    pub const GOOD: i32 = 0x08;
+    pub const EVIL: i32 = 0x10;
+    pub const AXIS_LAW_CHAOS: i32 = 0x1;
+    pub const AXIS_GOOD_EVIL: i32 = 0x2;
 
-    pub fn contains(&self, flag: i32) -> bool {
-        (self.0 & flag) != 0
+    const LAW_CHAOS: [(i32, &'static str); 3] = [
+        (Self::LAWFUL, "Lawful"),
+        (Self::NEUTRAL, "Neutral"),
+        (Self::CHAOTIC, "Chaotic"),
+    ];
+    const GOOD_EVIL: [(i32, &'static str); 3] = [
+        (Self::GOOD, "Good"),
+        (Self::NEUTRAL, "Neutral"),
+        (Self::EVIL, "Evil"),
+    ];
+
+    /// `None` when the class has no alignment restriction.
+    pub fn from_class_row(class_data: &AHashMap<String, Option<String>>) -> Option<Self> {
+        let restriction = Self {
+            bits: row_int(class_data, "alignrestrict", 0),
+            axes: row_int(class_data, "alignrstrcttype", 0),
+            invert: row_int(class_data, "invertrestrict", 0) == 1,
+        };
+        restriction.is_restricted().then_some(restriction)
+    }
+
+    fn is_restricted(&self) -> bool {
+        self.bits != 0 && self.axes & (Self::AXIS_LAW_CHAOS | Self::AXIS_GOOD_EVIL) != 0
+    }
+
+    fn axis_names(&self, axis: i32, values: [(i32, &'static str); 3]) -> Vec<&'static str> {
+        if self.axes & axis == 0 {
+            return Vec::new();
+        }
+        values
+            .into_iter()
+            .filter(|(bit, _)| (self.bits & bit != 0) == self.invert)
+            .map(|(_, name)| name)
+            .collect()
     }
 
     pub fn decode_to_string(&self) -> Option<String> {
-        if self.0 == 0 {
-            return Some("Any".to_string());
+        if !self.is_restricted() {
+            return None;
         }
-        let mut allowed = Vec::new();
-        if self.contains(Self::LAWFUL) {
-            allowed.push("Lawful");
+        let law_chaos = self.axis_names(Self::AXIS_LAW_CHAOS, Self::LAW_CHAOS);
+        let good_evil = self.axis_names(Self::AXIS_GOOD_EVIL, Self::GOOD_EVIL);
+        if self.invert {
+            let mut required: Vec<&str> = law_chaos;
+            for name in good_evil {
+                if !required.contains(&name) {
+                    required.push(name);
+                }
+            }
+            return Some(required.join(" or "));
         }
-        if self.contains(Self::CHAOTIC) {
-            allowed.push("Chaotic");
-        }
-        if self.contains(Self::GOOD) {
-            allowed.push("Good");
-        }
-        if self.contains(Self::EVIL) {
-            allowed.push("Evil");
-        }
-        if self.contains(Self::NEUTRAL_LC) {
-            allowed.push("Neutral (Law/Chaos)");
-        }
-        if self.contains(Self::NEUTRAL_GE) {
-            allowed.push("Neutral (Good/Evil)");
-        }
-        if allowed.is_empty() {
-            Some("Any".to_string())
-        } else {
-            Some(allowed.join(" or "))
-        }
+        let parts: Vec<String> = [law_chaos, good_evil]
+            .into_iter()
+            .filter(|names| !names.is_empty())
+            .map(|names| names.join(" or "))
+            .collect();
+        Some(parts.join(" "))
     }
 
     pub fn check_alignment(&self, alignment: &Alignment) -> bool {
-        if self.0 == 0 {
+        if !self.is_restricted() {
             return true;
         }
-        let lc_ok = (self.contains(Self::LAWFUL) && alignment.is_lawful())
-            || (self.contains(Self::CHAOTIC) && alignment.is_chaotic())
-            || (self.contains(Self::NEUTRAL_LC) && alignment.is_neutral_law_chaos());
-        let ge_ok = (self.contains(Self::GOOD) && alignment.is_good())
-            || (self.contains(Self::EVIL) && alignment.is_evil())
-            || (self.contains(Self::NEUTRAL_GE) && alignment.is_neutral_good_evil());
-        let has_lc_restriction = self.contains(Self::LAWFUL)
-            || self.contains(Self::CHAOTIC)
-            || self.contains(Self::NEUTRAL_LC);
-        let has_ge_restriction = self.contains(Self::GOOD)
-            || self.contains(Self::EVIL)
-            || self.contains(Self::NEUTRAL_GE);
-        (!has_lc_restriction || lc_ok) && (!has_ge_restriction || ge_ok)
+        let law_chaos = if alignment.is_lawful() {
+            Self::LAWFUL
+        } else if alignment.is_chaotic() {
+            Self::CHAOTIC
+        } else {
+            Self::NEUTRAL
+        };
+        let good_evil = if alignment.is_good() {
+            Self::GOOD
+        } else if alignment.is_evil() {
+            Self::EVIL
+        } else {
+            Self::NEUTRAL
+        };
+        let matched = (self.axes & Self::AXIS_LAW_CHAOS != 0 && self.bits & law_chaos != 0)
+            || (self.axes & Self::AXIS_GOOD_EVIL != 0 && self.bits & good_evil != 0);
+        matched == self.invert
     }
 }
 
@@ -478,44 +542,6 @@ impl Character {
         Ok(())
     }
 
-    /// Add a class entry and grant automatic class feats for each level.
-    ///
-    /// This method adds the class to ClassList and then grants all automatic
-    /// feats from the class's feat table (`cls_feat_*`) where `list_type == 0`
-    /// and `granted_on_level` matches levels 1 through `level`.
-    pub fn add_class_entry_with_feats(
-        &mut self,
-        class_id: ClassId,
-        level: i32,
-        game_data: &GameData,
-    ) -> Result<Vec<FeatId>, CharacterError> {
-        use super::feats::FeatSource;
-
-        // First add the class entry normally
-        self.add_class_entry(class_id, level)?;
-
-        let mut granted_feats = Vec::new();
-
-        // Get automatic feats for each level 1..=level
-        for lvl in 1..=level {
-            let feats_at_level = self.get_class_feats_for_level(class_id, lvl, game_data);
-            for feat_info in feats_at_level {
-                // list_type == 0 means automatically granted (e.g. Epic feats)
-                // list_type == 3 means Class feat (e.g. Fighter Proficiencies), also automatic
-                if (feat_info.list_type == 0 || feat_info.list_type == 3)
-                    && !self.has_feat(feat_info.feat_id)
-                    && self
-                        .add_feat_with_source(feat_info.feat_id, FeatSource::Class)
-                        .is_ok()
-                {
-                    granted_feats.push(feat_info.feat_id);
-                }
-            }
-        }
-
-        Ok(granted_feats)
-    }
-
     pub fn get_class_feats_for_level(
         &self,
         class_id: ClassId,
@@ -541,6 +567,7 @@ impl Character {
         let Some(feat_table) = game_data.get_table(&table_name.to_lowercase()) else {
             return feats_for_level;
         };
+        let feats = game_data.get_table("feat");
 
         for row_idx in 0..feat_table.row_count() {
             let Ok(row) = feat_table.get_row(row_idx) else {
@@ -555,7 +582,10 @@ impl Character {
 
             let feat_id = row_int(&row, "featindex", -1);
 
-            if feat_id < 0 {
+            let removed = feats
+                .and_then(|t| t.get_by_id(feat_id))
+                .is_some_and(|row| row_bool(&row, "removed", false));
+            if feat_id < 0 || removed {
                 continue;
             }
 
@@ -571,92 +601,18 @@ impl Character {
         feats_for_level
     }
 
-    pub fn get_all_class_feat_ids(&self, class_id: ClassId, game_data: &GameData) -> HashSet<i32> {
-        let mut feat_ids = HashSet::new();
-
-        let Some(classes_table) = game_data.get_table("classes") else {
-            return feat_ids;
-        };
-
-        let Some(class_row) = classes_table.get_by_id(class_id.0) else {
-            return feat_ids;
-        };
-
-        let feats_table_name = row_str(&class_row, "featstable");
-
-        let Some(table_name) = feats_table_name else {
-            return feat_ids;
-        };
-
-        let Some(feat_table) = game_data.get_table(&table_name.to_lowercase()) else {
-            return feat_ids;
-        };
-
-        for row_idx in 0..feat_table.row_count() {
-            let Ok(row) = feat_table.get_row(row_idx) else {
-                continue;
-            };
-
-            let list_type = row_int(&row, "list", -1);
-
-            if list_type != 0 && list_type != 3 {
-                continue;
-            }
-
-            let feat_id = row_int(&row, "featindex", -1);
-
-            if feat_id >= 0 {
-                feat_ids.insert(feat_id);
-            }
-        }
-
-        feat_ids
-    }
-
-    pub fn reconcile_class_feats(&mut self, removed_class_ids: &[ClassId], game_data: &GameData) {
-        let preserved_feats = self.get_preserved_feat_ids(game_data);
-
-        let mut feats_from_removed: HashSet<i32> = HashSet::new();
-        for class_id in removed_class_ids {
-            feats_from_removed.extend(self.get_all_class_feat_ids(*class_id, game_data));
-        }
-
-        let mut feats_from_remaining: HashSet<i32> = HashSet::new();
-        let class_entries = self.class_entries();
-        for entry in &class_entries {
-            feats_from_remaining.extend(self.get_all_class_feat_ids(entry.class_id, game_data));
-        }
-
-        let feats_to_remove: HashSet<i32> = feats_from_removed
-            .iter()
-            .filter(|f| !feats_from_remaining.contains(f) && !preserved_feats.contains(f))
-            .copied()
-            .collect();
-
-        if feats_to_remove.is_empty() {
-            return;
-        }
-
-        let mut char_feat_list = self.get_list_owned("FeatList").unwrap_or_default();
-        char_feat_list.retain(|f| {
-            let feat_id = f.get("Feat").and_then(gff_value_to_i32).unwrap_or(-1);
-            !feats_to_remove.contains(&feat_id)
-        });
-        self.set_list("FeatList", char_feat_list);
-
-        let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
-        for stat_entry in &mut lvl_stat_list {
-            if let Some(mut feat_list) =
-                super::gff_helpers::extract_list_from_map(stat_entry, "FeatList")
-            {
-                feat_list.retain(|f| {
-                    let feat_id = f.get("Feat").and_then(gff_value_to_i32).unwrap_or(-1);
-                    !feats_to_remove.contains(&feat_id)
-                });
-                stat_entry.insert("FeatList".to_string(), GffValue::ListOwned(feat_list));
-            }
-        }
-        self.set_list("LvlStatList", lvl_stat_list);
+    /// Automatic (`List 3`) feats a class grants on the class levels in `levels`.
+    fn automatic_class_feat_ids(
+        &self,
+        class_id: ClassId,
+        levels: std::ops::RangeInclusive<i32>,
+        game_data: &GameData,
+    ) -> HashSet<i32> {
+        levels
+            .flat_map(|level| self.get_class_feats_for_level(class_id, level, game_data))
+            .filter(|feat| feat.list_type == AUTOMATIC_FEAT_LIST)
+            .map(|feat| feat.feat_id.0)
+            .collect()
     }
 
     pub fn get_preserved_feat_ids(&self, game_data: &GameData) -> HashSet<i32> {
@@ -799,7 +755,9 @@ impl Character {
 
         // Find all level history entries for this class
         let mut indices_to_remove: Vec<usize> = Vec::new();
-        let mut total_hp_reduction = 0i32;
+        let mut removed_hit_dice = 0i32;
+        let old_total_level = self.total_level();
+        let old_con_mod = self.ability_modifier(AbilityIndex::CON);
         let mut total_sp_reduction = 0i32;
         let mut feats_to_remove: HashSet<i32> = HashSet::new();
         let mut feats_to_keep: HashSet<i32> = HashSet::new();
@@ -813,13 +771,10 @@ impl Character {
             if entry_class_id == Some(class_id.0) {
                 indices_to_remove.push(idx);
 
-                // HP to remove
-                let hp = entry
+                removed_hit_dice += entry
                     .get("LvlStatHitDie")
                     .and_then(gff_value_to_i32)
                     .unwrap_or(0);
-                let con_mod = self.ability_modifier(AbilityIndex::CON);
-                total_hp_reduction += (hp + con_mod).max(1);
 
                 total_sp_reduction += self.unspent_skill_points_of_level(
                     granted_per_level.get(idx).copied().unwrap_or(0),
@@ -858,36 +813,6 @@ impl Character {
                         }
                     }
                 }
-
-                // Remove spells from class's known lists
-                if let Some(class_entry) = class_list
-                    .iter_mut()
-                    .find(|c| c.get("Class").and_then(gff_value_to_i32) == Some(class_id.0))
-                {
-                    for spell_level in 0..10 {
-                        let list_key = format!("KnownList{spell_level}");
-                        if let Some(spells) =
-                            super::gff_helpers::extract_list_from_map(entry, &list_key)
-                        {
-                            for spell_entry in spells {
-                                if let Some(spell_id) =
-                                    spell_entry.get("Spell").and_then(gff_value_to_i32)
-                                    && let Some(mut known_list) =
-                                        super::gff_helpers::extract_list_from_map(
-                                            class_entry,
-                                            &list_key,
-                                        )
-                                {
-                                    known_list.retain(|s| {
-                                        s.get("Spell").and_then(gff_value_to_i32) != Some(spell_id)
-                                    });
-                                    class_entry
-                                        .insert(list_key.clone(), GffValue::ListOwned(known_list));
-                                }
-                            }
-                        }
-                    }
-                }
             } else {
                 // Collect chosen feats from OTHER classes to KEEP
                 if let Some(feat_list) =
@@ -902,45 +827,39 @@ impl Character {
             }
         }
 
-        // Add auto feats granted by this class across all its levels
-        for lvl in 1..=current_level {
-            for feat_info in self.get_class_feats_for_level(class_id, lvl, game_data) {
-                if feat_info.list_type == 0 || feat_info.list_type == 3 {
-                    feats_to_remove.insert(feat_info.feat_id.0);
-                }
-            }
+        feats_to_remove.extend(self.automatic_class_feat_ids(
+            class_id,
+            1..=current_level,
+            game_data,
+        ));
+        if old_total_level - current_level <= EPIC_LEVEL_THRESHOLD {
+            feats_to_remove.insert(FEAT_EPIC_CHARACTER.0);
         }
-
-        // Add auto feats to keep (from other classes)
-        for class_entry in &class_list {
-            let other_class_id = class_entry
-                .get("Class")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(-1);
-            if other_class_id != -1 && other_class_id != class_id.0 {
-                let other_level = class_entry
-                    .get("ClassLevel")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-                for lvl in 1..=other_level {
-                    for feat_info in
-                        self.get_class_feats_for_level(ClassId(other_class_id), lvl, game_data)
-                    {
-                        if feat_info.list_type == 0 || feat_info.list_type == 3 {
-                            feats_to_keep.insert(feat_info.feat_id.0);
-                        }
-                    }
-                }
+        for entry in self.class_entries() {
+            if entry.class_id != class_id {
+                feats_to_keep.extend(self.automatic_class_feat_ids(
+                    entry.class_id,
+                    1..=entry.level,
+                    game_data,
+                ));
             }
         }
 
         // Subtract feats_to_keep and preserved_feats
         feats_to_remove.retain(|f| !feats_to_keep.contains(f) && !preserved_feats.contains(f));
 
+        let surviving_grants: i32 = granted_per_level
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| !indices_to_remove.contains(idx))
+            .map(|(_, granted)| granted)
+            .sum();
+
         // Remove LvlStatList entries in reverse order to maintain indices
         for idx in indices_to_remove.into_iter().rev() {
             lvl_stat_list.remove(idx);
         }
+        ability_reductions.extend(realign_ability_increases(&mut lvl_stat_list));
 
         // Remove feats (respecting preserved)
         char_feat_list.retain(|f| {
@@ -948,18 +867,7 @@ impl Character {
             !feats_to_remove.contains(&feat_id)
         });
 
-        // Ensure these feats are also stripped from any remaining LvlStatList entries
-        for stat_entry in &mut lvl_stat_list {
-            if let Some(mut feat_list) =
-                super::gff_helpers::extract_list_from_map(stat_entry, "FeatList")
-            {
-                feat_list.retain(|f| {
-                    let feat_id = f.get("Feat").and_then(gff_value_to_i32).unwrap_or(-1);
-                    !feats_to_remove.contains(&feat_id)
-                });
-                stat_entry.insert("FeatList".to_string(), GffValue::ListOwned(feat_list));
-            }
-        }
+        remove_feats_from_level_history(&mut lvl_stat_list, &feats_to_remove);
 
         // Remove skill ranks
         for (skill_idx, ranks_to_remove) in skill_ranks_to_remove {
@@ -988,18 +896,12 @@ impl Character {
             }
         }
 
-        // Update HP
-        let current_max_hp = self.get_i32("MaxHitPoints").unwrap_or(0);
-        let current_hp = self.get_i32("CurrentHitPoints").unwrap_or(0);
-        let base_hp = self.get_i32("HitPoints").unwrap_or(0);
-        self.set_i32("MaxHitPoints", (current_max_hp - total_hp_reduction).max(1));
-        self.set_i32(
-            "CurrentHitPoints",
-            (current_hp - total_hp_reduction)
-                .max(1)
-                .min(current_max_hp - total_hp_reduction),
+        self.revert_level_hit_points(
+            removed_hit_dice,
+            current_level,
+            old_total_level,
+            old_con_mod,
         );
-        self.set_i32("HitPoints", (base_hp - total_hp_reduction).max(1));
 
         // Update skill points
         let current_sp = self.get_available_skill_points();
@@ -1010,16 +912,13 @@ impl Character {
         self.set_list("ClassList", class_list);
         self.set_list("FeatList", char_feat_list);
         self.set_list("SkillList", char_skill_list);
+        self.settle_shifted_skill_grants(surviving_grants, game_data);
 
         if let Some(idx) = removed_class_idx {
             self.sync_mclass_levupin(idx);
         }
 
-        // Recalculate stats once at the end
         self.recalculate_stats(game_data)?;
-
-        self.reconcile_class_feats(&[class_id], game_data);
-
         Ok(())
     }
 
@@ -1171,7 +1070,7 @@ impl Character {
         let is_spellcaster = row_bool(&class_data, "spellcaster", false);
 
         let bab_table_name = row_str(&class_data, "attackbonustable").unwrap_or_default();
-        let bab_type = Self::determine_bab_type(&bab_table_name);
+        let bab_type = BabType::from_table(&bab_table_name);
 
         Some(ClassInfo {
             id: class_id,
@@ -1300,21 +1199,13 @@ impl Character {
 
         let row_idx = (level - 1).max(0) as usize;
 
-        let bab_progression = if bab_table_name.to_lowercase().contains("low")
-            || bab_table_name.to_lowercase().contains("half")
-        {
-            "half"
-        } else if bab_table_name.to_lowercase().contains("med") {
-            "three_quarter"
-        } else {
-            "full"
-        };
+        let bab_type = BabType::from_table(&bab_table_name);
 
         let base_attack_bonus = bab_table
             .as_ref()
             .and_then(|t| t.get_cell(row_idx, "BAB").ok().flatten())
             .and_then(|s| s.parse::<i32>().ok())
-            .unwrap_or_else(|| calculate_bab_for_level(level, bab_progression));
+            .unwrap_or_else(|| bab_type.fallback_bab(level));
 
         let (fortitude_save, reflex_save, will_save) = save_table.as_ref().map_or((0, 0, 0), |t| {
             let fort = t
@@ -1373,19 +1264,6 @@ impl Character {
             .unwrap_or_else(|| "Unknown".to_string())
     }
 
-    fn determine_bab_type(bab_table_name: &str) -> BabType {
-        let table_lower = bab_table_name.to_lowercase();
-        if table_lower.contains("low") || table_lower.contains("half") {
-            BabType::Half
-        } else if table_lower.contains("med") || table_lower.contains("three") {
-            BabType::ThreeQuarter
-        } else if table_lower.contains("high") || table_lower.contains("full") {
-            BabType::Full
-        } else {
-            BabType::ThreeQuarter
-        }
-    }
-
     fn extract_feat_list(entry: &IndexMap<String, GffValue<'static>>, field: &str) -> Vec<FeatId> {
         let list = super::gff_helpers::extract_list_from_map(entry, field).unwrap_or_default();
         list.iter()
@@ -1434,229 +1312,81 @@ impl Character {
         class_data: &AHashMap<String, Option<String>>,
         game_data: &GameData,
     ) -> PrestigeRequirements {
+        let name_of = |table: &str, id: i32, name_column: &str| -> String {
+            game_data
+                .get_table(table)
+                .and_then(|t| t.get_by_id(id))
+                .and_then(|row| row.get(name_column).and_then(|v| v.clone()))
+                .and_then(|strref| strref.trim().parse::<i32>().ok())
+                .and_then(|strref| game_data.get_string(strref))
+                .unwrap_or_else(|| id.to_string())
+        };
+        let push_unique = |list: &mut Vec<String>, label: String| {
+            if !list.contains(&label) {
+                list.push(label);
+            }
+        };
+
         let mut requirements = PrestigeRequirements::default();
-
-        let bab = row_int(class_data, "minattackbonus", 0);
-        if bab > 0 {
-            requirements.base_attack_bonus = Some(bab);
-        }
-
-        if let Some(skill_str) = row_str(class_data, "reqskill") {
-            let skill_rank = row_int(class_data, "reqskillminranks", 0);
-            if skill_rank > 0 {
-                let skill_name = skill_str
-                    .parse::<i32>()
-                    .ok()
-                    .and_then(|id| {
-                        game_data
-                            .get_table("skills")
-                            .and_then(|t| t.get_by_id(id))
-                            .and_then(|row| row.get("name").and_then(|v| v.clone()))
-                            .and_then(|strref| strref.trim().parse::<i32>().ok())
-                            .and_then(|strref| game_data.get_string(strref))
-                    })
-                    .unwrap_or_else(|| skill_str.clone());
-                requirements.skills.push((skill_name, skill_rank));
-            }
-        }
-
-        if let Some(feat_str) = row_str(class_data, "prereqfeat1") {
-            let feat_name = feat_str
-                .parse::<i32>()
-                .ok()
-                .and_then(|id| {
-                    game_data
-                        .get_table("feat")
-                        .and_then(|t| t.get_by_id(id))
-                        .and_then(|row| row.get("feat").and_then(|v| v.clone()))
-                        .and_then(|strref| strref.trim().parse::<i32>().ok())
-                        .and_then(|strref| game_data.get_string(strref))
-                })
-                .unwrap_or_else(|| feat_str.clone());
-            requirements.feats.push(feat_name);
-        }
-
-        let align_restrict = row_int(class_data, "alignrestrict", 0);
-        if align_restrict > 0 {
-            requirements.alignment = AlignmentRestriction(align_restrict).decode_to_string();
-        }
-
-        if let Some(prereq_table_name) = row_str(class_data, "prereqtable") {
-            let prereq_table_key = prereq_table_name.to_lowercase();
-            if let Some(prereq_table) = game_data.get_table(&prereq_table_key) {
-                // First pass: collect all rows
-                let mut rows_parsed: Vec<(String, String, String)> = Vec::new();
-                for row_idx in 0..prereq_table.row_count() {
-                    let Ok(row) = prereq_table.get_row(row_idx) else {
-                        continue;
-                    };
-                    let req_type = row_str(&row, "reqtype").unwrap_or_default().to_uppercase();
-                    let param1 = row_str(&row, "reqparam1").unwrap_or_default();
-                    let param2 = row_str(&row, "reqparam2").unwrap_or_default();
-                    rows_parsed.push((req_type, param1, param2));
-                }
-
-                let resolve_feat_name = |feat_id_str: &str| -> String {
-                    feat_id_str
-                        .trim()
-                        .parse::<i32>()
-                        .ok()
-                        .and_then(|id| {
-                            game_data
-                                .get_table("feat")
-                                .and_then(|t| t.get_by_id(id))
-                                .and_then(|r| r.get("feat").and_then(|v| v.clone()))
-                                .and_then(|strref| strref.trim().parse::<i32>().ok())
-                                .and_then(|strref| game_data.get_string(strref))
-                        })
-                        .unwrap_or_else(|| feat_id_str.to_string())
-                };
-
-                let resolve_class_name = |class_id_str: &str| -> String {
-                    class_id_str
-                        .trim()
-                        .parse::<i32>()
-                        .ok()
-                        .and_then(|id| {
-                            game_data
-                                .get_table("classes")
-                                .and_then(|t| t.get_by_id(id))
-                                .and_then(|r| r.get("name").and_then(|v| v.clone()))
-                                .and_then(|strref| strref.trim().parse::<i32>().ok())
-                                .and_then(|strref| game_data.get_string(strref))
-                        })
-                        .unwrap_or_else(|| class_id_str.to_string())
-                };
-
-                let mut i = 0;
-                while i < rows_parsed.len() {
-                    let (ref req_type, ref param1, ref param2) = rows_parsed[i];
-
-                    match req_type.as_str() {
-                        "FEAT" => {
-                            let feat_name = resolve_feat_name(param1);
-                            if !requirements.feats.contains(&feat_name) {
-                                requirements.feats.push(feat_name);
-                            }
-                        }
-                        "FEATOR" => {
-                            // Collect consecutive FEATOR entries as alternatives
-                            let mut or_feats = vec![resolve_feat_name(param1)];
-                            while i + 1 < rows_parsed.len() && rows_parsed[i + 1].0 == "FEATOR" {
-                                i += 1;
-                                or_feats.push(resolve_feat_name(&rows_parsed[i].1));
-                            }
-                            let label = or_feats.join(" or ");
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "SKILL" => {
-                            let min_ranks = param2.trim().parse::<i32>().unwrap_or(1);
-                            let skill_name = param1
-                                .trim()
-                                .parse::<i32>()
-                                .ok()
-                                .and_then(|id| {
-                                    game_data
-                                        .get_table("skills")
-                                        .and_then(|t| t.get_by_id(id))
-                                        .and_then(|r| r.get("name").and_then(|v| v.clone()))
-                                        .and_then(|strref| strref.trim().parse::<i32>().ok())
-                                        .and_then(|strref| game_data.get_string(strref))
-                                })
-                                .unwrap_or_else(|| param1.clone());
-                            if !requirements.skills.iter().any(|(n, _)| n == &skill_name) {
-                                requirements.skills.push((skill_name, min_ranks));
-                            }
-                        }
-                        "BAB" => {
-                            if let Ok(bab) = param1.trim().parse::<i32>() {
-                                requirements.base_attack_bonus =
-                                    Some(requirements.base_attack_bonus.unwrap_or(0).max(bab));
-                            }
-                        }
-                        "ARCANE" => {
-                            let level = param1.trim().parse::<i32>().unwrap_or(1);
-                            let label = format!("Arcane Caster Level {level}");
-                            if !requirements.skills.iter().any(|(n, _)| n == &label) {
-                                requirements.skills.push((label, level));
-                            }
-                        }
-                        "ARCSPELL" => {
-                            let level = param1.trim().parse::<i32>().unwrap_or(1);
-                            let label = format!("Able to cast level {level} arcane spells");
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "DIVINE" => {
-                            let level = param1.trim().parse::<i32>().unwrap_or(1);
-                            let label = format!("Divine Caster Level {level}");
-                            if !requirements.skills.iter().any(|(n, _)| n == &label) {
-                                requirements.skills.push((label, level));
-                            }
-                        }
-                        "DIVSPELL" => {
-                            let level = param1.trim().parse::<i32>().unwrap_or(1);
-                            let label = format!("Able to cast level {level} divine spells");
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "CLASSLEVEL" => {
-                            let class_level = param2.trim().parse::<i32>().unwrap_or(1);
-                            let class_name = resolve_class_name(param1);
-                            let label = format!("{class_name} Level {class_level}");
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "CLASSOR" => {
-                            // Collect consecutive CLASSOR entries as alternatives
-                            let class_level = param2.trim().parse::<i32>().unwrap_or(1);
-                            let mut or_classes = vec![resolve_class_name(param1)];
-                            while i + 1 < rows_parsed.len() && rows_parsed[i + 1].0 == "CLASSOR" {
-                                i += 1;
-                                or_classes.push(resolve_class_name(&rows_parsed[i].1));
-                            }
-                            let label = format!("{} Level {class_level}", or_classes.join(" or "));
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "SPELLLVL" => {
-                            let spell_level = param1.trim().parse::<i32>().unwrap_or(1);
-                            let label = format!("Able to cast level {spell_level} spells");
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "SAVE" => {
-                            let save_value = param1.trim().parse::<i32>().unwrap_or(0);
-                            let save_type = match param2.trim() {
-                                "1" => "Fortitude",
-                                "2" => "Reflex",
-                                "3" => "Will",
-                                _ => "Base Save",
-                            };
-                            let label = format!("{save_type} Save +{save_value}");
-                            if !requirements.feats.contains(&label) {
-                                requirements.feats.push(label);
-                            }
-                        }
-                        "VAR" => {} // Script variable check, not displayable
-                        other => {
-                            tracing::debug!("Skipping unknown prereqtable reqtype: {other}");
-                        }
+        for check in Self::collect_prestige_prereq_checks(class_data, game_data) {
+            match check {
+                PrereqCheck::Bab(bab) => requirements.base_attack_bonus = Some(bab),
+                PrereqCheck::Skill(skill_id, ranks) => {
+                    let name = name_of("skills", skill_id.0, "name");
+                    if !requirements.skills.iter().any(|(n, _)| *n == name) {
+                        requirements.skills.push((name, ranks));
                     }
-                    i += 1;
                 }
-            } else {
-                tracing::warn!("Prereq table '{prereq_table_key}' not found in game data");
+                PrereqCheck::AnyFeat(ids) => {
+                    let names: Vec<String> =
+                        ids.iter().map(|id| name_of("feat", id.0, "feat")).collect();
+                    push_unique(&mut requirements.feats, names.join(" or "));
+                }
+                PrereqCheck::ArcaneCasterLevel(level) => requirements
+                    .skills
+                    .push((format!("Arcane Caster Level {level}"), level)),
+                PrereqCheck::DivineCasterLevel(level) => requirements
+                    .skills
+                    .push((format!("Divine Caster Level {level}"), level)),
+                PrereqCheck::ArcaneSpellLevel(level) => push_unique(
+                    &mut requirements.feats,
+                    format!("Able to cast level {level} arcane spells"),
+                ),
+                PrereqCheck::DivineSpellLevel(level) => push_unique(
+                    &mut requirements.feats,
+                    format!("Able to cast level {level} divine spells"),
+                ),
+                PrereqCheck::AnySpellLevel(level) => push_unique(
+                    &mut requirements.feats,
+                    format!("Able to cast level {level} spells"),
+                ),
+                PrereqCheck::AnyClassLevel(ids, level) => {
+                    let names: Vec<String> = ids
+                        .iter()
+                        .map(|id| name_of("classes", id.0, "name"))
+                        .collect();
+                    push_unique(
+                        &mut requirements.feats,
+                        format!("{} Level {level}", names.join(" or ")),
+                    );
+                }
+                PrereqCheck::BaseSave(save_type, value) => {
+                    let save_name = match save_type {
+                        1 => "Fortitude",
+                        2 => "Reflex",
+                        3 => "Will",
+                        _ => "Base Save",
+                    };
+                    push_unique(
+                        &mut requirements.feats,
+                        format!("{save_name} Save +{value}"),
+                    );
+                }
+                PrereqCheck::Alignment(restriction) => {
+                    requirements.alignment = restriction.decode_to_string();
+                }
             }
         }
-
         requirements
     }
 
@@ -1688,9 +1418,8 @@ impl Character {
             checks.push(PrereqCheck::AnyFeat(vec![FeatId(feat_id)]));
         }
 
-        let align_restrict = row_int(class_data, "alignrestrict", 0);
-        if align_restrict > 0 {
-            checks.push(PrereqCheck::Alignment(AlignmentRestriction(align_restrict)));
+        if let Some(restriction) = AlignmentRestriction::from_class_row(class_data) {
+            checks.push(PrereqCheck::Alignment(restriction));
         }
 
         if let Some(prereq_table_name) = row_str(class_data, "prereqtable")
@@ -1801,6 +1530,49 @@ impl Character {
         checks
     }
 
+    /// Caster levels prestige classes add to the base class `class_id`: every prestige level
+    /// flagged in its `BonusSpellcasterLevelTable` counts for the base class whose
+    /// spellcasting feat (`BonusCasterFeatByClassMap`) the character took.
+    fn prestige_bonus_caster_levels(&self, class_id: i32, game_data: &GameData) -> i32 {
+        let Some(classes_table) = game_data.get_table("classes") else {
+            return 0;
+        };
+        let mut bonus = 0;
+        for entry in self.class_entries() {
+            let Some(prestige_row) = classes_table.get_by_id(entry.class_id.0) else {
+                continue;
+            };
+            let (Some(level_table), Some(feat_map)) = (
+                row_str(&prestige_row, "bonusspellcasterleveltable")
+                    .and_then(|name| game_data.get_table(&name.to_lowercase())),
+                row_str(&prestige_row, "bonuscasterfeatbyclassmap")
+                    .and_then(|name| game_data.get_table(&name.to_lowercase())),
+            ) else {
+                continue;
+            };
+            let cell_int = |table: &crate::loaders::types::LoadedTable, row: usize, col: &str| {
+                table
+                    .get_cell(row, col)
+                    .ok()
+                    .flatten()
+                    .and_then(|v| v.trim().parse::<i32>().ok())
+            };
+            let took_feat = (0..feat_map.row_count()).any(|row| {
+                cell_int(feat_map, row, "ClassId") == Some(class_id)
+                    && cell_int(feat_map, row, "SpellcasterFeat")
+                        .is_some_and(|feat| feat >= 0 && self.has_feat(FeatId(feat)))
+            });
+            if !took_feat {
+                continue;
+            }
+            let levels = (entry.level.max(0) as usize).min(level_table.row_count());
+            bonus += (0..levels)
+                .filter(|&row| cell_int(level_table, row, "GrantsBonusSpellcasterLevel") == Some(1))
+                .count() as i32;
+        }
+        bonus
+    }
+
     /// Highest caster level among the character's spellcasting classes of the
     /// requested type (true = arcane, false = divine, None = any).
     fn caster_level(&self, want_arcane: Option<bool>, game_data: &GameData) -> i32 {
@@ -1820,11 +1592,7 @@ impl Character {
                 .get("ClassLevel")
                 .and_then(gff_value_to_i32)
                 .unwrap_or(0);
-            let caster_level = entry
-                .get("SpellCasterLevel")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0)
-                .max(class_level);
+            let caster_level = class_level + self.prestige_bonus_caster_levels(class_id, game_data);
             let Some(class_row) = classes_table.get_by_id(class_id) else {
                 continue;
             };
@@ -1862,11 +1630,7 @@ impl Character {
                 .get("ClassLevel")
                 .and_then(gff_value_to_i32)
                 .unwrap_or(0);
-            let caster_level = entry
-                .get("SpellCasterLevel")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0)
-                .max(class_level);
+            let caster_level = class_level + self.prestige_bonus_caster_levels(class_id, game_data);
             if caster_level <= 0 {
                 continue;
             }
@@ -2180,12 +1944,6 @@ impl Character {
             }
         }
 
-        let xp_req = self.calculate_xp_for_level(new_total_level, game_data);
-        let current_xp = self.experience();
-        if current_xp < xp_req {
-            self.set_experience(xp_req)?;
-        }
-
         let mut class_list = self.get_list_owned("ClassList").unwrap_or_default();
         let mut class_found = false;
         let mut class_level_gained = 1;
@@ -2223,6 +1981,11 @@ impl Character {
 
         self.set_list("ClassList", class_list);
 
+        let xp_req = self.calculate_xp_for_level(new_total_level, game_data);
+        if self.experience() < xp_req {
+            self.set_experience(xp_req)?;
+        }
+
         let hit_die = row_int(&class_data, "hitdie", 6);
         let con_mod = self.ability_modifier(AbilityIndex::CON);
 
@@ -2233,7 +1996,7 @@ impl Character {
         let current_hp = self.current_hp();
 
         self.set_max_hp(current_max_hp + hp_gained);
-        self.set_base_hp(current_base_hp + hp_gained);
+        self.set_base_hp(current_base_hp + hit_die);
         self.set_current_hp(current_hp + hp_gained);
 
         // 5. Skill Points
@@ -2276,55 +2039,6 @@ impl Character {
         // 8. Spellcasting
         let is_spellcaster = row_bool(&class_data, "spellcaster", false);
 
-        let spell_gain_table = row_str(&class_data, "spellgaintable");
-        let is_prestige_caster = is_spellcaster && spell_gain_table.is_none();
-
-        if is_prestige_caster {
-            let mut best_class_entry_idx = None;
-            let mut max_lvl = -1;
-
-            if let Some(mut updated_list) = self.get_list_owned("ClassList") {
-                for (idx, entry) in updated_list.iter().enumerate() {
-                    let c_id = entry.get("Class").and_then(gff_value_to_i32).unwrap_or(-1);
-                    if c_id == -1 || c_id == class_id.0 {
-                        continue;
-                    }
-
-                    if let Some(c_data) = classes_table.get_by_id(c_id) {
-                        let c_table = row_str(&c_data, "spellgaintable");
-                        if c_table.is_some() {
-                            let lvl = entry
-                                .get("ClassLevel")
-                                .and_then(gff_value_to_i32)
-                                .unwrap_or(0);
-                            if lvl > max_lvl {
-                                max_lvl = lvl;
-                                best_class_entry_idx = Some(idx);
-                            }
-                        }
-                    }
-                }
-
-                if let Some(idx) = best_class_entry_idx {
-                    if let Some(entry) = updated_list.get_mut(idx) {
-                        let current_cl = entry
-                            .get("ClassLevel")
-                            .and_then(gff_value_to_i32)
-                            .unwrap_or(0);
-                        let current_scl = entry
-                            .get("SpellCasterLevel")
-                            .and_then(gff_value_to_i32)
-                            .unwrap_or(current_cl);
-                        entry.insert(
-                            "SpellCasterLevel".to_string(),
-                            GffValue::Short((current_scl + 1) as i16),
-                        );
-                    }
-                    self.set_list("ClassList", updated_list);
-                }
-            }
-        }
-
         // 9. Update LvlStatList History
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
         let mut new_hist = IndexMap::new();
@@ -2337,28 +2051,39 @@ impl Character {
             GffValue::Word(self.get_available_skill_points().max(0) as u16),
         );
         new_hist.insert("LvlStatAbility".to_string(), GffValue::Byte(255));
+        new_hist.insert(
+            "EpicLevel".to_string(),
+            GffValue::Byte(u8::from(new_total_level > EPIC_LEVEL_THRESHOLD)),
+        );
         new_hist.insert("FeatList".to_string(), GffValue::ListOwned(vec![]));
-        new_hist.insert("SkillList".to_string(), GffValue::ListOwned(vec![]));
-
-        for i in 0..10 {
-            new_hist.insert(format!("KnownList{i}"), GffValue::ListOwned(vec![]));
-            new_hist.insert(format!("KnownRemoveList{i}"), GffValue::ListOwned(vec![]));
-        }
+        let skill_count = self.get_list("SkillList").map_or(0, |skills| skills.len());
+        let empty_ranks = (0..skill_count)
+            .map(|_| IndexMap::from([("Rank".to_string(), GffValue::Byte(0))]))
+            .collect();
+        new_hist.insert("SkillList".to_string(), GffValue::ListOwned(empty_ranks));
 
         lvl_stat_list.push(new_hist);
         self.set_list("LvlStatList", lvl_stat_list);
 
-        // 10. Grant automatic class feats (list_type 0 = Epic, 3 = Class granted)
-        let class_feats = self.get_class_feats_for_level(class_id, class_level_gained, game_data);
+        // 10. Grant automatic feats: like the engine, also the missing ones of earlier class
+        // levels, plus Epic Character on reaching level 21.
+        let mut automatic: Vec<FeatId> = self
+            .automatic_class_feat_ids(class_id, 1..=class_level_gained, game_data)
+            .into_iter()
+            .map(FeatId)
+            .collect();
+        automatic.sort_unstable_by_key(|feat| feat.0);
+        if new_total_level > EPIC_LEVEL_THRESHOLD {
+            automatic.push(FEAT_EPIC_CHARACTER);
+        }
         let mut granted_feats = Vec::new();
-        for feat_info in class_feats {
-            if (feat_info.list_type == 0 || feat_info.list_type == 3)
-                && !self.has_feat(feat_info.feat_id)
+        for feat_id in automatic {
+            if !self.has_feat(feat_id)
                 && self
-                    .add_feat_with_source(feat_info.feat_id, FeatSource::Class)
+                    .add_feat_with_source(feat_id, FeatSource::Class)
                     .is_ok()
             {
-                granted_feats.push(feat_info.feat_id);
+                granted_feats.push(feat_id);
             }
         }
 
@@ -2385,9 +2110,14 @@ impl Character {
         class_id: ClassId,
         game_data: &GameData,
     ) -> Result<(), CharacterError> {
+        if self.total_level() <= 1 {
+            return Err(CharacterError::ValidationFailed {
+                field: "ClassList",
+                message: "Cannot remove the last level".to_string(),
+            });
+        }
         self.level_down_internal(class_id, game_data)?;
         self.recalculate_stats(game_data)?;
-        self.reconcile_class_feats(&[class_id], game_data);
         Ok(())
     }
 
@@ -2424,11 +2154,11 @@ impl Character {
         };
 
         let entry = lvl_stat_list.remove(idx);
-        let granted = self
-            .skill_points_granted_per_level(game_data)
-            .get(idx)
-            .copied()
-            .unwrap_or(0);
+        let old_total_level = self.total_level();
+        let old_con_mod = self.ability_modifier(AbilityIndex::CON);
+        let granted_per_level = self.skill_points_granted_per_level(game_data);
+        let granted = granted_per_level.get(idx).copied().unwrap_or(0);
+        let surviving_grants = granted_per_level.iter().sum::<i32>() - granted;
         let sp_to_revert = self.unspent_skill_points_of_level(granted, &entry, game_data);
 
         // 1. Revert Ability Increase (Must happen before HP to match Python/Engine logic)
@@ -2439,27 +2169,19 @@ impl Character {
             let current_val = self.base_ability(index);
             let _ = self.set_ability(index, (current_val - 1).max(3));
         }
+        for ability_idx in realign_ability_increases(&mut lvl_stat_list) {
+            if let Some(index) = AbilityIndex::from_index(ability_idx) {
+                let current_val = self.base_ability(index);
+                let _ = self.set_ability(index, (current_val - 1).max(3));
+            }
+        }
 
         // 2. Revert HP
         let hp_roll = entry
             .get("LvlStatHitDie")
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
-        let con_mod = self.ability_modifier(AbilityIndex::CON);
-        let hp_reduction = (hp_roll + con_mod).max(1);
-
-        let current_max_hp = self.get_i32("MaxHitPoints").unwrap_or(0);
-        let current_hp = self.get_i32("CurrentHitPoints").unwrap_or(0);
-        let hit_points = self.get_i32("HitPoints").unwrap_or(0);
-
-        self.set_i32("MaxHitPoints", (current_max_hp - hp_reduction).max(1));
-        self.set_i32(
-            "CurrentHitPoints",
-            (current_hp - hp_reduction)
-                .max(1)
-                .min(current_max_hp - hp_reduction),
-        );
-        self.set_i32("HitPoints", (hit_points - hp_reduction).max(1));
+        self.revert_level_hit_points(hp_roll, 1, old_total_level, old_con_mod);
 
         // 3. Revert Skill Points
         let current_sp = self.get_available_skill_points();
@@ -2503,11 +2225,13 @@ impl Character {
         }
 
         // 5b. Add auto feats granted at THIS specific level
-        let auto_feats = self.get_class_feats_for_level(class_id, current_level, game_data);
-        for feat_info in auto_feats {
-            if feat_info.list_type == 0 || feat_info.list_type == 3 {
-                feats_to_remove.insert(feat_info.feat_id.0);
-            }
+        feats_to_remove.extend(self.automatic_class_feat_ids(
+            class_id,
+            current_level..=current_level,
+            game_data,
+        ));
+        if old_total_level == EPIC_LEVEL_THRESHOLD + 1 {
+            feats_to_remove.insert(FEAT_EPIC_CHARACTER.0);
         }
 
         // 5c. Collect chosen feats to KEEP from surviving LvlStatList entries
@@ -2524,32 +2248,17 @@ impl Character {
         }
 
         // 5d. Add auto feats to keep from remaining levels of THIS class and ALL levels of OTHER classes
-        let class_list_for_feats = self.get_list_owned("ClassList").unwrap_or_default();
-        for class_entry in &class_list_for_feats {
-            let other_class_id = class_entry
-                .get("Class")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(-1);
-            if other_class_id != -1 {
-                let other_level = class_entry
-                    .get("ClassLevel")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-                let max_lvl = if other_class_id == class_id.0 {
-                    current_level - 1
-                } else {
-                    other_level
-                };
-                for lvl in 1..=max_lvl {
-                    let auto_f =
-                        self.get_class_feats_for_level(ClassId(other_class_id), lvl, game_data);
-                    for feat_info in auto_f {
-                        if feat_info.list_type == 0 || feat_info.list_type == 3 {
-                            feats_to_keep.insert(feat_info.feat_id.0);
-                        }
-                    }
-                }
-            }
+        for class_entry in self.class_entries() {
+            let max_level = if class_entry.class_id == class_id {
+                current_level - 1
+            } else {
+                class_entry.level
+            };
+            feats_to_keep.extend(self.automatic_class_feat_ids(
+                class_entry.class_id,
+                1..=max_level,
+                game_data,
+            ));
         }
 
         feats_to_remove.retain(|f| !feats_to_keep.contains(f) && !preserved_feats.contains(f));
@@ -2561,18 +2270,7 @@ impl Character {
         });
         self.set_list("FeatList", char_feat_list);
 
-        // Ensure these feats are also stripped from any remaining LvlStatList entries
-        for stat_entry in &mut lvl_stat_list {
-            if let Some(mut feat_list) =
-                super::gff_helpers::extract_list_from_map(stat_entry, "FeatList")
-            {
-                feat_list.retain(|f| {
-                    let feat_id = f.get("Feat").and_then(gff_value_to_i32).unwrap_or(-1);
-                    !feats_to_remove.contains(&feat_id)
-                });
-                stat_entry.insert("FeatList".to_string(), GffValue::ListOwned(feat_list));
-            }
-        }
+        remove_feats_from_level_history(&mut lvl_stat_list, &feats_to_remove);
 
         // 6. Undo Spell Selections (Direct edit to avoid history side-effect)
         if let Some(mut class_list) = self.get_list_owned("ClassList") {
@@ -2631,6 +2329,7 @@ impl Character {
 
         self.set_list("ClassList", class_list);
         self.set_list("LvlStatList", lvl_stat_list);
+        self.settle_shifted_skill_grants(surviving_grants, game_data);
 
         if let Some(idx) = removed_idx {
             self.sync_mclass_levupin(idx);
@@ -2639,32 +2338,32 @@ impl Character {
         Ok(())
     }
 
-    /// Sync a feat change to the current level history.
+    /// Sync a feat change to the level history: an added feat goes to the current level,
+    /// a removed one leaves every level that recorded it.
     pub fn record_feat_change(&mut self, feat_id: FeatId, added: bool) {
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
         if lvl_stat_list.is_empty() {
             return;
         }
 
-        let last_idx = lvl_stat_list.len() - 1;
-        let entry = &mut lvl_stat_list[last_idx];
-
-        let mut feat_list =
-            super::gff_helpers::extract_list_from_map(entry, "FeatList").unwrap_or_default();
-
-        if added {
-            if !feat_list
-                .iter()
-                .any(|f| f.get("Feat").and_then(gff_value_to_i32) == Some(feat_id.0))
-            {
-                let mut new_feat = IndexMap::new();
-                new_feat.insert("Feat".to_string(), GffValue::Word(feat_id.0 as u16));
-                feat_list.push(new_feat);
-            }
-        } else {
-            feat_list.retain(|f| f.get("Feat").and_then(gff_value_to_i32) != Some(feat_id.0));
+        if !added {
+            remove_feats_from_level_history(&mut lvl_stat_list, &HashSet::from([feat_id.0]));
+            self.set_list("LvlStatList", lvl_stat_list);
+            return;
         }
 
+        let last_idx = lvl_stat_list.len() - 1;
+        let entry = &mut lvl_stat_list[last_idx];
+        let mut feat_list =
+            super::gff_helpers::extract_list_from_map(entry, "FeatList").unwrap_or_default();
+        if !feat_list
+            .iter()
+            .any(|f| f.get("Feat").and_then(gff_value_to_i32) == Some(feat_id.0))
+        {
+            let mut new_feat = IndexMap::new();
+            new_feat.insert("Feat".to_string(), GffValue::Word(feat_id.0 as u16));
+            feat_list.push(new_feat);
+        }
         entry.insert("FeatList".to_string(), GffValue::ListOwned(feat_list));
         self.set_list("LvlStatList", lvl_stat_list);
     }
@@ -2849,14 +2548,40 @@ impl Character {
         self.set_list("LvlStatList", lvl_stat_list);
     }
 
-    /// Recalculate derived stats like BAB and Saves.
+    /// After levels leave the history, the remaining ones can earn a different skill point
+    /// grant (a new level 1 earns four times the points, INT increases may have moved); the
+    /// unspent pool follows the difference to `grants_before` of those levels.
+    fn settle_shifted_skill_grants(&mut self, grants_before: i32, game_data: &GameData) {
+        let grants_after: i32 = self.skill_points_granted_per_level(game_data).iter().sum();
+        let pool = self.get_available_skill_points();
+        self.set_available_skill_points((pool + grants_after - grants_before).max(0));
+    }
+
+    /// Take back the hit points of removed levels. `HitPoints` is the plain hit-die sum;
+    /// the CON modifier counts on every level, so a CON increase reverted with the levels
+    /// also takes back its bonus on the levels that remain.
+    fn revert_level_hit_points(
+        &mut self,
+        hit_dice: i32,
+        levels_removed: i32,
+        old_total_level: i32,
+        old_con_mod: i32,
+    ) {
+        let new_con_mod = self.ability_modifier(AbilityIndex::CON);
+        let new_total_level = old_total_level - levels_removed;
+        let reduction = hit_dice + old_total_level * old_con_mod - new_total_level * new_con_mod;
+
+        let max_hp = (self.max_hp() - reduction).max(1);
+        self.set_max_hp(max_hp);
+        self.set_current_hp((self.current_hp() - reduction).clamp(1, max_hp));
+        self.set_base_hp((self.base_hp() - hit_dice).max(1));
+    }
+
+    /// Recalculate the stored `BaseAttackBonus`. Base saves are derived, never stored:
+    /// `fortbonus/refbonus/willbonus` hold the misc bonus.
     pub fn recalculate_stats(&mut self, game_data: &GameData) -> Result<(), CharacterError> {
         let bab = self.calculate_bab(game_data);
         self.set_base_attack_bonus(bab);
-
-        let saves = self.calculate_base_saves(game_data);
-        self.set_base_saves(saves)?;
-
         Ok(())
     }
 
@@ -2993,21 +2718,13 @@ pub fn get_class_progression(
 
     let bab_table_name = row_str(&class_data, "attackbonustable").unwrap_or_default();
 
-    let bab_progression = if bab_table_name.to_lowercase().contains("low")
-        || bab_table_name.to_lowercase().contains("half")
-    {
-        "half".to_string()
-    } else if bab_table_name.to_lowercase().contains("med") {
-        "three_quarter".to_string()
-    } else {
-        "full".to_string()
-    };
+    let bab_type = BabType::from_table(&bab_table_name);
 
     let save_table_name = row_str(&class_data, "savingthrowtable").unwrap_or_default();
 
     let is_spellcaster = row_bool(&class_data, "spellcaster", false);
 
-    let arcane_flag = row_bool(&class_data, "arcane", false);
+    let arcane_flag = row_bool(&class_data, "hasarcane", false);
 
     let spell_type = if !is_spellcaster {
         "none".to_string()
@@ -3017,7 +2734,7 @@ pub fn get_class_progression(
         "divine".to_string()
     };
 
-    let spell_table_name = row_str(&class_data, "spellknowntable");
+    let spell_table_name = row_str(&class_data, "spellgaintable");
 
     let mut level_progression = Vec::with_capacity(max_level as usize);
 
@@ -3034,7 +2751,7 @@ pub fn get_class_progression(
             .as_ref()
             .and_then(|t| t.get_cell(row_idx, "BAB").ok().flatten())
             .and_then(|s| s.parse::<i32>().ok())
-            .unwrap_or_else(|| calculate_bab_for_level(level, &bab_progression));
+            .unwrap_or_else(|| bab_type.fallback_bab(level));
 
         let (fortitude_save, reflex_save, will_save) = save_table.as_ref().map_or((0, 0, 0), |t| {
             let fort = t
@@ -3145,7 +2862,7 @@ pub fn get_class_progression(
         basic_info: ClassBasicInfo {
             hit_die,
             skill_points_per_level: skill_points,
-            bab_progression,
+            bab_progression: bab_type.progression_name().to_string(),
             save_progression: save_table_name,
             is_spellcaster,
             spell_type,
@@ -3155,12 +2872,67 @@ pub fn get_class_progression(
     })
 }
 
-fn calculate_bab_for_level(level: i32, bab_type: &str) -> i32 {
-    match bab_type {
-        "full" => level,
-        "three_quarter" => (level * 3) / 4,
-        "half" => level / 2,
-        _ => (level * 3) / 4,
+/// Levels above this are epic: the engine writes `EpicLevel = 1` and grants Epic Character.
+const EPIC_LEVEL_THRESHOLD: i32 = 20;
+
+/// `FEAT_EPIC_CHARACTER`: granted by the engine itself on reaching level 21 (no class feat
+/// table lists it; verified against an in-game level-up 20 -> 21, 2026-09-26).
+const FEAT_EPIC_CHARACTER: FeatId = FeatId(1001);
+
+/// `cls_feat_*` `List` value of feats the class grants on `GrantedOnLevel`; the other
+/// lists only make the feat selectable from that level on.
+const AUTOMATIC_FEAT_LIST: i32 = 3;
+
+/// After levels were taken out of the middle of the history, moves ability increases that
+/// now sit on a level without one onto the free levels that grant one, in order. Increases
+/// already on such a level stay. Returns the increases no level is left for.
+fn realign_ability_increases(lvl_stat_list: &mut [IndexMap<String, GffValue<'static>>]) -> Vec<u8> {
+    use crate::character::types::ABILITY_INCREASE_INTERVAL;
+
+    let grants_increase = |idx: usize| (idx as i32 + 1) % ABILITY_INCREASE_INTERVAL == 0;
+    let increase_at = |entry: &IndexMap<String, GffValue<'static>>| {
+        entry
+            .get("LvlStatAbility")
+            .and_then(gff_value_to_i32)
+            .filter(|ability| (0..=5).contains(ability))
+    };
+
+    let mut misplaced = Vec::new();
+    for (idx, entry) in lvl_stat_list.iter_mut().enumerate() {
+        if !grants_increase(idx)
+            && let Some(ability) = increase_at(entry)
+        {
+            misplaced.push(ability as u8);
+            entry.insert("LvlStatAbility".to_string(), GffValue::Byte(255));
+        }
+    }
+
+    let mut pending = misplaced.into_iter();
+    for (idx, entry) in lvl_stat_list.iter_mut().enumerate() {
+        if grants_increase(idx)
+            && increase_at(entry).is_none()
+            && let Some(ability) = pending.next()
+        {
+            entry.insert("LvlStatAbility".to_string(), GffValue::Byte(ability));
+        }
+    }
+    pending.collect()
+}
+
+fn remove_feats_from_level_history(
+    lvl_stat_list: &mut [IndexMap<String, GffValue<'static>>],
+    feats: &HashSet<i32>,
+) {
+    for stat_entry in lvl_stat_list {
+        if let Some(mut feat_list) =
+            super::gff_helpers::extract_list_from_map(stat_entry, "FeatList")
+        {
+            feat_list.retain(|f| {
+                let feat_id = f.get("Feat").and_then(gff_value_to_i32).unwrap_or(-1);
+                !feats.contains(&feat_id)
+            });
+            stat_entry.insert("FeatList".to_string(), GffValue::ListOwned(feat_list));
+        }
     }
 }
 
@@ -3192,140 +2964,162 @@ impl Character {
                 c.level_down_internal(old_class_id, game_data)?;
             }
             c.level_up(new_class_id, game_data)?;
-            c.reconcile_class_feats(&[old_class_id], game_data);
             Ok(())
         })
-    }
-
-    /// Change the primary class (index 0) and rewrite history.
-    ///
-    /// This "retcons" the character's history:
-    /// 1. Replaces ClassList[0] with new class.
-    /// 2. Updates `Class` byte field.
-    /// 3. Updates all `LvlStatList` entries for the old class to the new class.
-    /// 4. Recalculates HP for the entire history (using Average roll rule).
-    /// 5. Recalculates other stats (BAB, Saves).
-    pub fn change_primary_class(
-        &mut self,
-        new_class_id: ClassId,
-        game_data: &GameData,
-    ) -> Result<(), CharacterError> {
-        // Validate new class exists
-        let classes_table = game_data
-            .get_table("classes")
-            .ok_or_else(|| CharacterError::TableNotFound("classes".to_string()))?;
-        if classes_table.get_by_id(new_class_id.0).is_none() {
-            return Err(CharacterError::NotFound {
-                entity: "Class",
-                id: new_class_id.0,
-            });
-        }
-
-        // Get old class ID from slot 0
-        let mut class_list = self
-            .get_list_owned("ClassList")
-            .ok_or(CharacterError::FieldMissing { field: "ClassList" })?;
-
-        if class_list.is_empty() {
-            return Err(CharacterError::ValidationFailed {
-                field: "ClassList",
-                message: "Class list empty".to_string(),
-            });
-        }
-
-        let old_class_id = class_list[0]
-            .get("Class")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0);
-
-        if old_class_id == new_class_id.0 {
-            return Ok(()); // No change
-        }
-
-        // Update Slot 0
-        class_list[0].insert("Class".to_string(), GffValue::Int(new_class_id.0));
-        self.set_list("ClassList", class_list);
-
-        // Update History
-        let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
-        let mut updated = false;
-        for entry in &mut lvl_stat_list {
-            if entry.get("LvlStatClass").and_then(gff_value_to_i32) == Some(old_class_id) {
-                entry.insert(
-                    "LvlStatClass".to_string(),
-                    GffValue::Byte(new_class_id.0 as u8),
-                );
-                updated = true;
-            }
-        }
-
-        if updated {
-            self.set_list("LvlStatList", lvl_stat_list);
-        }
-
-        // Recalculate derived stats with the new class in place
-        self.recalculate_hp(game_data)?;
-        self.recalculate_stats(game_data)?;
-
-        Ok(())
-    }
-
-    /// Recalculate HP for the entire character based on class history.
-    ///
-    /// This enforces the "Average Roll" rule:
-    /// - Level 1: Max Hit Die + CON
-    /// - Level > 1: (Hit Die / 2 + 1) + CON
-    ///
-    /// Also updates `LvlStatHitDie` in history to match the new calculation.
-    pub fn recalculate_hp(&mut self, game_data: &GameData) -> Result<(), CharacterError> {
-        let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
-        let mut total_hp = 0;
-        let con_mod = self.ability_modifier(AbilityIndex::CON);
-
-        let classes_table = game_data
-            .get_table("classes")
-            .ok_or_else(|| CharacterError::TableNotFound("classes".to_string()))?;
-
-        for (idx, entry) in lvl_stat_list.iter_mut().enumerate() {
-            let class_id = entry
-                .get("LvlStatClass")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0);
-
-            // Get Hit Die for this class level
-            let hit_die = classes_table
-                .get_by_id(class_id)
-                .map_or(6, |class_data| row_int(&class_data, "hitdie", 6));
-
-            // Calculate Base HP (Roll equivalent)
-            let base_hp = if idx == 0 {
-                hit_die // Max at level 1
-            } else {
-                (hit_die / 2) + 1 // Average otherwise
-            };
-
-            let hp_gained = (base_hp + con_mod).max(1);
-
-            // Update history
-            entry.insert("LvlStatHitDie".to_string(), GffValue::Byte(base_hp as u8));
-
-            total_hp += hp_gained;
-        }
-
-        self.set_list("LvlStatList", lvl_stat_list);
-
-        // Update Globals
-        self.set_i32("HitPoints", total_hp);
-        self.set_i32("MaxHitPoints", total_hp);
-        self.set_i32("CurrentHitPoints", total_hp); // Heal to full on recalc
-
-        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn restriction(bits: i32, axes: i32, invert: bool) -> AlignmentRestriction {
+        AlignmentRestriction { bits, axes, invert }
+    }
+
+    const LG: Alignment = Alignment {
+        law_chaos: 85,
+        good_evil: 85,
+    };
+    const LE: Alignment = Alignment {
+        law_chaos: 85,
+        good_evil: 15,
+    };
+    const NN: Alignment = Alignment {
+        law_chaos: 50,
+        good_evil: 50,
+    };
+    const NE: Alignment = Alignment {
+        law_chaos: 50,
+        good_evil: 15,
+    };
+    const CG: Alignment = Alignment {
+        law_chaos: 15,
+        good_evil: 85,
+    };
+    const CN: Alignment = Alignment {
+        law_chaos: 15,
+        good_evil: 50,
+    };
+
+    fn level_entry(ability: Option<u8>, feats: &[u16]) -> IndexMap<String, GffValue<'static>> {
+        let mut entry = IndexMap::new();
+        entry.insert(
+            "LvlStatAbility".to_string(),
+            GffValue::Byte(ability.unwrap_or(255)),
+        );
+        let feats = feats
+            .iter()
+            .map(|id| IndexMap::from([("Feat".to_string(), GffValue::Word(*id))]))
+            .collect();
+        entry.insert("FeatList".to_string(), GffValue::ListOwned(feats));
+        entry
+    }
+
+    fn recorded_increases(lvl_stat_list: &[IndexMap<String, GffValue<'static>>]) -> Vec<i32> {
+        lvl_stat_list
+            .iter()
+            .map(|e| e.get("LvlStatAbility").and_then(gff_value_to_i32).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn realign_moves_misplaced_increases_onto_increase_levels() {
+        // Fighter 2 / Wizard 6 with STR at 4 and INT at 8, Fighter removed: the six Wizard
+        // levels hold the increases at levels 2 and 6, but only level 4 grants one.
+        let mut history: Vec<_> = (0..6).map(|_| level_entry(None, &[])).collect();
+        history[1] = level_entry(Some(0), &[]);
+        history[5] = level_entry(Some(3), &[]);
+
+        let excess = realign_ability_increases(&mut history);
+
+        assert_eq!(
+            recorded_increases(&history),
+            vec![255, 255, 255, 0, 255, 255]
+        );
+        assert_eq!(excess, vec![3]);
+    }
+
+    #[test]
+    fn realign_keeps_increases_already_on_increase_levels() {
+        let mut history: Vec<_> = (0..8).map(|_| level_entry(None, &[])).collect();
+        history[7] = level_entry(Some(3), &[]);
+
+        let excess = realign_ability_increases(&mut history);
+
+        assert_eq!(recorded_increases(&history)[3], 255);
+        assert_eq!(recorded_increases(&history)[7], 3);
+        assert!(excess.is_empty());
+    }
+
+    #[test]
+    fn record_feat_change_removes_feat_from_every_level() {
+        let mut fields = IndexMap::new();
+        fields.insert(
+            "LvlStatList".to_string(),
+            GffValue::ListOwned(vec![
+                level_entry(None, &[8]),
+                level_entry(None, &[44, 8]),
+                level_entry(None, &[]),
+            ]),
+        );
+        let mut character = Character::from_gff(fields);
+
+        character.record_feat_change(FeatId(8), false);
+
+        let history = character.get_list_owned("LvlStatList").unwrap();
+        let feats: Vec<Vec<i32>> = history
+            .iter()
+            .map(|e| {
+                Character::extract_feat_list(e, "FeatList")
+                    .iter()
+                    .map(|f| f.0)
+                    .collect()
+            })
+            .collect();
+        assert_eq!(feats, vec![vec![], vec![44], vec![]]);
+    }
+
+    #[test]
+    fn alignment_restriction_follows_classes_2da_bits() {
+        let blackguard = restriction(0x09, 0x2, false);
+        assert!(blackguard.check_alignment(&LE) && blackguard.check_alignment(&NE));
+        assert!(!blackguard.check_alignment(&LG) && !blackguard.check_alignment(&NN));
+        assert_eq!(blackguard.decode_to_string().as_deref(), Some("Evil"));
+
+        let harper = restriction(0x10, 0x2, false);
+        assert!(harper.check_alignment(&NN) && !harper.check_alignment(&NE));
+
+        let dwarven_defender = restriction(0x05, 0x1, false);
+        assert!(dwarven_defender.check_alignment(&LE) && !dwarven_defender.check_alignment(&NN));
+        assert_eq!(
+            dwarven_defender.decode_to_string().as_deref(),
+            Some("Lawful")
+        );
+
+        let arcane_trickster = restriction(0x02, 0x1, false);
+        assert!(arcane_trickster.check_alignment(&NN) && !arcane_trickster.check_alignment(&LG));
+
+        let paladin = restriction(0x15, 0x3, false);
+        assert!(paladin.check_alignment(&LG));
+        assert!(!paladin.check_alignment(&LE) && !paladin.check_alignment(&CG));
+        assert_eq!(paladin.decode_to_string().as_deref(), Some("Lawful Good"));
+
+        let druid = restriction(0x01, 0x3, true);
+        assert!(druid.check_alignment(&NE) && druid.check_alignment(&CN));
+        assert!(!druid.check_alignment(&LG));
+
+        let warlock = restriction(0x14, 0x3, true);
+        assert!(warlock.check_alignment(&CG) && warlock.check_alignment(&LE));
+        assert!(!warlock.check_alignment(&LG) && !warlock.check_alignment(&NN));
+        assert_eq!(
+            warlock.decode_to_string().as_deref(),
+            Some("Chaotic or Evil")
+        );
+
+        assert!(restriction(0x00, 0x1, false).check_alignment(&LG));
+        assert!(restriction(0x00, 0x1, false).decode_to_string().is_none());
+    }
 
     fn create_test_character() -> Character {
         let mut fields = IndexMap::new();
@@ -4024,18 +3818,6 @@ mod tests {
     }
 
     #[test]
-    fn test_change_primary_class_updates_class_list() {
-        let mut character = create_character_with_history();
-        let game_data = GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
-            crate::parsers::tlk::TLKParser::default(),
-        )));
-
-        // Without classes table, should fail
-        let result = character.change_primary_class(ClassId(1), &game_data);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_level_up_does_not_write_root_class_field() {
         let mut character = create_character_with_history();
         let game_data = create_game_data_with_prestige_classes();
@@ -4047,34 +3829,6 @@ mod tests {
             !character.has_field("Class"),
             "root-level Class is not part of the game's creature schema"
         );
-    }
-
-    #[test]
-    fn test_change_primary_class_does_not_write_root_class_field() {
-        let mut character = create_character_with_history();
-        let game_data = create_game_data_with_prestige_classes();
-
-        character
-            .change_primary_class(ClassId(5), &game_data)
-            .unwrap();
-
-        assert!(
-            !character.has_field("Class"),
-            "root-level Class is not part of the game's creature schema"
-        );
-    }
-
-    #[test]
-    fn test_change_primary_class_noop_same_class() {
-        let character = create_character_with_history();
-        let _game_data = GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
-            crate::parsers::tlk::TLKParser::default(),
-        )));
-
-        // Changing to same class should be no-op (but still fails due to missing table for validation)
-        // This tests the early return path
-        let entries_before = character.class_entries();
-        assert_eq!(entries_before[0].class_id.0, 0);
     }
 
     #[test]
@@ -4094,75 +3848,5 @@ mod tests {
             }
             _ => panic!("Expected NotFound error"),
         }
-    }
-
-    #[test]
-    fn test_history_class_update() {
-        let mut character = create_character_with_history();
-
-        // Manually update history to test the update mechanism
-        let mut lvl_stat_list = character.get_list_owned("LvlStatList").unwrap();
-        assert_eq!(lvl_stat_list.len(), 3);
-
-        // All entries should be class 0
-        for entry in &lvl_stat_list {
-            let class_id = entry
-                .get("LvlStatClass")
-                .and_then(gff_value_to_i32)
-                .unwrap();
-            assert_eq!(class_id, 0);
-        }
-
-        // Update all to class 1
-        for entry in &mut lvl_stat_list {
-            entry.insert("LvlStatClass".to_string(), GffValue::Byte(1));
-        }
-        character.set_list("LvlStatList", lvl_stat_list);
-
-        // Verify update
-        let updated_list = character.get_list_owned("LvlStatList").unwrap();
-        for entry in &updated_list {
-            let class_id = entry
-                .get("LvlStatClass")
-                .and_then(gff_value_to_i32)
-                .unwrap();
-            assert_eq!(class_id, 1);
-        }
-    }
-
-    #[test]
-    fn test_recalculate_hp_no_history() {
-        let mut fields = IndexMap::new();
-        fields.insert("HitPoints".to_string(), GffValue::Int(10));
-        fields.insert("MaxHitPoints".to_string(), GffValue::Int(10));
-        fields.insert("CurrentHitPoints".to_string(), GffValue::Int(10));
-        fields.insert("Con".to_string(), GffValue::Byte(10)); // +0 modifier
-
-        let mut character = Character::from_gff(fields);
-        let game_data = GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
-            crate::parsers::tlk::TLKParser::default(),
-        )));
-
-        // No history means HP becomes 0 (sum of nothing)
-        // But this requires classes table
-        let result = character.recalculate_hp(&game_data);
-        assert!(result.is_err()); // Missing classes table
-    }
-
-    #[test]
-    fn test_class_entry_preserved_on_primary_change_failure() {
-        let mut character = create_character_with_history();
-
-        // Store original state
-        let original_class = character.class_entries()[0].class_id.0;
-
-        // Attempt change without game data (will fail)
-        let game_data = GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
-            crate::parsers::tlk::TLKParser::default(),
-        )));
-        let _ = character.change_primary_class(ClassId(5), &game_data);
-
-        // Original class should be preserved (change failed)
-        assert_eq!(character.class_entries()[0].class_id.0, original_class);
     }
 }

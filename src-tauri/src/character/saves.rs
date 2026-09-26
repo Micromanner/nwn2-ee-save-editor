@@ -88,22 +88,11 @@ impl Character {
         let mut reflex = 0;
         let mut will = 0;
 
-        let total_level: i32 = class_entries.iter().map(|e| e.level).sum();
-
         for entry in class_entries {
-            let heroic_level = entry.level.min(20);
-            let (f, r, w) = self.get_class_saves_at_level(game_data, entry.class_id, heroic_level);
+            let (f, r, w) = self.get_class_saves_at_level(game_data, entry.class_id, entry.level);
             fort += f;
             reflex += r;
             will += w;
-        }
-
-        if total_level > 20 {
-            let epic_levels = total_level - 20;
-            let epic_save = (epic_levels + 1) / 2;
-            fort += epic_save;
-            reflex += epic_save;
-            will += epic_save;
         }
 
         SaveBonuses::new(fort, reflex, will)
@@ -138,7 +127,7 @@ impl Character {
             return (0, 0, 0);
         };
 
-        let row_index = (level - 1).clamp(0, 19) as usize;
+        let row_index = (level - 1) as usize;
         let fort = save_table
             .get_cell(row_index, "fortsave")
             .ok()
@@ -159,13 +148,6 @@ impl Character {
             .unwrap_or(0);
 
         (fort, reflex, will)
-    }
-
-    pub fn set_base_saves(&mut self, saves: SaveBonuses) -> Result<(), CharacterError> {
-        self.set_fortitude(saves.fortitude)?;
-        self.set_reflex(saves.reflex)?;
-        self.set_will(saves.will)?;
-        Ok(())
     }
 }
 

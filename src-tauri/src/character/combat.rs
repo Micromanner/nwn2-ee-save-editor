@@ -53,22 +53,10 @@ impl Character {
             return 0;
         }
 
-        let mut total_bab = 0;
-        let total_level: i32 = class_entries.iter().map(|e| e.level).sum();
-
-        for entry in class_entries {
-            let heroic_level = entry.level.min(20);
-            let class_bab = self.get_class_bab_at_level(game_data, entry.class_id, heroic_level);
-            total_bab += class_bab;
-        }
-
-        if total_level > 20 {
-            let epic_levels = total_level - 20;
-            let epic_bab = (epic_levels + 1) / 2;
-            total_bab += epic_bab;
-        }
-
-        total_bab
+        class_entries
+            .iter()
+            .map(|entry| self.get_class_bab_at_level(game_data, entry.class_id, entry.level))
+            .sum()
     }
 
     fn get_class_bab_at_level(&self, game_data: &GameData, class_id: ClassId, level: i32) -> i32 {
@@ -95,7 +83,7 @@ impl Character {
             return level / 2;
         };
 
-        let row_index = (level - 1).clamp(0, 19) as usize;
+        let row_index = (level - 1) as usize;
         bab_table
             .get_cell(row_index, "BAB")
             .ok()
@@ -201,7 +189,7 @@ impl Character {
     }
 
     pub fn base_attack_bonus(&self) -> i32 {
-        self.get_i32("BAB").unwrap_or(0)
+        self.get_i32("BaseAttackBonus").unwrap_or(0)
     }
 
     pub fn combat_stats(&self) -> CombatStats {
@@ -213,7 +201,7 @@ impl Character {
     }
 
     pub fn set_base_attack_bonus(&mut self, bab: i32) {
-        self.set_i32("BAB", bab);
+        self.set_byte("BaseAttackBonus", bab.clamp(0, i32::from(u8::MAX)) as u8);
     }
 
     pub fn current_hit_points(&self) -> i32 {
@@ -424,7 +412,7 @@ mod tests {
     #[test]
     fn test_base_attack_bonus_stored() {
         let mut fields = IndexMap::new();
-        fields.insert("BAB".to_string(), GffValue::Int(15));
+        fields.insert("BaseAttackBonus".to_string(), GffValue::Byte(15));
         let character = Character::from_gff(fields);
         assert_eq!(character.base_attack_bonus(), 15);
     }

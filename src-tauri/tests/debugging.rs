@@ -72,3 +72,6 @@ mod verify_skill_take_back;
 
 #[path = "debugging/dump_quest_decodes.rs"]
 mod dump_quest_decodes;
+
+#[path = "debugging/compare_level_up.rs"]
+mod compare_level_up;

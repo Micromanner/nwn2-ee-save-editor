@@ -158,12 +158,11 @@ impl Character {
 
         let current_hp = self.current_hp();
         let max_hp = self.max_hp();
-        let new_max_hp = max_hp + hp_change;
-        let new_current_hp = 1.max((current_hp + hp_change).min(new_max_hp));
+        let new_max_hp = (max_hp + hp_change).max(1);
+        let new_current_hp = (current_hp + hp_change).clamp(1, new_max_hp);
 
         self.set_max_hp(new_max_hp);
         self.set_current_hp(new_current_hp);
-        self.set_base_hp(new_max_hp);
     }
 
     pub fn base_scores(&self) -> AbilityScores {
@@ -775,7 +774,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(character.base_ability(AbilityIndex::CON), 16);
         assert_eq!(character.max_hp(), 110);
-        assert_eq!(character.base_hp(), 110);
+        assert_eq!(character.base_hp(), 100);
         assert_eq!(character.current_hp(), 90);
 
         let result = character.set_ability_with_cascades(AbilityIndex::CON, 12, &game_data);

@@ -284,7 +284,8 @@ pub fn get_categorized_classes(game_data: &GameData) -> CategorizedClasses {
         let has_arcane = row_bool(&row, "hasarcane", false);
         let has_divine = row_bool(&row, "hasdivine", false);
 
-        let align_restrict = row_int(&row, "alignrestrict", 0);
+        let align_restriction =
+            crate::character::classes::AlignmentRestriction::from_class_row(&row);
 
         let description_strref = row_int(&row, "description", -1);
         let description = if description_strref >= 0 {
@@ -295,15 +296,10 @@ pub fn get_categorized_classes(game_data: &GameData) -> CategorizedClasses {
             None
         };
 
-        let prerequisites = if align_restrict > 0 {
-            Some(PrestigeRequirements {
-                alignment: crate::character::classes::AlignmentRestriction(align_restrict)
-                    .decode_to_string(),
-                ..Default::default()
-            })
-        } else {
-            None
-        };
+        let prerequisites = align_restriction.map(|restriction| PrestigeRequirements {
+            alignment: restriction.decode_to_string(),
+            ..Default::default()
+        });
 
         let icon = row_str(&row, "icon");
 
@@ -322,7 +318,7 @@ pub fn get_categorized_classes(game_data: &GameData) -> CategorizedClasses {
             primary_ability: row_str(&row, "primaryabil").unwrap_or_else(|| "STR".to_string()),
             bab_progression: row_str(&row, "attackbonustable")
                 .unwrap_or_else(|| "CLS_ATK_2".to_string()),
-            alignment_restricted: align_restrict > 0,
+            alignment_restricted: align_restriction.is_some(),
             icon,
             description,
             prerequisites,
