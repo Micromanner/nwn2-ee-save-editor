@@ -1,6 +1,6 @@
 use crate::character::{
-    AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, Character, CharacterError,
-    HitPoints, resolve_localized_name, resolved_full_name,
+    AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, Character, HitPoints,
+    resolve_localized_name, resolved_full_name,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::loaders::GameData;
@@ -518,7 +518,7 @@ pub async fn get_race_name(state: State<'_, AppState>) -> CommandResult<String> 
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.race_name(&game_data))
+    Ok(character.race_display_name(&game_data))
 }
 
 #[tauri::command]
@@ -584,14 +584,9 @@ pub async fn change_race(
             .character
             .as_ref()
             .ok_or(CommandError::NoCharacterLoaded)?;
-        let validation = character.validate_race_change(race_id, subrace.as_deref(), &game_data);
-        if !validation.valid {
-            return Err(CharacterError::ValidationFailed {
-                field: "race",
-                message: validation.errors.join("; "),
-            }
-            .into());
-        }
+        character
+            .validate_race_change(race_id, subrace.as_deref(), &game_data)
+            .into_result("race")?;
         character.get_race_name_by_id(race_id, &game_data)
     };
     session.record_history(format!("Change race to {race_label}"));
@@ -600,16 +595,13 @@ pub async fn change_race(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    let old_race_id = character.race_id();
-    let old_subrace = character.subrace_name(&game_data);
-
-    character.change_race(race_id, subrace.clone(), false, &game_data)?;
+    let result = character.change_race(race_id, subrace, false, &game_data)?;
 
     Ok(RaceChangedEvent {
-        old_race_id: Some(old_race_id.0),
-        new_race_id: race_id,
-        old_subrace,
-        new_subrace: subrace,
+        old_race_id: Some(result.old_race_id),
+        new_race_id: result.new_race_id,
+        old_subrace: result.old_subrace,
+        new_subrace: result.new_subrace,
     })
 }
 

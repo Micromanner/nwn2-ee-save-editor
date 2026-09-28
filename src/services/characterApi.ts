@@ -335,18 +335,6 @@ export interface AlignmentUpdateResponse {
   alignment_string: string;
 }
 
-export interface RaceDataResponse {
-  race_id: number;
-  race_name: string;
-  subrace: string;
-  size: number;
-  size_name: string;
-  base_speed: number;
-  ability_modifiers: Record<string, number>;
-  racial_feats: number[];
-  favored_class?: number;
-}
-
 export interface CombatUpdateResponse {
   success: boolean;
   updated_value: number;
@@ -416,7 +404,6 @@ export interface CharacterData {
   damageImmunities?: string[];
   spellResistance?: number;
   // Physical stats
-  size?: string;
   initiative?: number;
   // Ability modifiers from overview dashboard
   abilityModifiers?: { Str: number; Dex: number; Con: number; Int: number; Wis: number; Cha: number };
@@ -503,7 +490,6 @@ export class CharacterAPI {
         saving_throws: { fortitude: number; reflex: number; will: number };
         gold: number;
         skill_points_available: number;
-        size_name: string;
         background: string | null;
         domains: Array<{ id: number; name: string; description: string; has_domain: boolean }>;
         ability_scores: { Str: number; Dex: number; Con: number; Int: number; Wis: number; Cha: number };
@@ -564,7 +550,6 @@ export class CharacterAPI {
         gold: overview.gold,
         background: overview.background ? { name: overview.background, id: 0 } : undefined,
         domains: overview.domains,
-        size: overview.size_name,
         baseAttackBonus: overview.base_attack_bonus,
         meleeAttackBonus: overview.melee_attack_bonus,
         rangedAttackBonus: overview.ranged_attack_bonus,
@@ -1118,24 +1103,6 @@ export class CharacterAPI {
     
     await Promise.all(promises);
     return { success: true, updated: Object.keys(saveUpdates) };
-  }
-
-  static async getRaceData(characterId: number): Promise<RaceDataResponse> {
-    // Construct race response from commands
-     const id = await invoke<number>('get_race_id');
-     const name = await invoke<string>('get_race_name');
-     const sub = await invoke<string | null>('get_subrace');
-     
-     return {
-         race_id: id,
-         race_name: name,
-         subrace: sub || '',
-         size: 0,
-         size_name: 'Medium',
-         base_speed: 30,
-         ability_modifiers: {},
-         racial_feats: []
-     };
   }
 
   static async getClassesState(characterId: number): Promise<any> {

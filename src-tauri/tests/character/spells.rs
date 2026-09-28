@@ -238,7 +238,7 @@ async fn test_aasimar_ability_spells() {
     let character = Character::from_gff(gff);
 
     // Verify this is an Aasimar
-    let race_name = character.race_name(game_data);
+    let race_name = character.race_display_name(game_data);
     println!("Race: {race_name}");
     assert_eq!(race_name, "Aasimar", "Fixture should be an Aasimar");
 
@@ -321,7 +321,7 @@ async fn test_non_caster_has_no_class_ability_spells_overlap() {
         .expect("Failed to read root struct");
     let character = Character::from_gff(gff);
 
-    let race_name = character.race_name(game_data);
+    let race_name = character.race_display_name(game_data);
     println!("Race: {race_name}");
 
     let ability_spells = character.get_ability_spells(game_data);

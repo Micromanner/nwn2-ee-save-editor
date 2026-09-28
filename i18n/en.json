@@ -160,22 +160,10 @@
     "meleeAttack": "Melee Attack",
     "rangedAttack": "Ranged Attack",
     "initiative": "Initiative",
-    "sizeLabel": "Size",
     "skillPoints": "Skill Points",
     "totalFeats": "Total Feats",
     "knownSpells": "Known Spells",
-    "genderLabel": "Gender",
-    "size": {
-      "fine": "Fine",
-      "diminutive": "Diminutive",
-      "tiny": "Tiny",
-      "small": "Small",
-      "medium": "Medium",
-      "large": "Large",
-      "huge": "Huge",
-      "gargantuan": "Gargantuan",
-      "colossal": "Colossal"
-    }
+    "genderLabel": "Gender"
   },
   "overview": {
     "armorClass": "Armor Class",

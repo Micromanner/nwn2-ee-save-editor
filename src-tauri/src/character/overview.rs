@@ -37,8 +37,6 @@ pub struct OverviewState {
     pub gold: u32,
     pub skill_points_available: i32,
 
-    pub size_name: String,
-
     pub background: Option<String>,
     pub domains: Vec<DomainInfo>,
 
@@ -127,7 +125,7 @@ impl Character {
             last_name,
             full_name,
             race_id: self.race_id().0,
-            race_name: self.race_name(game_data),
+            race_name: self.race_display_name(game_data),
             subrace: self.subrace_name(game_data),
             gender: gender_str.to_string(),
             gender_id,
@@ -149,8 +147,6 @@ impl Character {
 
             gold: self.gold(),
             skill_points_available: self.get_available_skill_points(),
-
-            size_name: self.get_size_name_from_2da(self.creature_size(), game_data),
 
             background: self.background(game_data),
             domains,

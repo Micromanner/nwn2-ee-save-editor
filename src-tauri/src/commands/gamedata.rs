@@ -556,14 +556,7 @@ pub async fn get_available_races(state: State<'_, AppState>) -> CommandResult<Ve
                 None
             };
 
-            let ability_adjustments = crate::character::types::AbilityModifiers::new(
-                row_int(&row, "stradjust", 0),
-                row_int(&row, "dexadjust", 0),
-                row_int(&row, "conadjust", 0),
-                row_int(&row, "intadjust", 0),
-                row_int(&row, "wisadjust", 0),
-                row_int(&row, "chaadjust", 0),
-            );
+            let ability_adjustments = crate::character::types::AbilityModifiers::from_row(&row);
 
             let favored_class = resolve_class_name(row_int(&row, "favored", -1), &game_data);
 
@@ -650,14 +643,7 @@ fn build_subrace(
         None
     };
 
-    let ability_adjustments = crate::character::types::AbilityModifiers::new(
-        row_int(row, "stradjust", 0),
-        row_int(row, "dexadjust", 0),
-        row_int(row, "conadjust", 0),
-        row_int(row, "intadjust", 0),
-        row_int(row, "wisadjust", 0),
-        row_int(row, "chaadjust", 0),
-    );
+    let ability_adjustments = crate::character::types::AbilityModifiers::from_row(row);
 
     let has_favored = row_int(row, "hasfavoredclass", 1);
     let favored_class = if has_favored == 0 {

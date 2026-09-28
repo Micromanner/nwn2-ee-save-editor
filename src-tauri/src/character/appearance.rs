@@ -416,7 +416,7 @@ impl Character {
 
         AppearanceState {
             race_id: self.race_id().0,
-            race_name: self.race_name(game_data),
+            race_name: self.race_display_name(game_data),
             subrace_id: self.subrace_index().unwrap_or(0),
             gender: gender_id,
             gender_name,

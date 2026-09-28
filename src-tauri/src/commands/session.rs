@@ -127,7 +127,7 @@ fn summarize_save_character(
     SaveCharacterOption {
         player_index,
         name,
-        race: character.race_name(game_data),
+        race: character.race_display_name(game_data),
         total_level: character.total_level(),
         classes,
     }

@@ -160,18 +160,6 @@
     "meleeAttack": "Nahkampfangriff",
     "rangedAttack": "Fernkampfangriff",
     "initiative": "Initiative",
-    "sizeLabel": "Größe",
-    "size": {
-      "fine": "Winzig",
-      "diminutive": "Sehr klein",
-      "tiny": "Klein",
-      "small": "Klein",
-      "medium": "Mittel",
-      "large": "Groß",
-      "huge": "Riesig",
-      "gargantuan": "Gigantisch",
-      "colossal": "Kolossal"
-    },
     "skillPoints": "Fertigkeitspunkte",
     "totalFeats": "Talente gesamt",
     "knownSpells": "Bekannte Zauber",

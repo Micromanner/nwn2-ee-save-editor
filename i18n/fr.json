@@ -160,22 +160,10 @@
     "meleeAttack": "Attaque de Mêlée",
     "rangedAttack": "Attaque à Distance",
     "initiative": "Initiative",
-    "sizeLabel": "Taille",
     "skillPoints": "Points de Compétence",
     "totalFeats": "Dons Totaux",
     "knownSpells": "Sorts Connus",
-    "genderLabel": "Sexe",
-    "size": {
-      "fine": "Infiniment petit",
-      "diminutive": "Très petit",
-      "tiny": "Minuscule",
-      "small": "Petit",
-      "medium": "Moyen",
-      "large": "Grand",
-      "huge": "Très grand",
-      "gargantuan": "Gargantuesque",
-      "colossal": "Colossal"
-    }
+    "genderLabel": "Sexe"
   },
   "overview": {
     "armorClass": "Classe d'Armure",

@@ -160,22 +160,10 @@
     "meleeAttack": "Ближний бой",
     "rangedAttack": "Дальний бой",
     "initiative": "Инициатива",
-    "sizeLabel": "Размер",
     "skillPoints": "Очки навыков",
     "totalFeats": "Всего фитов",
     "knownSpells": "Известные заклинания",
-    "genderLabel": "Пол",
-    "size": {
-      "fine": "Миниатюрный",
-      "diminutive": "Крошечный",
-      "tiny": "Маленький",
-      "small": "Маленький",
-      "medium": "Средний",
-      "large": "Большой",
-      "huge": "Огромный",
-      "gargantuan": "Громадный",
-      "colossal": "Колоссальный"
-    }
+    "genderLabel": "Пол"
   },
   "overview": {
     "armorClass": "Класс защиты",

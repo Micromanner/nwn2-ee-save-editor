@@ -4,6 +4,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::ops::{Index, IndexMut};
 
+use super::CharacterError;
+use crate::utils::parsing::{Row, row_int};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default, Type)]
 #[repr(transparent)]
 pub struct RaceId(pub i32);
@@ -261,6 +264,18 @@ impl AbilityModifiers {
         }
     }
 
+    /// `*adjust` columns shared by `racialtypes.2da` and `racialsubtypes.2da`.
+    pub fn from_row(row: &Row) -> Self {
+        Self::new(
+            row_int(row, "stradjust", 0),
+            row_int(row, "dexadjust", 0),
+            row_int(row, "conadjust", 0),
+            row_int(row, "intadjust", 0),
+            row_int(row, "wisadjust", 0),
+            row_int(row, "chaadjust", 0),
+        )
+    }
+
     pub fn from_scores(scores: &AbilityScores) -> Self {
         Self {
             str_mod: calculate_modifier(scores.str_),
@@ -431,6 +446,16 @@ impl ValidationResult {
 
     pub fn is_valid(&self) -> bool {
         self.valid
+    }
+
+    pub fn into_result(self, field: &'static str) -> Result<(), CharacterError> {
+        if self.valid {
+            return Ok(());
+        }
+        Err(CharacterError::ValidationFailed {
+            field,
+            message: self.errors.join("; "),
+        })
     }
 }
 

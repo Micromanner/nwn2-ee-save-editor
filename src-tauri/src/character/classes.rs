@@ -20,8 +20,9 @@ use super::{Character, CharacterError};
 use crate::character::feats::FeatSource;
 use crate::character::gff_helpers::gff_value_to_i32;
 use crate::character::identity::Alignment;
+use crate::character::race::featstable_feats;
 use crate::character::types::{
-    AbilityIndex, ClassId, FeatId, MAX_CLASSES, MAX_TOTAL_LEVEL, RaceId, SkillId,
+    AbilityIndex, ClassId, FeatId, MAX_CLASSES, MAX_TOTAL_LEVEL, SkillId,
 };
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
@@ -618,25 +619,22 @@ impl Character {
     pub fn get_preserved_feat_ids(&self, game_data: &GameData) -> HashSet<i32> {
         let mut preserved = HashSet::new();
 
-        let race_id = self.race_id();
-        if let Some(racial_feats) = self.get_racial_feat_ids(race_id, game_data) {
-            preserved.extend(racial_feats);
-        }
+        let race_id = self.race_id().0;
+        preserved.extend(
+            self.get_racial_feats_for_race(race_id, game_data)
+                .into_iter()
+                .map(|feat| feat.0),
+        );
 
-        if let Some(subrace_idx) = self.subrace_index()
-            && let Some(subtypes_table) = game_data.get_table("racialsubtypes")
-            && let Some(subtype_row) = subtypes_table.get_by_id(subrace_idx)
-            && let Some(table_name) = row_str(&subtype_row, "featstable")
-            && let Some(feat_table) = game_data.get_table(&table_name.to_lowercase())
+        if let Some(subrace) = self
+            .subrace_index()
+            .and_then(|idx| self.get_subrace_data_by_index(idx, game_data))
         {
-            for row_idx in 0..feat_table.row_count() {
-                if let Ok(row) = feat_table.get_row(row_idx) {
-                    let feat_id = row_int(&row, "featindex", -1);
-                    if feat_id >= 0 {
-                        preserved.insert(feat_id);
-                    }
-                }
-            }
+            preserved.extend(
+                featstable_feats(game_data, subrace.feats_table.as_deref())
+                    .into_iter()
+                    .map(|feat| feat.0),
+            );
         }
 
         let feat_entries = self.feat_entries();
@@ -683,36 +681,6 @@ impl Character {
         }
 
         preserved
-    }
-
-    pub fn get_racial_feat_ids(&self, race_id: RaceId, game_data: &GameData) -> Option<Vec<i32>> {
-        let racialtypes = game_data.get_table("racialtypes")?;
-        let race_data = racialtypes.get_by_id(race_id.0)?;
-
-        let feat_table_name = row_str(&race_data, "feattable")?;
-
-        let feat_table = game_data.get_table(&feat_table_name.to_lowercase())?;
-        let mut feat_ids = Vec::new();
-
-        for row_id in 0..feat_table.row_count() {
-            if let Some(row) = feat_table.get_by_id(row_id as i32)
-                && let Some(feat_index_str) = row
-                    .get("featindex")
-                    .and_then(|v| v.as_deref())
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty() && *s != "****")
-                && let Ok(feat_id) = feat_index_str.parse::<i32>()
-                && feat_id >= 0
-            {
-                feat_ids.push(feat_id);
-            }
-        }
-
-        if feat_ids.is_empty() {
-            None
-        } else {
-            Some(feat_ids)
-        }
     }
 
     /// Remove a class entirely from the character.

@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashSet;
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 use super::{Character, CharacterError};
 use crate::character::feats::{FeatSource, FeatType};
-use crate::character::types::{AbilityIndex, AbilityModifiers, FeatId, RaceId, ValidationResult};
+use crate::character::types::{AbilityModifiers, FeatId, RaceId, ValidationResult};
 use crate::loaders::GameData;
-use crate::utils::parsing::{Row, row_int, row_str};
+use crate::utils::parsing::{row_int, row_str};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[repr(i32)]
@@ -34,17 +34,6 @@ impl SizeCategory {
         }
     }
 
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::Invalid => "Invalid",
-            Self::Tiny => "Tiny",
-            Self::Small => "Small",
-            Self::Medium => "Medium",
-            Self::Large => "Large",
-            Self::Huge => "Huge",
-        }
-    }
-
     pub fn ac_modifier_default(&self) -> i32 {
         match self {
             Self::Invalid => 0,
@@ -68,12 +57,9 @@ pub struct SubraceInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct SubraceData {
     pub id: i32,
-    pub name: String,
     pub label: String,
     pub base_race: i32,
     pub ability_modifiers: AbilityModifiers,
-    pub player_race: bool,
-    pub favored_class: Option<i32>,
     pub feats_table: Option<String>,
 }
 
@@ -183,10 +169,6 @@ impl Character {
         SizeCategory::from_id(self.creature_size())
     }
 
-    pub fn race_name(&self, game_data: &GameData) -> String {
-        self.race_display_name(game_data)
-    }
-
     pub fn get_race_name_by_id(&self, race_id: i32, game_data: &GameData) -> String {
         let Some(races) = game_data.get_table("racialtypes") else {
             return format!("Race {race_id}");
@@ -276,14 +258,14 @@ impl Character {
                 };
                 let label = row_str(&row_data, "label").unwrap_or_default();
                 let strref = row_str(&row_data, "name").unwrap_or_default();
-                let tlk_name = strref
-                    .parse::<i32>()
-                    .ok()
-                    .and_then(|strref| game_data.get_string(strref));
 
                 label.to_lowercase() == wanted
                     || strref.to_lowercase() == wanted
-                    || tlk_name.is_some_and(|n| n.to_lowercase() == wanted)
+                    || strref
+                        .parse::<i32>()
+                        .ok()
+                        .and_then(|strref| game_data.get_string(strref))
+                        .is_some_and(|n| n.to_lowercase() == wanted)
             })
             .and_then(|row_idx| self.get_subrace_data_by_index(row_idx as i32, game_data))
     }
@@ -299,17 +281,13 @@ impl Character {
             .get_row_dict(usize::try_from(index).ok()?)
             .ok()?;
 
-        let name = row_str(&row_data, "name").unwrap_or_default();
-        let label = row_str(&row_data, "label").unwrap_or_else(|| name.clone());
-
         Some(SubraceData {
             id: index,
-            name,
-            label,
+            label: row_str(&row_data, "label")
+                .or_else(|| row_str(&row_data, "name"))
+                .unwrap_or_default(),
             base_race: row_int(&row_data, "baserace", -1),
-            ability_modifiers: ability_modifiers_from_row(&row_data),
-            player_race: row_int(&row_data, "playerrace", 1) == 1,
-            favored_class: Some(row_int(&row_data, "favored", -1)).filter(|&v| v >= 0),
+            ability_modifiers: AbilityModifiers::from_row(&row_data),
             feats_table: row_str(&row_data, "featstable").filter(|s| s != "****"),
         })
     }
@@ -334,7 +312,7 @@ impl Character {
             return AbilityModifiers::default();
         };
 
-        ability_modifiers_from_row(&row_data)
+        AbilityModifiers::from_row(&row_data)
     }
 
     pub fn get_racial_feats_for_race(&self, race_id: i32, game_data: &GameData) -> Vec<FeatId> {
@@ -363,8 +341,14 @@ impl Character {
             return ValidationResult::error(format!("Unknown race ID: {new_race_id}"));
         }
 
-        match new_subrace {
+        match new_subrace.filter(|s| !s.is_empty()) {
             Some(subrace_name) => self.validate_subrace(new_race_id, subrace_name, game_data),
+            None if self
+                .default_subrace_for_race(new_race_id, game_data)
+                .is_none() =>
+            {
+                ValidationResult::error(format!("Race {new_race_id} has no subrace to write"))
+            }
             None => ValidationResult::ok(),
         }
     }
@@ -404,13 +388,8 @@ impl Character {
             new_race_id, new_subrace
         );
 
-        let validation = self.validate_race_change(new_race_id, new_subrace.as_deref(), game_data);
-        if !validation.valid {
-            return Err(CharacterError::ValidationFailed {
-                field: "race",
-                message: validation.errors.join("; "),
-            });
-        }
+        self.validate_race_change(new_race_id, new_subrace.as_deref(), game_data)
+            .into_result("race")?;
 
         let old_race_id = self.race_id().0;
         let old_subrace_data = self
@@ -422,35 +401,33 @@ impl Character {
                 .default_subrace_for_race(new_race_id, game_data)
                 .and_then(|id| self.get_subrace_data_by_index(id, game_data)),
         };
-        let new_subrace_id = new_subrace_data.as_ref().map_or_else(
-            || {
-                warn!("No default subrace for race {new_race_id}; writing Subrace 0");
-                0
-            },
-            |data| data.id,
-        );
-        u8::try_from(new_subrace_id).map_err(|_| CharacterError::ValidationFailed {
-            field: "subrace",
-            message: format!("Subrace ID {new_subrace_id} does not fit the Subrace byte"),
-        })?;
-
+        // A subrace from another BaseRace crashes the game on save, and 0 is Gold Dwarf.
+        let new_subrace_id = new_subrace_data
+            .as_ref()
+            .map(|data| data.id)
+            .ok_or_else(|| CharacterError::ValidationFailed {
+                field: "subrace",
+                message: format!("Race {new_race_id} has no subrace to write"),
+            })?;
+        let old_subrace = self.subrace_name(game_data);
         let mut result = RaceChangeResult {
             old_race_id,
-            old_race_name: self.race_name(game_data),
-            old_subrace: self.subrace_name(game_data),
+            old_race_name: old_subrace
+                .clone()
+                .unwrap_or_else(|| self.get_race_name_by_id(old_race_id, game_data)),
+            old_subrace,
             new_race_id,
             new_race_name: self.get_race_name_by_id(new_race_id, game_data),
             new_subrace: new_subrace_data.as_ref().map(|data| data.label.clone()),
             ..Default::default()
         };
 
-        let base_con = self.base_ability(AbilityIndex::CON);
-        let old_con = base_con + self.get_racial_modifier_deltas(game_data).con_mod;
+        let old_con = self.get_effective_abilities(game_data).con;
 
-        self.set_race(RaceId(new_race_id))?;
         self.set_subrace_index(new_subrace_id)?;
+        self.set_race(RaceId(new_race_id))?;
 
-        let new_con = base_con + self.get_racial_modifier_deltas(game_data).con_mod;
+        let new_con = self.get_effective_abilities(game_data).con;
         self.recalculate_hit_points(old_con, new_con);
 
         if !preserve_feats {
@@ -561,33 +538,6 @@ impl Character {
         }
     }
 
-    pub fn get_size_name_from_2da(&self, size_id: i32, game_data: &GameData) -> String {
-        let Some(size_table) = game_data.get_table("creaturesize") else {
-            return SizeCategory::from_id(size_id).name().to_string();
-        };
-
-        let Some(row) = size_table.get_by_id(size_id) else {
-            return SizeCategory::from_id(size_id).name().to_string();
-        };
-
-        if let Some(label) = row
-            .get("label")
-            .and_then(std::clone::Clone::clone)
-            .filter(|s| !s.is_empty() && s != "INVALID")
-        {
-            let mut chars = label.chars();
-            match chars.next() {
-                None => label,
-                Some(first) => {
-                    first.to_uppercase().collect::<String>()
-                        + chars.as_str().to_lowercase().as_str()
-                }
-            }
-        } else {
-            SizeCategory::from_id(size_id).name().to_string()
-        }
-    }
-
     pub fn get_racial_modifier_deltas(&self, game_data: &GameData) -> AbilityModifiers {
         let race_id = self.race_id().0;
         if let Some(idx) = self.subrace_index()
@@ -610,18 +560,7 @@ impl Character {
     }
 }
 
-fn ability_modifiers_from_row(row: &Row) -> AbilityModifiers {
-    AbilityModifiers::new(
-        row_int(row, "stradjust", 0),
-        row_int(row, "dexadjust", 0),
-        row_int(row, "conadjust", 0),
-        row_int(row, "intadjust", 0),
-        row_int(row, "wisadjust", 0),
-        row_int(row, "chaadjust", 0),
-    )
-}
-
-fn featstable_feats(game_data: &GameData, table_name: Option<&str>) -> Vec<FeatId> {
+pub(crate) fn featstable_feats(game_data: &GameData, table_name: Option<&str>) -> Vec<FeatId> {
     let Some(name) = table_name.filter(|s| !s.is_empty() && *s != "****") else {
         return Vec::new();
     };
@@ -751,12 +690,5 @@ mod tests {
         assert_eq!(SizeCategory::Medium.ac_modifier_default(), 0);
         assert_eq!(SizeCategory::Large.ac_modifier_default(), -1);
         assert_eq!(SizeCategory::Huge.ac_modifier_default(), -2);
-    }
-
-    #[test]
-    fn test_size_category_names() {
-        assert_eq!(SizeCategory::Tiny.name(), "Tiny");
-        assert_eq!(SizeCategory::Medium.name(), "Medium");
-        assert_eq!(SizeCategory::Huge.name(), "Huge");
     }
 }

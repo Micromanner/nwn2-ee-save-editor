@@ -160,18 +160,6 @@
     "meleeAttack": "Ataque Cuerpo a Cuerpo",
     "rangedAttack": "Ataque a Distancia",
     "initiative": "Iniciativa",
-    "sizeLabel": "Tamaño",
-    "size": {
-      "fine": "Diminuto",
-      "diminutive": "Muy pequeño",
-      "tiny": "Pequeño",
-      "small": "Pequeño",
-      "medium": "Mediano",
-      "large": "Grande",
-      "huge": "Enorme",
-      "gargantuan": "Gargantuesco",
-      "colossal": "Colosal"
-    },
     "skillPoints": "Puntos de Habilidad",
     "totalFeats": "Total de Dotes",
     "knownSpells": "Hechizos Conocidos",

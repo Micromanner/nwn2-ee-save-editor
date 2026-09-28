@@ -17,7 +17,7 @@ async fn test_race_data_loading() {
 
     // Basic consistency checks
     let race_id = character.race_id();
-    let race_name = character.race_name(game_data);
+    let race_name = character.race_display_name(game_data);
     println!("Ryath race: {race_name} (ID: {race_id:?})");
 
     assert_ne!(race_name, "", "Race name should not be empty");
@@ -117,7 +117,7 @@ async fn test_diverse_races() {
                 .expect("Failed to read top level struct");
             let character = Character::from_gff(fields);
 
-            let race_name = character.race_name(game_data);
+            let race_name = character.race_display_name(game_data);
             let size = character.size_category();
 
             println!("Character: {name} ({file}) - Race: {race_name}, Size: {size:?}");
@@ -309,7 +309,7 @@ async fn test_aasimar_subrace_from_byte_index() {
         "Subrace name should be Aasimar, got: {subrace_name:?}"
     );
 
-    let race_name = character.race_name(game_data);
+    let race_name = character.race_display_name(game_data);
     println!("Race Name (display): {race_name}");
     assert!(
         race_name.to_lowercase().contains("aasimar"),

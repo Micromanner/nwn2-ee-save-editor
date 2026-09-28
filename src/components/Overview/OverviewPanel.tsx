@@ -473,7 +473,6 @@ export function OverviewPanel() {
             <KVRow label={t('character.initiative')} value={formatModifier(initTotal)} />
             <KVRow label={t('character.meleeAttack')} value={formatModifier(melee)} />
             <KVRow label={t('character.rangedAttack')} value={formatModifier(ranged)} />
-            <KVRow label={t('character.sizeLabel')} value={t(`character.size.${character.size?.toLowerCase()}`) || display(character.size)} />
           </div>
         </div>
 

@@ -162,22 +162,10 @@
     "meleeAttack": "Atak Wręcz",
     "rangedAttack": "Atak Dystansowy",
     "initiative": "Inicjatywa",
-    "sizeLabel": "Rozmiar",
     "skillPoints": "Punkty Umiejętności",
     "totalFeats": "Suma Atutów",
     "knownSpells": "Znane Czary",
-    "genderLabel": "Płeć",
-    "size": {
-      "fine": "Bardzo mały",
-      "diminutive": "Malutki",
-      "tiny": "Drobny",
-      "small": "Mały",
-      "medium": "Średni",
-      "large": "Duży",
-      "huge": "Ogromny",
-      "gargantuan": "Gargantuiczny",
-      "colossal": "Kolosalny"
-    }
+    "genderLabel": "Płeć"
   },
   "overview": {
     "armorClass": "Klasa Pancerza",
