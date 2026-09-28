@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use super::{Character, CharacterError, ClassId};
 use crate::character::gff_helpers::gff_value_to_i32;
-use crate::character::types::{AbilityIndex, AbilityModifiers, FeatId, SkillId};
+use crate::character::types::{AbilityIndex, FeatId, SkillId};
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
 use crate::services::item_property_decoder::ItemPropertyDecoder;
@@ -207,53 +207,6 @@ impl Character {
         -refund
     }
 
-    /// Calculate the total skill modifier for a skill.
-    ///
-    /// Formula: `ranks + ability_modifier`
-    /// If decoder is provided, uses total ability scores (base + race + equipment).
-    /// Otherwise uses base ability scores.
-    pub fn calculate_skill_modifier(
-        &self,
-        skill_id: SkillId,
-        game_data: &GameData,
-        decoder: Option<&ItemPropertyDecoder>,
-    ) -> i32 {
-        let ranks = self.skill_rank(skill_id);
-        let key_ability = self.get_skill_key_ability(skill_id, game_data);
-
-        // Base ability modifier
-        let mut ability_mod = self.ability_modifier(key_ability);
-        let mut item_skill_bonus = 0;
-
-        if let Some(decoder) = decoder {
-            // Get ability modifiers WITH equipment
-            let total_mods = self.get_total_ability_modifiers(game_data, decoder);
-            ability_mod = total_mods.get(key_ability);
-
-            // Get specific skill modifiers from equipment (properties 52, etc.)
-            let bonuses = self.get_equipment_bonuses(game_data, decoder);
-
-            // Skill properties are keyed by "Skill_<ID>"
-            let skill_key = format!("Skill_{}", skill_id.0);
-            item_skill_bonus = bonuses.skill_bonuses.get(&skill_key).copied().unwrap_or(0);
-        }
-
-        ranks + ability_mod + item_skill_bonus
-    }
-
-    /// Calculate skill modifier using pre-calculated ability modifiers.
-    /// Useful for batch operations to avoid recalculating abilities for every skill.
-    pub fn calculate_skill_modifier_with_mods(
-        &self,
-        skill_id: SkillId,
-        game_data: &GameData,
-        ability_modifiers: &AbilityModifiers,
-    ) -> i32 {
-        let ranks = self.skill_rank(skill_id);
-        let key_ability = self.get_skill_key_ability(skill_id, game_data);
-        ranks + ability_modifiers.get(key_ability)
-    }
-
     /// Get the key ability for a skill from the skills table.
     fn get_skill_key_ability(&self, skill_id: SkillId, game_data: &GameData) -> AbilityIndex {
         let Some(skills_table) = game_data.get_table("skills") else {
@@ -352,10 +305,7 @@ impl Character {
             let untrained = row_int(&skill_data, "untrained", 1) > 0;
 
             let mut synergy_bonus = 0;
-            if skill_id.0 == 29 && self.skill_rank(SkillId(14)) >= 5 {
-                // Search -> Survival synergy
-                synergy_bonus += 2;
-            } else if skill_id.0 == 2 && self.skill_rank(SkillId(15)) >= 5 {
+            if skill_id.0 == 2 && self.skill_rank(SkillId(15)) >= 5 {
                 // Set Trap -> Disable Device synergy
                 synergy_bonus += 2;
             } else if skill_id.0 == 15 && self.skill_rank(SkillId(2)) >= 5 {
@@ -416,68 +366,6 @@ impl Character {
         }
 
         0
-    }
-
-    /// Calculate skill points gained for a single level.
-    pub fn calculate_skill_points_for_level(
-        &self,
-        class_id: u8,
-        int_modifier: i32,
-        is_first_level: bool,
-        game_data: &GameData,
-    ) -> Result<i32, CharacterError> {
-        let classes_table = game_data
-            .get_table("classes")
-            .ok_or_else(|| CharacterError::TableNotFound("classes.2da".to_string()))?;
-
-        let class_data = classes_table
-            .get_by_id(i32::from(class_id))
-            .ok_or_else(|| CharacterError::ValidationFailed {
-                field: "Class",
-                message: format!("Class ID {class_id} not found"),
-            })?;
-
-        let base_points = class_data
-            .get("skillpointbase")
-            .and_then(|s| s.as_ref())
-            .and_then(|s| s.parse::<i32>().ok())
-            .ok_or_else(|| CharacterError::ValidationFailed {
-                field: "SkillPointBase",
-                message: format!("Class {class_id} missing SkillPointBase"),
-            })?;
-
-        let racial_bonus = self.racial_skill_point_bonus();
-
-        let mut points = base_points + int_modifier + racial_bonus;
-        // Minimum 1 point per level, even with negative modifiers
-        points = points.max(1);
-
-        if is_first_level {
-            points *= 4;
-            // Minimum 4 points at level 1
-            points = points.max(4);
-        }
-
-        Ok(points)
-    }
-
-    /// Validate skill state (checking for negative ranks).
-    pub fn validate_skills(&self) -> Vec<String> {
-        let mut errors = Vec::new();
-
-        let Some(skill_list) = self.get_list("SkillList") else {
-            return errors;
-        };
-
-        for (idx, entry) in skill_list.iter().enumerate() {
-            if let Some(rank) = entry.get("Rank").and_then(gff_value_to_i32)
-                && rank < 0
-            {
-                errors.push(format!("Skill {idx}: Negative rank ({rank}) is invalid"));
-            }
-        }
-
-        errors
     }
 
     pub fn get_skill_name(&self, skill_id: SkillId, game_data: &GameData) -> String {
@@ -610,17 +498,6 @@ impl Character {
         Ok(())
     }
 
-    pub fn total_skill_points_spent(&self) -> i32 {
-        let Some(skill_list) = self.get_list("SkillList") else {
-            return 0;
-        };
-
-        skill_list
-            .iter()
-            .filter_map(|entry| entry.get("Rank").and_then(gff_value_to_i32))
-            .sum()
-    }
-
     /// Get the number of unspent skill points from the GFF field.
     pub fn get_available_skill_points(&self) -> i32 {
         self.gff
@@ -631,41 +508,45 @@ impl Character {
 
     /// Set the number of unspent skill points.
     pub fn set_available_skill_points(&mut self, points: i32) {
-        let val = if points > 65535 {
-            GffValue::Int(points) // Should be WORD usually but safe to handle larger
-        } else {
-            GffValue::Word(points as u16)
-        };
-        self.gff.insert("SkillPoints".to_string(), val);
+        let points = points.clamp(0, i32::from(u16::MAX)) as u16;
+        self.gff
+            .insert("SkillPoints".to_string(), GffValue::Word(points));
         self.modified = true;
     }
 
-    /// Set skill rank AND deduct skill points from available pool.
+    /// Set a skill rank and pay for it from the unspent pool.
     ///
-    /// This is the "economy-aware" version of `set_skill_rank`.
-    /// - Calculates net cost (new_rank cost - current_rank cost)
-    /// - Deducts from available skill points
-    /// - Records change in level history
+    /// Buying more than the pool holds is allowed and leaves it at 0. A refund
+    /// pays such an overdraw back first: it never raises the pool above what
+    /// the level history earned minus what the remaining ranks cost, so buying
+    /// and removing ranks cannot mint points. Without a level history there is
+    /// no budget to check against and refunds are paid in full.
     ///
-    /// Returns the net cost on success, or error if validation fails.
-    pub fn set_skill_rank_with_cost(
+    /// Returns the net cost, negative for a refund.
+    pub fn change_skill_rank(
         &mut self,
         skill_id: SkillId,
         new_rank: i32,
         game_data: &GameData,
     ) -> Result<i32, CharacterError> {
         let net_cost = self.skill_change_cost(skill_id, new_rank, game_data);
-
         let available = self.get_available_skill_points();
-        if net_cost > available {
-            return Err(CharacterError::ValidationFailed {
-                field: "SkillPoints",
-                message: format!("Insufficient skill points: need {net_cost}, have {available}"),
-            });
-        }
 
         self.set_skill_rank(skill_id, new_rank)?;
-        self.set_available_skill_points(available - net_cost);
+
+        let pool = if net_cost > 0 {
+            (available - net_cost).max(0)
+        } else {
+            let refunded = available - net_cost;
+            let earned: i32 = self.get_theoretical_skill_points(game_data).values().sum();
+            if earned > 0 {
+                let unspent = earned - self.calculate_total_spent_with_costs(game_data);
+                refunded.min(available.max(unspent))
+            } else {
+                refunded
+            }
+        };
+        self.set_available_skill_points(pool);
 
         Ok(net_cost)
     }
@@ -698,6 +579,21 @@ impl Character {
         }
         self.set_list("SkillList", skill_list);
 
+        let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
+        for level in &mut lvl_stat_list {
+            if let Some(mut level_skills) =
+                super::gff_helpers::extract_list_from_map(level, "SkillList")
+            {
+                for entry in &mut level_skills {
+                    entry.insert("Rank".to_string(), GffValue::Byte(0));
+                }
+                level.insert("SkillList".to_string(), GffValue::ListOwned(level_skills));
+            }
+        }
+        if !lvl_stat_list.is_empty() {
+            self.set_list("LvlStatList", lvl_stat_list);
+        }
+
         self.set_available_skill_points(available);
 
         available
@@ -706,8 +602,9 @@ impl Character {
     /// Skill points the current ranks cost.
     ///
     /// Ranks the level history records are costed against the class taken at
-    /// that level; ranks it does not cover (toolset creation ranks, injected
-    /// ranks) against the class being levelled.
+    /// that level, oldest first and never more than the skill currently has;
+    /// ranks it does not cover (toolset creation ranks, injected ranks)
+    /// against the class being levelled.
     pub fn calculate_total_spent_with_costs(&self, game_data: &GameData) -> i32 {
         let has_able_learner = self.has_feat(FeatId(ABLE_LEARNER_FEAT_ID));
         let levelling = self.levelling_class().unwrap_or(ClassId(-1));
@@ -716,14 +613,21 @@ impl Character {
         let mut spent = 0;
         for level in self.level_history() {
             for skill in &level.skills_gained {
+                let recorded_ranks = recorded.entry(skill.skill_id).or_insert(0);
+                let ranks = skill
+                    .ranks
+                    .min(self.skill_rank(skill.skill_id) - *recorded_ranks);
+                if ranks <= 0 {
+                    continue;
+                }
                 spent += self.skill_cost_for_class(
                     level.class_id,
                     skill.skill_id,
-                    skill.ranks,
+                    ranks,
                     has_able_learner,
                     game_data,
                 );
-                *recorded.entry(skill.skill_id).or_insert(0) += skill.ranks;
+                *recorded_ranks += ranks;
             }
         }
 
@@ -893,36 +797,6 @@ mod tests {
             result.unwrap_err(),
             CharacterError::OutOfRange { .. }
         ));
-    }
-
-    #[test]
-    fn test_total_skill_points_spent() {
-        let character = create_test_character();
-        assert_eq!(character.total_skill_points_spent(), 18);
-    }
-
-    #[test]
-    fn test_total_skill_points_spent_empty() {
-        let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
-        assert_eq!(character.total_skill_points_spent(), 0);
-    }
-
-    #[test]
-    fn test_total_skill_points_spent_all_zero() {
-        let mut fields = IndexMap::new();
-        let mut skill0 = IndexMap::new();
-        skill0.insert("Rank".to_string(), GffValue::Byte(0));
-        let mut skill1 = IndexMap::new();
-        skill1.insert("Rank".to_string(), GffValue::Byte(0));
-
-        fields.insert(
-            "SkillList".to_string(),
-            GffValue::ListOwned(vec![skill0, skill1]),
-        );
-
-        let character = Character::from_gff(fields);
-        assert_eq!(character.total_skill_points_spent(), 0);
     }
 
     #[test]
@@ -1101,7 +975,7 @@ mod tests {
 
         // Test WITHOUT decoder (Base Dex 10 -> Mod +0)
         // Skill Mod = Rank 5 + Mod 0 = 5
-        let mod_no_equip = character.calculate_skill_modifier(SkillId(0), &game_data, None);
+        let mod_no_equip = character.get_skill_summary(&game_data, None)[0].total;
         assert_eq!(
             mod_no_equip, 5,
             "Without equipment, modifier should be rank + base_ability_mod"
@@ -1109,8 +983,7 @@ mod tests {
 
         // Test WITH decoder (Total Dex 14 -> Mod +2)
         // Skill Mod = Rank 5 + Mod 2 = 7
-        let mod_with_equip =
-            character.calculate_skill_modifier(SkillId(0), &game_data, Some(&decoder));
+        let mod_with_equip = character.get_skill_summary(&game_data, Some(&decoder))[0].total;
         assert_eq!(
             mod_with_equip, 7,
             "With equipment, modifier should be rank + total_ability_mod"
@@ -1184,7 +1057,6 @@ mod tests {
         // Ranks 5 + 3 + 0 + 10 = 18. With no cls_skill table every skill is
         // cross-class, so the real cost is double the rank sum. Callers
         // reporting points spent must use the cost-aware total, not the ranks.
-        assert_eq!(character.total_skill_points_spent(), 18);
         assert_eq!(character.calculate_total_spent_with_costs(&game_data), 36);
     }
 
@@ -1439,5 +1311,62 @@ mod tests {
         skill_list[LORE.0 as usize].insert("Rank".to_string(), GffValue::Byte(5));
         character.set_list("SkillList", skill_list);
         assert_eq!(character.calculate_total_spent_with_costs(&game_data), 9);
+    }
+
+    #[test]
+    fn test_total_spent_caps_recorded_ranks_at_current_rank() {
+        let mut character = create_sorcerer_then_fighter();
+        let game_data = game_data_with_sorcerer_and_fighter();
+
+        // History records 4 Lore, the skill has 1: only the oldest Sorcerer
+        // rank is paid for, plus 2 Parry.
+        let mut skill_list = character.get_list_owned("SkillList").unwrap();
+        skill_list[LORE.0 as usize].insert("Rank".to_string(), GffValue::Byte(1));
+        character.set_list("SkillList", skill_list);
+        assert_eq!(character.calculate_total_spent_with_costs(&game_data), 3);
+    }
+
+    #[test]
+    fn test_reset_all_skills_clears_level_history_ranks() {
+        let mut character = create_sorcerer_then_fighter();
+        let game_data = game_data_with_sorcerer_and_fighter();
+
+        character.reset_all_skills(&game_data);
+
+        assert!(
+            character
+                .level_history()
+                .iter()
+                .all(|level| level.skills_gained.is_empty())
+        );
+        assert_eq!(character.calculate_total_spent_with_costs(&game_data), 0);
+    }
+
+    #[test]
+    fn test_overdraw_refund_does_not_mint_points() {
+        let mut character = create_sorcerer_then_fighter();
+        let game_data = game_data_with_sorcerer_and_fighter();
+        let earned: i32 = character
+            .get_theoretical_skill_points(&game_data)
+            .values()
+            .sum();
+        let unspent = earned - character.calculate_total_spent_with_costs(&game_data);
+        character.set_available_skill_points(unspent);
+
+        // Parry is a Fighter class skill: 8 more ranks than the pool pays for.
+        let bought = unspent + 8;
+        assert_eq!(
+            character
+                .change_skill_rank(PARRY, 2 + bought, &game_data)
+                .unwrap(),
+            bought
+        );
+        assert_eq!(character.get_available_skill_points(), 0);
+
+        assert_eq!(
+            character.change_skill_rank(PARRY, 2, &game_data).unwrap(),
+            -bought
+        );
+        assert_eq!(character.get_available_skill_points(), unspent);
     }
 }

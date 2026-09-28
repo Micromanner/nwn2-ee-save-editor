@@ -405,56 +405,6 @@ async fn test_constitution_cascade_real_character() {
 }
 
 #[tokio::test]
-async fn test_encumbrance_calculations() {
-    let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
-
-    println!("\n=== Encumbrance Thresholds ===");
-
-    let characters = [
-        "occidiooctavon/occidiooctavon4.bic",
-        "ryathstrongarm/ryathstrongarm4.bic",
-    ];
-
-    for path in characters {
-        let character = load_character(path);
-
-        let str_score = character.base_ability(AbilityIndex::STR);
-        let encumbrance = character.calculate_encumbrance(game_data);
-
-        println!(
-            "{} (STR {}): Light={:.0} Medium={:.0} Heavy={:.0} Max={:.0}",
-            character.first_name(),
-            str_score,
-            encumbrance.light_limit,
-            encumbrance.medium_limit,
-            encumbrance.heavy_limit,
-            encumbrance.max_limit
-        );
-
-        // Verify relationships
-        assert!(
-            encumbrance.light_limit < encumbrance.medium_limit,
-            "Light should be less than medium"
-        );
-        assert!(
-            encumbrance.medium_limit < encumbrance.heavy_limit,
-            "Medium should be less than heavy"
-        );
-        assert!(
-            encumbrance.heavy_limit < encumbrance.max_limit,
-            "Heavy should be less than max"
-        );
-
-        // Max should be 2x heavy
-        assert!(
-            (encumbrance.max_limit - encumbrance.heavy_limit * 2.0).abs() < 1.0,
-            "Max should be approximately 2x heavy"
-        );
-    }
-}
-
-#[tokio::test]
 async fn test_hit_points_consistency() {
     println!("\n=== Hit Points Consistency ===");
 

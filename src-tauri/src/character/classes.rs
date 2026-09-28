@@ -757,7 +757,7 @@ impl Character {
         let mut indices_to_remove: Vec<usize> = Vec::new();
         let mut removed_hit_dice = 0i32;
         let old_total_level = self.total_level();
-        let old_con_mod = self.ability_modifier(AbilityIndex::CON);
+        let old_con_mod = self.get_effective_ability_modifier(AbilityIndex::CON, game_data);
         let mut total_sp_reduction = 0i32;
         let mut feats_to_remove: HashSet<i32> = HashSet::new();
         let mut feats_to_keep: HashSet<i32> = HashSet::new();
@@ -901,6 +901,7 @@ impl Character {
             current_level,
             old_total_level,
             old_con_mod,
+            game_data,
         );
 
         // Update skill points
@@ -1004,6 +1005,7 @@ impl Character {
     pub fn level_history_resolved(&self, game_data: &GameData) -> Vec<ResolvedLevelHistoryEntry> {
         let history = self.level_history();
         let ability_names = ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
+        let con_mod = self.get_effective_ability_modifier(AbilityIndex::CON, game_data);
 
         history
             .into_iter()
@@ -1041,7 +1043,7 @@ impl Character {
                     class_id: entry.class_id.0,
                     class_name,
                     class_level: entry.class_level,
-                    hp_gained: entry.hp_gained,
+                    hp_gained: (entry.hp_gained + con_mod).max(1),
                     skill_points_remaining: entry.skill_points_remaining,
                     ability_increase,
                     feats_gained,
@@ -1987,7 +1989,7 @@ impl Character {
         }
 
         let hit_die = row_int(&class_data, "hitdie", 6);
-        let con_mod = self.ability_modifier(AbilityIndex::CON);
+        let con_mod = self.get_effective_ability_modifier(AbilityIndex::CON, game_data);
 
         let hp_gained = std::cmp::max(1, hit_die + con_mod);
 
@@ -2000,7 +2002,7 @@ impl Character {
         self.set_current_hp(current_hp + hp_gained);
 
         // 5. Skill Points
-        let int_mod = self.ability_modifier(AbilityIndex::INT);
+        let int_mod = self.get_effective_ability_modifier(AbilityIndex::INT, game_data);
         let race_bonus = self.racial_skill_point_bonus();
 
         let skill_base = row_int(&class_data, "skillpointbase", 2);
@@ -2155,7 +2157,7 @@ impl Character {
 
         let entry = lvl_stat_list.remove(idx);
         let old_total_level = self.total_level();
-        let old_con_mod = self.ability_modifier(AbilityIndex::CON);
+        let old_con_mod = self.get_effective_ability_modifier(AbilityIndex::CON, game_data);
         let granted_per_level = self.skill_points_granted_per_level(game_data);
         let granted = granted_per_level.get(idx).copied().unwrap_or(0);
         let surviving_grants = granted_per_level.iter().sum::<i32>() - granted;
@@ -2181,7 +2183,7 @@ impl Character {
             .get("LvlStatHitDie")
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
-        self.revert_level_hit_points(hp_roll, 1, old_total_level, old_con_mod);
+        self.revert_level_hit_points(hp_roll, 1, old_total_level, old_con_mod, game_data);
 
         // 3. Revert Skill Points
         let current_sp = self.get_available_skill_points();
@@ -2507,6 +2509,28 @@ impl Character {
         }
     }
 
+    /// Free the most recent level-up slot spent on `ability_index`, the
+    /// inverse of `record_ability_change`.
+    pub fn release_ability_change(&mut self, ability_index: AbilityIndex) {
+        use crate::character::types::ABILITY_INCREASE_INTERVAL;
+        let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
+        let slot = lvl_stat_list
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(idx, entry)| {
+                let char_level = (idx + 1) as i32;
+                let spent_on_ability = entry.get("LvlStatAbility").and_then(gff_value_to_i32)
+                    == Some(i32::from(ability_index.0));
+                (char_level % ABILITY_INCREASE_INTERVAL == 0 && spent_on_ability).then_some(idx)
+            });
+
+        if let Some(idx) = slot {
+            lvl_stat_list[idx].insert("LvlStatAbility".to_string(), GffValue::Byte(255));
+            self.set_list("LvlStatList", lvl_stat_list);
+        }
+    }
+
     /// Sync a spell change to the current level history.
     pub fn record_spell_change(&mut self, level: i32, spell_id: i32, added: bool) {
         if !(0..=9).contains(&level) {
@@ -2566,8 +2590,9 @@ impl Character {
         levels_removed: i32,
         old_total_level: i32,
         old_con_mod: i32,
+        game_data: &GameData,
     ) {
-        let new_con_mod = self.ability_modifier(AbilityIndex::CON);
+        let new_con_mod = self.get_effective_ability_modifier(AbilityIndex::CON, game_data);
         let new_total_level = old_total_level - levels_removed;
         let reduction = hit_dice + old_total_level * old_con_mod - new_total_level * new_con_mod;
 
@@ -2591,7 +2616,7 @@ impl Character {
     /// quadrupled at level 1. The engine grants points with the INT modifier
     /// in effect at each level-up and never retroactively, so the level-up
     /// ability increases recorded in `LvlStatAbility` are replayed: the
-    /// current base INT is rolled back by the number of INT increases and
+    /// current INT (stored score + racial adjustment) is rolled back by the number of INT increases and
     /// re-applied level by level (an increase counts from the level it was
     /// taken). Entries without a class grant 0.
     pub fn skill_points_granted_per_level(&self, game_data: &GameData) -> Vec<i32> {
@@ -2606,7 +2631,7 @@ impl Character {
                 == Some(i32::from(AbilityIndex::INT.0))
         };
         let int_increases = lvl_stat_list.iter().filter(|e| is_int_increase(e)).count() as i32;
-        let mut int_score = self.base_ability(AbilityIndex::INT) - int_increases;
+        let mut int_score = self.get_effective_abilities(game_data).int - int_increases;
 
         let classes_table = game_data.get_table("classes");
 

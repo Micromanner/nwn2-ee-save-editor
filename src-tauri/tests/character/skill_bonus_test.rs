@@ -71,9 +71,22 @@ mod tests {
 
         char.set_list("Equip_ItemList", vec![equip_item]);
 
-        // GameData::new() creates an empty instance; get_skill_key_ability defaults to STR if table missing.
         let tlk = Arc::new(std::sync::RwLock::new(TLKParser::default()));
-        let game_data = app_lib::loaders::GameData::new(tlk);
+        let mut game_data = app_lib::loaders::GameData::new(tlk);
+        let mut skills = app_lib::parsers::tda::TDAParser::new();
+        skills
+            .parse_from_bytes(
+                b"2DA V2.0
+
+   Label          KeyAbility
+0  Concentration  STR
+",
+            )
+            .unwrap();
+        game_data.tables.insert(
+            "skills".to_string(),
+            app_lib::loaders::LoadedTable::new("skills.2da".to_string(), Arc::new(skills)),
+        );
         char.set_ability(app_lib::character::types::AbilityIndex::STR, 10)
             .unwrap();
 
@@ -81,7 +94,7 @@ mod tests {
         // Expected: Rank 5 + Ability 0 + Bonus 5 = 10.
         // Current Bug: Rank 5 + Ability 0 + Bonus 0 (ignored) = 5.
 
-        let total = char.calculate_skill_modifier(SkillId(0), &game_data, Some(&decoder));
+        let total = char.get_skill_summary(&game_data, Some(&decoder))[0].total;
         println!("Skill Total: {total}");
 
         assert_eq!(

@@ -469,12 +469,11 @@ export function OverviewPanel() {
           <div className="t-section" style={{ marginBottom: 8 }}>{t('character.combatStats')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 16px' }}>
             <KVRow label={t('character.armorClass')} value={display(ac)} />
-            <KVRow label={t('character.speed')} value={character.movementSpeed != null ? `${character.movementSpeed} ft` : '-'} />
             <KVRow label={t('character.baseAttackBonus')} value={formatModifier(bab)} />
             <KVRow label={t('character.initiative')} value={formatModifier(initTotal)} />
             <KVRow label={t('character.meleeAttack')} value={formatModifier(melee)} />
             <KVRow label={t('character.rangedAttack')} value={formatModifier(ranged)} />
-            <KVRow label={t('character.size')} value={t(`character.size.${character.size?.toLowerCase()}`) || display(character.size)} />
+            <KVRow label={t('character.sizeLabel')} value={t(`character.size.${character.size?.toLowerCase()}`) || display(character.size)} />
           </div>
         </div>
 

@@ -36,10 +36,9 @@ pub use classes::{
     AlignmentRestriction, BabType, ClassEntry, ClassInfo, ClassSummaryEntry, LevelHistoryEntry,
     PrestigeClassOption, PrestigeClassValidation, PrestigeRequirements, SkillRankEntry, XpProgress,
 };
-pub use combat::{CombatStats, DamageBonuses};
 pub use combat_summary::{
-    ACBreakdown, ArmorClass, AttackBonuses, AttackBreakdown, CombatManeuverBonus, CombatSummary,
-    DamageReduction, Initiative, MovementSpeed, NaturalArmorChange,
+    ACBreakdown, ArmorClass, AttackBonuses, AttackBreakdown, CombatSummary, Initiative,
+    NaturalArmorChange,
 };
 pub use error::CharacterError;
 pub use feats::{

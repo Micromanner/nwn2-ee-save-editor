@@ -8,7 +8,7 @@ use crate::loaders::GameData;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::services::item_property_decoder::ItemPropertyDecoder;
+use crate::services::item_property_decoder::{ItemBonuses, ItemPropertyDecoder};
 
 // Point buy constants (NWN2 standard)
 const POINT_BUY_COSTS: [i32; 11] = [0, 1, 2, 3, 4, 5, 6, 8, 10, 13, 16];
@@ -50,14 +50,6 @@ pub struct AbilityPointsSummary {
     pub available: i32,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
-pub struct EncumbranceInfo {
-    pub light_limit: f32,
-    pub medium_limit: f32,
-    pub heavy_limit: f32,
-    pub max_limit: f32,
-}
-
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Type)]
 pub struct PointBuyState {
     pub starting_scores: AbilityScores,
@@ -74,20 +66,8 @@ pub struct AbilitiesState {
     pub racial_modifiers: AbilityModifiers,
     pub equipment_modifiers: AbilityModifiers,
     pub hit_points: HitPoints,
-    pub encumbrance: EncumbranceInfo,
     pub point_summary: AbilityPointsSummary,
     pub point_buy: PointBuyState,
-}
-
-impl Default for EncumbranceInfo {
-    fn default() -> Self {
-        Self {
-            light_limit: 33.0,
-            medium_limit: 66.0,
-            heavy_limit: 100.0,
-            max_limit: 200.0,
-        }
-    }
 }
 
 impl Character {
@@ -128,9 +108,12 @@ impl Character {
             self.recalculate_hit_points(old_value, value);
         }
 
-        // 3. Record in history if this was an increase
-        if value > old_value {
+        // 3. One level-up slot per point raised, freed again per point lowered
+        for _ in old_value..value {
             self.record_ability_change(ability);
+        }
+        for _ in value..old_value {
+            self.release_ability_change(ability);
         }
 
         Ok(())
@@ -245,8 +228,18 @@ impl Character {
         game_data: &GameData,
         decoder: &ItemPropertyDecoder,
     ) -> AbilityScores {
-        let mut scores = self.get_effective_abilities(game_data);
         let equip_bonuses = self.get_equipment_bonuses(game_data, decoder);
+        self.total_abilities_with_items(game_data, &equip_bonuses)
+    }
+
+    /// Stored score + racial adjustment + item bonuses. Stored `.bic` scores
+    /// exclude the racial adjustment, so every derived value must start here.
+    pub fn total_abilities_with_items(
+        &self,
+        game_data: &GameData,
+        equip_bonuses: &ItemBonuses,
+    ) -> AbilityScores {
+        let mut scores = self.get_effective_abilities(game_data);
 
         scores.str_ += equip_bonuses.str_bonus;
         scores.dex += equip_bonuses.dex_bonus;
@@ -267,6 +260,8 @@ impl Character {
         AbilityModifiers::from_scores(&scores)
     }
 
+    /// Modifier of the stored score plus the racial adjustment: what the
+    /// engine grants level-up hit points and skill points with.
     pub fn get_effective_ability_modifier(
         &self,
         ability: AbilityIndex,
@@ -361,22 +356,6 @@ impl Character {
         }
     }
 
-    pub fn calculate_encumbrance(&self, _game_data: &GameData) -> EncumbranceInfo {
-        let strength = self.base_ability(AbilityIndex::STR);
-
-        let heavy = calculate_heavy_load(strength);
-        let light = (heavy as f32 * 0.33).round();
-        let medium = (heavy as f32 * 0.66).round();
-        let max = (heavy as f32 * 2.0).round();
-
-        EncumbranceInfo {
-            light_limit: light,
-            medium_limit: medium,
-            heavy_limit: heavy as f32,
-            max_limit: max,
-        }
-    }
-
     pub fn get_abilities_state(
         &self,
         game_data: &GameData,
@@ -396,15 +375,9 @@ impl Character {
             equip_bonuses.cha_bonus,
         );
 
-        let total_scores = AbilityScores::new(
-            base_scores.str_ + equip_bonuses.str_bonus,
-            base_scores.dex + equip_bonuses.dex_bonus,
-            base_scores.con + equip_bonuses.con_bonus,
-            base_scores.int + equip_bonuses.int_bonus,
-            base_scores.wis + equip_bonuses.wis_bonus,
-            base_scores.cha + equip_bonuses.cha_bonus,
+        let modifiers = AbilityModifiers::from_scores(
+            &self.total_abilities_with_items(game_data, &equip_bonuses),
         );
-        let modifiers = AbilityModifiers::from_scores(&total_scores);
 
         AbilitiesState {
             base_scores,
@@ -413,7 +386,6 @@ impl Character {
             racial_modifiers,
             equipment_modifiers,
             hit_points: self.hit_points(),
-            encumbrance: self.calculate_encumbrance(game_data),
             point_summary: self.get_ability_points_summary(),
             point_buy: self.get_point_buy_state(),
         }
@@ -423,64 +395,15 @@ impl Character {
         use crate::parsers::gff::GffValue;
 
         if let Some(list) = self.get_list_mut("LvlStatList") {
-            for entry in list.iter_mut() {
+            for entry in list
+                .iter_mut()
+                .skip(ABILITY_INCREASE_INTERVAL as usize - 1)
+                .step_by(ABILITY_INCREASE_INTERVAL as usize)
+            {
                 entry.insert("LvlStatAbility".to_string(), GffValue::Byte(255));
             }
         }
         Ok(())
-    }
-}
-
-fn calculate_heavy_load(strength: i32) -> i32 {
-    match strength {
-        ..=0 => 0,
-        1 => 10,
-        2 => 20,
-        3 => 30,
-        4 => 40,
-        5 => 50,
-        6 => 60,
-        7 => 70,
-        8 => 80,
-        9 => 90,
-        10 => 100,
-        11 => 115,
-        12 => 130,
-        13 => 150,
-        14 => 175,
-        15 => 200,
-        16 => 230,
-        17 => 260,
-        18 => 300,
-        19 => 350,
-        20 => 400,
-        21 => 460,
-        22 => 520,
-        23 => 600,
-        24 => 700,
-        25 => 800,
-        26 => 920,
-        27 => 1040,
-        28 => 1200,
-        29 => 1400,
-        _ => {
-            let extra_tens = (strength - 29) / 10;
-            let remainder = (strength - 29) % 10;
-            let base = match remainder {
-                0 => 1400,
-                1 => 1600,
-                2 => 1840,
-                3 => 2080,
-                4 => 2400,
-                5 => 2800,
-                6 => 3200,
-                7 => 3680,
-                8 => 4160,
-                9 => 4800,
-                _ => 1400,
-            };
-            base * 4_i32.pow(extra_tens as u32)
-        }
     }
 }
 
@@ -642,31 +565,6 @@ mod tests {
         character.set_ability(AbilityIndex::STR, 50).unwrap();
         assert_eq!(character.base_ability(AbilityIndex::STR), 50);
         assert_eq!(character.ability_modifier(AbilityIndex::STR), 20);
-    }
-
-    #[test]
-    fn test_calculate_heavy_load() {
-        assert_eq!(calculate_heavy_load(10), 100);
-        assert_eq!(calculate_heavy_load(16), 230);
-        assert_eq!(calculate_heavy_load(18), 300);
-        assert_eq!(calculate_heavy_load(20), 400);
-    }
-
-    #[test]
-    fn test_calculate_encumbrance() {
-        let mut fields = IndexMap::new();
-        fields.insert("Str".to_string(), GffValue::Byte(16));
-        let character = Character::from_gff(fields);
-
-        let game_data = crate::loaders::GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
-            crate::parsers::tlk::TLKParser::default(),
-        )));
-
-        let info = character.calculate_encumbrance(&game_data);
-        assert_eq!(info.heavy_limit, 230.0);
-        assert_eq!(info.light_limit, (230.0_f32 * 0.33).round());
-        assert_eq!(info.medium_limit, (230.0_f32 * 0.66).round());
-        assert_eq!(info.max_limit, 460.0);
     }
 
     #[test]
@@ -917,5 +815,54 @@ mod tests {
         character.record_ability_change(AbilityIndex::STR);
         let summary = character.get_ability_points_summary();
         assert_eq!(summary.level_increases[0].ability, AbilityIndex::CON);
+    }
+
+    fn character_with_eight_levels() -> Character {
+        let mut character = character_with_levels(None);
+        let mut levels = character.get_list_owned("LvlStatList").unwrap();
+        levels.extend(levels.clone().into_iter().take(3));
+        character.set_list("LvlStatList", levels);
+        let mut classes = character.get_list_owned("ClassList").unwrap();
+        classes[0].insert("ClassLevel".to_string(), GffValue::Short(8));
+        character.set_list("ClassList", classes);
+        character
+    }
+
+    #[test]
+    fn each_raised_point_spends_a_slot_and_each_lowered_point_frees_one() {
+        let mut character = character_with_eight_levels();
+        let game_data = crate::loaders::GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
+            crate::parsers::tlk::TLKParser::default(),
+        )));
+
+        character
+            .set_ability_with_cascades(AbilityIndex::STR, 18, &game_data)
+            .unwrap();
+        assert_eq!(character.get_ability_points_summary().available, 0);
+        assert_eq!(character.get_starting_ability_scores().str_, 16);
+
+        character
+            .set_ability_with_cascades(AbilityIndex::STR, 17, &game_data)
+            .unwrap();
+        let summary = character.get_ability_points_summary();
+        assert_eq!(summary.available, 1);
+        assert_eq!(summary.level_increases[0].level, 4);
+    }
+
+    #[test]
+    fn clearing_history_marks_only_ability_levels() {
+        let mut character = character_with_eight_levels();
+        character.clear_ability_level_up_history().unwrap();
+
+        let levels = character.get_list("LvlStatList").unwrap();
+        for (idx, level) in levels.iter().enumerate() {
+            let expected = ((idx + 1) % 4 == 0).then_some(255);
+            assert_eq!(
+                level.get("LvlStatAbility").and_then(gff_value_to_i32),
+                expected,
+                "level {}",
+                idx + 1
+            );
+        }
     }
 }

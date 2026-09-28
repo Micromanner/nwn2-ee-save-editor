@@ -145,7 +145,6 @@ pub fn run() {
             crate::commands::character::set_all_ability_scores,
             crate::commands::character::get_hit_points,
             crate::commands::character::update_hit_points,
-            crate::commands::character::get_encumbrance_limits,
             crate::commands::character::get_ability_points_summary,
             // Character - Race
             crate::commands::character::get_race_id,
@@ -250,7 +249,6 @@ pub fn run() {
             crate::commands::combat::get_combat_summary,
             crate::commands::combat::calculate_base_attack_bonus,
             crate::commands::combat::get_attack_sequence,
-            crate::commands::combat::get_damage_reduction,
             crate::commands::combat::update_natural_armor,
             crate::commands::combat::get_save_summary,
             crate::commands::combat::set_misc_save_bonus,

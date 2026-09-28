@@ -154,7 +154,7 @@
     "meleeAttack": "Ataque Cuerpo a Cuerpo",
     "rangedAttack": "Ataque a Distancia",
     "initiative": "Iniciativa",
-    "speed": "Velocidad",
+    "sizeLabel": "Tamaño",
     "size": {
       "fine": "Diminuto",
       "diminutive": "Muy pequeño",

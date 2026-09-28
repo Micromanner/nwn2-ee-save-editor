@@ -1,6 +1,6 @@
 use crate::character::{
-    ArmorClass, AttackBonuses, CombatSummary, DamageReduction, Initiative, NaturalArmorChange,
-    SaveChange, SaveCheck, SaveSummary, SaveType, SavingThrows,
+    ArmorClass, AttackBonuses, CombatSummary, Initiative, NaturalArmorChange, SaveChange,
+    SaveCheck, SaveSummary, SaveType, SavingThrows,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::state::AppState;
@@ -39,19 +39,6 @@ pub async fn get_attack_sequence(state: State<'_, AppState>) -> CommandResult<Ve
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(character.get_attack_sequence(&game_data))
-}
-
-#[tauri::command]
-pub async fn get_damage_reduction(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<DamageReduction>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_damage_reduction_list(&game_data))
 }
 
 #[tauri::command]

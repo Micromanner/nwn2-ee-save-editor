@@ -130,15 +130,14 @@ pub async fn set_skill_rank(
     let game_data = state.game_data.read();
     let mut session = state.session.write();
 
-    let (old_ranks, points_spent, skill_label) = {
+    let (old_ranks, skill_label) = {
         let character = session
             .character
             .as_ref()
             .ok_or(CommandError::NoCharacterLoaded)?;
         let old_ranks = character.skill_rank(SkillId(skill_id));
-        let points_spent = character.skill_change_cost(SkillId(skill_id), ranks, &game_data);
         let skill_label = character.get_skill_name(SkillId(skill_id), &game_data);
-        (old_ranks, points_spent, skill_label)
+        (old_ranks, skill_label)
     };
 
     session.record_history(format!("Set {skill_label} to rank {ranks}"));
@@ -147,11 +146,7 @@ pub async fn set_skill_rank(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    // The pool is clamped at zero: the tab reports overdraw instead of refusing the edit.
-    let current_unspent = (character.get_available_skill_points() - points_spent).max(0);
-
-    character.set_skill_rank(SkillId(skill_id), ranks)?;
-    character.set_available_skill_points(current_unspent);
+    let points_spent = character.change_skill_rank(SkillId(skill_id), ranks, &game_data)?;
 
     Ok(SkillChangeResult {
         skill_id: SkillId(skill_id),

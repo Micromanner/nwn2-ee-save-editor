@@ -78,8 +78,15 @@ async fn test_skills_progression() {
 
     // 3. Check Modifiers
     // Modifiers should also increase significantly due to ability bumps + items + ranks
-    let l1_conc_mod = char_l1.calculate_skill_modifier(conc_id, game_data, Some(&ctx.decoder));
-    let l30_conc_mod = char_l30.calculate_skill_modifier(conc_id, game_data, Some(&ctx.decoder));
+    let conc_total = |character: &Character| {
+        character
+            .get_skill_summary(game_data, Some(&ctx.decoder))
+            .into_iter()
+            .find(|entry| entry.skill_id == conc_id)
+            .map_or(0, |entry| entry.total)
+    };
+    let l1_conc_mod = conc_total(&char_l1);
+    let l30_conc_mod = conc_total(&char_l30);
 
     assert!(
         l30_conc_mod > l1_conc_mod,
@@ -117,9 +124,7 @@ async fn test_skill_summary_parity() {
         );
 
         if entry.untrained || entry.ranks > 0 {
-            let calc_total =
-                character.calculate_skill_modifier(entry.skill_id, game_data, Some(&ctx.decoder));
-            let expected_total = calc_total + entry.feat_bonus;
+            let expected_total = entry.ranks + entry.modifier + entry.item_bonus + entry.feat_bonus;
             assert_eq!(
                 entry.total, expected_total,
                 "Total mismatch for skill {}",
@@ -224,7 +229,7 @@ async fn test_skill_costs_and_points() {
         }
 
         let cost = character
-            .set_skill_rank_with_cost(spellcraft, new_rank, game_data)
+            .change_skill_rank(spellcraft, new_rank, game_data)
             .expect("Failed to set rank");
         assert_eq!(cost, 1);
 

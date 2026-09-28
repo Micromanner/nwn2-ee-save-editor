@@ -154,7 +154,7 @@
     "meleeAttack": "Nahkampfangriff",
     "rangedAttack": "Fernkampfangriff",
     "initiative": "Initiative",
-    "speed": "Geschwindigkeit",
+    "sizeLabel": "Größe",
     "size": {
       "fine": "Winzig",
       "diminutive": "Sehr klein",

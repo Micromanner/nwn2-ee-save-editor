@@ -47,7 +47,6 @@ pub struct OverviewState {
     pub melee_attack_bonus: i32,
     pub ranged_attack_bonus: i32,
     pub initiative: i32,
-    pub movement_speed: i32,
     pub total_feats: i32,
     pub known_spells_count: i32,
     pub spent_skill_points: i32,
@@ -96,21 +95,17 @@ impl Character {
             temp: self.temp_hp(),
         };
 
-        let spellcraft = self.skill_rank(crate::character::types::SkillId(16));
-        let spellcraft_save_bonus = spellcraft / 5;
-
-        let base_saves = self.calculate_base_saves(game_data);
+        let saves = self.get_saving_throws(game_data, decoder);
         let saving_throws = SaveBonuses {
-            fortitude: base_saves.fortitude + spellcraft_save_bonus,
-            reflex: base_saves.reflex + spellcraft_save_bonus,
-            will: base_saves.will + spellcraft_save_bonus,
+            fortitude: saves.fortitude.total,
+            reflex: saves.reflex.total,
+            will: saves.will.total,
         };
 
         let bab = self.calculate_bab(game_data);
         let armor_class = self.get_armor_class(game_data, decoder).total;
         let attack_bonuses = self.get_attack_bonuses(game_data, decoder);
         let initiative = self.get_initiative_breakdown(game_data, decoder);
-        let movement = self.get_movement_speed(game_data);
 
         let total_scores = self.get_total_abilities(game_data, decoder);
         let ability_modifiers = AbilityModifiers::from_scores(&total_scores);
@@ -165,7 +160,6 @@ impl Character {
             melee_attack_bonus: attack_bonuses.melee,
             ranged_attack_bonus: attack_bonuses.ranged,
             initiative: initiative.total,
-            movement_speed: movement.current,
             total_feats: self.feat_count() as i32,
             known_spells_count: self.count_unique_spells(),
             spent_skill_points: self.calculate_total_spent_with_costs(game_data),

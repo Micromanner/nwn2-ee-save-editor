@@ -416,7 +416,6 @@ export interface CharacterData {
   damageImmunities?: string[];
   spellResistance?: number;
   // Physical stats
-  movementSpeed?: number;
   size?: string;
   initiative?: number;
   // Ability modifiers from overview dashboard
@@ -512,7 +511,6 @@ export class CharacterAPI {
         melee_attack_bonus: number;
         ranged_attack_bonus: number;
         initiative: number;
-        movement_speed: number;
         total_feats: number;
         known_spells_count: number;
         spent_skill_points: number;
@@ -571,7 +569,6 @@ export class CharacterAPI {
         meleeAttackBonus: overview.melee_attack_bonus,
         rangedAttackBonus: overview.ranged_attack_bonus,
         initiative: overview.initiative,
-        movementSpeed: overview.movement_speed,
         totalFeats: overview.total_feats,
         knownSpells: overview.known_spells_count,
         totalSkillPoints: overview.spent_skill_points,

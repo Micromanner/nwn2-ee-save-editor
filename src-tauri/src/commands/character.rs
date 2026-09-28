@@ -28,23 +28,6 @@ fn resolved_last_name(character: &Character, game_data: &GameData) -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EncumbranceLimits {
-    pub light: i32,
-    pub medium: i32,
-    pub heavy: i32,
-}
-
-impl EncumbranceLimits {
-    pub fn new(light: i32, medium: i32, heavy: i32) -> Self {
-        Self {
-            light,
-            medium,
-            heavy,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Biography {
     pub first_name: String,
     pub last_name: String,
@@ -502,24 +485,6 @@ pub async fn get_hit_points(state: State<'_, AppState>) -> CommandResult<HitPoin
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(character.hit_points())
-}
-
-#[tauri::command]
-pub async fn get_encumbrance_limits(
-    state: State<'_, AppState>,
-) -> CommandResult<EncumbranceLimits> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let info = character.calculate_encumbrance(&game_data);
-    Ok(EncumbranceLimits::new(
-        info.light_limit as i32,
-        info.medium_limit as i32,
-        info.heavy_limit as i32,
-    ))
 }
 
 #[tauri::command]

@@ -329,13 +329,6 @@ export interface AbilityPointsSummary {
   available: number;
 }
 
-export interface EncumbranceInfo {
-  light_limit: number;
-  medium_limit: number;
-  heavy_limit: number;
-  max_limit: number;
-}
-
 export interface PointBuyState {
   starting_scores: AbilityScores;
   point_buy_cost: number;
@@ -350,7 +343,6 @@ export interface AbilitiesState {
   racial_modifiers: AbilityModifiers;
   equipment_modifiers: AbilityModifiers;
   hit_points: HitPoints;
-  encumbrance: EncumbranceInfo;
   point_summary: AbilityPointsSummary;
   point_buy: PointBuyState;
 }
@@ -649,33 +641,10 @@ export interface Initiative {
   feat: number;
 }
 
-export interface DamageReduction {
-  amount: number;
-  bypass: string;
-}
-
-export interface MovementSpeed {
-  base: number;
-  current: number;
-  armor_penalty: boolean;
-}
-
-export interface CombatManeuverBonus {
-  total: number;
-  bab: number;
-  str_mod: number;
-  size_mod: number;
-}
-
 export interface CombatSummary {
   armor_class: ArmorClass;
-  attack_bonuses: AttackBonuses;
   base_attack_bonus: number;
-  attack_sequence: number[];
   initiative: Initiative;
-  movement: MovementSpeed;
-  cmb: CombatManeuverBonus;
-  damage_reductions: DamageReduction[];
 }
 
 export type SaveType = 'Fortitude' | 'Reflex' | 'Will';

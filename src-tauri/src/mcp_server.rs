@@ -218,7 +218,7 @@ fn tools_list() -> Value {
         },
         {
             "name": "get_abilities",
-            "description": "Get ability scores (base/effective), modifiers, point buy tracking, encumbrance",
+            "description": "Get ability scores (base/effective), modifiers, point buy tracking",
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
