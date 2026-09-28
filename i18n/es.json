@@ -232,7 +232,10 @@
       "reset": "Restablecer",
       "pointsUsed": "Puntos Usados",
       "remaining": "restantes",
-      "warning": "Esto restablecerá sus aumentos de puntuación por nivel. Podrá volver a asignarlos después de aplicar."
+      "warning": "Esto restablecerá sus aumentos de puntuación por nivel. Podrá volver a asignarlos después de aplicar.",
+      "spent": "{points} gastados",
+      "nextCost": "Siguiente punto: {points}",
+      "maxReached": "Máximo alcanzado"
     },
     "names": {
       "strength": "Fuerza",

@@ -232,7 +232,10 @@
       "reset": "Zurücksetzen",
       "pointsUsed": "Verwendete Punkte",
       "remaining": "verbleibend",
-      "warning": "Dies setzt Ihre Attributserhöhungen durch Stufenaufstiege zurück. Sie können diese nach dem Anwenden neu verteilen."
+      "warning": "Dies setzt Ihre Attributserhöhungen durch Stufenaufstiege zurück. Sie können diese nach dem Anwenden neu verteilen.",
+      "spent": "{points} ausgegeben",
+      "nextCost": "Nächster Punkt: {points}",
+      "maxReached": "Maximum erreicht"
     },
     "names": {
       "strength": "Stärke",

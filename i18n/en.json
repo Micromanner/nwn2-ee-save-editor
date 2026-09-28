@@ -233,7 +233,10 @@
       "reset": "Reset",
       "pointsUsed": "Points Used",
       "remaining": "remaining",
-      "warning": "This will reset your level-up ability increases. You can re-spend them after applying."
+      "warning": "This will reset your level-up ability increases. You can re-spend them after applying.",
+      "spent": "{points} spent",
+      "nextCost": "Next point: {points}",
+      "maxReached": "Maximum reached"
     },
     "names": {
       "strength": "Strength",

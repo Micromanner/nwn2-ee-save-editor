@@ -233,7 +233,10 @@
       "reset": "Réinitialiser",
       "pointsUsed": "Points Utilisés",
       "remaining": "restants",
-      "warning": "Cela réinitialisera vos augmentations dues aux niveaux. Vous pourrez les redistribuer après application."
+      "warning": "Cela réinitialisera vos augmentations dues aux niveaux. Vous pourrez les redistribuer après application.",
+      "spent": "{points} dépensés",
+      "nextCost": "Point suivant : {points}",
+      "maxReached": "Maximum atteint"
     },
     "names": {
       "strength": "Force",

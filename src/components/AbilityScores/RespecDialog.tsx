@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Button, ProgressBar } from '@blueprintjs/core';
+import { Button, ProgressBar, Tooltip } from '@blueprintjs/core';
 import { GiAnticlockwiseRotation } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
@@ -9,9 +9,9 @@ import type { AbilityScores, PointBuyState } from '@/lib/bindings';
 
 type AbilityKey = 'Str' | 'Dex' | 'Con' | 'Int' | 'Wis' | 'Cha';
 
-const ABILITY_NAMES: Record<AbilityKey, string> = {
-  Str: 'Strength', Dex: 'Dexterity', Con: 'Constitution',
-  Int: 'Intelligence', Wis: 'Wisdom', Cha: 'Charisma',
+const ABILITY_NAME_KEYS: Record<AbilityKey, string> = {
+  Str: 'abilityScores.names.strength', Dex: 'abilityScores.names.dexterity', Con: 'abilityScores.names.constitution',
+  Int: 'abilityScores.names.intelligence', Wis: 'abilityScores.names.wisdom', Cha: 'abilityScores.names.charisma',
 };
 
 const ABILITY_SHORT: Record<AbilityKey, string> = {
@@ -138,6 +138,7 @@ export function RespecDialog({ isOpen, onClose, pointBuyState, onApply }: Respec
           const score = scores[key];
           const modifier = Math.floor((score - 10) / 2);
           const pts = cost(score);
+          const nextCost = cost(score + 1) - pts;
           return (
             <div key={key} style={{
               display: 'flex', alignItems: 'center', gap: 8,
@@ -145,13 +146,12 @@ export function RespecDialog({ isOpen, onClose, pointBuyState, onApply }: Respec
               background: T.surfaceAlt, border: `1px solid ${T.borderLight}`,
             }}>
               <span className="t-bold" style={{ width: 36, color: T.accent }}>{ABILITY_SHORT[key]}</span>
-              <span className="t-medium" style={{ flex: 1, color: T.text }}>{ABILITY_NAMES[key]}</span>
+              <span className="t-medium" style={{ flex: 1, color: T.text }}>{t(ABILITY_NAME_KEYS[key])}</span>
 
               <Button
                 icon="minus" small minimal
                 disabled={score <= MIN}
                 onClick={() => change(key, -1)}
-                style={{ color: T.textMuted }}
               />
               <span className="t-xl t-bold" style={{
                 width: 32, textAlign: 'center',
@@ -159,12 +159,16 @@ export function RespecDialog({ isOpen, onClose, pointBuyState, onApply }: Respec
               }}>
                 {score}
               </span>
-              <Button
-                icon="plus" small minimal
-                disabled={score >= MAX || remaining < (cost(score + 1) - cost(score))}
-                onClick={() => change(key, 1)}
-                style={{ color: T.textMuted }}
-              />
+              <Tooltip
+                content={score >= MAX ? t('abilityScores.pointBuy.maxReached') : t('abilityScores.pointBuy.nextCost', { points: nextCost })}
+                placement="top"
+              >
+                <Button
+                  icon="plus" small minimal
+                  disabled={score >= MAX || remaining < nextCost}
+                  onClick={() => change(key, 1)}
+                />
+              </Tooltip>
 
               <span className="t-semibold" style={{
                 width: 32, textAlign: 'center',
@@ -173,10 +177,10 @@ export function RespecDialog({ isOpen, onClose, pointBuyState, onApply }: Respec
                 {mod(modifier)}
               </span>
               <span className="t-sm" style={{
-                width: 40, textAlign: 'right',
+                minWidth: 64, textAlign: 'right',
                 color: T.textMuted,
               }}>
-                {pts} pts
+                {t('abilityScores.pointBuy.spent', { points: pts })}
               </span>
             </div>
           );

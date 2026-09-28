@@ -235,7 +235,10 @@
       "reset": "Resetuj",
       "pointsUsed": "Wydane Punkty",
       "remaining": "pozostało",
-      "warning": "To zresetuje Twoje przyrosty atrybutów z poziomów. Będziesz mógł je rozdzielić ponownie po zastosowaniu."
+      "warning": "To zresetuje Twoje przyrosty atrybutów z poziomów. Będziesz mógł je rozdzielić ponownie po zastosowaniu.",
+      "spent": "{points} wydano",
+      "nextCost": "Następny punkt: {points}",
+      "maxReached": "Osiągnięto maksimum"
     },
     "names": {
       "strength": "Siła",
