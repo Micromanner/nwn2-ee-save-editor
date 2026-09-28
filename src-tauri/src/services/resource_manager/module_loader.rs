@@ -35,6 +35,17 @@ fn with_extension(name: &str, extension: &str) -> String {
     }
 }
 
+/// HAK search folders in priority order: custom HAK folders, Documents `hak`, install `hak`.
+pub fn hak_dirs(paths: &NWN2Paths) -> Vec<PathBuf> {
+    paths
+        .custom_hak_folders()
+        .iter()
+        .cloned()
+        .chain(paths.hak_dir())
+        .chain(paths.install_hak_dir())
+        .collect()
+}
+
 /// An installed module's `.mod` file or directory module, searched in the
 /// custom module folders, the Documents and install `modules` folders, then
 /// the install campaign folders.

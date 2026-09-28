@@ -2898,7 +2898,7 @@ pub fn get_class_progression(
 }
 
 /// Levels above this are epic: the engine writes `EpicLevel = 1` and grants Epic Character.
-const EPIC_LEVEL_THRESHOLD: i32 = 20;
+pub(crate) const EPIC_LEVEL_THRESHOLD: i32 = 20;
 
 /// `FEAT_EPIC_CHARACTER`: granted by the engine itself on reaching level 21 (no class feat
 /// table lists it; verified against an in-game level-up 20 -> 21, 2026-09-26).

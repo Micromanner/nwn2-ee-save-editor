@@ -1010,6 +1010,13 @@ pub fn find_campaign_path(campaign_id: &str, paths: &NWN2Paths) -> Option<PathBu
         .map(|e| e.path.clone())
 }
 
+/// The folder holding the campaign's `campaign.cam`.
+pub fn find_campaign_folder(campaign_id: &str, paths: &NWN2Paths) -> Option<PathBuf> {
+    find_campaign_path(campaign_id, paths)?
+        .parent()
+        .map(Path::to_path_buf)
+}
+
 pub fn find_campaign_name(campaign_id: &str, paths: &NWN2Paths) -> Option<String> {
     campaign_index(paths)
         .get(&campaign_id.to_lowercase())

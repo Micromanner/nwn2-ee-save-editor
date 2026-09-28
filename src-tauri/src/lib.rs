@@ -1,6 +1,8 @@
 pub mod character;
 pub mod commands;
 pub mod config;
+#[cfg(debug_assertions)]
+pub mod dev_oracle;
 pub mod error;
 pub mod events;
 pub mod file_operations;
@@ -52,6 +54,7 @@ pub fn run() {
                 let mcp_state = crate::mcp_server::McpState::new(
                     Arc::clone(&app_state.game_data),
                     Arc::clone(&app_state.session),
+                    app.handle().clone(),
                 );
 
                 tauri::async_runtime::spawn(async move {

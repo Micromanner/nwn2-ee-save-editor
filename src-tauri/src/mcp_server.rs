@@ -34,14 +34,20 @@ type Sessions = Arc<Mutex<HashMap<String, UnboundedSender<String>>>>;
 pub struct McpState {
     pub game_data: Arc<RwLock<GameData>>,
     pub session: Arc<RwLock<SessionState>>,
+    app: tauri::AppHandle,
     sessions: Sessions,
 }
 
 impl McpState {
-    pub fn new(game_data: Arc<RwLock<GameData>>, session: Arc<RwLock<SessionState>>) -> Self {
+    pub fn new(
+        game_data: Arc<RwLock<GameData>>,
+        session: Arc<RwLock<SessionState>>,
+        app: tauri::AppHandle,
+    ) -> Self {
         Self {
             game_data,
             session,
+            app,
             sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -102,11 +108,57 @@ async fn messages_handler(
         None => return StatusCode::NOT_FOUND.into_response(),
     };
 
+    if let Some((id, tool, arguments)) = dev_oracle_call(&body) {
+        let app = state.app.clone();
+        tokio::spawn(async move {
+            let result = crate::dev_oracle::tools::call(&app, &tool, arguments).await;
+            let response = json!({ "jsonrpc": "2.0", "id": id, "result": tool_result(result) });
+            let _ = tx.send(serde_json::to_string(&response).unwrap_or_default());
+        });
+        return StatusCode::ACCEPTED.into_response();
+    }
+
     if let Some(response) = handle_jsonrpc(state, body) {
         let _ = tx.send(serde_json::to_string(&response).unwrap_or_default());
     }
 
     StatusCode::ACCEPTED.into_response()
+}
+
+/// Oracle tools take seconds and await the session, so they run on their own task instead of
+/// the synchronous dispatch below.
+fn dev_oracle_call(request: &Value) -> Option<(Value, String, Value)> {
+    if request.get("method").and_then(Value::as_str) != Some("tools/call") {
+        return None;
+    }
+    let id = request.get("id")?.clone();
+    let (tool, arguments) = tool_call_parts(request.get("params")?);
+    if !crate::dev_oracle::tools::NAMES.contains(&tool) {
+        return None;
+    }
+    Some((id, tool.to_string(), arguments))
+}
+
+fn tool_call_parts(params: &Value) -> (&str, Value) {
+    let tool = params.get("name").and_then(Value::as_str).unwrap_or("");
+    let arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or(Value::Object(Map::default()));
+    (tool, arguments)
+}
+
+fn tool_result<E: std::fmt::Display>(result: Result<Value, E>) -> Value {
+    match result {
+        Ok(value) => json!({
+            "content": [{ "type": "text", "text": serde_json::to_string_pretty(&value).unwrap_or_default() }],
+            "isError": false
+        }),
+        Err(e) => json!({
+            "content": [{ "type": "text", "text": e.to_string() }],
+            "isError": true
+        }),
+    }
 }
 
 fn handle_jsonrpc(state: McpState, request: Value) -> Option<Value> {
@@ -127,23 +179,16 @@ fn handle_jsonrpc(state: McpState, request: Value) -> Option<Value> {
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "nwn2-editor", "version": "1.0.0" }
         })),
-        "tools/list" => Ok(json!({ "tools": tools_list() })),
-        "tools/call" => {
-            let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let arguments = params
-                .get("arguments")
-                .cloned()
-                .unwrap_or(Value::Object(Map::default()));
-            match dispatch_tool(state, tool_name, arguments) {
-                Ok(value) => Ok(json!({
-                    "content": [{ "type": "text", "text": serde_json::to_string_pretty(&value).unwrap_or_default() }],
-                    "isError": false
-                })),
-                Err(e) => Ok(json!({
-                    "content": [{ "type": "text", "text": e.to_string() }],
-                    "isError": true
-                })),
+        "tools/list" => {
+            let mut tools = tools_list();
+            if let Some(list) = tools.as_array_mut() {
+                list.extend(crate::dev_oracle::tools::schemas());
             }
+            Ok(json!({ "tools": tools }))
+        }
+        "tools/call" => {
+            let (tool_name, arguments) = tool_call_parts(&params);
+            Ok(tool_result(dispatch_tool(state, tool_name, arguments)))
         }
         _ => Err(json!({ "code": -32601, "message": format!("Method not found: {method}") })),
     };

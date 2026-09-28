@@ -235,7 +235,7 @@ pub fn infer_save_path_from_backup(backup_path: &Path) -> Option<PathBuf> {
 
 /// Copy a save (or backup) folder, skipping the inner backups folder and the
 /// backup manifest. Returns the number of files copied.
-fn copy_save_files(src: &Path, dst: &Path) -> SaveGameResult<usize> {
+pub(crate) fn copy_save_files(src: &Path, dst: &Path) -> SaveGameResult<usize> {
     fs::create_dir_all(dst)?;
 
     let mut count = 0;

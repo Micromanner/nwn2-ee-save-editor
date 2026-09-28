@@ -323,7 +323,7 @@ fn spawn_stderr_forwarder(stderr: ChildStderr) {
 /// Route each bridge stderr line through `tracing` so `[timing]` breakdowns and
 /// `[info]`/`[warn]`/`[error]` messages land in the app log. Unprefixed lines go
 /// out at debug level so they never disappear silently.
-fn forward_bridge_line(line: &str) {
+pub(crate) fn forward_bridge_line(line: &str) {
     if let Some(rest) = line.strip_prefix("[timing] ") {
         tracing::info!(target: "toolset_bridge", "{rest}");
     } else if let Some(rest) = line.strip_prefix("[info] ") {

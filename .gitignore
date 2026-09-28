@@ -60,6 +60,10 @@ toolset-bridge/README.md
 !toolset-bridge/dist/*.exe
 !toolset-bridge/dist/*.config
 
+# Dev-only engine oracle: source only, never shipped
+toolset-oracle/bin/
+toolset-oracle/obj/
+
 # Claude
 CLAUDE.md
 .claude/

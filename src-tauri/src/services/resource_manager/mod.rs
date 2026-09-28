@@ -818,8 +818,7 @@ fn scan_module(paths: &NWN2Paths, content: ModuleContent) -> ModuleScan {
     }
 
     if let Some(guid) = content.campaign_id.as_deref().filter(|g| !g.is_empty()) {
-        if let Some(folder) = crate::services::campaign::content::find_campaign_path(guid, paths)
-            .and_then(|cam_file| cam_file.parent().map(Path::to_path_buf))
+        if let Some(folder) = crate::services::campaign::content::find_campaign_folder(guid, paths)
         {
             entries.extend(file_entries(
                 directory_scanner::scan_directory(&folder, true),
@@ -830,13 +829,7 @@ fn scan_module(paths: &NWN2Paths, content: ModuleContent) -> ModuleScan {
         }
     }
 
-    let hak_dirs: Vec<PathBuf> = paths
-        .custom_hak_folders()
-        .iter()
-        .cloned()
-        .chain(paths.hak_dir())
-        .chain(paths.install_hak_dir())
-        .collect();
+    let hak_dirs = module_loader::hak_dirs(paths);
     for (idx, hak_name) in content
         .hak_list
         .iter()

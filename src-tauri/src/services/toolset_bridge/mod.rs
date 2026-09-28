@@ -16,6 +16,8 @@ mod client;
 mod resolver;
 mod types;
 
+#[cfg(debug_assertions)]
+pub(crate) use client::forward_bridge_line;
 pub use client::{BridgeClient, BridgeError, BridgeResult};
 pub use resolver::build_client;
 pub use types::{
