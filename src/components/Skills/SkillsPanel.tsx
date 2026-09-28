@@ -252,7 +252,7 @@ export function SkillsPanel() {
                     </td>
                     <td style={{ textAlign: 'center' }}><ModCell value={s.modifier} /></td>
                     <td style={{ textAlign: 'center', color: T.textMuted }}>{misc ? mod(misc) : '-'}</td>
-                    <td className="t-medium" style={{ textAlign: 'center' }}>{mod(s.total)}</td>
+                    <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{mod(s.total)}</td>
                     <td style={{ textAlign: 'center' }}>
                       {s.is_class_skill
                         ? <span className="t-medium" style={{ color: T.positive }}>Class</span>

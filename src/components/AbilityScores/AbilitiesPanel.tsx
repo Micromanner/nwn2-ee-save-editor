@@ -116,9 +116,9 @@ export function AbilitiesPanel() {
   const flatFootedTotal = combatData?.armor_class?.flat_footed ?? 10;
 
   const acRows = [
-    { name: 'AC',          base: acBreakdown?.base ?? 10, dex: acBreakdown?.dex ?? 0, armor: acBreakdown?.armor ?? 0, shield: acBreakdown?.shield ?? 0, natural: acBreakdown?.natural ?? 0, deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: acTotal },
-    { name: 'Touch',       base: acBreakdown?.base ?? 10, dex: acBreakdown?.dex ?? 0, armor: 0,                       shield: 0,                        natural: 0,                         deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: touchTotal },
-    { name: 'Flat-Footed', base: acBreakdown?.base ?? 10, dex: 0,                     armor: acBreakdown?.armor ?? 0, shield: acBreakdown?.shield ?? 0, natural: acBreakdown?.natural ?? 0, deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: flatFootedTotal },
+    { key: 'ac', name: t('abilityScores.ac'), base: acBreakdown?.base ?? 10, dex: acBreakdown?.dex ?? 0, armor: acBreakdown?.armor ?? 0, shield: acBreakdown?.shield ?? 0, natural: acBreakdown?.natural ?? 0, deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: acTotal },
+    { key: 'touch', name: t('abilityScores.touch'), base: acBreakdown?.base ?? 10, dex: acBreakdown?.dex ?? 0, armor: 0,                       shield: 0,                        natural: 0,                         deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: touchTotal },
+    { key: 'flatFooted', name: t('abilityScores.flatFooted'), base: acBreakdown?.base ?? 10, dex: 0,                     armor: acBreakdown?.armor ?? 0, shield: acBreakdown?.shield ?? 0, natural: acBreakdown?.natural ?? 0, deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: flatFootedTotal },
   ];
 
   const initDex = combatData?.initiative?.dex ?? stats.initiative.dexMod ?? 0;
@@ -194,7 +194,7 @@ export function AbilitiesPanel() {
                 <th style={{ textAlign: 'center' }}>{t('abilityScores.racial')}</th>
                 <th style={{ textAlign: 'center' }}>{t('abilityScores.equip')}</th>
                 <th style={{ textAlign: 'center' }}>{t('abilityScores.effective')}</th>
-                <th style={{ textAlign: 'center' }}>Mod</th>
+                <th style={{ textAlign: 'center' }}>{t('abilityScores.mod')}</th>
               </tr>
             </thead>
             <tbody>
@@ -221,7 +221,7 @@ export function AbilitiesPanel() {
                       <td style={{ textAlign: 'center' }}><ModCell value={levelBonus} /></td>
                       <td style={{ textAlign: 'center' }}><ModCell value={racialBonus} /></td>
                       <td style={{ textAlign: 'center' }}><ModCell value={equipBonus} /></td>
-                      <td className="t-xl t-bold" style={{ textAlign: 'center', color: T.text }}>{a.value}</td>
+                      <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{a.value}</td>
                       <td className="t-semibold" style={{
                         textAlign: 'center',
                         color: a.modifier > 0 ? T.positive : a.modifier < 0 ? T.negative : T.textMuted,
@@ -264,7 +264,7 @@ export function AbilitiesPanel() {
                       <td style={{ textAlign: 'center' }}><ModCell value={levelBonus} /></td>
                       <td style={{ textAlign: 'center' }}><ModCell value={racial} /></td>
                       <td style={{ textAlign: 'center' }}><ModCell value={equip} /></td>
-                      <td className="t-xl t-bold" style={{ textAlign: 'center', color: T.text }}>{effective}</td>
+                      <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{effective}</td>
                       <td className="t-semibold" style={{
                         textAlign: 'center',
                         color: modifier > 0 ? T.positive : modifier < 0 ? T.negative : T.textMuted,
@@ -296,13 +296,13 @@ export function AbilitiesPanel() {
           <thead>
             <tr>
               <th></th>
-              <th style={{ textAlign: 'center' }}>Base</th>
-              <th style={{ textAlign: 'center' }}>Ability</th>
-              <th style={{ textAlign: 'center' }}>Equip</th>
-              <th style={{ textAlign: 'center' }}>Feat</th>
-              <th style={{ textAlign: 'center' }}>Racial</th>
-              <th style={{ textAlign: 'center' }}>Misc</th>
-              <th style={{ textAlign: 'center' }}>Total</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.base')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.ability')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.equip')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.feat')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.racial')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.misc')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -321,9 +321,7 @@ export function AbilitiesPanel() {
                     min={-35} max={255} width={88}
                   />
                 </td>
-                <td style={{ textAlign: 'center' }}>
-                  <strong className="t-xl" style={{ color: T.text }}>{mod(s.data?.total ?? 0)}</strong>
-                </td>
+                <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{mod(s.data?.total ?? 0)}</td>
               </tr>
             ))}
             <tr>
@@ -334,9 +332,7 @@ export function AbilitiesPanel() {
               <td style={{ textAlign: 'center' }}><ModCell value={initFeat} /></td>
               <td />
               <td />
-              <td style={{ textAlign: 'center' }}>
-                <strong className="t-xl" style={{ color: T.text }}>{mod(initTotal)}</strong>
-              </td>
+              <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{mod(initTotal)}</td>
             </tr>
           </tbody>
         </HTMLTable>
@@ -360,27 +356,27 @@ export function AbilitiesPanel() {
           <thead>
             <tr>
               <th>{t('abilityScores.type')}</th>
-              <th style={{ textAlign: 'center' }}>Base</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.base')}</th>
               <th style={{ textAlign: 'center' }}>DEX</th>
-              <th style={{ textAlign: 'center' }}>Armor</th>
-              <th style={{ textAlign: 'center' }}>Shield</th>
-              <th style={{ textAlign: 'center' }}>Natural</th>
-              <th style={{ textAlign: 'center' }}>Deflect</th>
-              <th style={{ textAlign: 'center' }}>Size</th>
-              <th style={{ textAlign: 'center' }}>Misc</th>
-              <th style={{ textAlign: 'center' }}>Total</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.armor')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.shield')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.natural')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.deflect')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.size')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.misc')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.total')}</th>
             </tr>
           </thead>
           <tbody>
             {acRows.map(ac => (
-              <tr key={ac.name}>
+              <tr key={ac.key}>
                 <td><strong style={{ color: T.text }}>{ac.name}</strong></td>
                 <td style={{ textAlign: 'center' }}>{ac.base}</td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.dex} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.armor} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.shield} /></td>
                 <td style={{ textAlign: 'center' }}>
-                  {ac.name === 'AC' ? (
+                  {ac.key === 'ac' ? (
                     <StepInput
                       value={ac.natural}
                       onValueChange={handleNaturalAcChange}
@@ -393,9 +389,7 @@ export function AbilitiesPanel() {
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.deflection} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.size} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.misc} /></td>
-                <td style={{ textAlign: 'center' }}>
-                  <strong className="t-xl" style={{ color: T.text }}>{ac.total}</strong>
-                </td>
+                <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{ac.total}</td>
               </tr>
             ))}
           </tbody>
