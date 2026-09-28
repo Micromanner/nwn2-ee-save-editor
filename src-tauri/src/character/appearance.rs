@@ -20,7 +20,7 @@ use super::appearance_helpers::{
 pub struct AppearanceState {
     pub race_id: i32,
     pub race_name: String,
-    /// `racialsubtypes.2da` row of the `Subrace` byte, 0 = none. Several
+    /// `racialsubtypes.2da` row of the `Subrace` byte (row 0 is Gold Dwarf). Several
     /// subraces can share one appearance row, so the UI matches on this first.
     pub subrace_id: i32,
     pub gender: i32,

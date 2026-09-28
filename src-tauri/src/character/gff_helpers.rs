@@ -243,21 +243,21 @@ impl super::Character {
     }
 
     pub fn set_localized_string(&mut self, field: &str, value: String) {
-        let (language, gender) = self
-            .gff
-            .get(field)
-            .and_then(|v| match v {
-                GffValue::LocString(ls) => ls.substrings.first().map(|s| (s.language, s.gender)),
-                _ => None,
-            })
-            .unwrap_or((0, 0));
+        if let Some(GffValue::LocString(ls)) = self.gff.get_mut(field)
+            && let Some(first) = ls.substrings.first_mut()
+        {
+            first.string = Cow::Owned(value);
+            ls.string_ref = -1;
+            self.modified = true;
+            return;
+        }
 
         let ls = LocalizedString {
             string_ref: -1,
             substrings: vec![LocalizedSubstring {
                 string: Cow::Owned(value),
-                language,
-                gender,
+                language: 0,
+                gender: 0,
             }],
         };
         self.gff.insert(field.to_string(), GffValue::LocString(ls));
@@ -503,27 +503,6 @@ mod tests {
         use std::collections::BTreeMap;
         use std::path::PathBuf;
 
-        fn variant_name(v: &GffValue<'_>) -> &'static str {
-            match v {
-                GffValue::Byte(_) => "Byte",
-                GffValue::Char(_) => "Char",
-                GffValue::Word(_) => "Word",
-                GffValue::Short(_) => "Short",
-                GffValue::Dword(_) => "Dword",
-                GffValue::Int(_) => "Int",
-                GffValue::Dword64(_) => "Dword64",
-                GffValue::Int64(_) => "Int64",
-                GffValue::Float(_) => "Float",
-                GffValue::Double(_) => "Double",
-                GffValue::String(_) => "String",
-                GffValue::ResRef(_) => "ResRef",
-                GffValue::LocString(_) => "LocString",
-                GffValue::Void(_) => "Void",
-                GffValue::Struct(_) | GffValue::StructOwned(_) | GffValue::StructRef(_) => "Struct",
-                GffValue::List(_) | GffValue::ListOwned(_) | GffValue::ListRef(_) => "List",
-            }
-        }
-
         let fixture_base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let fixtures = [
             "tests/fixtures/gff/ryathstrongarm/ryathstrongarm1.bic",
@@ -536,35 +515,6 @@ mod tests {
             "tests/fixtures/gff/occidiooctavon/occidiooctavon4.bic",
             "tests/fixtures/gff/sagemelchior/sagemelchior4.bic",
             "tests/fixtures/gff/player.bic",
-        ];
-
-        let lists_to_inspect = [
-            "ClassList",
-            "FeatList",
-            "SkillList",
-            "LvlStatList",
-            "SpellKnownList0",
-            "SpellKnownList1",
-            "SpellKnownList2",
-            "SpellKnownList3",
-            "SpellKnownList4",
-            "SpellKnownList5",
-            "SpellKnownList6",
-            "SpellKnownList7",
-            "SpellKnownList8",
-            "SpellMemorizedList0",
-            "SpellMemorizedList1",
-            "SpellMemorizedList2",
-            "SpellMemorizedList3",
-            "SpellMemorizedList4",
-            "SpellMemorizedList5",
-            "SpellMemorizedList6",
-            "SpellMemorizedList7",
-            "SpellMemorizedList8",
-            "Equip_ItemList",
-            "ItemList",
-            "HotbarList",
-            "DmgReduction",
         ];
 
         // list_name -> field_name -> type -> count
@@ -621,9 +571,6 @@ mod tests {
             }
         }
 
-        let _ = lists_to_inspect; // unused now — we walk recursively
-        let _ = variant_name;
-
         for fixture_rel in &fixtures {
             let fixture = fixture_base.join(fixture_rel);
             if !fixture.exists() {
@@ -670,5 +617,35 @@ mod tests {
         assert_eq!(updated.substrings[0].language, 5);
         assert_eq!(updated.substrings[0].gender, 2);
         assert_eq!(updated.substrings[0].string.as_ref(), "Updated");
+    }
+
+    #[test]
+    fn test_set_localized_string_keeps_other_languages() {
+        let mut fields = IndexMap::new();
+        let ls = LocalizedString {
+            string_ref: -1,
+            substrings: vec![
+                LocalizedSubstring {
+                    string: Cow::Owned("Hello".to_string()),
+                    language: 0,
+                    gender: 0,
+                },
+                LocalizedSubstring {
+                    string: Cow::Owned("Hallo".to_string()),
+                    language: 2,
+                    gender: 0,
+                },
+            ],
+        };
+        fields.insert("Description".to_string(), GffValue::LocString(ls));
+
+        let mut character = Character::from_gff(fields);
+        character.set_localized_string("Description", "Updated".to_string());
+
+        let updated = character.get_localized_string("Description").unwrap();
+        assert_eq!(updated.substrings.len(), 2);
+        assert_eq!(updated.substrings[0].string.as_ref(), "Updated");
+        assert_eq!(updated.substrings[1].string.as_ref(), "Hallo");
+        assert_eq!(updated.substrings[1].language, 2);
     }
 }

@@ -1,10 +1,9 @@
-use super::types::{ALIGNMENT_EVIL_THRESHOLD, ALIGNMENT_GOOD_THRESHOLD};
+use super::types::{
+    ALIGNMENT_EVIL_THRESHOLD, ALIGNMENT_GOOD_THRESHOLD, ALIGNMENT_MAX, ALIGNMENT_MIN,
+};
 use super::{Character, CharacterError};
 use serde::{Deserialize, Serialize};
 use specta::Type;
-
-pub const ALIGNMENT_MIN: i32 = 0;
-pub const ALIGNMENT_MAX: i32 = 100;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Type)]
 pub struct Alignment {
@@ -210,7 +209,7 @@ impl Character {
     }
 
     pub fn set_deity(&mut self, deity: String) {
-        self.set_localized_string("Deity", deity);
+        self.set_string("Deity", deity);
     }
 
     pub fn description(&self) -> String {
@@ -348,14 +347,7 @@ mod tests {
 
         fields.insert(
             "Deity".to_string(),
-            GffValue::LocString(LocalizedString {
-                string_ref: -1,
-                substrings: vec![LocalizedSubstring {
-                    string: Cow::Owned(String::new()),
-                    language: 0,
-                    gender: 0,
-                }],
-            }),
+            GffValue::String(Cow::Owned(String::new())),
         );
 
         Character::from_gff(fields)
@@ -509,6 +501,10 @@ mod tests {
         let mut character = create_test_character();
         character.set_deity("Tyr".to_string());
         assert_eq!(character.deity(), "Tyr");
+        assert!(matches!(
+            character.gff().get("Deity"),
+            Some(GffValue::String(_))
+        ));
         assert!(character.is_modified());
     }
 

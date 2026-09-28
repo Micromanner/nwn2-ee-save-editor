@@ -128,7 +128,7 @@ impl Character {
             full_name,
             race_id: self.race_id().0,
             race_name: self.race_name(game_data),
-            subrace: self.subrace(),
+            subrace: self.subrace_name(game_data),
             gender: gender_str.to_string(),
             gender_id,
             age: self.age(),

@@ -1,6 +1,6 @@
 use crate::character::{
-    AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, Character, HitPoints,
-    resolve_localized_name, resolved_full_name,
+    AbilityIndex, AbilityPointsSummary, AbilityScores, Alignment, Character, CharacterError,
+    HitPoints, resolve_localized_name, resolved_full_name,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::loaders::GameData;
@@ -524,11 +524,12 @@ pub async fn get_race_name(state: State<'_, AppState>) -> CommandResult<String> 
 #[tauri::command]
 pub async fn get_subrace(state: State<'_, AppState>) -> CommandResult<Option<String>> {
     let session = state.session.read();
+    let game_data = state.game_data.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.subrace())
+    Ok(character.subrace_name(&game_data))
 }
 
 #[tauri::command]
@@ -583,6 +584,14 @@ pub async fn change_race(
             .character
             .as_ref()
             .ok_or(CommandError::NoCharacterLoaded)?;
+        let validation = character.validate_race_change(race_id, subrace.as_deref(), &game_data);
+        if !validation.valid {
+            return Err(CharacterError::ValidationFailed {
+                field: "race",
+                message: validation.errors.join("; "),
+            }
+            .into());
+        }
         character.get_race_name_by_id(race_id, &game_data)
     };
     session.record_history(format!("Change race to {race_label}"));
@@ -592,7 +601,7 @@ pub async fn change_race(
         .ok_or(CommandError::NoCharacterLoaded)?;
 
     let old_race_id = character.race_id();
-    let old_subrace = character.subrace();
+    let old_subrace = character.subrace_name(&game_data);
 
     character.change_race(race_id, subrace.clone(), false, &game_data)?;
 

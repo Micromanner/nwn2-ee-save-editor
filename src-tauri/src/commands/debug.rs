@@ -281,7 +281,7 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
         let character_summary = session.character.as_ref().map(|c| CharacterSummaryDebug {
             name: c.full_name(),
             race_id: c.race_id().0,
-            subrace: c.subrace(),
+            subrace: c.subrace_name(&game_data),
             classes: c
                 .class_entries()
                 .iter()

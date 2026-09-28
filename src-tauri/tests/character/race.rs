@@ -73,7 +73,7 @@ async fn test_race_progression_consistency() {
         let character = Character::from_gff(fields);
 
         let race_id = character.race_id();
-        let subrace = character.subrace();
+        let subrace = character.subrace_index();
 
         println!("Checking {file} -> Race: {race_id:?} Subrace: {subrace:?}");
 
@@ -126,7 +126,8 @@ async fn test_diverse_races() {
             assert!(!race_name.is_empty());
 
             // Check racial feats
-            let racial_feats = character.get_all_racial_feats(game_data);
+            let racial_feats =
+                character.get_racial_feats_for_race(character.race_id().0, game_data);
             println!("  Racial Feats: {}", racial_feats.len());
             for feat in &racial_feats {
                 // Verify we can resolve feat names
@@ -201,6 +202,7 @@ async fn test_race_change_execution() {
     let initial_con = character.base_ability(app_lib::character::AbilityIndex::CON);
     let initial_cha = character.base_ability(app_lib::character::AbilityIndex::CHA);
     let _initial_feats_count = character.feat_ids().len();
+    let initial_max_hp = character.max_hp();
 
     println!("Initial Race: {initial_race:?}, CON: {initial_con}, CHA: {initial_cha}");
 
@@ -212,7 +214,6 @@ async fn test_race_change_execution() {
     }
 
     // Change to Dwarf (ID 0)
-    // Dwarf Mods: CON +2, CHA -2
     let dwarf_id = 0;
 
     let result = character
@@ -228,23 +229,24 @@ async fn test_race_change_execution() {
         "Race ID should be Dwarf (0)"
     );
 
-    // Verify Ability Adjustments
-    let new_con = character.base_ability(app_lib::character::AbilityIndex::CON);
-    let new_cha = character.base_ability(app_lib::character::AbilityIndex::CHA);
-
-    println!("New CON: {new_con}, New CHA: {new_cha}");
-
-    // Dwarves have +2 CON, -2 CHA (Humans have no adjustments)
     assert_eq!(
-        new_con,
-        initial_con + 2,
-        "Constitution should increase by 2 for Dwarf"
+        character.subrace_index(),
+        Some(2),
+        "Dwarf should get its DefaultSubRace"
+    );
+
+    // Adjustments are derived at read time; stored scores stay untouched
+    assert_eq!(
+        character.base_ability(app_lib::character::AbilityIndex::CON),
+        initial_con
     );
     assert_eq!(
-        new_cha,
-        initial_cha - 2,
-        "Charisma should decrease by 2 for Dwarf"
+        character.base_ability(app_lib::character::AbilityIndex::CHA),
+        initial_cha
     );
+
+    // Shield Dwarf CON +2 raises the CON modifier by 1 at every level
+    assert_eq!(character.max_hp(), initial_max_hp + character.total_level());
 
     // Verify Feat Changes
     // Darkvision (Feat 228) should be added
@@ -260,15 +262,6 @@ async fn test_race_change_execution() {
     assert!(
         !has_quick_to_master,
         "Dwarf should NOT have Quick to Master (Human trait)"
-    );
-
-    // Verify result struct accuracy
-    let con_change = result.ability_changes.iter().find(|c| c.attribute == "Con");
-    assert!(con_change.is_some(), "Result should record Con change");
-    assert_eq!(
-        con_change.unwrap().modifier,
-        2,
-        "Result should record +2 Con mod"
     );
 
     // Check removal log
@@ -322,4 +315,27 @@ async fn test_aasimar_subrace_from_byte_index() {
         race_name.to_lowercase().contains("aasimar"),
         "Race display name should be Aasimar, got: {race_name}"
     );
+}
+
+#[tokio::test]
+async fn test_rejected_race_change_leaves_character_untouched() {
+    let ctx = common::create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+
+    let data = common::load_test_gff("ryathstrongarm/ryathstrongarm1.bic");
+    let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");
+    let fields = parser
+        .read_struct_fields(0)
+        .expect("Failed to read top level struct");
+    let mut character = Character::from_gff(fields);
+    let race_before = character.race_id();
+
+    assert!(
+        character
+            .change_race(99999, None, false, game_data)
+            .is_err()
+    );
+    assert!(character.change_race(300, None, false, game_data).is_err());
+    assert_eq!(character.race_id(), race_before);
+    assert!(!character.is_modified());
 }
