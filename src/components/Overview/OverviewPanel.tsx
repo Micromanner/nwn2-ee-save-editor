@@ -355,7 +355,7 @@ export function OverviewPanel() {
             <KVRow label={t('character.alignment')} value={t(ALIGNMENT_GRID[getAlignmentIndex(lawChaos, goodEvil)]?.labelKey) || display(character.alignment)} />
             <KVRow label={t('overview.deity')} value={
               <span className="editable-row" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setIsDeityOpen(true)}>
-                {display(character.deity, 'None')}
+                {display(character.deity, t('common.none'))}
                 <GameIcon icon={GiQuillInk} size={12} style={{ color: T.textMuted }} />
               </span>
             } />

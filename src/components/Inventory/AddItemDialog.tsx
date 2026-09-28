@@ -12,6 +12,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useInventoryManagement } from '@/hooks/useInventoryManagement';
 import { inventoryAPI, BaseItem, ItemTemplate, ITEM_CATEGORIES, CATEGORIES_WITH_SUBS, SUB_CATEGORY_LABELS, isVanillaSource } from '@/services/inventoryApi';
 import { display } from '@/utils/dataHelpers';
+import { categoryLabel as resolveCategoryLabel, sourceLabel } from './inventoryLabels';
 
 const LIST_HEIGHT = 380;
 const ROW_HEIGHT = 46;
@@ -239,13 +240,13 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
 
   const categoryLabel = category === 'all'
     ? t('inventory.filterCategory')
-    : category;
+    : resolveCategoryLabel(t, category);
 
   const categoryMenu = (
     <Menu>
       <MenuItem text={t('inventory.categoryAll')} active={category === 'all'} onClick={() => { setCategory('all'); setSubCategory(null); }} />
       {(tab === 'base' ? baseCategories : templateCategories.map(([c]) => c)).map(cat => (
-        <MenuItem key={cat} text={cat} active={category === cat} onClick={() => { setCategory(cat); setSubCategory(null); }} />
+        <MenuItem key={cat} text={resolveCategoryLabel(t, cat)} active={category === cat} onClick={() => { setCategory(cat); setSubCategory(null); }} />
       ))}
     </Menu>
   );
@@ -269,11 +270,11 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className={selected ? 't-semibold' : undefined} style={{ color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{display(item.name)}</div>
-          <div className="t-sm" style={{ color: T.textMuted }}>{item.category}</div>
+          <div className="t-sm" style={{ color: T.textMuted }}>{resolveCategoryLabel(t, item.category)}</div>
         </div>
       </div>
     );
-  }, [filteredBase, selectedBaseId]);
+  }, [filteredBase, selectedBaseId, t]);
 
   const TemplateRow = useCallback(({ index, style }: RowComponentProps) => {
     const item = filteredTemplates[index];
@@ -293,12 +294,12 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className={selected ? 't-semibold' : undefined} style={{ color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{display(item.name)}</div>
           <div className="t-sm" style={{ color: T.textMuted }}>
-            {ITEM_CATEGORIES[item.category as keyof typeof ITEM_CATEGORIES] || 'Miscellaneous'} - {item.source}
+            {resolveCategoryLabel(t, ITEM_CATEGORIES[item.category as keyof typeof ITEM_CATEGORIES] || 'Miscellaneous')} - {sourceLabel(t, item.source)}
           </div>
         </div>
       </div>
     );
-  }, [filteredTemplates, selectedResref]);
+  }, [filteredTemplates, selectedResref, t]);
 
   const itemCount = tab === 'base' ? filteredBase.length : filteredTemplates.length;
   const totalBase = baseItems.length;

@@ -2,18 +2,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { CharacterAPI, FeatActionResponse } from '@/services/characterApi';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
-import type {
-  FeatInfo,
-  FeatsState,
-  ValidationCache,
-  ValidationState
-} from '@/components/Feats/types';
+import { useTranslations } from '@/hooks/useTranslations';
+import type { FeatInfo, FeatsState } from '@/components/Feats/types';
 
 const FEAT_DEPENDENT_SUBSYSTEMS = ['combat', 'abilityScores', 'saves', 'skills', 'classes'] as const;
 
 interface UseFeatManagementOptions {
   autoLoadFeats?: boolean;
-  enableValidation?: boolean;
 }
 
 interface FeatManagementState {
@@ -23,8 +18,6 @@ interface FeatManagementState {
   categoryFeats: FeatInfo[];
   categoryFeatsLoading: boolean;
   categoryFeatsError: string | null;
-  validationCache: ValidationCache;
-  validatingFeatId: number | null;
   selectedFeat: FeatInfo | null;
   featDetails: FeatInfo | null;
   loadingDetails: boolean;
@@ -34,8 +27,6 @@ interface FeatManagementActions {
   loadFeats: (force?: boolean) => Promise<void>;
   loadCategoryFeats: (category: string, subcategory?: string | null) => Promise<void>;
   loadFeatDetails: (feat: FeatInfo) => Promise<void>;
-  validateFeat: (featId: number) => Promise<ValidationState | null>;
-  clearValidationCache: () => void;
   addFeat: (featId: number) => Promise<FeatActionResponse>;
   removeFeat: (featId: number) => Promise<FeatActionResponse>;
   selectFeat: (feat: FeatInfo | null) => void;
@@ -47,10 +38,8 @@ export interface UseFeatManagementReturn extends FeatManagementState, FeatManage
 export function useFeatManagement(
   options: UseFeatManagementOptions = {}
 ): UseFeatManagementReturn {
-  const { 
-    autoLoadFeats = true,
-    enableValidation = true 
-  } = options;
+  const t = useTranslations();
+  const { autoLoadFeats = true } = options;
 
   const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems, refreshCharacter } = useCharacterContext();
   const feats = useSubsystem('feats');
@@ -58,8 +47,6 @@ export function useFeatManagement(
   const [categoryFeats, setCategoryFeats] = useState<FeatInfo[]>([]);
   const [categoryFeatsLoading, setCategoryFeatsLoading] = useState(false);
   const [categoryFeatsError, setCategoryFeatsError] = useState<string | null>(null);
-  const [validationCache, setValidationCache] = useState<ValidationCache>({});
-  const [validatingFeatId, setValidatingFeatId] = useState<number | null>(null);
   const [selectedFeat, setSelectedFeat] = useState<FeatInfo | null>(null);
   const [featDetails, setFeatDetails] = useState<FeatInfo | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -101,13 +88,13 @@ export function useFeatManagement(
       
       setCategoryFeats(response.feats);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load category feats';
+      const errorMessage = error instanceof Error ? error.message : t('errors.loadingFailed');
       setCategoryFeatsError(errorMessage);
       setCategoryFeats([]);
     } finally {
       setCategoryFeatsLoading(false);
     }
-  }, [character?.id]);
+  }, [t, character?.id]);
 
   const loadFeatDetails = useCallback(async (feat: FeatInfo) => {
     if (!character?.id) return;
@@ -125,73 +112,29 @@ export function useFeatManagement(
     }
   }, [character?.id]);
 
-  const validateFeat = useCallback(async (featId: number): Promise<ValidationState | null> => {
-    if (!character?.id || !enableValidation) return null;
-    
-    if (validationCache[featId]) {
-      return validationCache[featId];
-    }
-    
-    setValidatingFeatId(featId);
-    
-    try {
-      const validation: ValidationState = {
-        can_take: Math.random() > 0.5,
-        reason: 'Prerequisites not met',
-        has_feat: false,
-        missing_requirements: ['Level 5 required', 'BAB +3 required']
-      };
-      
-      setValidationCache(prev => ({
-        ...prev,
-        [featId]: validation
-      }));
-      
-      return validation;
-    } catch {
-      return null;
-    } finally {
-      setValidatingFeatId(null);
-    }
-  }, [character?.id, enableValidation, validationCache]);
-
-  const clearValidationCache = useCallback(() => {
-    setValidationCache({});
-  }, []);
-
   const addFeat = useCallback(async (featId: number): Promise<FeatActionResponse> => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await CharacterAPI.addFeat(character.id, featId);
-    setValidationCache(prev => {
-      const newCache = { ...prev };
-      delete newCache[featId];
-      return newCache;
-    });
     await Promise.all([
       feats.load({ force: true }),
       invalidateSubsystems([...FEAT_DEPENDENT_SUBSYSTEMS]),
       refreshCharacter(),
     ]);
     return response;
-  }, [character?.id, feats, invalidateSubsystems, refreshCharacter]);
+  }, [t, character?.id, feats, invalidateSubsystems, refreshCharacter]);
 
   const removeFeat = useCallback(async (featId: number): Promise<FeatActionResponse> => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await CharacterAPI.removeFeat(character.id, featId);
-    setValidationCache(prev => {
-      const newCache = { ...prev };
-      delete newCache[featId];
-      return newCache;
-    });
     await Promise.all([
       feats.load({ force: true }),
       invalidateSubsystems([...FEAT_DEPENDENT_SUBSYSTEMS]),
       refreshCharacter(),
     ]);
     return response;
-  }, [character?.id, feats, invalidateSubsystems, refreshCharacter]);
+  }, [t, character?.id, feats, invalidateSubsystems, refreshCharacter]);
 
   const selectFeat = useCallback((feat: FeatInfo | null) => {
     setSelectedFeat(feat);
@@ -212,16 +155,12 @@ export function useFeatManagement(
     categoryFeats,
     categoryFeatsLoading,
     categoryFeatsError,
-    validationCache,
-    validatingFeatId,
     selectedFeat,
     featDetails,
     loadingDetails,
     loadFeats,
     loadCategoryFeats,
     loadFeatDetails,
-    validateFeat,
-    clearValidationCache,
     addFeat,
     removeFeat,
     selectFeat,

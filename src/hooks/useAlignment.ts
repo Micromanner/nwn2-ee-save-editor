@@ -54,15 +54,15 @@ export function useAlignment(initialAlignment?: Alignment) {
   };
 
   const getAlignmentDescription = (law_chaos: number, good_evil: number): string => {
-    if (law_chaos >= 70 && good_evil >= 70) return "Acts with compassion and honor, holding a strong sense of duty.";
-    if (law_chaos >= 31 && law_chaos <= 69 && good_evil >= 70) return "Does what is good and right without a strong bias for or against order.";
-    if (law_chaos <= 30 && good_evil >= 70) return "Follows their own conscience to do good, with little regard for societal laws.";
-    if (law_chaos >= 70 && good_evil >= 31 && good_evil <= 69) return "Adheres to a personal code, tradition, or the law above all else.";
-    if (law_chaos >= 31 && law_chaos <= 69 && good_evil >= 31 && good_evil <= 69) return "Maintains a balance, avoiding strong commitments to any single alignment extreme.";
-    if (law_chaos <= 30 && good_evil >= 31 && good_evil <= 69) return "Values personal freedom and individuality above all other considerations.";
-    if (law_chaos >= 70 && good_evil <= 30) return "Methodically and intentionally uses order and structure to achieve malevolent goals.";
-    if (law_chaos >= 31 && law_chaos <= 69 && good_evil <= 30) return "Acts out of pure self-interest, harming others when it is convenient.";
-    if (law_chaos <= 30 && good_evil <= 30) return "Engages in destructive and unpredictable acts of evil and malice.";
+    if (law_chaos >= 70 && good_evil >= 70) return t('alignment.descriptions.lawfulGood');
+    if (law_chaos >= 31 && law_chaos <= 69 && good_evil >= 70) return t('alignment.descriptions.neutralGood');
+    if (law_chaos <= 30 && good_evil >= 70) return t('alignment.descriptions.chaoticGood');
+    if (law_chaos >= 70 && good_evil >= 31 && good_evil <= 69) return t('alignment.descriptions.lawfulNeutral');
+    if (law_chaos >= 31 && law_chaos <= 69 && good_evil >= 31 && good_evil <= 69) return t('alignment.descriptions.trueNeutral');
+    if (law_chaos <= 30 && good_evil >= 31 && good_evil <= 69) return t('alignment.descriptions.chaoticNeutral');
+    if (law_chaos >= 70 && good_evil <= 30) return t('alignment.descriptions.lawfulEvil');
+    if (law_chaos >= 31 && law_chaos <= 69 && good_evil <= 30) return t('alignment.descriptions.neutralEvil');
+    if (law_chaos <= 30 && good_evil <= 30) return t('alignment.descriptions.chaoticEvil');
     return "";
   };
 
@@ -87,15 +87,15 @@ export function useAlignment(initialAlignment?: Alignment) {
   };
 
   const alignmentGridData = [
-    { name: 'Lawful Good', law_chaos: 85, good_evil: 85, ranges: [[70, 100], [70, 100]] },
-    { name: 'Neutral Good', law_chaos: 50, good_evil: 85, ranges: [[31, 69], [70, 100]] },
-    { name: 'Chaotic Good', law_chaos: 15, good_evil: 85, ranges: [[0, 30], [70, 100]] },
-    { name: 'Lawful Neutral', law_chaos: 85, good_evil: 50, ranges: [[70, 100], [31, 69]] },
-    { name: 'True Neutral', law_chaos: 50, good_evil: 50, ranges: [[31, 69], [31, 69]] },
-    { name: 'Chaotic Neutral', law_chaos: 15, good_evil: 50, ranges: [[0, 30], [31, 69]] },
-    { name: 'Lawful Evil', law_chaos: 85, good_evil: 15, ranges: [[70, 100], [0, 30]] },
-    { name: 'Neutral Evil', law_chaos: 50, good_evil: 15, ranges: [[31, 69], [0, 30]] },
-    { name: 'Chaotic Evil', law_chaos: 15, good_evil: 15, ranges: [[0, 30], [0, 30]] },
+    { name: t('alignment.names.lawfulGood'), law_chaos: 85, good_evil: 85, ranges: [[70, 100], [70, 100]] },
+    { name: t('alignment.names.neutralGood'), law_chaos: 50, good_evil: 85, ranges: [[31, 69], [70, 100]] },
+    { name: t('alignment.names.chaoticGood'), law_chaos: 15, good_evil: 85, ranges: [[0, 30], [70, 100]] },
+    { name: t('alignment.names.lawfulNeutral'), law_chaos: 85, good_evil: 50, ranges: [[70, 100], [31, 69]] },
+    { name: t('alignment.names.trueNeutral'), law_chaos: 50, good_evil: 50, ranges: [[31, 69], [31, 69]] },
+    { name: t('alignment.names.chaoticNeutral'), law_chaos: 15, good_evil: 50, ranges: [[0, 30], [31, 69]] },
+    { name: t('alignment.names.lawfulEvil'), law_chaos: 85, good_evil: 15, ranges: [[70, 100], [0, 30]] },
+    { name: t('alignment.names.neutralEvil'), law_chaos: 50, good_evil: 15, ranges: [[31, 69], [0, 30]] },
+    { name: t('alignment.names.chaoticEvil'), law_chaos: 15, good_evil: 15, ranges: [[0, 30], [0, 30]] },
   ];
 
   return {

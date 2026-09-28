@@ -178,7 +178,7 @@ export function MarkupEditor({ value, onChange, multiline = false, minHeight = 3
           <button
             key={name}
             type="button"
-            title={name.charAt(0).toUpperCase() + name.slice(1)}
+            title={t(`inventory.editor.colorNames.${name}`)}
             onClick={() => applyColor(name.charAt(0).toUpperCase() + name.slice(1), hex)}
             style={{
               width: 28, height: 28, background: hex, border: `1px solid ${T.sectionBorder}`,

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
+import { useTranslations } from '@/hooks/useTranslations';
 import { inventoryAPI, EquipItemRequest, UnequipItemRequest, UpdateItemRequest } from '@/services/inventoryApi';
 
 // 'appearance' carries the equipped armor/cloak/helm tints the 3D viewer
@@ -7,6 +8,7 @@ import { inventoryAPI, EquipItemRequest, UnequipItemRequest, UpdateItemRequest }
 const EQUIP_DEPENDENT_SUBSYSTEMS = ['abilityScores', 'combat', 'saves', 'skills', 'appearance'] as const;
 
 export function useInventoryManagement() {
+  const t = useTranslations();
   const { character, invalidateSubsystems } = useCharacterContext();
   const inventoryData = useSubsystem('inventory');
 
@@ -36,37 +38,37 @@ export function useInventoryManagement() {
   }, [inventoryData, invalidateSubsystems]);
 
   const equipItem = useCallback(async (request: EquipItemRequest) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.equipItem(character.id, request);
     if (response.success) {
       await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const unequipItem = useCallback(async (request: UnequipItemRequest) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.unequipItem(character.id, request);
     if (response.success) {
       await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const deleteItem = useCallback(async (itemIndex: number) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.deleteItem(character.id, itemIndex);
     if (response.success) {
       await refreshAfterMutation(refreshInventory);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventory]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventory]);
 
   const addItemByBaseType = useCallback(async (baseItemId: number, iconTemplateResref?: string) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.addItemByBaseType(character.id, {
       base_item_id: baseItemId,
@@ -76,30 +78,30 @@ export function useInventoryManagement() {
       await refreshAfterMutation(refreshInventory);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventory]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventory]);
 
   const updateItem = useCallback(async (request: UpdateItemRequest) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.updateItem(character.id, request);
     if (response.success) {
       await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const addItemFromTemplate = useCallback(async (resref: string) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.addItemFromTemplate(character.id, resref);
     if (response.success) {
       await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const transformItem = useCallback(async (target: { itemIndex?: number; slot?: string }, targetResref: string) => {
-    if (!character?.id) throw new Error('No character loaded');
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     const response = await inventoryAPI.transformItem(character.id, {
       item_index: target.itemIndex ?? null,
@@ -110,7 +112,7 @@ export function useInventoryManagement() {
       await refreshAfterMutation(refreshInventoryAndEquipStats);
     }
     return response;
-  }, [character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
+  }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   return {
     equipItem,

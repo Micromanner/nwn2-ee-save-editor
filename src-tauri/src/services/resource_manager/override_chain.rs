@@ -47,18 +47,6 @@ impl OverrideSource {
             Self::Hak(_) => "hak",
         }
     }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::BaseGame => "Base Game",
-            Self::Module => "Module",
-            Self::Campaign => "Campaign",
-            Self::OverrideDir => "Override Directory",
-            Self::Workshop => "Steam Workshop",
-            Self::CustomOverride => "Custom Override",
-            Self::Hak(_) => "HAK Pack",
-        }
-    }
 }
 
 impl Ord for OverrideSource {

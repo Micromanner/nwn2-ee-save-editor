@@ -111,15 +111,6 @@ export interface SubcategoryInfo {
   count: number;
 }
 
-export interface ValidationState {
-  can_take: boolean;
-  reason: string;
-  has_feat: boolean;
-  missing_requirements: string[];
-}
-
-export type ValidationCache = Record<number, ValidationState>;
-
 export interface FeatManagementCallbacks {
   onDetails: (feat: FeatInfo) => void;
   onAdd: (featId: number) => void;

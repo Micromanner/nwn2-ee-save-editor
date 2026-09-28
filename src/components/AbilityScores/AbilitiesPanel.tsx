@@ -208,7 +208,7 @@ export function AbilitiesPanel() {
                   return (
                     <tr key={a.shortName}>
                       <td>
-                        <strong style={{ color: T.text }}>{shortName}</strong>
+                        <strong style={{ color: T.text }}>{t(`abilityScores.short.${shortName.toLowerCase()}`)}</strong>
                         <span style={{ marginLeft: 6, color: T.textMuted }}>{a.name}</span>
                       </td>
                       <td style={{ textAlign: 'center' }}>
@@ -233,7 +233,6 @@ export function AbilitiesPanel() {
                 })
               ) : abilitiesData ? (
                 (['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha'] as const).map((key, i) => {
-                  const shortNames: Record<string, string> = { Str: 'STR', Dex: 'DEX', Con: 'CON', Int: 'INT', Wis: 'WIS', Cha: 'CHA' };
                   const fullNames: Record<string, string> = {
                     Str: t('abilityScores.strength'), Dex: t('abilityScores.dexterity'),
                     Con: t('abilityScores.constitution'), Int: t('abilityScores.intelligence'),
@@ -251,7 +250,7 @@ export function AbilitiesPanel() {
                   return (
                     <tr key={key}>
                       <td>
-                        <strong style={{ color: T.text }}>{shortNames[key]}</strong>
+                        <strong style={{ color: T.text }}>{t(`abilityScores.short.${key.toLowerCase()}`)}</strong>
                         <span style={{ marginLeft: 6, color: T.textMuted }}>{fullNames[key]}</span>
                       </td>
                       <td style={{ textAlign: 'center' }}>
@@ -357,7 +356,7 @@ export function AbilitiesPanel() {
             <tr>
               <th>{t('abilityScores.type')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.base')}</th>
-              <th style={{ textAlign: 'center' }}>DEX</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.short.dex')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.armor')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.shield')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.natural')}</th>

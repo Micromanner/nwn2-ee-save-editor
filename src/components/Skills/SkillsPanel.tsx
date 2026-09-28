@@ -174,9 +174,9 @@ export function SkillsPanel() {
       <Card elevation={Elevation.ONE} style={{ padding: 0, background: T.surface, overflow: 'hidden' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
-          <span style={{ color: T.textMuted }}>Spent: <strong style={{ color: T.text }}>{budget.displayedSpent}</strong></span>
-          <span style={{ color: T.textMuted }}>Available: <strong style={{ color: T.accent }}>{budget.available}</strong></span>
-          <span style={{ color: budget.overdrawn > 0 ? T.negative : T.textMuted }}>Overdrawn: <strong>{budget.overdrawn}</strong></span>
+          <span style={{ color: T.textMuted }}>{t('skills.spent')}: <strong style={{ color: T.text }}>{budget.displayedSpent}</strong></span>
+          <span style={{ color: T.textMuted }}>{t('skills.available')}: <strong style={{ color: T.accent }}>{budget.available}</strong></span>
+          <span style={{ color: budget.overdrawn > 0 ? T.negative : T.textMuted }}>{t('skills.overdrawn')}: <strong>{budget.overdrawn}</strong></span>
           <Tooltip content={t('skills.levellingAsHint')} placement="bottom">
             <span style={{ color: T.textMuted, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               {t('skills.levellingAs')}: <strong style={{ color: T.text }}>{levellingClass}</strong>
@@ -234,12 +234,12 @@ export function SkillsPanel() {
                     <td>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <strong style={{ color: T.text }}>{s.name}</strong>
-                        <span style={{ color: T.textMuted, display: 'inline-block', width: 28 }}>{s.ability}</span>
+                        <span style={{ color: T.textMuted, display: 'inline-block', width: 28 }}>{t(`abilityScores.short.${s.ability.slice(0, 3).toLowerCase()}`)}</span>
                         {s.armor_check_penalty && (
-                          <Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.accent }}>ACP</Tag>
+                          <Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.accent }}>{t('skills.acp')}</Tag>
                         )}
                         {!s.is_class_skill && (
-                          <Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>2pt</Tag>
+                          <Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>{t('skills.twoPoints')}</Tag>
                         )}
                       </span>
                     </td>
@@ -255,8 +255,8 @@ export function SkillsPanel() {
                     <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{mod(s.total)}</td>
                     <td style={{ textAlign: 'center' }}>
                       {s.is_class_skill
-                        ? <span className="t-medium" style={{ color: T.positive }}>Class</span>
-                        : <span style={{ color: T.textMuted }}>Cross</span>}
+                        ? <span className="t-medium" style={{ color: T.positive }}>{t('skills.class')}</span>
+                        : <span style={{ color: T.textMuted }}>{t('skills.cross')}</span>}
                     </td>
                   </tr>
                 );
@@ -264,8 +264,8 @@ export function SkillsPanel() {
             </tbody>
           </HTMLTable>
           <div style={{ marginTop: 8, display: 'flex', gap: 16, color: T.textMuted }}>
-            <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.accent }}>ACP</Tag> {t('skills.armorCheck')}</span>
-            <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>2pt</Tag> {t('skills.crossClassLegend', { class: levellingClass })}</span>
+            <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.accent }}>{t('skills.acp')}</Tag> {t('skills.armorCheck')}</span>
+            <span><Tag minimal className="t-xs" style={{ padding: '0 4px', lineHeight: '16px', background: T.sectionBg, color: T.textMuted }}>{t('skills.twoPoints')}</Tag> {t('skills.crossClassLegend', { class: levellingClass })}</span>
           </div>
         </div>
       </Card>

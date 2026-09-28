@@ -126,7 +126,10 @@ export default function DashboardPanel() {
 
   const confirmSwitch = async (nextLabel: string) => {
     if (!character) return true;
-    return TauriAPI.confirmSaveSwitch(character.name || t('character.noCharacter'), nextLabel);
+    return TauriAPI.confirmSaveSwitch(
+      t('dashboard.switchSave.message', { current: character.name || t('character.noCharacter'), next: nextLabel }),
+      t('dashboard.switchSave.title')
+    );
   };
 
   const importSaveSelection = async (path: string, label: string, playerIndex?: number) => {

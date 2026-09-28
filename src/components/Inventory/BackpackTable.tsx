@@ -8,6 +8,7 @@ import type { FullInventoryItem } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
 import { renderNwn2Markup } from '@/utils/nwn2Markup';
 import { useTranslations } from '@/hooks/useTranslations';
+import { categoryLabel } from './inventoryLabels';
 
 interface BackpackTableProps {
   items: FullInventoryItem[];
@@ -86,15 +87,6 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
       </thead>
       <tbody>
         {sortedItems.map((item) => {
-          const resolveCategory = (c: string) => {
-            if (c === 'Armor & Clothing') return t('inventory.categories.armorAndClothing');
-            if (c === 'Weapons') return t('inventory.categories.weapons');
-            if (c === 'Magic Items') return t('inventory.categories.magicItems');
-            if (c === 'Accessories') return t('inventory.categories.accessories');
-            if (c === 'Miscellaneous') return t('inventory.categories.miscellaneous');
-            return c;
-          };
-
           const selected = selectedIndex === item.index;
           return (
             <tr
@@ -108,13 +100,13 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
               }}>
                 {renderNwn2Markup(display(item.name))}
               </td>
-              <td style={{ color: T.textMuted }}>{display(resolveCategory(item.category))}</td>
+              <td style={{ color: T.textMuted }}>{display(categoryLabel(t, item.category))}</td>
               <td style={{ textAlign: 'center' }}>{item.stack_size > 1 ? item.stack_size : ''}</td>
             <td style={{ textAlign: 'right', color: T.textMuted }}>
-              {item.weight > 0 ? `${item.weight.toFixed(1)} lbs` : '-'}
+              {item.weight > 0 ? t('inventory.weightValue', { value: item.weight.toFixed(1) }) : '-'}
             </td>
             <td style={{ textAlign: 'right', color: T.textMuted }}>
-              {item.value > 0 ? `${fmtNum(item.value)} gp` : '-'}
+              {item.value > 0 ? t('inventory.goldValue', { value: fmtNum(item.value) }) : '-'}
             </td>
           </tr>
           );

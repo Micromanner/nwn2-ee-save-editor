@@ -352,7 +352,7 @@ export function EditItemDialog({
               </div>
 
               <div>
-                <label className="t-semibold" style={{ color: T.textMuted, display: 'block', marginBottom: 6 }}>Flags</label>
+                <label className="t-semibold" style={{ color: T.textMuted, display: 'block', marginBottom: 6 }}>{t('inventory.flags')}</label>
                 <div style={{
                   display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
                   padding: '10px 12px', background: T.sectionBg, border: `1px solid ${T.sectionBorder}`, borderRadius: 4,

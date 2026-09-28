@@ -54,7 +54,7 @@ export function FeatsPanel() {
   const featsData = featsSubsystem.data as FeatsState | null;
   const isLoading = featsSubsystem.isLoading;
   const loadError = featsSubsystem.error;
-  const { addFeat, removeFeat } = useFeatManagement({ autoLoadFeats: false, enableValidation: false });
+  const { addFeat, removeFeat } = useFeatManagement({ autoLoadFeats: false });
   const { showToast } = useToast();
   const { handleError } = useErrorHandler();
   const t = useTranslations();
@@ -121,14 +121,14 @@ export function FeatsPanel() {
       }
     }).catch(err => {
       if (!cancelled) {
-        setAllFeatsError(err instanceof Error ? err.message : 'Failed to load feats');
+        setAllFeatsError(err instanceof Error ? err.message : t('common.failedToLoad', { section: t('navigation.feats').toLowerCase() }));
       }
     }).finally(() => {
       if (!cancelled) setAllFeatsLoading(false);
     });
 
     return () => { cancelled = true; };
-  }, [tab, character?.id, currentPage, activeTypeBit, debouncedSearch, allFeatsCache]);
+  }, [tab, character?.id, currentPage, activeTypeBit, debouncedSearch, allFeatsCache, t]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -156,7 +156,7 @@ export function FeatsPanel() {
         parts.push(t('placeholders.autoAddedFeats', { feats: featNames }) as string);
       }
       if (response.auto_modified_abilities && response.auto_modified_abilities.length > 0) {
-        const abilityChanges = response.auto_modified_abilities.map(a => `${a.ability} ${a.old_value} -> ${a.new_value}`).join(', ');
+        const abilityChanges = response.auto_modified_abilities.map(a => `${t(`abilityScores.short.${a.ability.slice(0, 3).toLowerCase()}`)} ${a.old_value} -> ${a.new_value}`).join(', ');
         parts.push(t('placeholders.autoModifiedAbilities', { abilities: abilityChanges }) as string);
       }
 

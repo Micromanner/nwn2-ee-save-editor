@@ -19,7 +19,11 @@
     "multiplayer": "Mehrspieler",
     "playerSlot": "Slot {slot}",
     "singlePlayer": "Einzelspieler",
-    "unnamedPlayer": "Spieler {index}"
+    "unnamedPlayer": "Spieler {index}",
+    "switchSave": {
+      "title": "Spielstand wechseln?",
+      "message": "Es ist ein Charakter aus \"{current}\" geladen. Der Wechsel zu \"{next}\" ersetzt die aktuellen Charakterdaten.\n\nSpeichern Sie vor dem Wechsel alle Änderungen.\n\nMöchten Sie fortfahren?"
+    }
   },
   "fileBrowser": {
     "loadSave": "Spielstand laden",
@@ -89,7 +93,9 @@
     "sectionCharacters": "Charaktere",
     "sectionQuests": "Quests",
     "sectionParty": "Gruppe",
-    "sectionVariables": "Variablen"
+    "sectionVariables": "Variablen",
+    "readFailed": "Verzeichnis konnte nicht gelesen werden",
+    "backupName": "Sicherung {timestamp}"
   },
   "navigation": {
     "overview": "Übersicht",
@@ -255,6 +261,14 @@
       "intelligence": "Intelligenz",
       "wisdom": "Weisheit",
       "charisma": "Charisma"
+    },
+    "short": {
+      "str": "ST",
+      "dex": "GE",
+      "con": "KO",
+      "int": "IN",
+      "wis": "WE",
+      "cha": "CH"
     }
   },
   "alignment": {
@@ -279,6 +293,17 @@
       "lawfulEvil": "Rechtschaffen Böse",
       "neutralEvil": "Neutral Böse",
       "chaoticEvil": "Chaotisch Böse"
+    },
+    "descriptions": {
+      "lawfulGood": "Handelt mit Mitgefühl und Ehre und besitzt ein starkes Pflichtbewusstsein.",
+      "neutralGood": "Tut, was gut und richtig ist, ohne starke Neigung für oder gegen die Ordnung.",
+      "chaoticGood": "Folgt seinem eigenen Gewissen, um Gutes zu tun, und schert sich wenig um gesellschaftliche Gesetze.",
+      "lawfulNeutral": "Hält sich vor allem anderen an einen persönlichen Kodex, eine Tradition oder das Gesetz.",
+      "trueNeutral": "Wahrt das Gleichgewicht und vermeidet starke Bindungen an ein einzelnes Extrem der Gesinnung.",
+      "chaoticNeutral": "Schätzt persönliche Freiheit und Individualität über alle anderen Belange.",
+      "lawfulEvil": "Nutzt Ordnung und Struktur methodisch und absichtlich, um bösartige Ziele zu erreichen.",
+      "neutralEvil": "Handelt aus reinem Eigennutz und schadet anderen, wenn es gelegen kommt.",
+      "chaoticEvil": "Begeht zerstörerische und unberechenbare Akte des Bösen und der Bosheit."
     }
   },
   "inventory": {
@@ -335,7 +360,24 @@
       "preview": "Vorschau",
       "rawOnly": "Dieser Text enthält Markup, das der visuelle Editor verändern würde, daher werden die Tags angezeigt.",
       "unclosedTag": "Das Tag {tag} wird nicht geschlossen.",
-      "unopenedTag": "Ein schließendes {tag} hat kein öffnendes Tag."
+      "unopenedTag": "Ein schließendes {tag} hat kein öffnendes Tag.",
+      "colorNames": {
+        "red": "Rot",
+        "green": "Grün",
+        "blue": "Blau",
+        "white": "Weiß",
+        "black": "Schwarz",
+        "yellow": "Gelb",
+        "cyan": "Cyan",
+        "magenta": "Magenta",
+        "orange": "Orange",
+        "pink": "Rosa",
+        "purple": "Violett",
+        "gray": "Grau",
+        "silver": "Silber",
+        "gold": "Gold",
+        "brown": "Braun"
+      }
     },
     "addItem": "Gegenstand hinzufügen",
     "createNewBaseType": "Neu erstellen",
@@ -425,7 +467,56 @@
     "source": {
       "all": "Alle",
       "override": "Override",
-      "vanilla": "Vanilla"
+      "vanilla": "Vanilla",
+      "names": {
+        "baseGame": "Hauptspiel",
+        "module": "Modul",
+        "campaign": "Kampagne",
+        "overrideDir": "Override-Ordner",
+        "workshop": "Steam Workshop",
+        "customOverride": "Eigener Override",
+        "hak": "HAK-Paket"
+      }
+    },
+    "backpack": "Rucksack",
+    "selectItem": "Gegenstand auswählen",
+    "selectItemHint": "Aus Ausrüstung oder Rucksack wählen",
+    "flags": "Markierungen",
+    "weightValue": "{value} Pfd.",
+    "goldValue": "{value} GM",
+    "weightRatio": "{current} / {max} Pfd.",
+    "itemCount": "{count, plural, one {# Gegenstand} other {# Gegenstände}}",
+    "slots": {
+      "mainHand": "Haupthand",
+      "offHand": "Zweithand",
+      "head": "Kopf",
+      "chest": "Brust",
+      "hands": "Hände",
+      "feet": "Füße",
+      "cloak": "Umhang",
+      "ring1": "Ring 1",
+      "ring2": "Ring 2",
+      "belt": "Gürtel",
+      "amulet": "Amulett",
+      "arrows": "Pfeile",
+      "bullets": "Schleuderkugeln",
+      "bolts": "Bolzen"
+    },
+    "slotAbbr": {
+      "mainHand": "HH",
+      "offHand": "ZH",
+      "head": "K",
+      "chest": "Br",
+      "hands": "Hä",
+      "feet": "Fü",
+      "cloak": "Um",
+      "ring1": "R1",
+      "ring2": "R2",
+      "belt": "Gü",
+      "amulet": "Am",
+      "arrows": "Pf",
+      "bullets": "Sk",
+      "bolts": "Bz"
     }
   },
   "feats": {
@@ -528,7 +619,21 @@
     "xpLevelMismatchWarning": "Ihre EP-Stufe ({xpLevel}) weicht von Ihren Klassenstufen ({classLevel}) ab. Wenn Sie diesen Spielstand laden, werden Sie zum Stufenaufstieg aufgefordert.",
     "retry": "Wiederholen",
     "requirementsNotMet": "Voraussetzungen nicht erfüllt",
-    "prestigeCrashWarning": "Voraussetzungen nicht erfüllt - das Spiel stürzt beim Stufenaufstieg ab, wenn diese Klasse hinzugefügt wird"
+    "prestigeCrashWarning": "Voraussetzungen nicht erfüllt - das Spiel stürzt beim Stufenaufstieg ab, wenn diese Klasse hinzugefügt wird",
+    "maxLevel": "Höchststufe",
+    "levelsLeft": "{count} übrig",
+    "spLeft": "FP übrig",
+    "alreadyHaveClass": "Klasse bereits vorhanden",
+    "maxClassesReached": "Max. {max} Klassen",
+    "atMaxLevel": "Höchststufe erreicht",
+    "resultsFor": "Ergebnisse für \"{query}\"",
+    "errors": {
+      "maxClassLevel": "{name} kann keine Stufe hinzugefügt werden: Die Höchststufe ist {max}, der Charakter hat bereits {level} Stufen",
+      "alreadyAssigned": "Diese Klasse ist dem Charakter bereits zugewiesen",
+      "maxClasses": "Maximal {max} Klassen erlaubt",
+      "maxTotalLevel": "Höchststufe {max} erreicht",
+      "needOneClass": "Der Charakter muss mindestens eine Klasse haben"
+    }
   },
   "skills": {
     "searchSkills": "Fertigkeiten suchen...",
@@ -545,7 +650,13 @@
     "fromFeatsItemsOrOtherBonuses": "Durch Talente, Gegenstände oder andere Boni",
     "levellingAs": "Stufenaufstieg als",
     "levellingAsHint": "Neue Ränge werden als die Klasse der letzten Stufe gekauft. Nur deren Fertigkeiten kosten 1 Punkt pro Rang; die Ranggrenze zählt weiterhin alle Klassen.",
-    "crossClassLegend": "Klassenfremde Fertigkeit für {class} (kostet 2 Punkte pro Rang)"
+    "crossClassLegend": "Klassenfremde Fertigkeit für {class} (kostet 2 Punkte pro Rang)",
+    "spent": "Ausgegeben",
+    "available": "Verfügbar",
+    "overdrawn": "Überzogen",
+    "acp": "RM",
+    "cross": "Fremd",
+    "twoPoints": "2 P."
   },
   "gameState": {
     "tabs": {
@@ -945,7 +1056,9 @@
     "restoreBackupPrompt": "Wählen Sie ein Backup zur Wiederherstellung aus. Dies überschreibt die aktuellen Daten.",
     "variables": "Variablen",
     "current": "Aktuell",
-    "max": "Max"
+    "max": "Max",
+    "failedToSave": "Speichern fehlgeschlagen",
+    "comingSoon": "Demnächst verfügbar"
   },
   "levelHelper": {
     "pendingAllocations": "Ausstehende Zuweisungen",
@@ -1166,7 +1279,8 @@
     "savedSuccessfully": "{name} wurde erfolgreich gespeichert.",
     "readyToVerify": "Bereit zur Überprüfung im Spiel?",
     "readyToVerifyDesc": "Starten Sie NWN2:EE jetzt, um Ihre Änderungen sofort zu testen.",
-    "gamePathWarning": "Spielverzeichnis nicht automatisch erkannt."
+    "gamePathWarning": "Spielverzeichnis nicht automatisch erkannt.",
+    "characterFallback": "Charakter"
   },
   "modelViewer": {
     "loading": "Modell wird geladen...",
@@ -1258,7 +1372,36 @@
     "part2": "Teil B (Griff)",
     "part3": "Teil C (Knauf)",
     "variation": "Variation",
-    "material": "Material"
+    "material": "Material",
+    "raceFallback": "Volk {id}",
+    "voiceTypeFallback": "Typ {id}",
+    "colorsHoverHint": "Fahren Sie mit der Maus über eine Farbe, um den betroffenen Bereich hervorzuheben",
+    "accessories": "Zubehör",
+    "accessoriesHint": "Neues Zubehör übernimmt die Farben der Rüstung. Eine andere Variation setzt das Zubehör zurück.",
+    "accessoryLeft": "L",
+    "accessoryRight": "R",
+    "accessorySide": "{slot} {side}",
+    "accessorySlotColumn": "Platz",
+    "accessoryCurrentColumn": "Aktuell",
+    "accessoryCurrentTitle": "Aktuell gewähltes Zubehör: #{id}",
+    "accessorySlot": {
+      "shoulder": "Schulter",
+      "arm": "Oberarm",
+      "elbow": "Ellbogen",
+      "bracer": "Armschiene",
+      "leg": "Oberschenkel",
+      "knee": "Knie",
+      "shin": "Unterschenkel",
+      "hip": "Hüfte"
+    },
+    "accessoryResetTitle": "Zubehöränderungen werden zurückgesetzt",
+    "accessoryResetDesc": "Eine andere Variation setzt das Zubehör auf den Stand beim Öffnen dieses Gegenstands zurück.",
+    "changeVariation": "Variation ändern",
+    "customColors": "Eigene Farben",
+    "usingArmorColors": "Nutzt Rüstungsfarben",
+    "copyToPair": "Farben auf {pair} kopieren",
+    "resetToArmor": "Auf Rüstungsfarben zurücksetzen",
+    "hasCustomColors": "Eigene Farben"
   },
   "roster": {
     "title": "Kader",
@@ -1287,6 +1430,7 @@
       "description": "Es wurde keine Neverwinter Nights 2-Installation gefunden. Bitte legen Sie Ihren Spielordner fest, um fortzufahren.",
       "retry": "Erneut versuchen",
       "title": "NWN2-Installation nicht gefunden"
-    }
+    },
+    "starting": "Wird gestartet..."
   }
 }

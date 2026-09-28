@@ -19,7 +19,11 @@
     "chooseCharacterHint": "{save} contains multiple player characters. Pick the one to edit.",
     "playerSlot": "Slot {slot}",
     "unnamedPlayer": "Player {index}",
-    "levelFallback": "Level {level}"
+    "levelFallback": "Level {level}",
+    "switchSave": {
+      "title": "Switch Save File?",
+      "message": "You have a character loaded from \"{current}\". Switching to \"{next}\" will replace the current character data.\n\nMake sure to save any changes before switching.\n\nDo you want to continue?"
+    }
   },
   "fileBrowser": {
     "loadSave": "Load Save",
@@ -89,7 +93,9 @@
     "sectionCharacters": "Characters",
     "sectionQuests": "Quests",
     "sectionParty": "Party",
-    "sectionVariables": "Variables"
+    "sectionVariables": "Variables",
+    "readFailed": "Failed to read directory",
+    "backupName": "Backup {timestamp}"
   },
   "navigation": {
     "overview": "Overview",
@@ -137,7 +143,10 @@
     "loadSaveFile": "Load a save file",
     "level": "Level",
     "race": "Race",
-    "gender": "Gender",
+    "gender": {
+      "male": "Male",
+      "female": "Female"
+    },
     "age": "Age",
     "male": "Male",
     "female": "Female",
@@ -156,10 +165,6 @@
     "totalFeats": "Total Feats",
     "knownSpells": "Known Spells",
     "genderLabel": "Gender",
-    "gender": {
-      "male": "Male",
-      "female": "Female"
-    },
     "size": {
       "fine": "Fine",
       "diminutive": "Diminutive",
@@ -256,6 +261,14 @@
       "intelligence": "Intelligence",
       "wisdom": "Wisdom",
       "charisma": "Charisma"
+    },
+    "short": {
+      "str": "STR",
+      "dex": "DEX",
+      "con": "CON",
+      "int": "INT",
+      "wis": "WIS",
+      "cha": "CHA"
     }
   },
   "alignment": {
@@ -280,6 +293,17 @@
       "lawfulEvil": "Lawful Evil",
       "neutralEvil": "Neutral Evil",
       "chaoticEvil": "Chaotic Evil"
+    },
+    "descriptions": {
+      "lawfulGood": "Acts with compassion and honor, holding a strong sense of duty.",
+      "neutralGood": "Does what is good and right without a strong bias for or against order.",
+      "chaoticGood": "Follows their own conscience to do good, with little regard for societal laws.",
+      "lawfulNeutral": "Adheres to a personal code, tradition, or the law above all else.",
+      "trueNeutral": "Maintains a balance, avoiding strong commitments to any single alignment extreme.",
+      "chaoticNeutral": "Values personal freedom and individuality above all other considerations.",
+      "lawfulEvil": "Methodically and intentionally uses order and structure to achieve malevolent goals.",
+      "neutralEvil": "Acts out of pure self-interest, harming others when it is convenient.",
+      "chaoticEvil": "Engages in destructive and unpredictable acts of evil and malice."
     }
   },
   "inventory": {
@@ -337,7 +361,24 @@
       "preview": "Preview",
       "rawOnly": "This text uses markup the visual editor would change, so it is shown as tags.",
       "unclosedTag": "Tag {tag} is never closed.",
-      "unopenedTag": "A closing {tag} has no opening tag."
+      "unopenedTag": "A closing {tag} has no opening tag.",
+      "colorNames": {
+        "red": "Red",
+        "green": "Green",
+        "blue": "Blue",
+        "white": "White",
+        "black": "Black",
+        "yellow": "Yellow",
+        "cyan": "Cyan",
+        "magenta": "Magenta",
+        "orange": "Orange",
+        "pink": "Pink",
+        "purple": "Purple",
+        "gray": "Gray",
+        "silver": "Silver",
+        "gold": "Gold",
+        "brown": "Brown"
+      }
     },
     "addItem": "Add Item",
     "createNewBaseType": "Create New",
@@ -350,7 +391,16 @@
     "source": {
       "all": "All",
       "vanilla": "Vanilla",
-      "override": "Override"
+      "override": "Override",
+      "names": {
+        "baseGame": "Base Game",
+        "module": "Module",
+        "campaign": "Campaign",
+        "overrideDir": "Override Directory",
+        "workshop": "Steam Workshop",
+        "customOverride": "Custom Override",
+        "hak": "HAK Pack"
+      }
     },
     "subcategories": {
       "swords": "Swords",
@@ -427,6 +477,46 @@
       "scrolls": "Scrolls & Books",
       "crafting": "Crafting",
       "other": "Other"
+    },
+    "backpack": "Backpack",
+    "selectItem": "Select an item",
+    "selectItemHint": "Choose from equipped or backpack",
+    "flags": "Flags",
+    "weightValue": "{value} lbs",
+    "goldValue": "{value} gp",
+    "weightRatio": "{current} / {max} lbs",
+    "itemCount": "{count, plural, one {# item} other {# items}}",
+    "slots": {
+      "mainHand": "Main Hand",
+      "offHand": "Off Hand",
+      "head": "Head",
+      "chest": "Chest",
+      "hands": "Hands",
+      "feet": "Feet",
+      "cloak": "Cloak",
+      "ring1": "Ring 1",
+      "ring2": "Ring 2",
+      "belt": "Belt",
+      "amulet": "Amulet",
+      "arrows": "Arrows",
+      "bullets": "Bullets",
+      "bolts": "Bolts"
+    },
+    "slotAbbr": {
+      "mainHand": "MH",
+      "offHand": "OH",
+      "head": "H",
+      "chest": "Ch",
+      "hands": "Gl",
+      "feet": "Ft",
+      "cloak": "Ck",
+      "ring1": "R1",
+      "ring2": "R2",
+      "belt": "Bt",
+      "amulet": "Nk",
+      "arrows": "Ar",
+      "bullets": "Bu",
+      "bolts": "Bo"
     }
   },
   "feats": {
@@ -529,7 +619,21 @@
     "xpLevelMismatchWarning": "Your XP level ({xpLevel}) differs from your class levels ({classLevel}). When you load this save in-game, you will be prompted to level up.",
     "retry": "Retry",
     "requirementsNotMet": "Requirements not met",
-    "prestigeCrashWarning": "Requirements not met - the game will crash at level-up if this class is added"
+    "prestigeCrashWarning": "Requirements not met - the game will crash at level-up if this class is added",
+    "maxLevel": "Max Level",
+    "levelsLeft": "{count} left",
+    "spLeft": "SP Left",
+    "alreadyHaveClass": "Already have this class",
+    "maxClassesReached": "Max {max} classes",
+    "atMaxLevel": "At max level",
+    "resultsFor": "Results for \"{query}\"",
+    "errors": {
+      "maxClassLevel": "Cannot add level to {name}: maximum level is {max}, character already has {level} levels",
+      "alreadyAssigned": "This class is already assigned to the character",
+      "maxClasses": "Maximum of {max} classes allowed",
+      "maxTotalLevel": "Maximum level of {max} reached",
+      "needOneClass": "Character must have at least one class"
+    }
   },
   "skills": {
     "searchSkills": "Search skills...",
@@ -546,7 +650,13 @@
     "fromFeatsItemsOrOtherBonuses": "From feats, items, or other bonuses",
     "levellingAs": "Levelling as",
     "levellingAsHint": "New ranks are bought as the class taken at the last level. Only that class's skills cost 1 point per rank; the rank cap still counts every class.",
-    "crossClassLegend": "Cross-class skill for {class} (costs 2 points per rank)"
+    "crossClassLegend": "Cross-class skill for {class} (costs 2 points per rank)",
+    "spent": "Spent",
+    "available": "Available",
+    "overdrawn": "Overdrawn",
+    "acp": "ACP",
+    "cross": "Cross",
+    "twoPoints": "2pt"
   },
   "gameState": {
     "tabs": {
@@ -695,7 +805,7 @@
         "transitionsFailed": "Failed to load dialogue lines",
         "noEntries": "No journal entries declared",
         "entries": "Journal entries",
-                "groupPrefix": "Leads to entry",
+        "groupPrefix": "Leads to entry",
         "coGlobals": "Campaign flags set on this line",
         "coLocals": "Module flags set on this line",
         "gatingConditions": "Conditions for this line",
@@ -945,7 +1055,9 @@
     "restoreBackupPrompt": "Select a backup to restore. This will overwrite the current campaign/module data.",
     "variables": "variables",
     "current": "Current",
-    "max": "Max"
+    "max": "Max",
+    "failedToSave": "Failed to save",
+    "comingSoon": "Coming soon"
   },
   "levelHelper": {
     "pendingAllocations": "Pending Allocations",
@@ -1094,7 +1206,8 @@
       "title": "NWN2 installation not found",
       "description": "We couldn't find a Neverwinter Nights 2 installation. Please set your game folder to continue.",
       "retry": "Retry"
-    }
+    },
+    "starting": "Starting up..."
   },
   "spells": {
     "known": "Known",
@@ -1128,7 +1241,6 @@
     "description": "Description",
     "specialAbilities": "Special Abilities",
     "domain": "Domain",
-    "domainSpell": "Domain Spell",
     "schools": {
       "abjuration": "Abjuration",
       "conjuration": "Conjuration",
@@ -1174,7 +1286,8 @@
     "savedSuccessfully": "{name} has been saved successfully.",
     "readyToVerify": "Ready to verify in-game?",
     "readyToVerifyDesc": "Launch NWN2:EE now to test your changes immediately.",
-    "gamePathWarning": "Game installation not automatically detected. We'll try to find it when you launch."
+    "gamePathWarning": "Game installation not automatically detected. We'll try to find it when you launch.",
+    "characterFallback": "Character"
   },
   "modelViewer": {
     "loading": "Loading model...",
@@ -1285,7 +1398,9 @@
     "usingArmorColors": "Using armor colors",
     "copyToPair": "Copy colors to {pair}",
     "resetToArmor": "Reset to armor colors",
-    "hasCustomColors": "Custom colors"
+    "hasCustomColors": "Custom colors",
+    "raceFallback": "Race {id}",
+    "voiceTypeFallback": "Type {id}"
   },
   "roster": {
     "title": "Roster",

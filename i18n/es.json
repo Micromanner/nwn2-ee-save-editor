@@ -19,7 +19,11 @@
     "multiplayer": "Multijugador",
     "playerSlot": "Ranura {slot}",
     "singlePlayer": "Un jugador",
-    "unnamedPlayer": "Jugador {index}"
+    "unnamedPlayer": "Jugador {index}",
+    "switchSave": {
+      "title": "¿Cambiar de partida guardada?",
+      "message": "Hay un personaje cargado de \"{current}\". Cambiar a \"{next}\" reemplazará los datos actuales del personaje.\n\nAsegúrate de guardar los cambios antes de cambiar.\n\n¿Quieres continuar?"
+    }
   },
   "fileBrowser": {
     "loadSave": "Cargar Partida",
@@ -89,7 +93,9 @@
     "sectionCharacters": "Personajes",
     "sectionQuests": "Misiones",
     "sectionParty": "Grupo",
-    "sectionVariables": "Variables"
+    "sectionVariables": "Variables",
+    "readFailed": "No se pudo leer el directorio",
+    "backupName": "Copia de seguridad {timestamp}"
   },
   "navigation": {
     "overview": "Resumen",
@@ -255,6 +261,14 @@
       "intelligence": "Inteligencia",
       "wisdom": "Sabiduría",
       "charisma": "Carisma"
+    },
+    "short": {
+      "str": "Fue",
+      "dex": "Des",
+      "con": "Con",
+      "int": "Int",
+      "wis": "Sab",
+      "cha": "Car"
     }
   },
   "alignment": {
@@ -279,6 +293,17 @@
       "lawfulEvil": "Legal Maligno",
       "neutralEvil": "Neutral Maligno",
       "chaoticEvil": "Caótico Maligno"
+    },
+    "descriptions": {
+      "lawfulGood": "Actúa con compasión y honor, con un fuerte sentido del deber.",
+      "neutralGood": "Hace lo que es bueno y correcto sin una fuerte inclinación a favor o en contra del orden.",
+      "chaoticGood": "Sigue su propia conciencia para hacer el bien, con poca consideración por las leyes de la sociedad.",
+      "lawfulNeutral": "Se atiene a un código personal, a la tradición o a la ley por encima de todo.",
+      "trueNeutral": "Mantiene el equilibrio y evita compromisos fuertes con cualquier extremo de alineamiento.",
+      "chaoticNeutral": "Valora la libertad personal y la individualidad por encima de cualquier otra consideración.",
+      "lawfulEvil": "Usa el orden y la estructura de forma metódica e intencionada para lograr fines malévolos.",
+      "neutralEvil": "Actúa por puro interés propio y perjudica a otros cuando le conviene.",
+      "chaoticEvil": "Comete actos destructivos e impredecibles de maldad y malicia."
     }
   },
   "inventory": {
@@ -335,7 +360,24 @@
       "preview": "Vista previa",
       "rawOnly": "Este texto usa marcado que el editor visual cambiaría, por lo que se muestra como etiquetas.",
       "unclosedTag": "La etiqueta {tag} nunca se cierra.",
-      "unopenedTag": "Una etiqueta de cierre {tag} no tiene etiqueta de apertura."
+      "unopenedTag": "Una etiqueta de cierre {tag} no tiene etiqueta de apertura.",
+      "colorNames": {
+        "red": "Rojo",
+        "green": "Verde",
+        "blue": "Azul",
+        "white": "Blanco",
+        "black": "Negro",
+        "yellow": "Amarillo",
+        "cyan": "Cian",
+        "magenta": "Magenta",
+        "orange": "Naranja",
+        "pink": "Rosa",
+        "purple": "Morado",
+        "gray": "Gris",
+        "silver": "Plata",
+        "gold": "Oro",
+        "brown": "Marrón"
+      }
     },
     "addItem": "Añadir Objeto",
     "createNewBaseType": "Crear Nuevo",
@@ -425,7 +467,56 @@
     "source": {
       "all": "Todos",
       "override": "Override",
-      "vanilla": "Vanilla"
+      "vanilla": "Vanilla",
+      "names": {
+        "baseGame": "Juego base",
+        "module": "Módulo",
+        "campaign": "Campaña",
+        "overrideDir": "Carpeta override",
+        "workshop": "Steam Workshop",
+        "customOverride": "Override personalizado",
+        "hak": "Paquete HAK"
+      }
+    },
+    "backpack": "Mochila",
+    "selectItem": "Selecciona un objeto",
+    "selectItemHint": "Elige entre el equipo o la mochila",
+    "flags": "Indicadores",
+    "weightValue": "{value} lb.",
+    "goldValue": "{value} po",
+    "weightRatio": "{current} / {max} lb.",
+    "itemCount": "{count, plural, one {# objeto} other {# objetos}}",
+    "slots": {
+      "mainHand": "Mano hábil",
+      "offHand": "Mano torpe",
+      "head": "Cabeza",
+      "chest": "Torso",
+      "hands": "Manos",
+      "feet": "Pies",
+      "cloak": "Capa",
+      "ring1": "Anillo 1",
+      "ring2": "Anillo 2",
+      "belt": "Cinturón",
+      "amulet": "Amuleto",
+      "arrows": "Flechas",
+      "bullets": "Balas",
+      "bolts": "Virotes"
+    },
+    "slotAbbr": {
+      "mainHand": "MH",
+      "offHand": "MT",
+      "head": "Ca",
+      "chest": "To",
+      "hands": "Ma",
+      "feet": "Pi",
+      "cloak": "Cp",
+      "ring1": "A1",
+      "ring2": "A2",
+      "belt": "Ci",
+      "amulet": "Am",
+      "arrows": "Fl",
+      "bullets": "Ba",
+      "bolts": "Vi"
     }
   },
   "feats": {
@@ -529,7 +620,21 @@
     "xpLevelMismatchWarning": "Su nivel de PX ({xpLevel}) difiere de sus niveles de clase ({classLevel}). Subirá de nivel al cargar el juego.",
     "retry": "Reintentar",
     "requirementsNotMet": "Requisitos no cumplidos",
-    "prestigeCrashWarning": "Requisitos no cumplidos - el juego se bloqueará al subir de nivel si se añade esta clase"
+    "prestigeCrashWarning": "Requisitos no cumplidos - el juego se bloqueará al subir de nivel si se añade esta clase",
+    "maxLevel": "Nivel máximo",
+    "levelsLeft": "{count} restantes",
+    "spLeft": "PH rest.",
+    "alreadyHaveClass": "Ya tiene esta clase",
+    "maxClassesReached": "Máx. {max} clases",
+    "atMaxLevel": "Nivel máximo alcanzado",
+    "resultsFor": "Resultados para \"{query}\"",
+    "errors": {
+      "maxClassLevel": "No se puede añadir un nivel a {name}: el nivel máximo es {max} y el personaje ya tiene {level} niveles",
+      "alreadyAssigned": "Esta clase ya está asignada al personaje",
+      "maxClasses": "Se permite un máximo de {max} clases",
+      "maxTotalLevel": "Se alcanzó el nivel máximo de {max}",
+      "needOneClass": "El personaje debe tener al menos una clase"
+    }
   },
   "skills": {
     "searchSkills": "Buscar habilidades...",
@@ -546,7 +651,13 @@
     "fromFeatsItemsOrOtherBonuses": "De dotes, objetos u otros bonos",
     "levellingAs": "Subiendo nivel como",
     "levellingAsHint": "Los rangos nuevos se compran como la clase del último nivel. Solo sus habilidades cuestan 1 punto por rango; el límite de rangos sigue contando todas las clases.",
-    "crossClassLegend": "Habilidad transclásea para {class} (cuesta 2 puntos por rango)"
+    "crossClassLegend": "Habilidad transclásea para {class} (cuesta 2 puntos por rango)",
+    "spent": "Gastados",
+    "available": "Disponible",
+    "overdrawn": "Excedidos",
+    "acp": "PA",
+    "cross": "Otra",
+    "twoPoints": "2 pt"
   },
   "gameState": {
     "tabs": {
@@ -946,7 +1057,9 @@
     "restoreBackupPrompt": "Seleccione una copia. Esto sobrescribirá los datos actuales.",
     "variables": "variables",
     "current": "Actual",
-    "max": "Máx"
+    "max": "Máx",
+    "failedToSave": "Error al guardar",
+    "comingSoon": "Próximamente"
   },
   "levelHelper": {
     "pendingAllocations": "Asignaciones Pendientes",
@@ -1167,7 +1280,8 @@
     "savedSuccessfully": "{name} se guardó con éxito.",
     "readyToVerify": "¿Listo para probar?",
     "readyToVerifyDesc": "Inicie NWN2:EE ahora para probar sus cambios.",
-    "gamePathWarning": "Instalación no detectada automáticamente."
+    "gamePathWarning": "Instalación no detectada automáticamente.",
+    "characterFallback": "Personaje"
   },
   "modelViewer": {
     "loading": "Cargando modelo...",
@@ -1259,7 +1373,36 @@
     "part2": "Parte B (Empuñadura)",
     "part3": "Parte C (Pomo)",
     "variation": "Variación",
-    "material": "Material"
+    "material": "Material",
+    "raceFallback": "Raza {id}",
+    "voiceTypeFallback": "Tipo {id}",
+    "colorsHoverHint": "Pasa el ratón sobre un color para resaltar la zona que afecta",
+    "accessories": "Accesorios",
+    "accessoriesHint": "Los accesorios nuevos usan los colores de la armadura. Cambiar la variación restablece los accesorios.",
+    "accessoryLeft": "I",
+    "accessoryRight": "D",
+    "accessorySide": "{slot} {side}",
+    "accessorySlotColumn": "Ranura",
+    "accessoryCurrentColumn": "Actual",
+    "accessoryCurrentTitle": "Accesorio seleccionado: #{id}",
+    "accessorySlot": {
+      "shoulder": "Hombro",
+      "arm": "Brazo",
+      "elbow": "Codo",
+      "bracer": "Brazal",
+      "leg": "Muslo",
+      "knee": "Rodilla",
+      "shin": "Espinilla",
+      "hip": "Cadera"
+    },
+    "accessoryResetTitle": "Se restablecerán los cambios de los accesorios",
+    "accessoryResetDesc": "Cambiar la variación devuelve los accesorios al estado que tenía este objeto al abrirlo.",
+    "changeVariation": "Cambiar variación",
+    "customColors": "Colores personalizados",
+    "usingArmorColors": "Usa los colores de la armadura",
+    "copyToPair": "Copiar colores a {pair}",
+    "resetToArmor": "Restablecer colores de la armadura",
+    "hasCustomColors": "Colores personalizados"
   },
   "roster": {
     "title": "Plantilla",
@@ -1288,6 +1431,7 @@
       "description": "No se encontró una instalación de Neverwinter Nights 2. Configura tu carpeta del juego para continuar.",
       "retry": "Reintentar",
       "title": "Instalación de NWN2 no encontrada"
-    }
+    },
+    "starting": "Iniciando..."
   }
 }

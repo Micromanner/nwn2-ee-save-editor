@@ -474,7 +474,7 @@ export function SpellsPanel() {
                     {a.school_name && (
                       <span style={{ color: T.textMuted, flexShrink: 0 }}>{t(`spells.schools.${a.school_name.toLowerCase()}`)}</span>
                     )}
-                    <span className="t-medium" style={{ color: T.accent, flexShrink: 0 }}>Lv {a.innate_level}</span>
+                    <span className="t-medium" style={{ color: T.accent, flexShrink: 0 }}>{t('classes.lvl')} {a.innate_level}</span>
                   </div>
                 );
               })}

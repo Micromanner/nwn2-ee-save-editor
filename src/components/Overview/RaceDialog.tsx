@@ -85,15 +85,15 @@ function parseRaceDescription(raw: string): ParsedDescription {
   return { lore, traits };
 }
 
-function formatAbilityMods(mods: AbilityModifiers): string {
+function formatAbilityMods(mods: AbilityModifiers, t: (key: string) => string): string {
   const parts: string[] = [];
-  if (mods.Str) parts.push(`STR ${mods.Str > 0 ? '+' : ''}${mods.Str}`);
-  if (mods.Dex) parts.push(`DEX ${mods.Dex > 0 ? '+' : ''}${mods.Dex}`);
-  if (mods.Con) parts.push(`CON ${mods.Con > 0 ? '+' : ''}${mods.Con}`);
-  if (mods.Int) parts.push(`INT ${mods.Int > 0 ? '+' : ''}${mods.Int}`);
-  if (mods.Wis) parts.push(`WIS ${mods.Wis > 0 ? '+' : ''}${mods.Wis}`);
-  if (mods.Cha) parts.push(`CHA ${mods.Cha > 0 ? '+' : ''}${mods.Cha}`);
-  return parts.join(', ') || 'None';
+  if (mods.Str) parts.push(`${t('abilityScores.short.str')} ${mods.Str > 0 ? '+' : ''}${mods.Str}`);
+  if (mods.Dex) parts.push(`${t('abilityScores.short.dex')} ${mods.Dex > 0 ? '+' : ''}${mods.Dex}`);
+  if (mods.Con) parts.push(`${t('abilityScores.short.con')} ${mods.Con > 0 ? '+' : ''}${mods.Con}`);
+  if (mods.Int) parts.push(`${t('abilityScores.short.int')} ${mods.Int > 0 ? '+' : ''}${mods.Int}`);
+  if (mods.Wis) parts.push(`${t('abilityScores.short.wis')} ${mods.Wis > 0 ? '+' : ''}${mods.Wis}`);
+  if (mods.Cha) parts.push(`${t('abilityScores.short.cha')} ${mods.Cha > 0 ? '+' : ''}${mods.Cha}`);
+  return parts.join(', ');
 }
 
 export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onSelect }: RaceDialogProps) {
@@ -247,7 +247,7 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
                       )}
                       {showChildren && subraces.map(sub => {
                         const isSubSelected = selectedSubrace === sub.name;
-                        const modsStr = formatAbilityMods(sub.ability_adjustments);
+                        const modsStr = formatAbilityMods(sub.ability_adjustments, t);
                         return (
                           <button
                             key={sub.id}
@@ -262,7 +262,7 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
                             }}
                           >
                             <div>{sub.name}</div>
-                            {modsStr !== 'None' && (
+                            {modsStr && (
                               <div style={{ opacity: 0.7 }}>{modsStr}</div>
                             )}
                           </button>

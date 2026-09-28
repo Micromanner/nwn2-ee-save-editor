@@ -178,7 +178,7 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
         });
         setInfluences(map);
       })
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load companion data'))
+      .catch(err => setError(err instanceof Error ? err.message : t('gameState.companions.failedToLoad')))
       .finally(() => setIsLoading(false));
   }, [characterId, globalsVersion, saveVersion]);
 
@@ -198,7 +198,7 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
       const res = await gameStateAPI.getCompanionInfluence(characterId);
       setCompanions(res.companions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setError(err instanceof Error ? err.message : t('common.failedToSave'));
     } finally {
       setIsSaving(false);
     }
@@ -606,7 +606,7 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
     setError(null);
     gameStateAPI.getModuleVariables(characterId, moduleId)
       .then(data => { if (request === requestRef.current) setVars(data); })
-      .catch(err => { if (request === requestRef.current) setError(err instanceof Error ? err.message : 'Failed to load module variables'); })
+      .catch(err => { if (request === requestRef.current) setError(err instanceof Error ? err.message : t('common.failedToLoad', { section: t('gameState.tabs.moduleAndVariables') })); })
       .finally(() => { if (request === requestRef.current) setIsLoading(false); });
   }, [characterId, moduleId]);
 
@@ -698,7 +698,7 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
     setError(null);
     gameStateAPI.getCampaignSettings(characterId)
       .then(s => { setSettings(s); setCampaignGuid(s.guid || ''); populateFromSettings(s); })
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load campaign settings'))
+      .catch(err => setError(err instanceof Error ? err.message : t('gameState.campaign.failedToLoad')))
       .finally(() => setIsLoading(false));
   }, [characterId]);
 
@@ -870,7 +870,7 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
     setError(null);
     gameStateAPI.getCampaignVariables(characterId)
       .then(data => setVars(data))
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load campaign variables'))
+      .catch(err => setError(err instanceof Error ? err.message : t('common.failedToLoad', { section: t('gameState.tabs.campaignAndVariables') })))
       .finally(() => setIsLoading(false));
   }, [characterId]);
 

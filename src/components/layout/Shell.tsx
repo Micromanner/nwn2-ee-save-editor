@@ -142,7 +142,7 @@ function ShellContent() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   <div style={{ textAlign: 'center' }}>
                     <GameIcon icon={GiAnvil} size={40} style={{ color: T.border }} />
-                    <p style={{ marginTop: 12, color: T.textMuted }}>Coming soon</p>
+                    <p style={{ marginTop: 12, color: T.textMuted }}>{t('common.comingSoon')}</p>
                   </div>
                 </div>
               )}
@@ -158,7 +158,7 @@ function ShellContent() {
 export default function Shell() {
   const t = useTranslations();
   const [initReady, setInitReady] = useState(false);
-  const [initProgress, setInitProgress] = useState({ step: 'initializing', progress: 0, message: 'Starting up...' });
+  const [initProgress, setInitProgress] = useState({ step: 'initializing', progress: 0, message: t('startup.starting') });
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {

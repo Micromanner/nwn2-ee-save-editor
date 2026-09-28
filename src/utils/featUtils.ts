@@ -37,7 +37,7 @@ const FEAT_TYPE_PRIORITY: number[] = [
 
 export function getFeatTypeLabel(type: number): string {
   const bit = FEAT_TYPE_PRIORITY.find(b => (type & b) !== 0);
-  return bit ? FEAT_TYPE_LABELS[bit] : 'General';
+  return bit ? FEAT_TYPE_LABELS[bit] : FEAT_TYPE_LABELS[FEAT_TYPES.GENERAL];
 }
 
 interface FeatsSummary {

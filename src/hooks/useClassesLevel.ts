@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { invoke } from '@tauri-apps/api/core';
 import type { XpProgress } from '@/lib/bindings';
@@ -79,6 +80,7 @@ export type { XpProgress } from '@/lib/bindings';
 const CLASS_SUBSYSTEMS = ['classes', 'abilityScores', 'combat', 'saves', 'skills', 'feats', 'spells'] as const;
 
 export function useClassesLevel(classesData?: ClassesData | null) {
+  const t = useTranslations();
   const { characterId, invalidateSubsystems, categorizedClasses, isMetadataLoading } = useCharacterContext();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isLoadingXP] = useState(false);
@@ -152,7 +154,7 @@ export function useClassesLevel(classesData?: ClassesData | null) {
     if (newLevel === cls.level) return;
 
     if (delta > 0 && cls.max_level && cls.max_level > 0 && newLevel > cls.max_level) {
-      throw new Error(`Cannot add level to ${cls.name}: maximum level is ${cls.max_level}, character already has ${cls.level} levels`);
+      throw new Error(t('classes.errors.maxClassLevel', { name: cls.name, max: cls.max_level, level: cls.level }));
     }
 
     await runWithRefresh(async () => {
@@ -162,13 +164,13 @@ export function useClassesLevel(classesData?: ClassesData | null) {
         await invoke('remove_class_levels', { classId, count: Math.abs(delta) });
       }
     });
-  }, [characterId, classes, runWithRefresh]);
+  }, [t, characterId, classes, runWithRefresh]);
 
   const changeClass = useCallback(async (classId: number, newClassInfo: ClassInfo) => {
     if (!characterId) return;
 
     if (classes.some(c => c.id !== classId && c.id === newClassInfo.id)) {
-      throw new Error('This class is already assigned to the character');
+      throw new Error(t('classes.errors.alreadyAssigned'));
     }
 
     await runWithRefresh(async () => {
@@ -177,37 +179,37 @@ export function useClassesLevel(classesData?: ClassesData | null) {
         newClassId: newClassInfo.id,
       });
     });
-  }, [characterId, classes, runWithRefresh]);
+  }, [t, characterId, classes, runWithRefresh]);
 
   const addClass = useCallback(async (classInfo: ClassInfo) => {
     if (!characterId || !classesData) return;
 
     if (classes.some(c => c.id === classInfo.id)) {
-      throw new Error('This class is already assigned to the character');
+      throw new Error(t('classes.errors.alreadyAssigned'));
     }
     if (classes.length >= 4) {
-      throw new Error('Maximum of 4 classes allowed');
+      throw new Error(t('classes.errors.maxClasses', { max: 4 }));
     }
     if (classesData.total_level >= 60) {
-      throw new Error('Maximum level of 60 reached');
+      throw new Error(t('classes.errors.maxTotalLevel', { max: 60 }));
     }
 
     await runWithRefresh(async () => {
       await invoke('add_class_level', { classId: classInfo.id });
     });
-  }, [characterId, classes, classesData, runWithRefresh]);
+  }, [t, characterId, classes, classesData, runWithRefresh]);
 
   const removeClass = useCallback(async (classId: number) => {
     if (!characterId) return;
 
     if (classes.length <= 1) {
-      throw new Error('Character must have at least one class');
+      throw new Error(t('classes.errors.needOneClass'));
     }
 
     await runWithRefresh(async () => {
       await invoke('remove_class_entry', { classId });
     });
-  }, [characterId, classes, runWithRefresh]);
+  }, [t, characterId, classes, runWithRefresh]);
 
   // Helper function to check if a class can level up
   const canLevelUp = useCallback((classId: number): boolean => {

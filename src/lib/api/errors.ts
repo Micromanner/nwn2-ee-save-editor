@@ -114,46 +114,6 @@ export function isCommandError(error: unknown): error is CommandError {
   );
 }
 
-/**
- * Convert a CommandError to a user-friendly message
- */
-export function getErrorMessage(error: CommandError): string {
-  switch (error.code) {
-    case 'NoCharacterLoaded':
-      return 'Please load a character first';
-    case 'NoGameDataLoaded':
-      return 'Game data is not initialized. Please check your NWN2 installation path.';
-    case 'CharacterNotFound':
-      return `Character file not found: ${error.details.path}`;
-    case 'ValidationError':
-      return `Invalid ${error.details.field}: ${error.details.reason}`;
-    case 'InvalidValue':
-      return `Invalid value for ${error.details.field}: expected ${error.details.expected}, got ${error.details.actual}`;
-    case 'FileError':
-      return error.details.path
-        ? `File error (${error.details.path}): ${error.details.message}`
-        : `File error: ${error.details.message}`;
-    case 'ParseError':
-      return error.details.context
-        ? `Parse error in ${error.details.context}: ${error.details.message}`
-        : `Parse error: ${error.details.message}`;
-    case 'InsufficientResources':
-      return `Not enough ${error.details.resource}: need ${error.details.required}, have ${error.details.available}`;
-    case 'PrerequisitesNotMet':
-      return `Missing prerequisites: ${error.details.missing.join(', ')}`;
-    case 'NotFound':
-      return `Not found: ${error.details.item}`;
-    case 'AlreadyExists':
-      return `Already exists: ${error.details.item}`;
-    case 'OperationFailed':
-      return `${error.details.operation} failed: ${error.details.reason}`;
-    case 'Internal':
-      return typeof error.details === 'string' ? error.details : 'An unexpected error occurred';
-    default:
-      return 'An unexpected error occurred';
-  }
-}
-
 export type TranslationFn = (key: string, values?: Record<string, unknown>) => string;
 
 export interface TranslatedError {
@@ -269,64 +229,4 @@ export function getTranslatedError(error: CommandError, t: TranslationFn): Trans
  */
 export function getErrorCode(error: CommandError): CommandErrorCode {
   return error.code;
-}
-
-/**
- * Check if error is recoverable (user can retry or take action)
- */
-export function isRecoverableError(error: CommandError): boolean {
-  switch (error.code) {
-    case 'NoCharacterLoaded':
-    case 'NoGameDataLoaded':
-    case 'ValidationError':
-    case 'InvalidValue':
-    case 'InsufficientResources':
-    case 'PrerequisitesNotMet':
-      return true;
-    case 'CharacterNotFound':
-    case 'FileError':
-    case 'ParseError':
-    case 'NotFound':
-    case 'AlreadyExists':
-    case 'OperationFailed':
-    case 'Internal':
-      return false;
-    default:
-      return false;
-  }
-}
-
-/**
- * Helper to handle Tauri invoke errors
- *
- * @example
- * ```typescript
- * try {
- *   await invoke('load_character', { filePath: path });
- * } catch (error) {
- *   handleCommandError(error, {
- *     onRecoverable: (err, msg) => toast.warning(msg),
- *     onFatal: (err, msg) => toast.error(msg),
- *   });
- * }
- * ```
- */
-export function handleCommandError(
-  error: unknown,
-  handlers: {
-    onRecoverable?: (error: CommandError, message: string) => void;
-    onFatal?: (error: CommandError, message: string) => void;
-    onUnknown?: (error: unknown) => void;
-  }
-): void {
-  if (isCommandError(error)) {
-    const message = getErrorMessage(error);
-    if (isRecoverableError(error)) {
-      handlers.onRecoverable?.(error, message);
-    } else {
-      handlers.onFatal?.(error, message);
-    }
-  } else {
-    handlers.onUnknown?.(error);
-  }
 }

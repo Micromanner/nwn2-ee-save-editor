@@ -313,7 +313,7 @@ export function ClassesPanel() {
                       />
                       {cls.max_level != null && cls.max_level > 0 && cls.max_level < 60 && (
                         <div className="t-xs" style={{ color: atMax ? T.negative : T.textMuted, marginTop: 1 }}>
-                          {atMax ? 'Max Level' : `${remaining} left`}
+                          {atMax ? t('classes.maxLevel') : t('classes.levelsLeft', { count: remaining })}
                         </div>
                       )}
                     </td>
@@ -389,7 +389,7 @@ export function ClassesPanel() {
                 <th style={{ textAlign: 'center' }}>{t('classes.level')}</th>
                 <th>{t('classes.class')}</th>
                 <th style={{ textAlign: 'center' }}>{t('classes.hpGained')}</th>
-                <th style={{ textAlign: 'center' }}>SP Left</th>
+                <th style={{ textAlign: 'center' }}>{t('classes.spLeft')}</th>
                 <th style={{ textAlign: 'center' }}>{t('classes.abilityIncrease')}</th>
                 <th>{t('classes.skills')}</th>
                 <th>{t('classes.feats')}</th>
@@ -403,7 +403,7 @@ export function ClassesPanel() {
                   <td className="t-medium" style={{ textAlign: 'center', color: T.positive }}>+{lv.hp_gained}</td>
                   <td style={{ textAlign: 'center' }}>{lv.skill_points_remaining}</td>
                   <td className={lv.ability_increase ? 't-semibold' : undefined} style={{ textAlign: 'center', color: lv.ability_increase ? T.accent : T.textMuted }}>
-                    {lv.ability_increase ?? '-'}
+                    {lv.ability_increase ? t(`abilityScores.short.${lv.ability_increase.slice(0, 3).toLowerCase()}`) : '-'}
                   </td>
                   <td>
                     {lv.skills_gained && lv.skills_gained.length > 0

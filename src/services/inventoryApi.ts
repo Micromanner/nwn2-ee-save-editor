@@ -200,10 +200,8 @@ export const SUB_CATEGORY_LABELS: Record<string, string> = {
 
 export const CATEGORIES_WITH_SUBS = new Set(['Weapons', 'Armor & Clothing', 'Magic Items', 'Miscellaneous']);
 
-export const VANILLA_SOURCES: ReadonlySet<string> = new Set(['Base Game', 'Expansion']);
-
 export function isVanillaSource(source: string): boolean {
-  return VANILLA_SOURCES.has(source);
+  return source === 'base_game';
 }
 
 export class InventoryAPI {

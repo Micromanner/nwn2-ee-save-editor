@@ -52,7 +52,7 @@ export function GameLaunchDialog({ isOpen, onClose, onLaunch, saveName, gamePath
     >
       <DialogBody style={{ padding: 16, margin: 0, background: T.surface }}>
         <p style={{ color: T.textMuted, marginBottom: 12 }}>
-          <strong style={{ color: T.text }}>{saveName || 'Character'}</strong>{' '}
+          <strong style={{ color: T.text }}>{saveName || t('gameLaunch.characterFallback')}</strong>{' '}
           {t('gameLaunch.savedSuccessfully', { name: '' }).replace(/ $/, '')}
         </p>
 

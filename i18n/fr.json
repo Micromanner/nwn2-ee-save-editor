@@ -19,7 +19,11 @@
     "chooseCharacterHint": "{save} contient plusieurs personnages joueurs. Choisissez celui à modifier.",
     "playerSlot": "Emplacement {slot}",
     "unnamedPlayer": "Joueur {index}",
-    "levelFallback": "Niveau {level}"
+    "levelFallback": "Niveau {level}",
+    "switchSave": {
+      "title": "Changer de sauvegarde ?",
+      "message": "Un personnage de \"{current}\" est chargé. Passer à \"{next}\" remplacera les données actuelles du personnage.\n\nPensez à enregistrer vos modifications avant de changer.\n\nVoulez-vous continuer ?"
+    }
   },
   "fileBrowser": {
     "loadSave": "Charger la Partie",
@@ -89,7 +93,9 @@
     "sectionCharacters": "Personnages",
     "sectionQuests": "Quêtes",
     "sectionParty": "Groupe",
-    "sectionVariables": "Variables"
+    "sectionVariables": "Variables",
+    "readFailed": "Impossible de lire le répertoire",
+    "backupName": "Sauvegarde {timestamp}"
   },
   "navigation": {
     "overview": "Vue d'ensemble",
@@ -137,7 +143,10 @@
     "loadSaveFile": "Charger un fichier de sauvegarde",
     "level": "Niveau",
     "race": "Race",
-    "gender": "Sexe",
+    "gender": {
+      "male": "Mâle",
+      "female": "Femelle"
+    },
     "age": "Âge",
     "male": "Mâle",
     "female": "Femelle",
@@ -156,10 +165,6 @@
     "totalFeats": "Dons Totaux",
     "knownSpells": "Sorts Connus",
     "genderLabel": "Sexe",
-    "gender": {
-      "male": "Mâle",
-      "female": "Femelle"
-    },
     "size": {
       "fine": "Infiniment petit",
       "diminutive": "Très petit",
@@ -256,6 +261,14 @@
       "intelligence": "Intelligence",
       "wisdom": "Sagesse",
       "charisma": "Charisme"
+    },
+    "short": {
+      "str": "FOR",
+      "dex": "DEX",
+      "con": "CON",
+      "int": "INT",
+      "wis": "SAG",
+      "cha": "CHA"
     }
   },
   "alignment": {
@@ -280,6 +293,17 @@
       "lawfulEvil": "Loyal Mauvais",
       "neutralEvil": "Neutre Mauvais",
       "chaoticEvil": "Chaotique Mauvais"
+    },
+    "descriptions": {
+      "lawfulGood": "Agit avec compassion et honneur, avec un fort sens du devoir.",
+      "neutralGood": "Fait ce qui est bien et juste sans forte inclination pour ou contre l'ordre.",
+      "chaoticGood": "Suit sa propre conscience pour faire le bien, sans grand égard pour les lois de la société.",
+      "lawfulNeutral": "Se conforme avant tout à un code personnel, à la tradition ou à la loi.",
+      "trueNeutral": "Maintient un équilibre et évite de s'engager fortement envers un extrême de l'alignement.",
+      "chaoticNeutral": "Place la liberté personnelle et l'individualité au-dessus de toute autre considération.",
+      "lawfulEvil": "Utilise méthodiquement et intentionnellement l'ordre et la structure pour atteindre des buts malveillants.",
+      "neutralEvil": "Agit par pur intérêt personnel et nuit aux autres quand cela l'arrange.",
+      "chaoticEvil": "Commet des actes destructeurs et imprévisibles de mal et de malveillance."
     }
   },
   "inventory": {
@@ -337,7 +361,24 @@
       "preview": "Aperçu",
       "rawOnly": "Ce texte utilise un balisage que l’éditeur visuel modifierait, il est donc affiché sous forme de balises.",
       "unclosedTag": "La balise {tag} n’est jamais fermée.",
-      "unopenedTag": "Une balise fermante {tag} n’a pas de balise ouvrante."
+      "unopenedTag": "Une balise fermante {tag} n’a pas de balise ouvrante.",
+      "colorNames": {
+        "red": "Rouge",
+        "green": "Vert",
+        "blue": "Bleu",
+        "white": "Blanc",
+        "black": "Noir",
+        "yellow": "Jaune",
+        "cyan": "Cyan",
+        "magenta": "Magenta",
+        "orange": "Orange",
+        "pink": "Rose",
+        "purple": "Violet",
+        "gray": "Gris",
+        "silver": "Argent",
+        "gold": "Or",
+        "brown": "Marron"
+      }
     },
     "addItem": "Ajouter Objet",
     "createNewBaseType": "Créer Nouveau",
@@ -350,7 +391,16 @@
     "source": {
       "all": "Tout",
       "vanilla": "Vanilla",
-      "override": "Override"
+      "override": "Override",
+      "names": {
+        "baseGame": "Jeu de base",
+        "module": "Module",
+        "campaign": "Campagne",
+        "overrideDir": "Dossier override",
+        "workshop": "Steam Workshop",
+        "customOverride": "Override personnalisé",
+        "hak": "Pack HAK"
+      }
     },
     "subcategories": {
       "swords": "Épées",
@@ -427,6 +477,46 @@
       "scrolls": "Parchemins & Livres",
       "crafting": "Artisanat",
       "other": "Autres"
+    },
+    "backpack": "Sac à dos",
+    "selectItem": "Sélectionnez un objet",
+    "selectItemHint": "Choisissez parmi l'équipement ou le sac à dos",
+    "flags": "Indicateurs",
+    "weightValue": "{value} livres",
+    "goldValue": "{value} PO",
+    "weightRatio": "{current} / {max} livres",
+    "itemCount": "{count, plural, one {# objet} other {# objets}}",
+    "slots": {
+      "mainHand": "Main principale",
+      "offHand": "Main non directrice",
+      "head": "Tête",
+      "chest": "Torse",
+      "hands": "Mains",
+      "feet": "Pieds",
+      "cloak": "Cape",
+      "ring1": "Anneau 1",
+      "ring2": "Anneau 2",
+      "belt": "Ceinture",
+      "amulet": "Amulette",
+      "arrows": "Flèches",
+      "bullets": "Billes",
+      "bolts": "Carreaux"
+    },
+    "slotAbbr": {
+      "mainHand": "MP",
+      "offHand": "MN",
+      "head": "T",
+      "chest": "To",
+      "hands": "Ma",
+      "feet": "Pi",
+      "cloak": "Cp",
+      "ring1": "A1",
+      "ring2": "A2",
+      "belt": "Ce",
+      "amulet": "Am",
+      "arrows": "Fl",
+      "bullets": "Bi",
+      "bolts": "Ca"
     }
   },
   "feats": {
@@ -529,7 +619,21 @@
     "xpLevelMismatchWarning": "Votre niveau d'XP ({xpLevel}) diffère de vos niveaux de classe ({classLevel}). Un passage de niveau sera requis en jeu.",
     "retry": "Réessayer",
     "requirementsNotMet": "Conditions non remplies",
-    "prestigeCrashWarning": "Conditions non remplies - le jeu plantera lors du passage de niveau si cette classe est ajoutée"
+    "prestigeCrashWarning": "Conditions non remplies - le jeu plantera lors du passage de niveau si cette classe est ajoutée",
+    "maxLevel": "Niveau maximum",
+    "levelsLeft": "{count} restants",
+    "spLeft": "PC rest.",
+    "alreadyHaveClass": "Classe déjà possédée",
+    "maxClassesReached": "Max {max} classes",
+    "atMaxLevel": "Niveau maximum atteint",
+    "resultsFor": "Résultats pour \"{query}\"",
+    "errors": {
+      "maxClassLevel": "Impossible d'ajouter un niveau à {name} : le niveau maximum est {max}, le personnage a déjà {level} niveaux",
+      "alreadyAssigned": "Cette classe est déjà attribuée au personnage",
+      "maxClasses": "Maximum de {max} classes autorisées",
+      "maxTotalLevel": "Niveau maximum de {max} atteint",
+      "needOneClass": "Le personnage doit avoir au moins une classe"
+    }
   },
   "skills": {
     "searchSkills": "Chercher compétences...",
@@ -543,7 +647,16 @@
     "armorCheck": "Malus d'Armure",
     "cancel": "Annuler",
     "resetConfirmMessage": "Réinitialiser tous les degrés à 0 ? Les points seront récupérés.",
-    "fromFeatsItemsOrOtherBonuses": "Dons, objets ou autres bonus"
+    "fromFeatsItemsOrOtherBonuses": "Dons, objets ou autres bonus",
+    "spent": "Dépensés",
+    "available": "Disponible",
+    "overdrawn": "Dépassés",
+    "acp": "MA",
+    "cross": "Autre",
+    "twoPoints": "2 pt",
+    "levellingAs": "Progression en tant que",
+    "levellingAsHint": "Les nouveaux rangs sont achetés avec la classe prise au dernier niveau. Seules les compétences de cette classe coûtent 1 point par rang ; le rang maximum tient toujours compte de toutes les classes.",
+    "crossClassLegend": "Compétence hors classe pour {class} (coûte 2 points par rang)"
   },
   "gameState": {
     "tabs": {
@@ -943,7 +1056,9 @@
     "restoreBackupPrompt": "Choisissez un backup à restaurer.",
     "variables": "variables",
     "current": "Actuel",
-    "max": "Max"
+    "max": "Max",
+    "failedToSave": "Échec de l'enregistrement",
+    "comingSoon": "Bientôt disponible"
   },
   "levelHelper": {
     "pendingAllocations": "Attributions en attente",
@@ -1092,7 +1207,8 @@
       "title": "Installation de NWN2 introuvable",
       "description": "Impossible de trouver une installation de Neverwinter Nights 2. Veuillez indiquer votre dossier de jeu pour continuer.",
       "retry": "Réessayer"
-    }
+    },
+    "starting": "Démarrage..."
   },
   "spells": {
     "known": "Connus",
@@ -1171,7 +1287,8 @@
     "savedSuccessfully": "{name} enregistré avec succès.",
     "readyToVerify": "Prêt à tester ?",
     "readyToVerifyDesc": "Lancez NWN2:EE pour tester immédiatement.",
-    "gamePathWarning": "Installation non auto-détectée."
+    "gamePathWarning": "Installation non auto-détectée.",
+    "characterFallback": "Personnage"
   },
   "modelViewer": {
     "loading": "Chargement du modèle...",
@@ -1263,7 +1380,36 @@
     "meshOverride": {
       "label": "Substitution de maillage (debug)",
       "auto": "Auto (résolveur)"
-    }
+    },
+    "raceFallback": "Race {id}",
+    "voiceTypeFallback": "Type {id}",
+    "colorsHoverHint": "Survolez une couleur pour mettre en évidence la zone concernée",
+    "accessories": "Accessoires",
+    "accessoriesHint": "Les nouveaux accessoires reprennent les couleurs de l'armure. Changer de variation réinitialise les accessoires.",
+    "accessoryLeft": "G",
+    "accessoryRight": "D",
+    "accessorySide": "{slot} {side}",
+    "accessorySlotColumn": "Emplacement",
+    "accessoryCurrentColumn": "Actuel",
+    "accessoryCurrentTitle": "Accessoire actuellement sélectionné : #{id}",
+    "accessorySlot": {
+      "shoulder": "Épaule",
+      "arm": "Bras",
+      "elbow": "Coude",
+      "bracer": "Bracelet",
+      "leg": "Cuisse",
+      "knee": "Genou",
+      "shin": "Tibia",
+      "hip": "Hanche"
+    },
+    "accessoryResetTitle": "Les modifications des accessoires seront annulées",
+    "accessoryResetDesc": "Changer de variation rétablit les accessoires tels qu'ils étaient à l'ouverture de cet objet.",
+    "changeVariation": "Changer de variation",
+    "customColors": "Couleurs personnalisées",
+    "usingArmorColors": "Couleurs de l'armure",
+    "copyToPair": "Copier les couleurs vers {pair}",
+    "resetToArmor": "Revenir aux couleurs de l'armure",
+    "hasCustomColors": "Couleurs personnalisées"
   },
   "roster": {
     "title": "Effectif",

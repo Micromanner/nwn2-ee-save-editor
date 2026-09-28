@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { ask, open } from '@tauri-apps/plugin-dialog';
+import { ask } from '@tauri-apps/plugin-dialog';
 import type { SaveSummary } from '@/lib/bindings';
 
 export interface SaveFile {
@@ -60,17 +60,6 @@ export class TauriAPI {
     return await invoke('find_nwn2_saves', { saveMode });
   }
 
-  static async selectCharacterFile(): Promise<string | null> {
-    const selected = await open({
-      filters: [{
-        name: 'Character Files',
-        extensions: ['bic', 'xml']
-      }],
-      multiple: false
-    });
-    return selected as string | null;
-  }
-
   static async getSteamWorkshopPath(): Promise<string | null> {
     return await invoke('get_steam_workshop_path');
   }
@@ -83,11 +72,11 @@ export class TauriAPI {
     return await invoke('get_save_thumbnail', { thumbnailPath });
   }
 
-  static async confirmSaveSwitch(currentSave: string, newSave: string): Promise<boolean> {
+  static async confirmSaveSwitch(message: string, title: string): Promise<boolean> {
     return await ask(
-      `You have a character loaded from "${currentSave}". Switching to "${newSave}" will replace the current character data.\n\nMake sure to save any changes before switching.\n\nDo you want to continue?`,
+      message,
       {
-        title: 'Switch Save File?',
+        title,
         kind: 'warning'
       }
     );
@@ -128,9 +117,6 @@ export class TauriAPI {
     return TauriAPI.openFolderInExplorer(folderPath);
   }
 
-  async selectCharacterFile(): Promise<string | null> {
-    return TauriAPI.selectCharacterFile();
-  }
   
   async getPathsConfig(): Promise<PathConfig> {
     return TauriAPI.getPathsConfig();

@@ -14,10 +14,6 @@ const ABILITY_NAME_KEYS: Record<AbilityKey, string> = {
   Int: 'abilityScores.names.intelligence', Wis: 'abilityScores.names.wisdom', Cha: 'abilityScores.names.charisma',
 };
 
-const ABILITY_SHORT: Record<AbilityKey, string> = {
-  Str: 'STR', Dex: 'DEX', Con: 'CON', Int: 'INT', Wis: 'WIS', Cha: 'CHA',
-};
-
 const KEYS: AbilityKey[] = ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha'];
 const POINT_COSTS = [0, 1, 2, 3, 4, 5, 6, 8, 10, 13, 16];
 const BUDGET = 32;
@@ -145,7 +141,7 @@ export function RespecDialog({ isOpen, onClose, pointBuyState, onApply }: Respec
               padding: '8px 12px', borderRadius: 4,
               background: T.surfaceAlt, border: `1px solid ${T.borderLight}`,
             }}>
-              <span className="t-bold" style={{ width: 36, color: T.accent }}>{ABILITY_SHORT[key]}</span>
+              <span className="t-bold" style={{ width: 36, color: T.accent }}>{t(`abilityScores.short.${key.toLowerCase()}`)}</span>
               <span className="t-medium" style={{ flex: 1, color: T.text }}>{t(ABILITY_NAME_KEYS[key])}</span>
 
               <Button

@@ -5,6 +5,7 @@ import { inventoryAPI, type ItemEditorMetadataResponse } from '@/services/invent
 import { CharacterStateAPI } from '@/lib/api/character-state';
 import type { RosterEntryInfo } from '@/lib/api/character-state';
 import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
+import { useTranslations } from '@/hooks/useTranslations';
 import type {
   AbilitiesState,
   AppearanceState,
@@ -249,6 +250,7 @@ const initializeSubsystems = (): CharacterContextState['subsystems'] => {
 
 // Provider component
 export function CharacterProvider({ children }: { children: ReactNode }) {
+  const t = useTranslations();
   const [characterId, setCharacterId] = useState<number | null>(null);
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -346,7 +348,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
       return data;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : `Failed to load ${subsystem}`;
+      const errorMessage = err instanceof Error ? err.message : t('errors.loadingFailed');
 
       setSubsystems(prev => ({
         ...prev,
@@ -360,7 +362,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       console.error(`Failed to load ${subsystem}:`, err);
       throw err;
     }
-  }, [characterId]);
+  }, [t, characterId]);
 
   // Update subsystem data (for optimistic updates)
   const updateSubsystem = useCallback(async (subsystem: SubsystemType, data: unknown) => {
@@ -543,7 +545,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       setSubsystems(initializeSubsystems());
       setHistoryState(null);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load character';
+      const errorMessage = err instanceof Error ? err.message : t('errors.loadingFailed');
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -552,7 +554,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     // Load metadata and preload game data in background (non-blocking)
     loadMetadataInternal(id);
     preloadGameData(id);
-  }, [loadMetadataInternal, preloadGameData]);
+  }, [t, loadMetadataInternal, preloadGameData]);
 
   const refreshRoster = useCallback(async () => {
     try {

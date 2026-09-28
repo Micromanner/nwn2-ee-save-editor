@@ -9,6 +9,7 @@ import type { FullEquippedItem, FullInventoryItem } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
 import { nwn2ToHtml, renderNwn2Markup } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
+import { slotLabel } from './inventoryLabels';
 
 export type AnyItem =
   | (FullEquippedItem & { _kind: 'equipped' })
@@ -49,8 +50,8 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <div style={{ textAlign: 'center' }}>
           <GameIcon icon={GiPointing} size={36} style={{ color: T.border }} />
-          <p style={{ marginTop: 10, color: T.textMuted }}>Select an item</p>
-          <p style={{ marginTop: 2, color: T.border }}>Choose from equipped or backpack</p>
+          <p style={{ marginTop: 10, color: T.textMuted }}>{t('inventory.selectItem')}</p>
+          <p style={{ marginTop: 2, color: T.border }}>{t('inventory.selectItemHint')}</p>
         </div>
       </div>
     );
@@ -131,7 +132,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
           <div style={{ minWidth: 0 }}>
             <H4 style={{ margin: 0, color: T.text, overflowWrap: 'anywhere' }}>{renderNwn2Markup(name)}</H4>
             <span style={{ color: T.textMuted }}>
-              {equipped ? `${item.slot} · ${baseItemName}` : baseItemName}
+              {equipped ? `${slotLabel(t, item.slot)} · ${baseItemName}` : baseItemName}
             </span>
           </div>
         </div>
@@ -144,10 +145,10 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
           <span className="t-semibold">{display(baseItemName)}</span>
 
           <span style={{ color: T.textMuted }}>{t('inventory.weight')}</span>
-          <span className="t-semibold">{weight > 0 ? `${weight.toFixed(1)} lbs` : '-'}</span>
+          <span className="t-semibold">{weight > 0 ? t('inventory.weightValue', { value: weight.toFixed(1) }) : '-'}</span>
 
           <span style={{ color: T.textMuted }}>{t('inventory.value')}</span>
-          <span>{value > 0 ? `${fmtNum(value)} gp` : '-'}</span>
+          <span>{value > 0 ? t('inventory.goldValue', { value: fmtNum(value) }) : '-'}</span>
 
           {baseAc !== null && baseAc !== undefined && (
             <>

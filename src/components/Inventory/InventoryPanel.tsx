@@ -18,46 +18,16 @@ import type { FullEquippedItem, FullInventoryItem, ItemAppearance } from '@/lib/
 import { resolveEquipSlot } from '@/utils/inventoryUtils';
 import { stripNwn2Tags } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
-
-const DISPLAY_SLOT_TO_API: Record<string, string> = {
-  'Main Hand': 'right_hand',
-  'Off Hand': 'left_hand',
-  'Head': 'head',
-  'Chest': 'chest',
-  'Hands': 'gloves',
-  'Feet': 'boots',
-  'Cloak': 'cloak',
-  'Ring 1': 'left_ring',
-  'Ring 2': 'right_ring',
-  'Belt': 'belt',
-  'Amulet': 'neck',
-  'Arrows': 'arrows',
-  'Bullets': 'bullets',
-  'Bolts': 'bolts',
-};
-
-const SLOT_LABELS: Record<string, string> = {
-  'Main Hand': 'MH',
-  'Off Hand': 'OH',
-  'Head': 'H',
-  'Chest': 'Ch',
-  'Hands': 'Gl',
-  'Feet': 'Ft',
-  'Cloak': 'Ck',
-  'Ring 1': 'R1',
-  'Ring 2': 'R2',
-  'Belt': 'Bt',
-  'Amulet': 'Nk',
-};
+import { DISPLAY_SLOT_TO_API } from './inventoryLabels';
 
 const EQUIPMENT_GRID: (string | null)[][] = [
-  [null, 'Head', 'Amulet', null],
-  ['Main Hand', 'Chest', 'Cloak', 'Off Hand'],
-  ['Ring 1', 'Belt', 'Hands', 'Ring 2'],
-  [null, 'Feet', null, null],
+  [null, 'head', 'amulet', null],
+  ['mainHand', 'chest', 'cloak', 'offHand'],
+  ['ring1', 'belt', 'hands', 'ring2'],
+  [null, 'feet', null, null],
 ];
 
-const AMMO_SLOTS = ['Arrows', 'Bullets', 'Bolts'];
+const AMMO_SLOTS = ['arrows', 'bullets', 'bolts'];
 
 function getEquippedItemForDisplaySlot(
   equippedItems: FullEquippedItem[],
@@ -76,14 +46,16 @@ interface EquipSlotProps {
 }
 
 function EquipSlot({ slot, equippedItem, selected, onSelect }: EquipSlotProps) {
-  const label = SLOT_LABELS[slot] || slot.charAt(0);
+  const t = useTranslations();
+  const label = t(`inventory.slotAbbr.${slot}`);
+  const slotName = t(`inventory.slots.${slot}`);
   const hasItem = !!equippedItem;
   const iconUrl = useIcon(equippedItem?.icon);
 
   return (
     <div
       onClick={onSelect}
-      title={equippedItem ? `${stripNwn2Tags(equippedItem.name)} (${slot})` : slot}
+      title={equippedItem ? `${stripNwn2Tags(equippedItem.name)} (${slotName})` : slotName}
       style={{
         width: 44, height: 44,
         borderRadius: 4,
@@ -335,7 +307,7 @@ export function InventoryPanel() {
           <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '12px 16px', flex: 1, overflow: 'auto', minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div className="t-bold" style={{ color: T.accent }}>
-                Backpack <span style={{ color: T.textMuted }}>({backpackItems.length})</span>
+                {t('inventory.backpack')} <span style={{ color: T.textMuted }}>({backpackItems.length})</span>
               </div>
               <Button
                 icon="add"
@@ -357,7 +329,7 @@ export function InventoryPanel() {
           <div style={{ padding: '10px 16px', borderTop: `1px solid ${T.borderLight}`, background: T.surfaceAlt }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ color: weightRatio > 0.75 ? T.negative : T.textMuted }}>
-                {totalWeight.toFixed(1)} / {maxWeight} lbs
+                {t('inventory.weightRatio', { current: totalWeight.toFixed(1), max: maxWeight })}
                 {encumbrance && (
                   <span style={{ marginLeft: 6, color: T.textMuted }}>({encumbrance.encumbrance_level})</span>
                 )}
@@ -371,7 +343,7 @@ export function InventoryPanel() {
                   style={{ height: 3 }}
                 />
               </div>
-              <span style={{ color: T.textMuted }}>{totalItems} items</span>
+              <span style={{ color: T.textMuted }}>{t('inventory.itemCount', { count: totalItems })}</span>
             </div>
             {/* Party gold lives on the player; the companion .ros gold field is unused */}
             {!isCompanion && (

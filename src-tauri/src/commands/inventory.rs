@@ -386,7 +386,7 @@ pub async fn get_available_templates(
     let mut grouped: HashMap<PathBuf, Vec<(String, String, String)>> = HashMap::new();
     let mut other_templates = Vec::new();
     for (resref, location) in &templates {
-        let source = location.source.display_name().to_string();
+        let source = location.source.key().to_string();
         match (&location.container_type, &location.internal_path) {
             (crate::services::resource_manager::ContainerType::Zip, Some(internal_path)) => {
                 grouped

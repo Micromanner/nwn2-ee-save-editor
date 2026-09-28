@@ -177,7 +177,7 @@ export function FileBrowserDialog({
           size: b.size,
           modified: String(b.created_at),
           is_directory: !isSaveFolder,
-          save_name: b.save_name ?? (b.timestamp ? `Backup ${b.timestamp}` : undefined),
+          save_name: b.save_name ?? (b.timestamp ? t('fileBrowser.backupName', { timestamp: b.timestamp }) : undefined),
           character_name: b.character_name ?? undefined,
           changes: b.changes,
         }));
@@ -242,7 +242,7 @@ export function FileBrowserDialog({
       }
     } catch (err) {
       console.error('Failed to load files:', err);
-      setError(err instanceof Error ? err.message : 'Failed to read directory');
+      setError(err instanceof Error ? err.message : t('fileBrowser.readFailed'));
       setFiles([]);
       setTotalFiles(0);
     } finally {
@@ -513,7 +513,7 @@ export function FileBrowserDialog({
       setShowDeleteConfirm(false);
     } catch (err) {
       console.error('Failed to delete backup(s):', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete backup(s)');
+      setError(err instanceof Error ? err.message : t('fileBrowser.deleteFailed'));
     } finally {
       setIsDeleting(false);
     }

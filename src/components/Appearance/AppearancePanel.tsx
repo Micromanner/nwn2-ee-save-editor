@@ -225,7 +225,7 @@ export function AppearancePanel() {
     for (const s of subraceOptions) {
       let g = byId.get(s.base_race);
       if (!g) {
-        g = { baseRaceId: s.base_race, groupName: s.base_race_name || `Race ${s.base_race}`, race: null, subraces: [] };
+        g = { baseRaceId: s.base_race, groupName: s.base_race_name || t('appearance.raceFallback', { id: s.base_race }), race: null, subraces: [] };
         byId.set(s.base_race, g);
       }
       g.subraces.push(s);
@@ -240,7 +240,7 @@ export function AppearancePanel() {
       if (!!a.race !== !!b.race) return a.race ? -1 : 1;
       return a.baseRaceId - b.baseRaceId;
     });
-  }, [raceOptions, subraceOptions]);
+  }, [raceOptions, subraceOptions, t]);
 
   const currentAppearanceType = appearanceSubsystem.data?.appearance_type;
   const currentAppearanceTypeName = appearanceSubsystem.data?.appearance_type_name;
@@ -600,7 +600,7 @@ export function AppearancePanel() {
                       top: 0,
                       zIndex: 1,
                     }}>
-                      {typeLabels[typeKey] ?? `Type ${typeKey}`}
+                      {typeLabels[typeKey] ?? t('appearance.voiceTypeFallback', { id: typeKey })}
                     </div>
                     {voices.map(v => {
                       const isCurrent = v.id === data.soundset;

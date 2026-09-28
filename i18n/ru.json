@@ -19,7 +19,11 @@
     "chooseCharacterHint": "{save} содержит несколько игровых персонажей. Выберите того, кого нужно редактировать.",
     "playerSlot": "Слот {slot}",
     "unnamedPlayer": "Игрок {index}",
-    "levelFallback": "Уровень {level}"
+    "levelFallback": "Уровень {level}",
+    "switchSave": {
+      "title": "Сменить сохранение?",
+      "message": "Загружен персонаж из \"{current}\". Переход к \"{next}\" заменит текущие данные персонажа.\n\nСохраните изменения перед переключением.\n\nПродолжить?"
+    }
   },
   "fileBrowser": {
     "loadSave": "Загрузить сохранение",
@@ -89,7 +93,9 @@
     "sectionCharacters": "Персонажи",
     "sectionQuests": "Задания",
     "sectionParty": "Группа",
-    "sectionVariables": "Переменные"
+    "sectionVariables": "Переменные",
+    "readFailed": "Не удалось прочитать каталог",
+    "backupName": "Резервная копия {timestamp}"
   },
   "navigation": {
     "overview": "Обзор",
@@ -137,7 +143,10 @@
     "loadSaveFile": "Загрузите файл сохранения",
     "level": "Уровень",
     "race": "Раса",
-    "gender": "Пол",
+    "gender": {
+      "male": "Мужской",
+      "female": "Женский"
+    },
     "age": "Возраст",
     "male": "Мужчина",
     "female": "Женщина",
@@ -156,10 +165,6 @@
     "totalFeats": "Всего фитов",
     "knownSpells": "Известные заклинания",
     "genderLabel": "Пол",
-    "gender": {
-      "male": "Мужской",
-      "female": "Женский"
-    },
     "size": {
       "fine": "Миниатюрный",
       "diminutive": "Крошечный",
@@ -256,6 +261,14 @@
       "intelligence": "Интеллект",
       "wisdom": "Мудрость",
       "charisma": "Харизма"
+    },
+    "short": {
+      "str": "СИЛ",
+      "dex": "ЛОВ",
+      "con": "ТЕЛ",
+      "int": "ИНТ",
+      "wis": "МДР",
+      "cha": "ХАР"
     }
   },
   "alignment": {
@@ -280,6 +293,17 @@
       "lawfulEvil": "Принципиально-злой",
       "neutralEvil": "Нейтрально-злой",
       "chaoticEvil": "Хаотично-злой"
+    },
+    "descriptions": {
+      "lawfulGood": "Действует с состраданием и честью, обладая сильным чувством долга.",
+      "neutralGood": "Поступает хорошо и правильно, не питая сильного пристрастия ни к порядку, ни к беспорядку.",
+      "chaoticGood": "Следует собственной совести, чтобы творить добро, мало считаясь с общественными законами.",
+      "lawfulNeutral": "Превыше всего придерживается личного кодекса, традиций или закона.",
+      "trueNeutral": "Сохраняет равновесие, избегая сильной приверженности какой-либо одной крайности мировоззрения.",
+      "chaoticNeutral": "Ценит личную свободу и индивидуальность превыше всего остального.",
+      "lawfulEvil": "Методично и намеренно использует порядок и структуру для достижения злых целей.",
+      "neutralEvil": "Действует из чистого эгоизма, причиняя вред другим, когда это удобно.",
+      "chaoticEvil": "Совершает разрушительные и непредсказуемые деяния зла и злобы."
     }
   },
   "inventory": {
@@ -337,7 +361,24 @@
       "preview": "Предпросмотр",
       "rawOnly": "Этот текст содержит разметку, которую визуальный редактор изменил бы, поэтому он показан в виде тегов.",
       "unclosedTag": "Тег {tag} не закрыт.",
-      "unopenedTag": "Закрывающий тег {tag} не имеет открывающего."
+      "unopenedTag": "Закрывающий тег {tag} не имеет открывающего.",
+      "colorNames": {
+        "red": "Красный",
+        "green": "Зелёный",
+        "blue": "Синий",
+        "white": "Белый",
+        "black": "Чёрный",
+        "yellow": "Жёлтый",
+        "cyan": "Голубой",
+        "magenta": "Пурпурный",
+        "orange": "Оранжевый",
+        "pink": "Розовый",
+        "purple": "Фиолетовый",
+        "gray": "Серый",
+        "silver": "Серебряный",
+        "gold": "Золотой",
+        "brown": "Коричневый"
+      }
     },
     "addItem": "Добавить предмет",
     "createNewBaseType": "Создать новый",
@@ -350,7 +391,16 @@
     "source": {
       "all": "Все",
       "vanilla": "Vanilla",
-      "override": "Override"
+      "override": "Override",
+      "names": {
+        "baseGame": "Основная игра",
+        "module": "Модуль",
+        "campaign": "Кампания",
+        "overrideDir": "Папка override",
+        "workshop": "Мастерская Steam",
+        "customOverride": "Свой override",
+        "hak": "HAK-пакет"
+      }
     },
     "subcategories": {
       "swords": "Мечи",
@@ -427,6 +477,46 @@
       "scrolls": "Свитки и книги",
       "crafting": "Ремесло",
       "other": "Прочее"
+    },
+    "backpack": "Рюкзак",
+    "selectItem": "Выберите предмет",
+    "selectItemHint": "Выберите из снаряжения или рюкзака",
+    "flags": "Флаги",
+    "weightValue": "{value} фунт.",
+    "goldValue": "{value} зол.",
+    "weightRatio": "{current} / {max} фунт.",
+    "itemCount": "{count, plural, one {# предмет} few {# предмета} many {# предметов} other {# предмета}}",
+    "slots": {
+      "mainHand": "Основная рука",
+      "offHand": "Неосновная рука",
+      "head": "Голова",
+      "chest": "Торс",
+      "hands": "Руки",
+      "feet": "Ступни",
+      "cloak": "Плащ",
+      "ring1": "Кольцо 1",
+      "ring2": "Кольцо 2",
+      "belt": "Пояс",
+      "amulet": "Амулет",
+      "arrows": "Стрелы",
+      "bullets": "Ядра",
+      "bolts": "Болты"
+    },
+    "slotAbbr": {
+      "mainHand": "ОР",
+      "offHand": "НР",
+      "head": "Г",
+      "chest": "Т",
+      "hands": "Р",
+      "feet": "С",
+      "cloak": "П",
+      "ring1": "К1",
+      "ring2": "К2",
+      "belt": "Пс",
+      "amulet": "Ам",
+      "arrows": "Ст",
+      "bullets": "Яд",
+      "bolts": "Бл"
     }
   },
   "feats": {
@@ -529,7 +619,21 @@
     "xpLevelMismatchWarning": "Ваш уровень опыта ({xpLevel}) не совпадает с количеством уровней классов ({classLevel}). Игра потребует повышения уровня.",
     "retry": "Повтор",
     "requirementsNotMet": "Требования не выполнены",
-    "prestigeCrashWarning": "Требования не выполнены - игра вылетит при повышении уровня, если добавить этот класс"
+    "prestigeCrashWarning": "Требования не выполнены - игра вылетит при повышении уровня, если добавить этот класс",
+    "maxLevel": "Макс. уровень",
+    "levelsLeft": "Осталось: {count}",
+    "spLeft": "ОУ ост.",
+    "alreadyHaveClass": "Класс уже есть",
+    "maxClassesReached": "Макс. классов: {max}",
+    "atMaxLevel": "Достигнут макс. уровень",
+    "resultsFor": "Результаты для \"{query}\"",
+    "errors": {
+      "maxClassLevel": "Нельзя добавить уровень классу {name}: максимальный уровень {max}, у персонажа уже {level} уровней",
+      "alreadyAssigned": "Этот класс уже назначен персонажу",
+      "maxClasses": "Допускается не более {max} классов",
+      "maxTotalLevel": "Достигнут максимальный уровень {max}",
+      "needOneClass": "У персонажа должен быть хотя бы один класс"
+    }
   },
   "skills": {
     "searchSkills": "Поиск навыков...",
@@ -543,7 +647,16 @@
     "armorCheck": "Штраф доспеха",
     "cancel": "Отмена",
     "resetConfirmMessage": "Сбросить все ранги навыков? Очки будут возвращены.",
-    "fromFeatsItemsOrOtherBonuses": "Бонусы от фитов, предметов и прочего"
+    "fromFeatsItemsOrOtherBonuses": "Бонусы от фитов, предметов и прочего",
+    "spent": "Потрачено",
+    "available": "Доступно",
+    "overdrawn": "Превышено",
+    "acp": "ШБ",
+    "cross": "Чужой",
+    "twoPoints": "2 оч.",
+    "levellingAs": "Повышение уровня как",
+    "levellingAsHint": "Новые ранги покупаются за класс, взятый на последнем уровне. Только его умения стоят 1 очко за ранг; предел рангов по-прежнему учитывает все классы.",
+    "crossClassLegend": "Межклассовое умение для {class} (стоит 2 очка за ранг)"
   },
   "gameState": {
     "tabs": {
@@ -943,7 +1056,9 @@
     "restoreBackupPrompt": "Выберите бэкап для восстановления.",
     "variables": "переменные",
     "current": "Текущее",
-    "max": "Макс."
+    "max": "Макс.",
+    "failedToSave": "Не удалось сохранить",
+    "comingSoon": "Скоро"
   },
   "levelHelper": {
     "pendingAllocations": "Ожидающие очки",
@@ -1092,7 +1207,8 @@
       "title": "Установка NWN2 не найдена",
       "description": "Не удалось найти установку Neverwinter Nights 2. Укажите папку с игрой, чтобы продолжить.",
       "retry": "Повторить"
-    }
+    },
+    "starting": "Запуск..."
   },
   "spells": {
     "known": "Известные",
@@ -1126,7 +1242,6 @@
     "description": "Описание",
     "specialAbilities": "Спец. способности",
     "domain": "Домен",
-    "domainSpell": "Доменное заклинание",
     "schools": {
       "abjuration": "Ограждение",
       "conjuration": "Вызов",
@@ -1172,7 +1287,8 @@
     "savedSuccessfully": "{name} успешно сохранен.",
     "readyToVerify": "Готовы проверить в игре?",
     "readyToVerifyDesc": "Запустите NWN2:EE сейчас, чтобы увидеть изменения.",
-    "gamePathWarning": "Путь к игре не определен автоматически."
+    "gamePathWarning": "Путь к игре не определен автоматически.",
+    "characterFallback": "Персонаж"
   },
   "modelViewer": {
     "loading": "Загрузка модели...",
@@ -1264,7 +1380,36 @@
     "meshOverride": {
       "label": "Замена меша (отладка)",
       "auto": "Авто (резолвер)"
-    }
+    },
+    "raceFallback": "Раса {id}",
+    "voiceTypeFallback": "Тип {id}",
+    "colorsHoverHint": "Наведите курсор на цвет, чтобы подсветить область, на которую он влияет",
+    "accessories": "Аксессуары",
+    "accessoriesHint": "Новые аксессуары получают цвета доспеха. Смена вариации сбрасывает аксессуары.",
+    "accessoryLeft": "Л",
+    "accessoryRight": "П",
+    "accessorySide": "{slot} {side}",
+    "accessorySlotColumn": "Слот",
+    "accessoryCurrentColumn": "Текущий",
+    "accessoryCurrentTitle": "Выбранный аксессуар: #{id}",
+    "accessorySlot": {
+      "shoulder": "Плечо",
+      "arm": "Предплечье",
+      "elbow": "Локоть",
+      "bracer": "Наруч",
+      "leg": "Бедро",
+      "knee": "Колено",
+      "shin": "Голень",
+      "hip": "Бедро (таз)"
+    },
+    "accessoryResetTitle": "Изменения аксессуаров будут сброшены",
+    "accessoryResetDesc": "Смена вариации возвращает аксессуары к состоянию на момент открытия предмета.",
+    "changeVariation": "Изменить вариацию",
+    "customColors": "Свои цвета",
+    "usingArmorColors": "Цвета доспеха",
+    "copyToPair": "Копировать цвета в {pair}",
+    "resetToArmor": "Вернуть цвета доспеха",
+    "hasCustomColors": "Свои цвета"
   },
   "roster": {
     "title": "Состав",

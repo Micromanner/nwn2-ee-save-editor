@@ -19,7 +19,11 @@
     "chooseCharacterHint": "{save} zawiera wielu graczy. Wybierz postać do edycji.",
     "playerSlot": "Slot {slot}",
     "unnamedPlayer": "Gracz {index}",
-    "levelFallback": "Poziom {level}"
+    "levelFallback": "Poziom {level}",
+    "switchSave": {
+      "title": "Zmienić zapis gry?",
+      "message": "Załadowana jest postać z \"{current}\". Przejście do \"{next}\" zastąpi bieżące dane postaci.\n\nZapisz zmiany przed przełączeniem.\n\nCzy chcesz kontynuować?"
+    }
   },
   "fileBrowser": {
     "loadSave": "Wczytaj Zapis",
@@ -89,7 +93,9 @@
     "sectionCharacters": "Postacie",
     "sectionQuests": "Zadania",
     "sectionParty": "Grupa",
-    "sectionVariables": "Zmienne"
+    "sectionVariables": "Zmienne",
+    "readFailed": "Nie udało się odczytać katalogu",
+    "backupName": "Kopia zapasowa {timestamp}"
   },
   "navigation": {
     "overview": "Przegląd",
@@ -139,7 +145,10 @@
     "loadSaveFile": "Wczytaj plik zapisu",
     "level": "Poziom",
     "race": "Rasa",
-    "gender": "Płeć",
+    "gender": {
+      "male": "Mężczyzna",
+      "female": "Kobieta"
+    },
     "age": "Wiek",
     "male": "Mężczyzna",
     "female": "Kobieta",
@@ -158,10 +167,6 @@
     "totalFeats": "Suma Atutów",
     "knownSpells": "Znane Czary",
     "genderLabel": "Płeć",
-    "gender": {
-      "male": "Mężczyzna",
-      "female": "Kobieta"
-    },
     "size": {
       "fine": "Bardzo mały",
       "diminutive": "Malutki",
@@ -258,6 +263,14 @@
       "intelligence": "Inteligencja",
       "wisdom": "Roztropność",
       "charisma": "Charyzma"
+    },
+    "short": {
+      "str": "SIŁ",
+      "dex": "ZRĘ",
+      "con": "KON",
+      "int": "INT",
+      "wis": "MĄD",
+      "cha": "CHA"
     }
   },
   "alignment": {
@@ -282,6 +295,17 @@
       "lawfulEvil": "Praworządny Zły",
       "neutralEvil": "Neutralny Zły",
       "chaoticEvil": "Chaotyczny Zły"
+    },
+    "descriptions": {
+      "lawfulGood": "Działa ze współczuciem i honorem, kierując się silnym poczuciem obowiązku.",
+      "neutralGood": "Czyni dobro i to, co słuszne, bez silnego nastawienia za porządkiem lub przeciw niemu.",
+      "chaoticGood": "Kieruje się własnym sumieniem, by czynić dobro, niewiele dbając o prawa społeczne.",
+      "lawfulNeutral": "Przestrzega przede wszystkim osobistego kodeksu, tradycji lub prawa.",
+      "trueNeutral": "Zachowuje równowagę, unikając silnego zaangażowania w jakąkolwiek skrajność cech charakteru.",
+      "chaoticNeutral": "Ceni osobistą wolność i indywidualność ponad wszystko inne.",
+      "lawfulEvil": "Metodycznie i celowo wykorzystuje porządek i strukturę do osiągania złych celów.",
+      "neutralEvil": "Działa wyłącznie z własnego interesu, krzywdząc innych, gdy jest mu to na rękę.",
+      "chaoticEvil": "Dopuszcza się destrukcyjnych i nieprzewidywalnych aktów zła i złośliwości."
     }
   },
   "inventory": {
@@ -339,7 +363,24 @@
       "preview": "Podgląd",
       "rawOnly": "Ten tekst zawiera znaczniki, które edytor wizualny by zmienił, dlatego wyświetlany jest jako tagi.",
       "unclosedTag": "Tag {tag} nie został zamknięty.",
-      "unopenedTag": "Zamykający tag {tag} nie ma tagu otwierającego."
+      "unopenedTag": "Zamykający tag {tag} nie ma tagu otwierającego.",
+      "colorNames": {
+        "red": "Czerwony",
+        "green": "Zielony",
+        "blue": "Niebieski",
+        "white": "Biały",
+        "black": "Czarny",
+        "yellow": "Żółty",
+        "cyan": "Cyjan",
+        "magenta": "Magenta",
+        "orange": "Pomarańczowy",
+        "pink": "Różowy",
+        "purple": "Fioletowy",
+        "gray": "Szary",
+        "silver": "Srebrny",
+        "gold": "Złoty",
+        "brown": "Brązowy"
+      }
     },
     "addItem": "Dodaj Przedmiot",
     "createNewBaseType": "Stwórz Nowy",
@@ -352,7 +393,16 @@
     "source": {
       "all": "Wszystkie",
       "vanilla": "Vanilla",
-      "override": "Override"
+      "override": "Override",
+      "names": {
+        "baseGame": "Gra podstawowa",
+        "module": "Moduł",
+        "campaign": "Kampania",
+        "overrideDir": "Folder override",
+        "workshop": "Steam Workshop",
+        "customOverride": "Własny override",
+        "hak": "Pakiet HAK"
+      }
     },
     "subcategories": {
       "swords": "Miecze",
@@ -429,6 +479,46 @@
       "scrolls": "Zwoje i Księgi",
       "crafting": "Rzemiosło",
       "other": "Inne"
+    },
+    "backpack": "Plecak",
+    "selectItem": "Wybierz przedmiot",
+    "selectItemHint": "Wybierz spośród wyposażenia lub plecaka",
+    "flags": "Flagi",
+    "weightValue": "{value} lbs.",
+    "goldValue": "{value} szt. zł",
+    "weightRatio": "{current} / {max} lbs.",
+    "itemCount": "{count, plural, one {# przedmiot} few {# przedmioty} many {# przedmiotów} other {# przedmiotu}}",
+    "slots": {
+      "mainHand": "Główna ręka",
+      "offHand": "Druga ręka",
+      "head": "Głowa",
+      "chest": "Tors",
+      "hands": "Ręce",
+      "feet": "Stopy",
+      "cloak": "Płaszcz",
+      "ring1": "Pierścień 1",
+      "ring2": "Pierścień 2",
+      "belt": "Pas",
+      "amulet": "Amulet",
+      "arrows": "Strzały",
+      "bullets": "Pociski",
+      "bolts": "Bełty"
+    },
+    "slotAbbr": {
+      "mainHand": "GR",
+      "offHand": "DR",
+      "head": "G",
+      "chest": "T",
+      "hands": "R",
+      "feet": "S",
+      "cloak": "P",
+      "ring1": "P1",
+      "ring2": "P2",
+      "belt": "Pa",
+      "amulet": "Am",
+      "arrows": "St",
+      "bullets": "Po",
+      "bolts": "Be"
     }
   },
   "feats": {
@@ -531,7 +621,21 @@
     "xpLevelMismatchWarning": "Twój poziom PD ({xpLevel}) różni się od poziomu klas ({classLevel}). Gra poprosi o awansowanie po wczytaniu zapisu.",
     "retry": "Ponów",
     "requirementsNotMet": "Wymagania niespełnione",
-    "prestigeCrashWarning": "Wymagania niespełnione - gra zawiesi się przy awansie, jeśli ta klasa zostanie dodana"
+    "prestigeCrashWarning": "Wymagania niespełnione - gra zawiesi się przy awansie, jeśli ta klasa zostanie dodana",
+    "maxLevel": "Maksymalny poziom",
+    "levelsLeft": "Pozostało: {count}",
+    "spLeft": "PU poz.",
+    "alreadyHaveClass": "Ta klasa już jest",
+    "maxClassesReached": "Limit klas: {max}",
+    "atMaxLevel": "Osiągnięto maks. poziom",
+    "resultsFor": "Wyniki dla \"{query}\"",
+    "errors": {
+      "maxClassLevel": "Nie można dodać poziomu klasy {name}: maksymalny poziom to {max}, a postać ma już {level} poziomów",
+      "alreadyAssigned": "Ta klasa jest już przypisana do postaci",
+      "maxClasses": "Dozwolone maksymalnie {max} klasy",
+      "maxTotalLevel": "Osiągnięto maksymalny poziom {max}",
+      "needOneClass": "Postać musi mieć co najmniej jedną klasę"
+    }
   },
   "skills": {
     "searchSkills": "Szukaj umiejętności...",
@@ -545,7 +649,16 @@
     "armorCheck": "Kara Pancerza",
     "cancel": "Anuluj",
     "resetConfirmMessage": "Zresetować wszystkie umiejętności do 0? Punkty zostaną zwrócone.",
-    "fromFeatsItemsOrOtherBonuses": "Z atutów, przedmiotów lub innych premii"
+    "fromFeatsItemsOrOtherBonuses": "Z atutów, przedmiotów lub innych premii",
+    "spent": "Wydane",
+    "available": "Dostępne",
+    "overdrawn": "Przekroczone",
+    "acp": "KZ",
+    "cross": "Obca",
+    "twoPoints": "2 pkt",
+    "levellingAs": "Awans jako",
+    "levellingAsHint": "Nowe rangi kupuje się jako klasa wybrana na ostatnim poziomie. Tylko jej umiejętności kosztują 1 punkt za rangę; limit rang nadal uwzględnia wszystkie klasy.",
+    "crossClassLegend": "Umiejętność spoza klasy dla {class} (kosztuje 2 punkty za rangę)"
   },
   "gameState": {
     "tabs": {
@@ -945,7 +1058,9 @@
     "restoreBackupPrompt": "Wybierz kopię zapasową do przywrócenia.",
     "variables": "zmienne",
     "current": "Obecnie",
-    "max": "Max"
+    "max": "Max",
+    "failedToSave": "Nie udało się zapisać",
+    "comingSoon": "Wkrótce"
   },
   "levelHelper": {
     "pendingAllocations": "Oczekujące Punkty",
@@ -1094,7 +1209,8 @@
       "title": "Nie znaleziono instalacji NWN2",
       "description": "Nie udało się znaleźć instalacji Neverwinter Nights 2. Wskaż folder gry, aby kontynuować.",
       "retry": "Spróbuj ponownie"
-    }
+    },
+    "starting": "Uruchamianie..."
   },
   "spells": {
     "known": "Znane",
@@ -1173,7 +1289,8 @@
     "savedSuccessfully": "{name} zapisany pomyślnie.",
     "readyToVerify": "Gotowy do sprawdzenia w grze?",
     "readyToVerifyDesc": "Uruchom NWN2:EE teraz, aby sprawdzić zmiany.",
-    "gamePathWarning": "Nie wykryto ścieżki instalacji gry."
+    "gamePathWarning": "Nie wykryto ścieżki instalacji gry.",
+    "characterFallback": "Postać"
   },
   "modelViewer": {
     "loading": "Wczytywanie modelu...",
@@ -1265,7 +1382,36 @@
     "meshOverride": {
       "label": "Nadpisanie siatki (debug)",
       "auto": "Auto (resolver)"
-    }
+    },
+    "raceFallback": "Rasa {id}",
+    "voiceTypeFallback": "Typ {id}",
+    "colorsHoverHint": "Najedź na kolor, aby podświetlić obszar, którego dotyczy",
+    "accessories": "Akcesoria",
+    "accessoriesHint": "Nowe akcesoria przejmują kolory pancerza. Zmiana wariacji resetuje akcesoria.",
+    "accessoryLeft": "L",
+    "accessoryRight": "P",
+    "accessorySide": "{slot} {side}",
+    "accessorySlotColumn": "Miejsce",
+    "accessoryCurrentColumn": "Obecne",
+    "accessoryCurrentTitle": "Obecnie wybrane akcesorium: #{id}",
+    "accessorySlot": {
+      "shoulder": "Ramię",
+      "arm": "Przedramię górne",
+      "elbow": "Łokieć",
+      "bracer": "Karwasz",
+      "leg": "Udo",
+      "knee": "Kolano",
+      "shin": "Goleń",
+      "hip": "Biodro"
+    },
+    "accessoryResetTitle": "Zmiany akcesoriów zostaną cofnięte",
+    "accessoryResetDesc": "Zmiana wariacji przywraca akcesoria do stanu z chwili otwarcia tego przedmiotu.",
+    "changeVariation": "Zmień wariację",
+    "customColors": "Własne kolory",
+    "usingArmorColors": "Kolory pancerza",
+    "copyToPair": "Kopiuj kolory do {pair}",
+    "resetToArmor": "Przywróć kolory pancerza",
+    "hasCustomColors": "Własne kolory"
   },
   "roster": {
     "title": "Skład",

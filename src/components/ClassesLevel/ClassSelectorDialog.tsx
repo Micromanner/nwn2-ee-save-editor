@@ -39,15 +39,15 @@ function checkCanSelect(
   maxClasses: number,
   currentClassCount: number,
   prestigeEligibility: Map<number, PrestigeClassOption> | null,
-  requirementsNotMetLabel: string,
+  t: (key: string, values?: Record<string, unknown>) => string,
 ): { ok: boolean; reason?: string; prestigeBlocked?: boolean } {
   const hasClass = currentClassIds.includes(cls.id);
-  if (hasClass && !isChanging) return { ok: false, reason: 'Already have this class' };
-  if (!isChanging && currentClassCount >= maxClasses) return { ok: false, reason: `Max ${maxClasses} classes` };
-  if (!isChanging && totalLevel >= maxLevel) return { ok: false, reason: 'At max level' };
+  if (hasClass && !isChanging) return { ok: false, reason: t('classes.alreadyHaveClass') };
+  if (!isChanging && currentClassCount >= maxClasses) return { ok: false, reason: t('classes.maxClassesReached', { max: maxClasses }) };
+  if (!isChanging && totalLevel >= maxLevel) return { ok: false, reason: t('classes.atMaxLevel') };
   const eligibility = prestigeEligibility?.get(cls.id);
   if (eligibility && !eligibility.can_take && !hasClass) {
-    return { ok: false, reason: requirementsNotMetLabel, prestigeBlocked: true };
+    return { ok: false, reason: t('classes.requirementsNotMet'), prestigeBlocked: true };
   }
   return { ok: true };
 }
@@ -105,22 +105,20 @@ export function ClassSelectorDialog({
       const filtered = allClasses.filter(c =>
         c.name.toLowerCase().includes(q) || c.label.toLowerCase().includes(q)
       );
-      return filtered.length > 0 ? [{ key: 'search', title: `Results for "${search}"`, items: filtered }] : [];
+      return filtered.length > 0 ? [{ key: 'search', title: t('classes.resultsFor', { query: search }), items: filtered }] : [];
     }
 
     const groups = categorizedClasses.categories[tab as keyof typeof categorizedClasses.categories] ?? {};
     return buildSections(groups);
-  }, [categorizedClasses, search, tab, allClasses, buildSections]);
-
-  const requirementsNotMetLabel = t('classes.requirementsNotMet');
+  }, [categorizedClasses, search, tab, allClasses, buildSections, t]);
 
   const selectedValidity = useMemo(() => {
     if (!selectedClass) return { ok: false };
-    return checkCanSelect(selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel);
-  }, [selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel]);
+    return checkCanSelect(selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, t);
+  }, [selectedClass, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, t]);
 
   const renderClassItem = useCallback((cls: ClassInfo, selected: boolean) => {
-    const { ok, reason } = checkCanSelect(cls, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel);
+    const { ok, reason } = checkCanSelect(cls, currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, t);
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: ok ? 1 : 0.5 }}>
         <span className={selected ? 't-semibold' : undefined} style={{
@@ -134,7 +132,7 @@ export function ClassSelectorDialog({
         )}
       </div>
     );
-  }, [currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, requirementsNotMetLabel]);
+  }, [currentClassIds, isChanging, totalLevel, maxLevel, maxClasses, currentClassCount, prestigeEligibility, t]);
 
   const totalClasses = allClasses.length;
 

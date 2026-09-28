@@ -143,21 +143,21 @@ export function FeatDetail({ feat, isOwned, onAdd, onRemove }: FeatDetailProps) 
             {prereqs.abilities?.map((p, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <GameIcon icon={p.met ? GiCheckMark : GiCancel} size={14} style={{ color: p.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>{p.ability} {p.required}</span>
+                <span style={{ color: T.text }}>{t(`abilityScores.short.${p.ability.slice(0, 3).toLowerCase()}`)} {p.required}</span>
                 <span style={{ color: T.textMuted }}>({p.current}/{p.required})</span>
               </div>
             ))}
             {prereqs.bab && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <GameIcon icon={prereqs.bab.met ? GiCheckMark : GiCancel} size={14} style={{ color: prereqs.bab.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>BAB +{prereqs.bab.required}</span>
+                <span style={{ color: T.text }}>{t('classes.bab')} +{prereqs.bab.required}</span>
                 <span style={{ color: T.textMuted }}>({prereqs.bab.current}/{prereqs.bab.required})</span>
               </div>
             )}
             {prereqs.level && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <GameIcon icon={prereqs.level.met ? GiCheckMark : GiCancel} size={14} style={{ color: prereqs.level.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>Level {prereqs.level.required}</span>
+                <span style={{ color: T.text }}>{t('classes.level')} {prereqs.level.required}</span>
                 <span style={{ color: T.textMuted }}>({prereqs.level.current}/{prereqs.level.required})</span>
               </div>
             )}
