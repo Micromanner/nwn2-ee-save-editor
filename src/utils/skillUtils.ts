@@ -42,10 +42,16 @@ export function calculateSkillBudget(totalAvailable: number, spentPoints: number
   };
 }
 
+export function skillMisc(skill: SkillSummaryEntry): number {
+  return (skill.feat_bonus || 0) + (skill.item_bonus || 0);
+}
+
+export type SkillSortColumn = 'name' | 'ranks' | 'modifier' | 'misc' | 'total' | 'class';
+
 export function filterAndSortSkills(
   skills: SkillSummaryEntry[],
   searchTerm: string,
-  sortColumn: 'name' | 'total' | 'ranks' | null,
+  sortColumn: SkillSortColumn | null,
   sortDirection: 'asc' | 'desc'
 ): SkillSummaryEntry[] {
   let result = skills;
@@ -63,7 +69,11 @@ export function filterAndSortSkills(
       case 'name': cmp = a.name.localeCompare(b.name); break;
       case 'total': cmp = a.total - b.total; break;
       case 'ranks': cmp = a.ranks - b.ranks; break;
+      case 'modifier': cmp = a.modifier - b.modifier; break;
+      case 'misc': cmp = skillMisc(a) - skillMisc(b); break;
+      case 'class': cmp = Number(b.is_class_skill) - Number(a.is_class_skill); break;
     }
-    return sortDirection === 'asc' ? cmp : -cmp;
+    if (sortDirection === 'desc') cmp = -cmp;
+    return cmp || a.name.localeCompare(b.name);
   });
 }

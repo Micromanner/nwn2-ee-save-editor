@@ -7,11 +7,11 @@ import { LoadingState, ModCell, mod, StepInput } from '../shared';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { useSkillManagement } from '@/hooks/useSkillManagement';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { applySkillOverrides, categorizeSkills, calculateSkillBudget, filterAndSortSkills } from '@/utils/skillUtils';
+import { applySkillOverrides, categorizeSkills, calculateSkillBudget, filterAndSortSkills, skillMisc, type SkillSortColumn } from '@/utils/skillUtils';
 import { useTranslations } from '@/hooks/useTranslations';
 import { display } from '@/utils/dataHelpers';
 
-type SortCol = 'name' | 'total' | 'ranks' | null;
+type SortCol = SkillSortColumn | null;
 type SortDir = 'asc' | 'desc';
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -39,6 +39,7 @@ export function SkillsPanel() {
   const [isResetting, setIsResetting] = useState(false);
   const pendingRef = useRef<Record<number, number>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ownReloadsRef = useRef(0);
   const [fixedTotalBudget, setFixedTotalBudget] = useState<number | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -60,15 +61,17 @@ export function SkillsPanel() {
     };
   }, []);
 
+  // The backend clamps an overdrawn pool at 0, so the budget stays fixed across
+  // this panel's own rank edits to keep the overdraw visible. Any other reload
+  // (undo, redo, level changes) re-reads it.
   useEffect(() => {
-    setFixedTotalBudget(null);
-  }, [character?.id]);
-
-  useEffect(() => {
-    if (skillsData && fixedTotalBudget === null) {
-      setFixedTotalBudget(skillsData.total_available);
+    if (!skillsData) return;
+    if (ownReloadsRef.current > 0) {
+      ownReloadsRef.current -= 1;
+      return;
     }
-  }, [skillsData, fixedTotalBudget]);
+    setFixedTotalBudget(skillsData.total_available);
+  }, [skillsData]);
 
   const { allSkills, budget } = useMemo(() => {
     const skills = applySkillOverrides(
@@ -101,9 +104,11 @@ export function SkillsPanel() {
     pendingRef.current = {};
     if (Object.keys(batch).length === 0) return;
 
+    ownReloadsRef.current += 1;
     try {
       await updateSkills(batch);
     } catch (err) {
+      ownReloadsRef.current = Math.max(0, ownReloadsRef.current - 1);
       handleError(err);
       setLocalOverrides(prev => {
         const updated = { ...prev };
@@ -128,7 +133,6 @@ export function SkillsPanel() {
     setIsResetting(true);
     try {
       await resetSkills();
-      setFixedTotalBudget(null);
     } catch (err) {
       handleError(err);
     } finally {
@@ -208,17 +212,23 @@ export function SkillsPanel() {
                 <th {...thSortable('ranks')}>
                   {t('skills.ranks')}<SortIcon active={sortCol === 'ranks'} dir={sortDir} />
                 </th>
-                <th style={{ textAlign: 'center' }}>{t('skills.ability')}</th>
-                <th style={{ textAlign: 'center' }}>{t('skills.misc')}</th>
+                <th {...thSortable('modifier')}>
+                  {t('skills.ability')}<SortIcon active={sortCol === 'modifier'} dir={sortDir} />
+                </th>
+                <th {...thSortable('misc')}>
+                  {t('skills.misc')}<SortIcon active={sortCol === 'misc'} dir={sortDir} />
+                </th>
                 <th {...thSortable('total')}>
                   {t('skills.total')}<SortIcon active={sortCol === 'total'} dir={sortDir} />
                 </th>
-                <th style={{ textAlign: 'center' }}>{t('skills.class')}</th>
+                <th {...thSortable('class')}>
+                  {t('skills.class')}<SortIcon active={sortCol === 'class'} dir={sortDir} />
+                </th>
               </tr>
             </thead>
             <tbody>
               {sorted.map(s => {
-                const misc = (s.feat_bonus || 0) + (s.item_bonus || 0);
+                const misc = skillMisc(s);
                 return (
                   <tr key={s.skill_id}>
                     <td>
