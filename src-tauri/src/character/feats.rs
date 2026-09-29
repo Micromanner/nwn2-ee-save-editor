@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use tracing::{debug, trace};
@@ -602,6 +603,14 @@ fn compute_is_domain(
     from_domain_source || label.to_uppercase().contains("DOMAIN")
 }
 
+/// Caster level and highest castable spell level for feat prerequisites, computed on
+/// first use and shared by every feat of one listing.
+#[derive(Default)]
+pub struct CasterProgress {
+    caster_level: OnceCell<i32>,
+    max_spell_level: OnceCell<i32>,
+}
+
 impl Character {
     // ========== BASIC FEAT ACCESS ==========
 
@@ -1066,9 +1075,6 @@ impl Character {
         domain_id: DomainId,
         game_data: &GameData,
     ) -> Result<Vec<FeatId>, CharacterError> {
-        // Remove domain spells first (before feats) - cascade from Python implementation
-        let _removed_spells = self.remove_domain_spells(domain_id, game_data)?;
-
         let Some(domains_table) = game_data.get_table("domains") else {
             return Err(CharacterError::TableNotFound("domains".to_string()));
         };
@@ -2437,6 +2443,15 @@ impl Character {
     // ========== FEAT INFO AND METADATA ==========
 
     pub fn get_feat_info(&self, feat_id: FeatId, game_data: &GameData) -> Option<FeatInfo> {
+        self.feat_info_with(feat_id, game_data, &CasterProgress::default())
+    }
+
+    fn feat_info_with(
+        &self,
+        feat_id: FeatId,
+        game_data: &GameData,
+        caster: &CasterProgress,
+    ) -> Option<FeatInfo> {
         let feats_table = game_data.get_table("feat")?;
         let feat_data = feats_table.get_by_id(feat_id.0)?;
 
@@ -2466,7 +2481,7 @@ impl Character {
         let is_custom = row_bool(&feat_data, "custom", false);
         let has_feat = self.has_feat(feat_id);
 
-        let prerequisites = self.build_feat_prerequisites(&feat_data, game_data);
+        let prerequisites = self.build_feat_prerequisites(&feat_data, game_data, caster);
         let availability = self.get_feat_availability(feat_id, feat_type, &label, game_data);
         let prereq_result = self.validate_feat_prerequisites(feat_id, game_data);
 
@@ -2498,6 +2513,7 @@ impl Character {
         epithet_feats: &HashSet<i32>,
         feat_sources: &HashMap<FeatId, FeatSource>,
         owned_feats: &HashSet<FeatId>,
+        caster: &CasterProgress,
     ) -> Option<FeatInfo> {
         let feats_table = game_data.get_table("feat")?;
         let feat_data = feats_table.get_by_id(feat_id.0)?;
@@ -2545,7 +2561,7 @@ impl Character {
             has_feat,
             can_take: true,
             missing_requirements: vec![],
-            prerequisites: self.build_feat_prerequisites(&feat_data, game_data),
+            prerequisites: self.build_feat_prerequisites(&feat_data, game_data, caster),
             availability: FeatAvailability {
                 available: true,
                 reasons: vec![],
@@ -2581,6 +2597,7 @@ impl Character {
         &self,
         feat_data: &ahash::AHashMap<String, Option<String>>,
         game_data: &GameData,
+        caster: &CasterProgress,
     ) -> FeatPrerequisites {
         let mut prereqs = FeatPrerequisites::default();
 
@@ -2671,7 +2688,9 @@ impl Character {
             .filter(|&v| v > 0);
 
         if let Some(required) = min_caster_level {
-            let current = self.get_highest_caster_level(game_data);
+            let current = *caster
+                .caster_level
+                .get_or_init(|| self.caster_level(None, game_data));
             prereqs.caster_level = Some(PrereqValue {
                 required,
                 current,
@@ -2685,7 +2704,9 @@ impl Character {
             .filter(|&v| v > 0);
 
         if let Some(required) = min_spell_level {
-            let current = self.get_max_spell_level(game_data);
+            let current = *caster
+                .max_spell_level
+                .get_or_init(|| self.max_castable_spell_level(None, game_data));
             prereqs.spell_level = Some(PrereqValue {
                 required,
                 current,
@@ -2696,22 +2717,6 @@ impl Character {
         prereqs
     }
 
-    fn get_highest_caster_level(&self, game_data: &GameData) -> i32 {
-        self.class_entries()
-            .iter()
-            .map(|entry| self.get_caster_level(entry.class_id, game_data))
-            .max()
-            .unwrap_or(0)
-    }
-
-    fn get_max_spell_level(&self, game_data: &GameData) -> i32 {
-        let caster_level = self.get_highest_caster_level(game_data);
-        if caster_level == 0 {
-            return 0;
-        }
-        ((caster_level + 1) / 2).min(9)
-    }
-
     pub fn get_feat_summary(&self, game_data: &GameData) -> FeatSummary {
         let feat_entries = self.feat_entries();
         let mut summary = FeatSummary {
@@ -2719,8 +2724,9 @@ impl Character {
             ..Default::default()
         };
 
+        let caster = CasterProgress::default();
         for entry in &feat_entries {
-            let Some(feat_info) = self.get_feat_info(entry.feat_id, game_data) else {
+            let Some(feat_info) = self.feat_info_with(entry.feat_id, game_data, &caster) else {
                 continue;
             };
 

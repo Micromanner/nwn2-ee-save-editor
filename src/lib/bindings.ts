@@ -496,16 +496,9 @@ export interface CasterClassSummary {
   slots_by_level: Record<number, number>;
 }
 
-export interface MetamagicFeat {
-  id: number;
-  name: string;
-  level_cost: number;
-}
-
 export interface SpellSummary {
   caster_classes: CasterClassSummary[];
   total_spell_levels: number;
-  metamagic_feats: MetamagicFeat[];
   spell_resistance: number;
 }
 
@@ -655,7 +648,6 @@ export interface SaveBreakdown {
   ability: number;
   equipment: number;
   feat: number;
-  racial: number;
   class_bonus: number;
   misc: number;
 }
@@ -680,14 +672,6 @@ export interface SaveChange {
   save_type: SaveType;
   old_misc: number;
   new_misc: number;
-}
-
-export interface SaveCheck {
-  roll: number;
-  modifier: number;
-  total: number;
-  dc: number;
-  success: boolean;
 }
 
 // =============================================================================

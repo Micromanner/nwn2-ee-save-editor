@@ -288,7 +288,6 @@ export function AbilitiesPanel() {
             <col style={{ width: 72 }} />
             <col style={{ width: 72 }} />
             <col style={{ width: 72 }} />
-            <col style={{ width: 72 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 80 }} />
           </colgroup>
@@ -299,7 +298,6 @@ export function AbilitiesPanel() {
               <th style={{ textAlign: 'center' }}>{t('abilityScores.ability')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.equip')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.feat')}</th>
-              <th style={{ textAlign: 'center' }}>{t('abilityScores.racial')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.misc')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.total')}</th>
             </tr>
@@ -312,7 +310,6 @@ export function AbilitiesPanel() {
                 <td style={{ textAlign: 'center' }}><ModCell value={s.data?.ability ?? 0} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={s.data?.equipment ?? 0} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={(s.data?.feat ?? 0) + (s.data?.class_bonus ?? 0)} /></td>
-                <td style={{ textAlign: 'center' }}><ModCell value={s.data?.racial ?? 0} /></td>
                 <td style={{ textAlign: 'center' }}>
                   <StepInput
                     value={stats[s.key as 'fortitude' | 'reflex' | 'will'].base}

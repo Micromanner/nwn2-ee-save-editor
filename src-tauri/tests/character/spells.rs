@@ -33,11 +33,11 @@ async fn test_wizard_progression() {
     // Level 5 Wizard: L0=4, L1=3, L2=2, L3=1
     let slots = character.calculate_spell_slots(wizard_id, game_data);
     println!("Wizard 5 Base Slots: {slots:?}");
-    assert!(slots[0] >= 4);
-    assert!(slots[1] >= 2); // Tables might vary slightly with updates, but should have some
-    assert!(slots[2] >= 1);
-    assert!(slots[3] >= 1);
-    assert_eq!(slots[4], 0); // No L4 spells yet (needs L7)
+    assert!(slots[0] >= Some(4));
+    assert!(slots[1] >= Some(2));
+    assert!(slots[2] >= Some(1));
+    assert!(slots[3] >= Some(1));
+    assert_eq!(slots[4], None); // No L4 spells yet (needs L7)
 
     // Check Known Spells
     let known_l1 = character.known_spells(wizard_id, 1);
@@ -116,16 +116,16 @@ async fn test_sorcerer_spells() {
     assert!(!character.is_prepared_caster(sorcerer_id, game_data)); // Spontaneous
     assert!(!character.uses_all_spells_known(sorcerer_id, game_data));
 
-    // Caster Level: Sorcerer 10 + prestige classes with full progression, expect at least 10.
+    // Caster Level: Sorcerer 10 + Arcane Scholar 10 (full progression); Dragon
+    // Disciple adds none.
     let cl = character.get_caster_level(sorcerer_id, game_data);
-    println!("Qara Sorcerer Caster Level: {cl}");
-    assert!(cl >= 10);
+    assert_eq!(cl, 20);
 
     // Check Spontaneous Casting Slots
     let slots = character.calculate_spell_slots(sorcerer_id, game_data);
     println!("Qara Sorcerer Slots: {slots:?}");
-    assert!(slots[1] > 0);
-    assert!(slots[5] > 0);
+    assert!(slots[1] > Some(0));
+    assert!(slots[9] > Some(0));
 
     // Known Spells
     let known_l5 = character.known_spells(sorcerer_id, 5);
@@ -167,14 +167,9 @@ async fn test_paladin_spells() {
     // Slots
     let slots = character.calculate_spell_slots(paladin_id, game_data);
     println!("Paladin Slots: {slots:?}");
-    assert!(slots[1] > 0);
-    assert!(slots[3] > 0);
-    assert_eq!(slots[5], 0); // Pal only goes up to L4
-
-    // Bonus Slots from Wisdom
-    // Occidio L30 probably has high stats.
-    let bonus = character.calculate_bonus_spell_slots(paladin_id, 1, game_data);
-    println!("Paladin Bonus Slots L1: {bonus}");
+    assert!(slots[1] > Some(0));
+    assert!(slots[3] > Some(0));
+    assert_eq!(slots[5], None); // Pal only goes up to L4
 }
 
 #[tokio::test]
@@ -200,7 +195,7 @@ async fn test_wizard_slots_modification() {
 
     let initial_slots = character.calculate_spell_slots(wizard_id, game_data);
     println!("Initial Wizard 5 Slots: {initial_slots:?}");
-    assert_eq!(initial_slots[5], 0, "Wizard 5 should not have L5 slots");
+    assert_eq!(initial_slots[5], None, "Wizard 5 should not have L5 slots");
 
     // Modify to Wizard 10
     // This tests that our slot calculations respond dynamically to level changes in-memory
@@ -218,10 +213,10 @@ async fn test_wizard_slots_modification() {
     println!("Modified Wizard 10 Slots: {new_slots:?}");
 
     assert!(
-        new_slots[5] >= 2,
+        new_slots[5] >= Some(2),
         "Wizard 10 should have at least 2 L5 slots"
     );
-    assert_eq!(new_slots[6], 0, "Wizard 10 should not have L6 slots");
+    assert_eq!(new_slots[6], None, "Wizard 10 should not have L6 slots");
 }
 
 #[tokio::test]
@@ -291,7 +286,7 @@ async fn test_ability_spells_via_spells_state() {
     let character = Character::from_gff(gff);
 
     // Verify ability spells come through the full SpellsState pipeline
-    let spells_state = character.get_spells_state(game_data);
+    let spells_state = character.get_spells_state(game_data, &ctx.decoder);
     assert!(
         !spells_state.ability_spells.is_empty(),
         "SpellsState should include ability spells for Aasimar"
@@ -355,16 +350,18 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
     let mut qara = load("qaraofblacklake/qaraofblacklake1.bic");
     let sorcerer = ClassId(9);
     assert!(
-        qara.get_spells_state(game_data)
+        qara.get_spells_state(game_data, &ctx.decoder)
             .pending_spell_learning
             .is_empty()
     );
     qara.level_up(sorcerer, game_data).expect("level up");
-    let pending = qara.get_spells_state(game_data).pending_spell_learning;
+    let pending = qara
+        .get_spells_state(game_data, &ctx.decoder)
+        .pending_spell_learning;
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].by_level.get(&0), Some(&1));
     let slot = qara
-        .get_spells_state(game_data)
+        .get_spells_state(game_data, &ctx.decoder)
         .spellcasting_classes
         .iter()
         .find(|c| c.class_id == sorcerer)
@@ -373,7 +370,7 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
     qara.add_known_spell(slot, 0, app_lib::character::SpellId(424))
         .expect("learn cantrip");
     assert!(
-        qara.get_spells_state(game_data)
+        qara.get_spells_state(game_data, &ctx.decoder)
             .pending_spell_learning
             .is_empty()
     );
@@ -384,7 +381,7 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
     melchior.level_up(warlock, game_data).expect("level up");
     assert!(
         melchior
-            .get_spells_state(game_data)
+            .get_spells_state(game_data, &ctx.decoder)
             .pending_spell_learning
             .is_empty()
     );
@@ -418,4 +415,56 @@ async fn test_learnable_spell_columns_derived_from_2da() {
     assert_eq!(ids("wiz_sorc"), vec![9, 10], "Sorcerer and Wizard share");
     assert_eq!(ids("cleric"), vec![2, 58], "Favored Soul maps to cleric");
     assert_eq!(ids("druid"), vec![3, 55], "Spirit Shaman maps to druid");
+}
+
+/// A `0` in a spell gain table unlocks the spell level with bonus slots only, `****`
+/// means no access; the cleric table already carries the domain slot.
+#[tokio::test]
+async fn test_spell_gain_table_access_and_domain_slots() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let load = |name: &str| {
+        let parser = GffParser::from_bytes(load_test_gff(name)).expect("Failed to parse GFF");
+        Character::from_gff(parser.read_struct_fields(0).expect("root"))
+    };
+
+    let mut occidio = load("occidiooctavon/occidiooctavon4.bic");
+    let paladin = ClassId(6);
+    occidio
+        .set_class_level(paladin, 4)
+        .expect("Failed to set Paladin level");
+    let slots = occidio.calculate_spell_slots(paladin, game_data);
+    assert_eq!(slots[1], Some(0), "Paladin 4 unlocks level 1 spells");
+    assert_eq!(slots[2], None);
+    assert_eq!(occidio.max_spell_level(paladin, game_data), Some(1));
+
+    let melchior = load("sagemelchior/sagemelchior4.bic");
+    let cleric = ClassId(2);
+    assert_eq!(melchior.get_caster_level(cleric, game_data), 7);
+    let slots = melchior.calculate_spell_slots(cleric, game_data);
+    let table = game_data
+        .get_table("cls_spgn_cler")
+        .expect("cleric gain table");
+    for (level, slot) in slots.iter().enumerate() {
+        let cell = table
+            .get_cell(6, &format!("SpellLevel{level}"))
+            .expect("cell")
+            .and_then(|v| v.parse::<i32>().ok());
+        assert_eq!(*slot, cell, "Cleric 7 spell level {level}");
+    }
+}
+
+/// Classes that do not cast have no caster level, whatever their class level.
+#[tokio::test]
+async fn test_non_caster_has_no_caster_level() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let parser = GffParser::from_bytes(load_test_gff("occidiooctavon/occidiooctavon4.bic"))
+        .expect("Failed to parse GFF");
+    let occidio = Character::from_gff(parser.read_struct_fields(0).expect("root"));
+    let divine_champion = ClassId(32);
+    assert!(occidio.has_class(divine_champion));
+    assert_eq!(occidio.get_caster_level(divine_champion, game_data), 0);
 }

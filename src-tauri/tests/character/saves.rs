@@ -124,16 +124,15 @@ async fn test_save_breakdown_correctness() {
 
     // Ryath might have good equipment/stats
     let character = load_character("ryathstrongarm/ryathstrongarm4.bic");
-    let breakdown = character.get_save_breakdown(game_data, decoder, SaveType::Fortitude);
+    let breakdown = character.get_saving_throws(game_data, decoder).fortitude;
 
     println!(
-        "Ryath Fortitude: Total {} (Base {} + Abil {} + Equip {} + Feat {} + Race {} + Class {} + Misc {})",
+        "Ryath Fortitude: Total {} (Base {} + Abil {} + Equip {} + Feat {} + Class {} + Misc {})",
         breakdown.total,
         breakdown.base,
         breakdown.ability,
         breakdown.equipment,
         breakdown.feat,
-        breakdown.racial,
         breakdown.class_bonus,
         breakdown.misc
     );
@@ -142,7 +141,6 @@ async fn test_save_breakdown_correctness() {
         + breakdown.ability
         + breakdown.equipment
         + breakdown.feat
-        + breakdown.racial
         + breakdown.class_bonus
         + breakdown.misc;
 
@@ -250,4 +248,22 @@ async fn test_epic_save_progression() {
     assert_eq!(base_saves.fortitude, row("FortSave"));
     assert_eq!(base_saves.reflex, row("RefSave"));
     assert_eq!(base_saves.will, row("WillSave"));
+}
+
+/// Divine Grace (feat 217) adds the positive CHA modifier of the total score
+/// (stored + racial + items) to every save.
+#[tokio::test]
+async fn test_divine_grace_adds_total_cha_modifier() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let decoder = &ctx.decoder;
+
+    let occidio = load_character("occidiooctavon/occidiooctavon4.bic");
+    assert!(occidio.has_feat(app_lib::character::FeatId(217)));
+    let cha = occidio.get_total_abilities(game_data, decoder).cha;
+    let expected = ((cha - 10).div_euclid(2)).max(0);
+    let saves = occidio.get_saving_throws(game_data, decoder);
+    assert_eq!(saves.fortitude.class_bonus, expected);
+    assert_eq!(saves.reflex.class_bonus, expected);
+    assert_eq!(saves.will.class_bonus, expected);
 }

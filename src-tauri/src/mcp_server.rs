@@ -478,8 +478,9 @@ fn get_spells(state: McpState, _params: Value) -> anyhow::Result<Value> {
     let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
     if let Some(char_ref) = session_lock.character() {
+        let decoder = &session_lock.item_property_decoder;
         Ok(serde_json::to_value(
-            char_ref.get_spells_state(&game_data_lock),
+            char_ref.get_spells_state(&game_data_lock, decoder),
         )?)
     } else {
         Err(anyhow::anyhow!("No character is currently loaded."))

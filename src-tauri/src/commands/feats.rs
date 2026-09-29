@@ -535,6 +535,7 @@ pub(super) fn build_feat_list(
         owned_feats.insert(entry.feat_id);
     }
 
+    let caster = crate::character::CasterProgress::default();
     let mut all_feats: Vec<FeatInfo> = Vec::new();
     let mut seen_names: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
@@ -558,6 +559,7 @@ pub(super) fn build_feat_list(
             &epithet_feats,
             &feat_sources,
             &owned_feats,
+            &caster,
         ) {
             if feat_info.label.is_empty()
                 || feat_info.label.starts_with("****")

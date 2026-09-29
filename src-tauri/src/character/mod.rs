@@ -42,8 +42,8 @@ pub use combat_summary::{
 };
 pub use error::CharacterError;
 pub use feats::{
-    DomainInfo, FeatAvailability, FeatCategory, FeatEntry, FeatInfo, FeatSlots, FeatSource,
-    FeatSummary, FeatType, FeatsState, PrerequisiteResult,
+    CasterProgress, DomainInfo, FeatAvailability, FeatCategory, FeatEntry, FeatInfo, FeatSlots,
+    FeatSource, FeatSummary, FeatType, FeatsState, PrerequisiteResult,
 };
 pub use identity::{Alignment, resolve_localized_name, resolved_full_name};
 pub(crate) use inventory::typed_stack_size;
@@ -63,12 +63,12 @@ pub use item_appearance::{
 pub use overview::OverviewState;
 pub use pets::{PetSlot, PetTypeOption, PetsState};
 pub use race::{SizeCategory, SubraceInfo};
-pub use save_summary::{SaveBreakdown, SaveChange, SaveCheck, SaveSummary, SaveType, SavingThrows};
+pub use save_summary::{SaveBreakdown, SaveChange, SaveSummary, SaveType, SavingThrows};
 pub use saves::SaveBonuses;
 pub use skills::{ABLE_LEARNER_FEAT_ID, SkillPointsSummary, SkillSummaryEntry};
 pub use spells::{
     AbilitySpellEntry, CasterClassSummary, KnownSpellEntry, MAX_SPELL_LEVEL, MemorizedSpellEntry,
-    MemorizedSpellRaw, MetamagicFeat, SpellDetails, SpellSummary, SpellcastingClass, SpellsState,
+    MemorizedSpellRaw, SpellDetails, SpellSummary, SpellcastingClass, SpellsState,
     is_displayable_spell, is_mod_prefixed_name,
 };
 pub use types::*;

@@ -148,8 +148,8 @@ async fn extract_storm_campaign_character() {
         ("Will", &saves.will),
     ] {
         println!(
-            "  {}: {:>3} = base {} + ability {} + equip {} + feat {} + racial {} + class {} + misc {}",
-            name, s.total, s.base, s.ability, s.equipment, s.feat, s.racial, s.class_bonus, s.misc
+            "  {}: {:>3} = base {} + ability {} + equip {} + feat {} + class {} + misc {}",
+            name, s.total, s.base, s.ability, s.equipment, s.feat, s.class_bonus, s.misc
         );
     }
 

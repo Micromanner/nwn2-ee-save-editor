@@ -333,6 +333,7 @@ pub async fn get_feats_state(state: State<'_, AppState>) -> CommandResult<FeatsS
 
 #[tauri::command]
 pub async fn get_spells_state(state: State<'_, AppState>) -> CommandResult<SpellsState> {
+    super::inventory::ensure_decoder_initialized(&state).await;
     let session = state.session.read();
     let character = session
         .character
@@ -340,5 +341,5 @@ pub async fn get_spells_state(state: State<'_, AppState>) -> CommandResult<Spell
         .ok_or(CommandError::NoCharacterLoaded)?;
     let game_data = state.game_data.read();
 
-    Ok(character.get_spells_state(&game_data))
+    Ok(character.get_spells_state(&game_data, &session.item_property_decoder))
 }

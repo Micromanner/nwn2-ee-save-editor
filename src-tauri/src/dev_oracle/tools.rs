@@ -376,7 +376,7 @@ async fn engine_check(state: &AppState, args: &Value) -> Result<Value, String> {
         let game_data = state.game_data.read();
         let session = state.session.read();
         let decoder = &session.item_property_decoder;
-        let spells = stripped.get_spells_state(&game_data);
+        let spells = stripped.get_spells_state(&game_data, decoder);
         let casters = spells
             .spellcasting_classes
             .iter()

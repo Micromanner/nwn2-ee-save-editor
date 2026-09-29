@@ -1503,7 +1503,7 @@ impl Character {
     /// Caster levels prestige classes add to the base class `class_id`: every prestige level
     /// flagged in its `BonusSpellcasterLevelTable` counts for the base class whose
     /// spellcasting feat (`BonusCasterFeatByClassMap`) the character took.
-    fn prestige_bonus_caster_levels(&self, class_id: i32, game_data: &GameData) -> i32 {
+    pub(crate) fn prestige_bonus_caster_levels(&self, class_id: i32, game_data: &GameData) -> i32 {
         let Some(classes_table) = game_data.get_table("classes") else {
             return 0;
         };
@@ -1545,102 +1545,45 @@ impl Character {
 
     /// Highest caster level among the character's spellcasting classes of the
     /// requested type (true = arcane, false = divine, None = any).
-    fn caster_level(&self, want_arcane: Option<bool>, game_data: &GameData) -> i32 {
-        let Some(classes_table) = game_data.get_table("classes") else {
-            return 0;
-        };
-        let Some(class_list) = self.get_list("ClassList") else {
-            return 0;
-        };
-
-        let mut best = 0;
-        for entry in class_list {
-            let Some(class_id) = entry.get("Class").and_then(gff_value_to_i32) else {
-                continue;
-            };
-            let class_level = entry
-                .get("ClassLevel")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0);
-            let caster_level = class_level + self.prestige_bonus_caster_levels(class_id, game_data);
-            let Some(class_row) = classes_table.get_by_id(class_id) else {
-                continue;
-            };
-            if !row_bool(&class_row, "spellcaster", false) {
-                continue;
-            }
-            let type_matches = match want_arcane {
-                Some(true) => row_bool(&class_row, "hasarcane", false),
-                Some(false) => row_bool(&class_row, "hasdivine", false),
-                None => true,
-            };
-            if type_matches {
-                best = best.max(caster_level);
-            }
-        }
-        best
+    pub(crate) fn caster_level(&self, want_arcane: Option<bool>, game_data: &GameData) -> i32 {
+        self.casting_classes(want_arcane, game_data)
+            .map(|class_id| self.get_caster_level(class_id, game_data))
+            .max()
+            .unwrap_or(0)
     }
 
     /// Highest spell level the character can cast, from each casting class's
     /// spell gain table at its current caster level.
-    fn max_castable_spell_level(&self, want_arcane: Option<bool>, game_data: &GameData) -> i32 {
-        let Some(classes_table) = game_data.get_table("classes") else {
-            return 0;
-        };
-        let Some(class_list) = self.get_list("ClassList") else {
-            return 0;
-        };
+    pub(crate) fn max_castable_spell_level(
+        &self,
+        want_arcane: Option<bool>,
+        game_data: &GameData,
+    ) -> i32 {
+        self.casting_classes(want_arcane, game_data)
+            .filter_map(|class_id| self.max_spell_level(class_id, game_data))
+            .max()
+            .unwrap_or(0)
+    }
 
-        let mut max_spell_level = 0;
-        for entry in class_list {
-            let Some(class_id) = entry.get("Class").and_then(gff_value_to_i32) else {
-                continue;
-            };
-            let class_level = entry
-                .get("ClassLevel")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0);
-            let caster_level = class_level + self.prestige_bonus_caster_levels(class_id, game_data);
-            if caster_level <= 0 {
-                continue;
-            }
-            let Some(class_row) = classes_table.get_by_id(class_id) else {
-                continue;
-            };
-            let type_matches = match want_arcane {
-                Some(true) => row_bool(&class_row, "hasarcane", false),
-                Some(false) => row_bool(&class_row, "hasdivine", false),
-                None => {
-                    row_bool(&class_row, "hasarcane", false)
-                        || row_bool(&class_row, "hasdivine", false)
+    fn casting_classes<'a>(
+        &'a self,
+        want_arcane: Option<bool>,
+        game_data: &'a GameData,
+    ) -> impl Iterator<Item = ClassId> + 'a {
+        let classes_table = game_data.get_table("classes");
+        self.class_entries()
+            .into_iter()
+            .map(|entry| entry.class_id)
+            .filter(move |class_id| {
+                let Some(class_row) = classes_table.and_then(|t| t.get_by_id(class_id.0)) else {
+                    return false;
+                };
+                match want_arcane {
+                    Some(true) => row_bool(&class_row, "hasarcane", false),
+                    Some(false) => row_bool(&class_row, "hasdivine", false),
+                    None => true,
                 }
-            };
-            if !type_matches {
-                continue;
-            }
-            let Some(gain_table_name) = row_str(&class_row, "spellgaintable") else {
-                continue;
-            };
-            let Some(gain_table) = game_data.get_table(&gain_table_name.to_lowercase()) else {
-                continue;
-            };
-            if gain_table.row_count() == 0 {
-                continue;
-            }
-            let row_idx = (caster_level as usize).min(gain_table.row_count()) - 1;
-            for spell_level in (0..=9).rev() {
-                if gain_table
-                    .get_cell(row_idx, &format!("SpellLevel{spell_level}"))
-                    .ok()
-                    .flatten()
-                    .is_some()
-                {
-                    max_spell_level = max_spell_level.max(spell_level);
-                    break;
-                }
-            }
-        }
-        max_spell_level
+            })
     }
 
     fn evaluate_prereq_check(
@@ -2499,44 +2442,51 @@ impl Character {
         }
     }
 
-    /// Sync a spell change to the current level history.
-    pub fn record_spell_change(&mut self, level: i32, spell_id: i32, added: bool) {
-        if !(0..=9).contains(&level) {
-            return;
-        }
-
+    /// Record a learned or forgotten spell in the most recent level of its class, where
+    /// delevelling that class takes it back. A spell learned and then forgotten (or the
+    /// reverse) cancels the earlier entry instead of landing in both lists.
+    pub(crate) fn record_spell_change(
+        &mut self,
+        class_id: ClassId,
+        level: i32,
+        spell_id: u16,
+        added: bool,
+    ) {
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
-        if lvl_stat_list.is_empty() {
+        let Some(entry) = lvl_stat_list
+            .iter_mut()
+            .rev()
+            .find(|e| e.get("LvlStatClass").and_then(gff_value_to_i32) == Some(class_id.0))
+        else {
             return;
-        }
-
-        let last_idx = lvl_stat_list.len() - 1;
-        let entry = &mut lvl_stat_list[last_idx];
-
-        let list_key = if added {
-            format!("KnownList{level}")
-        } else {
-            format!("KnownRemoveList{level}")
         };
 
-        let mut spell_list = entry
-            .get(&list_key)
-            .and_then(|v| match v {
-                GffValue::ListOwned(l) => Some(l.clone()),
-                _ => None,
-            })
-            .unwrap_or_default();
+        let known_key = format!("KnownList{level}");
+        let removed_key = format!("KnownRemoveList{level}");
+        let (list_key, opposite_key) = if added {
+            (known_key, removed_key)
+        } else {
+            (removed_key, known_key)
+        };
+        let is_spell = |s: &IndexMap<String, GffValue<'static>>| {
+            s.get("Spell").and_then(gff_value_to_i32) == Some(i32::from(spell_id))
+        };
 
-        if !spell_list
-            .iter()
-            .any(|s| s.get("Spell").and_then(gff_value_to_i32) == Some(spell_id))
-        {
-            let mut new_spell = IndexMap::new();
-            new_spell.insert("Spell".to_string(), GffValue::Word(spell_id as u16));
-            spell_list.push(new_spell);
+        let mut opposite =
+            super::gff_helpers::extract_list_from_map(entry, &opposite_key).unwrap_or_default();
+        if opposite.iter().any(is_spell) {
+            opposite.retain(|s| !is_spell(s));
+            entry.insert(opposite_key, GffValue::ListOwned(opposite));
+        } else {
+            let mut spell_list =
+                super::gff_helpers::extract_list_from_map(entry, &list_key).unwrap_or_default();
+            if !spell_list.iter().any(is_spell) {
+                let mut new_spell = IndexMap::new();
+                new_spell.insert("Spell".to_string(), GffValue::Word(spell_id));
+                spell_list.push(new_spell);
+            }
+            entry.insert(list_key, GffValue::ListOwned(spell_list));
         }
-
-        entry.insert(list_key, GffValue::ListOwned(spell_list));
         self.set_list("LvlStatList", lvl_stat_list);
     }
 

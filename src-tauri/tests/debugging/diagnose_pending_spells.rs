@@ -49,7 +49,7 @@ async fn diagnose_pending_spells() {
                 }
             }
         }
-        let st = c.get_spells_state(gd);
+        let st = c.get_spells_state(gd, &ctx.decoder);
         println!("  pending {:?}", st.pending_spell_learning);
     }
 }

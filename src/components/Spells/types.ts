@@ -50,11 +50,6 @@ export interface SpellSummary {
     slots_by_level: Record<number, number>;
   }>;
   total_spell_levels: number;
-  metamagic_feats: Array<{
-    id: number;
-    name: string;
-    level_cost: number;
-  }>;
   spell_resistance: number;
 }
 

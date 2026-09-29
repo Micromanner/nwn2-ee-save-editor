@@ -1,6 +1,6 @@
 use crate::character::{
     ArmorClass, AttackBonuses, CombatSummary, Initiative, NaturalArmorChange, SaveChange,
-    SaveCheck, SaveSummary, SaveType, SavingThrows,
+    SaveSummary, SaveType, SavingThrows,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::state::AppState;
@@ -121,43 +121,6 @@ pub async fn set_misc_save_bonus(
 }
 
 #[tauri::command]
-pub async fn check_save(
-    state: State<'_, AppState>,
-    save_type: i32,
-    dc: i32,
-    modifier: i32,
-    take_20: bool,
-) -> CommandResult<SaveCheck> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    let save_enum = match save_type {
-        1 => SaveType::Fortitude,
-        2 => SaveType::Reflex,
-        3 => SaveType::Will,
-        _ => {
-            return Err(CommandError::InvalidValue {
-                field: "save_type".to_string(),
-                expected: "1 (Fortitude), 2 (Reflex), or 3 (Will)".to_string(),
-                actual: save_type.to_string(),
-            });
-        }
-    };
-
-    let base_bonus = match save_enum {
-        SaveType::Fortitude => character.base_fortitude(),
-        SaveType::Reflex => character.base_reflex(),
-        SaveType::Will => character.base_will(),
-    };
-
-    let total_bonus = base_bonus + modifier;
-    Ok(SaveCheck::evaluate(save_enum, total_bonus, dc, take_20))
-}
-
-#[tauri::command]
 pub async fn get_armor_class(state: State<'_, AppState>) -> CommandResult<ArmorClass> {
     super::inventory::ensure_decoder_initialized(&state).await;
     let session = state.session.read();
@@ -219,34 +182,4 @@ pub async fn get_saving_throws(state: State<'_, AppState>) -> CommandResult<Savi
         .ok_or(CommandError::NoCharacterLoaded)?;
     let decoder = &session.item_property_decoder;
     Ok(character.get_saving_throws(&game_data, decoder))
-}
-
-#[tauri::command]
-pub async fn get_save_breakdown(
-    state: State<'_, AppState>,
-    save_type: i32,
-) -> CommandResult<crate::character::SaveBreakdown> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let decoder = &session.item_property_decoder;
-
-    let save_enum = match save_type {
-        1 => SaveType::Fortitude,
-        2 => SaveType::Reflex,
-        3 => SaveType::Will,
-        _ => {
-            return Err(CommandError::InvalidValue {
-                field: "save_type".to_string(),
-                expected: "1 (Fortitude), 2 (Reflex), or 3 (Will)".to_string(),
-                actual: save_type.to_string(),
-            });
-        }
-    };
-
-    Ok(character.get_save_breakdown(&game_data, decoder, save_enum))
 }

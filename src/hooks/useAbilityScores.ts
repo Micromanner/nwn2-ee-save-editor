@@ -43,7 +43,6 @@ export interface CharacterStats {
     abilityMod?: number;
     classMod?: number;
     equipment?: number;
-    racial?: number;
     feat?: number;
   };
   reflex: {
@@ -52,7 +51,6 @@ export interface CharacterStats {
     abilityMod?: number;
     classMod?: number;
     equipment?: number;
-    racial?: number;
     feat?: number;
   };
   will: {
@@ -61,7 +59,6 @@ export interface CharacterStats {
     abilityMod?: number;
     classMod?: number;
     equipment?: number;
-    racial?: number;
     feat?: number;
   };
 }
@@ -264,7 +261,7 @@ export function useAbilityScores(
       };
     };
 
-    const buildSave = (saveData: { total: number; base: number; ability: number; equipment: number; feat: number; racial: number; class_bonus: number; misc: number } | undefined, overrideKey: 'fortitude' | 'reflex' | 'will') => {
+    const buildSave = (saveData: { total: number; base: number; ability: number; equipment: number; feat: number; class_bonus: number; misc: number } | undefined, overrideKey: 'fortitude' | 'reflex' | 'will') => {
       if (!saveData) return defaultStats[overrideKey];
       return {
         base: localStatsOverrides[overrideKey]?.base ?? saveData.misc ?? 0,
@@ -272,7 +269,6 @@ export function useAbilityScores(
         abilityMod: saveData.ability ?? 0,
         classMod: saveData.base ?? 0,
         equipment: saveData.equipment ?? 0,
-        racial: saveData.racial ?? 0,
         feat: (saveData.feat ?? 0) + (saveData.class_bonus ?? 0),
       };
     };

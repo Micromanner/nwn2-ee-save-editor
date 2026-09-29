@@ -83,7 +83,6 @@ export type {
   SpellDetails,
   SpellcastingClass,
   CasterClassSummary,
-  MetamagicFeat,
   KnownSpellEntry,
   MemorizedSpellEntry,
   SpellChangeResult,

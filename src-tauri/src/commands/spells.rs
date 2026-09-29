@@ -24,12 +24,6 @@ pub struct SpellChangeResult {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpellSlots {
-    pub class_id: ClassId,
-    pub slots_by_level: HashMap<i32, i32>,
-}
-
 #[tauri::command]
 pub async fn is_spellcaster(state: State<'_, AppState>, class_id: i32) -> CommandResult<bool> {
     let session = state.session.read();
@@ -43,13 +37,16 @@ pub async fn is_spellcaster(state: State<'_, AppState>, class_id: i32) -> Comman
 
 #[tauri::command]
 pub async fn get_spell_summary(state: State<'_, AppState>) -> CommandResult<SpellSummary> {
+    super::inventory::ensure_decoder_initialized(&state).await;
     let session = state.session.read();
     let game_data = state.game_data.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_spells_state(&game_data).spell_summary)
+    Ok(character
+        .get_spells_state(&game_data, &session.item_property_decoder)
+        .spell_summary)
 }
 
 #[tauri::command]
@@ -80,17 +77,6 @@ pub fn get_class_available_spells(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(character.get_spells_available_to_class(ClassId(class_id), spell_level, &game_data))
-}
-
-#[tauri::command]
-pub fn calculate_metamagic_cost(state: State<'_, AppState>, metamagic: u8) -> CommandResult<i32> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.calculate_metamagic_cost(metamagic, &game_data))
 }
 
 #[tauri::command]
@@ -137,64 +123,6 @@ pub async fn get_spell_details(
         .ok_or_else(|| CommandError::NotFound {
             item: format!("Spell {spell_id}"),
         })
-}
-
-#[tauri::command]
-pub async fn get_max_castable_spell_level(
-    state: State<'_, AppState>,
-    class_id: i32,
-) -> CommandResult<i32> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let slots = character.calculate_spell_slots(ClassId(class_id), &game_data);
-
-    for level in (0..=9).rev() {
-        if slots.get(level as usize).copied().unwrap_or(0) > 0 {
-            return Ok(level);
-        }
-    }
-    Ok(0)
-}
-
-#[tauri::command]
-pub async fn calculate_spell_slots(
-    state: State<'_, AppState>,
-) -> CommandResult<HashMap<ClassId, SpellSlots>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    let mut result = HashMap::new();
-    for class_entry in character.class_entries() {
-        if !character.is_spellcaster(class_entry.class_id, &game_data) {
-            continue;
-        }
-
-        let slots_vec = character.calculate_spell_slots(class_entry.class_id, &game_data);
-        let mut slots_by_level = HashMap::new();
-        for (level, count) in slots_vec.iter().enumerate() {
-            if *count > 0 {
-                slots_by_level.insert(level as i32, *count);
-            }
-        }
-
-        result.insert(
-            class_entry.class_id,
-            SpellSlots {
-                class_id: class_entry.class_id,
-                slots_by_level,
-            },
-        );
-    }
-
-    Ok(result)
 }
 
 #[tauri::command]
@@ -291,7 +219,7 @@ pub async fn prepare_spell(
     class_index: usize,
     spell_level: i32,
     spell_id: i32,
-    metamagic: u8,
+    metamagic: u32,
     ready: bool,
 ) -> CommandResult<SpellChangeResult> {
     let game_data = state.game_data.read();
@@ -313,7 +241,6 @@ pub async fn prepare_spell(
         spell_id: SpellId(spell_id),
         meta_magic: metamagic,
         ready,
-        is_domain: false,
     };
 
     match character.add_memorized_spell(class_index, spell_level, spell) {

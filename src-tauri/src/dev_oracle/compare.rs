@@ -117,7 +117,7 @@ pub fn rows(editor: &EditorSide, engine: &EngineCheck) -> Vec<Row> {
         // The engine counts racial feats, Divine Grace and similar as one feat bonus.
         push(
             format!("save.{name}.feat_racial_class"),
-            ed.feat + ed.racial + ed.class_bonus,
+            ed.feat + ed.class_bonus,
             en.feat,
         );
     }
