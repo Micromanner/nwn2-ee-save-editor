@@ -3,7 +3,7 @@ import { Button } from '@blueprintjs/core';
 import { GiCancel, GiCheckMark } from 'react-icons/gi';
 import { T, FEAT_TYPE_COLORS } from '../theme';
 import { GameIcon } from '../shared/GameIcon';
-import type { FeatInfo, BackendFeatPrerequisites } from '@/components/Feats/types';
+import type { FeatInfo, PrereqValue } from '@/components/Feats/types';
 import { FEAT_TYPE_LABELS, getFeatTypeLabel } from '@/utils/featUtils';
 import { DetailSection, FormattedDescription } from '../shared';
 import { display } from '@/utils/dataHelpers';
@@ -19,11 +19,17 @@ interface FeatDetailProps {
 }
 
 
-function isBackendPrerequisites(prereqs: unknown): prereqs is BackendFeatPrerequisites {
-  if (!prereqs || typeof prereqs !== 'object') return false;
-  const p = prereqs as Record<string, unknown>;
-  return 'feats' in p || 'abilities' in p || 'bab' in p || 'level' in p || 'skills' in p;
+function PrereqRow({ met, label, detail }: { met: boolean; label: string; detail?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <GameIcon icon={met ? GiCheckMark : GiCancel} size={14} style={{ color: met ? T.positive : T.negative }} />
+      <span style={{ color: T.text }}>{label}</span>
+      {detail && <span style={{ color: T.textMuted }}>{detail}</span>}
+    </div>
+  );
 }
+
+const ratio = (v: PrereqValue) => `(${v.current}/${v.required})`;
 
 export function FeatDetail({ feat, isOwned, onAdd, onRemove }: FeatDetailProps) {
   const t = useTranslations();
@@ -52,14 +58,28 @@ export function FeatDetail({ feat, isOwned, onAdd, onRemove }: FeatDetailProps) 
 
   const labelKey = getFeatTypeLabel(feat.type);
   const typeColor = FEAT_TYPE_COLORS[labelKey] || T.textMuted;
-  const prereqs = isBackendPrerequisites(feat.prerequisites) ? feat.prerequisites : null;
+  const prereqs = feat.prerequisites;
 
-  const hasPrereqs = prereqs && (
-    (prereqs.feats?.length ?? 0) > 0 ||
-    (prereqs.abilities?.length ?? 0) > 0 ||
-    prereqs.bab !== null ||
-    prereqs.level !== null ||
-    (prereqs.skills?.length ?? 0) > 0
+  const valuePrereqs: [PrereqValue | null, (v: PrereqValue) => string][] = [
+    [prereqs.bab, v => `${t('classes.bab')} +${v.required}`],
+    [prereqs.level, v => `${t('classes.level')} ${v.required}`],
+    [prereqs.max_level, v => t('feats.maxLevel', { level: v.required }) as string],
+    [prereqs.epic, () => t('feats.epicCharacter') as string],
+    [prereqs.base_fortitude, v => `${t('feats.baseFortitude')} +${v.required}`],
+    [prereqs.caster_level, v => `${t('feats.casterLevel')} ${v.required}`],
+    [prereqs.spell_level, v => `${t('feats.spellLevel')} ${v.required}`],
+  ];
+
+  const hasAutoResolvable =
+    prereqs.feats.some(p => !p.met) || prereqs.abilities.some(p => !p.met);
+
+  const hasPrereqs = (
+    prereqs.feats.length > 0 ||
+    prereqs.any_feats.length > 0 ||
+    prereqs.abilities.length > 0 ||
+    valuePrereqs.some(([v]) => v !== null) ||
+    prereqs.class_level !== null ||
+    prereqs.skills.length > 0
   );
 
   return (
@@ -118,63 +138,40 @@ export function FeatDetail({ feat, isOwned, onAdd, onRemove }: FeatDetailProps) 
         );
       })()}
 
-      {feat.missing_requirements && feat.missing_requirements.length > 0 && (
-        <DetailSection title={t('feats.missingRequirements')}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {feat.missing_requirements.map((req, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <GameIcon icon={GiCancel} size={14} style={{ color: T.negative }} />
-                <span style={{ color: T.text }}>{req}</span>
-              </div>
-            ))}
-          </div>
-        </DetailSection>
-      )}
-
-      {hasPrereqs && prereqs && (
+      {hasPrereqs && (
         <DetailSection title={t('feats.prerequisites')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {prereqs.feats?.map(p => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <GameIcon icon={p.met ? GiCheckMark : GiCancel} size={14} style={{ color: p.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>{p.name}</span>
-              </div>
+            {prereqs.feats.map(p => (
+              <PrereqRow key={p.id} met={p.met} label={p.name} />
             ))}
-            {prereqs.abilities?.map((p, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <GameIcon icon={p.met ? GiCheckMark : GiCancel} size={14} style={{ color: p.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>{t(`abilityScores.short.${p.ability.slice(0, 3).toLowerCase()}`)} {p.required}</span>
-                <span style={{ color: T.textMuted }}>({p.current}/{p.required})</span>
-              </div>
-            ))}
-            {prereqs.bab && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <GameIcon icon={prereqs.bab.met ? GiCheckMark : GiCancel} size={14} style={{ color: prereqs.bab.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>{t('classes.bab')} +{prereqs.bab.required}</span>
-                <span style={{ color: T.textMuted }}>({prereqs.bab.current}/{prereqs.bab.required})</span>
-              </div>
+            {prereqs.any_feats.length > 0 && (
+              <PrereqRow
+                met={prereqs.any_feats.some(p => p.met)}
+                label={t('feats.oneOf', { feats: prereqs.any_feats.map(p => p.name).join(', ') }) as string}
+              />
             )}
-            {prereqs.level && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <GameIcon icon={prereqs.level.met ? GiCheckMark : GiCancel} size={14} style={{ color: prereqs.level.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>{t('classes.level')} {prereqs.level.required}</span>
-                <span style={{ color: T.textMuted }}>({prereqs.level.current}/{prereqs.level.required})</span>
-              </div>
-            )}
-            {prereqs.skills?.map((p, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <GameIcon icon={p.met ? GiCheckMark : GiCancel} size={14} style={{ color: p.met ? T.positive : T.negative }} />
-                <span style={{ color: T.text }}>{p.skill} {p.required} {t('feats.ranks')}</span>
-                <span style={{ color: T.textMuted }}>({p.current}/{p.required})</span>
-              </div>
+            {prereqs.abilities.map((p, i) => (
+              <PrereqRow
+                key={i}
+                met={p.met}
+                label={`${t(`abilityScores.short.${p.ability.slice(0, 3).toLowerCase()}`)} ${p.required}`}
+                detail={ratio(p)}
+              />
             ))}
-            {!isOwned && onAdd && (
-              prereqs.feats?.some(p => !p.met) ||
-              prereqs.abilities?.some(p => !p.met) ||
-              (prereqs.bab && !prereqs.bab.met) ||
-              (prereqs.level && !prereqs.level.met) ||
-              prereqs.skills?.some(p => !p.met)
-            ) && (
+            {prereqs.class_level && (
+              <PrereqRow
+                met={prereqs.class_level.met}
+                label={`${prereqs.class_level.class_name} ${prereqs.class_level.required}`}
+                detail={ratio(prereqs.class_level)}
+              />
+            )}
+            {valuePrereqs.map(([v, label], i) => v && (
+              <PrereqRow key={i} met={v.met} label={label(v)} detail={ratio(v)} />
+            ))}
+            {prereqs.skills.map((p, i) => (
+              <PrereqRow key={i} met={p.met} label={`${p.skill} ${p.required} ${t('feats.ranks')}`} detail={ratio(p)} />
+            ))}
+            {!isOwned && onAdd && hasAutoResolvable && (
               <div className="t-sm" style={{ color: T.textMuted, fontStyle: 'italic', marginTop: 4 }}>
                 {t('feats.autoAddHint')}
               </div>

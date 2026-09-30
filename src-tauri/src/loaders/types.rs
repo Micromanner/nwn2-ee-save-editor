@@ -77,6 +77,8 @@ impl LoadedTable {
 pub struct GameData {
     pub tables: HashMap<String, LoadedTable>,
     pub strings: Arc<std::sync::RwLock<TLKParser>>,
+    /// English base talk table when `strings` is another language.
+    pub english_strings: Option<Arc<std::sync::RwLock<TLKParser>>>,
     /// The loaded save's module TLK (`Mod_CustomTlk`), if it has one.
     pub custom_strings: Option<Arc<std::sync::RwLock<TLKParser>>>,
     pub rule_detector: Option<RuleDetector>,
@@ -88,6 +90,7 @@ impl GameData {
         Self {
             tables: HashMap::new(),
             strings,
+            english_strings: None,
             custom_strings: None,
             rule_detector: None,
             priority_tables: Vec::new(),
@@ -108,6 +111,7 @@ impl GameData {
 
     pub fn clear(&mut self) {
         self.tables.clear();
+        self.english_strings = None;
         self.custom_strings = None;
         self.rule_detector = None;
         self.priority_tables.clear();
@@ -120,6 +124,15 @@ impl GameData {
     pub fn get_string(&self, str_ref: i32) -> Option<String> {
         crate::parsers::tlk::resolve_strref(
             Some(&self.strings),
+            self.custom_strings.as_deref(),
+            str_ref,
+        )
+    }
+
+    /// A string as English text, for game text the editor parses (feat bonuses).
+    pub fn get_english_string(&self, str_ref: i32) -> Option<String> {
+        crate::parsers::tlk::resolve_strref(
+            Some(self.english_strings.as_deref().unwrap_or(&self.strings)),
             self.custom_strings.as_deref(),
             str_ref,
         )
@@ -196,4 +209,52 @@ pub struct LoadingStats {
     pub total_rows: usize,
     pub load_time_ms: f64,
     pub priority_tables_loaded: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parsers::tlk::TLKStringEntry;
+    use crate::parsers::tlk::types::CachedString;
+    use std::sync::RwLock;
+
+    fn tlk_with(text: &str) -> Arc<RwLock<TLKParser>> {
+        let mut tlk = TLKParser::default();
+        tlk.entries.push(TLKStringEntry {
+            flags: 1,
+            sound_resref: None,
+            volume_variance: 0,
+            pitch_variance: 0,
+            data_offset: 0,
+            string_size: 0,
+        });
+        let symbol = tlk.interner.get_or_intern(text);
+        tlk.string_cache.insert(
+            0,
+            CachedString {
+                symbol,
+                byte_length: 0,
+            },
+        );
+        Arc::new(RwLock::new(tlk))
+    }
+
+    #[test]
+    fn english_string_reads_english_tlk_when_base_is_localized() {
+        let mut game_data = GameData::new(tlk_with("+2 Bonus auf Zähigkeitswürfe"));
+        assert_eq!(
+            game_data.get_english_string(0).as_deref(),
+            Some("+2 Bonus auf Zähigkeitswürfe")
+        );
+
+        game_data.english_strings = Some(tlk_with("+2 bonus on Fortitude saving throws"));
+        assert_eq!(
+            game_data.get_english_string(0).as_deref(),
+            Some("+2 bonus on Fortitude saving throws")
+        );
+        assert_eq!(
+            game_data.get_string(0).as_deref(),
+            Some("+2 Bonus auf Zähigkeitswürfe")
+        );
+    }
 }

@@ -512,7 +512,6 @@
   "feats": {
     "selectFeatDetail": "Wybierz atut, aby zobaczyć szczegóły",
     "description": "Opis",
-    "missingRequirements": "Brakujące Wymagania",
     "prerequisites": "Sprawdzanie Wymagań",
     "autoAddHint": "Brakujące wymagania zostaną rozwiązane automatycznie podczas dodawania.",
     "protected": "chroniony",
@@ -528,6 +527,12 @@
     "customFeats": "Atuty Niestandardowe",
     "protectedFeats": "Atuty Chronione",
     "ranks": "poziomy",
+    "oneOf": "Jeden z: {feats}",
+    "maxLevel": "Poziom {level} lub niższy",
+    "epicCharacter": "Postać epicka (poziom 21+)",
+    "baseFortitude": "Bazowa Wytrwałość",
+    "casterLevel": "Poziom czarującego",
+    "spellLevel": "Krąg czarów",
     "categories": {
       "general": "Ogólny",
       "proficiency": "Biegłość",

@@ -396,6 +396,20 @@ impl NWN2Paths {
         Some(localized.unwrap_or_else(|| game.join("dialog.tlk")))
     }
 
+    /// The English base talk table, whatever the editor language.
+    pub fn english_dialog_tlk(&self) -> Option<PathBuf> {
+        let game = self.game_folder.as_ref()?;
+        let localized = game
+            .join("localization")
+            .join(GameLanguage::English.localization_folder())
+            .join("dialog.tlk");
+        Some(if localized.is_file() {
+            localized
+        } else {
+            game.join("dialog.tlk")
+        })
+    }
+
     /// `localization/<language>` for the editor language when it exists,
     /// else the English one.
     pub fn localization_folder(&self) -> Option<PathBuf> {

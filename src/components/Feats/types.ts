@@ -1,21 +1,5 @@
 // Shared type definitions for the Feats system
 
-export interface Prerequisite {
-  type: 'ability' | 'feat' | 'class' | 'level' | 'bab' | 'spell_level';
-  description: string;
-  required_value?: number;
-  current_value?: number;
-  feat_id?: number;
-  class_id?: number;
-  met: boolean;
-}
-
-export interface DetailedPrerequisites {
-  requirements: Prerequisite[];
-  met: string[];
-  unmet: string[];
-}
-
 export interface PrereqFeat {
   id: number;
   name: string;
@@ -35,6 +19,10 @@ export interface PrereqValue {
   met: boolean;
 }
 
+export interface PrereqClassLevel extends PrereqValue {
+  class_name: string;
+}
+
 export interface PrereqSkill {
   skill: string;
   required: number;
@@ -44,9 +32,14 @@ export interface PrereqSkill {
 
 export interface BackendFeatPrerequisites {
   feats: PrereqFeat[];
+  any_feats: PrereqFeat[];
   abilities: PrereqAbility[];
   bab: PrereqValue | null;
   level: PrereqValue | null;
+  class_level: PrereqClassLevel | null;
+  max_level: PrereqValue | null;
+  epic: PrereqValue | null;
+  base_fortitude: PrereqValue | null;
   caster_level: PrereqValue | null;
   spell_level: PrereqValue | null;
   skills: PrereqSkill[];
@@ -63,11 +56,8 @@ export interface FeatInfo {
   custom: boolean;
   description?: string;
   icon?: string;
-  prerequisites?: BackendFeatPrerequisites | Record<string, unknown>;
-  can_take?: boolean;
-  missing_requirements?: string[];
+  prerequisites: BackendFeatPrerequisites;
   has_feat?: boolean;
-  detailed_prerequisites?: DetailedPrerequisites;
 }
 
 export interface FeatsState {
@@ -109,13 +99,6 @@ export interface SubcategoryInfo {
   id: string;
   name: string;
   count: number;
-}
-
-export interface FeatManagementCallbacks {
-  onDetails: (feat: FeatInfo) => void;
-  onAdd: (featId: number) => void;
-  onRemove: (featId: number) => void;
-  onValidate?: (featId: number) => void;
 }
 
 // Feat type constants based on NWN2

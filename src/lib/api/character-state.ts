@@ -249,8 +249,6 @@ export const CharacterStateAPI = {
   // Feats
   addFeat: (featId: FeatId) => invoke<void>('add_feat', { featId }),
   removeFeat: (featId: FeatId) => invoke<void>('remove_feat', { featId }),
-  swapFeat: (oldFeatId: FeatId, newFeatId: FeatId) =>
-    invoke<void>('swap_feat', { oldFeatId, newFeatId }),
 
   // Spells
   addKnownSpell: (classIndex: number, spellLevel: number, spellId: SpellId) =>

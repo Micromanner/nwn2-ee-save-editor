@@ -1,5 +1,7 @@
 use super::super::common::{create_test_context, load_test_gff};
-use app_lib::character::{AbilityIndex, BackgroundId, Character, DomainId, FeatId, FeatSource};
+use app_lib::character::{
+    AbilityIndex, BackgroundId, Character, DomainId, FeatId, FeatSource, domain_epithet_feats,
+};
 use app_lib::loaders::types::LoadedTable;
 use app_lib::parsers::gff::GffParser;
 
@@ -315,13 +317,15 @@ async fn test_feat_slots_calculation() {
             "Total should equal general + bonus"
         );
 
-        let expected_open = slots.total_slots - slots.filled_slots;
-        if slots.open_slots != expected_open {
-            println!(
-                "  NOTE: open_slots ({}) differs from total-filled ({}), may be clamped or adjusted",
-                slots.open_slots, expected_open
-            );
-        }
+        assert_eq!(
+            slots.open_slots,
+            slots.total_slots - slots.filled_slots,
+            "{name}: open slots must be the unfilled ones"
+        );
+        assert_eq!(
+            slots.open_slots, 0,
+            "{name}: a game-written character has every feat slot filled"
+        );
     }
 }
 
@@ -340,27 +344,19 @@ async fn test_feat_prerequisite_validation() {
     );
 
     let power_attack_id = FeatId(28);
-    let result = character.validate_feat_prerequisites(power_attack_id, game_data);
-    println!(
-        "Power Attack (Feat 28): can_take={}, missing={:?}",
-        result.can_take, result.missing_requirements
-    );
-
     character.set_ability(AbilityIndex::STR, 8).unwrap();
-    let result_low_str = character.validate_feat_prerequisites(power_attack_id, game_data);
-    println!(
-        "Power Attack with STR 8: can_take={}, missing={:?}",
-        result_low_str.can_take, result_low_str.missing_requirements
-    );
+    let info = character
+        .get_feat_info(power_attack_id, game_data)
+        .expect("Power Attack exists");
+    let strength = info
+        .prerequisites
+        .abilities
+        .iter()
+        .find(|a| a.ability == "Strength")
+        .expect("Power Attack requires Strength");
 
-    assert!(
-        !result_low_str.can_take,
-        "Power Attack should fail with STR 8"
-    );
-    assert!(
-        !result_low_str.missing_requirements.is_empty(),
-        "Should have missing requirements listed"
-    );
+    assert_eq!(strength.required, 13);
+    assert!(!strength.met, "Power Attack should be unmet with STR 8");
 }
 
 #[tokio::test]
@@ -672,7 +668,9 @@ async fn test_protected_feats() {
     let mut protected_count = 0;
 
     for entry in &entries {
-        let is_protected = character.is_feat_protected(entry.feat_id, game_data);
+        let is_protected = character
+            .get_feat_info(entry.feat_id, game_data)
+            .is_some_and(|info| info.is_protected);
         if is_protected {
             protected_count += 1;
         }
@@ -713,16 +711,19 @@ async fn test_domain_feats() {
             println!("  DomainId({})", domain_id.0);
         }
 
-        let feat_ids = character.feat_ids();
-        let mut domain_feat_count = 0;
+        let epithets = domain_epithet_feats(game_data);
+        let epithet_count = character
+            .feat_ids()
+            .iter()
+            .filter(|f| epithets.contains(&f.0))
+            .count();
 
-        for feat_id in &feat_ids {
-            if character.is_domain_feat(*feat_id, game_data) {
-                domain_feat_count += 1;
-            }
-        }
-
-        println!("  {domain_feat_count} domain-related feats detected");
+        println!("  {epithet_count} domain epithet feats detected");
+        assert_eq!(
+            epithet_count,
+            domains.len(),
+            "every domain in Domain1/Domain2 should have its epithet feat"
+        );
     }
 }
 
@@ -981,101 +982,6 @@ async fn test_feat_name_resolution() {
     );
 }
 
-#[tokio::test]
-async fn test_feat_uses() {
-    println!("\n=== Feat Uses ===");
-
-    let mut character = load_character("occidiooctavon/occidiooctavon4.bic");
-    let entries = character.feat_entries();
-
-    println!(
-        "{}: Checking uses for {} feats",
-        character.first_name(),
-        entries.len()
-    );
-
-    let feats_with_uses: Vec<_> = entries.iter().filter(|e| e.uses.is_some()).collect();
-    println!("  {} feats have uses defined", feats_with_uses.len());
-
-    for entry in feats_with_uses.iter().take(5) {
-        println!(
-            "    FeatId({}): {} uses",
-            entry.feat_id.0,
-            entry.uses.unwrap_or(0)
-        );
-
-        let uses_via_method = character.get_feat_uses(entry.feat_id);
-        assert_eq!(
-            uses_via_method, entry.uses,
-            "get_feat_uses should match entry.uses"
-        );
-    }
-
-    if let Some(first_feat) = entries.first() {
-        let new_uses = 5;
-        let success = character.set_feat_uses(first_feat.feat_id, new_uses);
-        if success {
-            let retrieved = character.get_feat_uses(first_feat.feat_id);
-            assert_eq!(
-                retrieved,
-                Some(new_uses),
-                "set_feat_uses should update the value"
-            );
-            println!(
-                "  set_feat_uses for FeatId({}) = {} verified",
-                first_feat.feat_id.0, new_uses
-            );
-        }
-    }
-}
-
-#[tokio::test]
-async fn test_general_feat_slots_calculation() {
-    println!("\n=== General Feat Slots Calculation ===");
-
-    let fixtures = [
-        ("occidiooctavon/occidiooctavon1.bic", "Occidio L1"),
-        ("occidiooctavon/occidiooctavon4.bic", "Occidio L30"),
-        ("qaraofblacklake/qaraofblacklake4.bic", "Qara L30"),
-    ];
-
-    for (path, name) in fixtures {
-        let character = load_character(path);
-        let general_slots = character.calculate_general_feat_slots();
-        let total_level = character.total_level();
-
-        println!("{name}: Level {total_level} -> {general_slots} general feat slots");
-
-        let base_slots = 1 + (total_level / 3);
-        assert!(
-            general_slots >= base_slots,
-            "{name} should have at least {base_slots} general slots (1 + level/3)"
-        );
-    }
-}
-
-#[tokio::test]
-async fn test_bonus_feat_slots_calculation() {
-    let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
-
-    println!("\n=== Bonus Feat Slots Calculation ===");
-
-    let fixtures = [
-        ("occidiooctavon/occidiooctavon4.bic", "Occidio L30"),
-        ("ryathstrongarm/ryathstrongarm4.bic", "Ryath L30"),
-    ];
-
-    for (path, name) in fixtures {
-        let character = load_character(path);
-        let bonus_slots = character.calculate_bonus_feat_slots(game_data);
-
-        println!("{name}: {bonus_slots} bonus feat slots from classes");
-
-        assert!(bonus_slots >= 0, "Bonus slots should be non-negative");
-    }
-}
-
 /// Locate a usable (non-None, non-REMOVED) background row with a DisplayFeat we can exercise.
 fn first_selectable_background(table: &LoadedTable) -> Option<(BackgroundId, FeatId)> {
     for row in 1..table.row_count() {
@@ -1231,4 +1137,134 @@ async fn test_remove_background_clears_field_and_feat() {
         removed.contains(&feat_id),
         "remove_background should report the removed feat"
     );
+}
+
+#[tokio::test]
+async fn test_add_background_replaces_previous_background() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let bg_table = ctx
+        .loader
+        .get_table("backgrounds")
+        .expect("backgrounds.2da should be loaded");
+
+    let selectable: Vec<(BackgroundId, FeatId)> = (1..bg_table.row_count())
+        .filter(|&row| cell_value(bg_table, row, "REMOVED").as_deref() != Some("1"))
+        .filter_map(|row| {
+            cell_int(bg_table, row, "DisplayFeat").map(|f| (BackgroundId(row as i32), FeatId(f)))
+        })
+        .take(2)
+        .collect();
+    let [(first_bg, first_feat), (second_bg, second_feat)] = selectable[..] else {
+        panic!("need two selectable backgrounds");
+    };
+
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    character.remove_background(game_data).ok();
+    character.add_background(first_bg, game_data).unwrap();
+    character.add_background(second_bg, game_data).unwrap();
+
+    assert_eq!(character.get_character_background(), Some(second_bg));
+    assert!(character.has_feat(second_feat));
+    assert!(
+        !character.has_feat(first_feat),
+        "the previous background's history feat must be removed"
+    );
+}
+
+#[tokio::test]
+async fn test_add_feat_raises_ability_by_effective_score() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let power_attack = FeatId(28);
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    if character.has_feat(power_attack) {
+        character.remove_feat(power_attack).unwrap();
+    }
+    let racial_str = character
+        .get_effective_abilities(game_data)
+        .get(AbilityIndex::STR)
+        - character.base_scores().get(AbilityIndex::STR);
+
+    character.set_ability(AbilityIndex::STR, 8).unwrap();
+    let result = character
+        .add_feat_with_prerequisites(power_attack, FeatSource::Manual, game_data)
+        .unwrap();
+
+    assert!(character.has_feat(power_attack));
+    assert_eq!(
+        character
+            .get_effective_abilities(game_data)
+            .get(AbilityIndex::STR),
+        13,
+        "effective STR must land exactly on Power Attack's minimum"
+    );
+    assert_eq!(result.auto_modified_abilities.len(), 1);
+    assert_eq!(result.auto_modified_abilities[0].new_value, 13 - racial_str);
+}
+
+#[tokio::test]
+async fn test_add_feat_adds_prerequisite_chain_in_order() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let (power_attack, cleave) = (FeatId(28), FeatId(6));
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    for feat in [cleave, power_attack] {
+        if character.has_feat(feat) {
+            character.remove_feat(feat).unwrap();
+        }
+    }
+
+    let result = character
+        .add_feat_with_prerequisites(cleave, FeatSource::Manual, game_data)
+        .unwrap();
+
+    assert!(character.has_feat(cleave) && character.has_feat(power_attack));
+    let added: Vec<FeatId> = result.auto_added_feats.iter().map(|f| f.feat_id).collect();
+    assert_eq!(added, vec![power_attack]);
+}
+
+#[tokio::test]
+async fn test_feat_prerequisites_read_class_level_and_skills() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let character = load_character("occidiooctavon/occidiooctavon1.bic");
+
+    let weapon_specialization = character
+        .get_feat_info(FeatId(128), game_data)
+        .expect("Weapon Specialization (Dagger) exists");
+    let class_level = weapon_specialization
+        .prerequisites
+        .class_level
+        .expect("MinLevelClass makes this a class level requirement");
+    assert_eq!(class_level.level.required, 4);
+    assert!(!class_level.level.met, "a level 1 paladin has no Fighter 4");
+    assert!(weapon_specialization.prerequisites.level.is_none());
+
+    let skill_focus_perform = character
+        .get_feat_info(FeatId(184), game_data)
+        .expect("Skill Focus (Perform) exists");
+    assert_eq!(skill_focus_perform.prerequisites.skills.len(), 1);
+}
+
+#[tokio::test]
+async fn test_history_feats_replace_each_other() {
+    let ctx = create_test_context().await;
+    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+
+    let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
+    let history = [FeatId(1724), FeatId(1723), FeatId(1725)];
+    for feat in history {
+        let bg = character
+            .find_background_for_feat(feat, game_data)
+            .expect("history feat maps to a background");
+        character.add_background(bg, game_data).unwrap();
+    }
+
+    assert_eq!(character.get_character_background(), Some(BackgroundId(9)));
+    assert!(character.has_feat(FeatId(1725)));
+    assert!(!character.has_feat(FeatId(1724)) && !character.has_feat(FeatId(1723)));
 }

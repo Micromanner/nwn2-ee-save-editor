@@ -54,6 +54,7 @@ pub struct ResourceManager {
     zip_reader: Mutex<ZipContentReader>,
 
     tlk_cache: Option<Arc<StdRwLock<TLKParser>>>,
+    english_tlk: Option<Arc<StdRwLock<TLKParser>>>,
     /// The loaded module's `Mod_CustomTlk`.
     custom_tlk: Option<Arc<StdRwLock<TLKParser>>>,
 
@@ -89,6 +90,7 @@ struct BaseScan {
     icon_file_paths: HashMap<String, PathBuf>,
     icon_dir: Option<PathBuf>,
     tlk: Option<TLKParser>,
+    english_tlk: Option<TLKParser>,
 }
 
 /// The resources and custom TLK of one module, gathered by
@@ -108,6 +110,7 @@ impl ResourceManager {
             paths,
             zip_reader: Mutex::new(ZipContentReader::new()),
             tlk_cache: None,
+            english_tlk: None,
             custom_tlk: None,
             tda_cache: DashMap::new(),
             module_content: None,
@@ -140,6 +143,7 @@ impl ResourceManager {
         self.insert_entries(scan.entries);
         self.icon_file_paths = scan.icon_file_paths;
         self.tlk_cache = scan.tlk.map(|tlk| Arc::new(StdRwLock::new(tlk)));
+        self.english_tlk = scan.english_tlk.map(|tlk| Arc::new(StdRwLock::new(tlk)));
 
         info!(
             "Indexed {} data zips: {} 2DAs, {} workshop resources, {} icons from {}",
@@ -409,6 +413,12 @@ impl ResourceManager {
 
     pub fn get_tlk_parser(&self) -> Option<Arc<StdRwLock<TLKParser>>> {
         self.tlk_cache.clone()
+    }
+
+    /// The English base talk table when the base one is another language, for text
+    /// the editor parses as English.
+    pub fn get_english_tlk_parser(&self) -> Option<Arc<StdRwLock<TLKParser>>> {
+        self.english_tlk.clone()
     }
 
     pub fn get_custom_tlk_parser(&self) -> Option<Arc<StdRwLock<TLKParser>>> {
@@ -705,12 +715,30 @@ fn scan_base(paths: &NWN2Paths) -> ResourceManagerResult<BaseScan> {
 
     let (icon_dir, icon_file_paths) = scan_icons(game_folder.as_deref(), &mut entries);
 
+    let (tlk, tlk_path) = load_base_tlk(paths).unzip();
+    // A merged mod TLK replaces the localized one and is English itself.
+    let english_tlk = paths
+        .english_dialog_tlk()
+        .filter(|english| {
+            tlk_path.is_some()
+                && tlk_path == paths.dialog_tlk()
+                && tlk_path.as_ref() != Some(english)
+        })
+        .and_then(|english| match module_loader::load_tlk(&english) {
+            Ok(parser) => Some(parser),
+            Err(e) => {
+                warn!("Failed to parse English TLK {}: {}", english.display(), e);
+                None
+            }
+        });
+
     Ok(BaseScan {
         data_zip_paths,
         entries,
         icon_file_paths,
         icon_dir,
-        tlk: load_base_tlk(paths),
+        tlk,
+        english_tlk,
     })
 }
 
@@ -752,7 +780,7 @@ fn dialog_tlk_in(dir: &Path) -> Option<PathBuf> {
 /// The base talk table. Mods like Kaedrin's PrC Pack ship a merged
 /// `dialog.tlk` into the Documents folder (Nexus install) or their Workshop
 /// item folder; the candidate with the most strings wins.
-fn load_base_tlk(paths: &NWN2Paths) -> Option<TLKParser> {
+fn load_base_tlk(paths: &NWN2Paths) -> Option<(TLKParser, PathBuf)> {
     let mut candidates: Vec<PathBuf> = paths.dialog_tlk().into_iter().collect();
     candidates.extend(paths.documents_folder().and_then(|d| dialog_tlk_in(d)));
     if let Some(workshop_dir) = paths.steam_workshop_folder()
@@ -788,7 +816,7 @@ fn load_base_tlk(paths: &NWN2Paths) -> Option<TLKParser> {
                 best.0.display(),
                 parser.string_count()
             );
-            Some(parser)
+            Some((parser, best.0))
         }
         Err(e) => {
             warn!("Failed to parse TLK {}: {}", best.0.display(), e);

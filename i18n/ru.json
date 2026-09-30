@@ -510,7 +510,6 @@
   "feats": {
     "selectFeatDetail": "Выберите фит, чтобы увидеть детали",
     "description": "Описание",
-    "missingRequirements": "Недостающие требования",
     "prerequisites": "Проверка требований",
     "autoAddHint": "Недостающие требования будут автоматически разрешены при добавлении.",
     "protected": "защищено",
@@ -526,6 +525,12 @@
     "customFeats": "Пользовательские фиты",
     "protectedFeats": "Защищенные фиты",
     "ranks": "ранги",
+    "oneOf": "Одно из: {feats}",
+    "maxLevel": "Уровень {level} или ниже",
+    "epicCharacter": "Эпический персонаж (уровень 21+)",
+    "baseFortitude": "Базовая Стойкость",
+    "casterLevel": "Уровень заклинателя",
+    "spellLevel": "Уровень заклинания",
     "categories": {
       "general": "Общий",
       "proficiency": "Владение",

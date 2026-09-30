@@ -408,6 +408,10 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
   const invalidateSubsystems = useCallback(async (subsystems: SubsystemType[]) => {
     if (!characterId) return;
 
+    // Feat prerequisites compare against abilities, classes, skills and saves,
+    // so any edit makes the preloaded list stale; the Feats tab refetches.
+    setAllFeatsCache(null);
+
     const refreshPromises = subsystems.map(subsystem =>
       loadSubsystem(subsystem, { silent: true }).catch(err =>
         console.error(`Silent refresh failed for ${subsystem}:`, err)

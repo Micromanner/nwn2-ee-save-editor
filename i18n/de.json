@@ -510,7 +510,6 @@
   "feats": {
     "selectFeatDetail": "Wählen Sie ein Talent aus, um Details anzuzeigen",
     "description": "Beschreibung",
-    "missingRequirements": "Fehlende Voraussetzungen",
     "prerequisites": "Voraussetzungsprüfung",
     "autoAddHint": "Fehlende Voraussetzungen werden beim Hinzufügen automatisch aufgelöst.",
     "protected": "geschützt",
@@ -526,6 +525,12 @@
     "customFeats": "Benutzerdefinierte Talente",
     "protectedFeats": "Geschützte Talente",
     "ranks": "Ränge",
+    "oneOf": "Eines von: {feats}",
+    "maxLevel": "Stufe {level} oder niedriger",
+    "epicCharacter": "Epischer Charakter (ab Stufe 21)",
+    "baseFortitude": "Basis-Zähigkeit",
+    "casterLevel": "Zauberstufe",
+    "spellLevel": "Zaubergrad",
     "categories": {
       "general": "Allgemein",
       "proficiency": "Kampf",

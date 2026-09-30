@@ -349,12 +349,16 @@ async fn rebuild_game_data(
                 reason: e.to_string(),
             }
         })?;
-    let custom_tlk = state.resource_manager.read().await.get_custom_tlk_parser();
+    let (english_tlk, custom_tlk) = {
+        let rm = state.resource_manager.read().await;
+        (rm.get_english_tlk_parser(), rm.get_custom_tlk_parser())
+    };
 
     {
         let mut game_data = state.game_data.write();
         game_data.tables = loaded_data.tables;
         game_data.strings = tlk_parser;
+        game_data.english_strings = english_tlk;
         game_data.custom_strings = custom_tlk;
         game_data.rule_detector = loaded_data.rule_detector;
         game_data.priority_tables = loaded_data.priority_tables;

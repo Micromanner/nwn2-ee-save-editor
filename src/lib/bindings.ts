@@ -1281,16 +1281,6 @@ export interface RaceChangedEvent {
   new_subrace: string | null;
 }
 
-// =============================================================================
-// Prerequisite Types
-// =============================================================================
-
-export interface PrerequisiteResult {
-  met: boolean;
-  missing: string[];
-  details: string | null;
-}
-
 export interface LevelUpResult {
   class_id: ClassId;
   new_level: number;

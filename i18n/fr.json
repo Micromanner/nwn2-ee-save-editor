@@ -510,7 +510,6 @@
   "feats": {
     "selectFeatDetail": "Sélectionnez un don pour voir les détails",
     "description": "Description",
-    "missingRequirements": "Conditions Manquantes",
     "prerequisites": "Vérification des Conditions",
     "autoAddHint": "Les prérequis manquants seront automatiquement ajoutés.",
     "protected": "protégé",
@@ -526,6 +525,12 @@
     "customFeats": "Dons Personnalisés",
     "protectedFeats": "Dons Protégés",
     "ranks": "rangs",
+    "oneOf": "L'un de : {feats}",
+    "maxLevel": "Niveau {level} ou moins",
+    "epicCharacter": "Personnage épique (niveau 21+)",
+    "baseFortitude": "Vigueur de base",
+    "casterLevel": "Niveau de lanceur",
+    "spellLevel": "Niveau de sort",
     "categories": {
       "general": "Général",
       "proficiency": "Maîtrise",

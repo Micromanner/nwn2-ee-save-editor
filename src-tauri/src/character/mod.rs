@@ -42,8 +42,8 @@ pub use combat_summary::{
 };
 pub use error::CharacterError;
 pub use feats::{
-    CasterProgress, DomainInfo, FeatAvailability, FeatCategory, FeatEntry, FeatInfo, FeatSlots,
-    FeatSource, FeatSummary, FeatType, FeatsState, PrerequisiteResult,
+    DomainInfo, FeatCategory, FeatEntry, FeatInfo, FeatListContext, FeatSlots, FeatSource,
+    FeatSummary, FeatType, FeatsState, domain_epithet_feats,
 };
 pub use identity::{Alignment, resolve_localized_name, resolved_full_name};
 pub(crate) use inventory::typed_stack_size;

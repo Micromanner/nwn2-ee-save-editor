@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { BackendFeatPrerequisites } from '@/components/Feats/types';
 
 // Helper to format alignment string from numbers
 const formatAlignment = (lawChaos: number, goodEvil: number): string => {
@@ -114,9 +115,7 @@ export interface FeatResponse {
   custom: boolean;
   icon?: string;
   description?: string;
-  prerequisites?: Record<string, unknown>;
-  can_take?: boolean;
-  missing_requirements?: string[];
+  prerequisites: BackendFeatPrerequisites;
   has_feat?: boolean;
 }
 
@@ -171,19 +170,9 @@ export interface FeatDetailsResponse {
   protected: boolean;
   custom: boolean;
   icon?: string;
-  prerequisites?: Record<string, unknown>;
-  can_take?: boolean;
-  missing_requirements?: string[];
+  prerequisites: BackendFeatPrerequisites;
   has_feat?: boolean;
   effects?: Record<string, unknown>;
-}
-
-export interface FeatValidationResponse {
-  feat_id: number;
-  can_take: boolean;
-  reason: string;
-  has_feat: boolean;
-  missing_requirements: string[];
 }
 
 export interface SpellResponse {
@@ -768,12 +757,6 @@ export class CharacterAPI {
   static async getFeatDetails(characterId: number, featId: number): Promise<FeatDetailsResponse> {
     return await invoke('get_feat_info', { featId: featId });
   }
-
-  static async validateFeat(characterId: number, featId: number): Promise<FeatValidationResponse> {
-    return await invoke('validate_feat_prerequisites', { featId: featId });
-  }
-
-
 
   static async getLegitimateSpells(
     _characterId: number,

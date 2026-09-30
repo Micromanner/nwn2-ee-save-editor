@@ -510,7 +510,6 @@
   "feats": {
     "selectFeatDetail": "Seleccione una dote para ver detalles",
     "description": "Descripción",
-    "missingRequirements": "Requisitos Faltantes",
     "prerequisites": "Comprobación de Requisitos",
     "autoAddHint": "Los requisitos faltantes se resolverán automáticamente al añadir.",
     "protected": "protegida",
@@ -526,6 +525,12 @@
     "customFeats": "Dotes Personalizadas",
     "protectedFeats": "Dotes Protegidas",
     "ranks": "rangos",
+    "oneOf": "Uno de: {feats}",
+    "maxLevel": "Nivel {level} o inferior",
+    "epicCharacter": "Personaje épico (nivel 21+)",
+    "baseFortitude": "Fortaleza base",
+    "casterLevel": "Nivel de lanzador",
+    "spellLevel": "Nivel de conjuro",
     "categories": {
       "general": "General",
       "proficiency": "Competencia",

@@ -510,7 +510,6 @@
   "feats": {
     "selectFeatDetail": "Select a feat to view details",
     "description": "Description",
-    "missingRequirements": "Missing Requirements",
     "prerequisites": "Requirement Check",
     "autoAddHint": "Missing prerequisites will be resolved automatically when adding.",
     "protected": "protected",
@@ -526,6 +525,12 @@
     "customFeats": "Custom Feats",
     "protectedFeats": "Protected Feats",
     "ranks": "ranks",
+    "oneOf": "One of: {feats}",
+    "maxLevel": "Level {level} or lower",
+    "epicCharacter": "Epic character (level 21+)",
+    "baseFortitude": "Base Fortitude",
+    "casterLevel": "Caster Level",
+    "spellLevel": "Spell Level",
     "categories": {
       "general": "General",
       "proficiency": "Proficiency",

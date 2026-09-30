@@ -739,6 +739,7 @@ impl SessionState {
             self.history.undo_stack.pop_front();
         }
         self.history.redo_stack.clear();
+        self.feat_cache = None;
     }
 
     /// Stage a quest edit and apply its player changes (gold, XP, alignment, feats,
@@ -806,6 +807,7 @@ impl SessionState {
         history.redo_stack.clear();
         self.change_log.push((CharacterSource::Player, label));
         self.quest_edits.restore(edit);
+        self.feat_cache = None;
         Ok(())
     }
 
@@ -813,6 +815,7 @@ impl SessionState {
     /// back off the loaded player.
     pub fn discard_quest_edits(&mut self, tag: Option<&str>) -> Result<(), String> {
         let removed = self.quest_edits.discard(tag);
+        self.feat_cache = None;
         self.revert_quest_edits(&removed)
     }
 
@@ -994,6 +997,7 @@ impl SessionState {
         if let Some(redo) = redo_entry {
             self.history.redo_stack.push(redo);
         }
+        self.feat_cache = None;
         Some(label)
     }
 
@@ -1017,6 +1021,7 @@ impl SessionState {
         if let Some(undo) = undo_entry {
             self.history.undo_stack.push_back(undo);
         }
+        self.feat_cache = None;
         Some(label)
     }
 
@@ -1103,10 +1108,6 @@ impl SessionState {
             }
         }
         out
-    }
-
-    pub fn invalidate_feat_cache(&mut self) {
-        self.feat_cache = None;
     }
 
     pub fn invalidate_module_info_cache(&mut self) {
