@@ -142,7 +142,7 @@ impl Character {
     }
 
     /// `racialtypes.DefaultSubRace`, else the first `racialsubtypes` row of the race.
-    pub fn default_subrace_for_race(&self, race_id: i32, game_data: &GameData) -> Option<i32> {
+    pub fn default_subrace_for_race(race_id: i32, game_data: &GameData) -> Option<i32> {
         let from_race = game_data
             .get_table("racialtypes")
             .and_then(|races| races.get_by_id(race_id))
@@ -343,10 +343,7 @@ impl Character {
 
         match new_subrace.filter(|s| !s.is_empty()) {
             Some(subrace_name) => self.validate_subrace(new_race_id, subrace_name, game_data),
-            None if self
-                .default_subrace_for_race(new_race_id, game_data)
-                .is_none() =>
-            {
+            None if Self::default_subrace_for_race(new_race_id, game_data).is_none() => {
                 ValidationResult::error(format!("Race {new_race_id} has no subrace to write"))
             }
             None => ValidationResult::ok(),
@@ -397,8 +394,7 @@ impl Character {
             .and_then(|idx| self.get_subrace_data_by_index(idx, game_data));
         let new_subrace_data = match new_subrace.as_deref().filter(|s| !s.is_empty()) {
             Some(name) => self.get_subrace_data(name, game_data),
-            None => self
-                .default_subrace_for_race(new_race_id, game_data)
+            None => Self::default_subrace_for_race(new_race_id, game_data)
                 .and_then(|id| self.get_subrace_data_by_index(id, game_data)),
         };
         // A subrace from another BaseRace crashes the game on save, and 0 is Gold Dwarf.

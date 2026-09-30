@@ -1,5 +1,6 @@
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
 
@@ -60,8 +61,12 @@ pub fn test_range() -> String {
     format!("{:06}-{:06}", TEST_SLOTS.start(), TEST_SLOTS.end())
 }
 
+/// Held while picking a slot and copying into it, so concurrent calls cannot pick the same one.
+static CREATE_LOCK: Mutex<()> = Mutex::new(());
+
 /// Copies `template` into the first free test slot and returns the new folder.
 pub fn create(saves: &Path, template: &Path, name: &str) -> Result<PathBuf, String> {
+    let _guard = CREATE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let used: Vec<u32> = folders(saves)?.into_iter().map(|(n, _)| n).collect();
     let slot = TEST_SLOTS
         .clone()
@@ -110,11 +115,17 @@ pub fn delete(
         .filter(|(n, _)| slots.map_or(TEST_SLOTS.contains(n), |s| s.contains(n)))
         .filter(|(_, p)| slots.is_some() || !loaded.is_some_and(|l| same_path(l, p)))
         .collect();
+    for (_, path) in &targets {
+        ensure_deletable(saves, path, loaded)?;
+    }
     let mut deleted = Vec::new();
     for (slot, path) in targets {
-        ensure_deletable(saves, &path, loaded)?;
-        std::fs::remove_dir_all(&path)
-            .map_err(|e| format!("failed to delete {}: {e}", path.display()))?;
+        std::fs::remove_dir_all(&path).map_err(|e| {
+            format!(
+                "failed to delete {}: {e}; already deleted: {deleted:?}",
+                path.display()
+            )
+        })?;
         deleted.push(slot);
     }
     Ok(deleted)

@@ -101,6 +101,15 @@ public static class RulesHost
         return 0;
     }
 
+    /// Spell slots per spell level 0-9 of the class at `index`. `CalcMaxSpellsPerDayAtLevel` adds
+    /// the prestige caster levels itself, so it takes the bare class level.
+    public static List<int> SpellsPerDay(NWN2_CreatureStatsCore core, byte index)
+    {
+        var cls = core.GetClass(index);
+        var classLevel = core.GetClassLevel(index);
+        return Enumerable.Range(0, 10).Select(l => (int)core.CalcMaxSpellsPerDayAtLevel(cls, classLevel, (byte)l, 1)).ToList();
+    }
+
     public static int[] BaseAbilities(NWN2_CreatureStatsCore core) =>
         Attributes.Select(a => (int)core.GetBaseAttribute(a)).ToArray();
 

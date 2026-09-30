@@ -56,14 +56,11 @@ pub fn run(install: &Path, op: &str, request: &Value) -> Result<Value, String> {
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("failed to start oracle: {e}"))?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    stdin
-        .write_all(request.to_string().as_bytes())
-        .map_err(|e| format!("failed to send oracle request: {e}"))?;
-    drop(stdin);
-
     let stdout = drain(child.stdout.take().expect("piped stdout"));
     let stderr = drain(child.stderr.take().expect("piped stderr"));
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let body = request.to_string();
+    let send = std::thread::spawn(move || stdin.write_all(body.as_bytes()));
 
     let deadline = Instant::now() + TIMEOUT;
     loop {
@@ -84,9 +81,14 @@ pub fn run(install: &Path, op: &str, request: &Value) -> Result<Value, String> {
         forward_bridge_line(line);
     }
 
+    let sent = match send.join() {
+        Ok(Ok(())) => String::new(),
+        Ok(Err(e)) => format!("; sending the request failed: {e}"),
+        Err(_) => "; sending the request panicked".to_string(),
+    };
     let envelope: Envelope = serde_json::from_str(out.trim()).map_err(|e| {
         format!(
-            "oracle returned no valid response ({e}); stderr:\n{}",
+            "oracle returned no valid response ({e}){sent}; stderr:\n{}",
             tail(&err)
         )
     })?;

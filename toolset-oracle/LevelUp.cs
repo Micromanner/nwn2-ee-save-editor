@@ -22,6 +22,8 @@ public static class LevelUp
         public List<int> feats_added { get; set; } = new();
     }
 
+    private static readonly int IntelligenceIndex = Array.IndexOf(RulesHost.Attributes, ATTRIBUTE.INTELLIGENCE);
+
     public static object Run(CNWRules rules, Dictionary<string, object> request)
     {
         var cls = RulesHost.RequireInt(request, "class");
@@ -37,15 +39,17 @@ public static class LevelUp
         {
             var characterLevel = core.GetLevel() + 1;
             var gain = core.ComputeSkillPointGain((byte)cls, (byte)characterLevel, 0);
+            var gainWithIntIncrease = core.ComputeSkillPointGain((byte)cls, (byte)characterLevel, 1);
             var featsBefore = RulesHost.Feats(core);
             var abilitiesBefore = RulesHost.BaseAbilities(core);
             RulesHost.LevelOnce(rules, core, cls, package, first: false);
+            var increase = RulesHost.AbilityIncrease(abilitiesBefore, RulesHost.BaseAbilities(core));
             steps.Add(new Step
             {
                 level = characterLevel,
-                skill_points_gained = gain,
+                skill_points_gained = increase == IntelligenceIndex ? gainWithIntIncrease : gain,
                 hp_after = core.GetMaxHitPoints(1),
-                ability_increase = RulesHost.AbilityIncrease(abilitiesBefore, RulesHost.BaseAbilities(core)),
+                ability_increase = increase,
                 bab = core.CalcBaseAttackBonus(),
                 saves = RulesHost.Saves.Select(s => (int)core.CalcSavingThrowClassLevelMod(s)).ToList(),
                 feats_added = RulesHost.Feats(core).Except(featsBefore).OrderBy(f => f).ToList(),

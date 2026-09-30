@@ -71,7 +71,7 @@ public static class Build
     public static Result Run(CNWRules rules, Dictionary<string, object> request)
     {
         var race = RulesHost.RequireInt(request, "race");
-        var subrace = RulesHost.OptInt(request, "subrace") ?? DefaultSubrace(race);
+        var subrace = RulesHost.RequireInt(request, "subrace");
         var abilities = OptInts(request, "abilities") ?? DefaultAbilities;
         if (abilities.Length != 6) throw new ArgumentException("abilities needs 6 values (Str Dex Con Int Wis Cha)");
         var goodEvil = RulesHost.OptInt(request, "good_evil") ?? 50;
@@ -133,7 +133,7 @@ public static class Build
                 domain1 = info.GetDomain1(),
                 domain2 = info.GetDomain2(),
                 school = info.GetSchool(),
-                spells_per_day = Enumerable.Range(0, 10).Select(l => (int)core.CalcMaxSpellsPerDayAtLevel(cls, classLevel, (byte)l, 1)).ToList(),
+                spells_per_day = RulesHost.SpellsPerDay(core, idx),
                 known = before.Known[idx].ToList(),
             });
         }
@@ -174,14 +174,15 @@ public static class Build
             hp_after = core.GetMaxHitPoints(1),
             feats_added = after.Feats.Except(before.Feats).OrderBy(f => f).ToList(),
             skill_ranks_added = after.Skills.Select((rank, i) => rank - before.Skills[i]).ToList(),
+            spells_added = Enumerable.Range(0, 10).Select(_ => new List<int>()).ToList(),
         };
 
+        // A prestige level that advances casting records the base class's new spells in its own entry, like the game.
         for (byte idx = 0; idx < core.GetNumClasses(); idx++)
         {
-            if (core.GetClass(idx) != cls) continue;
             var had = before.Known.TryGetValue(idx, out var old) ? old : null;
             for (var lvl = 0; lvl < 10; lvl++)
-                record.spells_added.Add(after.Known[idx][lvl].Except(had?[lvl] ?? new List<int>()).ToList());
+                record.spells_added[lvl].AddRange(after.Known[idx][lvl].Except(had?[lvl] ?? new List<int>()));
         }
         return record;
     }
@@ -197,17 +198,6 @@ public static class Build
         for (var i = 0; i < packages.RowCount; i++)
             if (packages["ClassID"][i] == own) return i;
         return null;
-    }
-
-    /// The first player subrace of the race, as the game's character creation offers it.
-    private static int DefaultSubrace(int race)
-    {
-        var subraces = TwoDAManager.Instance.Get("racialsubtypes");
-        for (var i = 0; i < subraces.RowCount; i++)
-        {
-            if (subraces["BaseRace"][i] == race.ToString() && subraces["PlayerRace"][i] == "1") return i;
-        }
-        return 0;
     }
 
     private static int HitDie(TwoDAFile classes, int cls) =>

@@ -70,7 +70,7 @@ pub fn schemas() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "race": { "type": "integer", "description": "racialtypes.2da row" },
-                    "subrace": { "type": "integer", "description": "racialsubtypes.2da row; default: first player subrace of the race" },
+                    "subrace": { "type": "integer", "description": "racialsubtypes.2da row; default: racialtypes.2da DefaultSubRace" },
                     "classes": {
                         "type": "array",
                         "description": "Levels in order, e.g. [{\"class\":4,\"levels\":2},{\"class\":10,\"levels\":3}]",
@@ -124,17 +124,23 @@ pub async fn call(app: &AppHandle, name: &str, args: Value) -> Result<Value, Str
         "list_test_saves" | "delete_test_saves" => {
             let saves = saves_dir(&state)?;
             let loaded = state.session.read().save_dir.clone();
-            if name == "list_test_saves" {
-                return Ok(json!(slots::list(&saves, loaded.as_deref())?));
-            }
+            let list = name == "list_test_saves";
             let wanted: Option<Vec<u32>> = args.get("slots").and_then(Value::as_array).map(|a| {
                 a.iter()
                     .filter_map(Value::as_u64)
                     .map(|n| n as u32)
                     .collect()
             });
-            let deleted = slots::delete(&saves, wanted.as_deref(), loaded.as_deref())?;
-            Ok(json!({ "deleted": deleted }))
+            tokio::task::spawn_blocking(move || {
+                if list {
+                    Ok(json!(slots::list(&saves, loaded.as_deref())?))
+                } else {
+                    let deleted = slots::delete(&saves, wanted.as_deref(), loaded.as_deref())?;
+                    Ok(json!({ "deleted": deleted }))
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?
         }
         _ => Err(format!("unknown dev tool: {name}")),
     }
@@ -157,7 +163,7 @@ async fn make_test_save(state: &AppState, args: Value) -> Result<Value, String> 
             .ok_or("no save loaded in the editor; pass template (a save slot number)")?,
     };
 
-    let request = copy_args(
+    let mut request = copy_args(
         &args,
         &[
             "race",
@@ -168,6 +174,15 @@ async fn make_test_save(state: &AppState, args: Value) -> Result<Value, String> 
             "lawful_chaotic",
         ],
     );
+    if request.get("subrace").is_none() {
+        let race = args
+            .get("race")
+            .and_then(Value::as_i64)
+            .ok_or("race is required")? as i32;
+        let subrace = Character::default_subrace_for_race(race, &state.game_data.read())
+            .ok_or_else(|| format!("race {race} has no subrace; pass subrace"))?;
+        request["subrace"] = json!(subrace);
+    }
     let raw = run_oracle(
         paths,
         install,
@@ -197,16 +212,22 @@ async fn make_test_save(state: &AppState, args: Value) -> Result<Value, String> 
         player_index: None,
         file_size: None,
     });
-    state
-        .session
-        .write()
-        .load_character(&folder_str, None, false, &mut report)
-        .map_err(|e| {
-            format!(
-                "copied to {folder_str} but loading it failed: {}",
-                e.message
-            )
-        })?;
+    {
+        let mut session = state.session.write();
+        if session.has_unsaved_changes() {
+            return Err(format!(
+                "copied to {folder_str}, but the editor session got unsaved changes meanwhile, so it was not loaded"
+            ));
+        }
+        session
+            .load_character(&folder_str, None, false, &mut report)
+            .map_err(|e| {
+                format!(
+                    "copied to {folder_str} but loading it failed: {}",
+                    e.message
+                )
+            })?;
+    }
     crate::commands::session::sync_module_content(state).await;
 
     {

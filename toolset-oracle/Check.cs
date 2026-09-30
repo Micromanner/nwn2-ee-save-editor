@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using NWN2Toolset.NWN2.Rules;
@@ -49,15 +48,12 @@ public static class Check
     private static object Caster(NWN2_CreatureStatsCore core, byte index)
     {
         var cls = core.GetClass(index);
-        var classLevel = core.GetClassLevel(index);
-        var bonus = core.CalcBonusCasterLevelsFromPrestigeClasses(cls);
-        var effective = (byte)Math.Min(classLevel + bonus, 255);
         return new
         {
             @class = (int)cls,
-            level = (int)classLevel,
-            prestige_bonus = (int)bonus,
-            spells_per_day = Enumerable.Range(0, 10).Select(l => (int)core.CalcMaxSpellsPerDayAtLevel(cls, effective, (byte)l, 0)).ToList(),
+            level = (int)core.GetClassLevel(index),
+            prestige_bonus = (int)core.CalcBonusCasterLevelsFromPrestigeClasses(cls),
+            spells_per_day = RulesHost.SpellsPerDay(core, index),
         };
     }
 }
