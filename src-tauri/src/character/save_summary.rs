@@ -153,17 +153,18 @@ impl Character {
         }
     }
 
-    /// Paladin Divine Grace and Blackguard Dark Blessing add the positive CHA
-    /// modifier to every save; both grant the same bonus, so it counts once.
+    /// Paladin Divine Grace and Blackguard Dark Blessing each add the positive CHA
+    /// modifier to every save; with both feats the engine adds it twice.
     fn get_class_save_bonuses(&self, total_cha: i32) -> SaveBonuses {
         const FEAT_DIVINE_GRACE: FeatId = FeatId(217);
         const FEAT_DARK_BLESSING: FeatId = FeatId(473);
 
-        if !self.has_feat(FEAT_DIVINE_GRACE) && !self.has_feat(FEAT_DARK_BLESSING) {
-            return SaveBonuses::default();
-        }
-        let cha_mod = calculate_modifier(total_cha).max(0);
-        SaveBonuses::new(cha_mod, cha_mod, cha_mod)
+        let feats = [FEAT_DIVINE_GRACE, FEAT_DARK_BLESSING]
+            .into_iter()
+            .filter(|&feat| self.has_feat(feat))
+            .count() as i32;
+        let bonus = feats * calculate_modifier(total_cha).max(0);
+        SaveBonuses::new(bonus, bonus, bonus)
     }
 }
 
@@ -205,6 +206,19 @@ mod tests {
         assert_eq!(breakdown.total, 12);
         assert_eq!(breakdown.base, 5);
         assert_eq!(breakdown.ability, 2);
+    }
+
+    #[test]
+    fn test_divine_grace_and_dark_blessing_stack() {
+        let mut character = create_test_character();
+        assert_eq!(character.get_class_save_bonuses(18).fortitude, 0);
+
+        character.add_feat(FeatId(217)).unwrap();
+        assert_eq!(character.get_class_save_bonuses(18).will, 4);
+        assert_eq!(character.get_class_save_bonuses(8).will, 0);
+
+        character.add_feat(FeatId(473)).unwrap();
+        assert_eq!(character.get_class_save_bonuses(18).reflex, 8);
     }
 
     #[test]
