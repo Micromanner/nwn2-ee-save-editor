@@ -30,7 +30,6 @@ export default defineConfig({
       '@radix-ui/react-slider',
       '@radix-ui/react-scroll-area',
       '@radix-ui/react-label',
-      'lucide-react',
       '@heroicons/react/24/outline',
       '@heroicons/react/24/solid',
       'clsx',

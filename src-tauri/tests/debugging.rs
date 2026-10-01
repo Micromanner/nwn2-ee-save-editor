@@ -75,3 +75,6 @@ mod dump_quest_decodes;
 
 #[path = "debugging/compare_level_up.rs"]
 mod compare_level_up;
+
+#[path = "debugging/prepare_spell_test_saves.rs"]
+mod prepare_spell_test_saves;
