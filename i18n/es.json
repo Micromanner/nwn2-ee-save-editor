@@ -473,6 +473,11 @@
     "weightValue": "{value} lb.",
     "goldValue": "{value} po",
     "weightRatio": "{current} / {max} lb.",
+    "encumbrance": {
+      "normal": "Normal",
+      "encumbered": "Cargado",
+      "overloaded": "Sobrecargado"
+    },
     "itemCount": "{count, plural, one {# objeto} other {# objetos}}",
     "slots": {
       "mainHand": "Mano hábil",

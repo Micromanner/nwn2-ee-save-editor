@@ -216,8 +216,9 @@ export function InventoryPanel() {
   const encumbrance = inventoryData?.encumbrance;
 
   const totalWeight = encumbrance?.total_weight ?? 0;
-  const maxWeight = encumbrance?.heavy_load ?? 200;
+  const maxWeight = encumbrance?.heavy_load ?? 0;
   const weightRatio = maxWeight > 0 ? Math.min(totalWeight / maxWeight, 1) : 0;
+  const encumbranceStatus = encumbrance?.status ?? 'normal';
   const totalItems = equippedItems.length + backpackItems.length;
 
   if (inventorySubsystem.isLoading) {
@@ -328,16 +329,18 @@ export function InventoryPanel() {
 
           <div style={{ padding: '10px 16px', borderTop: `1px solid ${T.borderLight}`, background: T.surfaceAlt }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ color: weightRatio > 0.75 ? T.negative : T.textMuted }}>
+              <span style={{ color: encumbranceStatus === 'normal' ? T.textMuted : T.negative }}>
                 {t('inventory.weightRatio', { current: totalWeight.toFixed(1), max: maxWeight })}
                 {encumbrance && (
-                  <span style={{ marginLeft: 6, color: T.textMuted }}>({encumbrance.encumbrance_level})</span>
+                  <span style={{ marginLeft: 6, color: T.textMuted }}>
+                    ({t(`inventory.encumbrance.${encumbranceStatus}`)})
+                  </span>
                 )}
               </span>
               <div style={{ flex: 1 }}>
                 <ProgressBar
                   value={weightRatio}
-                  intent={weightRatio > 0.9 ? 'danger' : weightRatio > 0.75 ? 'warning' : 'none'}
+                  intent={encumbranceStatus === 'overloaded' ? 'danger' : encumbranceStatus === 'encumbered' ? 'warning' : 'none'}
                   stripes={false}
                   animate={false}
                   style={{ height: 3 }}

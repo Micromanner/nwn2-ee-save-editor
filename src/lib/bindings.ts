@@ -756,13 +756,11 @@ export interface FullEquippedItem {
 
 export interface FullEncumbrance {
   total_weight: number;
-  light_load: number;
-  medium_load: number;
   heavy_load: number;
-  encumbrance_level: string;
+  status: EncumbranceStatus;
 }
 
-export type EncumbranceStatus = 'Light' | 'Medium' | 'Heavy' | 'Overloaded';
+export type EncumbranceStatus = 'normal' | 'encumbered' | 'overloaded';
 
 export interface FullInventorySummary {
   inventory: FullInventoryItem[];
@@ -825,19 +823,6 @@ export interface ItemBonuses {
   attack_bonus: number;
   damage_bonus: number;
   save_bonus: number;
-}
-
-export interface ProficiencyRequirement {
-  feat_id: FeatId;
-  feat_name: string;
-  has_proficiency: boolean;
-}
-
-export interface ItemProficiencyInfo {
-  base_item_id: BaseItemId;
-  base_item_name: string;
-  requirements: ProficiencyRequirement[];
-  is_proficient: boolean;
 }
 
 // =============================================================================

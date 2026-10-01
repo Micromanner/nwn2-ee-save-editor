@@ -1,7 +1,6 @@
 use crate::character::{
-    AddItemResult, BaseItemId, BasicItemInfo, EncumbranceInfo, EquipResult, EquipmentSlot,
-    FullInventorySummary, InventoryItem, ItemProficiencyInfo, RemoveItemResult, TransformResult,
-    UnequipResult,
+    AddItemResult, BaseItemId, BasicItemInfo, EquipResult, EquipmentSlot, FullInventorySummary,
+    InventoryItem, RemoveItemResult, TransformResult, UnequipResult,
 };
 use crate::commands::{CommandError, CommandResult};
 use crate::services::item_property_decoder::{
@@ -173,31 +172,6 @@ pub async fn get_equipment_bonuses(state: State<'_, AppState>) -> CommandResult<
 }
 
 #[tauri::command]
-pub async fn get_item_proficiency_info(
-    state: State<'_, AppState>,
-    base_item_id: i32,
-) -> CommandResult<ItemProficiencyInfo> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_item_proficiency_info(base_item_id, &game_data))
-}
-
-#[tauri::command]
-pub async fn calculate_total_weight(state: State<'_, AppState>) -> CommandResult<f32> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.calculate_total_weight(&game_data))
-}
-
-#[tauri::command]
 pub async fn equip_item(
     state: State<'_, AppState>,
     inventory_index: usize,
@@ -294,17 +268,6 @@ pub async fn remove_from_inventory(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(character.remove_item(index)?)
-}
-
-#[tauri::command]
-pub async fn calculate_encumbrance(state: State<'_, AppState>) -> CommandResult<EncumbranceInfo> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_encumbrance_info(&game_data))
 }
 
 #[tauri::command]
@@ -675,7 +638,7 @@ pub async fn add_item_from_template(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    Ok(character.add_item_from_struct(item_fields, &game_data)?)
+    Ok(character.add_new_item(item_fields, &game_data)?)
 }
 
 /// Response for the item editor metadata endpoint.

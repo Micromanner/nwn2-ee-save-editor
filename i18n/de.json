@@ -473,6 +473,11 @@
     "weightValue": "{value} Pfd.",
     "goldValue": "{value} GM",
     "weightRatio": "{current} / {max} Pfd.",
+    "encumbrance": {
+      "normal": "Normal",
+      "encumbered": "Belastet",
+      "overloaded": "Überladen"
+    },
     "itemCount": "{count, plural, one {# Gegenstand} other {# Gegenstände}}",
     "slots": {
       "mainHand": "Haupthand",

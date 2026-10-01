@@ -2556,10 +2556,7 @@ fn give_items_to(
             .and_then(gff_integer)
             .and_then(|v| i32::try_from(v).ok())
             .unwrap_or(0);
-        let max_stack = character
-            .get_base_item_data(base_item, game_data)
-            .map_or(1, |d| d.max_stack)
-            .max(1);
+        let max_stack = character.max_stack(base_item, game_data);
         let mut remaining = *quantity;
         while remaining > 0 {
             let count = remaining.min(i64::from(max_stack));

@@ -475,6 +475,11 @@
     "weightValue": "{value} lbs.",
     "goldValue": "{value} szt. zł",
     "weightRatio": "{current} / {max} lbs.",
+    "encumbrance": {
+      "normal": "Normalne",
+      "encumbered": "Obciążony",
+      "overloaded": "Przeciążony"
+    },
     "itemCount": "{count, plural, one {# przedmiot} few {# przedmioty} many {# przedmiotów} other {# przedmiotu}}",
     "slots": {
       "mainHand": "Główna ręka",

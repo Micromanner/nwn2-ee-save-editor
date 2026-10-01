@@ -473,6 +473,11 @@
     "weightValue": "{value} livres",
     "goldValue": "{value} PO",
     "weightRatio": "{current} / {max} livres",
+    "encumbrance": {
+      "normal": "Normal",
+      "encumbered": "Encombré",
+      "overloaded": "Surchargé"
+    },
     "itemCount": "{count, plural, one {# objet} other {# objets}}",
     "slots": {
       "mainHand": "Main principale",

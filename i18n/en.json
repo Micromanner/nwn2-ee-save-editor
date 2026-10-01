@@ -473,6 +473,11 @@
     "weightValue": "{value} lbs",
     "goldValue": "{value} gp",
     "weightRatio": "{current} / {max} lbs",
+    "encumbrance": {
+      "normal": "Normal",
+      "encumbered": "Encumbered",
+      "overloaded": "Overloaded"
+    },
     "itemCount": "{count, plural, one {# item} other {# items}}",
     "slots": {
       "mainHand": "Main Hand",

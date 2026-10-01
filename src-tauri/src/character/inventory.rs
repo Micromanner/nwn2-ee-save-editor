@@ -1,11 +1,11 @@
 use crate::character::CharacterError;
 use crate::character::gff_helpers::{extract_list_from_map, gff_value_to_i32, gff_value_to_string};
-use crate::character::item_appearance::ItemAppearance;
+use crate::character::item_appearance::{ItemAppearance, parse_equip_slots};
 use crate::character::types::BaseItemId;
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
 use crate::services::ItemCostCalculator;
-use crate::services::item_property_decoder::{DecodedProperty, ItemBonuses, ItemPropertyDecoder};
+use crate::services::item_property_decoder::{ItemBonuses, ItemPropertyDecoder};
 use crate::utils::parsing::{row_int, row_str};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -77,24 +77,6 @@ impl EquipmentSlot {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub enum EncumbranceStatus {
-    Light,
-    Medium,
-    Heavy,
-    Overloaded,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct EncumbranceInfo {
-    pub current_weight: f32,
-    pub light_load: f32,
-    pub medium_load: f32,
-    pub heavy_load: f32,
-    pub max_load: f32,
-    pub status: EncumbranceStatus,
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
 pub struct InventoryItem {
     pub index: usize,
@@ -153,22 +135,10 @@ pub struct BasicItemInfo {
     pub identified: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, Type)]
-pub enum WeightStatus {
-    #[default]
-    Unencumbered,
-    Light,
-    Medium,
-    Heavy,
-    Overloaded,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct BaseItemData {
-    pub id: i32,
     pub name: String,
-    pub weight: f32,
-    pub base_ac: i32,
+    pub category: String,
     pub max_stack: i32,
     /// `baseitems.MaxProps` - how many item properties this base type is meant to
     /// carry. 0 when the row leaves it blank.
@@ -176,47 +146,6 @@ pub struct BaseItemData {
     /// `baseitems.PropColumn` - the `itemprops.2da` column that says which
     /// properties the engine honours on this base type. -1 when blank.
     pub prop_column: i32,
-    pub num_dice: i32,
-    pub die_to_roll: i32,
-    pub crit_threat: i32,
-    pub crit_multiplier: i32,
-    pub weapon_size: i32,
-    pub weapon_type: i32,
-    pub armor_check_penalty: i32,
-}
-
-impl BaseItemData {
-    pub fn damage_dice_string(&self) -> String {
-        if self.num_dice > 0 && self.die_to_roll > 0 {
-            format!("{}d{}", self.num_dice, self.die_to_roll)
-        } else {
-            "-".to_string()
-        }
-    }
-
-    pub fn threat_range_string(&self) -> String {
-        match self.crit_threat {
-            1 => "20".to_string(),
-            2 => "19-20".to_string(),
-            3 => "18-20".to_string(),
-            n if n > 3 => format!("{}-20", 21 - n),
-            _ => "20".to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct EquipmentSummary {
-    pub slots: Vec<EquipmentSlotInfo>,
-    pub total_ac_bonus: i32,
-    pub total_weight: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct EquipmentSlotInfo {
-    pub slot: u32,
-    pub slot_name: String,
-    pub item: Option<BasicItemInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -294,35 +223,42 @@ pub struct FullEquippedItem {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct FullEncumbrance {
     pub total_weight: f32,
-    pub light_load: f32,
-    pub medium_load: f32,
+    /// `encumbrance.Heavy` in lbs: above it the character is overloaded.
     pub heavy_load: f32,
-    pub encumbrance_level: String,
+    pub status: EncumbranceStatus,
 }
 
-const PROPERTY_ID_AC_BONUS: u32 = 1;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum EncumbranceStatus {
+    Normal,
+    Encumbered,
+    Overloaded,
+}
+
 const BASE_ITEM_ARMOR: i32 = 16;
 const BASE_ITEM_SMALL_SHIELD: i32 = 14;
 const BASE_ITEM_LARGE_SHIELD: i32 = 56;
 const BASE_ITEM_TOWER_SHIELD: i32 = 57;
 
-const FEAT_WEAPON_PROFICIENCY_SIMPLE: u16 = 44;
-const FEAT_WEAPON_PROFICIENCY_MARTIAL: u16 = 45;
-const FEAT_WEAPON_PROFICIENCY_EXOTIC: u16 = 46;
-const FEAT_SHIELD_PROFICIENCY: u16 = 47;
-const FEAT_TOWER_SHIELD_PROFICIENCY: u16 = 48;
-
-#[derive(Debug, Serialize, Deserialize, Type)]
-pub struct ProficiencyRequirement {
-    pub feat_id: Option<u16>,
-    pub feat_name: String,
-    pub met: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, Type)]
-pub struct ItemProficiencyInfo {
-    pub is_proficient: bool,
-    pub requirements: Vec<ProficiencyRequirement>,
+struct ItemDetails {
+    base_item: i32,
+    base_item_name: String,
+    name: String,
+    description: String,
+    is_custom: bool,
+    category: String,
+    icon: Option<String>,
+    weight: f32,
+    stack_size: i32,
+    value: i32,
+    base_ac: Option<i32>,
+    max_stack: i32,
+    max_props: i32,
+    prop_column: i32,
+    decoded_properties: Vec<DecodedPropertyInfo>,
+    item_data: RawItemData,
+    appearance: ItemAppearance,
 }
 
 const EQUIPMENT_SLOTS: [(u32, &str); 14] = [
@@ -437,151 +373,6 @@ impl super::Character {
         })
     }
 
-    pub fn get_equipment_ac_bonus(&self, game_data: &GameData) -> i32 {
-        let Some(equip_list) = self.get_list_owned("Equip_ItemList") else {
-            return 0;
-        };
-
-        let mut total_ac = 0;
-
-        for item_struct in &equip_list {
-            let struct_id = item_struct
-                .get("__struct_id__")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0) as u32;
-
-            if struct_id == 0 {
-                continue;
-            }
-
-            let base_item_id = item_struct
-                .get("BaseItem")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0);
-
-            if let Some(base_ac) = self.get_base_item_ac(item_struct, base_item_id, game_data) {
-                total_ac += base_ac;
-            }
-
-            if let Some(props_list) = item_struct.get("PropertiesList")
-                && let GffValue::ListOwned(props) = props_list
-            {
-                for prop in props {
-                    let property_id = prop
-                        .get("PropertyName")
-                        .and_then(gff_value_to_i32)
-                        .unwrap_or(0) as u32;
-
-                    if property_id == PROPERTY_ID_AC_BONUS {
-                        let cost_value = prop
-                            .get("CostValue")
-                            .and_then(gff_value_to_i32)
-                            .unwrap_or(0);
-                        total_ac += cost_value;
-                    }
-                }
-            }
-        }
-
-        total_ac
-    }
-
-    pub fn get_armor_check_penalty(&self, game_data: &GameData) -> i32 {
-        let Some(equip_list) = self.get_list_owned("Equip_ItemList") else {
-            return 0;
-        };
-
-        let mut total_penalty = 0;
-
-        for item_struct in &equip_list {
-            let struct_id = item_struct
-                .get("__struct_id__")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0) as u32;
-
-            // Only check armor (Chest=0x0002) and shields (LeftHand=0x0020)
-            if struct_id != 0x0002 && struct_id != 0x0020 {
-                continue;
-            }
-
-            let base_item_id = item_struct
-                .get("BaseItem")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0);
-
-            if let Some(base_data) = self.get_base_item_data(base_item_id, game_data) {
-                total_penalty += base_data.armor_check_penalty;
-            }
-        }
-
-        total_penalty
-    }
-
-    pub fn calculate_total_weight(&self, game_data: &GameData) -> f32 {
-        let mut total_weight = 0.0;
-
-        if let Some(inv_list) = self.get_list_owned("ItemList") {
-            for item_struct in &inv_list {
-                let base_item_id = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                let stack_size = item_struct
-                    .get("StackSize")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(1);
-
-                if let Some(weight) = self.get_base_item_weight(base_item_id, game_data) {
-                    total_weight += weight * stack_size as f32;
-                }
-            }
-        }
-
-        if let Some(equip_list) = self.get_list_owned("Equip_ItemList") {
-            for item_struct in &equip_list {
-                let struct_id = item_struct
-                    .get("__struct_id__")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0) as u32;
-
-                if struct_id == 0 {
-                    continue;
-                }
-
-                let base_item_id = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                if let Some(weight) = self.get_base_item_weight(base_item_id, game_data) {
-                    total_weight += weight;
-                }
-            }
-        }
-
-        total_weight
-    }
-
-    pub fn get_weight_status(&self, game_data: &GameData) -> WeightStatus {
-        let total_weight = self.calculate_total_weight(game_data);
-        let strength = self.base_ability(crate::character::types::AbilityIndex::STR);
-
-        let (light, medium, heavy, max) = self.get_encumbrance_thresholds(strength, game_data);
-
-        if total_weight > max {
-            WeightStatus::Overloaded
-        } else if total_weight > heavy {
-            WeightStatus::Heavy
-        } else if total_weight > medium {
-            WeightStatus::Medium
-        } else if total_weight > light {
-            WeightStatus::Light
-        } else {
-            WeightStatus::Unencumbered
-        }
-    }
-
     pub fn get_base_item_data(
         &self,
         base_item_id: i32,
@@ -590,99 +381,22 @@ impl super::Character {
         let baseitems = game_data.get_table("baseitems")?;
         let row = baseitems.get_by_id(base_item_id)?;
 
-        let name = game_data
-            .get_string(row_int(&row, "name", -1))
-            .unwrap_or_else(|| format!("Item {base_item_id}"));
-
-        let weight = row
-            .get("tenthlbs")
-            .and_then(|s| s.as_ref())
-            .and_then(|s| s.parse::<f32>().ok())
-            .map_or(0.0, |w| w / 10.0);
-
-        let base_ac = row_int(&row, "baseac", 0);
-
-        let max_stack = row_int(&row, "stacking", 1);
-
-        let max_props = row_int(&row, "maxprops", 0);
-
-        let prop_column = row_int(&row, "propcolumn", -1);
-
-        let num_dice = row_int(&row, "numdice", 0);
-
-        let die_to_roll = row_int(&row, "dietoroll", 0);
-
-        let crit_threat = row_int(&row, "critthreat", 1);
-
-        let crit_multiplier = row_int(&row, "crithitmult", 2);
-
-        let weapon_size = row_int(&row, "weaponsize", 0);
-
-        let weapon_type = row_int(&row, "weapontype", 0);
-
-        let armor_check_penalty = row
-            .get("armourcheckpen")
-            .or_else(|| row.get("armorcheckpen"))
-            .and_then(|s| s.as_ref())
-            .and_then(|s| s.parse::<i32>().ok())
-            .unwrap_or(0);
-
         Some(BaseItemData {
-            id: base_item_id,
-            name,
-            weight,
-            base_ac,
-            max_stack,
-            max_props,
-            prop_column,
-            num_dice,
-            die_to_roll,
-            crit_threat,
-            crit_multiplier,
-            weapon_size,
-            weapon_type,
-            armor_check_penalty,
+            name: game_data
+                .get_string(row_int(&row, "name", -1))
+                .unwrap_or_else(|| format!("Item {base_item_id}")),
+            category: get_item_category(&row),
+            max_stack: row_int(&row, "stacking", 1),
+            max_props: row_int(&row, "maxprops", 0),
+            prop_column: row_int(&row, "propcolumn", -1),
         })
     }
 
-    pub fn get_equipment_summary(&self, game_data: &GameData) -> EquipmentSummary {
-        let mut slots = Vec::new();
-        let mut equipped_items: HashMap<u32, BasicItemInfo> = HashMap::new();
-
-        if let Some(equip_list) = self.get_list_owned("Equip_ItemList") {
-            for item_struct in &equip_list {
-                let struct_id = item_struct
-                    .get("__struct_id__")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0) as u32;
-
-                if struct_id == 0 {
-                    continue;
-                }
-
-                if let Some(item_info) = self.parse_basic_item_info(item_struct) {
-                    equipped_items.insert(struct_id, item_info);
-                }
-            }
-        }
-
-        for (slot_bitmask, slot_name) in EQUIPMENT_SLOTS {
-            let item = equipped_items.get(&slot_bitmask).cloned();
-            slots.push(EquipmentSlotInfo {
-                slot: slot_bitmask,
-                slot_name: slot_name.to_string(),
-                item,
-            });
-        }
-
-        let total_ac_bonus = self.get_equipment_ac_bonus(game_data);
-        let total_weight = self.calculate_total_weight(game_data);
-
-        EquipmentSummary {
-            slots,
-            total_ac_bonus,
-            total_weight,
-        }
+    /// `baseitems.Stacking`, 1 for a base item missing from `baseitems`.
+    pub(crate) fn max_stack(&self, base_item_id: i32, game_data: &GameData) -> i32 {
+        self.get_base_item_data(base_item_id, game_data)
+            .map_or(1, |d| d.max_stack)
+            .max(1)
     }
 
     pub fn get_full_inventory_summary(
@@ -691,247 +405,149 @@ impl super::Character {
         decoder: &ItemPropertyDecoder,
         resource_manager: Option<&crate::services::resource_manager::ResourceManager>,
     ) -> FullInventorySummary {
-        use tracing::{debug, warn};
-
-        let mut inventory_items = Vec::new();
-        let mut equipped_items = Vec::new();
-
-        debug!(
-            "Getting ItemList from character. Has field: {}",
-            self.has_field("ItemList")
-        );
-        if let Some(inv_list) = self.get_list_owned("ItemList") {
-            debug!("ItemList found with {} items", inv_list.len());
-            for (index, item_struct) in inv_list.iter().enumerate() {
-                let base_item_id = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                let base_item_data = self.get_base_item_data(base_item_id, game_data);
-                let base_item_name = base_item_data
-                    .as_ref()
-                    .map_or_else(|| format!("Item {base_item_id}"), |d| d.name.clone());
-
-                let is_custom = base_item_data.is_none();
-
-                let name = self
-                    .get_item_localized_name(item_struct, game_data)
-                    .unwrap_or_else(|| base_item_name.clone());
-
-                let description = self
-                    .get_item_localized_description(item_struct, game_data)
-                    .unwrap_or_default();
-
-                let weight = self
-                    .get_base_item_weight(base_item_id, game_data)
-                    .unwrap_or(0.0);
-
-                let stack_size = item_struct
-                    .get("StackSize")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(1);
-
-                let value = item_value(item_struct, game_data);
-
-                let enhancement = item_struct
-                    .get("Enhancement")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                let charges = item_struct.get("Charges").and_then(gff_value_to_i32);
-
-                let identified = item_struct
-                    .get("Identified")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(1)
-                    != 0;
-
-                let plot = item_struct
-                    .get("Plot")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0)
-                    == 1;
-
-                let cursed = item_struct
-                    .get("Cursed")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0)
-                    == 1;
-
-                let stolen = item_struct
-                    .get("Stolen")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0)
-                    == 1;
-
-                let base_ac = self.get_base_item_ac(item_struct, base_item_id, game_data);
-
-                let category = base_item_data
-                    .as_ref()
-                    .and_then(|_| game_data.get_table("baseitems"))
-                    .and_then(|t| t.get_by_id(base_item_id))
-                    .map(|row| get_item_category(&row))
-                    .unwrap_or_else(|| "Miscellaneous".to_string());
-
+        let mut total_weight = 0.0;
+        let inventory = self
+            .get_list_owned("ItemList")
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .map(|(index, item_struct)| {
+                let common = self.item_details(item_struct, game_data, decoder, resource_manager);
+                total_weight += common.weight * common.stack_size as f32;
+                let field = |name: &str| item_struct.get(name).and_then(gff_value_to_i32);
                 let (equippable_slots, default_slot) =
-                    self.get_equippable_slots(base_item_id, game_data);
+                    self.get_equippable_slots(common.base_item, game_data);
 
-                let decoded_properties = self.decode_item_properties(item_struct, decoder);
-
-                let item_data = gff_struct_to_json(item_struct);
-
-                let icon = resolve_item_icon(item_struct, game_data);
-                let appearance = {
-                    let mut a = ItemAppearance::from_gff(item_struct);
-                    a.normalize_for_ui(base_item_id, game_data);
-                    // Fall back to the UTI template's Tintable when the save
-                    // has no explicit tints, so the UI swatches show the
-                    // colours actually rendered by the game.
-                    if let Some(rm) = resource_manager
-                        && let Some(effective) = Self::read_item_tint_with_fallback(item_struct, rm)
-                    {
-                        a.tints = effective;
-                    }
-                    a
-                };
-
-                inventory_items.push(FullInventoryItem {
+                FullInventoryItem {
                     index,
-                    item: RawItemData(item_data),
-                    base_item: base_item_id,
-                    base_item_name,
-                    name,
-                    icon,
-                    description,
-                    weight,
-                    value,
-                    is_custom,
-                    stack_size,
-                    enhancement,
-                    charges,
-                    identified,
-                    plot,
-                    cursed,
-                    stolen,
-                    base_ac,
-                    max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack),
-                    max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
-                    prop_column: base_item_data.as_ref().map_or(-1, |d| d.prop_column),
-                    category,
+                    item: common.item_data,
+                    base_item: common.base_item,
+                    base_item_name: common.base_item_name,
+                    name: common.name,
+                    icon: common.icon,
+                    description: common.description,
+                    weight: common.weight,
+                    value: common.value,
+                    is_custom: common.is_custom,
+                    stack_size: common.stack_size,
+                    enhancement: field("Enhancement").unwrap_or(0),
+                    charges: field("Charges"),
+                    identified: field("Identified").unwrap_or(1) != 0,
+                    plot: field("Plot") == Some(1),
+                    cursed: field("Cursed") == Some(1),
+                    stolen: field("Stolen") == Some(1),
+                    base_ac: common.base_ac,
+                    max_stack: common.max_stack,
+                    max_props: common.max_props,
+                    prop_column: common.prop_column,
+                    category: common.category,
                     equippable_slots,
                     default_slot,
-                    decoded_properties,
-                    appearance,
-                });
-            }
-        } else {
-            warn!("ItemList not found or empty");
-        }
+                    decoded_properties: common.decoded_properties,
+                    appearance: common.appearance,
+                }
+            })
+            .collect();
 
-        debug!(
-            "Getting Equip_ItemList. Has field: {}",
-            self.has_field("Equip_ItemList")
-        );
-        if let Some(equip_list) = self.get_list_owned("Equip_ItemList") {
-            debug!("Equip_ItemList found with {} slots", equip_list.len());
-            for item_struct in &equip_list {
+        let equipped = self
+            .get_list_owned("Equip_ItemList")
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|item_struct| {
                 let struct_id = item_struct
                     .get("__struct_id__")
                     .and_then(gff_value_to_i32)
                     .unwrap_or(0) as u32;
-
                 if struct_id == 0 {
-                    continue;
+                    return None;
                 }
+                let common = self.item_details(item_struct, game_data, decoder, resource_manager);
+                total_weight += common.weight * common.stack_size as f32;
 
-                let slot_name = get_slot_name(struct_id).to_lowercase().replace(' ', "_");
-
-                let base_item_id = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                let base_item_data = self.get_base_item_data(base_item_id, game_data);
-                let base_item_name = base_item_data
-                    .as_ref()
-                    .map_or_else(|| format!("Item {base_item_id}"), |d| d.name.clone());
-
-                let is_custom = base_item_data.is_none();
-
-                let name = self
-                    .get_item_localized_name(item_struct, game_data)
-                    .unwrap_or_else(|| base_item_name.clone());
-
-                let description = self
-                    .get_item_localized_description(item_struct, game_data)
-                    .unwrap_or_default();
-
-                let weight = self
-                    .get_base_item_weight(base_item_id, game_data)
-                    .unwrap_or(0.0);
-
-                let value = item_value(item_struct, game_data);
-
-                let base_ac = self.get_base_item_ac(item_struct, base_item_id, game_data);
-
-                let decoded_properties = self.decode_item_properties(item_struct, decoder);
-
-                let item_data = gff_struct_to_json(item_struct);
-
-                let icon = resolve_item_icon(item_struct, game_data);
-
-                equipped_items.push(FullEquippedItem {
-                    slot: slot_name,
-                    base_item: base_item_id,
-                    base_item_name,
-                    custom: is_custom,
-                    name,
-                    icon,
-                    description,
-                    weight,
-                    value,
-                    item_data: RawItemData(item_data),
-                    base_ac,
-                    max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack),
-                    max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
-                    prop_column: base_item_data.as_ref().map_or(-1, |d| d.prop_column),
-                    decoded_properties,
-                    appearance: {
-                        let mut a = ItemAppearance::from_gff(item_struct);
-                        a.normalize_for_ui(base_item_id, game_data);
-                        if let Some(rm) = resource_manager
-                            && let Some(effective) =
-                                Self::read_item_tint_with_fallback(item_struct, rm)
-                        {
-                            a.tints = effective;
-                        }
-                        a
-                    },
-                });
-            }
-        }
-
-        let encumbrance_info = self.get_encumbrance_info(game_data);
-        let encumbrance = FullEncumbrance {
-            total_weight: encumbrance_info.current_weight,
-            light_load: encumbrance_info.light_load,
-            medium_load: encumbrance_info.medium_load,
-            heavy_load: encumbrance_info.heavy_load,
-            encumbrance_level: match encumbrance_info.status {
-                EncumbranceStatus::Light => "light",
-                EncumbranceStatus::Medium => "medium",
-                EncumbranceStatus::Heavy => "heavy",
-                EncumbranceStatus::Overloaded => "overloaded",
-            }
-            .to_string(),
-        };
+                Some(FullEquippedItem {
+                    slot: get_slot_name(struct_id).to_lowercase().replace(' ', "_"),
+                    base_item: common.base_item,
+                    base_item_name: common.base_item_name,
+                    custom: common.is_custom,
+                    name: common.name,
+                    icon: common.icon,
+                    description: common.description,
+                    weight: common.weight,
+                    value: common.value,
+                    item_data: common.item_data,
+                    base_ac: common.base_ac,
+                    max_stack: common.max_stack,
+                    max_props: common.max_props,
+                    prop_column: common.prop_column,
+                    decoded_properties: common.decoded_properties,
+                    appearance: common.appearance,
+                })
+            })
+            .collect();
 
         FullInventorySummary {
-            inventory: inventory_items,
-            equipped: equipped_items,
+            inventory,
+            equipped,
             gold: self.gold(),
-            encumbrance,
+            encumbrance: self.get_encumbrance(total_weight, game_data, decoder),
+        }
+    }
+
+    /// Display fields shared by inventory and equipped items.
+    fn item_details(
+        &self,
+        item_struct: &IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
+        decoder: &ItemPropertyDecoder,
+        resource_manager: Option<&crate::services::resource_manager::ResourceManager>,
+    ) -> ItemDetails {
+        let base_item = item_struct
+            .get("BaseItem")
+            .and_then(gff_value_to_i32)
+            .unwrap_or(0);
+        let base_item_data = self.get_base_item_data(base_item, game_data);
+        let base_item_name = base_item_data
+            .as_ref()
+            .map_or_else(|| format!("Item {base_item}"), |d| d.name.clone());
+
+        let mut appearance = ItemAppearance::from_gff(item_struct);
+        appearance.normalize_for_ui(base_item, game_data);
+        // Fall back to the UTI template's Tintable when the save has no
+        // explicit tints, so the UI swatches show the colours actually
+        // rendered by the game.
+        if let Some(rm) = resource_manager
+            && let Some(effective) = Self::read_item_tint_with_fallback(item_struct, rm)
+        {
+            appearance.tints = effective;
+        }
+
+        ItemDetails {
+            base_item,
+            name: self
+                .get_item_localized_name(item_struct, game_data)
+                .unwrap_or_else(|| base_item_name.clone()),
+            description: self
+                .get_item_localized_description(item_struct, game_data)
+                .unwrap_or_default(),
+            base_item_name,
+            is_custom: base_item_data.is_none(),
+            category: base_item_data
+                .as_ref()
+                .map_or_else(|| "Miscellaneous".to_string(), |d| d.category.clone()),
+            icon: resolve_item_icon(item_struct, game_data),
+            weight: item_unit_weight(item_struct, game_data),
+            stack_size: item_struct
+                .get("StackSize")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(1),
+            value: item_value(item_struct, game_data),
+            base_ac: self.get_base_item_ac(item_struct, base_item, game_data),
+            max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack.max(1)),
+            max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
+            prop_column: base_item_data.as_ref().map_or(-1, |d| d.prop_column),
+            decoded_properties: self.decode_item_properties(item_struct, decoder),
+            item_data: RawItemData(gff_struct_to_json(item_struct)),
+            appearance,
         }
     }
 
@@ -980,23 +596,7 @@ impl super::Character {
         base_item_id: i32,
         game_data: &GameData,
     ) -> (Vec<String>, Option<String>) {
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return (vec![], None);
-        };
-
-        let Some(row) = baseitems.get_by_id(base_item_id) else {
-            return (vec![], None);
-        };
-
-        let equip_slots = row_str(&row, "equipableslots")
-            .and_then(|s| {
-                if let Some(stripped) = s.strip_prefix("0x") {
-                    u32::from_str_radix(stripped, 16).ok()
-                } else {
-                    s.parse::<u32>().ok()
-                }
-            })
-            .unwrap_or(0);
+        let equip_slots = equipable_slots_mask(base_item_id, game_data);
 
         let mut slots = Vec::new();
         let mut default_slot = None;
@@ -1027,16 +627,7 @@ impl super::Character {
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
 
-        let mut prop_maps = Vec::new();
-        for prop in props {
-            let mut map = HashMap::new();
-            for (k, v) in prop {
-                if let Some(json_val) = gff_to_json_primitive(v) {
-                    map.insert(k.clone(), json_val);
-                }
-            }
-            prop_maps.push(map);
-        }
+        let prop_maps: Vec<_> = props.iter().map(gff_struct_to_json).collect();
 
         decoder
             .decode_item_properties(&prop_maps, base_item_id)
@@ -1091,65 +682,21 @@ impl super::Character {
                 continue;
             }
 
-            // 1. Base AC from Armor/Shields
             let base_item_id = item_struct
                 .get("BaseItem")
                 .and_then(gff_value_to_i32)
                 .unwrap_or(0);
 
-            // Logic matching Python:
-            // Armor (16)
-            if base_item_id == BASE_ITEM_ARMOR {
-                if let Some(armor_rules_type) =
-                    item_struct.get("ArmorRulesType").and_then(gff_value_to_i32)
-                    && let Some(stats) = game_data
-                        .get_table("armorrulestats")
-                        .and_then(|t| t.get_by_id(armor_rules_type))
-                    && let Some(ac_bonus) = stats
-                        .get("acbonus")
-                        .and_then(|s| s.as_ref())
-                        .and_then(|s| s.parse::<f32>().ok()) // Python uses float parse then int cast if likely
-                        .map(|f| f as i32)
-                    && ac_bonus > 0
-                {
-                    total_bonuses.ac_armor_bonus += ac_bonus;
+            if let Some(ac_bonus) = armor_rules_ac(item_struct, game_data) {
+                if base_item_id == BASE_ITEM_ARMOR {
+                    total_bonuses.ac_armor_bonus += ac_bonus.max(0);
+                } else if is_armor_or_shield(base_item_id) {
+                    total_bonuses.ac_shield_bonus += ac_bonus.max(0);
                 }
-            }
-            // Shields (14, 56, 57)
-            else if [
-                BASE_ITEM_SMALL_SHIELD,
-                BASE_ITEM_LARGE_SHIELD,
-                BASE_ITEM_TOWER_SHIELD,
-            ]
-            .contains(&base_item_id)
-                && let Some(armor_rules_type) =
-                    item_struct.get("ArmorRulesType").and_then(gff_value_to_i32)
-                && let Some(stats) = game_data
-                    .get_table("armorrulestats")
-                    .and_then(|t| t.get_by_id(armor_rules_type))
-                && let Some(ac_bonus) = stats
-                    .get("acbonus")
-                    .and_then(|s| s.as_ref())
-                    .and_then(|s| s.parse::<f32>().ok())
-                    .map(|f| f as i32)
-                && ac_bonus > 0
-            {
-                total_bonuses.ac_shield_bonus += ac_bonus;
             }
 
-            // 2. Item Properties
             if let Some(GffValue::ListOwned(props)) = item_struct.get("PropertiesList") {
-                let mut prop_maps = Vec::new();
-                for prop in props {
-                    let mut map = HashMap::new();
-                    // Convert GFF struct fields to simple JSON map for decoder
-                    for (k, v) in prop {
-                        if let Some(json_val) = gff_to_json_primitive(v) {
-                            map.insert(k.clone(), json_val);
-                        }
-                    }
-                    prop_maps.push(map);
-                }
+                let prop_maps: Vec<_> = props.iter().map(gff_struct_to_json).collect();
 
                 let item_bonuses = decoder.get_item_bonuses(&prop_maps, base_item_id);
 
@@ -1188,42 +735,19 @@ impl super::Character {
         total_bonuses
     }
 
-    fn get_base_item_weight(&self, base_item_id: i32, game_data: &GameData) -> Option<f32> {
-        let baseitems = game_data.get_table("baseitems")?;
-        let row = baseitems.get_by_id(base_item_id)?;
-
-        row.get("tenthlbs")
-            .and_then(|s| s.as_ref())
-            .and_then(|s| s.parse::<f32>().ok())
-            .map(|w| w / 10.0)
-    }
-
     fn get_base_item_ac(
         &self,
         item_struct: &IndexMap<String, GffValue<'static>>,
         base_item_id: i32,
         game_data: &GameData,
     ) -> Option<i32> {
-        if base_item_id != BASE_ITEM_ARMOR
-            && base_item_id != BASE_ITEM_SMALL_SHIELD
-            && base_item_id != BASE_ITEM_LARGE_SHIELD
-            && base_item_id != BASE_ITEM_TOWER_SHIELD
-        {
+        if !is_armor_or_shield(base_item_id) {
             return None;
         }
 
         // Real base AC for armor/shields comes from armorrulestats.2da via ArmorRulesType;
         // baseitems.2da baseac is 0 for the generic "armor" base item.
-        if let Some(armor_rules_type) = item_struct.get("ArmorRulesType").and_then(gff_value_to_i32)
-            && let Some(stats) = game_data
-                .get_table("armorrulestats")
-                .and_then(|t| t.get_by_id(armor_rules_type))
-            && let Some(ac_bonus) = stats
-                .get("acbonus")
-                .and_then(|s| s.as_ref())
-                .and_then(|s| s.parse::<f32>().ok())
-                .map(|f| f as i32)
-        {
+        if let Some(ac_bonus) = armor_rules_ac(item_struct, game_data) {
             return Some(ac_bonus);
         }
 
@@ -1233,68 +757,38 @@ impl super::Character {
         row_str(&row, "baseac").and_then(|s| s.parse::<i32>().ok())
     }
 
-    fn get_encumbrance_thresholds(
+    /// Thresholds from `encumbrance.2da` (`Normal`/`Heavy`, tenths of a lb) at
+    /// the total STR including racial and item bonuses.
+    fn get_encumbrance(
         &self,
-        strength: i32,
+        total_weight: f32,
         game_data: &GameData,
-    ) -> (f32, f32, f32, f32) {
-        let clamped_str = strength.clamp(1, 100);
+        decoder: &ItemPropertyDecoder,
+    ) -> FullEncumbrance {
+        let strength = self.get_total_abilities(game_data, decoder).str_;
 
-        if let Some(encumbrance) = game_data.get_table("encumbrance")
-            && let Some(row) = encumbrance.get_by_id(clamped_str)
-        {
-            let light = row
-                .get("light")
-                .or_else(|| row.get("lightload"))
-                .and_then(|s| s.as_ref())
-                .and_then(|s| s.parse::<f32>().ok())
-                .unwrap_or(0.0);
+        let (normal_load, heavy_load) = game_data
+            .get_table("encumbrance")
+            .and_then(|table| {
+                let last_row = i32::try_from(table.row_count()).ok()? - 1;
+                table.get_by_id(strength.clamp(0, last_row))
+            })
+            .map_or((0.0, 0.0), |row| {
+                let load = |column: &str| row_int(&row, column, 0) as f32 / 10.0;
+                (load("normal"), load("heavy"))
+            });
 
-            let medium = row
-                .get("medium")
-                .or_else(|| row.get("mediumload"))
-                .and_then(|s| s.as_ref())
-                .and_then(|s| s.parse::<f32>().ok())
-                .unwrap_or(0.0);
-
-            let heavy = row
-                .get("heavy")
-                .or_else(|| row.get("heavyload"))
-                .and_then(|s| s.as_ref())
-                .and_then(|s| s.parse::<f32>().ok())
-                .unwrap_or(0.0);
-
-            let max = heavy * 2.0;
-
-            return (light, medium, heavy, max);
-        }
-
-        let base = 10.0 * clamped_str as f32;
-        (base * 0.33, base * 0.66, base, base * 2.0)
-    }
-
-    pub fn get_encumbrance_info(&self, game_data: &GameData) -> EncumbranceInfo {
-        let current_weight = self.calculate_total_weight(game_data);
-        let strength = self.base_ability(crate::character::types::AbilityIndex::STR);
-
-        let (light, medium, heavy, max) = self.get_encumbrance_thresholds(strength, game_data);
-
-        let status = if current_weight > max {
+        let status = if total_weight > heavy_load {
             EncumbranceStatus::Overloaded
-        } else if current_weight > heavy {
-            EncumbranceStatus::Heavy
-        } else if current_weight > medium {
-            EncumbranceStatus::Medium
+        } else if total_weight > normal_load {
+            EncumbranceStatus::Encumbered
         } else {
-            EncumbranceStatus::Light
+            EncumbranceStatus::Normal
         };
 
-        EncumbranceInfo {
-            current_weight,
-            light_load: light,
-            medium_load: medium,
-            heavy_load: heavy,
-            max_load: max,
+        FullEncumbrance {
+            total_weight,
+            heavy_load,
             status,
         }
     }
@@ -1466,45 +960,11 @@ impl super::Character {
         armor_visual_type: Option<u8>,
         game_data: &GameData,
     ) -> Result<AddItemResult, CharacterError> {
-        let base_item_data = self.get_base_item_data(base_item_id, game_data);
+        let stack_size = stack_size.clamp(1, self.max_stack(base_item_id, game_data));
 
-        let max_stack = base_item_data.as_ref().map_or(1, |d| d.max_stack);
-
-        if max_stack > 1 {
-            let mut inv_list = self.get_list_owned("ItemList").unwrap_or_default();
-
-            for (index, item_struct) in inv_list.iter_mut().enumerate() {
-                if item_stack_identity_matches(item_struct, base_item_id, "", &[]) {
-                    let current_stack = item_struct
-                        .get("StackSize")
-                        .and_then(gff_value_to_i32)
-                        .unwrap_or(1);
-
-                    if current_stack < max_stack {
-                        let new_stack = (current_stack + stack_size).min(max_stack);
-                        let new_value = typed_stack_size(item_struct.get("StackSize"), new_stack);
-                        item_struct.insert("StackSize".to_string(), new_value);
-                        self.set_list("ItemList", inv_list);
-
-                        return Ok(AddItemResult {
-                            success: true,
-                            inventory_index: Some(index),
-                            stacked: true,
-                            message: format!("Stacked {stack_size} items"),
-                            item: None,
-                        });
-                    }
-                }
-            }
-        }
-
-        let mut inv_list = self.get_list_owned("ItemList").unwrap_or_default();
         let mut new_item = IndexMap::new();
         new_item.insert("BaseItem".to_string(), GffValue::Int(base_item_id));
-        new_item.insert(
-            "StackSize".to_string(),
-            GffValue::Word(stack_size.min(max_stack) as u16),
-        );
+        new_item.insert("StackSize".to_string(), GffValue::Word(stack_size as u16));
         new_item.insert("Identified".to_string(), GffValue::Byte(1));
         new_item.insert("Charges".to_string(), GffValue::Byte(0));
         new_item.insert("Cost".to_string(), GffValue::Int(0));
@@ -1567,16 +1027,32 @@ impl super::Character {
             );
         }
 
-        let inventory_index = inv_list.len();
-        inv_list.push(new_item);
+        self.add_new_item(new_item, game_data)
+    }
+
+    /// Adds `item` as its own inventory entry, never merging it onto a stack:
+    /// the user adds it to edit it next. Quest rewards go through
+    /// [`Self::add_item_from_struct`], which stacks.
+    pub fn add_new_item(
+        &mut self,
+        mut item: IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
+    ) -> Result<AddItemResult, CharacterError> {
+        mark_identified(&mut item);
+        self.clamp_stack_size(&mut item, game_data);
+        let info = self.parse_basic_item_info(&item);
+
+        let mut inv_list = self.get_list_owned("ItemList").unwrap_or_default();
+        let index = inv_list.len();
+        inv_list.push(item);
         self.set_list("ItemList", inv_list);
 
         Ok(AddItemResult {
             success: true,
-            inventory_index: Some(inventory_index),
+            inventory_index: Some(index),
             stacked: false,
             message: "Item added to inventory".to_string(),
-            item: None,
+            item: info,
         })
     }
 
@@ -1706,631 +1182,23 @@ impl super::Character {
         slot: EquipmentSlot,
         game_data: &GameData,
     ) -> bool {
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return false;
-        };
-
-        let Some(row) = baseitems.get_by_id(base_item_id) else {
-            return false;
-        };
-
-        let equip_slots = row_str(&row, "equipableslots")
-            .and_then(|s| {
-                if let Some(stripped) = s.strip_prefix("0x") {
-                    u32::from_str_radix(stripped, 16).ok()
-                } else {
-                    s.parse::<u32>().ok()
-                }
-            })
-            .unwrap_or(0);
-
-        equip_slots & slot.to_bitmask() != 0
-    }
-
-    pub fn get_item_proficiency_info(
-        &self,
-        base_item_id: i32,
-        game_data: &GameData,
-    ) -> ItemProficiencyInfo {
-        let mut requirements = Vec::new();
-        let mut is_proficient = true;
-
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return ItemProficiencyInfo {
-                is_proficient: true,
-                requirements: vec![],
-            };
-        };
-
-        let Some(row) = baseitems.get_by_id(base_item_id) else {
-            return ItemProficiencyInfo {
-                is_proficient: true,
-                requirements: vec![],
-            };
-        };
-
-        // Helper to check feat
-        let has_feat = |feat_id: u16| -> bool {
-            if let Some(feats) = self.get_list_owned("FeatList") {
-                feats.iter().any(|f| {
-                    f.get("Feat").and_then(gff_value_to_i32).unwrap_or(-1) as u16 == feat_id
-                })
-            } else {
-                false
-            }
-        };
-
-        // Helper to get feat name from feat.2da via TLK lookup
-        let get_feat_name = |feat_id: u16| -> String {
-            game_data
-                .get_table("feat")
-                .and_then(|t| t.get_by_id(i32::from(feat_id)))
-                .and_then(|row| row_str(&row, "featname").and_then(|s| s.parse::<i32>().ok()))
-                .and_then(|str_ref| game_data.get_string(str_ref))
-                .unwrap_or_else(|| format!("Feat {feat_id}"))
-        };
-
-        // 1. Check ReqFeat0-4
-        for i in 0..5 {
-            let col = format!("reqfeat{i}");
-            let feat_id_val = row_int(&row, &col, -1);
-            // -1 means no requirement
-            if feat_id_val >= 0 {
-                let feat_id = feat_id_val as u16;
-                let met = has_feat(feat_id);
-                if !met {
-                    is_proficient = false;
-                }
-
-                requirements.push(ProficiencyRequirement {
-                    feat_id: Some(feat_id),
-                    feat_name: get_feat_name(feat_id),
-                    met,
-                });
-            }
-        }
-
-        // 2. Check WeaponType
-        let weapon_type = row_int(&row, "weapontype", 0);
-        if weapon_type > 0 {
-            let mut required_feat = None;
-            match weapon_type {
-                1 => required_feat = Some(FEAT_WEAPON_PROFICIENCY_SIMPLE),
-                2 => required_feat = Some(FEAT_WEAPON_PROFICIENCY_MARTIAL),
-                3 => required_feat = Some(FEAT_WEAPON_PROFICIENCY_EXOTIC),
-                // Note: Exotic usually has specific ReqFeat, but this is general category fallback
-                _ => {}
-            }
-
-            // Special cases for Shields
-            if [BASE_ITEM_SMALL_SHIELD, BASE_ITEM_LARGE_SHIELD].contains(&base_item_id) {
-                required_feat = Some(FEAT_SHIELD_PROFICIENCY);
-            } else if base_item_id == BASE_ITEM_TOWER_SHIELD {
-                required_feat = Some(FEAT_TOWER_SHIELD_PROFICIENCY);
-            }
-
-            if let Some(feat_id) = required_feat {
-                let met = has_feat(feat_id);
-                if !met {
-                    is_proficient = false;
-                    requirements.push(ProficiencyRequirement {
-                        feat_id: Some(feat_id),
-                        feat_name: get_feat_name(feat_id),
-                        met,
-                    });
-                }
-            }
-        }
-
-        ItemProficiencyInfo {
-            is_proficient,
-            requirements,
-        }
+        equipable_slots_mask(base_item_id, game_data) & slot.to_bitmask() != 0
     }
 
     pub fn get_equipped_armor_max_dex(&self, game_data: &GameData) -> i32 {
-        let Some(equip_list) = self.get_list_owned("Equip_ItemList") else {
-            return 999;
-        };
-
-        for item_struct in &equip_list {
-            let struct_id = item_struct
-                .get("__struct_id__")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0) as u32;
-
-            if struct_id == EquipmentSlot::Chest.to_bitmask() {
-                if let Some(armor_rules_type) =
-                    item_struct.get("ArmorRulesType").and_then(gff_value_to_i32)
-                    && let Some(stats) = game_data
-                        .get_table("armorrulestats")
-                        .and_then(|t| t.get_by_id(armor_rules_type))
-                    && let Some(max_dex) =
-                        row_str(&stats, "maxdexbonus").and_then(|s| s.parse::<i32>().ok())
-                {
-                    return max_dex;
-                }
-                break;
-            }
-        }
-
-        999
+        self.equipped_armor_rules_stat("maxdexbonus", game_data)
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(999)
     }
 
     pub fn get_equipped_armor_rank(&self, game_data: &GameData) -> String {
-        let Some(equip_list) = self.get_list_owned("Equip_ItemList") else {
-            return "None".to_string();
-        };
-
-        for item_struct in &equip_list {
-            let struct_id = item_struct
-                .get("__struct_id__")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0) as u32;
-
-            if struct_id == EquipmentSlot::Chest.to_bitmask() {
-                if let Some(armor_rules_type) =
-                    item_struct.get("ArmorRulesType").and_then(gff_value_to_i32)
-                    && let Some(stats) = game_data
-                        .get_table("armorrulestats")
-                        .and_then(|t| t.get_by_id(armor_rules_type))
-                    && let Some(rank) = row_str(&stats, "rank")
-                {
-                    return rank;
-                }
-                break;
-            }
-        }
-
-        "None".to_string()
+        self.equipped_armor_rules_stat("rank", game_data)
+            .unwrap_or_else(|| "None".to_string())
     }
 
-    pub fn validate_inventory(&self) -> InventoryValidation {
-        let mut errors = Vec::new();
-        let warnings = Vec::new();
-
-        if let Some(inv_list) = self.get_list_owned("ItemList") {
-            for (idx, item_struct) in inv_list.iter().enumerate() {
-                let stack_size = item_struct
-                    .get("StackSize")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(1);
-
-                if stack_size < 0 {
-                    errors.push(format!(
-                        "Inventory item {idx}: Invalid negative stack size {stack_size}"
-                    ));
-                } else if stack_size > 999 {
-                    errors.push(format!(
-                        "Inventory item {idx}: Stack size {stack_size} too large (max 999)"
-                    ));
-                }
-
-                let base_item = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                if base_item < 0 {
-                    errors.push(format!(
-                        "Inventory item {idx}: Invalid negative base item ID {base_item}"
-                    ));
-                }
-            }
-        }
-
-        if let Some(equip_list) = self.get_list_owned("Equip_ItemList") {
-            for item_struct in &equip_list {
-                let struct_id = item_struct
-                    .get("__struct_id__")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0) as u32;
-
-                if struct_id == 0 {
-                    continue;
-                }
-
-                let base_item = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                if base_item < 0 {
-                    let slot_name = get_slot_name(struct_id);
-                    errors.push(format!(
-                        "Equipped item in {slot_name}: Invalid negative base item ID {base_item}"
-                    ));
-                }
-            }
-        }
-
-        InventoryValidation {
-            is_valid: errors.is_empty(),
-            errors,
-            warnings,
-        }
-    }
-
-    pub fn get_custom_items(&self, game_data: &GameData) -> Vec<CustomItemInfo> {
-        let mut custom_items = Vec::new();
-
-        if let Some(equip_list) = self.get_list_owned("Equip_ItemList") {
-            for item_struct in &equip_list {
-                let struct_id = item_struct
-                    .get("__struct_id__")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0) as u32;
-
-                if struct_id == 0 {
-                    continue;
-                }
-
-                let base_item_id = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                let baseitems = game_data.get_table("baseitems");
-                let is_custom = baseitems.and_then(|t| t.get_by_id(base_item_id)).is_none();
-
-                if is_custom {
-                    let slot_name = get_slot_name(struct_id);
-                    custom_items.push(CustomItemInfo {
-                        location: format!("equipped_{slot_name}"),
-                        base_item_id,
-                        tag: item_struct
-                            .get("Tag")
-                            .and_then(|v| match v {
-                                GffValue::String(s) => Some(s.to_string()),
-                                _ => None,
-                            })
-                            .unwrap_or_default(),
-                    });
-                }
-            }
-        }
-
-        if let Some(inv_list) = self.get_list_owned("ItemList") {
-            for (idx, item_struct) in inv_list.iter().enumerate() {
-                let base_item_id = item_struct
-                    .get("BaseItem")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-
-                let baseitems = game_data.get_table("baseitems");
-                let is_custom = baseitems.and_then(|t| t.get_by_id(base_item_id)).is_none();
-
-                if is_custom {
-                    custom_items.push(CustomItemInfo {
-                        location: format!("inventory_{idx}"),
-                        base_item_id,
-                        tag: item_struct
-                            .get("Tag")
-                            .and_then(|v| match v {
-                                GffValue::String(s) => Some(s.to_string()),
-                                _ => None,
-                            })
-                            .unwrap_or_default(),
-                    });
-                }
-            }
-        }
-
-        custom_items
-    }
-
-    pub fn has_custom_content(&self, game_data: &GameData) -> bool {
-        !self.get_custom_items(game_data).is_empty()
-    }
-
-    pub fn get_all_weapons(&self, game_data: &GameData) -> Vec<BaseItemInfo> {
-        let mut weapons = Vec::new();
-
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return weapons;
-        };
-
-        for item_id in 0..baseitems.row_count() {
-            let row_id = item_id as i32;
-            let Some(row) = baseitems.get_by_id(row_id) else {
-                continue;
-            };
-
-            let weapon_type = row_int(&row, "weapontype", 0);
-
-            if weapon_type > 0 {
-                let label = row_str(&row, "label").unwrap_or_else(|| format!("Weapon {row_id}"));
-
-                if is_invalid_base_item_label(&label) {
-                    continue;
-                }
-
-                let name = resolve_base_item_name(&row, row_id, game_data);
-
-                weapons.push(BaseItemInfo {
-                    id: row_id,
-                    name,
-                    label,
-                    category: get_item_category(&row),
-                    weapon_type: Some(weapon_type),
-                    ac_type: None,
-                });
-            }
-        }
-
-        weapons.sort_by(|a, b| a.name.cmp(&b.name));
-        weapons
-    }
-
-    pub fn get_all_armor(&self, game_data: &GameData) -> Vec<BaseItemInfo> {
-        let mut armor = Vec::new();
-
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return armor;
-        };
-
-        for item_id in 0..baseitems.row_count() {
-            let row_id = item_id as i32;
-            let Some(row) = baseitems.get_by_id(row_id) else {
-                continue;
-            };
-
-            if row_id == BASE_ITEM_ARMOR
-                || row_id == BASE_ITEM_SMALL_SHIELD
-                || row_id == BASE_ITEM_LARGE_SHIELD
-                || row_id == BASE_ITEM_TOWER_SHIELD
-            {
-                let label = row_str(&row, "label").unwrap_or_else(|| format!("Armor {row_id}"));
-
-                if is_invalid_base_item_label(&label) {
-                    continue;
-                }
-
-                let name = resolve_base_item_name(&row, row_id, game_data);
-
-                let ac_type = row_str(&row, "actype").and_then(|s| s.parse::<i32>().ok());
-
-                armor.push(BaseItemInfo {
-                    id: row_id,
-                    name,
-                    label,
-                    category: get_item_category(&row),
-                    weapon_type: None,
-                    ac_type,
-                });
-            }
-        }
-
-        armor.sort_by(|a, b| a.name.cmp(&b.name));
-        armor
-    }
-
-    pub fn filter_items_by_category(
-        &self,
-        game_data: &GameData,
-        category: &str,
-    ) -> Vec<BaseItemInfo> {
-        let mut items = Vec::new();
-
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return items;
-        };
-
-        for item_id in 0..baseitems.row_count() {
-            let row_id = item_id as i32;
-            let Some(row) = baseitems.get_by_id(row_id) else {
-                continue;
-            };
-
-            let item_category = get_item_category(&row);
-            if item_category != category {
-                continue;
-            }
-
-            let label = row_str(&row, "label").unwrap_or_else(|| format!("Item {row_id}"));
-
-            if is_invalid_base_item_label(&label) {
-                continue;
-            }
-
-            let name = resolve_base_item_name(&row, row_id, game_data);
-
-            items.push(BaseItemInfo {
-                id: row_id,
-                name,
-                label,
-                category: item_category,
-                weapon_type: None,
-                ac_type: None,
-            });
-        }
-
-        items.sort_by(|a, b| a.name.cmp(&b.name));
-        items
-    }
-
-    pub fn get_equipment_summary_by_slot(
-        &self,
-        game_data: &GameData,
-    ) -> HashMap<String, Option<EquippedItemInfo>> {
-        let mut summary: HashMap<String, Option<EquippedItemInfo>> = HashMap::new();
-
-        for (_bitmask, name) in EQUIPMENT_SLOTS {
-            summary.insert(name.to_string(), None);
-        }
-
-        let Some(equip_list) = self.get_list_owned("Equip_ItemList") else {
-            return summary;
-        };
-
-        for item_struct in &equip_list {
-            let struct_id = item_struct
-                .get("__struct_id__")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0) as u32;
-
-            if struct_id == 0 {
-                continue;
-            }
-
-            let slot_name = get_slot_name(struct_id);
-
-            let base_item_id = item_struct
-                .get("BaseItem")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0);
-
-            let tag = item_struct
-                .get("Tag")
-                .and_then(|v| match v {
-                    GffValue::String(s) => Some(s.to_string()),
-                    _ => None,
-                })
-                .unwrap_or_default();
-
-            let baseitems = game_data.get_table("baseitems");
-            let is_custom = baseitems.and_then(|t| t.get_by_id(base_item_id)).is_none();
-
-            let name = if let Some(row) = baseitems.and_then(|t| t.get_by_id(base_item_id)) {
-                resolve_base_item_name(&row, base_item_id, game_data)
-            } else {
-                format!("Custom Item {base_item_id}")
-            };
-
-            let weight = self
-                .get_base_item_weight(base_item_id, game_data)
-                .unwrap_or(0.0);
-
-            summary.insert(
-                slot_name.to_string(),
-                Some(EquippedItemInfo {
-                    base_item_id,
-                    tag,
-                    name,
-                    weight,
-                    is_custom,
-                }),
-            );
-        }
-
-        summary
-    }
-
-    pub fn get_item_property_descriptions(
-        &self,
-        item_struct: &IndexMap<String, GffValue<'static>>,
-        decoder: &ItemPropertyDecoder,
-    ) -> Vec<DecodedProperty> {
-        let Some(GffValue::ListOwned(props)) = item_struct.get("PropertiesList") else {
-            return Vec::new();
-        };
-        let base_item_id = item_struct
-            .get("BaseItem")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0);
-
-        let mut prop_maps = Vec::new();
-        for prop in props {
-            let mut map = HashMap::new();
-            for (k, v) in prop {
-                if let Some(json_val) = gff_to_json_primitive(v) {
-                    map.insert(k.clone(), json_val);
-                }
-            }
-            prop_maps.push(map);
-        }
-
-        decoder.decode_item_properties(&prop_maps, base_item_id)
-    }
-
-    pub fn get_enhanced_item_summary(
-        &self,
-        item_struct: &IndexMap<String, GffValue<'static>>,
-        game_data: &GameData,
-        decoder: &ItemPropertyDecoder,
-    ) -> EnhancedItemSummary {
-        let base_item_id = item_struct
-            .get("BaseItem")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0);
-
-        let tag = item_struct
-            .get("Tag")
-            .and_then(|v| match v {
-                GffValue::String(s) => Some(s.to_string()),
-                _ => None,
-            })
-            .unwrap_or_default();
-
-        let baseitems = game_data.get_table("baseitems");
-        let is_custom = baseitems.and_then(|t| t.get_by_id(base_item_id)).is_none();
-
-        let name = if let Some(row) = baseitems.and_then(|t| t.get_by_id(base_item_id)) {
-            resolve_base_item_name(&row, base_item_id, game_data)
-        } else {
-            format!("Custom Item {base_item_id}")
-        };
-
-        let enhancement = item_struct
-            .get("Enhancement")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0);
-
-        let charges = item_struct.get("Charges").and_then(gff_value_to_i32);
-
-        let identified = item_struct
-            .get("Identified")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(1)
-            != 0;
-
-        let plot = item_struct
-            .get("Plot")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0)
-            == 1;
-
-        let cursed = item_struct
-            .get("Cursed")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0)
-            == 1;
-
-        let stolen = item_struct
-            .get("Stolen")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(0)
-            == 1;
-
-        let stack_size = item_struct
-            .get("StackSize")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(1);
-
-        let properties = self.get_item_property_descriptions(item_struct, decoder);
-
-        let weight = self
-            .get_base_item_weight(base_item_id, game_data)
-            .unwrap_or(0.0);
-
-        let value = item_value(item_struct, game_data);
-
-        EnhancedItemSummary {
-            base_item_id,
-            tag,
-            name,
-            is_custom,
-            enhancement,
-            charges,
-            identified,
-            plot,
-            cursed,
-            stolen,
-            stack_size,
-            properties,
-            weight,
-            value,
-        }
+    fn equipped_armor_rules_stat(&self, column: &str, game_data: &GameData) -> Option<String> {
+        let armor = self.get_equipped_item_raw(EquipmentSlot::Chest)?;
+        row_str(&armor_rules_row(&armor, game_data)?, column)
     }
 
     pub fn update_inventory_item(
@@ -2350,7 +1218,8 @@ impl super::Character {
         }
 
         let had_identified = inv_list[index].contains_key("Identified");
-        merge_json_into_gff_struct(&mut inv_list[index], updated_data);
+        merge_json_into_gff_struct(&mut inv_list[index], updated_data)
+            .map_err(invalid_item_field)?;
         normalize_identified_field(&mut inv_list[index], had_identified);
         normalize_item_properties_list(&mut inv_list[index]);
         self.clamp_stack_size(&mut inv_list[index], game_data);
@@ -2361,7 +1230,7 @@ impl super::Character {
     /// Hold `StackSize` to `baseitems.Stacking`. The engine renders a single item
     /// for a non-stackable base type (a cloak is Stacking=1) but still multiplies
     /// encumbrance by the stack, so an over-sized stack reads as one cloak that
-    /// weighs ten.
+    /// weighs ten. A base item missing from `baseitems` keeps its stack.
     fn clamp_stack_size(
         &self,
         item: &mut IndexMap<String, GffValue<'static>>,
@@ -2372,10 +1241,10 @@ impl super::Character {
         };
 
         let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
-        let max_stack = self
-            .get_base_item_data(base_item_id, game_data)
-            .map_or(1, |d| d.max_stack)
-            .max(1);
+        let Some(base_item_data) = self.get_base_item_data(base_item_id, game_data) else {
+            return;
+        };
+        let max_stack = base_item_data.max_stack.max(1);
 
         let clamped = stack_size.clamp(1, max_stack);
         if clamped == stack_size {
@@ -2389,14 +1258,7 @@ impl super::Character {
             "Clamped StackSize to baseitems.Stacking"
         );
 
-        // Keep the field's own GFF type; the engine is type-strict, and real .uti
-        // items store StackSize as a Word.
-        let new_value = match item.get("StackSize") {
-            Some(GffValue::Byte(_)) => GffValue::Byte(clamped as u8),
-            Some(GffValue::Short(_)) => GffValue::Short(clamped as i16),
-            Some(GffValue::Int(_)) => GffValue::Int(clamped),
-            _ => GffValue::Word(clamped as u16),
-        };
+        let new_value = typed_stack_size(item.get("StackSize"), clamped);
         item.insert("StackSize".to_string(), new_value);
     }
 
@@ -2427,7 +1289,8 @@ impl super::Character {
             )))?;
 
         let had_identified = equip_list[item_idx].contains_key("Identified");
-        merge_json_into_gff_struct(&mut equip_list[item_idx], updated_data);
+        merge_json_into_gff_struct(&mut equip_list[item_idx], updated_data)
+            .map_err(invalid_item_field)?;
         normalize_identified_field(&mut equip_list[item_idx], had_identified);
         normalize_item_properties_list(&mut equip_list[item_idx]);
         self.clamp_stack_size(&mut equip_list[item_idx], game_data);
@@ -2495,66 +1358,6 @@ impl super::Character {
         Ok(())
     }
 
-    pub fn add_item_by_base_type(
-        &mut self,
-        base_item_id: i32,
-        game_data: &GameData,
-    ) -> Result<AddItemResult, CharacterError> {
-        let base_item_data = self.get_base_item_data(base_item_id, game_data);
-
-        if base_item_data.is_none() {
-            return Err(CharacterError::ValidationFailed {
-                field: "base_item_id",
-                message: format!("Invalid base item ID: {base_item_id}"),
-            });
-        }
-
-        self.add_item(base_item_id, 1, None, None, game_data)
-    }
-
-    pub fn get_all_base_items(&self, game_data: &GameData) -> Vec<BaseItemInfo> {
-        let mut items = Vec::new();
-
-        let Some(baseitems) = game_data.get_table("baseitems") else {
-            return items;
-        };
-
-        for item_id in 0..baseitems.row_count() {
-            let row_id = item_id as i32;
-            let Some(row) = baseitems.get_by_id(row_id) else {
-                continue;
-            };
-
-            let label = row_str(&row, "label").unwrap_or_else(|| format!("Item {row_id}"));
-
-            if is_invalid_base_item_label(&label) {
-                continue;
-            }
-
-            let name = resolve_base_item_name(&row, row_id, game_data);
-
-            if is_invalid_base_item_label(&name) {
-                continue;
-            }
-
-            let weapon_type = row_str(&row, "weapontype").and_then(|s| s.parse::<i32>().ok());
-
-            let ac_type = row_str(&row, "actype").and_then(|s| s.parse::<i32>().ok());
-
-            items.push(BaseItemInfo {
-                id: row_id,
-                name,
-                label,
-                category: get_item_category(&row),
-                weapon_type,
-                ac_type,
-            });
-        }
-
-        items.sort_by(|a, b| a.name.cmp(&b.name));
-        items
-    }
-
     pub fn get_inventory_item_at(
         &self,
         index: usize,
@@ -2585,55 +1388,52 @@ impl super::Character {
             .and_then(gff_value_to_i32)
             .unwrap_or(1);
 
-        let max_stack = self
-            .get_base_item_data(base_item_id, game_data)
-            .map_or(1, |d| d.max_stack);
+        let max_stack = self.max_stack(base_item_id, game_data);
 
         if !self.has_field("ItemList") {
             self.set_list("ItemList", Vec::new());
         }
-
-        if max_stack > 1 {
-            let properties = extract_list_from_map(&item, "PropertiesList").unwrap_or_default();
-            let inv_list = self
-                .get_list_mut("ItemList")
-                .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
-
-            for (index, existing) in inv_list.iter_mut().enumerate() {
-                if !item_stack_identity_matches(existing, base_item_id, &tag, &properties) {
-                    continue;
-                }
-
-                let current_stack = existing
-                    .get("StackSize")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(1);
-
-                if current_stack < max_stack {
-                    let new_stack = (current_stack + stack_size).min(max_stack);
-                    let new_value = typed_stack_size(existing.get("StackSize"), new_stack);
-                    existing.insert("StackSize".to_string(), new_value);
-
-                    return Ok(AddItemResult {
-                        success: true,
-                        inventory_index: Some(index),
-                        stacked: true,
-                        message: format!("Stacked {stack_size} onto existing {tag}"),
-                        item: Some(BasicItemInfo {
-                            base_item: base_item_id,
-                            tag,
-                            stack_size: new_stack,
-                            identified: true,
-                        }),
-                    });
-                }
-            }
-        }
-
         let inv_list = self
             .get_list_mut("ItemList")
             .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
 
+        let (remaining, stacked_index) = if max_stack > 1 {
+            let properties = extract_list_from_map(&item, "PropertiesList").unwrap_or_default();
+            fill_matching_stacks(
+                inv_list,
+                base_item_id,
+                &tag,
+                &properties,
+                max_stack,
+                stack_size,
+            )
+        } else {
+            (stack_size, None)
+        };
+        if remaining == 0
+            && let Some(index) = stacked_index
+        {
+            return Ok(AddItemResult {
+                success: true,
+                inventory_index: Some(index),
+                stacked: true,
+                message: format!("Stacked {stack_size} onto existing {tag}"),
+                item: Some(BasicItemInfo {
+                    base_item: base_item_id,
+                    tag,
+                    stack_size: inv_list[index]
+                        .get("StackSize")
+                        .and_then(gff_value_to_i32)
+                        .unwrap_or(stack_size),
+                    identified: true,
+                }),
+            });
+        }
+
+        if remaining != stack_size {
+            let value = typed_stack_size(item.get("StackSize"), remaining);
+            item.insert("StackSize".to_string(), value);
+        }
         inv_list.push(item);
         let index = inv_list.len() - 1;
 
@@ -2645,7 +1445,7 @@ impl super::Character {
             item: Some(BasicItemInfo {
                 base_item: base_item_id,
                 tag,
-                stack_size,
+                stack_size: remaining,
                 identified: true,
             }),
         })
@@ -2681,57 +1481,6 @@ impl super::Character {
         };
         resolve_base_item_name(&row, base_item_id, game_data)
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct InventoryValidation {
-    pub is_valid: bool,
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct CustomItemInfo {
-    pub location: String,
-    pub base_item_id: i32,
-    pub tag: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct BaseItemInfo {
-    pub id: i32,
-    pub name: String,
-    pub label: String,
-    pub category: String,
-    pub weapon_type: Option<i32>,
-    pub ac_type: Option<i32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct EquippedItemInfo {
-    pub base_item_id: i32,
-    pub tag: String,
-    pub name: String,
-    pub weight: f32,
-    pub is_custom: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct EnhancedItemSummary {
-    pub base_item_id: i32,
-    pub tag: String,
-    pub name: String,
-    pub is_custom: bool,
-    pub enhancement: i32,
-    pub charges: Option<i32>,
-    pub identified: bool,
-    pub plot: bool,
-    pub cursed: bool,
-    pub stolen: bool,
-    pub stack_size: i32,
-    pub properties: Vec<DecodedProperty>,
-    pub weight: f32,
-    pub value: i32,
 }
 
 fn get_slot_name(bitmask: u32) -> &'static str {
@@ -2782,6 +1531,68 @@ fn resolve_base_item_name(
     }
 
     row_str(row, "label").unwrap_or_else(|| format!("Item {row_id}"))
+}
+
+fn is_armor_or_shield(base_item_id: i32) -> bool {
+    matches!(
+        base_item_id,
+        BASE_ITEM_ARMOR | BASE_ITEM_SMALL_SHIELD | BASE_ITEM_LARGE_SHIELD | BASE_ITEM_TOWER_SHIELD
+    )
+}
+
+pub(crate) fn armor_rules_row(
+    item_struct: &IndexMap<String, GffValue<'static>>,
+    game_data: &GameData,
+) -> Option<ahash::AHashMap<String, Option<String>>> {
+    let rules_type = item_struct
+        .get("ArmorRulesType")
+        .and_then(gff_value_to_i32)?;
+    game_data.get_table("armorrulestats")?.get_by_id(rules_type)
+}
+
+fn armor_rules_ac(
+    item_struct: &IndexMap<String, GffValue<'static>>,
+    game_data: &GameData,
+) -> Option<i32> {
+    let row = armor_rules_row(item_struct, game_data)?;
+    row_str(&row, "acbonus")
+        .and_then(|s| s.parse::<f32>().ok())
+        .map(|f| f as i32)
+}
+
+/// Weight of one unit in lbs. Armor and shields weigh `armorrulestats.WEIGHT`
+/// by `ArmorRulesType` (full plate 50 lb); their `baseitems.TenthLBS` is generic
+/// (every body armor 10 lb).
+fn item_unit_weight(
+    item_struct: &IndexMap<String, GffValue<'static>>,
+    game_data: &GameData,
+) -> f32 {
+    let base_item_id = item_struct
+        .get("BaseItem")
+        .and_then(gff_value_to_i32)
+        .unwrap_or(0);
+    let armor_weight = is_armor_or_shield(base_item_id)
+        .then(|| armor_rules_row(item_struct, game_data))
+        .flatten()
+        .and_then(|row| row_str(&row, "weight"));
+    let tenth_lbs = armor_weight.or_else(|| {
+        game_data
+            .get_table("baseitems")?
+            .get_by_id(base_item_id)
+            .and_then(|row| row_str(&row, "tenthlbs"))
+    });
+    tenth_lbs
+        .and_then(|s| s.parse::<f32>().ok())
+        .map_or(0.0, |w| w / 10.0)
+}
+
+/// `baseitems.EquipableSlots` bitmask, 0 when the row is missing or blank.
+fn equipable_slots_mask(base_item_id: i32, game_data: &GameData) -> u32 {
+    game_data
+        .get_table("baseitems")
+        .and_then(|t| t.get_by_id(base_item_id))
+        .and_then(|row| row_str(&row, "equipableslots"))
+        .map_or(0, |s| parse_equip_slots(&s))
 }
 
 fn gff_to_json_primitive(val: &GffValue) -> Option<JsonValue> {
@@ -2866,19 +1677,43 @@ fn gff_struct_to_json(
     map
 }
 
+/// Converts `json_val` to the GFF type of `existing`. `Err` carries the path
+/// below `existing` that did not fit (empty when `existing` itself did not).
 fn coerce_json_to_gff_type(
     json_val: &JsonValue,
     existing: GffValue<'static>,
-) -> Option<GffValue<'static>> {
-    match existing {
-        GffValue::Byte(_) => json_val.as_u64().map(|n| GffValue::Byte(n as u8)),
-        GffValue::Char(_) => json_val.as_u64().map(|n| GffValue::Char(n as u8 as char)),
-        GffValue::Short(_) => json_val.as_i64().map(|n| GffValue::Short(n as i16)),
-        GffValue::Word(_) => json_val.as_u64().map(|n| GffValue::Word(n as u16)),
-        GffValue::Int(_) => json_val.as_i64().map(|n| GffValue::Int(n as i32)),
-        GffValue::Dword(_) => json_val.as_u64().map(|n| GffValue::Dword(n as u32)),
-        GffValue::Dword64(_) => json_val.as_u64().map(GffValue::Dword64),
-        GffValue::Int64(_) => json_val.as_i64().map(GffValue::Int64),
+) -> Result<GffValue<'static>, String> {
+    let unsigned = || {
+        json_val
+            .as_u64()
+            .or_else(|| json_val.as_bool().map(u64::from))
+    };
+    let signed = || {
+        json_val
+            .as_i64()
+            .or_else(|| json_val.as_bool().map(i64::from))
+    };
+    let coerced = match existing {
+        GffValue::Byte(_) => unsigned()
+            .and_then(|n| u8::try_from(n).ok())
+            .map(GffValue::Byte),
+        GffValue::Char(_) => unsigned()
+            .and_then(|n| u8::try_from(n).ok())
+            .map(|n| GffValue::Char(n as char)),
+        GffValue::Short(_) => signed()
+            .and_then(|n| i16::try_from(n).ok())
+            .map(GffValue::Short),
+        GffValue::Word(_) => unsigned()
+            .and_then(|n| u16::try_from(n).ok())
+            .map(GffValue::Word),
+        GffValue::Int(_) => signed()
+            .and_then(|n| i32::try_from(n).ok())
+            .map(GffValue::Int),
+        GffValue::Dword(_) => unsigned()
+            .and_then(|n| u32::try_from(n).ok())
+            .map(GffValue::Dword),
+        GffValue::Dword64(_) => unsigned().map(GffValue::Dword64),
+        GffValue::Int64(_) => signed().map(GffValue::Int64),
         GffValue::Float(_) => json_val.as_f64().map(|n| GffValue::Float(n as f32)),
         GffValue::Double(_) => json_val.as_f64().map(GffValue::Double),
         GffValue::String(_) => json_val
@@ -2888,24 +1723,28 @@ fn coerce_json_to_gff_type(
             .as_str()
             .map(|s| GffValue::ResRef(std::borrow::Cow::Owned(s.to_string()))),
         GffValue::LocString(_) => json_to_locstring(json_val),
-        GffValue::ListOwned(existing_list) => json_val
-            .as_array()
-            .map(|arr| GffValue::ListOwned(merge_json_list_into_gff_list(&existing_list, arr))),
-        GffValue::StructOwned(existing_struct) => coerce_json_to_struct(json_val, *existing_struct),
-        GffValue::Struct(lazy) => coerce_json_to_struct(json_val, lazy.force_load()),
+        GffValue::ListOwned(existing_list) => {
+            let arr = json_val.as_array().ok_or_else(String::new)?;
+            return merge_json_list_into_gff_list(&existing_list, arr).map(GffValue::ListOwned);
+        }
+        GffValue::StructOwned(existing_struct) => {
+            return coerce_json_to_struct(json_val, *existing_struct);
+        }
+        GffValue::Struct(lazy) => return coerce_json_to_struct(json_val, lazy.force_load()),
         _ => json_to_gff_best_guess(json_val),
-    }
+    };
+    coerced.ok_or_else(String::new)
 }
 
 fn coerce_json_to_struct(
     json_val: &JsonValue,
     mut existing: IndexMap<String, GffValue<'static>>,
-) -> Option<GffValue<'static>> {
-    let obj = json_val.as_object()?;
+) -> Result<GffValue<'static>, String> {
+    let obj = json_val.as_object().ok_or_else(String::new)?;
     let updates: HashMap<String, JsonValue> =
         obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-    merge_json_into_gff_struct(&mut existing, &updates);
-    Some(GffValue::StructOwned(Box::new(existing)))
+    merge_json_into_gff_struct(&mut existing, &updates)?;
+    Ok(GffValue::StructOwned(Box::new(existing)))
 }
 
 fn json_to_locstring(json_val: &JsonValue) -> Option<GffValue<'static>> {
@@ -3137,13 +1976,6 @@ fn write_accessories_into_item(
     }
 }
 
-/// Enforce NWN2 GFF schema types on every entry of an item's PropertiesList.
-///
-/// The frontend sends new property entries as generic JSON, which the merge path
-/// coerces into GffValue::Int for numeric fields when no existing entry exists.
-/// The engine reads the GFF with per-field type tags and silently drops properties
-/// whose types don't match the expected schema on the next load, so every numeric
-/// field must be re-typed to Byte/Word before writing.
 /// `merge_json_into_gff_struct` preserves `Identified`'s existing GFF type when
 /// the field is already on the item, but creates a brand new field as
 /// `GffValue::Int` (the JSON-number merge default) when the item never had
@@ -3164,6 +1996,13 @@ fn normalize_identified_field(
     }
 }
 
+/// Enforce NWN2 GFF schema types on every entry of an item's PropertiesList.
+///
+/// The frontend sends new property entries as generic JSON, which the merge path
+/// coerces into GffValue::Int for numeric fields when no existing entry exists.
+/// The engine reads the GFF with per-field type tags and silently drops properties
+/// whose types don't match the expected schema on the next load, so every numeric
+/// field must be re-typed to Byte/Word before writing.
 fn normalize_item_properties_list(item: &mut IndexMap<String, GffValue<'static>>) {
     if let Some(GffValue::ListOwned(entries)) = item.get_mut("PropertiesList") {
         for entry in entries {
@@ -3307,59 +2146,97 @@ fn item_stack_identity_matches(
     property_lists_match(&existing_props, properties)
 }
 
+fn invalid_item_field(path: String) -> CharacterError {
+    CharacterError::ValidationFailed {
+        field: "item_data",
+        message: format!("{path} has a value that does not fit its field type"),
+    }
+}
+
+/// Tops up the inventory stacks matching `base_item_id`, `tag` and `properties`
+/// to `max_stack`. Returns the units that did not fit and the last stack topped up.
+fn fill_matching_stacks(
+    inv_list: &mut [IndexMap<String, GffValue<'static>>],
+    base_item_id: i32,
+    tag: &str,
+    properties: &[IndexMap<String, GffValue<'static>>],
+    max_stack: i32,
+    mut count: i32,
+) -> (i32, Option<usize>) {
+    let mut last_index = None;
+    for (index, existing) in inv_list.iter_mut().enumerate() {
+        if count == 0 {
+            break;
+        }
+        if !item_stack_identity_matches(existing, base_item_id, tag, properties) {
+            continue;
+        }
+        let current = existing
+            .get("StackSize")
+            .and_then(gff_value_to_i32)
+            .unwrap_or(1);
+        let added = (max_stack - current).clamp(0, count);
+        if added == 0 {
+            continue;
+        }
+        let value = typed_stack_size(existing.get("StackSize"), current + added);
+        existing.insert("StackSize".to_string(), value);
+        count -= added;
+        last_index = Some(index);
+    }
+    (count, last_index)
+}
+
+/// Merges frontend JSON into an item struct, keeping each existing field's GFF
+/// type. `Err` names the field path whose value does not fit its type; the
+/// struct may then be partially merged and must be discarded.
 fn merge_json_into_gff_struct(
     existing: &mut IndexMap<String, GffValue<'static>>,
     updates: &HashMap<String, JsonValue>,
-) {
+) -> Result<(), String> {
     for (key, json_val) in updates {
         if key == "__struct_id__" {
             continue;
         }
 
-        let new_val = if let Some(existing_val) = existing.shift_remove(key) {
-            coerce_json_to_gff_type(json_val, existing_val)
-        } else {
-            json_to_gff_best_guess(json_val)
+        let new_val = match existing.get(key) {
+            Some(existing_val) => {
+                coerce_json_to_gff_type(json_val, existing_val.clone()).map_err(|path| {
+                    if path.is_empty() {
+                        key.clone()
+                    } else if path.starts_with('[') {
+                        format!("{key}{path}")
+                    } else {
+                        format!("{key}.{path}")
+                    }
+                })?
+            }
+            None => match json_to_gff_best_guess(json_val) {
+                Some(val) => val,
+                None => continue,
+            },
         };
-
-        if let Some(val) = new_val {
-            existing.insert(key.clone(), val);
-        }
+        existing.insert(key.clone(), new_val);
     }
+    Ok(())
 }
 
 fn merge_json_list_into_gff_list(
     existing_list: &[IndexMap<String, GffValue<'static>>],
     json_arr: &[JsonValue],
-) -> Vec<IndexMap<String, GffValue<'static>>> {
+) -> Result<Vec<IndexMap<String, GffValue<'static>>>, String> {
     json_arr
         .iter()
         .enumerate()
         .map(|(i, json_item)| {
-            let Some(obj) = json_item.as_object() else {
-                return if i < existing_list.len() {
-                    existing_list[i].clone()
-                } else {
-                    IndexMap::new()
-                };
-            };
-
+            let obj = json_item.as_object().ok_or_else(|| format!("[{i}]"))?;
             let updates: HashMap<String, JsonValue> =
                 obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-            if i < existing_list.len() {
-                let mut item = existing_list[i].clone();
-                merge_json_into_gff_struct(&mut item, &updates);
-                item
-            } else {
-                let mut item = IndexMap::new();
-                for (k, v) in &updates {
-                    if let Some(gff_val) = json_to_gff_best_guess(v) {
-                        item.insert(k.clone(), gff_val);
-                    }
-                }
-                item
-            }
+            let mut item = existing_list.get(i).cloned().unwrap_or_default();
+            merge_json_into_gff_struct(&mut item, &updates)
+                .map_err(|path| format!("[{i}].{path}"))?;
+            Ok(item)
         })
         .collect()
 }
@@ -3370,7 +2247,6 @@ mod tests {
     use super::*;
     use crate::character::Character;
     use std::borrow::Cow;
-    use std::fmt::Write as _;
 
     #[test]
     fn test_normalize_item_property_entry_types_and_aliases() {
@@ -3486,7 +2362,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        merge_json_into_gff_struct(&mut existing, &updates);
+        merge_json_into_gff_struct(&mut existing, &updates).unwrap();
 
         // Walk back down and assert the numbers stayed Byte-typed
         let tintable_v = existing.get("Tintable").expect("Tintable missing");
@@ -3642,130 +2518,6 @@ mod tests {
         assert!(character.equipped_items().is_empty());
     }
 
-    #[test]
-    fn test_calculate_total_weight_empty() {
-        use crate::loaders::GameData;
-        use crate::parsers::tlk::TLKParser;
-        use std::sync::{Arc, RwLock};
-
-        let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
-        let game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
-
-        assert_eq!(character.calculate_total_weight(&game_data), 0.0);
-    }
-
-    #[test]
-    fn test_get_equipment_ac_bonus_empty() {
-        use crate::loaders::GameData;
-        use crate::parsers::tlk::TLKParser;
-        use std::sync::{Arc, RwLock};
-
-        let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
-        let game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
-
-        assert_eq!(character.get_equipment_ac_bonus(&game_data), 0);
-    }
-
-    #[test]
-    fn test_weight_status_default() {
-        use crate::loaders::GameData;
-        use crate::parsers::tlk::TLKParser;
-        use std::sync::{Arc, RwLock};
-
-        let mut fields = IndexMap::new();
-        fields.insert("Str".to_string(), GffValue::Byte(10));
-        let character = Character::from_gff(fields);
-        let game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
-
-        let status = character.get_weight_status(&game_data);
-        assert_eq!(status, WeightStatus::Unencumbered);
-    }
-
-    #[test]
-    fn test_equipment_summary_empty() {
-        use crate::loaders::GameData;
-        use crate::parsers::tlk::TLKParser;
-        use std::sync::{Arc, RwLock};
-
-        let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
-        let game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
-
-        let summary = character.get_equipment_summary(&game_data);
-        assert_eq!(summary.slots.len(), 14);
-        assert_eq!(summary.total_ac_bonus, 0);
-        assert_eq!(summary.total_weight, 0.0);
-        assert!(summary.slots.iter().all(|slot| slot.item.is_none()));
-    }
-
-    #[test]
-    fn test_get_item_proficiency_info() {
-        use crate::loaders::GameData;
-        use crate::loaders::types::LoadedTable;
-        use crate::parsers::tda::TDAParser;
-        use crate::parsers::tlk::TLKParser;
-        use std::sync::{Arc, RwLock};
-
-        // Setup GameData
-        let mut game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
-
-        // Mock baseitems table via 2DA content
-        // Item 0: Simple Weapon (Type 1), No specific feat
-        // Item 1: Exotic Weapon (Type 3), Requires Feat 100
-        let baseitems_content = "2DA V2.0
-        
-           Label       WeaponType ReqFeat0
-0      Item0       1          -1
-1      Item1       3          100
-";
-        let mut baseitems_parser = TDAParser::new();
-        baseitems_parser
-            .parse_from_bytes(baseitems_content.as_bytes())
-            .unwrap();
-        let baseitems_table = LoadedTable::new("baseitems".to_string(), Arc::new(baseitems_parser));
-        game_data
-            .tables
-            .insert("baseitems".to_string(), baseitems_table);
-
-        // Mock feat table
-        // We need entry 100
-        let mut feat_content = String::from("2DA V2.0\n\n       Label       FeatName\n");
-        for i in 0..=100 {
-            let _ = writeln!(feat_content, "{i}      Feat{i}      {i}");
-        }
-
-        let mut feat_parser = TDAParser::new();
-        feat_parser
-            .parse_from_bytes(feat_content.as_bytes())
-            .unwrap();
-        let feat_table = LoadedTable::new("feat".to_string(), Arc::new(feat_parser));
-        game_data.tables.insert("feat".to_string(), feat_table);
-
-        // Setup Character with Feat 44 (Simple) but NOT Feat 100
-        let mut fields = IndexMap::new();
-        let mut feat44 = IndexMap::new();
-        feat44.insert("Feat".to_string(), GffValue::Word(44));
-        fields.insert("FeatList".to_string(), GffValue::ListOwned(vec![feat44]));
-
-        let character = Character::from_gff(fields);
-
-        // Test Simple Weapon (Item 0)
-        let info_simple = character.get_item_proficiency_info(0, &game_data);
-        assert!(info_simple.is_proficient);
-
-        // Test Exotic Weapon (Item 1)
-        let info_exotic = character.get_item_proficiency_info(1, &game_data);
-        assert!(!info_exotic.is_proficient);
-        assert!(
-            info_exotic
-                .requirements
-                .iter()
-                .any(|r| r.feat_id == Some(100) && !r.met)
-        );
-    }
-
     /// GameData whose baseitems row 0 allows stacks of 10, so the stack-merge
     /// branch in add_item/add_item_from_struct is reachable.
     fn game_data_with_stackable_baseitem() -> GameData {
@@ -3842,7 +2594,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add_item_stacks_onto_matching_untagged_item() {
+    fn test_add_item_never_merges_onto_matching_stack() {
         let game_data = game_data_with_stackable_baseitem();
         let mut untagged = stackable_item("", 3, &[]);
         untagged.shift_remove("Tag");
@@ -3850,9 +2602,10 @@ mod tests {
 
         let result = character.add_item(0, 2, None, None, &game_data).unwrap();
 
-        assert!(result.stacked);
-        assert_eq!(character.inventory_count(), 1);
-        assert_eq!(stack_size_at(&character, 0), 5);
+        assert!(!result.stacked);
+        assert_eq!(result.inventory_index, Some(1));
+        assert_eq!(stack_size_at(&character, 0), 3);
+        assert_eq!(stack_size_at(&character, 1), 2);
     }
 
     #[test]
@@ -4003,27 +2756,6 @@ mod tests {
     }
 
     #[test]
-    fn test_add_item_stack_merge_preserves_word_stack_size_type() {
-        // A stack merge onto an existing Word-typed item must stay a Word, not
-        // get retyped to Short (the engine is type-strict).
-        // add_item's stack-merge path matches only untagged items (fresh
-        // base-type adds never carry a Tag).
-        let game_data = game_data_with_stackable_baseitem();
-        let mut item = stackable_item("", 3, &[]);
-        item.insert("StackSize".to_string(), GffValue::Word(3));
-        let mut character = character_with_items(vec![item]);
-
-        character.add_item(0, 2, None, None, &game_data).unwrap();
-
-        let stored = character.get_inventory_item_at(0).unwrap();
-        assert!(
-            matches!(stored.get("StackSize"), Some(GffValue::Word(5))),
-            "StackSize should stay Word(5): {:?}",
-            stored.get("StackSize")
-        );
-    }
-
-    #[test]
     fn test_add_item_from_struct_stack_merge_preserves_word_stack_size_type() {
         let game_data = game_data_with_stackable_baseitem();
         let mut existing = stackable_item("cft_ess_fire4", 2, &[(52, 21)]);
@@ -4068,6 +2800,147 @@ mod tests {
 
         // game_data_with_stackable_baseitem's only row (BaseItem 0) caps at 10.
         assert_eq!(stack_size_at(&character, 0), 10);
+    }
+
+    #[test]
+    fn test_add_item_from_struct_overflow_fills_stack_then_adds_remainder() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![stackable_item("arrow", 8, &[])]);
+
+        let result = character
+            .add_item_from_struct(stackable_item("arrow", 5, &[]), &game_data)
+            .unwrap();
+
+        assert!(!result.stacked);
+        assert_eq!(result.item.unwrap().stack_size, 3);
+        assert_eq!(stack_size_at(&character, 0), 10);
+        assert_eq!(stack_size_at(&character, 1), 3);
+    }
+
+    #[test]
+    fn test_add_item_bounds_stack_size() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = character_with_items(vec![]);
+
+        character.add_item(0, 0, None, None, &game_data).unwrap();
+        character.add_item(0, -5, None, None, &game_data).unwrap();
+        character.add_item(0, 50, None, None, &game_data).unwrap();
+
+        assert_eq!(stack_size_at(&character, 0), 1);
+        assert_eq!(stack_size_at(&character, 1), 1);
+        assert_eq!(stack_size_at(&character, 2), 10);
+    }
+
+    #[test]
+    fn test_clamp_keeps_stack_of_unknown_base_item() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = Character::from_gff(create_test_fields());
+        let mut item = stackable_item("custom_ammo", 50, &[]);
+        item.insert("BaseItem".to_string(), GffValue::Int(9999));
+
+        character
+            .transform_inventory_item(0, item, &game_data)
+            .unwrap();
+
+        assert_eq!(stack_size_at(&character, 0), 50);
+    }
+
+    #[test]
+    fn test_clamp_preserves_dword_stack_size() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut character = Character::from_gff(create_test_fields());
+        let mut item = stackable_item("bundle", 1, &[]);
+        item.insert("StackSize".to_string(), GffValue::Dword(50));
+
+        character
+            .transform_inventory_item(0, item, &game_data)
+            .unwrap();
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(matches!(stored.get("StackSize"), Some(GffValue::Dword(10))));
+    }
+
+    #[test]
+    fn test_update_inventory_item_rejects_value_that_does_not_fit() {
+        let game_data = game_data_with_stackable_baseitem();
+        let mut item = stackable_item("arrow", 5, &[(1, 0)]);
+        item.insert("StackSize".to_string(), GffValue::Word(5));
+        let mut character = character_with_items(vec![item]);
+
+        for bad in [
+            serde_json::json!({ "StackSize": -1 }),
+            serde_json::json!({ "StackSize": 70000 }),
+            serde_json::json!({ "StackSize": null }),
+            serde_json::json!({ "PropertiesList": [{ "Subtype": "x" }] }),
+        ] {
+            let updates: HashMap<String, JsonValue> = serde_json::from_value(bad).unwrap();
+            let err = character
+                .update_inventory_item(0, &updates, &game_data)
+                .unwrap_err();
+            assert!(matches!(err, CharacterError::ValidationFailed { .. }));
+        }
+
+        let stored = character.get_inventory_item_at(0).unwrap();
+        assert!(matches!(stored.get("StackSize"), Some(GffValue::Word(5))));
+    }
+
+    #[test]
+    fn test_merge_accepts_bool_for_byte_flag() {
+        let mut item = IndexMap::new();
+        item.insert("Plot".to_string(), GffValue::Byte(0));
+        let updates: HashMap<String, JsonValue> =
+            serde_json::from_value(serde_json::json!({ "Plot": true })).unwrap();
+
+        merge_json_into_gff_struct(&mut item, &updates).unwrap();
+
+        assert!(matches!(item.get("Plot"), Some(GffValue::Byte(1))));
+    }
+
+    #[test]
+    fn test_armor_weight_comes_from_armorrulestats() {
+        use crate::loaders::types::LoadedTable;
+        use crate::parsers::tda::TDAParser;
+        use crate::parsers::tlk::TLKParser;
+        use std::sync::{Arc, RwLock};
+
+        let mut game_data = GameData::new(Arc::new(RwLock::new(TLKParser::default())));
+        for (name, content) in [
+            (
+                "baseitems",
+                "2DA V2.0
+
+   Label  TenthLBS
+0  Ring  1
+16  Armor  100
+",
+            ),
+            (
+                "armorrulestats",
+                "2DA V2.0
+
+   Label  ACBONUS  WEIGHT
+0  Cloth  0  100
+1  Plate  8  500
+",
+            ),
+        ] {
+            let mut parser = TDAParser::new();
+            parser.parse_from_bytes(content.as_bytes()).unwrap();
+            game_data.tables.insert(
+                name.to_string(),
+                LoadedTable::new(name.to_string(), Arc::new(parser)),
+            );
+        }
+
+        let mut armor = IndexMap::new();
+        armor.insert("BaseItem".to_string(), GffValue::Int(16));
+        armor.insert("ArmorRulesType".to_string(), GffValue::Byte(1));
+        let mut ring = IndexMap::new();
+        ring.insert("BaseItem".to_string(), GffValue::Int(0));
+        ring.insert("ArmorRulesType".to_string(), GffValue::Byte(1));
+
+        assert_eq!(item_unit_weight(&armor, &game_data), 50.0);
+        assert_eq!(item_unit_weight(&ring, &game_data), 0.1);
     }
 
     #[test]

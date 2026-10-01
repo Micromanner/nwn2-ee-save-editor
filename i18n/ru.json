@@ -473,6 +473,11 @@
     "weightValue": "{value} фунт.",
     "goldValue": "{value} зол.",
     "weightRatio": "{current} / {max} фунт.",
+    "encumbrance": {
+      "normal": "Норма",
+      "encumbered": "Нагружен",
+      "overloaded": "Перегружен"
+    },
     "itemCount": "{count, plural, one {# предмет} few {# предмета} many {# предметов} other {# предмета}}",
     "slots": {
       "mainHand": "Основная рука",

@@ -46,13 +46,12 @@ pub use feats::{
     FeatSummary, FeatType, FeatsState, domain_epithet_feats,
 };
 pub use identity::{Alignment, resolve_localized_name, resolved_full_name};
-pub(crate) use inventory::typed_stack_size;
 pub use inventory::{
-    AddItemResult, BasicItemInfo, EncumbranceInfo, EquipResult, EquipmentSlot, EquipmentSummary,
-    FullEncumbrance, FullEquippedItem, FullInventoryItem, FullInventorySummary, InventoryItem,
-    ItemProficiencyInfo, ProficiencyRequirement, RemoveItemResult, TransformResult, UnequipResult,
-    WeightStatus,
+    AddItemResult, BasicItemInfo, EncumbranceStatus, EquipResult, EquipmentSlot, FullEncumbrance,
+    FullEquippedItem, FullInventoryItem, FullInventorySummary, InventoryItem, RemoveItemResult,
+    TransformResult, UnequipResult,
 };
+pub(crate) use inventory::{armor_rules_row, typed_stack_size};
 pub(crate) use item_appearance::ArmorSlot;
 pub(crate) use item_appearance::is_bracer_label;
 pub use item_appearance::{

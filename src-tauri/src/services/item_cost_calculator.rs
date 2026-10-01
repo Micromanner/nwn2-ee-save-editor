@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use tracing::{trace, warn};
 
+use crate::character::armor_rules_row;
 use crate::character::gff_helpers::gff_value_to_i32;
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
@@ -94,12 +95,7 @@ impl ItemCostCalculator {
         let base_cost = row_str(&row, "basecost")
             .and_then(|s| s.parse::<f64>().ok())
             .or_else(|| {
-                let rules_type = item_struct
-                    .get("ArmorRulesType")
-                    .and_then(gff_value_to_i32)?;
-                game_data
-                    .get_table("armorrulestats")?
-                    .get_by_id(rules_type)
+                armor_rules_row(item_struct, game_data)
                     .and_then(|r| row_str(&r, "cost"))
                     .and_then(|s| s.parse::<f64>().ok())
             })

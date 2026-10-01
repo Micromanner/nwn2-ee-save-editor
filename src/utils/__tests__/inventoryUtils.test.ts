@@ -46,7 +46,7 @@ describe('parseInventoryGrid', () => {
       ],
       equipped: [],
       gold: 0,
-      encumbrance: { total_weight: 0, light_load: 50, medium_load: 100, heavy_load: 150, encumbrance_level: 'Light' },
+      encumbrance: { total_weight: 0, heavy_load: 150, status: 'normal' },
     };
     const result = parseInventoryGrid(data as any);
     expect(result[0]).not.toBeNull();

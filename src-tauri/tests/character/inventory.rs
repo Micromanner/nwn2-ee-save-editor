@@ -1,10 +1,17 @@
 use crate::common::{create_test_context, fixtures_path, load_test_gff};
-use app_lib::character::EquipmentSlot;
+use app_lib::character::{Character, EncumbranceStatus, EquipmentSlot};
+use app_lib::loaders::GameData;
 use app_lib::parsers::gff::GffParser;
+use app_lib::services::item_property_decoder::ItemPropertyDecoder;
 use app_lib::services::savegame_handler::SaveGameHandler;
 
 // Use a high level character to ensure they have equipment and gold
 const TEST_CHAR_FILE: &str = "ryathstrongarm/ryathstrongarm4.bic";
+
+fn equipment_ac(character: &Character, game_data: &GameData, decoder: &ItemPropertyDecoder) -> i32 {
+    let bonuses = character.get_equipment_bonuses(game_data, decoder);
+    bonuses.ac_armor_bonus + bonuses.ac_shield_bonus + bonuses.ac_bonus
+}
 
 #[tokio::test]
 async fn test_inventory_loading() {
@@ -51,55 +58,6 @@ async fn test_inventory_loading() {
 }
 
 #[tokio::test]
-async fn test_equipment_stats() {
-    let ctx = create_test_context().await;
-    let data = load_test_gff(TEST_CHAR_FILE);
-    let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");
-    let fields = parser
-        .read_struct_fields(0)
-        .expect("Failed to read top level struct");
-    let character = app_lib::character::Character::from_gff(fields);
-
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
-
-    let summary = character.get_equipment_summary(game_data);
-
-    // Verify meaningful stats
-    assert!(!summary.slots.is_empty(), "Should list equipment slots");
-
-    println!("Equipment Summary AC Bonus: {}", summary.total_ac_bonus);
-    println!("Equipment Summary Weight: {}", summary.total_weight);
-
-    // Check for specific commonly equipped slots
-    let right_hand = summary
-        .slots
-        .iter()
-        .find(|s| s.slot == EquipmentSlot::RightHand.to_bitmask());
-    assert!(right_hand.is_some(), "Should have Right Hand slot info");
-
-    if let Some(rh) = right_hand {
-        if let Some(item) = &rh.item {
-            println!("Right Hand Item: {}", item.tag);
-        } else {
-            println!("Right Hand: Empty");
-        }
-    }
-
-    let chest = summary
-        .slots
-        .iter()
-        .find(|s| s.slot == EquipmentSlot::Chest.to_bitmask());
-    assert!(chest.is_some(), "Should have Chest slot info");
-    if let Some(ch) = chest {
-        if let Some(item) = &ch.item {
-            println!("Chest Item: {}", item.tag);
-        } else {
-            println!("Chest: Empty");
-        }
-    }
-}
-
-#[tokio::test]
 async fn test_encumbrance() {
     let ctx = create_test_context().await;
     let data = load_test_gff(TEST_CHAR_FILE);
@@ -110,18 +68,26 @@ async fn test_encumbrance() {
     let character = app_lib::character::Character::from_gff(fields);
 
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
-    let encumbrance = character.get_encumbrance_info(game_data);
+    let encumbrance = character
+        .get_full_inventory_summary(game_data, &ctx.decoder, None)
+        .encumbrance;
 
-    // Verify fields populated
-    assert!(encumbrance.current_weight >= 0.0);
-    assert!(encumbrance.max_load > 0.0);
+    let strength = character.get_total_abilities(game_data, &ctx.decoder).str_;
+    let row = game_data
+        .get_table("encumbrance")
+        .and_then(|t| t.get_by_id(strength))
+        .expect("encumbrance row for STR");
+    let load = |column: &str| {
+        row.get(column)
+            .and_then(|v| v.as_deref())
+            .and_then(|v| v.parse::<f32>().ok())
+            .expect("encumbrance column")
+            / 10.0
+    };
 
-    // Verify thresholds logic
-    assert!(encumbrance.light_load <= encumbrance.medium_load);
-    assert!(encumbrance.medium_load <= encumbrance.heavy_load);
-    assert!(encumbrance.heavy_load <= encumbrance.max_load);
-
-    println!("Encumbrance: {encumbrance:?}");
+    assert_eq!(encumbrance.heavy_load, load("heavy"));
+    assert!(encumbrance.total_weight > 0.0);
+    assert_eq!(encumbrance.status, EncumbranceStatus::Normal);
 }
 
 #[tokio::test]
@@ -155,19 +121,23 @@ async fn test_progression_comparison() {
     }
 
     // Compare Equipment Weight (High level usuall has heavier/more gear)
-    let weight_low = char_low.calculate_total_weight(game_data);
-    let weight_high = char_high.calculate_total_weight(game_data);
+    let weight = |character: &Character| {
+        character
+            .get_full_inventory_summary(game_data, &ctx.decoder, None)
+            .encumbrance
+            .total_weight
+    };
+    let weight_low = weight(&char_low);
+    let weight_high = weight(&char_high);
 
     // Ryath Lvl 4 might be heavier than Lvl 1
     println!("Weight Low: {weight_low}, Weight High: {weight_high}");
 
-    // Compare AC
-    let ac_low = char_low.get_equipment_ac_bonus(game_data);
-    let ac_high = char_high.get_equipment_ac_bonus(game_data);
+    let ac_low = equipment_ac(&char_low, game_data, &ctx.decoder);
+    let ac_high = equipment_ac(&char_high, game_data, &ctx.decoder);
 
     println!("AC Low: {ac_low}, AC High: {ac_high}");
 
-    // High level gear should provide more AC (magical bonuses etc) or at least equal
     assert!(
         ac_high >= ac_low,
         "High level gear should provide at least equal AC"
@@ -186,7 +156,7 @@ async fn test_equip_unequip_flow() {
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
 
     // 1. Snapshot initial state
-    let initial_ac = character.get_equipment_ac_bonus(game_data);
+    let initial_ac = equipment_ac(&character, game_data, &ctx.decoder);
     let initial_equipped = character.equipped_count();
 
     println!("Initial AC: {initial_ac}");
@@ -253,7 +223,7 @@ async fn test_equip_unequip_flow() {
     assert!(unequip_res.unequipped_item.is_some());
 
     // 3. Verify changes
-    let unequipped_ac = character.get_equipment_ac_bonus(game_data);
+    let unequipped_ac = equipment_ac(&character, game_data, &ctx.decoder);
     println!("AC after unequip: {unequipped_ac}");
 
     assert_eq!(
@@ -274,7 +244,7 @@ async fn test_equip_unequip_flow() {
         assert!(equip_res.success);
 
         // 5. Verify restoration
-        let final_ac = character.get_equipment_ac_bonus(game_data);
+        let final_ac = equipment_ac(&character, game_data, &ctx.decoder);
         assert_eq!(
             final_ac, initial_ac,
             "AC should be restored after re-equipping"
