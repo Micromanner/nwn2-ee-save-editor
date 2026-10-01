@@ -153,7 +153,7 @@ pub async fn add_known_spell(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    match character.add_known_spell(class_index, spell_level, SpellId(spell_id)) {
+    match character.add_known_spell(class_index, spell_level, SpellId(spell_id), &game_data) {
         Ok(()) => Ok(SpellChangeResult {
             spell_id: SpellId(spell_id),
             action: SpellAction::Learned,
@@ -197,7 +197,7 @@ pub async fn remove_known_spell(
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
 
-    match character.remove_known_spell(class_index, spell_level, SpellId(spell_id)) {
+    match character.remove_known_spell(class_index, spell_level, SpellId(spell_id), &game_data) {
         Ok(()) => Ok(SpellChangeResult {
             spell_id: SpellId(spell_id),
             action: SpellAction::Forgotten,

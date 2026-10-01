@@ -124,6 +124,12 @@ pub fn bonus_spell_slots(spell_level: i32, casting_score: i32) -> i32 {
     }
 }
 
+/// Whether a casting ability score allows casting spells of `spell_level` at all: the
+/// engine grants no slots below 10 + spell level.
+fn can_cast_spell_level(spell_level: i32, casting_score: i32) -> bool {
+    casting_score >= 10 + spell_level
+}
+
 fn entry_class_id(entry: &IndexMap<String, GffValue<'static>>) -> ClassId {
     ClassId(entry.get("Class").and_then(gff_value_to_i32).unwrap_or(-1))
 }
@@ -268,6 +274,7 @@ impl Character {
         class_index: usize,
         spell_level: i32,
         spell_id: SpellId,
+        game_data: &GameData,
     ) -> Result<(), CharacterError> {
         let mut class_list = self.class_list_for_spell_edit(class_index, spell_level)?;
         let spell_word = spell_word(spell_id)?;
@@ -297,7 +304,7 @@ impl Character {
         class_entry.insert(field_name, GffValue::ListOwned(known_list));
         self.set_list("ClassList", class_list);
 
-        self.record_spell_change(class_id, spell_level, spell_word, true);
+        self.record_spell_change(class_id, spell_level, spell_word, true, game_data);
 
         Ok(())
     }
@@ -312,6 +319,7 @@ impl Character {
         class_index: usize,
         spell_level: i32,
         spell_id: SpellId,
+        game_data: &GameData,
     ) -> Result<(), CharacterError> {
         let mut class_list = self.class_list_for_spell_edit(class_index, spell_level)?;
         let spell_word = spell_word(spell_id)?;
@@ -345,7 +353,7 @@ impl Character {
         }
         self.set_list("ClassList", class_list);
 
-        self.record_spell_change(class_id, spell_level, spell_word, false);
+        self.record_spell_change(class_id, spell_level, spell_word, false, game_data);
 
         Ok(())
     }
@@ -772,11 +780,17 @@ impl Character {
 
             let caster_level = self.get_caster_level(class_id, game_data);
             let is_prepared = self.is_prepared_caster(class_id, game_data);
-            let base_slots = self.spell_slots_at(class_id, caster_level, game_data);
-
             let casting_score = self
                 .get_casting_ability(class_id, game_data)
                 .map(|ability| abilities.get(ability));
+            let mut base_slots = self.spell_slots_at(class_id, caster_level, game_data);
+            if let Some(score) = casting_score {
+                for (spell_level, slots) in (0..).zip(base_slots.iter_mut()) {
+                    if !can_cast_spell_level(spell_level, score) {
+                        *slots = slots.map(|_| 0);
+                    }
+                }
+            }
             let bonus_slots = (0..=MAX_SPELL_LEVEL)
                 .map(|spell_level| {
                     casting_score.map_or(0, |score| bonus_spell_slots(spell_level, score))
@@ -1641,6 +1655,12 @@ mod tests {
     use super::*;
     use crate::character::types::ClassId;
 
+    fn empty_game_data() -> GameData {
+        use crate::parsers::tlk::TLKParser;
+        use std::sync::{Arc, RwLock};
+        GameData::new(Arc::new(RwLock::new(TLKParser::default())))
+    }
+
     fn create_test_character_with_wizard() -> Character {
         let mut fields = IndexMap::new();
 
@@ -1703,7 +1723,11 @@ mod tests {
     #[test]
     fn test_add_known_spell() {
         let mut character = create_test_character_with_wizard();
-        assert!(character.add_known_spell(0, 0, SpellId(2)).is_ok());
+        assert!(
+            character
+                .add_known_spell(0, 0, SpellId(2), &empty_game_data())
+                .is_ok()
+        );
 
         let known = character.known_spells(ClassId(10), 0);
         assert_eq!(known.len(), 3);
@@ -1713,14 +1737,18 @@ mod tests {
     #[test]
     fn test_add_known_spell_duplicate() {
         let mut character = create_test_character_with_wizard();
-        let result = character.add_known_spell(0, 0, SpellId(0));
+        let result = character.add_known_spell(0, 0, SpellId(0), &empty_game_data());
         assert!(result.is_err());
     }
 
     #[test]
     fn test_remove_known_spell() {
         let mut character = create_test_character_with_wizard();
-        assert!(character.remove_known_spell(0, 0, SpellId(1)).is_ok());
+        assert!(
+            character
+                .remove_known_spell(0, 0, SpellId(1), &empty_game_data())
+                .is_ok()
+        );
 
         let known = character.known_spells(ClassId(10), 0);
         assert_eq!(known.len(), 1);
@@ -1730,7 +1758,7 @@ mod tests {
     #[test]
     fn test_remove_known_spell_not_found() {
         let mut character = create_test_character_with_wizard();
-        let result = character.remove_known_spell(0, 0, SpellId(99));
+        let result = character.remove_known_spell(0, 0, SpellId(99), &empty_game_data());
         assert!(result.is_err());
     }
 
@@ -1774,29 +1802,39 @@ mod tests {
     #[test]
     fn test_invalid_spell_level() {
         let mut character = create_test_character_with_wizard();
-        let result = character.add_known_spell(0, 10, SpellId(0));
+        let result = character.add_known_spell(0, 10, SpellId(0), &empty_game_data());
         assert!(result.is_err());
     }
 
     #[test]
     fn test_invalid_class_index() {
         let mut character = create_test_character_with_wizard();
-        let result = character.add_known_spell(5, 0, SpellId(0));
+        let result = character.add_known_spell(5, 0, SpellId(0), &empty_game_data());
         assert!(result.is_err());
     }
 
     #[test]
     fn test_spell_ids_outside_word_range_are_rejected() {
         let mut character = create_test_character_with_wizard();
-        assert!(character.add_known_spell(0, 1, SpellId(-1)).is_err());
-        assert!(character.add_known_spell(0, 1, SpellId(70_000)).is_err());
+        assert!(
+            character
+                .add_known_spell(0, 1, SpellId(-1), &empty_game_data())
+                .is_err()
+        );
+        assert!(
+            character
+                .add_known_spell(0, 1, SpellId(70_000), &empty_game_data())
+                .is_err()
+        );
         assert!(character.known_spells(ClassId(10), 1).is_empty());
     }
 
     #[test]
     fn test_remove_known_spell_drops_prepared_copies() {
         let mut character = create_test_character_with_wizard();
-        character.remove_known_spell(0, 0, SpellId(0)).unwrap();
+        character
+            .remove_known_spell(0, 0, SpellId(0), &empty_game_data())
+            .unwrap();
         assert!(character.memorized_spells(ClassId(10), 0).is_empty());
     }
 
@@ -1818,13 +1856,25 @@ mod tests {
                 })
         };
 
-        character.add_known_spell(0, 1, SpellId(5)).unwrap();
+        character
+            .add_known_spell(0, 1, SpellId(5), &empty_game_data())
+            .unwrap();
         assert_eq!(spell_list(&character, 0, "KnownList1"), Some(1));
         assert_eq!(spell_list(&character, 1, "KnownList1"), None);
 
-        character.remove_known_spell(0, 1, SpellId(5)).unwrap();
+        character
+            .remove_known_spell(0, 1, SpellId(5), &empty_game_data())
+            .unwrap();
         assert_eq!(spell_list(&character, 0, "KnownList1"), Some(0));
         assert_eq!(spell_list(&character, 0, "KnownRemoveList1"), None);
+    }
+
+    #[test]
+    fn test_can_cast_spell_level() {
+        assert!(can_cast_spell_level(0, 10));
+        assert!(!can_cast_spell_level(0, 9));
+        assert!(can_cast_spell_level(3, 13));
+        assert!(!can_cast_spell_level(3, 12));
     }
 
     #[test]

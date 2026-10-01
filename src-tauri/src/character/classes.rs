@@ -1064,6 +1064,8 @@ impl Character {
         row_int(&class_data, "hitdie", 6)
     }
 
+    /// XP the engine requires for character level `level`: the `exptable.2da` row of the
+    /// level plus the subrace ECL.
     pub fn calculate_xp_for_level(&self, level: i32, game_data: &GameData) -> i32 {
         if level < 1 {
             return 0;
@@ -1072,8 +1074,11 @@ impl Character {
         let Some(exp_table) = game_data.get_table("exptable") else {
             return 0;
         };
+        let Some(last_row) = exp_table.row_count().checked_sub(1) else {
+            return 0;
+        };
 
-        let row_index = (level - 1).max(0) as usize;
+        let row_index = ((level + self.ecl(game_data) - 1).max(0) as usize).min(last_row);
         exp_table
             .get_cell(row_index, "XP")
             .ok()
@@ -1504,43 +1509,86 @@ impl Character {
     /// flagged in its `BonusSpellcasterLevelTable` counts for the base class whose
     /// spellcasting feat (`BonusCasterFeatByClassMap`) the character took.
     pub(crate) fn prestige_bonus_caster_levels(&self, class_id: i32, game_data: &GameData) -> i32 {
-        let Some(classes_table) = game_data.get_table("classes") else {
-            return 0;
+        self.class_entries()
+            .into_iter()
+            .map(|entry| {
+                self.prestige_caster_level_grants(
+                    entry.class_id.0,
+                    class_id,
+                    entry.level.max(0) as usize,
+                    game_data,
+                )
+                .into_iter()
+                .filter(|grants| *grants)
+                .count() as i32
+            })
+            .sum()
+    }
+
+    /// Whether the `level_in_class`-th level of `level_class` advances `casting_class`'s
+    /// casting: a level of that class, or a prestige level adding a caster level to it.
+    fn level_advances_casting(
+        &self,
+        level_class: i32,
+        level_in_class: usize,
+        casting_class: i32,
+        game_data: &GameData,
+    ) -> bool {
+        level_class == casting_class
+            || level_in_class.checked_sub(1).is_some_and(|row| {
+                self.prestige_caster_level_grants(
+                    level_class,
+                    casting_class,
+                    level_in_class,
+                    game_data,
+                )
+                .get(row)
+                .is_some_and(|grants| *grants)
+            })
+    }
+
+    /// For the first `levels` levels of `prestige_id` (`BonusSpellcasterLevelTable` rows),
+    /// whether each adds a caster level to `casting_class`. Empty unless the character took
+    /// the spellcaster feat that `BonusCasterFeatByClassMap` maps to that class.
+    fn prestige_caster_level_grants(
+        &self,
+        prestige_id: i32,
+        casting_class: i32,
+        levels: usize,
+        game_data: &GameData,
+    ) -> Vec<bool> {
+        let Some(prestige_row) = game_data
+            .get_table("classes")
+            .and_then(|t| t.get_by_id(prestige_id))
+        else {
+            return Vec::new();
         };
-        let mut bonus = 0;
-        for entry in self.class_entries() {
-            let Some(prestige_row) = classes_table.get_by_id(entry.class_id.0) else {
-                continue;
-            };
-            let (Some(level_table), Some(feat_map)) = (
-                row_str(&prestige_row, "bonusspellcasterleveltable")
-                    .and_then(|name| game_data.get_table(&name.to_lowercase())),
-                row_str(&prestige_row, "bonuscasterfeatbyclassmap")
-                    .and_then(|name| game_data.get_table(&name.to_lowercase())),
-            ) else {
-                continue;
-            };
-            let cell_int = |table: &crate::loaders::types::LoadedTable, row: usize, col: &str| {
-                table
-                    .get_cell(row, col)
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.trim().parse::<i32>().ok())
-            };
-            let took_feat = (0..feat_map.row_count()).any(|row| {
-                cell_int(feat_map, row, "ClassId") == Some(class_id)
-                    && cell_int(feat_map, row, "SpellcasterFeat")
-                        .is_some_and(|feat| feat >= 0 && self.has_feat(FeatId(feat)))
-            });
-            if !took_feat {
-                continue;
-            }
-            let levels = (entry.level.max(0) as usize).min(level_table.row_count());
-            bonus += (0..levels)
-                .filter(|&row| cell_int(level_table, row, "GrantsBonusSpellcasterLevel") == Some(1))
-                .count() as i32;
+        let (Some(level_table), Some(feat_map)) = (
+            row_str(&prestige_row, "bonusspellcasterleveltable")
+                .and_then(|name| game_data.get_table(&name.to_lowercase())),
+            row_str(&prestige_row, "bonuscasterfeatbyclassmap")
+                .and_then(|name| game_data.get_table(&name.to_lowercase())),
+        ) else {
+            return Vec::new();
+        };
+        let cell_int = |table: &crate::loaders::types::LoadedTable, row: usize, col: &str| {
+            table
+                .get_cell(row, col)
+                .ok()
+                .flatten()
+                .and_then(|v| v.trim().parse::<i32>().ok())
+        };
+        let took_feat = (0..feat_map.row_count()).any(|row| {
+            cell_int(feat_map, row, "ClassId") == Some(casting_class)
+                && cell_int(feat_map, row, "SpellcasterFeat")
+                    .is_some_and(|feat| feat >= 0 && self.has_feat(FeatId(feat)))
+        });
+        if !took_feat {
+            return Vec::new();
         }
-        bonus
+        (0..level_table.row_count().min(levels))
+            .map(|row| cell_int(level_table, row, "GrantsBonusSpellcasterLevel") == Some(1))
+            .collect()
     }
 
     /// Highest caster level among the character's spellcasting classes of the
@@ -2066,6 +2114,13 @@ impl Character {
             });
         };
 
+        let level_in_class = level_in_class_at(&lvl_stat_list, idx);
+        let spell_classes: Vec<i32> = self
+            .class_entries()
+            .into_iter()
+            .map(|e| e.class_id.0)
+            .filter(|&c| self.level_advances_casting(class_id.0, level_in_class, c, game_data))
+            .collect();
         let entry = lvl_stat_list.remove(idx);
         let old_total_level = self.total_level();
         let old_con_mod = self.get_effective_ability_modifier(AbilityIndex::CON, game_data);
@@ -2194,8 +2249,10 @@ impl Character {
                         if let Some(spell_id) = spell_entry.get("Spell").and_then(gff_value_to_i32)
                         {
                             for class_entry in &mut class_list {
-                                if class_entry.get("Class").and_then(gff_value_to_i32)
-                                    == Some(class_id.0)
+                                if class_entry
+                                    .get("Class")
+                                    .and_then(gff_value_to_i32)
+                                    .is_some_and(|c| spell_classes.contains(&c))
                                     && let Some(mut known_list) =
                                         super::gff_helpers::extract_list_from_map(
                                             class_entry,
@@ -2391,11 +2448,12 @@ impl Character {
     /// A slot counts as unspent when `LvlStatAbility` is absent or not a valid
     /// ability index, mirroring `get_level_up_ability_history`; the editor
     /// writes 255, but toolset-made histories may omit the field entirely.
-    pub fn record_ability_change(&mut self, ability_index: AbilityIndex) {
+    /// Returns whether a slot took it.
+    pub fn record_ability_change(&mut self, ability_index: AbilityIndex) -> bool {
         use crate::character::types::ABILITY_INCREASE_INTERVAL;
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
         if lvl_stat_list.is_empty() {
-            return;
+            return false;
         }
 
         let mut changed = false;
@@ -2418,11 +2476,12 @@ impl Character {
         if changed {
             self.set_list("LvlStatList", lvl_stat_list);
         }
+        changed
     }
 
     /// Free the most recent level-up slot spent on `ability_index`, the
-    /// inverse of `record_ability_change`.
-    pub fn release_ability_change(&mut self, ability_index: AbilityIndex) {
+    /// inverse of `record_ability_change`. Returns whether a slot was freed.
+    pub fn release_ability_change(&mut self, ability_index: AbilityIndex) -> bool {
         use crate::character::types::ABILITY_INCREASE_INTERVAL;
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
         let slot = lvl_stat_list
@@ -2436,28 +2495,41 @@ impl Character {
                 (char_level % ABILITY_INCREASE_INTERVAL == 0 && spent_on_ability).then_some(idx)
             });
 
-        if let Some(idx) = slot {
-            lvl_stat_list[idx].insert("LvlStatAbility".to_string(), GffValue::Byte(255));
-            self.set_list("LvlStatList", lvl_stat_list);
-        }
+        let Some(idx) = slot else {
+            return false;
+        };
+        lvl_stat_list[idx].insert("LvlStatAbility".to_string(), GffValue::Byte(255));
+        self.set_list("LvlStatList", lvl_stat_list);
+        true
     }
 
-    /// Record a learned or forgotten spell in the most recent level of its class, where
-    /// delevelling that class takes it back. A spell learned and then forgotten (or the
-    /// reverse) cancels the earlier entry instead of landing in both lists.
+    /// Record a learned or forgotten spell in the most recent level that advanced its class's
+    /// casting (a level of the class or a prestige level adding a caster level to it, as the
+    /// game records it), where delevelling that level takes it back. A spell learned and then
+    /// forgotten (or the reverse) cancels the earlier entry instead of landing in both lists.
     pub(crate) fn record_spell_change(
         &mut self,
         class_id: ClassId,
         level: i32,
         spell_id: u16,
         added: bool,
+        game_data: &GameData,
     ) {
         let mut lvl_stat_list = self.get_list_owned("LvlStatList").unwrap_or_default();
-        let Some(entry) = lvl_stat_list
-            .iter_mut()
-            .rev()
-            .find(|e| e.get("LvlStatClass").and_then(gff_value_to_i32) == Some(class_id.0))
-        else {
+        let target = (0..lvl_stat_list.len()).rev().find(|&idx| {
+            lvl_stat_list[idx]
+                .get("LvlStatClass")
+                .and_then(gff_value_to_i32)
+                .is_some_and(|level_class| {
+                    self.level_advances_casting(
+                        level_class,
+                        level_in_class_at(&lvl_stat_list, idx),
+                        class_id.0,
+                        game_data,
+                    )
+                })
+        });
+        let Some(entry) = target.map(|idx| &mut lvl_stat_list[idx]) else {
             return;
         };
 
@@ -2493,7 +2565,7 @@ impl Character {
     /// After levels leave the history, the remaining ones can earn a different skill point
     /// grant (a new level 1 earns four times the points, INT increases may have moved); the
     /// unspent pool follows the difference to `grants_before` of those levels.
-    fn settle_shifted_skill_grants(&mut self, grants_before: i32, game_data: &GameData) {
+    pub(super) fn settle_shifted_skill_grants(&mut self, grants_before: i32, game_data: &GameData) {
         let grants_after: i32 = self.skill_points_granted_per_level(game_data).iter().sum();
         let pool = self.get_available_skill_points();
         self.set_available_skill_points((pool + grants_after - grants_before).max(0));
@@ -2860,6 +2932,17 @@ fn realign_ability_increases(lvl_stat_list: &mut [IndexMap<String, GffValue<'sta
         }
     }
     pending.collect()
+}
+
+/// Which level of its own class the `LvlStatList` entry at `idx` is (1-based).
+fn level_in_class_at(lvl_stat_list: &[IndexMap<String, GffValue<'static>>], idx: usize) -> usize {
+    let class_of =
+        |e: &IndexMap<String, GffValue<'static>>| e.get("LvlStatClass").and_then(gff_value_to_i32);
+    let level_class = class_of(&lvl_stat_list[idx]);
+    lvl_stat_list[..=idx]
+        .iter()
+        .filter(|e| class_of(e) == level_class)
+        .count()
 }
 
 fn remove_feats_from_level_history(

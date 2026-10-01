@@ -100,6 +100,13 @@ impl Character {
         self.get_i32("Subrace")
     }
 
+    /// Effective character level adjustment of the subrace (`racialsubtypes.2da` `ECL`).
+    pub fn ecl(&self, game_data: &GameData) -> i32 {
+        self.subrace_index()
+            .and_then(|index| game_data.get_table("racialsubtypes")?.get_by_id(index))
+            .map_or(0, |row| row_int(&row, "ecl", 0))
+    }
+
     /// TLK display name of the `Subrace` byte's `racialsubtypes` row, else its label.
     pub fn subrace_name(&self, game_data: &GameData) -> Option<String> {
         let idx = self.subrace_index()?;

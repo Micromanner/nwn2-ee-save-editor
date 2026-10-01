@@ -117,11 +117,7 @@ pub fn apply(character: &mut Character, build: &EngineBuild, game_data: &GameDat
     for field in ["MaxHitPoints", "CurrentHitPoints", "PregameCurrent"] {
         character.set_i16(field, build.hp_max as i16);
     }
-    let ecl = game_data
-        .get_table("racialsubtypes")
-        .and_then(|t| t.get_by_id(build.subrace))
-        .map_or(0, |row| row_int(&row, "ecl", 0));
-    let xp = character.calculate_xp_for_level(build.level + ecl, game_data);
+    let xp = character.calculate_xp_for_level(build.level, game_data);
     character.set_u32("Experience", xp as u32);
 
     if let Some(appearance) = game_data

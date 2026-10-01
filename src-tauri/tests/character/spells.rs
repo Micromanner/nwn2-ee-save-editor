@@ -367,7 +367,7 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
         .find(|c| c.class_id == sorcerer)
         .map(|c| c.index as usize)
         .expect("sorcerer caster slot");
-    qara.add_known_spell(slot, 0, app_lib::character::SpellId(424))
+    qara.add_known_spell(slot, 0, app_lib::character::SpellId(424), game_data)
         .expect("learn cantrip");
     assert!(
         qara.get_spells_state(game_data, &ctx.decoder)

@@ -95,7 +95,7 @@ impl Character {
         &mut self,
         ability: AbilityIndex,
         value: i32,
-        _game_data: &GameData,
+        game_data: &GameData,
     ) -> Result<(), CharacterError> {
         let old_value = self.base_ability(ability);
 
@@ -108,15 +108,37 @@ impl Character {
             self.recalculate_hit_points(old_value, value);
         }
 
-        // 3. One level-up slot per point raised, freed again per point lowered
-        for _ in old_value..value {
-            self.record_ability_change(ability);
+        // 3. One level-up slot per point raised, freed again per point lowered. An INT
+        // point on a level-up slot changes that level's skill point grant, like in-game.
+        let raise = value > old_value;
+        let steps: Vec<i32> = if raise {
+            (old_value..value).collect()
+        } else {
+            (value + 1..=old_value).rev().collect()
+        };
+        for from in steps {
+            let settles_skills = ability == AbilityIndex::INT;
+            let grants_before = if settles_skills {
+                self.set_ability(ability, from)?;
+                let grants: i32 = self.skill_points_granted_per_level(game_data).iter().sum();
+                self.set_ability(ability, if raise { from + 1 } else { from - 1 })?;
+                grants
+            } else {
+                0
+            };
+            let slot_changed = if raise {
+                self.record_ability_change(ability)
+            } else {
+                self.release_ability_change(ability)
+            };
+            if !slot_changed {
+                break;
+            }
+            if settles_skills {
+                self.settle_shifted_skill_grants(grants_before, game_data);
+            }
         }
-        for _ in value..old_value {
-            self.release_ability_change(ability);
-        }
-
-        Ok(())
+        self.set_ability(ability, value)
     }
 
     pub(crate) fn recalculate_hit_points(&mut self, old_con: i32, new_con: i32) {
@@ -847,6 +869,26 @@ mod tests {
         let summary = character.get_ability_points_summary();
         assert_eq!(summary.available, 1);
         assert_eq!(summary.level_increases[0].level, 4);
+    }
+
+    #[test]
+    fn int_raised_on_a_level_up_slot_grants_its_skill_points() {
+        let mut character = character_with_eight_levels();
+        character.set_ability(AbilityIndex::INT, 13).unwrap();
+        character.set_available_skill_points(0);
+        let game_data = crate::loaders::GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
+            crate::parsers::tlk::TLKParser::default(),
+        )));
+
+        character
+            .set_ability_with_cascades(AbilityIndex::INT, 14, &game_data)
+            .unwrap();
+        assert_eq!(character.get_available_skill_points(), 5);
+
+        character
+            .set_ability_with_cascades(AbilityIndex::INT, 13, &game_data)
+            .unwrap();
+        assert_eq!(character.get_available_skill_points(), 0);
     }
 
     #[test]
