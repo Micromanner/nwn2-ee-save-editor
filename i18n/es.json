@@ -466,7 +466,6 @@
         "hak": "Paquete HAK"
       }
     },
-    "backpack": "Mochila",
     "selectItem": "Selecciona un objeto",
     "selectItemHint": "Elige entre el equipo o la mochila",
     "flags": "Indicadores",

@@ -305,18 +305,18 @@ export function InventoryPanel() {
             </div>
           </div>
 
-          <div style={{ borderTop: `1px solid ${T.borderLight}`, padding: '12px 16px', flex: 1, overflow: 'auto', minHeight: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div className="t-bold" style={{ color: T.accent }}>
-                {t('inventory.backpack')} <span style={{ color: T.textMuted }}>({backpackItems.length})</span>
-              </div>
-              <Button
-                icon="add"
-                intent="primary"
-                text={t('inventory.addItem')}
-                onClick={() => setAddItemOpen(true)}
-              />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `1px solid ${T.borderLight}`, padding: '12px 16px 10px' }}>
+            <div className="t-bold" style={{ color: T.accent }}>
+              {t('navigation.inventory')} <span style={{ color: T.textMuted }}>({backpackItems.length})</span>
             </div>
+            <Button
+              icon="add"
+              intent="primary"
+              text={t('inventory.addItem')}
+              onClick={() => setAddItemOpen(true)}
+            />
+          </div>
+          <div style={{ padding: '0 16px 12px', flex: 1, overflow: 'auto', minHeight: 0 }}>
             <BackpackTable
               items={backpackItems}
               selectedIndex={selectedItem?._kind === 'inventory' ? (selectedItem as unknown as { index: number }).index : null}

@@ -466,7 +466,6 @@
       "crafting": "Artisanat",
       "other": "Autres"
     },
-    "backpack": "Sac à dos",
     "selectItem": "Sélectionnez un objet",
     "selectItemHint": "Choisissez parmi l'équipement ou le sac à dos",
     "flags": "Indicateurs",

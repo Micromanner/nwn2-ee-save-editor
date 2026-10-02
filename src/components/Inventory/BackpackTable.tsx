@@ -49,7 +49,7 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
   };
 
   const header = (key: SortKey, label: string, align?: 'center' | 'right') => (
-    <th onClick={() => toggleSort(key)} style={{ textAlign: align, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+    <th onClick={() => toggleSort(key)} style={{ textAlign: align, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 1, background: T.surface }}>
       {label}
       {sort?.key === key && (
         <Icon icon={sort.dir === 'asc' ? 'caret-up' : 'caret-down'} size={12} style={{ marginLeft: 2, verticalAlign: 'middle' }} />
@@ -92,9 +92,10 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
             <tr
               key={item.index}
               onClick={() => onSelectItem(item.index)}
+              className={selected ? 't-bold' : undefined}
               style={selected ? { background: 'rgba(160, 82, 45, 0.1)' } : undefined}
             >
-              <td className={selected ? 't-bold' : item.is_custom ? 't-semibold' : undefined} style={{
+              <td className={!selected && item.is_custom ? 't-semibold' : undefined} style={{
                 color: item.is_custom ? T.accent : T.text,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>

@@ -466,7 +466,6 @@
         "hak": "HAK-Paket"
       }
     },
-    "backpack": "Rucksack",
     "selectItem": "Gegenstand auswählen",
     "selectItemHint": "Aus Ausrüstung oder Rucksack wählen",
     "flags": "Markierungen",

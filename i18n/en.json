@@ -466,7 +466,6 @@
       "crafting": "Crafting",
       "other": "Other"
     },
-    "backpack": "Backpack",
     "selectItem": "Select an item",
     "selectItemHint": "Choose from equipped or backpack",
     "flags": "Flags",
