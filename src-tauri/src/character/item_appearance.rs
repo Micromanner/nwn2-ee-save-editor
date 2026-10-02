@@ -8,7 +8,9 @@ use crate::parsers::gff::GffValue;
 use crate::services::resource_manager::ResourceManager;
 use crate::utils::parsing::row_str;
 
-use super::appearance_helpers::{TintChannels, read_tint_from_tintable, resolve_armor_prefix};
+use super::appearance_helpers::{
+    TintChannels, mesh_number, read_tint_from_tintable, resolve_armor_prefix,
+};
 use super::gff_helpers::gff_value_to_i32;
 use super::inventory::EquipmentSlot;
 
@@ -183,6 +185,35 @@ impl AccessorySlot {
             Self::RtFoot => "ACRtFoot",
             Self::BkHip => "ACBkHip",
             Self::FtHip => "ACFtHip",
+        }
+    }
+
+    /// GFF struct id the game gives this slot's `AC*` struct (same on every
+    /// game-written item).
+    pub(crate) fn struct_id(self) -> u32 {
+        match self {
+            Self::LtShoulder => 0,
+            Self::RtShoulder => 1,
+            Self::LtBracer => 2,
+            Self::RtBracer => 3,
+            Self::LtElbow => 4,
+            Self::RtElbow => 5,
+            Self::LtArm => 6,
+            Self::RtArm => 7,
+            Self::LtHip => 8,
+            Self::RtHip => 9,
+            Self::FtHip => 10,
+            Self::BkHip => 11,
+            Self::LtLeg => 12,
+            Self::RtLeg => 13,
+            Self::LtShin => 14,
+            Self::RtShin => 15,
+            Self::LtKnee => 16,
+            Self::RtKnee => 17,
+            Self::LtFoot => 18,
+            Self::RtFoot => 19,
+            Self::LtAnkle => 20,
+            Self::RtAnkle => 21,
         }
     }
 
@@ -790,11 +821,7 @@ impl ItemAppearance {
         };
         let part = slot.part_name();
 
-        let item_prefix = armor_visual_type.and_then(|vt| {
-            resolve_armor_prefix(game_data, vt, false)
-                .into_iter()
-                .next()
-        });
+        let item_prefix = armor_visual_type.and_then(|vt| resolve_armor_prefix(game_data, vt));
 
         let material_prefixes: Vec<String> = match slot {
             // Cloaks are hardcoded to CL by the loader.
@@ -986,11 +1013,9 @@ impl ItemAppearance {
         let is_bracer = is_bracer_label(&prefix);
         if is_bracer {
             let body = body_prefix.unwrap_or(DEFAULT_BODY_PREFIX);
-            let item_armor_prefix = self.armor_visual_type.and_then(|vt| {
-                resolve_armor_prefix(game_data, vt, false)
-                    .into_iter()
-                    .next()
-            });
+            let item_armor_prefix = self
+                .armor_visual_type
+                .and_then(|vt| resolve_armor_prefix(game_data, vt));
             let primaries: Vec<&str> = item_armor_prefix.iter().map(String::as_str).collect();
             info!(
                 "Resolving bracer item {base_item_id}: body={body}, avt_prefix={item_armor_prefix:?}"
@@ -1006,11 +1031,9 @@ impl ItemAppearance {
             let equip_slots =
                 parse_equip_slots(&row_str(&row, "equipableslots").unwrap_or_default());
             let slot = detect_armor_slot(equip_slots);
-            let item_armor_prefix = self.armor_visual_type.and_then(|vt| {
-                resolve_armor_prefix(game_data, vt, false)
-                    .into_iter()
-                    .next()
-            });
+            let item_armor_prefix = self
+                .armor_visual_type
+                .and_then(|vt| resolve_armor_prefix(game_data, vt));
 
             info!(
                 "Resolving armor item {base_item_id}: slot={slot:?}, item_armor_prefix={item_armor_prefix:?}, equip_slots=0x{equip_slots:04x}, boots={:?}, gloves={:?}",
@@ -1018,13 +1041,8 @@ impl ItemAppearance {
             );
 
             let body = body_prefix.unwrap_or(DEFAULT_BODY_PREFIX);
-            let mut groups = build_armor_resrefs(
-                body,
-                slot,
-                item_armor_prefix.as_deref(),
-                self.variation,
-                self.model_parts[0],
-            );
+            let mut groups =
+                build_armor_resrefs(body, slot, item_armor_prefix.as_deref(), self.variation);
 
             // NWN2 stores nested boots/gloves + 22 accessory slots inline
             // on the chest item; emit them so the viewer renders the
@@ -1146,30 +1164,22 @@ fn build_weapon_resrefs(
 /// NWN2 armor file pattern: `{body_prefix}_{armor_prefix}_{Part}{NN}.mdb`
 /// e.g. `P_HHM_LE_Body01.mdb`, `P_HHM_LE_Helm05.mdb`, `P_HHM_CL_Cloak01.mdb`.
 ///
-/// GFF `Variation` is 0-indexed (the toolset shows "Variation 0, 1, 2, ..."),
-/// while mesh filenames are 1-indexed (Body01 is the first variant). The
-/// engine adds 1 at render time; we do the same. `ArmorVisualType` and
-/// `ModelPart1` are *not* adjusted — real data shows those match the filename
-/// number directly.
+/// GFF `Variation` is 0-indexed and goes through `mesh_number`;
+/// `ArmorVisualType` is an `armor.2da` row used as is.
 fn build_armor_resrefs(
     body_prefix: &str,
     slot: Option<ArmorSlot>,
     item_armor_prefix: Option<&str>,
     variation: i32,
-    model_part1: i32,
 ) -> Vec<Vec<String>> {
     let Some(slot) = slot else {
         return Vec::new();
     };
 
-    let variation_nn = variation + 1;
+    let variation_nn = mesh_number(variation);
 
     let candidates = match slot {
-        ArmorSlot::Body => match item_armor_prefix {
-            Some(pfx) => armor_resref_candidates(body_prefix, slot, variation_nn, &[pfx], false),
-            None => Vec::new(),
-        },
-        ArmorSlot::Boots | ArmorSlot::Gloves => match item_armor_prefix {
+        ArmorSlot::Body | ArmorSlot::Boots | ArmorSlot::Gloves => match item_armor_prefix {
             Some(pfx) => armor_resref_candidates(body_prefix, slot, variation_nn, &[pfx], false),
             None => Vec::new(),
         },
@@ -1178,18 +1188,7 @@ fn build_armor_resrefs(
             None => armor_resref_candidates(body_prefix, slot, variation_nn, &[], true),
         },
         ArmorSlot::Cloak => {
-            // Cloak uses the hardcoded `CL` armor prefix. Real data shows the
-            // variant lives in `Variation` (0-indexed → +1); `ModelPart1` is
-            // a fallback for items that only store it there, and it's
-            // 1-indexed so we use it directly.
-            let nn = if variation > 0 {
-                variation_nn
-            } else if model_part1 > 0 {
-                model_part1
-            } else {
-                0
-            };
-            armor_resref_candidates(body_prefix, slot, nn, &["CL"], false)
+            armor_resref_candidates(body_prefix, slot, variation_nn, &["CL"], false)
         }
     };
 
@@ -1389,19 +1388,21 @@ fn nested_part_group(
     chest_armor_prefix: Option<&str>,
 ) -> Option<Vec<String>> {
     let part = part?;
-    let part_prefix = part.armor_visual_type.and_then(|vt| {
-        resolve_armor_prefix(game_data, vt, false)
-            .into_iter()
-            .next()
-    });
+    let part_prefix = part
+        .armor_visual_type
+        .and_then(|vt| resolve_armor_prefix(game_data, vt));
 
     let primaries: Vec<&str> = [part_prefix.as_deref(), chest_armor_prefix]
         .into_iter()
         .flatten()
         .collect();
-    // Nested part's `Variation` is 0-indexed like the top-level chest one.
-    let candidates =
-        armor_resref_candidates(body_prefix, slot, part.variation + 1, &primaries, true);
+    let candidates = armor_resref_candidates(
+        body_prefix,
+        slot,
+        mesh_number(part.variation),
+        &primaries,
+        true,
+    );
     if candidates.is_empty() {
         None
     } else {
@@ -1785,19 +1786,19 @@ mod tests {
     #[test]
     fn body_armor_uses_armor_prefix_and_body_suffix_with_one_based_filename() {
         // GFF Variation=7 is 0-indexed → mesh is Body08 (1-indexed filename).
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Body), Some("LE"), 7, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Body), Some("LE"), 7);
         assert_eq!(r, vec![vec!["P_HHM_LE_Body08".to_string()]]);
     }
 
     #[test]
     fn body_armor_variation_zero_maps_to_first_mesh() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Body), Some("LE"), 0, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Body), Some("LE"), 0);
         assert_eq!(r, vec![vec!["P_HHM_LE_Body01".to_string()]]);
     }
 
     #[test]
     fn body_armor_without_resolved_prefix_emits_nothing() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Body), None, 1, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Body), None, 1);
         assert!(r.is_empty());
     }
 
@@ -1805,13 +1806,13 @@ mod tests {
     fn helmet_uses_item_armor_prefix_and_variation_plus_one() {
         // Helm of Darkness: ArmorVisualType=7 → PH (Half-Plate), Variation=9 → Helm10.
         // Confirmed against in-game render.
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Head), Some("PH"), 9, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Head), Some("PH"), 9);
         assert_eq!(r, vec![vec!["P_HHM_PH_Helm10".to_string()]]);
     }
 
     #[test]
     fn helmet_without_armor_prefix_falls_back_to_material_list() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Head), None, 4, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Head), None, 4);
         assert_eq!(r.len(), 1);
         let g = &r[0];
         assert!(g.contains(&"P_HHM_LE_Helm05".to_string()));
@@ -1820,13 +1821,13 @@ mod tests {
 
     #[test]
     fn standalone_boots_use_only_item_prefix() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Boots), Some("LE"), 3, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Boots), Some("LE"), 3);
         assert_eq!(r, vec![vec!["P_HHM_LE_Boots04".to_string()]]);
     }
 
     #[test]
     fn standalone_gloves_use_only_item_prefix() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Gloves), Some("CH"), 2, 0);
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Gloves), Some("CH"), 2);
         assert_eq!(r, vec![vec!["P_HHM_CH_Gloves03".to_string()]]);
     }
 
@@ -1843,33 +1844,22 @@ mod tests {
                 Some(ArmorSlot::Boots),
                 Some("LE"),
                 discovered_value,
-                0,
             );
             assert_eq!(r, vec![vec![format!("P_HHM_LE_Boots{nn:02}")]]);
         }
     }
 
     #[test]
-    fn cloak_prefers_variation_over_model_part1() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Cloak), None, 2, 1);
+    fn cloak_variation_is_zero_indexed() {
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Cloak), None, 2);
         assert_eq!(r, vec![vec!["P_HHM_CL_Cloak03".to_string()]]);
-    }
-
-    #[test]
-    fn cloak_falls_back_to_model_part1_when_variation_zero_and_mp1_set() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Cloak), None, 0, 4);
-        assert_eq!(r, vec![vec!["P_HHM_CL_Cloak04".to_string()]]);
-    }
-
-    #[test]
-    fn cloak_with_variation_zero_and_no_mp1_is_empty() {
-        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Cloak), None, 0, 0);
-        assert!(r.is_empty());
+        let r = build_armor_resrefs("P_HHM", Some(ArmorSlot::Cloak), None, 0);
+        assert_eq!(r, vec![vec!["P_HHM_CL_Cloak01".to_string()]]);
     }
 
     #[test]
     fn armor_with_unknown_slot_is_empty() {
-        let r = build_armor_resrefs("P_HHM", None, Some("LE"), 1, 0);
+        let r = build_armor_resrefs("P_HHM", None, Some("LE"), 1);
         assert!(r.is_empty());
     }
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Button, Card, Dialog, DialogBody, DialogFooter, Elevation, Icon, Switch } from '@blueprintjs/core';
+import { Button, Card, Elevation, Icon, Switch } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
@@ -63,6 +63,9 @@ const ACCESSORY_ROWS: { labelKey: string; left: AccessorySlot; right: AccessoryS
   { labelKey: 'appearance.accessorySlot.shin', left: 'LtShin', right: 'RtShin' },
   { labelKey: 'appearance.accessorySlot.hip', left: 'LtHip', right: 'RtHip' },
 ];
+const ACCESSORY_SLOTS: AccessorySlot[] = ACCESSORY_ROWS.flatMap(row => [row.left, row.right]);
+
+const ZERO_TINTS_KEY = '0,0,0|0,0,0|0,0,0';
 
 const EMPTY_ACCESSORIES: ArmorAccessories = {
   lt_shoulder: null, rt_shoulder: null, lt_arm: null, rt_arm: null,
@@ -87,15 +90,19 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
     if (active) setActivated(true);
   }, [active]);
 
-  const isZeroTints = useCallback((t: TintChannels) =>
-    t.channel1.r === 0 && t.channel1.g === 0 && t.channel1.b === 0 &&
-    t.channel2.r === 0 && t.channel2.g === 0 && t.channel2.b === 0 &&
-    t.channel3.r === 0 && t.channel3.g === 0 && t.channel3.b === 0, []);
-
-  // Slots the user switched to custom colors this session. Everything starts
-  // off: accessories keep their saved tints until a master color edit or a
-  // toggle touches them.
-  const [customTintSlots, setCustomTintSlots] = useState<Set<AccessorySlot>>(() => new Set());
+  // Slots with their own colors. A slot starts custom when its saved tint
+  // differs from the armor's (almost every game item), so a master color edit
+  // only moves slots that already matched the armor. All-zero tints render
+  // in the armor colors and count as following it.
+  const [customTintSlots, setCustomTintSlots] = useState<Set<AccessorySlot>>(() => {
+    const armorKey = tintChannelsKey(appearance.tints);
+    return new Set(ACCESSORY_SLOTS.filter(slot => {
+      const data = appearance.accessories[ACCESSORY_FIELD[slot]];
+      if (!data || data.id <= 0) return false;
+      const key = tintChannelsKey(data.tints);
+      return key !== ZERO_TINTS_KEY && key !== armorKey;
+    }));
+  });
 
   // Thumbnails render once with the tints active when the tab mounts; later
   // tint edits update only the live viewer (the parent remounts this tab per
@@ -114,25 +121,15 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   // ModelPart1 and treat Variation as a mirror, so both have to move or the
   // live preview keeps rendering the old variant.
   const variationField = options?.variation_field ?? 'variation';
-  // Accessories belong to the outfit the item was designed as; a variation
-  // change puts them back to what the item had when the dialog opened, and
-  // asks first when the user has edited them in this session.
-  const initialAccessories = useRef(appearance.accessories).current;
-  const accessoriesDirty = JSON.stringify(appearance.accessories) !== JSON.stringify(initialAccessories);
-  const [pendingVariation, setPendingVariation] = useState<number | null>(null);
-  const applyVariation = useCallback((value: number) => {
-    const next = { ...appearance, variation: value, accessories: initialAccessories };
+  const updateVariation = useCallback((value: number) => {
+    if (value === appearance.variation) return;
+    const next = { ...appearance, variation: value };
     if (variationField === 'model_part1') {
       next.model_parts = [value, appearance.model_parts[1], appearance.model_parts[2]];
     }
     onChange(next);
     setRefreshKey(k => k + 1);
-  }, [appearance, onChange, variationField, initialAccessories]);
-  const updateVariation = useCallback((value: number) => {
-    if (value === appearance.variation) return;
-    if (accessoriesDirty) setPendingVariation(value);
-    else applyVariation(value);
-  }, [appearance.variation, accessoriesDirty, applyVariation]);
+  }, [appearance, onChange, variationField]);
 
   // ArmorVisualType is the armor.2da material; the parent refetches the
   // options for the new material, and the effect below moves the variation
@@ -159,19 +156,16 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
     };
     const nextAccessories = { ...appearance.accessories };
     let changedAcc = false;
-    for (const row of ACCESSORY_ROWS) {
-      for (const slot of [row.left, row.right]) {
-        if (!customTintSlots.has(slot)) {
-          const key = ACCESSORY_FIELD[slot];
-          const current = nextAccessories[key];
-          if (current && current.id > 0) {
-            nextAccessories[key] = {
-              ...current,
-              tints: { ...current.tints, [channel]: color },
-            };
-            changedAcc = true;
-          }
-        }
+    for (const slot of ACCESSORY_SLOTS) {
+      if (customTintSlots.has(slot)) continue;
+      const key = ACCESSORY_FIELD[slot];
+      const current = nextAccessories[key];
+      if (current && current.id > 0 && tintChannelsKey(current.tints) !== ZERO_TINTS_KEY) {
+        nextAccessories[key] = {
+          ...current,
+          tints: { ...current.tints, [channel]: color },
+        };
+        changedAcc = true;
       }
     }
     onChange({
@@ -294,14 +288,14 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
   // The gallery shows one slot at a time: the first set one on open, then
   // whichever slot button was clicked last.
   const [activeSlot, setActiveSlot] = useState<AccessorySlot>(() => {
-    const firstSet = ACCESSORY_ROWS.flatMap(r => [r.left, r.right])
+    const firstSet = ACCESSORY_SLOTS
       .find(slot => (appearance.accessories[ACCESSORY_FIELD[slot]]?.id ?? 0) > 0);
     return firstSet ?? 'LtShoulder';
   });
   const activeIds = accessoryIds(activeSlot);
   const activeData = appearance.accessories[ACCESSORY_FIELD[activeSlot]];
   const activeId = accessoryId(activeSlot);
-  const activeTints = activeData && activeData.id > 0 && !isZeroTints(activeData.tints) ? activeData.tints : appearance.tints;
+  const activeTints = activeData && activeData.id > 0 && tintChannelsKey(activeData.tints) !== ZERO_TINTS_KEY ? activeData.tints : appearance.tints;
   const activeTintKey = tintChannelsKey(activeTints);
 
   const partLists = options
@@ -406,7 +400,7 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
                   <span>{t('appearance.accessorySlotColumn')}</span>
                   <span>{t('appearance.accessoryCurrentColumn')}</span>
                 </div>
-                {ACCESSORY_ROWS.flatMap(row => [row.left, row.right]).map(slot => {
+                {ACCESSORY_SLOTS.map(slot => {
                   const id = accessoryId(slot);
                   const isActive = slot === activeSlot;
                   const disabled = accessoryIds(slot).length === 0;
@@ -553,40 +547,6 @@ export function ItemAppearanceTab({ appearance, baseItemId, options, active, onC
             </div>
           </Card>
         )}
-
-        <Dialog
-          isOpen={pendingVariation !== null}
-          onClose={() => setPendingVariation(null)}
-          title={t('appearance.changeVariation')}
-          style={{ width: 440, paddingBottom: 0, background: T.surface }}
-        >
-          <DialogBody style={{ padding: 16, margin: 0, background: T.surface }}>
-            <div style={{
-              background: T.sectionBg, border: `1px solid ${T.sectionBorder}`,
-              borderRadius: 4, padding: 12,
-            }}>
-              <div className="t-medium" style={{ color: T.text }}>{t('appearance.accessoryResetTitle')}</div>
-              <div style={{ color: T.textMuted, marginTop: 4 }}>{t('appearance.accessoryResetDesc')}</div>
-            </div>
-          </DialogBody>
-          <DialogFooter
-            style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}` }}
-            actions={
-              <>
-                <Button text={t('actions.cancel')} onClick={() => setPendingVariation(null)} />
-                <Button
-                  text={t('appearance.changeVariation')}
-                  intent="primary"
-                  onClick={() => {
-                    const v = pendingVariation;
-                    setPendingVariation(null);
-                    if (v !== null) applyVariation(v);
-                  }}
-                />
-              </>
-            }
-          />
-        </Dialog>
 
         {options?.has_model && (
           <Card elevation={Elevation.ONE} style={{ padding: '12px 16px', background: T.surface }}>

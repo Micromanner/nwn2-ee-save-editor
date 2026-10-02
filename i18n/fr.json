@@ -1383,7 +1383,7 @@
     "voiceTypeFallback": "Type {id}",
     "colorsHoverHint": "Survolez une couleur pour mettre en évidence la zone concernée",
     "accessories": "Accessoires",
-    "accessoriesHint": "Les nouveaux accessoires reprennent les couleurs de l'armure. Changer de variation réinitialise les accessoires.",
+    "accessoriesHint": "Les nouveaux accessoires reprennent les couleurs de l'armure.",
     "accessoryLeft": "G",
     "accessoryRight": "D",
     "accessorySide": "{slot} {side}",
@@ -1400,9 +1400,6 @@
       "shin": "Tibia",
       "hip": "Hanche"
     },
-    "accessoryResetTitle": "Les modifications des accessoires seront annulées",
-    "accessoryResetDesc": "Changer de variation rétablit les accessoires tels qu'ils étaient à l'ouverture de cet objet.",
-    "changeVariation": "Changer de variation",
     "customColors": "Couleurs personnalisées",
     "usingArmorColors": "Couleurs de l'armure",
     "copyToPair": "Copier les couleurs vers {pair}",

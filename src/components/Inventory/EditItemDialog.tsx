@@ -83,6 +83,9 @@ export function EditItemDialog({
   const [tab, setTab] = useState<string>('basic');
   const [localData, setLocalData] = useState<Record<string, unknown> | null>(null);
   const [localAppearance, setLocalAppearance] = useState<ItemAppearance | null>(null);
+  // Bumped on every load so the appearance tab remounts and snapshots the new
+  // item's appearance instead of the previous item's.
+  const [appearanceLoadId, setAppearanceLoadId] = useState(0);
   const [appearanceOptions, setAppearanceOptions] = useState<ItemAppearanceOptions | null>(null);
   const [localIconResref, setLocalIconResref] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -111,6 +114,7 @@ export function EditItemDialog({
 
     setLocalData(data);
     setLocalAppearance(appearance ? structuredClone(appearance) : null);
+    setAppearanceLoadId(id => id + 1);
     setLocalIconResref(resolvedIcon ?? null);
     setAppearanceOptions(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -499,7 +503,7 @@ export function EditItemDialog({
             <div style={{ paddingTop: 4, height: '100%', overflow: 'hidden' }}>
               {localAppearance && localData && !appearanceDisabled && (
                 <ItemAppearanceTab
-                  key={itemKey}
+                  key={`${itemKey}:${appearanceLoadId}`}
                   appearance={localAppearance}
                   baseItemId={baseItemId}
                   options={appearanceOptions}

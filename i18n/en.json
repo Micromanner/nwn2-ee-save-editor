@@ -1372,7 +1372,7 @@
     "material": "Material",
     "colorsHoverHint": "Hover over a color to highlight the area it affects",
     "accessories": "Accessories",
-    "accessoriesHint": "New accessories start with the armor's colors. Changing the variation resets accessories.",
+    "accessoriesHint": "New accessories start with the armor's colors.",
     "accessoryLeft": "L",
     "accessoryRight": "R",
     "accessorySide": "{slot} {side}",
@@ -1389,9 +1389,6 @@
       "shin": "Lower Leg",
       "hip": "Hip"
     },
-    "accessoryResetTitle": "Accessory changes will be reset",
-    "accessoryResetDesc": "Changing the variation puts the accessories back to what this item had when you opened it.",
-    "changeVariation": "Change Variation",
     "customColors": "Custom Colors",
     "usingArmorColors": "Using armor colors",
     "copyToPair": "Copy colors to {pair}",

@@ -1375,7 +1375,7 @@
     "voiceTypeFallback": "Typ {id}",
     "colorsHoverHint": "Fahren Sie mit der Maus über eine Farbe, um den betroffenen Bereich hervorzuheben",
     "accessories": "Zubehör",
-    "accessoriesHint": "Neues Zubehör übernimmt die Farben der Rüstung. Eine andere Variation setzt das Zubehör zurück.",
+    "accessoriesHint": "Neues Zubehör übernimmt die Farben der Rüstung.",
     "accessoryLeft": "L",
     "accessoryRight": "R",
     "accessorySide": "{slot} {side}",
@@ -1392,9 +1392,6 @@
       "shin": "Unterschenkel",
       "hip": "Hüfte"
     },
-    "accessoryResetTitle": "Zubehöränderungen werden zurückgesetzt",
-    "accessoryResetDesc": "Eine andere Variation setzt das Zubehör auf den Stand beim Öffnen dieses Gegenstands zurück.",
-    "changeVariation": "Variation ändern",
     "customColors": "Eigene Farben",
     "usingArmorColors": "Nutzt Rüstungsfarben",
     "copyToPair": "Farben auf {pair} kopieren",

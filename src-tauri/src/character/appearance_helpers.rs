@@ -20,6 +20,14 @@ pub struct TintChannels {
     pub channel3: TintChannel,
 }
 
+impl TintChannels {
+    pub fn has_color(&self) -> bool {
+        [&self.channel1, &self.channel2, &self.channel3]
+            .iter()
+            .any(|ch| ch.r > 0 || ch.g > 0 || ch.b > 0 || ch.a > 0)
+    }
+}
+
 pub fn read_tint_channel(fields: &IndexMap<String, GffValue<'_>>) -> TintChannel {
     let get_byte = |key: &str| -> u8 {
         match fields.get(key) {
@@ -126,26 +134,16 @@ pub fn cosmetic_gloves_tint(src: &TintChannels) -> TintChannels {
     swap_tint_2_3(&pre_swap)
 }
 
-pub fn resolve_armor_prefix(
-    game_data: &GameData,
-    visual_type: i32,
-    one_indexed: bool,
-) -> Vec<String> {
-    let mut prefixes = Vec::new();
-    let Some(armor_table) = game_data.get_table("armor") else {
-        return prefixes;
-    };
+/// Mesh number for a GFF `Variation`: the field is 0-indexed (the toolset
+/// shows "Variation 0") while armor mesh filenames are 1-indexed (`Body01`).
+pub fn mesh_number(variation: i32) -> i32 {
+    (variation + 1).max(1)
+}
 
-    let primary = if one_indexed {
-        visual_type - 1
-    } else {
-        visual_type
-    };
-    if primary >= 0
-        && let Some(row) = armor_table.get_by_id(primary)
-        && let Some(prefix) = row_str(&row, "prefix")
-    {
-        prefixes.push(prefix);
+pub fn resolve_armor_prefix(game_data: &GameData, visual_type: i32) -> Option<String> {
+    if visual_type < 0 {
+        return None;
     }
-    prefixes
+    let row = game_data.get_table("armor")?.get_by_id(visual_type)?;
+    row_str(&row, "prefix")
 }

@@ -1376,7 +1376,7 @@
     "voiceTypeFallback": "Tipo {id}",
     "colorsHoverHint": "Pasa el ratón sobre un color para resaltar la zona que afecta",
     "accessories": "Accesorios",
-    "accessoriesHint": "Los accesorios nuevos usan los colores de la armadura. Cambiar la variación restablece los accesorios.",
+    "accessoriesHint": "Los accesorios nuevos usan los colores de la armadura.",
     "accessoryLeft": "I",
     "accessoryRight": "D",
     "accessorySide": "{slot} {side}",
@@ -1393,9 +1393,6 @@
       "shin": "Espinilla",
       "hip": "Cadera"
     },
-    "accessoryResetTitle": "Se restablecerán los cambios de los accesorios",
-    "accessoryResetDesc": "Cambiar la variación devuelve los accesorios al estado que tenía este objeto al abrirlo.",
-    "changeVariation": "Cambiar variación",
     "customColors": "Colores personalizados",
     "usingArmorColors": "Usa los colores de la armadura",
     "copyToPair": "Copiar colores a {pair}",

@@ -11,8 +11,10 @@ use crate::character::{
     cosmetic_gloves_tint, swap_tint_2_3,
 };
 use crate::commands::{CommandError, CommandResult};
+use crate::loaders::GameData;
 use crate::services::model_loader::{self, AttachedPart, MeshData, ModelData, NamedSkeleton};
 use crate::services::resource_manager::ResourceManager;
+use crate::services::tint_analysis::{self, TintCapabilityCache};
 use crate::state::AppState;
 
 /// Load a wing/tail as an AttachedPart with its own skeleton (from the 2DA
@@ -76,9 +78,24 @@ pub struct VoiceSetInfo {
     pub voice_type: u8,
 }
 
+fn build_appearance_state(
+    character: &Character,
+    game_data: &GameData,
+    rm: &ResourceManager,
+    tint_capability_cache: &TintCapabilityCache,
+) -> AppearanceState {
+    let parts = character.resolve_model_parts(game_data, rm);
+    let mut appearance_state = character.get_appearance_state(game_data, rm, parts.as_ref());
+    if let Some(parts) = &parts {
+        appearance_state.color_capabilities =
+            tint_analysis::color_capabilities(rm, tint_capability_cache, parts);
+    }
+    appearance_state
+}
+
 #[tauri::command]
-pub fn get_appearance_state(state: State<'_, AppState>) -> CommandResult<AppearanceState> {
-    let rm = state.resource_manager.blocking_read();
+pub async fn get_appearance_state(state: State<'_, AppState>) -> CommandResult<AppearanceState> {
+    let rm = state.resource_manager.read().await;
     let session = state.session.read();
     let character = session
         .character
@@ -86,25 +103,25 @@ pub fn get_appearance_state(state: State<'_, AppState>) -> CommandResult<Appeara
         .ok_or(CommandError::NoCharacterLoaded)?;
     let game_data = state.game_data.read();
 
-    let mut appearance_state = character.get_appearance_state(&game_data, &rm);
-    if let Some(parts) = character.resolve_model_parts(&game_data, &rm) {
-        appearance_state.color_capabilities = crate::services::tint_analysis::color_capabilities(
-            &rm,
-            &state.tint_capability_cache,
-            &parts,
-        );
-    }
-    Ok(appearance_state)
+    Ok(build_appearance_state(
+        character,
+        &game_data,
+        &rm,
+        &state.tint_capability_cache,
+    ))
 }
 
 #[tauri::command]
-pub fn update_appearance(
+pub async fn update_appearance(
     state: State<'_, AppState>,
     updates: AppearanceUpdates,
 ) -> CommandResult<AppearanceState> {
-    let rm = state.resource_manager.blocking_read();
+    let rm = state.resource_manager.read().await;
 
     let mut session = state.session.write();
+    if session.character.is_none() {
+        return Err(CommandError::NoCharacterLoaded);
+    }
     session.record_history("Update appearance");
     let character = session
         .character
@@ -162,38 +179,34 @@ pub fn update_appearance(
 
     let game_data = state.game_data.read();
 
-    let mut appearance_state = character.get_appearance_state(&game_data, &rm);
-
     // On appearance_type change, stored head/hair may not exist for the new
-    // race prefix — clamp to the first available to keep the model resolvable.
+    // race prefix; clamp to the first available to keep the model resolvable.
     if updates.appearance_type.is_some() {
-        if !appearance_state
-            .available_heads
-            .contains(&character.appearance_head())
-            && let Some(&first) = appearance_state.available_heads.first()
+        let (available_heads, available_hairs, _) =
+            character.discover_model_variants(&game_data, &rm);
+        if !available_heads.contains(&character.appearance_head())
+            && let Some(&first) = available_heads.first()
         {
             character.set_appearance_head(first);
-            appearance_state.appearance_head = first;
         }
-        if !appearance_state
-            .available_hairs
-            .contains(&character.appearance_hair())
-            && let Some(&first) = appearance_state.available_hairs.first()
+        if !available_hairs.contains(&character.appearance_hair())
+            && let Some(&first) = available_hairs.first()
         {
             character.set_appearance_hair(first);
-            appearance_state.appearance_hair = first;
         }
     }
 
-    if let Some(parts) = character.resolve_model_parts(&game_data, &rm) {
-        appearance_state.color_capabilities = crate::services::tint_analysis::color_capabilities(
-            &rm,
-            &state.tint_capability_cache,
-            &parts,
-        );
-    }
-
-    Ok(appearance_state)
+    let session = parking_lot::RwLockWriteGuard::downgrade(session);
+    let character = session
+        .character
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?;
+    Ok(build_appearance_state(
+        character,
+        &game_data,
+        &rm,
+        &state.tint_capability_cache,
+    ))
 }
 
 #[tauri::command]

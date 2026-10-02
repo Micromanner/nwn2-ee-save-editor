@@ -998,7 +998,7 @@ impl super::Character {
                 // ArmorVisualType (armor.2da row). Chest, boots and gloves
                 // render nothing without a material, so seed the template's
                 // or fall back to row 0 (Cloth), which every slot ships.
-                new_item.insert("Variation".to_string(), GffValue::Int(1));
+                new_item.insert("Variation".to_string(), GffValue::Byte(0));
                 new_item.insert(
                     "ArmorVisualType".to_string(),
                     GffValue::Byte(armor_visual_type.unwrap_or(0)),
@@ -1834,17 +1834,8 @@ fn write_appearance_into_item(
     appearance: &crate::character::ItemAppearance,
     create_variation: bool,
 ) {
-    // Preserve existing numeric type where possible; fall back to the NWN2 schema defaults
-    // (Variation: Int, ModelPartN: Byte).
-    let typed_int = |existing: Option<&GffValue<'static>>, v: i32| -> GffValue<'static> {
-        match existing {
-            Some(GffValue::Byte(_)) => GffValue::Byte(v as u8),
-            Some(GffValue::Short(_)) => GffValue::Short(v as i16),
-            Some(GffValue::Word(_)) => GffValue::Word(v as u16),
-            Some(GffValue::Int(_)) | None => GffValue::Int(v),
-            _ => GffValue::Int(v),
-        }
-    };
+    // Preserve the existing numeric type; new fields are Bytes like the game
+    // writes them (Variation, ModelPartN, ArmorVisualType).
     let typed_byte = |existing: Option<&GffValue<'static>>, v: i32| -> GffValue<'static> {
         match existing {
             Some(GffValue::Int(_)) => GffValue::Int(v),
@@ -1868,7 +1859,7 @@ fn write_appearance_into_item(
         }
     };
 
-    let new_variation = typed_int(item.get("Variation"), appearance.variation);
+    let new_variation = typed_byte(item.get("Variation"), appearance.variation);
     let new_mp1 = typed_byte(item.get("ModelPart1"), appearance.model_parts[0]);
     let new_mp2 = typed_byte(item.get("ModelPart2"), appearance.model_parts[1]);
     let new_mp3 = typed_byte(item.get("ModelPart3"), appearance.model_parts[2]);
@@ -1939,11 +1930,17 @@ fn write_accessories_into_item(
     }
     fn sibling_template(
         item: &IndexMap<String, GffValue<'static>>,
+        slot: AccessorySlot,
     ) -> IndexMap<String, GffValue<'static>> {
-        AccessorySlot::all()
+        let mut inner = AccessorySlot::all()
             .iter()
-            .find_map(|slot| item.get(slot.uti_field()).and_then(load_struct))
-            .unwrap_or_default()
+            .find_map(|s| item.get(s.uti_field()).and_then(load_struct))
+            .unwrap_or_default();
+        inner.insert(
+            "__struct_id__".to_string(),
+            GffValue::Dword(slot.struct_id()),
+        );
+        inner
     }
 
     for slot in AccessorySlot::all() {
@@ -1953,7 +1950,7 @@ fn write_accessories_into_item(
         let key = slot.uti_field();
         let mut inner = match item.get(key).and_then(load_struct) {
             Some(existing) => existing,
-            None => sibling_template(item),
+            None => sibling_template(item, *slot),
         };
         let accessory = match inner.get("Accessory") {
             Some(GffValue::Int(_)) => GffValue::Int(data.id),
@@ -3127,7 +3124,7 @@ mod tests {
 
         write_appearance_into_item(&mut item, &appearance, true);
 
-        assert!(matches!(item.get("Variation"), Some(GffValue::Int(4))));
+        assert!(matches!(item.get("Variation"), Some(GffValue::Byte(4))));
         assert!(item.get("ModelPart1").is_none());
     }
 
@@ -3201,13 +3198,13 @@ mod tests {
         assert!(matches!(rt.get("Accessory"), Some(GffValue::Byte(0))));
 
         // A slot the item never had is cloned from a sibling so it carries
-        // the same UVScroll/struct id layout.
+        // the same UVScroll layout, with the game's struct id for its slot.
         let knee = struct_fields(item.get("ACLtKnee").unwrap());
         assert!(matches!(knee.get("Accessory"), Some(GffValue::Byte(2))));
         assert!(knee.contains_key("UVScroll"));
         assert!(matches!(
             knee.get("__struct_id__"),
-            Some(GffValue::Dword(0))
+            Some(GffValue::Dword(16))
         ));
         assert!(knee.contains_key("Tintable"));
         assert!(item.get("ACRtKnee").is_none());

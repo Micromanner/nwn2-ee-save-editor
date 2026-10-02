@@ -1385,7 +1385,7 @@
     "voiceTypeFallback": "Typ {id}",
     "colorsHoverHint": "Najedź na kolor, aby podświetlić obszar, którego dotyczy",
     "accessories": "Akcesoria",
-    "accessoriesHint": "Nowe akcesoria przejmują kolory pancerza. Zmiana wariacji resetuje akcesoria.",
+    "accessoriesHint": "Nowe akcesoria przejmują kolory pancerza.",
     "accessoryLeft": "L",
     "accessoryRight": "P",
     "accessorySide": "{slot} {side}",
@@ -1402,9 +1402,6 @@
       "shin": "Goleń",
       "hip": "Biodro"
     },
-    "accessoryResetTitle": "Zmiany akcesoriów zostaną cofnięte",
-    "accessoryResetDesc": "Zmiana wariacji przywraca akcesoria do stanu z chwili otwarcia tego przedmiotu.",
-    "changeVariation": "Zmień wariację",
     "customColors": "Własne kolory",
     "usingArmorColors": "Kolory pancerza",
     "copyToPair": "Kopiuj kolory do {pair}",

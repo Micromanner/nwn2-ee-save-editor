@@ -1383,7 +1383,7 @@
     "voiceTypeFallback": "Тип {id}",
     "colorsHoverHint": "Наведите курсор на цвет, чтобы подсветить область, на которую он влияет",
     "accessories": "Аксессуары",
-    "accessoriesHint": "Новые аксессуары получают цвета доспеха. Смена вариации сбрасывает аксессуары.",
+    "accessoriesHint": "Новые аксессуары получают цвета доспеха.",
     "accessoryLeft": "Л",
     "accessoryRight": "П",
     "accessorySide": "{slot} {side}",
@@ -1400,9 +1400,6 @@
       "shin": "Голень",
       "hip": "Бедро (таз)"
     },
-    "accessoryResetTitle": "Изменения аксессуаров будут сброшены",
-    "accessoryResetDesc": "Смена вариации возвращает аксессуары к состоянию на момент открытия предмета.",
-    "changeVariation": "Изменить вариацию",
     "customColors": "Свои цвета",
     "usingArmorColors": "Цвета доспеха",
     "copyToPair": "Копировать цвета в {pair}",

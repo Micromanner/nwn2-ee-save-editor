@@ -42,8 +42,8 @@ fn diagnose_npc_heads() {
     }
 
     for (name, character) in &entries {
-        let state = character.get_appearance_state(&game_data, &rm);
         let parts = character.resolve_model_parts(&game_data, &rm);
+        let state = character.get_appearance_state(&game_data, &rm, parts.as_ref());
         let caps = parts.as_ref().map(|p| color_capabilities(&rm, &cache, p));
         println!(
             "\n== {name}: race={} subrace_idx={:?} appearance={} ({}) gender={}",
