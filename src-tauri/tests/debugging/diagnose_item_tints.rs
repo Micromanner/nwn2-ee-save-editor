@@ -124,7 +124,7 @@ async fn diagnose_item_tints() {
     if !save_path.exists() {
         writeln!(out, "\nSave not found, skipping save comparison").unwrap();
     } else {
-        let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+        let handler = SaveGameHandler::new(&save_path, false).expect("handler");
         let bic_data = handler
             .extract_player_bic()
             .expect("extract")

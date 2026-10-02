@@ -266,7 +266,7 @@ async fn test_classic_campaign_inventory_equip() {
 
     let save_path = fixtures_path().join("saves/Classic_Campaign");
     let handler =
-        SaveGameHandler::new(&save_path, false, false).expect("Failed to create SaveGameHandler");
+        SaveGameHandler::new(&save_path, false).expect("Failed to create SaveGameHandler");
 
     let player_data = handler
         .extract_player_bic()

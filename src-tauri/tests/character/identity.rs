@@ -135,7 +135,7 @@ async fn test_classic_campaign_identity() {
     println!("Loading save from: {save_path:?}");
 
     let handler =
-        SaveGameHandler::new(&save_path, false, false).expect("Failed to create SaveGameHandler");
+        SaveGameHandler::new(&save_path, false).expect("Failed to create SaveGameHandler");
 
     let player_data = handler
         .extract_player_bic()

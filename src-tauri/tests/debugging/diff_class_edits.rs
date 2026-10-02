@@ -23,7 +23,7 @@ fn fixtures_dir() -> PathBuf {
 }
 
 fn load_bic(save_path: &Path) -> IndexMap<String, GffValue<'static>> {
-    let handler = SaveGameHandler::new(save_path, false, false).expect("handler");
+    let handler = SaveGameHandler::new(save_path, false).expect("handler");
     let data = handler
         .extract_player_bic()
         .expect("extract_player_bic")
@@ -352,7 +352,7 @@ fn dump_class_edit_diff() {
                 if !cand.join("resgff.zip").exists() {
                     continue;
                 }
-                let handler = match SaveGameHandler::new(&cand, false, false) {
+                let handler = match SaveGameHandler::new(&cand, false) {
                     Ok(h) => h,
                     Err(_) => continue,
                 };

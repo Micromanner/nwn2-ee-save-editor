@@ -93,20 +93,11 @@ fn read_save_character_name(save_path: &std::path::Path) -> Option<String> {
         return Some(name);
     }
 
-    if let Ok(handler) = SaveGameHandler::new(save_path, false, false)
-        && let Ok(Some(summary)) = handler.read_character_summary()
-    {
-        let name = [summary.first_name, summary.last_name]
-            .into_iter()
-            .filter(|part| !part.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        if !name.trim().is_empty() {
-            return Some(name);
-        }
-    }
-
-    None
+    SaveGameHandler::new(save_path, false)
+        .ok()?
+        .read_character_name()
+        .ok()
+        .flatten()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]

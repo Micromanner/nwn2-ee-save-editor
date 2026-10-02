@@ -21,9 +21,7 @@ pub use resource_manager::{
 
 pub use rule_detector::{ColumnPurpose, RuleDetector, TableType};
 
-pub use savegame_handler::{
-    CharacterStats, CharacterSummary, FileInfo, SaveGameError, SaveGameHandler, SaveGameResult,
-};
+pub use savegame_handler::{FileInfo, SaveGameError, SaveGameHandler, SaveGameResult};
 
 pub use playerinfo::{
     PlayerClassEntry, PlayerInfo, PlayerInfoData, PlayerInfoParseError, PlayerInfoResult,

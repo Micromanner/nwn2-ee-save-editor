@@ -139,7 +139,7 @@ pub async fn list_save_characters(
     state: State<'_, AppState>,
     file_path: String,
 ) -> CommandResult<Vec<SaveCharacterOption>> {
-    let handler = SaveGameHandler::new(&file_path, false, false).map_err(CommandError::from)?;
+    let handler = SaveGameHandler::new(&file_path, false).map_err(CommandError::from)?;
     let playerlist_data = handler.extract_player_data().map_err(CommandError::from)?;
     let gff = GffParser::from_bytes(playerlist_data).map_err(|e| CommandError::ParseError {
         message: format!("Failed to parse playerlist.ifo: {e}"),

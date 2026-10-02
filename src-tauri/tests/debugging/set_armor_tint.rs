@@ -117,7 +117,7 @@ fn set_armor_tint_test_colors() {
     }
     copy_dir(&save_path, &test_save);
 
-    let handler = SaveGameHandler::new(&test_save, false, false).expect("handler");
+    let handler = SaveGameHandler::new(&test_save, false).expect("handler");
 
     // Modify playerlist.ifo (the file the game actually reads)
     let ifo_data = handler.extract_file("playerlist.ifo").expect("extract ifo");
@@ -159,7 +159,7 @@ fn set_armor_tint_test_colors() {
     let new_ifo = write_gff(ifo_fields, &ifo_type, &ifo_ver);
     let new_bic = write_gff(bic_fields, &bic_type, &bic_ver);
 
-    let mut handler = SaveGameHandler::new(&test_save, false, false).expect("handler");
+    let mut handler = SaveGameHandler::new(&test_save, false).expect("handler");
     handler
         .rewrite_player_files(|_src| Ok(PlayerOutputs {
             playerlist: new_ifo,

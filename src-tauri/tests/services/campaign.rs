@@ -19,7 +19,7 @@ fn test_campaign_manager_read_operations() {
     // Copy directory
     common::copy_dir_recursive(&fixture_path, &save_path).expect("Failed to copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, true, false).expect("Failed to create handler");
+    let handler = SaveGameHandler::new(&save_path, false).expect("Failed to create handler");
     let paths = NWN2Paths::new(); // Default paths, likely mostly empty but should work for basic logic
 
     // Test get_summary
@@ -79,8 +79,7 @@ fn test_campaign_manager_write_operations() {
 
     common::copy_dir_recursive(&fixture_path, &save_path).expect("Failed to copy fixture");
 
-    let mut handler =
-        SaveGameHandler::new(&save_path, true, false).expect("Failed to create handler");
+    let mut handler = SaveGameHandler::new(&save_path, false).expect("Failed to create handler");
 
     // Test update_global_int
     let test_var = "TEST_INT_VAR";
@@ -115,8 +114,8 @@ fn test_campaign_manager_write_operations() {
 // The influence page must still list the whole MotB cast and none of the OC.
 #[test]
 fn companion_influence_lists_whole_campaign_cast_from_roster() {
-    let handler = SaveGameHandler::new(common::fixtures_path().join("saves/MOTB"), false, false)
-        .expect("handler");
+    let handler =
+        SaveGameHandler::new(common::fixtures_path().join("saves/MOTB"), false).expect("handler");
     let companions = CampaignManager::get_companion_influence(&handler, &QuestEdits::default())
         .expect("influence");
 
@@ -137,7 +136,6 @@ fn companion_influence_lists_whole_campaign_cast_from_roster() {
 fn companion_influence_lists_whole_oc_cast() {
     let handler = SaveGameHandler::new(
         common::fixtures_path().join("saves/Classic_Campaign"),
-        false,
         false,
     )
     .expect("handler");

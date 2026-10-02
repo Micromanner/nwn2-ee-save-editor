@@ -41,7 +41,7 @@ fn restore_and_reload(state: &AppState, backup_path: &str) -> CommandResult<bool
     // If a character is loaded, it must be the save this backup belongs to,
     // otherwise the user is about to overwrite an unrelated save.
     if let Some(loaded) = &loaded_save_dir
-        && *loaded != inferred_save_dir
+        && !crate::config::nwn2_paths::paths_equivalent(loaded, &inferred_save_dir)
     {
         let loaded_name = loaded.file_name().and_then(|n| n.to_str()).unwrap_or("?");
         let target_name = inferred_save_dir
@@ -96,18 +96,6 @@ pub async fn list_save_files(state: State<'_, AppState>) -> CommandResult<Vec<Fi
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     Ok(handler.list_files()?)
-}
-
-#[tauri::command]
-pub async fn get_save_info(
-    state: State<'_, AppState>,
-) -> CommandResult<Option<crate::services::savegame_handler::CharacterSummary>> {
-    let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(handler.read_character_summary()?)
 }
 
 #[tauri::command]

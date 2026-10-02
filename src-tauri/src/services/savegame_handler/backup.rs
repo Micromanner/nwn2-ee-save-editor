@@ -7,6 +7,7 @@ use std::time::SystemTime;
 use chrono::Local;
 use tracing::{info, warn};
 
+use super::SaveFormat;
 use super::backup_manifest::{self, BackupReason};
 use super::error::{SaveGameError, SaveGameResult};
 
@@ -83,9 +84,25 @@ pub fn create_backup(save_dir: &Path, reason: BackupReason) -> SaveGameResult<Pa
         BackupReason::PreRestore => PRE_RESTORE_PREFIX,
     };
     let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT);
-    let backup_path = get_backup_dir_for_save(save_dir).join(format!("{prefix}{timestamp}"));
+    let backup_dir = get_backup_dir_for_save(save_dir);
+    let context = format!(
+        "Could not back up {} to {}",
+        save_dir.display(),
+        backup_dir.display()
+    );
+    let backup_path = create_unique_dir(&backup_dir, &format!("{prefix}{timestamp}"))
+        .map_err(|e| SaveGameError::BackupFailed(format!("{context}: {e}")))?;
 
-    copy_save_files(save_dir, &backup_path)?;
+    if let Err(e) = copy_save_files(save_dir, &backup_path) {
+        // A partial backup would be listed and could be restored over the save.
+        if let Err(cleanup) = fs::remove_dir_all(&backup_path) {
+            warn!(
+                "Failed to remove partial backup {}: {cleanup}",
+                backup_path.display()
+            );
+        }
+        return Err(SaveGameError::BackupFailed(format!("{context}: {e}")));
+    }
     backup_manifest::write_initial(&backup_path, reason);
 
     info!(
@@ -96,10 +113,30 @@ pub fn create_backup(save_dir: &Path, reason: BackupReason) -> SaveGameResult<Pa
     Ok(backup_path)
 }
 
+/// Create `parent/name`, or `parent/name_2`, `_3`, ... when it already exists,
+/// so two backups taken within the same second never share a folder.
+fn create_unique_dir(parent: &Path, name: &str) -> io::Result<PathBuf> {
+    fs::create_dir_all(parent)?;
+    let mut path = parent.join(name);
+    let mut counter = 1;
+    loop {
+        match fs::create_dir(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                counter += 1;
+                path = parent.join(format!("{name}_{counter}"));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// Replace the contents of `save_dir` with `backup_path`, after taking a
 /// pre-restore backup. The backup is copied to a staging folder first and
 /// swapped in by renames, so a failed copy leaves the save untouched and a
-/// failed swap moves the original files back.
+/// failed swap moves the original files back. Original files that cannot be
+/// moved back stay in the displaced folder, which blocks later restores until
+/// they are recovered.
 pub fn restore_from_backup(backup_path: &Path, save_dir: &Path) -> SaveGameResult<RestoreResult> {
     if !backup_path.exists() {
         return Err(SaveGameError::NotFound {
@@ -122,16 +159,29 @@ pub fn restore_from_backup(backup_path: &Path, save_dir: &Path) -> SaveGameResul
         )));
     }
 
-    let pre_restore_backup = create_backup(save_dir, BackupReason::PreRestore)?;
+    // The game cannot load a folder without these; restoring a partial backup
+    // would replace a working save with a broken one.
+    SaveFormat::detect(backup_path).map_err(|_| {
+        SaveGameError::RestoreFailed(format!(
+            "{} is not a complete save backup, save left unchanged",
+            backup_path.display()
+        ))
+    })?;
 
     let work_dir = get_backup_dir_for_save(save_dir);
     let staging = work_dir.join(RESTORE_STAGING_DIR);
     let displaced = work_dir.join(RESTORE_DISPLACED_DIR);
-    for leftover in [&staging, &displaced] {
-        if leftover.exists() {
-            fs::remove_dir_all(leftover)?;
-        }
+    if displaced.exists() && fs::remove_dir(&displaced).is_err() {
+        return Err(SaveGameError::RestoreFailed(format!(
+            "A failed restore left save files in {}; move them back into the save before restoring again",
+            displaced.display()
+        )));
     }
+    if staging.exists() {
+        fs::remove_dir_all(&staging)?;
+    }
+
+    let pre_restore_backup = create_backup(save_dir, BackupReason::PreRestore)?;
 
     let files_restored = match copy_save_files(backup_path, &staging) {
         Ok(count) => count,
@@ -141,14 +191,23 @@ pub fn restore_from_backup(backup_path: &Path, save_dir: &Path) -> SaveGameResul
         }
     };
     let swapped = swap_save_contents(save_dir, &staging, &displaced);
-    for temp in [&staging, &displaced] {
-        if temp.exists()
-            && let Err(e) = fs::remove_dir_all(temp)
-        {
-            warn!("Failed to remove {}: {e}", temp.display());
-        }
+    // Staging only ever holds copies of the backup.
+    if staging.exists()
+        && let Err(e) = fs::remove_dir_all(&staging)
+    {
+        warn!("Failed to remove {}: {e}", staging.display());
     }
-    swapped?;
+    if let Err(e) = swapped {
+        // Empty (and removed) only when every original file was moved back.
+        let _ = fs::remove_dir(&displaced);
+        return Err(SaveGameError::RestoreFailed(format!(
+            "{e} Pre-restore backup: {}",
+            pre_restore_backup.display()
+        )));
+    }
+    if let Err(e) = fs::remove_dir_all(&displaced) {
+        warn!("Failed to remove {}: {e}", displaced.display());
+    }
 
     info!(
         "Restored backup: {} -> {} ({} files)",
@@ -165,24 +224,31 @@ pub fn restore_from_backup(backup_path: &Path, save_dir: &Path) -> SaveGameResul
 
 /// Move the save's files (except the inner backups folder) to `displaced`,
 /// then the staged files into the save, undoing both moves on failure.
-fn swap_save_contents(save_dir: &Path, staging: &Path, displaced: &Path) -> SaveGameResult<()> {
-    fs::create_dir_all(displaced)?;
+fn swap_save_contents(save_dir: &Path, staging: &Path, displaced: &Path) -> Result<(), String> {
+    fs::create_dir_all(displaced).map_err(|e| e.to_string())?;
+    let failure = |step: &str, e: io::Error, put_back: bool| {
+        let outcome = if put_back {
+            "original files put back.".to_string()
+        } else {
+            format!(
+                "not all original save files could be put back; the rest are in {}.",
+                displaced.display()
+            )
+        };
+        format!("Could not move {step}: {e}; {outcome}")
+    };
 
     let mut displaced_names = Vec::new();
     if let Err(e) = move_entries(save_dir, displaced, &mut displaced_names) {
-        move_back(displaced, save_dir, &displaced_names);
-        return Err(SaveGameError::RestoreFailed(format!(
-            "Could not move the current save files aside, save left unchanged: {e}"
-        )));
+        let put_back = move_back(displaced, save_dir, &displaced_names);
+        return Err(failure("the current save files aside", e, put_back));
     }
 
     let mut restored_names = Vec::new();
     if let Err(e) = move_entries(staging, save_dir, &mut restored_names) {
-        move_back(save_dir, staging, &restored_names);
-        move_back(displaced, save_dir, &displaced_names);
-        return Err(SaveGameError::RestoreFailed(format!(
-            "Could not move the restored files into the save, original files put back: {e}"
-        )));
+        let put_back = move_back(save_dir, staging, &restored_names)
+            && move_back(displaced, save_dir, &displaced_names);
+        return Err(failure("the restored files into the save", e, put_back));
     }
     Ok(())
 }
@@ -199,7 +265,9 @@ fn move_entries(from: &Path, to: &Path, moved: &mut Vec<OsString>) -> io::Result
     Ok(())
 }
 
-fn move_back(from: &Path, to: &Path, names: &[OsString]) {
+/// Returns whether every entry was moved.
+fn move_back(from: &Path, to: &Path, names: &[OsString]) -> bool {
+    let mut all_moved = true;
     for name in names {
         if let Err(e) = fs::rename(from.join(name), to.join(name)) {
             warn!(
@@ -207,8 +275,10 @@ fn move_back(from: &Path, to: &Path, names: &[OsString]) {
                 from.join(name).display(),
                 to.display()
             );
+            all_moved = false;
         }
     }
+    all_moved
 }
 
 pub fn infer_save_path_from_backup(backup_path: &Path) -> Option<PathBuf> {
@@ -317,6 +387,7 @@ mod tests {
         fs::create_dir_all(&inner).unwrap();
         fs::write(inner.join("m_20260925_120000.z"), b"old-module").unwrap();
         fs::write(save.join("globals.xml"), b"original").unwrap();
+        fs::write(save.join("resgff.zip"), b"archive").unwrap();
 
         let backup = create_backup(&save, BackupReason::Load).unwrap();
         assert!(!backup.join(INNER_BACKUPS_DIR).exists());
@@ -326,7 +397,7 @@ mod tests {
 
         let result = restore_from_backup(&backup, &save).unwrap();
 
-        assert_eq!(result.files_restored, 1);
+        assert_eq!(result.files_restored, 2);
         assert_eq!(fs::read(save.join("globals.xml")).unwrap(), b"original");
         assert!(!save.join("new.z").exists());
         assert!(!save.join(backup_manifest::MANIFEST_FILE).exists());
@@ -338,5 +409,52 @@ mod tests {
         let work_dir = get_backup_dir_for_save(&save);
         assert!(!work_dir.join(RESTORE_STAGING_DIR).exists());
         assert!(!work_dir.join(RESTORE_DISPLACED_DIR).exists());
+    }
+
+    #[test]
+    fn test_restore_refuses_incomplete_backup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let save = tmp.path().join("saves").join("a");
+        fs::create_dir_all(&save).unwrap();
+        fs::write(save.join("resgff.zip"), b"archive").unwrap();
+        let backup = get_backup_dir_for_save(&save).join("backup_20260925_120000");
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(backup.join("globals.xml"), b"partial").unwrap();
+
+        let result = restore_from_backup(&backup, &save);
+
+        assert!(matches!(result, Err(SaveGameError::RestoreFailed(_))));
+        assert_eq!(fs::read(save.join("resgff.zip")).unwrap(), b"archive");
+        assert!(!save.join("globals.xml").exists());
+    }
+
+    #[test]
+    fn test_restore_refuses_while_displaced_files_remain() {
+        let tmp = tempfile::tempdir().unwrap();
+        let save = tmp.path().join("saves").join("a");
+        fs::create_dir_all(&save).unwrap();
+        fs::write(save.join("resgff.zip"), b"current").unwrap();
+        let backup = create_backup(&save, BackupReason::Load).unwrap();
+        let displaced = get_backup_dir_for_save(&save).join(RESTORE_DISPLACED_DIR);
+        fs::create_dir_all(&displaced).unwrap();
+        fs::write(displaced.join("player.bic"), b"stranded").unwrap();
+
+        let result = restore_from_backup(&backup, &save);
+
+        assert!(matches!(result, Err(SaveGameError::RestoreFailed(_))));
+        assert_eq!(fs::read(displaced.join("player.bic")).unwrap(), b"stranded");
+    }
+
+    #[test]
+    fn test_backups_in_the_same_second_get_separate_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        let parent = tmp.path().join("backups");
+        let first = create_unique_dir(&parent, "backup_20260925_120000").unwrap();
+        let second = create_unique_dir(&parent, "backup_20260925_120000").unwrap();
+        assert_ne!(first, second);
+        assert_eq!(
+            backup_timestamp(second.file_name().unwrap().to_str().unwrap()),
+            Some("20260925_120000_2")
+        );
     }
 }

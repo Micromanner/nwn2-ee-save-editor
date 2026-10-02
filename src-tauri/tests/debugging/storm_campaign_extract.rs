@@ -8,7 +8,7 @@ use common::{create_test_context, fixtures_path};
 fn load_storm_player() -> Character {
     let save_path = fixtures_path().join("saves/STORM_Campaign");
     let handler =
-        SaveGameHandler::new(&save_path, false, false).expect("Failed to open STORM_Campaign save");
+        SaveGameHandler::new(&save_path, false).expect("Failed to open STORM_Campaign save");
     let player_data = handler
         .extract_player_bic()
         .expect("Failed to extract player.bic")

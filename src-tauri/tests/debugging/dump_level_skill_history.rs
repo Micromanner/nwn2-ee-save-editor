@@ -96,7 +96,7 @@ fn dump_level_skill_history() {
     for f in files {
         let label = f.strip_prefix(&root).unwrap_or(&f).display().to_string();
         if f.file_name().is_some_and(|n| n == "resgff.zip") {
-            let Ok(h) = SaveGameHandler::new(&f, false, false) else {
+            let Ok(h) = SaveGameHandler::new(&f, false) else {
                 continue;
             };
             if let Ok(b) = h.extract_file("player.bic") {

@@ -114,7 +114,7 @@ async fn dump_full_armor_item() {
             )
         });
     if save_path.exists() {
-        let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+        let handler = SaveGameHandler::new(&save_path, false).expect("handler");
         let bic_data = handler
             .extract_player_bic()
             .expect("extract")

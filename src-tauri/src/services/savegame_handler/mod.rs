@@ -2,15 +2,15 @@ pub mod backup;
 pub mod backup_manifest;
 pub mod error;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs::{self, File};
-use std::io::{BufReader, Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn};
+use tracing::debug;
+use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -30,14 +30,14 @@ const MODULE_IFO: &str = "module.ifo";
 const PLAYERINFO_BIN: &str = "playerinfo.bin";
 pub const SAVENAME_TXT: &str = "savename.txt";
 
-const FILE_HEADERS: &[(&str, &[u8; 4])] = &[
-    (".bic", b"BIC "),
-    (".ros", b"ROS "),
-    (".ifo", b"IFO "),
-    (".uti", b"UTI "),
-    (".utc", b"UTC "),
-    (".ute", b"UTE "),
-];
+/// Files an EE save keeps beside `resgff.zip` instead of inside it: the root
+/// text/info files and the per-module `.z` state archives.
+fn is_loose_in_ee(filename: &str) -> bool {
+    matches!(
+        filename,
+        GLOBALS_XML | MODULE_IFO | CURRENTMODULE_TXT | PLAYERINFO_BIN | SAVENAME_TXT
+    ) || filename.to_ascii_lowercase().ends_with(".z")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveFormat {
@@ -71,28 +71,6 @@ pub struct FileInfo {
     pub compression: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CharacterSummary {
-    pub first_name: String,
-    pub last_name: String,
-    pub race: String,
-    pub subrace: String,
-    pub deity: String,
-    pub gender: u8,
-    pub classes: Vec<(String, u8)>,
-    pub alignment: (u8, u8),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CharacterStats {
-    pub str: u8,
-    pub dex: u8,
-    pub con: u8,
-    pub int: u8,
-    pub wis: u8,
-    pub cha: u8,
-}
-
 pub struct PlayerSources<'a> {
     pub playerlist: &'a [u8],
     pub player_bic: Option<&'a [u8]>,
@@ -102,20 +80,6 @@ pub struct PlayerOutputs {
     pub playerlist: Vec<u8>,
     /// `None` preserves the source bytes (used for non-primary-slot MP writes).
     pub player_bic: Option<Vec<u8>>,
-}
-
-fn read_archive_entry<R: Read + std::io::Seek>(
-    archive: &mut ZipArchive<R>,
-    filename: &str,
-) -> SaveGameResult<Vec<u8>> {
-    let mut entry = archive
-        .by_name(filename)
-        .map_err(|_| SaveGameError::FileNotInSave {
-            filename: filename.into(),
-        })?;
-    let mut buf = Vec::with_capacity(entry.size() as usize);
-    entry.read_to_end(&mut buf)?;
-    Ok(buf)
 }
 
 fn commit_outputs(outputs: Vec<(PathBuf, Vec<u8>)>) -> SaveGameResult<()> {
@@ -184,7 +148,7 @@ mod transaction_tests {
         fs::write(dir.path().join("playerlist.ifo"), b"original player").unwrap();
         fs::write(dir.path().join("player.bic"), b"original bic").unwrap();
         fs::write(dir.path().join("globals.xml"), b"original globals").unwrap();
-        let mut handler = SaveGameHandler::new(dir.path(), false, false).unwrap();
+        let mut handler = SaveGameHandler::new(dir.path(), false).unwrap();
         handler.begin_batch();
         handler.update_file("globals.xml", b"new globals").unwrap();
         assert_eq!(handler.extract_file("globals.xml").unwrap(), b"new globals");
@@ -272,22 +236,21 @@ pub struct SaveGameHandler {
     save_dir: PathBuf,
     zip_path: PathBuf,
     format: SaveFormat,
-    validate: bool,
     /// Backup taken by [`Self::new`] before any edit of this session.
     load_backup_path: Option<PathBuf>,
-    temp_files: Vec<PathBuf>,
-    /// `Some` while a batch is open: zip-bound `update_file` writes are staged
-    /// here and flushed by [`Self::commit_batch`] in one archive rewrite.
-    pending_zip_updates: Option<indexmap::IndexMap<String, Vec<u8>>>,
-    pending_disk_updates: indexmap::IndexMap<String, Vec<u8>>,
+    /// `Some` while a batch is open: `update_file` writes are staged here and
+    /// flushed by [`Self::commit_batch`] with one archive rewrite.
+    batch: Option<Batch>,
+}
+
+#[derive(Default)]
+struct Batch {
+    zip: indexmap::IndexMap<String, Vec<u8>>,
+    loose: indexmap::IndexMap<String, Vec<u8>>,
 }
 
 impl SaveGameHandler {
-    pub fn new(
-        save_path: impl AsRef<Path>,
-        validate: bool,
-        create_load_backup: bool,
-    ) -> SaveGameResult<Self> {
+    pub fn new(save_path: impl AsRef<Path>, create_load_backup: bool) -> SaveGameResult<Self> {
         let save_path = save_path.as_ref();
 
         let (save_dir, zip_path) = if save_path.is_dir() {
@@ -320,104 +283,94 @@ impl SaveGameHandler {
             save_dir,
             zip_path,
             format,
-            validate,
             load_backup_path,
-            temp_files: Vec::new(),
-            pending_zip_updates: None,
-            pending_disk_updates: indexmap::IndexMap::new(),
+            batch: None,
         })
     }
 
-    /// Stage subsequent zip-bound `update_file` writes in memory so
+    /// Stage subsequent `update_file` writes in memory so
     /// [`Self::commit_batch`] rewrites `resgff.zip` once for the whole save
-    /// operation instead of once per file. Reads observe staged bytes;
-    /// loose-disk writes stay immediate.
+    /// operation instead of once per file. Reads observe staged bytes.
     pub fn begin_batch(&mut self) {
-        if self.pending_zip_updates.is_none() {
-            self.pending_zip_updates = Some(indexmap::IndexMap::new());
-        }
+        self.batch.get_or_insert_with(Batch::default);
     }
 
-    /// Write all staged zip entries in a single archive rewrite and end the
-    /// batch. A failed commit drops the staged bytes so callers can retry
-    /// from their still-modified in-memory state.
+    /// Write all staged files in one transaction and end the batch. A failed
+    /// commit drops the staged bytes so callers can retry from their
+    /// still-modified in-memory state.
     pub fn commit_batch(&mut self) -> SaveGameResult<()> {
-        let Some(pending) = self.pending_zip_updates.take() else {
+        let Some(batch) = self.batch.take() else {
             return Ok(());
         };
-        let loose = std::mem::take(&mut self.pending_disk_updates);
-        let mut outputs: Vec<(PathBuf, Vec<u8>)> = loose
+        let mut outputs: Vec<(PathBuf, Vec<u8>)> = batch
+            .loose
             .into_iter()
             .map(|(name, bytes)| (self.save_dir.join(name), bytes))
             .collect();
-        if !pending.is_empty() {
-            let path = self.prepare_zip_entries(&pending)?;
-            let bytes = fs::read(&path)?;
-            fs::remove_file(path)?;
-            outputs.push((self.zip_path.clone(), bytes));
+        if !batch.zip.is_empty() {
+            outputs.push((self.zip_path.clone(), self.build_zip(&batch.zip)?));
         }
         commit_outputs(outputs)
     }
 
     pub fn abort_batch(&mut self) {
-        self.pending_zip_updates = None;
-        self.pending_disk_updates.clear();
+        self.batch = None;
+    }
+
+    /// Run `stage` inside the open batch, or inside a batch of its own that is
+    /// committed right after.
+    fn in_batch(
+        &mut self,
+        stage: impl FnOnce(&mut Self) -> SaveGameResult<()>,
+    ) -> SaveGameResult<()> {
+        if self.batch.is_some() {
+            return stage(self);
+        }
+        self.begin_batch();
+        if let Err(e) = stage(self) {
+            self.abort_batch();
+            return Err(e);
+        }
+        self.commit_batch()
     }
 
     pub fn format(&self) -> SaveFormat {
         self.format
     }
 
+    fn is_loose(&self, filename: &str) -> bool {
+        self.format == SaveFormat::Original || is_loose_in_ee(filename)
+    }
+
     pub fn extract_file(&self, filename: &str) -> SaveGameResult<Vec<u8>> {
-        if let Some(bytes) = self.pending_disk_updates.get(filename) {
-            return Ok(bytes.clone());
-        }
-        // Root-level loose files exist in both formats and always live on disk.
-        let is_disk_root_file =
-            filename == GLOBALS_XML || filename == MODULE_IFO || filename == CURRENTMODULE_TXT;
-
-        if is_disk_root_file {
-            let disk_path = self.save_dir.join(filename);
-            if let Ok(content) = fs::read(&disk_path) {
-                return Ok(content);
-            }
-        }
-
-        let contents = match self.format {
-            SaveFormat::Ee => {
-                if let Some(staged) = self
-                    .pending_zip_updates
-                    .as_ref()
-                    .and_then(|p| p.get(filename))
-                {
-                    staged.clone()
-                } else {
-                    let file = File::open(&self.zip_path)?;
-                    let mut archive = ZipArchive::new(file)?;
-                    let mut zip_file =
-                        archive
-                            .by_name(filename)
-                            .map_err(|_| SaveGameError::FileNotInSave {
-                                filename: filename.into(),
-                            })?;
-                    let mut buf = Vec::with_capacity(zip_file.size() as usize);
-                    zip_file.read_to_end(&mut buf)?;
-                    buf
-                }
-            }
-            SaveFormat::Original => {
-                let disk_path = self.save_dir.join(filename);
-                fs::read(&disk_path).map_err(|_| SaveGameError::FileNotInSave {
-                    filename: filename.into(),
-                })?
-            }
+        let not_in_save = || SaveGameError::FileNotInSave {
+            filename: filename.into(),
         };
 
-        if self.validate {
-            self.validate_file_content(filename, &contents)?;
+        let loose = self.is_loose(filename);
+        if let Some(batch) = &self.batch {
+            let staged = if loose { &batch.loose } else { &batch.zip };
+            if let Some(bytes) = staged.get(filename) {
+                return Ok(bytes.clone());
+            }
         }
 
-        Ok(contents)
+        if loose {
+            return match fs::read(self.save_dir.join(filename)) {
+                Ok(bytes) => Ok(bytes),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(not_in_save()),
+                Err(e) => Err(e.into()),
+            };
+        }
+
+        let mut archive = ZipArchive::new(File::open(&self.zip_path)?)?;
+        let mut entry = archive.by_name(filename).map_err(|e| match e {
+            ZipError::FileNotFound => not_in_save(),
+            e => e.into(),
+        })?;
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        entry.read_to_end(&mut buf)?;
+        Ok(buf)
     }
 
     pub fn extract_player_data(&self) -> SaveGameResult<Vec<u8>> {
@@ -450,227 +403,69 @@ impl SaveGameHandler {
         }
     }
 
-    pub fn batch_read_character_files(&self) -> SaveGameResult<HashMap<String, Vec<u8>>> {
-        match self.format {
-            SaveFormat::Ee => self.batch_read_character_files_ee(),
-            SaveFormat::Original => self.batch_read_character_files_original(),
-        }
-    }
-
-    fn batch_read_character_files_ee(&self) -> SaveGameResult<HashMap<String, Vec<u8>>> {
-        let file = File::open(&self.zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
-
-        let mut character_files = Vec::new();
-        for i in 0..archive.len() {
-            let entry = archive.by_index_raw(i)?;
-            let name = entry.name().to_string();
-
-            let is_character_file = name == PLAYERLIST_IFO
-                || name == PLAYER_BIC
-                || name.to_lowercase().ends_with(".ros");
-
-            if is_character_file {
-                character_files.push(name);
-            }
-        }
-
-        let zip_path = self.zip_path.clone();
-        let validate = self.validate;
-
-        let results: Vec<(String, Vec<u8>)> = character_files
-            .par_iter()
-            .filter_map(|name| {
-                let file = File::open(&zip_path).ok()?;
-                let reader = BufReader::with_capacity(64 * 1024, file);
-                let mut archive = ZipArchive::new(reader).ok()?;
-                let mut zip_file = archive.by_name(name).ok()?;
-
-                let mut contents = Vec::with_capacity(zip_file.size() as usize);
-                zip_file.read_to_end(&mut contents).ok()?;
-
-                if validate {
-                    Self::validate_file_header(name, &contents).ok()?;
-                }
-
-                Some((name.clone(), contents))
-            })
-            .collect();
-
-        Ok(results.into_iter().collect())
-    }
-
-    fn batch_read_character_files_original(&self) -> SaveGameResult<HashMap<String, Vec<u8>>> {
-        let mut out: HashMap<String, Vec<u8>> = HashMap::new();
-        for entry in fs::read_dir(&self.save_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let lower = name.to_lowercase();
-            let is_character_file =
-                lower == PLAYERLIST_IFO || lower == PLAYER_BIC || lower.ends_with(".ros");
-            if !is_character_file {
-                continue;
-            }
-            let contents = fs::read(&path)?;
-            if self.validate {
-                Self::validate_file_header(&name, &contents)?;
-            }
-            out.insert(name, contents);
-        }
-        Ok(out)
-    }
-
-    fn validate_file_header(filename: &str, content: &[u8]) -> SaveGameResult<()> {
-        if content.len() < 4 {
-            return Err(SaveGameError::ValidationFailed {
-                filename: filename.into(),
-                reason: "File too small".into(),
-            });
-        }
-
-        for (ext, expected_header) in FILE_HEADERS {
-            if filename.to_lowercase().ends_with(ext) {
-                let actual = &content[0..4];
-                if actual != *expected_header {
-                    return Err(SaveGameError::InvalidHeader {
-                        filename: filename.into(),
-                        expected: String::from_utf8_lossy(*expected_header).into(),
-                    });
-                }
-                break;
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn extract_globals_xml(&self) -> SaveGameResult<String> {
         String::from_utf8(self.extract_file(GLOBALS_XML)?)
             .map_err(|e| SaveGameError::Transform(format!("Invalid globals.xml encoding: {e}")))
     }
 
     pub fn extract_current_module(&self) -> SaveGameResult<String> {
-        let path = self.save_dir.join(CURRENTMODULE_TXT);
-        if !path.exists() {
-            return Err(SaveGameError::FileNotInSave {
-                filename: CURRENTMODULE_TXT.into(),
-            });
-        }
-        Ok(fs::read_to_string(path)?.trim().to_string())
-    }
-
-    pub fn extract_module_ifo(&self) -> SaveGameResult<Vec<u8>> {
-        let path = self.save_dir.join(MODULE_IFO);
-        if !path.exists() {
-            return Err(SaveGameError::FileNotInSave {
-                filename: MODULE_IFO.into(),
-            });
-        }
-        Ok(fs::read(path)?)
+        String::from_utf8(self.extract_file(CURRENTMODULE_TXT)?)
+            .map(|module| module.trim().to_string())
+            .map_err(|e| SaveGameError::Transform(format!("Invalid {CURRENTMODULE_TXT}: {e}")))
     }
 
     pub fn update_file(&mut self, filename: &str, content: &[u8]) -> SaveGameResult<()> {
-        if self.validate {
-            self.validate_file_content(filename, content)?;
-        }
-
-        let disk_path = self.save_dir.join(filename);
-
-        // Always-loose files (both formats) and Original format write straight to disk.
-        let force_disk = filename == GLOBALS_XML
-            || filename == MODULE_IFO
-            || filename == CURRENTMODULE_TXT
-            || filename == PLAYERINFO_BIN
-            || filename == SAVENAME_TXT
-            || disk_path.exists();
-
-        if self.format == SaveFormat::Original || force_disk {
-            if self.pending_zip_updates.is_some() {
-                self.pending_disk_updates
-                    .insert(filename.to_string(), content.to_vec());
-                return Ok(());
-            }
-            fs::write(&disk_path, content)?;
-            debug!("Updated file on disk: {}", filename);
-            return Ok(());
-        }
-
-        if let Some(pending) = self.pending_zip_updates.as_mut() {
-            pending.insert(filename.to_string(), content.to_vec());
-            debug!("Staged file for batched save: {}", filename);
-            return Ok(());
-        }
-
-        let mut entries = indexmap::IndexMap::new();
-        entries.insert(filename.to_string(), content.to_vec());
-        self.write_zip_entries(&entries)?;
-
+        let loose = self.is_loose(filename);
+        self.in_batch(|handler| {
+            let batch = handler.batch.get_or_insert_with(Batch::default);
+            let staged = if loose {
+                &mut batch.loose
+            } else {
+                &mut batch.zip
+            };
+            staged.insert(filename.to_string(), content.to_vec());
+            Ok(())
+        })?;
         debug!("Updated file in save: {}", filename);
         Ok(())
     }
 
-    /// Rewrite `resgff.zip` once, substituting every entry in `entries` and
-    /// appending the ones the archive doesn't hold yet.
-    fn write_zip_entries(
-        &mut self,
-        entries: &indexmap::IndexMap<String, Vec<u8>>,
-    ) -> SaveGameResult<()> {
-        let path = self.prepare_zip_entries(entries)?;
-        fs::rename(path, &self.zip_path)?;
-        Ok(())
-    }
+    /// Build a copy of `resgff.zip` in memory with every entry in `entries`
+    /// substituted (matched case-insensitively) and the ones the archive
+    /// doesn't hold yet appended. Untouched entries are copied raw.
+    fn build_zip(&self, entries: &indexmap::IndexMap<String, Vec<u8>>) -> SaveGameResult<Vec<u8>> {
+        let mut src = ZipArchive::new(File::open(&self.zip_path)?)?;
+        let mut dst = ZipWriter::new(Cursor::new(Vec::new()));
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .last_modified_time(*NWN2_DATE_TIME);
 
-    fn prepare_zip_entries(
-        &self,
-        entries: &indexmap::IndexMap<String, Vec<u8>>,
-    ) -> SaveGameResult<PathBuf> {
-        let temp_path = self.zip_path.with_extension("zip.tmp");
-
-        {
-            let src_file = File::open(&self.zip_path)?;
-            let mut src_archive = ZipArchive::new(src_file)?;
-
-            let dst_file = File::create(&temp_path)?;
-            let mut dst_archive = ZipWriter::new(dst_file);
-
-            let options = SimpleFileOptions::default()
-                .compression_method(CompressionMethod::Deflated)
-                .last_modified_time(*NWN2_DATE_TIME);
-
-            let mut written: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-            for i in 0..src_archive.len() {
-                let mut src_entry = src_archive.by_index(i)?;
-                let name = src_entry.name().to_string();
-                dst_archive.start_file(&name, options)?;
-                if let Some(content) = entries.get(&name) {
-                    dst_archive.write_all(content)?;
-                    written.insert(name);
-                } else {
-                    let mut buffer = Vec::with_capacity(src_entry.size() as usize);
-                    src_entry.read_to_end(&mut buffer)?;
-                    dst_archive.write_all(&buffer)?;
+        let mut written: HashSet<&str> = HashSet::new();
+        for i in 0..src.len() {
+            let entry = src.by_index_raw(i)?;
+            let name = entry.name().to_string();
+            match entries
+                .iter()
+                .find(|(staged, _)| staged.eq_ignore_ascii_case(&name))
+            {
+                Some((staged, content)) => {
+                    dst.start_file(name, options)?;
+                    dst.write_all(content)?;
+                    written.insert(staged.as_str());
                 }
+                None => dst.raw_copy_file(entry)?,
             }
-
-            for (name, content) in entries {
-                if !written.contains(name) {
-                    dst_archive.start_file(name, options)?;
-                    dst_archive.write_all(content)?;
-                }
-            }
-
-            dst_archive.finish()?;
         }
-
-        Ok(temp_path)
+        for (name, content) in entries {
+            if !written.contains(name.as_str()) {
+                dst.start_file(name.as_str(), options)?;
+                dst.write_all(content)?;
+            }
+        }
+        Ok(dst.finish()?.into_inner())
     }
 
-    /// Rewrite playerlist.ifo and player.bic inside the save zip in a single pass.
+    /// Rewrite playerlist.ifo and player.bic in one step.
     ///
     /// The transform closure receives the source bytes for both files and returns
     /// the new bytes. Returning `player_bic: None` preserves the source bytes
@@ -680,182 +475,21 @@ impl SaveGameHandler {
     where
         F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
     {
-        match self.format {
-            SaveFormat::Ee => self.rewrite_player_files_ee(transform),
-            SaveFormat::Original => self.rewrite_player_files_original(transform),
-        }
-    }
-
-    fn rewrite_player_files_ee<F>(&mut self, transform: F) -> SaveGameResult<()>
-    where
-        F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
-    {
-        if self.pending_zip_updates.is_some() {
-            let playerlist_src = self.extract_file(PLAYERLIST_IFO)?;
-            let player_bic_src = match self.extract_file(PLAYER_BIC) {
-                Ok(b) => Some(b),
-                Err(SaveGameError::FileNotInSave { .. }) => None,
-                Err(e) => return Err(e),
-            };
-            let outputs = transform(PlayerSources {
-                playerlist: &playerlist_src,
-                player_bic: player_bic_src.as_deref(),
-            })
-            .map_err(SaveGameError::Transform)?;
-
-            if let Some(pending) = self.pending_zip_updates.as_mut() {
-                pending.insert(PLAYERLIST_IFO.to_string(), outputs.playerlist);
-                if let Some(bytes) = outputs.player_bic {
-                    pending.insert(PLAYER_BIC.to_string(), bytes);
-                }
-            }
-            info!("Staged player files for batched save (EE)");
-            return Ok(());
-        }
-
-        let src_file = File::open(&self.zip_path)?;
-        let mut src_archive = ZipArchive::new(src_file)?;
-
-        let playerlist_src = read_archive_entry(&mut src_archive, PLAYERLIST_IFO)?;
-        let player_bic_src = match read_archive_entry(&mut src_archive, PLAYER_BIC) {
-            Ok(b) => Some(b),
-            Err(SaveGameError::FileNotInSave { .. }) => None,
-            Err(e) => return Err(e),
-        };
-
+        let playerlist = self.extract_player_data()?;
+        let player_bic = self.extract_player_bic()?;
         let outputs = transform(PlayerSources {
-            playerlist: &playerlist_src,
-            player_bic: player_bic_src.as_deref(),
+            playerlist: &playerlist,
+            player_bic: player_bic.as_deref(),
         })
         .map_err(SaveGameError::Transform)?;
 
-        let temp_path = self.zip_path.with_extension("zip.tmp");
-        {
-            let dst_file = File::create(&temp_path)?;
-            let mut dst = ZipWriter::new(dst_file);
-
-            let options = SimpleFileOptions::default()
-                .compression_method(CompressionMethod::Deflated)
-                .last_modified_time(*NWN2_DATE_TIME);
-
-            let mut bic_seen = false;
-            for i in 0..src_archive.len() {
-                let mut entry = src_archive.by_index(i)?;
-                let name = entry.name().to_string();
-                dst.start_file(&name, options)?;
-                match name.as_str() {
-                    PLAYERLIST_IFO => dst.write_all(&outputs.playerlist)?,
-                    PLAYER_BIC => {
-                        bic_seen = true;
-                        if let Some(bytes) = &outputs.player_bic {
-                            dst.write_all(bytes)?;
-                        } else {
-                            let mut buf = Vec::with_capacity(entry.size() as usize);
-                            entry.read_to_end(&mut buf)?;
-                            dst.write_all(&buf)?;
-                        }
-                    }
-                    _ => {
-                        let mut buf = Vec::with_capacity(entry.size() as usize);
-                        entry.read_to_end(&mut buf)?;
-                        dst.write_all(&buf)?;
-                    }
-                }
+        self.in_batch(|handler| {
+            handler.update_file(PLAYERLIST_IFO, &outputs.playerlist)?;
+            if let Some(bytes) = &outputs.player_bic {
+                handler.update_file(PLAYER_BIC, bytes)?;
             }
-            if !bic_seen && let Some(bytes) = &outputs.player_bic {
-                dst.start_file(PLAYER_BIC, options)?;
-                dst.write_all(bytes)?;
-            }
-            dst.finish()?;
-        }
-
-        drop(src_archive);
-        fs::rename(&temp_path, &self.zip_path)?;
-
-        info!("Updated player files in save (EE)");
-        Ok(())
-    }
-
-    fn rewrite_player_files_original<F>(&mut self, transform: F) -> SaveGameResult<()>
-    where
-        F: FnOnce(PlayerSources<'_>) -> Result<PlayerOutputs, String>,
-    {
-        let playerlist_path = self.save_dir.join(PLAYERLIST_IFO);
-        let player_bic_path = self.save_dir.join(PLAYER_BIC);
-
-        let playerlist_src = fs::read(&playerlist_path)?;
-        let player_bic_src = if player_bic_path.exists() {
-            Some(fs::read(&player_bic_path)?)
-        } else {
-            None
-        };
-
-        let outputs = transform(PlayerSources {
-            playerlist: &playerlist_src,
-            player_bic: player_bic_src.as_deref(),
+            Ok(())
         })
-        .map_err(SaveGameError::Transform)?;
-
-        if self.pending_zip_updates.is_some() {
-            self.update_file(PLAYERLIST_IFO, &outputs.playerlist)?;
-            if let Some(bytes) = outputs.player_bic {
-                self.update_file(PLAYER_BIC, &bytes)?;
-            }
-            return Ok(());
-        }
-
-        // Write to .tmp first then rename, so a crash mid-write doesn't leave
-        // a half-written playerlist.ifo behind.
-        let pl_tmp = playerlist_path.with_extension("ifo.tmp");
-        fs::write(&pl_tmp, &outputs.playerlist)?;
-        fs::rename(&pl_tmp, &playerlist_path)?;
-
-        if let Some(bytes) = outputs.player_bic {
-            let bic_tmp = player_bic_path.with_extension("bic.tmp");
-            fs::write(&bic_tmp, &bytes)?;
-            fs::rename(&bic_tmp, &player_bic_path)?;
-        }
-        // Transform returned None: caller asked to preserve the original; it's
-        // already on disk untouched.
-
-        info!("Updated player files in save (Original)");
-        Ok(())
-    }
-
-    pub fn sync_playerinfo_bin(
-        &self,
-        fields: &indexmap::IndexMap<String, crate::parsers::gff::GffValue<'_>>,
-        subrace_name: &str,
-        alignment_name: &str,
-        classes: &[(String, u8)],
-    ) -> SaveGameResult<()> {
-        let playerinfo_path = self.save_dir.join(PLAYERINFO_BIN);
-
-        if !playerinfo_path.exists() {
-            return Err(SaveGameError::PlayerInfoSync(
-                "playerinfo.bin not found - save is invalid".into(),
-            ));
-        }
-
-        let mut player_info = crate::services::playerinfo::PlayerInfo::load(&playerinfo_path)
-            .map_err(|e| {
-                SaveGameError::PlayerInfoSync(format!("playerinfo.bin is corrupted: {e}"))
-            })?;
-
-        player_info.update_from_gff_data(fields, subrace_name, alignment_name, classes);
-
-        player_info.save(&playerinfo_path).map_err(|e| {
-            SaveGameError::PlayerInfoSync(format!("Failed to write playerinfo.bin: {e}"))
-        })?;
-
-        info!("Successfully synced playerinfo.bin");
-        Ok(())
-    }
-
-    pub fn update_module_ifo(&self, data: &[u8]) -> SaveGameResult<()> {
-        let path = self.save_dir.join(MODULE_IFO);
-        fs::write(path, data)?;
-        Ok(())
     }
 
     pub fn list_files(&self) -> SaveGameResult<Vec<FileInfo>> {
@@ -898,13 +532,10 @@ impl SaveGameHandler {
     fn entry_names(&self) -> SaveGameResult<Vec<String>> {
         match self.format {
             SaveFormat::Ee => {
-                let file = File::open(&self.zip_path)?;
-                let mut archive = ZipArchive::new(file)?;
-                let mut names: Vec<String> = (0..archive.len())
-                    .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
-                    .collect();
-                if let Some(pending) = self.pending_zip_updates.as_ref() {
-                    for name in pending.keys() {
+                let archive = ZipArchive::new(File::open(&self.zip_path)?)?;
+                let mut names: Vec<String> = archive.file_names().map(str::to_string).collect();
+                if let Some(pending) = self.batch.as_ref() {
+                    for name in pending.zip.keys() {
                         if !names.iter().any(|n| n == name) {
                             names.push(name.clone());
                         }
@@ -912,11 +543,16 @@ impl SaveGameHandler {
                 }
                 Ok(names)
             }
-            SaveFormat::Original => Ok(fs::read_dir(&self.save_dir)?
-                .filter_map(Result::ok)
-                .filter(|e| e.path().is_file())
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .collect()),
+            SaveFormat::Original => {
+                let mut names = Vec::new();
+                for entry in fs::read_dir(&self.save_dir)? {
+                    let entry = entry?;
+                    if entry.file_type()?.is_file() {
+                        names.push(entry.file_name().to_string_lossy().to_string());
+                    }
+                }
+                Ok(names)
+            }
         }
     }
 
@@ -973,160 +609,24 @@ impl SaveGameHandler {
         Ok(companions)
     }
 
-    pub fn extract_for_editing(&mut self, temp_dir: &Path) -> SaveGameResult<PathBuf> {
-        if self.format != SaveFormat::Ee {
-            return Err(SaveGameError::InvalidStructure(
-                "extract_for_editing is only supported for EE-format saves".into(),
-            ));
-        }
-        fs::create_dir_all(temp_dir)?;
-
-        let file = File::open(&self.zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
-
-        for i in 0..archive.len() {
-            let mut entry = archive.by_index(i)?;
-            let out_path = temp_dir.join(entry.name());
-
-            if let Some(parent) = out_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-
-            let mut out_file = File::create(&out_path)?;
-            std::io::copy(&mut entry, &mut out_file)?;
-
-            self.temp_files.push(out_path);
-        }
-
-        for entry in fs::read_dir(&self.save_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path != self.zip_path && path.is_file() {
-                let dest = temp_dir.join(entry.file_name());
-                fs::copy(&path, &dest)?;
-                self.temp_files.push(dest);
-            }
-        }
-
-        Ok(temp_dir.to_path_buf())
-    }
-
-    pub fn repack_from_directory(&mut self, source_dir: &Path) -> SaveGameResult<()> {
-        if self.format != SaveFormat::Ee {
-            return Err(SaveGameError::InvalidStructure(
-                "repack_from_directory is only supported for EE-format saves".into(),
-            ));
-        }
-        let temp_path = self.zip_path.with_extension("zip.tmp");
-
-        {
-            let dst_file = File::create(&temp_path)?;
-            let mut dst_archive = ZipWriter::new(dst_file);
-
-            let options = SimpleFileOptions::default()
-                .compression_method(CompressionMethod::Deflated)
-                .last_modified_time(*NWN2_DATE_TIME);
-
-            for entry in fs::read_dir(source_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-
-                if path.is_file() {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-
-                    if name_str.to_lowercase().ends_with(".xml")
-                        || name_str.to_lowercase().ends_with(".txt")
-                        || name_str.to_lowercase() == "module.ifo"
-                        || name_str.to_lowercase() == "playerinfo.bin"
-                    {
-                        continue;
-                    }
-
-                    dst_archive.start_file(name_str.as_ref(), options)?;
-                    let mut file = File::open(&path)?;
-                    std::io::copy(&mut file, &mut dst_archive)?;
-                }
-            }
-
-            dst_archive.finish()?;
-        }
-
-        fs::rename(&temp_path, &self.zip_path)?;
-
-        info!("Repacked save from directory: {}", source_dir.display());
-        Ok(())
-    }
-
-    pub fn read_character_summary(&self) -> SaveGameResult<Option<CharacterSummary>> {
-        let data = match self.extract_player_bic()? {
-            Some(d) => d,
-            None => return Ok(None),
+    /// `FirstName LastName` from `player.bic`, `None` when the save has no
+    /// player.bic or the name is empty.
+    pub fn read_character_name(&self) -> SaveGameResult<Option<String>> {
+        let Some(data) = self.extract_player_bic()? else {
+            return Ok(None);
         };
-
         let gff = GffParser::from_bytes(data)
             .map_err(|e| SaveGameError::GffParse(format!("Failed to parse player.bic: {e}")))?;
-
         let fields = gff.read_struct_fields(0).map_err(|e| {
             SaveGameError::GffParse(format!("Failed to read player.bic fields: {e}"))
         })?;
-
-        let first_name = extract_locstring(&fields, "FirstName").unwrap_or_default();
-        let last_name = extract_locstring(&fields, "LastName").unwrap_or_default();
-        let subrace = extract_string(&fields, "Subrace").unwrap_or_default();
-        let deity = extract_string(&fields, "Deity").unwrap_or_default();
-        let gender = extract_byte(&fields, "Gender").unwrap_or(0);
-
-        let race_id = extract_byte(&fields, "Race").unwrap_or(0);
-        let race = format!("Race_{race_id}");
-
-        let lawful = extract_byte(&fields, "LawfulChaotic").unwrap_or(50);
-        let good = extract_byte(&fields, "GoodEvil").unwrap_or(50);
-
-        let classes = Vec::new();
-
-        Ok(Some(CharacterSummary {
-            first_name,
-            last_name,
-            race,
-            subrace,
-            deity,
-            gender,
-            classes,
-            alignment: (lawful, good),
-        }))
-    }
-
-    pub fn get_file_info(&self, filename: &str) -> SaveGameResult<Option<FileInfo>> {
-        match self.format {
-            SaveFormat::Ee => {
-                let file = File::open(&self.zip_path)?;
-                let mut archive = ZipArchive::new(file)?;
-                match archive.by_name(filename) {
-                    Ok(entry) => Ok(Some(FileInfo {
-                        name: entry.name().to_string(),
-                        size: entry.size(),
-                        compressed_size: entry.compressed_size(),
-                        compression: format!("{:?}", entry.compression()),
-                    })),
-                    Err(_) => Ok(None),
-                }
-            }
-            SaveFormat::Original => {
-                let path = self.save_dir.join(filename);
-                if !path.is_file() {
-                    return Ok(None);
-                }
-                let meta = fs::metadata(&path)?;
-                Ok(Some(FileInfo {
-                    name: filename.to_string(),
-                    size: meta.len(),
-                    compressed_size: meta.len(),
-                    compression: "Stored".to_string(),
-                }))
-            }
-        }
+        let name = ["FirstName", "LastName"]
+            .into_iter()
+            .filter_map(|key| extract_locstring(&fields, key))
+            .filter(|part| !part.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        Ok((!name.is_empty()).then_some(name))
     }
 
     pub fn load_backup_path(&self) -> Option<&Path> {
@@ -1135,43 +635,6 @@ impl SaveGameHandler {
 
     pub fn save_dir(&self) -> &Path {
         &self.save_dir
-    }
-
-    pub fn zip_path(&self) -> &Path {
-        &self.zip_path
-    }
-
-    fn validate_file_content(&self, filename: &str, content: &[u8]) -> SaveGameResult<()> {
-        Self::validate_file_header(filename, content)
-    }
-
-    fn cleanup_temp_files(&mut self) {
-        for path in self.temp_files.drain(..) {
-            if path.exists()
-                && let Err(e) = fs::remove_file(&path)
-            {
-                warn!("Failed to cleanup temp file {}: {}", path.display(), e);
-            }
-        }
-    }
-}
-
-impl Drop for SaveGameHandler {
-    fn drop(&mut self) {
-        self.cleanup_temp_files();
-    }
-}
-
-fn extract_string(
-    fields: &indexmap::IndexMap<String, crate::parsers::gff::GffValue<'_>>,
-    key: &str,
-) -> Option<String> {
-    use crate::parsers::gff::GffValue;
-
-    match fields.get(key)? {
-        GffValue::String(s) => Some(s.to_string()),
-        GffValue::ResRef(s) => Some(s.to_string()),
-        _ => None,
     }
 }
 
@@ -1188,48 +651,9 @@ fn extract_locstring(
     }
 }
 
-fn extract_byte(
-    fields: &indexmap::IndexMap<String, crate::parsers::gff::GffValue<'_>>,
-    key: &str,
-) -> Option<u8> {
-    use crate::parsers::gff::GffValue;
-
-    match fields.get(key)? {
-        GffValue::Byte(v) => Some(*v),
-        GffValue::Word(v) => Some(*v as u8),
-        GffValue::Dword(v) => Some(*v as u8),
-        GffValue::Int(v) => Some(*v as u8),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_file_header_validation() {
-        let handler = SaveGameHandler {
-            save_dir: PathBuf::from("/test"),
-            zip_path: PathBuf::from("/test/resgff.zip"),
-            format: SaveFormat::Ee,
-            validate: true,
-            load_backup_path: None,
-            temp_files: Vec::new(),
-            pending_zip_updates: None,
-            pending_disk_updates: indexmap::IndexMap::new(),
-        };
-
-        let valid_bic = b"BIC test data here";
-        assert!(handler.validate_file_content("test.bic", valid_bic).is_ok());
-
-        let invalid_bic = b"XXXX test data here";
-        assert!(
-            handler
-                .validate_file_content("test.bic", invalid_bic)
-                .is_err()
-        );
-    }
 
     #[test]
     fn test_detect_format_ee_when_resgff_present() {
@@ -1274,7 +698,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false)
+        let handler = SaveGameHandler::new(tmp.path(), false)
             .expect("Original-format save directory must be accepted");
         assert_eq!(handler.format(), SaveFormat::Original);
         assert_eq!(handler.save_dir(), tmp.path());
@@ -1287,7 +711,7 @@ mod tests {
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy ifo payload").unwrap();
         std::fs::write(tmp.path().join("companion.ros"), b"ROS dummy ros payload").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
 
         assert_eq!(
             handler.extract_file("player.bic").unwrap(),
@@ -1311,7 +735,7 @@ mod tests {
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
         std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"ROS khelgar bytes").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
 
         assert_eq!(
             handler.extract_companion("khelgar").unwrap(),
@@ -1327,7 +751,7 @@ mod tests {
         std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"K").unwrap();
         std::fs::write(tmp.path().join("neeshka.ros"), b"N").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         let mut companions = handler.list_companions().unwrap();
         companions.sort();
         assert_eq!(
@@ -1344,7 +768,7 @@ mod tests {
         std::fs::write(tmp.path().join("globals.xml"), b"<xml/>").unwrap();
         std::fs::write(tmp.path().join("khelgar.ros"), b"K").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         let files = handler.list_files().unwrap();
         let names: std::collections::HashSet<String> = files.into_iter().map(|f| f.name).collect();
         assert!(names.contains("player.bic"));
@@ -1354,27 +778,12 @@ mod tests {
     }
 
     #[test]
-    fn test_get_file_info_returns_loose_for_original() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("player.bic"), b"BIC payload").unwrap();
-        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
-
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
-        let info = handler
-            .get_file_info("player.bic")
-            .unwrap()
-            .expect("present");
-        assert_eq!(info.name, "player.bic");
-        assert_eq!(info.size, b"BIC payload".len() as u64);
-    }
-
-    #[test]
     fn test_update_file_writes_loose_for_original() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("player.bic"), b"BIC original").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO original").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
 
         handler
             .update_file("player.bic", b"BIC rewritten")
@@ -1409,7 +818,7 @@ mod tests {
             zw.finish().unwrap();
         }
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         handler.begin_batch();
         handler
             .update_file("khelgar.ros", b"ROS khelgar new")
@@ -1472,7 +881,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC old").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO old").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         handler
             .rewrite_player_files(|src| {
                 assert_eq!(src.playerlist, b"IFO old");
@@ -1500,7 +909,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC keep me").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO old").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         handler
             .rewrite_player_files(|_| {
                 Ok(PlayerOutputs {
@@ -1521,28 +930,13 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_read_character_files_original() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
-        std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
-        std::fs::write(tmp.path().join("neeshka.ros"), b"NEESHKA").unwrap();
-
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
-        let map = handler.batch_read_character_files().unwrap();
-        assert!(map.contains_key("player.bic"));
-        assert!(map.contains_key("playerlist.ifo"));
-        assert!(map.contains_key("neeshka.ros"));
-        assert_eq!(map.get("neeshka.ros").unwrap(), b"NEESHKA");
-    }
-
-    #[test]
     fn test_extract_roster_finds_uppercase_original() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy").unwrap();
         std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
         std::fs::write(tmp.path().join("ROSTER.rst"), b"RST dummy roster").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         let (name, bytes) = handler.extract_roster().unwrap().expect("roster present");
         assert_eq!(name, "ROSTER.rst");
         assert_eq!(bytes, b"RST dummy roster");
@@ -1554,7 +948,7 @@ mod tests {
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy").unwrap();
         std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         assert!(handler.extract_roster().unwrap().is_none());
     }
 
@@ -1566,7 +960,7 @@ mod tests {
         std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"K").unwrap();
         std::fs::write(tmp.path().join("neeshka.ros"), b"N").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false, false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
         assert_eq!(
             handler.companion_stored_name("khelgar").unwrap(),
             "ROS-khelgar.ros"
@@ -1590,8 +984,86 @@ mod tests {
         zw.write_all(b"IFO ").unwrap();
         zw.finish().unwrap();
 
-        let handler =
-            SaveGameHandler::new(tmp.path(), false, false).expect("EE save must be accepted");
+        let handler = SaveGameHandler::new(tmp.path(), false).expect("EE save must be accepted");
         assert_eq!(handler.format(), SaveFormat::Ee);
+    }
+
+    fn write_stored_zip(path: &Path, entries: &[(&str, &[u8])]) {
+        let mut zw = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        let options =
+            zip::write::SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for (name, content) in entries {
+            zw.start_file(*name, options).unwrap();
+            zw.write_all(content).unwrap();
+        }
+        zw.finish().unwrap();
+    }
+
+    #[test]
+    fn test_ee_writes_zip_entry_even_when_loose_copy_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_stored_zip(
+            &tmp.path().join("resgff.zip"),
+            &[("playerlist.ifo", b"IFO"), ("khelgar.ros", b"ROS zip")],
+        );
+        std::fs::write(tmp.path().join("khelgar.ros"), b"ROS loose").unwrap();
+
+        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        assert_eq!(handler.extract_file("khelgar.ros").unwrap(), b"ROS zip");
+        handler.update_file("khelgar.ros", b"ROS new").unwrap();
+
+        assert_eq!(handler.extract_file("khelgar.ros").unwrap(), b"ROS new");
+        assert_eq!(
+            std::fs::read(tmp.path().join("khelgar.ros")).unwrap(),
+            b"ROS loose"
+        );
+    }
+
+    #[test]
+    fn test_zip_rewrite_copies_untouched_entries_raw_and_matches_names_case_insensitively() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("resgff.zip");
+        write_stored_zip(
+            &zip_path,
+            &[("playerlist.ifo", b"IFO"), ("Player.bic", b"BIC old")],
+        );
+
+        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        handler.update_file("player.bic", b"BIC new").unwrap();
+
+        let mut archive = ZipArchive::new(std::fs::File::open(&zip_path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 2);
+        assert_eq!(
+            archive.by_name("playerlist.ifo").unwrap().compression(),
+            CompressionMethod::Stored
+        );
+        let mut bic = Vec::new();
+        archive
+            .by_name("Player.bic")
+            .unwrap()
+            .read_to_end(&mut bic)
+            .unwrap();
+        assert_eq!(bic, b"BIC new");
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn test_loose_read_error_is_not_reported_as_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_stored_zip(
+            &tmp.path().join("resgff.zip"),
+            &[("playerlist.ifo", b"IFO")],
+        );
+        std::fs::create_dir(tmp.path().join("globals.xml")).unwrap();
+
+        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        assert!(matches!(
+            handler.extract_file("globals.xml"),
+            Err(SaveGameError::Io(_))
+        ));
+        assert!(matches!(
+            handler.extract_file("savename.txt"),
+            Err(SaveGameError::FileNotInSave { .. })
+        ));
     }
 }

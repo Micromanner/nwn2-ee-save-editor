@@ -34,7 +34,7 @@ fn save_graph_builds_on_classic_campaign() {
     let save_path = tmp.path().join("Classic_Campaign");
     common::copy_dir_recursive(&fixture, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+    let handler = SaveGameHandler::new(&save_path, false).expect("handler");
 
     let mut paths = NWN2Paths::new();
     paths
@@ -188,7 +188,7 @@ fn save_graph_degrades_without_campaign() {
     let save_path = tmp.path().join("Classic_Campaign_orphan");
     common::copy_dir_recursive(&fixture, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+    let handler = SaveGameHandler::new(&save_path, false).expect("handler");
 
     // Intentionally leave NWN2Paths game_folder unset so the OnceLock-cached
     // campaign_index has nowhere to look.
@@ -245,7 +245,7 @@ fn save_graph_transitions_carry_text_strref() {
     let save_path = tmp.path().join("Classic_Campaign_textstrref");
     common::copy_dir_recursive(&fixture, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+    let handler = SaveGameHandler::new(&save_path, false).expect("handler");
 
     let mut paths = NWN2Paths::new();
     paths.set_game_folder(&install).expect("set_game_folder");

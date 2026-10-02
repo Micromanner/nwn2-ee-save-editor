@@ -11,7 +11,7 @@ mod common;
 fn load_character_bic(
     save_path: &std::path::Path,
 ) -> indexmap::IndexMap<String, GffValue<'static>> {
-    let handler = SaveGameHandler::new(save_path, false, false).expect("Failed to create handler");
+    let handler = SaveGameHandler::new(save_path, false).expect("Failed to create handler");
     let bic_data = handler
         .extract_player_bic()
         .expect("extract")

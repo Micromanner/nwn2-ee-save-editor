@@ -172,7 +172,7 @@ impl SessionState {
         };
 
         debug!("Creating SaveGameHandler");
-        let handler = SaveGameHandler::new(&path, false, create_load_backup).map_err(|e| {
+        let handler = SaveGameHandler::new(&path, create_load_backup).map_err(|e| {
             fatal(
                 report,
                 LoadStage::SaveOpen,
@@ -1822,7 +1822,7 @@ mod tests {
         .unwrap();
         let mut session = make_session_with_character(fields);
         session.save_dir = Some(save.clone());
-        session.savegame_handler = Some(SaveGameHandler::new(save, false, false).unwrap());
+        session.savegame_handler = Some(SaveGameHandler::new(save, false).unwrap());
         session.primary_player_index = Some(0);
         session
             .quest_edits
@@ -1869,7 +1869,7 @@ mod tests {
 
         let mut session = make_session_with_character(fields);
         session.save_dir = Some(save.clone());
-        session.savegame_handler = Some(SaveGameHandler::new(save.clone(), false, false).unwrap());
+        session.savegame_handler = Some(SaveGameHandler::new(save.clone(), false).unwrap());
         session.primary_player_index = Some(0);
         let data = GameData::new(Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::new(),

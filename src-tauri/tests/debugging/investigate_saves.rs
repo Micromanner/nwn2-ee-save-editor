@@ -22,7 +22,7 @@ fn dump_to_json(fields: &IndexMap<String, GffValue<'static>>, path: &PathBuf) {
 
 #[test]
 fn compare_khelgar_and_playerlist() {
-    let handler = SaveGameHandler::new(saves_dir(), false, false).expect("Failed to open save");
+    let handler = SaveGameHandler::new(saves_dir(), false).expect("Failed to open save");
 
     // 1. Dump Khelgar.ros
     let khelgar_bytes = handler

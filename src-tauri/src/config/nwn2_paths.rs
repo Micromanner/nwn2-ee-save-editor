@@ -773,7 +773,7 @@ fn canonicalize_or_normalize(p: &Path) -> PathBuf {
     })
 }
 
-fn paths_equivalent(a: &Path, b: &Path) -> bool {
+pub(crate) fn paths_equivalent(a: &Path, b: &Path) -> bool {
     canonicalize_or_normalize(a) == canonicalize_or_normalize(b)
 }
 

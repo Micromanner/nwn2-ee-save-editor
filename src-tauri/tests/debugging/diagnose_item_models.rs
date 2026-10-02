@@ -108,7 +108,7 @@ async fn diagnose_item_models() {
         return;
     }
 
-    let handler = SaveGameHandler::new(&save_path, false, false).expect("handler");
+    let handler = SaveGameHandler::new(&save_path, false).expect("handler");
     let bic_data = handler
         .extract_player_bic()
         .expect("extract")

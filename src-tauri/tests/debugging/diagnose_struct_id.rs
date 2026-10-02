@@ -6,7 +6,7 @@ use std::path::PathBuf;
 fn load_via_playerlist_ifo(
     save_path: &std::path::Path,
 ) -> indexmap::IndexMap<String, GffValue<'static>> {
-    let handler = SaveGameHandler::new(save_path, false, false).expect("Failed to create handler");
+    let handler = SaveGameHandler::new(save_path, false).expect("Failed to create handler");
     let data = handler
         .extract_player_data()
         .expect("Failed to extract playerlist.ifo");
@@ -27,7 +27,7 @@ fn load_via_playerlist_ifo(
 fn load_via_bic(
     save_path: &std::path::Path,
 ) -> Option<indexmap::IndexMap<String, GffValue<'static>>> {
-    let handler = SaveGameHandler::new(save_path, false, false).expect("Failed to create handler");
+    let handler = SaveGameHandler::new(save_path, false).expect("Failed to create handler");
     let bic_data = handler.extract_player_bic().ok()??;
     println!("  player.bic: {} bytes", bic_data.len());
     let gff = GffParser::from_bytes(bic_data).expect("Failed to parse BIC");
