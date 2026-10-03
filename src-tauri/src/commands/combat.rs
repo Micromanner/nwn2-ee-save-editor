@@ -5,7 +5,6 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn get_combat_summary(state: State<'_, AppState>) -> CommandResult<CombatSummary> {
-    super::inventory::ensure_decoder_initialized(&state).await;
     let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session
@@ -34,7 +33,6 @@ pub async fn update_natural_armor(
 
 #[tauri::command]
 pub async fn get_save_summary(state: State<'_, AppState>) -> CommandResult<SaveSummary> {
-    super::inventory::ensure_decoder_initialized(&state).await;
     let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session

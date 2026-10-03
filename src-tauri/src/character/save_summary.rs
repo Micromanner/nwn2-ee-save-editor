@@ -192,12 +192,7 @@ mod tests {
     }
 
     fn create_test_decoder() -> crate::services::item_property_decoder::ItemPropertyDecoder {
-        use crate::config::nwn2_paths::NWN2Paths;
-        use crate::services::resource_manager::ResourceManager;
-        use tauri::async_runtime::RwLock;
-        let paths = Arc::new(RwLock::new(NWN2Paths::default()));
-        let rm = Arc::new(RwLock::new(ResourceManager::new(paths)));
-        crate::services::item_property_decoder::ItemPropertyDecoder::new(rm)
+        crate::services::item_property_decoder::ItemPropertyDecoder::default()
     }
 
     #[test]

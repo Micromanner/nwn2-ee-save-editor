@@ -1,5 +1,5 @@
 use app_lib::parsers::gff::GffParser;
-use app_lib::services::item_property_decoder::{EditorContext, ItemPropertyDecoder};
+use app_lib::services::item_property_decoder::{ItemBonuses, ItemPropertyDecoder};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -8,11 +8,8 @@ mod common;
 
 /// Decoder wired up against the real game 2DAs/TLK, as the app does at runtime.
 async fn init_decoder(context: &common::TestContext) -> ItemPropertyDecoder {
-    let mut decoder = ItemPropertyDecoder::new(context.resource_manager.clone());
     let rm = context.resource_manager.read().await;
-    decoder.initialize_with_rm(&rm);
-    drop(rm);
-    decoder
+    ItemPropertyDecoder::load(&rm)
 }
 
 fn property(property_id: u32, subtype: u32, cost_value: u32) -> HashMap<String, Value> {
@@ -100,9 +97,26 @@ async fn test_item_property_decoding_from_fixture() {
         let decoded = decoder.decode_property(&prop_map);
         if let Some(d) = decoded {
             println!("Decoded Property: {d:?}");
-            assert!(!d.label.is_empty());
+            assert!(!d.is_empty());
         }
     }
+}
+
+fn bonuses_of(decoder: &ItemPropertyDecoder, properties: &[HashMap<String, Value>]) -> ItemBonuses {
+    let mut bonuses = ItemBonuses::default();
+    decoder.add_item_bonuses(&mut bonuses, properties, 80);
+    bonuses
+}
+
+fn describe(
+    decoder: &ItemPropertyDecoder,
+    property_id: u32,
+    subtype: u32,
+    cost_value: u32,
+) -> String {
+    decoder
+        .decode_property(&property(property_id, subtype, cost_value))
+        .unwrap_or_else(|| panic!("property {property_id} decodes"))
 }
 
 /// `iprp_damagecost.2da` row 6 is 1d4 and row 10 is 2d6. A hardcoded map used to
@@ -112,21 +126,16 @@ async fn damage_bonus_dice_come_from_iprp_damagecost() {
     let context = common::create_test_context().await;
     let decoder = init_decoder(&context).await;
 
-    let one_d_four = decoder
-        .decode_property(&property(16, 0, 6))
-        .expect("damage bonus decodes");
-    assert_eq!(one_d_four.damage_dice.as_deref(), Some("1d4"));
-
-    let two_d_six = decoder
-        .decode_property(&property(16, 0, 10))
-        .expect("damage bonus decodes");
-    assert_eq!(two_d_six.damage_dice.as_deref(), Some("2d6"));
-
+    assert_eq!(
+        describe(&decoder, 16, 0, 6),
+        "Damage Bonus: Bludgeoning 1d4"
+    );
+    assert_eq!(
+        describe(&decoder, 16, 0, 10),
+        "Damage Bonus: Bludgeoning 2d6"
+    );
     // Rows 1-5 are flat bonuses, not dice.
-    let flat = decoder
-        .decode_property(&property(16, 0, 1))
-        .expect("damage bonus decodes");
-    assert_eq!(flat.damage_dice.as_deref(), Some("+1"));
+    assert_eq!(describe(&decoder, 16, 0, 1), "Damage Bonus: Bludgeoning 1");
 }
 
 /// `iprp_damvulcost.2da` row 1 is 5%, not the 25% a hardcoded map assumed.
@@ -135,15 +144,8 @@ async fn damage_vulnerability_percent_comes_from_iprp_damvulcost() {
     let context = common::create_test_context().await;
     let decoder = init_decoder(&context).await;
 
-    let decoded = decoder
-        .decode_property(&property(24, 0, 1))
-        .expect("vulnerability decodes");
-    assert_eq!(decoded.vulnerability_percent, Some(5));
-
-    let decoded = decoder
-        .decode_property(&property(24, 0, 5))
-        .expect("vulnerability decodes");
-    assert_eq!(decoded.vulnerability_percent, Some(75));
+    assert!(describe(&decoder, 24, 0, 1).ends_with(" 5% Damage Weakness"));
+    assert!(describe(&decoder, 24, 0, 5).ends_with(" 75% Damage Weakness"));
 }
 
 /// AC Bonus has no subtype in `itempropdef.2da`; the engine derives the AC type
@@ -154,13 +156,68 @@ async fn ac_bonus_is_not_labelled_with_an_ac_modifier_type() {
     let context = common::create_test_context().await;
     let decoder = init_decoder(&context).await;
 
-    let decoded = decoder
-        .decode_property(&property(1, 0, 3))
-        .expect("AC bonus decodes");
+    assert_eq!(describe(&decoder, 1, 0, 3), "AC Bonus: + 3");
+}
 
-    assert_eq!(decoded.label, "AC Bonus +3");
-    assert_eq!(decoded.ac_type, None);
-    assert_eq!(decoded.bonus_value, Some(3));
+/// `iprp_srcost.2da` row 3 is SR 16; the row index used to be shown and applied.
+#[tokio::test]
+async fn spell_resistance_uses_the_cost_table_value() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+
+    assert_eq!(describe(&decoder, 39, 0, 3), "Spell Resistance: 16");
+    let bonuses = bonuses_of(&decoder, &[property(39, 0, 3)]);
+    assert_eq!(bonuses.spell_resistance, 16);
+}
+
+/// Bonus Feat's subtype is an `iprp_feats` row (row 2 = Cleave, feat 6), not a
+/// `feat.2da` id.
+#[tokio::test]
+async fn bonus_feat_reads_the_iprp_feats_row() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+
+    assert_eq!(describe(&decoder, 12, 2, 0), "Bonus Feat: Cleave");
+}
+
+/// Damage Reduction (row 90) has no cost table; its amount is the subtype.
+#[tokio::test]
+async fn damage_reduction_reads_its_subtype() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+
+    assert_eq!(describe(&decoder, 90, 5, 0), "Damage Reduction: +5");
+}
+
+/// Bonuses and penalties come from the cost table `Value` column, matched on
+/// property and subtype ids, so they count in every UI language.
+#[tokio::test]
+async fn item_bonuses_apply_bonuses_and_penalties() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+
+    let bonuses = bonuses_of(
+        &decoder,
+        &[
+            property(0, 0, 2),  // Strength +2
+            property(27, 1, 3), // Decreased Dexterity -3
+            property(41, 1, 2), // Fortitude +2
+            property(50, 2, 3), // Reduced Will -3
+            property(49, 0, 1), // Reduced saves vs Universal -1
+            property(60, 0, 2), // Attack Penalty -2
+            property(28, 4, 1), // Decreased AC (Deflection) -1
+            property(29, 0, 5), // Decreased skill row 0 -5
+        ],
+    );
+
+    assert_eq!(bonuses.str_bonus, 2);
+    assert_eq!(bonuses.dex_bonus, -3);
+    assert_eq!(bonuses.fortitude_bonus, 1);
+    assert_eq!(bonuses.will_bonus, -4);
+    assert_eq!(bonuses.reflex_bonus, -1);
+    assert_eq!(bonuses.attack_bonus, -2);
+    assert_eq!(bonuses.ac_deflection_bonus, -1);
+    assert_eq!(bonuses.skill_bonuses.get(&0), Some(&-5));
 }
 
 /// Property names come from the `Name` strref, which is what the game shows.
@@ -171,8 +228,10 @@ async fn property_labels_use_the_game_names() {
 
     let label = |id: u32| {
         decoder
-            .get_property_definition(id)
-            .unwrap_or_else(|| panic!("property {id} defined"))
+            .editor_metadata()
+            .iter()
+            .find(|m| m.id == id)
+            .unwrap_or_else(|| panic!("property {id} in metadata"))
             .label
             .clone()
     };
@@ -191,12 +250,11 @@ async fn property_labels_use_the_game_names() {
 async fn cost_table_options_never_offer_random() {
     let context = common::create_test_context().await;
     let decoder = init_decoder(&context).await;
-    let rm = context.resource_manager.read().await;
 
-    let metadata = decoder.get_editor_property_metadata_with_rm(&EditorContext::default(), &rm);
+    let metadata = decoder.editor_metadata();
     assert!(!metadata.is_empty(), "editor metadata should not be empty");
 
-    for meta in &metadata {
+    for meta in metadata {
         for (row, label) in &meta.cost_table_options {
             assert!(
                 !label.to_lowercase().contains("random"),
@@ -239,9 +297,8 @@ async fn cost_table_options_never_offer_random() {
 async fn metadata_exposes_the_cost_table_index() {
     let context = common::create_test_context().await;
     let decoder = init_decoder(&context).await;
-    let rm = context.resource_manager.read().await;
 
-    let metadata = decoder.get_editor_property_metadata_with_rm(&EditorContext::default(), &rm);
+    let metadata = decoder.editor_metadata();
     let idx = |id: u32| {
         metadata
             .iter()
@@ -262,49 +319,31 @@ async fn ac_bonus_family_reads_like_the_game_and_carries_the_item_ac_type() {
 
     // AC Bonus vs. Damage Type, subtype Slashing (iprp_combatdam row 2), +3, on a cloak.
     let on_cloak = decoder.decode_item_properties(&[property(3, 2, 3)], 80);
-    assert_eq!(
-        on_cloak[0].description,
-        "Armor Bonus vs. Slashing + 3 (Deflection)"
-    );
-    assert_eq!(on_cloak[0].ac_type.as_deref(), Some("Deflection"));
+    assert_eq!(on_cloak[0], "Armor Bonus vs. Slashing + 3 (Deflection)");
 
     // AC Bonus vs. Alignment Group, subtype Evil (iprp_aligngrp row 5), +2, on armor.
     let on_armor = decoder.decode_item_properties(&[property(2, 5, 2)], 16);
-    assert_eq!(on_armor[0].description, "Armor Bonus vs. Evil + 2 (Armor)");
+    assert_eq!(on_armor[0], "Armor Bonus vs. Evil + 2 (Armor)");
 
     // AC Bonus vs. Specific Alignment, Lawful Good (iprp_alignment row 0), +1, on a shield.
     let on_shield = decoder.decode_item_properties(&[property(5, 0, 1)], 56);
-    assert_eq!(
-        on_shield[0].description,
-        "Armor Bonus vs. Lawful Good + 1 (Shield)"
-    );
+    assert_eq!(on_shield[0], "Armor Bonus vs. Lawful Good + 1 (Shield)");
 
     // Plain AC Bonus keeps its own text, only gaining the AC type.
     let plain = decoder.decode_item_properties(&[property(1, 0, 3)], 80);
-    assert_eq!(plain[0].description, "Armor Class Bonus: +3 (Deflection)");
+    assert_eq!(plain[0], "AC Bonus: + 3 (Deflection)");
 }
 
 #[tokio::test]
 async fn cast_spell_reads_like_the_game() {
     let context = common::create_test_context().await;
-    let mut decoder = init_decoder(&context).await;
-    let spells = {
-        let rm = context.resource_manager.read().await;
-        app_lib::services::item_property_decoder::load_2da_options_from_rm(&rm, "iprp_spells")
-    };
-    decoder.set_lookup_tables(
-        HashMap::new(),
-        HashMap::new(),
-        HashMap::new(),
-        spells,
-        HashMap::new(),
-    );
+    let decoder = init_decoder(&context).await;
 
     // Acid Fog (iprp_spells row 0, caster level 11), 4 Uses/Day (iprp_chargecost row 11).
-    let decoded = decoder
-        .decode_property(&property(15, 0, 11))
-        .expect("cast spell decodes");
-    assert_eq!(decoded.description, "Use: Acid Fog (11) 4 Uses/Day");
+    assert_eq!(
+        describe(&decoder, 15, 0, 11),
+        "Use: Acid Fog (11) 4 Uses/Day"
+    );
 }
 
 /// `itemprops.2da` decides which properties a base item honours: a cloak
@@ -313,8 +352,7 @@ async fn cast_spell_reads_like_the_game() {
 async fn metadata_carries_the_itemprops_allow_list() {
     let context = common::create_test_context().await;
     let decoder = init_decoder(&context).await;
-    let rm = context.resource_manager.read().await;
-    let metadata = decoder.get_editor_property_metadata_with_rm(&EditorContext::default(), &rm);
+    let metadata = decoder.editor_metadata();
     let allowed = |id: u32| {
         metadata
             .iter()

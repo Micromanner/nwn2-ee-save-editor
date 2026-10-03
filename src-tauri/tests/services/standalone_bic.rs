@@ -106,20 +106,15 @@ fn save_prunes_old_backups_to_keep_count() {
 }
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use app_lib::config::NWN2Paths;
 use app_lib::loaders::GameData;
 use app_lib::parsers::tlk::TLKParser;
 use app_lib::services::load_diagnostics::{LoadInput, LoadReport};
-use app_lib::services::resource_manager::ResourceManager;
 use app_lib::state::SessionState;
 use app_lib::state::session_state::CharacterSource;
 
 fn new_session() -> SessionState {
-    let paths = Arc::new(RwLock::new(NWN2Paths::new()));
-    let rm = Arc::new(RwLock::new(ResourceManager::new(paths)));
-    SessionState::new(rm)
+    SessionState::new()
 }
 
 fn new_report(path: &str) -> LoadReport {

@@ -737,36 +737,11 @@ mod tests {
 
         let character = Character::from_gff(fields);
 
-        let paths =
-            std::sync::Arc::new(tokio::sync::RwLock::new(crate::config::NWN2Paths::default()));
-        let rm = std::sync::Arc::new(tokio::sync::RwLock::new(
-            crate::services::resource_manager::ResourceManager::new(paths),
-        ));
-
         let game_data = crate::loaders::GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::default(),
         )));
 
-        let mut decoder = ItemPropertyDecoder::new(rm);
-        use std::collections::HashMap;
-        let abilities = HashMap::from([
-            (0, "Str".to_string()),
-            (1, "Dex".to_string()),
-            (2, "Con".to_string()),
-            (3, "Int".to_string()),
-            (4, "Wis".to_string()),
-            (5, "Cha".to_string()),
-        ]);
-        decoder.set_2da_tables(
-            abilities,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let decoder = ItemPropertyDecoder::default();
 
         let total = character.get_total_abilities(&game_data, &decoder);
         assert_eq!(total.str_, 16); // 14 + 2

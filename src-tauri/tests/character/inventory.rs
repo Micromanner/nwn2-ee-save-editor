@@ -10,7 +10,7 @@ const TEST_CHAR_FILE: &str = "ryathstrongarm/ryathstrongarm4.bic";
 
 fn equipment_ac(character: &Character, game_data: &GameData, decoder: &ItemPropertyDecoder) -> i32 {
     let bonuses = character.get_equipment_bonuses(game_data, decoder);
-    bonuses.ac_armor_bonus + bonuses.ac_shield_bonus + bonuses.ac_bonus
+    bonuses.ac_armor_bonus + bonuses.ac_shield_bonus
 }
 
 #[tokio::test]

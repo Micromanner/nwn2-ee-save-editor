@@ -1,21 +1,14 @@
 //! Integration tests for the LoadReport lifecycle.
 
 use app_lib::services::load_diagnostics::{LoadInput, LoadReport, LoadStage, LoadStatus};
-use app_lib::services::resource_manager::ResourceManager;
 use app_lib::state::SessionState;
-use std::sync::Arc;
 use tempfile::TempDir;
-use tokio::sync::RwLock;
-
-use app_lib::config::NWN2Paths;
 
 #[path = "../common/mod.rs"]
 mod common;
 
 fn new_session() -> SessionState {
-    let paths = Arc::new(RwLock::new(NWN2Paths::new()));
-    let rm = Arc::new(RwLock::new(ResourceManager::new(paths)));
-    SessionState::new(rm)
+    SessionState::new()
 }
 
 fn new_report(path: &str) -> LoadReport {

@@ -255,18 +255,7 @@ async fn test_size_modifier() {
 // ============================================================
 
 async fn create_decoder() -> app_lib::services::item_property_decoder::ItemPropertyDecoder {
-    use app_lib::config::nwn2_paths::NWN2Paths;
-    use app_lib::services::resource_manager::ResourceManager;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
-
-    let paths = Arc::new(RwLock::new(NWN2Paths::new()));
-    let rm = Arc::new(RwLock::new(ResourceManager::new(paths.clone())));
-    {
-        let mut rm_guard = rm.write().await;
-        let _ = rm_guard.initialize().await;
-    }
-    app_lib::services::item_property_decoder::ItemPropertyDecoder::new(rm)
+    app_lib::services::item_property_decoder::ItemPropertyDecoder::default()
 }
 
 #[tokio::test]

@@ -12,7 +12,6 @@ use crate::services::PlayerInfo;
 use crate::services::campaign::content::{ModuleInfo, ModuleVariables};
 use crate::services::item_property_decoder::ItemPropertyDecoder;
 use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
-use crate::services::resource_manager::ResourceManager;
 use crate::services::save_graph::SaveGraph;
 use crate::services::save_graph::editing::{self, PendingQuestEdit, QuestPreview};
 use crate::services::savegame_handler::backup_manifest::{
@@ -109,15 +108,15 @@ pub struct SessionState {
     change_log: Vec<(CharacterSource, String)>,
 }
 
+impl Default for SessionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionState {
     #[instrument(name = "SessionState::new", skip_all)]
-    pub fn new(resource_manager: Arc<tokio::sync::RwLock<ResourceManager>>) -> Self {
-        debug!("Creating SessionState");
-
-        debug!("Initializing ItemPropertyDecoder");
-        let item_property_decoder = ItemPropertyDecoder::new(resource_manager);
-        debug!("ItemPropertyDecoder created");
-
+    pub fn new() -> Self {
         info!("SessionState created successfully");
 
         Self {
@@ -127,7 +126,7 @@ impl SessionState {
             character: None,
             selected_player_index: 0,
             primary_player_index: None,
-            item_property_decoder,
+            item_property_decoder: ItemPropertyDecoder::default(),
             feat_cache: None,
             module_info_cache: None,
             quest_graph_cache: None,
@@ -1812,13 +1811,7 @@ mod tests {
     }
 
     fn make_session_with_character(gff: IndexMap<String, GffValue<'static>>) -> SessionState {
-        let paths = Arc::new(tokio::sync::RwLock::new(
-            crate::config::nwn2_paths::NWN2Paths::new(),
-        ));
-        let rm = Arc::new(tokio::sync::RwLock::new(
-            crate::services::resource_manager::ResourceManager::new(paths),
-        ));
-        let mut session = SessionState::new(rm);
+        let mut session = SessionState::new();
         session.character = Some(Character::from_gff(gff));
         session
     }

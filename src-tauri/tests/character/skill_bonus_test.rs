@@ -2,32 +2,15 @@
 mod tests {
     use app_lib::character::types::SkillId;
     use app_lib::character::{Character, EquipmentSlot};
-    use app_lib::config::NWN2Paths;
     use app_lib::parsers::gff::GffValue;
     use app_lib::parsers::tlk::TLKParser;
-    use app_lib::services::ResourceManager;
     use app_lib::services::item_property_decoder::ItemPropertyDecoder;
     use indexmap::IndexMap;
     use std::borrow::Cow;
     use std::sync::Arc;
-    use tokio::sync::RwLock;
 
-    fn setup_test_environment() -> (Character, Arc<RwLock<ResourceManager>>, ItemPropertyDecoder) {
-        let paths = Arc::new(RwLock::new(NWN2Paths::new()));
-        let rm = Arc::new(RwLock::new(ResourceManager::new(paths)));
-        let mut decoder = ItemPropertyDecoder::new(rm.clone());
-
-        let mut skills_map = std::collections::HashMap::new();
-        skills_map.insert(0, "Concentration".to_string());
-
-        // Manually inject lookup tables into decoder
-        decoder.set_lookup_tables(
-            skills_map,
-            std::collections::HashMap::new(),
-            std::collections::HashMap::new(),
-            std::collections::HashMap::new(),
-            std::collections::HashMap::new(),
-        );
+    fn setup_test_environment() -> (Character, ItemPropertyDecoder) {
+        let decoder = ItemPropertyDecoder::default();
 
         let fields = IndexMap::new();
         let mut char = Character::from_gff(fields);
@@ -35,12 +18,12 @@ mod tests {
         // Add a skill (Concentration = ID 0) with rank 5
         char.set_skill_rank(SkillId(0), 5).unwrap();
 
-        (char, rm, decoder)
+        (char, decoder)
     }
 
     #[tokio::test]
     async fn test_equipment_skill_bonus_application() {
-        let (mut char, _, decoder) = setup_test_environment();
+        let (mut char, decoder) = setup_test_environment();
 
         // 1. Create an item with Skill Bonus (Property 52), Subtype 0 (Concentration), Cost 5 (Value +5)
         let mut item = IndexMap::new();

@@ -45,35 +45,21 @@ export interface AddItemResponse {
 export interface PropertyMetadata {
   id: number;
   label: string;
-  original_label: string;
   description: string;
   has_subtype: boolean;
-  subtype_label: string;
   subtype_options: Record<number, string>;
   has_cost_table: boolean;
-  cost_table_label: string;
   cost_table_options: Record<number, string>;
   cost_table_idx: number | null;
   has_param1: boolean;
-  param1_label: string;
   param1_options: Record<number, string>;
   param1_idx: number | null;
-  is_flat: boolean;
   /** `null` means the allow-list itself couldn't be loaded - treat as unfiltered, not as "allowed on nothing". */
   allowed_columns: number[] | null;
 }
 
 export interface ItemEditorMetadataResponse {
   property_types: PropertyMetadata[];
-  abilities: Record<number, string>;
-  skills: Record<number, string>;
-  damage_types: Record<number, string>;
-  alignment_groups: Record<number, string>;
-  racial_groups: Record<number, string>;
-  saving_throws: Record<number, string>;
-  immunity_types: Record<number, string>;
-  classes: Record<number, string>;
-  spells: Record<number, string>;
 }
 
 export interface BaseItem {
@@ -189,11 +175,7 @@ export class InventoryAPI {
           return result;
       } catch (e) {
           console.error('Failed to get editor metadata:', e);
-          return {
-              property_types: [], abilities: {}, skills: {}, damage_types: {},
-              alignment_groups: {}, racial_groups: {}, saving_throws: {},
-              immunity_types: {}, classes: {}, spells: {}
-          };
+          return { property_types: [] };
       }
   }
 

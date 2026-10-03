@@ -1,9 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use app_lib::config::NWN2Paths;
-use app_lib::services::ResourceManager;
 use app_lib::services::savegame_handler::backup;
 use app_lib::state::session_state::{CharacterSource, SessionState};
 
@@ -12,8 +9,7 @@ fn saves_dir() -> PathBuf {
 }
 
 fn make_session() -> SessionState {
-    let paths = Arc::new(RwLock::new(NWN2Paths::new()));
-    SessionState::new(Arc::new(RwLock::new(ResourceManager::new(paths))))
+    SessionState::new()
 }
 
 fn load_save(session: &mut SessionState, save: &str) {

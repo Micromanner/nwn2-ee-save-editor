@@ -12,8 +12,6 @@ use super::types::CharacterUpdates;
 
 #[tauri::command]
 pub async fn get_overview_state(state: State<'_, AppState>) -> CommandResult<OverviewState> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-
     let module_info_result = cached_module_info(&state)
         .inspect_err(|e| warn!("Module info unavailable for overview: {e}"))
         .ok();
@@ -61,8 +59,6 @@ pub async fn update_character(
     state: State<'_, AppState>,
     updates: CharacterUpdates,
 ) -> CommandResult<OverviewState> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-
     let game_data = state.game_data.read();
     let mut session = state.session.write();
     let changed_fields: Vec<&str> = [
@@ -121,8 +117,6 @@ pub async fn update_character(
 
 #[tauri::command]
 pub async fn get_abilities_state(state: State<'_, AppState>) -> CommandResult<AbilitiesState> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-
     let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session
@@ -143,8 +137,6 @@ pub async fn apply_point_buy(
         POINT_BUY_BUDGET, POINT_BUY_MAX, POINT_BUY_MIN, calculate_point_buy_cost,
     };
     use crate::character::types::AbilityIndex;
-
-    super::inventory::ensure_decoder_initialized(&state).await;
 
     let cost = calculate_point_buy_cost(&new_scores);
     if cost > POINT_BUY_BUDGET {
@@ -227,7 +219,6 @@ pub async fn get_feats_state(state: State<'_, AppState>) -> CommandResult<FeatsS
 
 #[tauri::command]
 pub async fn get_spells_state(state: State<'_, AppState>) -> CommandResult<SpellsState> {
-    super::inventory::ensure_decoder_initialized(&state).await;
     let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session

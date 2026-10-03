@@ -107,7 +107,7 @@ impl Character {
             dex: capped_dex,
             natural: natural_ac + item_bonuses.ac_natural_bonus,
             dodge: item_bonuses.ac_dodge_bonus,
-            deflection: item_bonuses.ac_deflection_bonus + item_bonuses.ac_bonus,
+            deflection: item_bonuses.ac_deflection_bonus,
             size: size_mod,
             misc: feat_ac + class_ac,
         };
@@ -274,12 +274,7 @@ mod tests {
     }
 
     fn create_test_decoder() -> crate::services::item_property_decoder::ItemPropertyDecoder {
-        use crate::config::nwn2_paths::NWN2Paths;
-        use crate::services::resource_manager::ResourceManager;
-        use tauri::async_runtime::RwLock;
-        let paths = Arc::new(RwLock::new(NWN2Paths::default()));
-        let rm = Arc::new(RwLock::new(ResourceManager::new(paths)));
-        crate::services::item_property_decoder::ItemPropertyDecoder::new(rm)
+        crate::services::item_property_decoder::ItemPropertyDecoder::default()
     }
 
     #[test]

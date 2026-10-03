@@ -236,10 +236,11 @@ async fn rebuild_game_data(
         game_data.rule_detector = loaded_data.rule_detector;
         game_data.priority_tables = loaded_data.priority_tables;
     }
-    state.session.write().item_property_decoder =
-        crate::services::item_property_decoder::ItemPropertyDecoder::new(Arc::clone(
-            &state.resource_manager,
-        ));
+    let item_property_decoder = {
+        let rm = state.resource_manager.read().await;
+        crate::services::item_property_decoder::ItemPropertyDecoder::load(&rm)
+    };
+    state.session.write().item_property_decoder = item_property_decoder;
     *state.model_list_cache.lock() = None;
     Ok(())
 }

@@ -680,10 +680,6 @@ export type EquipmentSlot =
   | 'CreatureArmor';
 
 export interface DecodedPropertyInfo {
-  property_name: string;
-  subtype_name: string | null;
-  cost_value: number;
-  param1_value: number | null;
   display_string: string;
 }
 

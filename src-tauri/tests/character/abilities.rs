@@ -2,8 +2,6 @@ use super::super::common::{create_test_context, load_test_gff};
 use app_lib::character::{AbilityIndex, Character};
 use app_lib::parsers::gff::GffParser;
 use app_lib::services::item_property_decoder::ItemPropertyDecoder;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 fn load_character(fixture_path: &str) -> Character {
     let bytes = load_test_gff(fixture_path);
@@ -212,17 +210,7 @@ async fn test_total_abilities_with_equipment() {
     let ctx = create_test_context().await;
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
 
-    let paths = Arc::new(RwLock::new(app_lib::config::NWN2Paths::new()));
-    let rm = Arc::new(RwLock::new(
-        app_lib::services::resource_manager::ResourceManager::new(paths),
-    ));
-
-    {
-        let mut rm_guard = rm.write().await;
-        rm_guard.initialize().await.expect("Failed to init RM");
-    }
-
-    let decoder = ItemPropertyDecoder::new(rm);
+    let decoder = ItemPropertyDecoder::default();
 
     println!("\n=== Total Abilities (Base + Racial + Equipment) ===");
 

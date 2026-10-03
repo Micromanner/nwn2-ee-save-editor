@@ -75,7 +75,7 @@ impl AppState {
         info!("GameData initialized (empty - will load on initialize_game_data)");
 
         debug!("Creating SessionState");
-        let session = SessionState::new(Arc::clone(&resource_manager));
+        let session = SessionState::new();
         debug!("SessionState created");
 
         info!("AppState created successfully");

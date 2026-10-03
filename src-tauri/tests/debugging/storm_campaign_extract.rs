@@ -196,13 +196,12 @@ async fn extract_storm_campaign_character() {
         eq_bonuses.fortitude_bonus, eq_bonuses.reflex_bonus, eq_bonuses.will_bonus
     );
     println!(
-        "  AC armor: +{}, shield: +{}, natural: +{}, dodge: +{}, deflection: +{}, generic: +{}",
+        "  AC armor: +{}, shield: +{}, natural: +{}, dodge: +{}, deflection: +{}",
         eq_bonuses.ac_armor_bonus,
         eq_bonuses.ac_shield_bonus,
         eq_bonuses.ac_natural_bonus,
         eq_bonuses.ac_dodge_bonus,
-        eq_bonuses.ac_deflection_bonus,
-        eq_bonuses.ac_bonus
+        eq_bonuses.ac_deflection_bonus
     );
     println!("  Attack: +{}", eq_bonuses.attack_bonus);
 

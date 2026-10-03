@@ -1,6 +1,6 @@
 use app_lib::character::gff_helpers::gff_value_to_i32;
 use app_lib::parsers::gff::{GffParser, GffValue};
-use app_lib::services::item_cost_calculator::ItemCostCalculator;
+use app_lib::services::item_cost_calculator::calculate_item_cost;
 use app_lib::utils::parsing::row_str;
 use indexmap::IndexMap;
 use std::fmt::Write as _;
@@ -29,7 +29,6 @@ async fn load_template(
 async fn item_cost_matches_toolset_computed_templates() {
     let context = common::create_test_context().await;
     let game_data = context.loader.game_data().expect("game data");
-    let calc = ItemCostCalculator::new();
 
     // (resref, stored Cost): multiplier 2.0 weapons with 3 properties, a
     // 1.25-multiplier item with 10 immunities whose squared sum dominates, and
@@ -57,9 +56,7 @@ async fn item_cost_matches_toolset_computed_templates() {
         ("x2_it_wmgrd001", 91097),
     ] {
         let item = load_template(&context, resref).await;
-        let cost = calc
-            .calculate_item_cost(&item, game_data)
-            .expect("cost computes");
+        let cost = calculate_item_cost(&item, game_data).expect("cost computes");
         // The toolset stores Cost before ModifyCost; the engine (and we) add it.
         let modify_cost = i64::from(
             item.get("ModifyCost")

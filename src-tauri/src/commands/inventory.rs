@@ -3,12 +3,9 @@ use crate::character::{
     TransformResult, UnequipResult,
 };
 use crate::commands::{CommandError, CommandResult};
-use crate::loaders::GameData;
-use crate::services::item_property_decoder::{
-    EditorContext, PropertyMetadata, is_invalid_label, load_2da_options_from_rm,
-};
+use crate::services::item_property_decoder::PropertyMetadata;
 use crate::state::AppState;
-use crate::utils::parsing::{row_int, row_str, row_string};
+use crate::utils::parsing::{row_int, row_str};
 use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -16,38 +13,6 @@ use serde_json::Value as JsonValue;
 use specta::Type;
 use std::collections::HashMap;
 use tauri::State;
-
-pub(super) async fn ensure_decoder_initialized(state: &AppState) {
-    let needs_init = {
-        let session = state.session.read();
-        !session.item_property_decoder.has_lookup_tables()
-    };
-    if needs_init {
-        let (skills, classes, feats, racial_groups) = {
-            let game_data = state.game_data.read();
-            (
-                load_names_from_game_data(&game_data, "skills", "name"),
-                load_names_from_game_data(&game_data, "classes", "name"),
-                load_names_from_game_data(&game_data, "feat", "feat"),
-                load_names_from_game_data(&game_data, "racialtypes", "name"),
-            )
-        };
-        let spells = {
-            let rm = state.resource_manager.read().await;
-            load_2da_options_from_rm(&rm, "iprp_spells")
-        };
-        let rm = state.resource_manager.read().await;
-        let mut session = state.session.write();
-        session.item_property_decoder.initialize_with_rm(&rm);
-        session.item_property_decoder.set_lookup_tables(
-            skills,
-            classes,
-            feats,
-            spells,
-            racial_groups,
-        );
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexedTemplate {
@@ -63,8 +28,6 @@ pub struct IndexedTemplate {
 pub async fn get_inventory_summary(
     state: State<'_, AppState>,
 ) -> CommandResult<FullInventorySummary> {
-    ensure_decoder_initialized(&state).await;
-
     let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
     let session = state.session.read();
@@ -524,41 +487,6 @@ pub async fn add_item_from_template(
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct ItemEditorMetadataResponse {
     pub property_types: Vec<PropertyMetadata>,
-    pub abilities: HashMap<u32, String>,
-    pub skills: HashMap<u32, String>,
-    pub damage_types: HashMap<u32, String>,
-    pub alignment_groups: HashMap<u32, String>,
-    pub racial_groups: HashMap<u32, String>,
-    pub saving_throws: HashMap<u32, String>,
-    pub immunity_types: HashMap<u32, String>,
-    pub classes: HashMap<u32, String>,
-    pub spells: HashMap<u32, String>,
-}
-
-/// Display names for a 2DA table: the strref in `name_column`, else the row label.
-fn load_names_from_game_data(
-    game_data: &GameData,
-    table: &str,
-    name_column: &str,
-) -> HashMap<u32, String> {
-    let mut names = HashMap::new();
-    let Some(table) = game_data.get_table(table) else {
-        return names;
-    };
-
-    for row_idx in 0..table.row_count() {
-        let Ok(row) = table.get_row(row_idx) else {
-            continue;
-        };
-
-        let label = row_string(game_data, &row, name_column)
-            .or_else(|| row_str(&row, "label").filter(|s| !s.starts_with("DEL_")));
-
-        if let Some(name) = label.filter(|s| !is_invalid_label(s)) {
-            names.insert(row_idx as u32, name);
-        }
-    }
-    names
 }
 
 /// Get editor metadata for the item property editor.
@@ -566,43 +494,9 @@ fn load_names_from_game_data(
 pub async fn get_editor_metadata(
     state: State<'_, AppState>,
 ) -> CommandResult<ItemEditorMetadataResponse> {
-    ensure_decoder_initialized(&state).await;
-
-    let rm = state.resource_manager.read().await;
-    let game_data = state.game_data.read();
     let session = state.session.read();
-
-    let context = EditorContext {
-        abilities: load_2da_options_from_rm(&rm, "iprp_abilities"),
-        skills: load_names_from_game_data(&game_data, "skills", "name"),
-        spells: load_2da_options_from_rm(&rm, "iprp_spells"),
-        damage_types: load_2da_options_from_rm(&rm, "iprp_damagetype"),
-        immunity_types: load_2da_options_from_rm(&rm, "iprp_immunity"),
-        saving_throws: load_2da_options_from_rm(&rm, "iprp_savingthrow"),
-        save_elements: load_2da_options_from_rm(&rm, "iprp_saveelement"),
-        classes: load_names_from_game_data(&game_data, "classes", "name"),
-        racial_groups: load_names_from_game_data(&game_data, "racialtypes", "name"),
-        alignment_groups: load_2da_options_from_rm(&rm, "iprp_aligngrp"),
-        alignments: load_2da_options_from_rm(&rm, "iprp_alignment"),
-        light: load_2da_options_from_rm(&rm, "iprp_lightcost"),
-        feats: load_names_from_game_data(&game_data, "feat", "feat"),
-    };
-
-    let property_types = session
-        .item_property_decoder
-        .get_editor_property_metadata_with_rm(&context, &rm);
-
     Ok(ItemEditorMetadataResponse {
-        property_types,
-        abilities: context.abilities,
-        skills: context.skills,
-        damage_types: context.damage_types,
-        alignment_groups: context.alignment_groups,
-        racial_groups: context.racial_groups,
-        saving_throws: context.saving_throws,
-        immunity_types: context.immunity_types,
-        classes: context.classes,
-        spells: context.spells,
+        property_types: session.item_property_decoder.editor_metadata().to_vec(),
     })
 }
 

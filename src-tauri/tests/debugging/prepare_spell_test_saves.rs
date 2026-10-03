@@ -6,12 +6,9 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use app_lib::character::{EquipmentSlot, FeatId};
 use app_lib::config::NWN2Paths;
-use app_lib::services::ResourceManager;
 use app_lib::services::load_diagnostics::{LoadInput, LoadReport};
 use app_lib::state::session_state::SessionState;
 use serde_json::json;
@@ -38,8 +35,7 @@ fn slot_dir(saves: &PathBuf, slot: u32) -> PathBuf {
 }
 
 fn load(saves: &PathBuf, slot: u32) -> SessionState {
-    let paths = Arc::new(RwLock::new(NWN2Paths::new()));
-    let mut session = SessionState::new(Arc::new(RwLock::new(ResourceManager::new(paths))));
+    let mut session = SessionState::new();
     let path = slot_dir(saves, slot);
     let mut report = LoadReport::new(LoadInput {
         file_path: path.to_string_lossy().to_string(),
@@ -58,10 +54,9 @@ async fn prepare_spell_test_saves() {
     let ctx = create_test_context().await;
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
     let saves = NWN2Paths::new().saves().expect("saves folder");
-    let mut decoder = app_lib::services::item_property_decoder::ItemPropertyDecoder::new(
-        ctx.resource_manager.clone(),
+    let decoder = app_lib::services::item_property_decoder::ItemPropertyDecoder::load(
+        &*ctx.resource_manager.read().await,
     );
-    decoder.initialize_with_rm(&*ctx.resource_manager.read().await);
 
     if std::env::var("SKIP_EDITS").is_err() {
         let mut session = load(&saves, 962);

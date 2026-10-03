@@ -26,7 +26,6 @@ pub struct SkillsStateResponse {
 
 #[tauri::command]
 pub async fn get_skills_state(state: State<'_, AppState>) -> CommandResult<SkillsStateResponse> {
-    super::inventory::ensure_decoder_initialized(&state).await;
     let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session

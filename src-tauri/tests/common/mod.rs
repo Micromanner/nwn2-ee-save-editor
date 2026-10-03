@@ -74,7 +74,7 @@ pub async fn create_test_context() -> TestContext {
         .expect("Failed to initialize GameDataLoader");
 
     // Initialize ItemPropertyDecoder
-    let decoder = ItemPropertyDecoder::new(resource_manager.clone());
+    let decoder = ItemPropertyDecoder::default();
 
     TestContext {
         loader,

@@ -68,9 +68,7 @@ async fn create_decoder() -> ItemPropertyDecoder {
     let paths = Arc::new(RwLock::new(NWN2Paths::new()));
     let rm = Arc::new(RwLock::new(ResourceManager::new(paths)));
     let _ = rm.write().await.initialize().await;
-    let mut decoder = ItemPropertyDecoder::new(rm.clone());
-    decoder.initialize_with_rm(&*rm.read().await);
-    decoder
+    ItemPropertyDecoder::load(&*rm.read().await)
 }
 
 #[test]

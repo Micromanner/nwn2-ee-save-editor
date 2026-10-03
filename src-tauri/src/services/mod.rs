@@ -27,13 +27,8 @@ pub use playerinfo::{
     PlayerClassEntry, PlayerInfo, PlayerInfoData, PlayerInfoParseError, PlayerInfoResult,
 };
 
-pub use item_property_decoder::{
-    DecodedProperty, ItemBonuses, ItemPropertyDecoder, ItemPropertyError, ItemPropertyResult,
-    PropertyDefinition, PropertyMetadata,
-};
+pub use item_property_decoder::{ItemBonuses, ItemPropertyDecoder, PropertyMetadata};
 
 pub use class_categorizer::{
     Categories, ClassFocus, ClassInfo, ClassType, FocusInfo, get_categorized_classes,
 };
-
-pub use item_cost_calculator::ItemCostCalculator;

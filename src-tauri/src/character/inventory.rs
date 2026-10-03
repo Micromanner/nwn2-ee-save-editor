@@ -4,7 +4,7 @@ use crate::character::item_appearance::{ItemAppearance, parse_equip_slots};
 use crate::character::types::BaseItemId;
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
-use crate::services::ItemCostCalculator;
+use crate::services::item_cost_calculator::calculate_item_cost;
 use crate::services::item_property_decoder::{ItemBonuses, ItemPropertyDecoder};
 use crate::utils::parsing::{row_int, row_str};
 use indexmap::IndexMap;
@@ -181,10 +181,6 @@ pub struct FullInventoryItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DecodedPropertyInfo {
-    pub property_name: String,
-    pub subtype_name: Option<String>,
-    pub cost_value: i32,
-    pub param1_value: Option<i32>,
     pub display_string: String,
 }
 
@@ -621,32 +617,7 @@ impl super::Character {
         decoder
             .decode_item_properties(&prop_maps, base_item_id)
             .into_iter()
-            .map(|dp| {
-                let cost_value = dp
-                    .raw_data
-                    .get("CostValue")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32)
-                    .unwrap_or(0);
-                let param1_value = dp
-                    .raw_data
-                    .get("Param1Value")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32);
-                let subtype = dp
-                    .raw_data
-                    .get("Subtype")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32);
-
-                DecodedPropertyInfo {
-                    property_name: dp.label.clone(),
-                    subtype_name: subtype.map(|s| format!("Subtype {s}")),
-                    cost_value,
-                    param1_value,
-                    display_string: dp.description,
-                }
-            })
+            .map(|display_string| DecodedPropertyInfo { display_string })
             .collect()
     }
 
@@ -687,37 +658,7 @@ impl super::Character {
             if let Some(GffValue::ListOwned(props)) = item_struct.get("PropertiesList") {
                 let prop_maps: Vec<_> = props.iter().map(gff_struct_to_json).collect();
 
-                let item_bonuses = decoder.get_item_bonuses(&prop_maps, base_item_id);
-
-                // Aggregate
-                total_bonuses.str_bonus += item_bonuses.str_bonus;
-                total_bonuses.dex_bonus += item_bonuses.dex_bonus;
-                total_bonuses.con_bonus += item_bonuses.con_bonus;
-                total_bonuses.int_bonus += item_bonuses.int_bonus;
-                total_bonuses.wis_bonus += item_bonuses.wis_bonus;
-                total_bonuses.cha_bonus += item_bonuses.cha_bonus;
-                total_bonuses.ac_bonus += item_bonuses.ac_bonus;
-                total_bonuses.ac_armor_bonus += item_bonuses.ac_armor_bonus;
-                total_bonuses.ac_shield_bonus += item_bonuses.ac_shield_bonus;
-                total_bonuses.ac_natural_bonus += item_bonuses.ac_natural_bonus;
-                total_bonuses.ac_deflection_bonus += item_bonuses.ac_deflection_bonus;
-                total_bonuses.ac_dodge_bonus += item_bonuses.ac_dodge_bonus;
-                total_bonuses.attack_bonus += item_bonuses.attack_bonus;
-                total_bonuses.damage_bonus += item_bonuses.damage_bonus;
-                total_bonuses.fortitude_bonus += item_bonuses.fortitude_bonus;
-                total_bonuses.reflex_bonus += item_bonuses.reflex_bonus;
-                total_bonuses.will_bonus += item_bonuses.will_bonus;
-                total_bonuses.spell_resistance = total_bonuses
-                    .spell_resistance
-                    .max(item_bonuses.spell_resistance);
-
-                for (skill, val) in item_bonuses.skill_bonuses {
-                    *total_bonuses.skill_bonuses.entry(skill).or_insert(0) += val;
-                }
-                for (dtype, val) in item_bonuses.damage_resistances {
-                    *total_bonuses.damage_resistances.entry(dtype).or_insert(0) =
-                        (*total_bonuses.damage_resistances.get(&dtype).unwrap_or(&0)).max(val);
-                }
+                decoder.add_item_bonuses(&mut total_bonuses, &prop_maps, base_item_id);
             }
         }
 
@@ -2029,22 +1970,20 @@ fn property_lists_match(
 /// Item value as the game shows it: computed from the 2DAs, falling back to the
 /// stored `Cost + ModifyCost` only when the base item is unknown.
 fn item_value(item_struct: &IndexMap<String, GffValue<'static>>, game_data: &GameData) -> i32 {
-    ItemCostCalculator::new()
-        .calculate_item_cost(item_struct, game_data)
-        .map_or_else(
-            || {
-                let cost = item_struct
-                    .get("Cost")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-                let modify_cost = item_struct
-                    .get("ModifyCost")
-                    .and_then(gff_value_to_i32)
-                    .unwrap_or(0);
-                cost + modify_cost
-            },
-            |v| v as i32,
-        )
+    calculate_item_cost(item_struct, game_data).map_or_else(
+        || {
+            let cost = item_struct
+                .get("Cost")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0);
+            let modify_cost = item_struct
+                .get("ModifyCost")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(0);
+            cost + modify_cost
+        },
+        |v| v as i32,
+    )
 }
 
 /// Blueprints are loot templates: 65% of vanilla `.uti` files ship

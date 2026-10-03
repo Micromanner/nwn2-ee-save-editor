@@ -1,98 +1,63 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
+const INVALID_LABEL_PATTERNS: &[&str] = &[
+    "****",
+    "**",
+    "DEL_",
+    "DELETED",
+    "PADDING",
+    "NONE",
+    "REMOVED",
+    "TEST",
+    "INVALID",
+    "RESERVED",
+    "UNUSED",
+    "PLACEHOLDER",
+];
 
-pub static LABEL_CLEANUPS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
-    let mut m = HashMap::new();
-    m.insert("TN", "True Neutral");
-    m.insert("AC_Natural", "Natural Armor");
-    m.insert("AC_Dodge", "Dodge");
-    m.insert("AC_Deflection", "Deflection");
-    m.insert("AC_Armor", "Armor");
-    m.insert("AC_Shield", "Shield");
-    m.insert("Bonus_1", "+1");
-    m.insert("Bonus_2", "+2");
-    m.insert("Bonus_3", "+3");
-    m.insert("Bonus_4", "+4");
-    m.insert("Bonus_5", "+5");
-    m.insert("Bonus_6", "+6");
-    m.insert("Bonus_7", "+7");
-    m.insert("Bonus_8", "+8");
-    m.insert("Bonus_9", "+9");
-    m.insert("Bonus_10", "+10");
-    m.insert("Bonus_11", "+11");
-    m.insert("Bonus_12", "+12");
-    m.insert("Bonus_14", "DC 14");
-    m.insert("Bonus_15", "DC 15");
-    m.insert("Bonus_16", "DC 16");
-    m.insert("Bonus_17", "DC 17");
-    m.insert("Bonus_18", "DC 18");
-    m.insert("Bonus_19", "DC 19");
-    m.insert("Bonus_20", "DC 20");
-    m.insert("1d4", "1d4");
-    m.insert("1d6", "1d6");
-    m.insert("1d8", "1d8");
-    m.insert("1d10", "1d10");
-    m.insert("2d6", "2d6");
-    m.insert("2d8", "2d8");
-    m.insert("2d10", "2d10");
-    m
-});
-
-pub static INVALID_LABEL_PATTERNS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
-    vec![
-        "****",
-        "**",
-        "DEL_",
-        "DELETED",
-        "padding",
-        "None",
-        "REMOVED",
-        "TEST",
-        "INVALID",
-        "RESERVED",
-        "unused",
-        "placeholder",
-    ]
-});
-
-pub static HIDDEN_PROPERTY_IDS: LazyLock<HashSet<u32>> = LazyLock::new(|| {
-    let mut s = HashSet::new();
-    s.insert(30); // DoubleStack - inventory system flag
-    s.insert(31); // EnhancedContainer BonusSlot - flat, no options
-    s.insert(33); // DamageMelee - has type but no damage amount
-    s.insert(34); // DamageRanged - has type but no damage amount
-    s.insert(47); // DamageNone - remove damage properties instead
-    s.insert(54); // SpellSchool Immunity - flat, no school selection
-    s.insert(72); // On Monster Hit
-    s.insert(76); // Poison - misconfigured options
-    s.insert(77); // Monster Damage
-    s.insert(79); // Special Walk - only "Default"
-    s.insert(82);
-    s.insert(83); // Visual Effect - flat, no options
-    s.insert(90); // Damage Reduction - ambiguous options
-    s.insert(92); // Damage Vulnerability duplicate of 24
-    s.insert(94);
-    s.insert(96);
-    s.insert(100);
-    s
-});
+const HIDDEN_PROPERTY_IDS: &[u32] = &[
+    30,  // DoubleStack - inventory system flag
+    31,  // EnhancedContainer BonusSlot - flat, no options
+    33,  // DamageMelee - has type but no damage amount
+    34,  // DamageRanged - has type but no damage amount
+    47,  // DamageNone - remove damage properties instead
+    54,  // SpellSchool Immunity - flat, no school selection
+    72,  // On Monster Hit
+    76,  // Poison - misconfigured options
+    77,  // Monster Damage
+    79,  // Special Walk - only "Default"
+    82,  // OnHitCastSpell
+    83,  // Visual Effect - flat, no options
+    90,  // Damage Reduction - ambiguous options
+    92,  // Damage Vulnerability duplicate of 24
+    94,  // padding
+    96,  // padding
+    100, // padding
+];
 
 /// `itempropdef.2da` rows whose `Name` strref points at another property's text in
 /// vanilla data (85 ArrowCatching -> "Turn Resistance", 86 Bashing -> "Trap",
 /// 87 Animated -> "On Hit", 88 Wild and 89 Etherealness -> "Thieves' Tools").
 /// These fall back to the cleaned label column instead.
-pub static IGNORED_NAME_STRREF_IDS: LazyLock<HashSet<u32>> =
-    LazyLock::new(|| HashSet::from([85, 86, 87, 88, 89]));
+const IGNORED_NAME_STRREF_IDS: &[u32] = &[85, 86, 87, 88, 89];
 
+/// Engineer-facing 2DA label of a deleted or placeholder row.
 pub fn is_invalid_label(label: &str) -> bool {
     let label_upper = label.to_uppercase();
     INVALID_LABEL_PATTERNS
         .iter()
-        .any(|pattern| label_upper.contains(&pattern.to_uppercase()))
+        .any(|pattern| label_upper.contains(pattern))
 }
 
 pub fn clean_label(label: &str) -> String {
-    if let Some(&cleaned) = LABEL_CLEANUPS.get(label) {
+    let cleaned = match label {
+        "TN" => Some("True Neutral"),
+        "AC_Natural" => Some("Natural Armor"),
+        "AC_Dodge" => Some("Dodge"),
+        "AC_Deflection" => Some("Deflection"),
+        "AC_Armor" => Some("Armor"),
+        "AC_Shield" => Some("Shield"),
+        _ => None,
+    };
+    if let Some(cleaned) = cleaned {
         return cleaned.to_string();
     }
 
