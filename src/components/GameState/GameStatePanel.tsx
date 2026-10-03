@@ -154,6 +154,7 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveVersion, setSaveVersion] = useState(0);
+  const { handleError } = useErrorHandler();
 
   useEffect(() => {
     const onChange = () => setSaveVersion(v => v + 1);
@@ -189,16 +190,26 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
   const handleSave = async () => {
     if (!hasChanges) return;
     setIsSaving(true);
-    setError(null);
     try {
       const updates = Object.entries(influences)
         .filter(([id, val]) => val !== (companions[id]?.influence ?? 0))
         .map(([id, val]) => gameStateAPI.updateCompanionInfluence(characterId, id, val));
-      await Promise.all(updates);
+      const results = await Promise.allSettled(updates);
       const res = await gameStateAPI.getCompanionInfluence(characterId);
       setCompanions(res.companions);
+      initialRef.current = res.companions;
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) {
+        handleError(failed.reason);
+      } else {
+        const map: Record<string, number> = {};
+        Object.entries(res.companions).forEach(([id, data]) => {
+          map[id] = data.influence ?? 0;
+        });
+        setInfluences(map);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.failedToSave'));
+      handleError(err);
     } finally {
       setIsSaving(false);
     }

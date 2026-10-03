@@ -336,10 +336,13 @@ fn check_pending_quest_variable(
             w.key.module.as_deref() == module && w.key.name == name && w.key.value_type == kind
         })
     }) {
-        return Err(CommandError::from(format!(
-            "Variable {name} has a pending quest edit ({}) currently owning it. Discard that quest edit before changing this variable here.",
-            edit.tag
-        )));
+        return Err(CommandError::ValidationError {
+            field: name.to_string(),
+            reason: format!(
+                "the pending quest edit {} sets it. Discard that quest edit before changing it here.",
+                edit.tag
+            ),
+        });
     }
     Ok(())
 }
