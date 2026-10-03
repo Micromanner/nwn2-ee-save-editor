@@ -5,6 +5,7 @@ use crate::character::{
     AccessorySlot, ArmorSlot, ItemAppearance, ItemAppearanceOptions, TintChannels,
     accessory_resref, swap_tint_2_3,
 };
+use crate::commands::{CommandError, CommandResult};
 use crate::services::model_loader::{self, ModelData};
 use crate::state::AppState;
 
@@ -22,7 +23,7 @@ pub async fn get_item_appearance_options(
     state: State<'_, AppState>,
     base_item_id: i32,
     armor_visual_type: Option<i32>,
-) -> Result<ItemAppearanceOptions, String> {
+) -> CommandResult<ItemAppearanceOptions> {
     let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
     let body_prefix = current_body_prefix(&state, &game_data);
@@ -59,7 +60,7 @@ pub fn load_item_model_impl(
     body_prefix: Option<&str>,
     game_data: &crate::loaders::GameData,
     rm: &crate::services::resource_manager::ResourceManager,
-) -> Result<ModelData, String> {
+) -> CommandResult<ModelData> {
     let base_label = game_data
         .get_table("baseitems")
         .and_then(|t| t.get_by_id(base_item_id))
@@ -188,7 +189,7 @@ pub async fn load_item_model(
     state: State<'_, AppState>,
     appearance: ItemAppearance,
     base_item_id: i32,
-) -> Result<ModelData, String> {
+) -> CommandResult<ModelData> {
     let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
     let body_prefix = current_body_prefix(&state, &game_data);
@@ -207,7 +208,7 @@ pub async fn load_item_part(
     base_item_id: i32,
     part_index: u8,
     variant: i32,
-) -> Result<ModelData, String> {
+) -> CommandResult<ModelData> {
     debug!(
         "Loading item part base_item_id={} part_index={} variant={}",
         base_item_id, part_index, variant
@@ -221,7 +222,9 @@ pub async fn load_item_part(
         variant,
         &game_data,
     )
-    .ok_or_else(|| format!("No resref for part {part_index} variant {variant}"))?;
+    .ok_or_else(|| CommandError::NotFound {
+        item: format!("resref for part {part_index} variant {variant}"),
+    })?;
 
     let part_tag = match part_index {
         0 => "item_a",
@@ -229,8 +232,12 @@ pub async fn load_item_part(
         2 => "item_c",
         _ => "item",
     };
-    model_loader::load_model_static(&rm, &resref, part_tag, "item")
-        .map_err(|e| format!("Failed to load part '{resref}': {e}"))
+    model_loader::load_model_static(&rm, &resref, part_tag, "item").map_err(|e| {
+        CommandError::OperationFailed {
+            operation: format!("load item part '{resref}'"),
+            reason: e.clone(),
+        }
+    })
 }
 
 /// One accessory mesh on its own (no body) for the per-slot thumbnail
@@ -242,17 +249,23 @@ pub async fn load_accessory_model(
     slot: AccessorySlot,
     id: i32,
     tints: TintChannels,
-) -> Result<ModelData, String> {
+) -> CommandResult<ModelData> {
     let rm = state.resource_manager.read().await;
     let game_data = state.game_data.read();
     let body_prefix = current_body_prefix(&state, &game_data)
         .unwrap_or_else(|| crate::character::DEFAULT_BODY_PREFIX.to_string());
-    let resref = accessory_resref(&body_prefix, slot, id)
-        .ok_or_else(|| format!("No accessory mesh for {slot:?} id {id}"))?;
+    let resref =
+        accessory_resref(&body_prefix, slot, id).ok_or_else(|| CommandError::NotFound {
+            item: format!("accessory mesh for {slot:?} id {id}"),
+        })?;
     debug!("Loading accessory model {resref}");
 
-    let mut data = model_loader::load_model_static(&rm, &resref, "item", "item")
-        .map_err(|e| format!("Failed to load accessory '{resref}': {e}"))?;
+    let mut data = model_loader::load_model_static(&rm, &resref, "item", "item").map_err(|e| {
+        CommandError::OperationFailed {
+            operation: format!("load accessory '{resref}'"),
+            reason: e.clone(),
+        }
+    })?;
     let tints = swap_tint_2_3(&tints);
     let attach_bone = slot.attach_bone().map(str::to_string);
     for m in &mut data.meshes {

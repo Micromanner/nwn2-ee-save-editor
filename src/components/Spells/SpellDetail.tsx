@@ -14,7 +14,7 @@ interface SpellDetailProps {
   memorizedCount?: number;
   isOwned: boolean;
   editableClasses?: CasterClassInfo[];
-  onAdd?: (spellId: number, classIndex: number, spellLevel: number) => Promise<void>;
+  onAdd?: (spellId: number, classIndex: number) => Promise<void>;
   onRemove?: (spellId: number, classIndex: number, spellLevel: number) => Promise<void>;
 }
 
@@ -43,7 +43,7 @@ export function SpellDetail({ spell, memorizedCount, isOwned, editableClasses = 
   const handleAdd = async (cls: CasterClassInfo) => {
     if (!onAdd) return;
     setBusy(true);
-    try { await onAdd(spell.id, cls.index, spell.level); } finally { setBusy(false); }
+    try { await onAdd(spell.id, cls.index); } finally { setBusy(false); }
   };
 
   const handleRemove = async () => {
@@ -57,7 +57,8 @@ export function SpellDetail({ spell, memorizedCount, isOwned, editableClasses = 
   const canRemove = isOwned && spell.class_id !== undefined &&
     editableClasses.some(c => c.class_id === spell.class_id);
 
-  const addableClasses = editableClasses.filter(c => c.can_edit_spells);
+  const spellLevelFor = (cls: CasterClassInfo) => spell.class_levels?.find(cl => cl.class_id === cls.class_id)?.level;
+  const addableClasses = editableClasses.filter(c => c.can_edit_spells && spellLevelFor(c) !== undefined);
 
   const schoolName = spell.school_name || spell.school;
   const schoolColor = SPELL_SCHOOL_COLORS[schoolName || ''] || T.textMuted;
@@ -120,6 +121,7 @@ export function SpellDetail({ spell, memorizedCount, isOwned, editableClasses = 
                       <MenuItem
                         key={cls.class_id}
                         text={cls.name}
+                        label={spellLevelFor(cls) === 0 ? t('spells.cantrips') : t('spells.levelSpells', { level: spellLevelFor(cls) })}
                         onClick={() => handleAdd(cls)}
                       />
                     ))}

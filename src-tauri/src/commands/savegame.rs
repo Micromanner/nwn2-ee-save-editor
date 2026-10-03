@@ -1,9 +1,8 @@
 use crate::commands::{CommandError, CommandResult};
 use crate::services::load_diagnostics::{LoadInput, LoadReport};
-use crate::services::savegame_handler::FileInfo;
 use crate::services::savegame_handler::backup;
 use crate::state::AppState;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 #[tauri::command]
@@ -11,11 +10,9 @@ pub async fn restore_backup(
     state: State<'_, AppState>,
     backup_path: String,
 ) -> CommandResult<bool> {
-    let reloaded = restore_and_reload(&state, &backup_path)?;
-    if reloaded {
-        super::session::sync_module_content(&state).await;
-    }
-    Ok(reloaded)
+    let reloaded = restore_and_reload(&state, &backup_path);
+    super::session::sync_module_content(&state).await;
+    reloaded
 }
 
 fn restore_and_reload(state: &AppState, backup_path: &str) -> CommandResult<bool> {
@@ -88,39 +85,53 @@ fn restore_and_reload(state: &AppState, backup_path: &str) -> CommandResult<bool
     Ok(reloaded)
 }
 
-#[tauri::command]
-pub async fn list_save_files(state: State<'_, AppState>) -> CommandResult<Vec<FileInfo>> {
-    let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(handler.list_files()?)
+/// Canonical path of a full-backup folder (`<saves>/backups/<save>/backup_*`),
+/// refusing anything else so a delete can never leave the backups root.
+fn resolve_backup_dir(backup_path: &str, backups_root: &Path) -> CommandResult<PathBuf> {
+    let path = PathBuf::from(backup_path);
+    let canonical = std::fs::canonicalize(&path).map_err(|_| CommandError::NotFound {
+        item: format!("Backup path: {backup_path}"),
+    })?;
+    let root = std::fs::canonicalize(backups_root).map_err(|_| CommandError::NotFound {
+        item: format!("Backups folder: {}", backups_root.display()),
+    })?;
+    let is_backup_folder = canonical.is_dir()
+        && canonical
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| backup::backup_timestamp(n).is_some())
+        && canonical.parent().and_then(Path::parent) == Some(root.as_path());
+    if !is_backup_folder {
+        return Err(CommandError::FileError {
+            message: "Path is not a save backup folder".to_string(),
+            path: Some(backup_path.to_string()),
+            diagnostics_path: None,
+        });
+    }
+    Ok(canonical)
+}
+
+fn remove_backup(backup_path: &str, backups_root: &Path) -> CommandResult<()> {
+    std::fs::remove_dir_all(resolve_backup_dir(backup_path, backups_root)?)?;
+    Ok(())
+}
+
+fn backups_root(state: &AppState) -> CommandResult<PathBuf> {
+    state
+        .paths
+        .read()
+        .saves()
+        .map(|saves| saves.join(backup::INNER_BACKUPS_DIR))
+        .ok_or(CommandError::NotFound {
+            item: "Saves folder".to_string(),
+        })
 }
 
 #[tauri::command]
-pub async fn delete_backup(
-    _state: State<'_, AppState>,
-    backup_path: String,
-) -> CommandResult<bool> {
+pub async fn delete_backup(state: State<'_, AppState>, backup_path: String) -> CommandResult<bool> {
+    let root = backups_root(&state)?;
     tokio::task::spawn_blocking(move || {
-        let path = PathBuf::from(&backup_path);
-
-        if !path.exists() {
-            return Err(CommandError::NotFound {
-                item: format!("Backup path: {backup_path}"),
-            });
-        }
-
-        if !path.is_dir() {
-            return Err(CommandError::FileError {
-                message: "Backup path is not a directory".to_string(),
-                path: Some(backup_path),
-                diagnostics_path: None,
-            });
-        }
-
-        std::fs::remove_dir_all(&path)?;
+        remove_backup(&backup_path, &root)?;
         Ok(true)
     })
     .await
@@ -129,29 +140,23 @@ pub async fn delete_backup(
 
 #[tauri::command]
 pub async fn delete_backups(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     backup_paths: Vec<String>,
 ) -> CommandResult<usize> {
+    let root = backups_root(&state)?;
     tokio::task::spawn_blocking(move || {
         use rayon::prelude::*;
 
         let deleted_count = backup_paths
             .par_iter()
-            .filter_map(|backup_path| {
-                let path = PathBuf::from(backup_path);
-                if path.exists() && path.is_dir() {
-                    match std::fs::remove_dir_all(&path) {
-                        Ok(()) => Some(1),
-                        Err(err) => {
-                            tracing::warn!("Failed to delete backup dir {}: {err}", path.display());
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
+            .filter(|backup_path| {
+                remove_backup(backup_path, &root)
+                    .inspect_err(|err| {
+                        tracing::warn!("Failed to delete backup {backup_path}: {err}");
+                    })
+                    .is_ok()
             })
-            .sum();
+            .count();
 
         Ok(deleted_count)
     })

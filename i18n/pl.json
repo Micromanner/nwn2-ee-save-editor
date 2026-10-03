@@ -1134,6 +1134,10 @@
     }
   },
   "settings": {
+    "unsavedChanges": {
+      "title": "Niezapisane zmiany",
+      "warning": "Ta postać ma niezapisane zmiany. Zmiana tego ustawienia przeładuje dane gry i odrzuci je."
+    },
     "title": "Ustawienia",
     "tabs": {
       "general": "Ogólne",
@@ -1202,6 +1206,11 @@
     }
   },
   "startup": {
+    "error": {
+      "openSettings": "Otwórz ustawienia",
+      "title": "Nie udało się wczytać danych gry",
+      "unknown": "Nieznany błąd"
+    },
     "notFound": {
       "title": "Nie znaleziono instalacji NWN2",
       "description": "Nie udało się znaleźć instalacji Neverwinter Nights 2. Wskaż folder gry, aby kontynuować.",

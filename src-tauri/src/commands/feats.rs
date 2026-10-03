@@ -1,8 +1,5 @@
 use crate::character::feats::{AbilityChange, AutoAddedFeat};
-use crate::character::{
-    Character, DomainId, DomainInfo, FeatEntry, FeatId, FeatInfo, FeatListContext, FeatSlots,
-    FeatSummary,
-};
+use crate::character::{Character, FeatId, FeatInfo, FeatListContext};
 use crate::commands::{CommandError, CommandResult};
 use crate::loaders::GameData;
 use crate::state::{AppState, SessionState};
@@ -12,9 +9,6 @@ use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct FeatActionResult {
-    pub success: bool,
-    pub message: String,
-    pub feat_id: i32,
     pub auto_added_feats: Vec<AutoAddedFeat>,
     pub auto_modified_abilities: Vec<AbilityChange>,
 }
@@ -31,29 +25,9 @@ pub struct FilteredFeatsResponse {
 }
 
 #[tauri::command]
-pub async fn get_feat_list(state: State<'_, AppState>) -> CommandResult<Vec<FeatEntry>> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.feat_entries())
-}
-
-#[tauri::command]
-pub async fn has_feat(state: State<'_, AppState>, feat_id: i32) -> CommandResult<bool> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.has_feat(FeatId(feat_id)))
-}
-
-#[tauri::command]
 pub async fn get_feat_info(state: State<'_, AppState>, feat_id: i32) -> CommandResult<FeatInfo> {
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -66,381 +40,92 @@ pub async fn get_feat_info(state: State<'_, AppState>, feat_id: i32) -> CommandR
 }
 
 #[tauri::command]
-pub async fn get_feat_summary(state: State<'_, AppState>) -> CommandResult<FeatSummary> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_feat_summary(&game_data))
-}
-
-#[tauri::command]
-pub async fn get_feat_slots(state: State<'_, AppState>) -> CommandResult<FeatSlots> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_feat_slots(&game_data))
-}
-
-#[tauri::command]
 pub async fn add_feat(state: State<'_, AppState>, feat_id: i32) -> CommandResult<FeatActionResult> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    let feat_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_feat_name(crate::character::FeatId(feat_id), &game_data)
-    };
-    session.record_history(format!("Add feat: {feat_label}"));
+    let feat_label = session
+        .character
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?
+        .get_feat_name(FeatId(feat_id), &game_data);
 
-    // Background feats only take effect when CharBackground (Dword on the character root)
-    // points at the matching backgrounds.2da row; adding the feat alone is not enough.
-    let background_id = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.find_background_for_feat(FeatId(feat_id), &game_data)
-    };
+    session.record_edit(format!("Add feat: {feat_label}"), |character| {
+        // Background feats only take effect when CharBackground (Dword on the character root)
+        // points at the matching backgrounds.2da row; adding the feat alone is not enough.
+        if let Some(background_id) = character.find_background_for_feat(FeatId(feat_id), &game_data)
+        {
+            let added = character.add_background(background_id, &game_data)?;
+            return Ok(group_add_result(character, &game_data, feat_id, &added));
+        }
 
-    if let Some(background_id) = background_id {
-        let bg_result = {
-            let character = session
-                .character
-                .as_mut()
-                .ok_or(CommandError::NoCharacterLoaded)?;
-            character.add_background(background_id, &game_data)
-        };
-        return build_feat_group_add_result(&session, &game_data, feat_id, "Background", bg_result);
-    }
+        // Domain feats reach the game engine via Domain1/Domain2 class fields, not the feat list;
+        // routing through add_domain keeps both in sync.
+        if let Some(domain_id) = character.find_domain_for_feat(FeatId(feat_id), &game_data) {
+            let added = character.add_domain(domain_id, &game_data)?;
+            return Ok(group_add_result(character, &game_data, feat_id, &added));
+        }
 
-    // Domain feats reach the game engine via Domain1/Domain2 class fields, not the feat list;
-    // routing through add_domain keeps both in sync.
-    let domain_id = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.find_domain_for_feat(FeatId(feat_id), &game_data)
-    };
-
-    if let Some(domain_id) = domain_id {
-        let domain_result = {
-            let character = session
-                .character
-                .as_mut()
-                .ok_or(CommandError::NoCharacterLoaded)?;
-            character.add_domain(domain_id, &game_data)
-        };
-        return build_feat_group_add_result(&session, &game_data, feat_id, "Domain", domain_result);
-    }
-
-    let result = {
-        let character = session
-            .character
-            .as_mut()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.add_feat_with_prerequisites(
+        let add_result = character.add_feat_with_prerequisites(
             FeatId(feat_id),
             crate::character::feats::FeatSource::Manual,
             &game_data,
-        )
-    };
-    match result {
-        Ok(add_result) => {
-            let mut parts = Vec::new();
-            if !add_result.auto_added_feats.is_empty() {
-                let names: Vec<&str> = add_result
-                    .auto_added_feats
-                    .iter()
-                    .map(|f| f.label.as_str())
-                    .collect();
-                parts.push(format!("feats: {}", names.join(", ")));
-            }
-            if !add_result.auto_modified_abilities.is_empty() {
-                let changes: Vec<String> = add_result
-                    .auto_modified_abilities
-                    .iter()
-                    .map(|a| format!("{} {} -> {}", a.ability, a.old_value, a.new_value))
-                    .collect();
-                parts.push(format!("abilities: {}", changes.join(", ")));
-            }
-            let message = if parts.is_empty() {
-                "Feat added successfully".to_string()
-            } else {
-                format!("Feat added with prerequisites - {}", parts.join("; "))
-            };
-            Ok(FeatActionResult {
-                success: true,
-                message,
-                feat_id,
-                auto_added_feats: add_result.auto_added_feats,
-                auto_modified_abilities: add_result.auto_modified_abilities,
-            })
-        }
-        Err(e) => Ok(FeatActionResult {
-            success: false,
-            message: e.to_string(),
-            feat_id,
-            auto_added_feats: vec![],
-            auto_modified_abilities: vec![],
-        }),
-    }
+        )?;
+        Ok(FeatActionResult {
+            auto_added_feats: add_result.auto_added_feats,
+            auto_modified_abilities: add_result.auto_modified_abilities,
+        })
+    })
 }
 
 #[tauri::command]
-pub async fn remove_feat(
-    state: State<'_, AppState>,
-    feat_id: i32,
-) -> CommandResult<FeatActionResult> {
+pub async fn remove_feat(state: State<'_, AppState>, feat_id: i32) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    let feat_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_feat_name(FeatId(feat_id), &game_data)
-    };
-    session.record_history(format!("Remove feat: {feat_label}"));
-
-    // Background feats only take effect when CharBackground points at the matching row;
-    // clearing that field is required for the game to treat the character as having no background.
-    let background_id = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.find_background_for_feat(FeatId(feat_id), &game_data)
-    };
-
-    if let Some(background_id) = background_id {
-        let current = {
-            let character = session
-                .character
-                .as_ref()
-                .ok_or(CommandError::NoCharacterLoaded)?;
-            character.get_character_background()
-        };
-
-        if current == Some(background_id) {
-            let bg_result = {
-                let character = session
-                    .character
-                    .as_mut()
-                    .ok_or(CommandError::NoCharacterLoaded)?;
-                character.remove_background(&game_data)
-            };
-            return Ok(build_feat_group_remove_result(
-                feat_id,
-                "Background",
-                bg_result,
-            ));
-        }
-        // CharBackground points elsewhere - fall through so the feat still gets dropped.
-    }
-
-    // Domain feats reach the game engine via Domain1/Domain2 class fields, not the feat list;
-    // routing through remove_domain keeps both in sync.
-    let domain_id = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.find_domain_for_feat(FeatId(feat_id), &game_data)
-    };
-
-    if let Some(domain_id) = domain_id {
-        let domain_result = {
-            let character = session
-                .character
-                .as_mut()
-                .ok_or(CommandError::NoCharacterLoaded)?;
-            character.remove_domain(domain_id, &game_data)
-        };
-        return Ok(build_feat_group_remove_result(
-            feat_id,
-            "Domain",
-            domain_result,
-        ));
-    }
-
-    let result = {
-        let character = session
-            .character
-            .as_mut()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.remove_feat(FeatId(feat_id))
-    };
-    match result {
-        Ok(()) => Ok(FeatActionResult {
-            success: true,
-            message: "Feat removed successfully".to_string(),
-            feat_id,
-            auto_added_feats: vec![],
-            auto_modified_abilities: vec![],
-        }),
-        Err(e) => Ok(FeatActionResult {
-            success: false,
-            message: e.to_string(),
-            feat_id,
-            auto_added_feats: vec![],
-            auto_modified_abilities: vec![],
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn get_character_domains(state: State<'_, AppState>) -> CommandResult<Vec<i32>> {
-    let session = state.session.read();
-    let character = session
+    let feat_label = session
         .character
         .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let domains = character.get_character_domains();
-    Ok(domains.into_iter().map(|d| d.0).collect())
+        .ok_or(CommandError::NoCharacterLoaded)?
+        .get_feat_name(FeatId(feat_id), &game_data);
+
+    session.record_edit(format!("Remove feat: {feat_label}"), |character| {
+        // Background feats only take effect when CharBackground points at the matching row;
+        // clearing that field is required for the game to treat the character as having no background.
+        if let Some(background_id) = character.find_background_for_feat(FeatId(feat_id), &game_data)
+            && character.get_character_background() == Some(background_id)
+        {
+            character.remove_background(&game_data)?;
+            return Ok(());
+        }
+
+        // Domain feats reach the game engine via Domain1/Domain2 class fields, not the feat list;
+        // routing through remove_domain keeps both in sync.
+        if let Some(domain_id) = character.find_domain_for_feat(FeatId(feat_id), &game_data) {
+            character.remove_domain(domain_id, &game_data)?;
+            return Ok(());
+        }
+
+        character.remove_feat(FeatId(feat_id))?;
+        Ok(())
+    })
 }
 
-#[tauri::command]
-pub async fn get_available_domains(state: State<'_, AppState>) -> CommandResult<Vec<DomainInfo>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_available_domains(&game_data))
-}
-
-#[tauri::command]
-pub async fn add_domain(state: State<'_, AppState>, domain_id: i32) -> CommandResult<Vec<i32>> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    let domain_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_domain_name(DomainId(domain_id), &game_data)
-    };
-    session.record_history(format!("Add domain: {domain_label}"));
-    let feats = {
-        let character = session
-            .character
-            .as_mut()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character
-            .add_domain(DomainId(domain_id), &game_data)
-            .map_err(|e| CommandError::OperationFailed {
-                operation: format!("add_domain({domain_id})"),
-                reason: e.to_string(),
-            })?
-    };
-    Ok(feats.into_iter().map(|f| f.0).collect())
-}
-
-#[tauri::command]
-pub async fn remove_domain(state: State<'_, AppState>, domain_id: i32) -> CommandResult<Vec<i32>> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    let domain_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_domain_name(DomainId(domain_id), &game_data)
-    };
-    session.record_history(format!("Remove domain: {domain_label}"));
-    let feats = {
-        let character = session
-            .character
-            .as_mut()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character
-            .remove_domain(DomainId(domain_id), &game_data)
-            .map_err(|e| CommandError::OperationFailed {
-                operation: format!("remove_domain({domain_id})"),
-                reason: e.to_string(),
-            })?
-    };
-    Ok(feats.into_iter().map(|f| f.0).collect())
-}
-
-/// Build a `FeatActionResult` for an add-via-group operation (background or domain).
-/// On success, resolves the names of any auto-added feats (excluding the triggering feat).
-fn build_feat_group_add_result(
-    session: &SessionState,
+/// Resolves the names of feats auto-added by a background or domain add, excluding the triggering feat.
+fn group_add_result(
+    character: &Character,
     game_data: &GameData,
     feat_id: i32,
-    group_label: &str,
-    result: Result<Vec<FeatId>, crate::character::CharacterError>,
-) -> CommandResult<FeatActionResult> {
-    match result {
-        Ok(added_feats) => {
-            let character = session
-                .character
-                .as_ref()
-                .ok_or(CommandError::NoCharacterLoaded)?;
-            let auto_added_feats: Vec<AutoAddedFeat> = added_feats
-                .iter()
-                .filter(|f| f.0 != feat_id)
-                .map(|f| AutoAddedFeat {
-                    feat_id: *f,
-                    label: character.get_feat_name(*f, game_data),
-                })
-                .collect();
-            let message = if auto_added_feats.is_empty() {
-                format!("{group_label} added")
-            } else {
-                let names: Vec<&str> = auto_added_feats.iter().map(|f| f.label.as_str()).collect();
-                format!("{group_label} added with feats: {}", names.join(", "))
-            };
-            Ok(FeatActionResult {
-                success: true,
-                message,
-                feat_id,
-                auto_added_feats,
-                auto_modified_abilities: vec![],
-            })
-        }
-        Err(e) => Ok(FeatActionResult {
-            success: false,
-            message: e.to_string(),
-            feat_id,
-            auto_added_feats: vec![],
-            auto_modified_abilities: vec![],
-        }),
-    }
-}
-
-/// Build a `FeatActionResult` for a remove-via-group operation (background or domain).
-fn build_feat_group_remove_result(
-    feat_id: i32,
-    group_label: &str,
-    result: Result<Vec<FeatId>, crate::character::CharacterError>,
+    added_feats: &[FeatId],
 ) -> FeatActionResult {
-    match result {
-        Ok(_) => FeatActionResult {
-            success: true,
-            message: format!("{group_label} removed"),
-            feat_id,
-            auto_added_feats: vec![],
-            auto_modified_abilities: vec![],
-        },
-        Err(e) => FeatActionResult {
-            success: false,
-            message: e.to_string(),
-            feat_id,
-            auto_added_feats: vec![],
-            auto_modified_abilities: vec![],
-        },
+    FeatActionResult {
+        auto_added_feats: added_feats
+            .iter()
+            .filter(|f| f.0 != feat_id)
+            .map(|f| AutoAddedFeat {
+                feat_id: *f,
+                label: character.get_feat_name(*f, game_data),
+            })
+            .collect(),
+        auto_modified_abilities: vec![],
     }
 }
 
@@ -511,14 +196,6 @@ pub(super) fn ensure_feat_cache(
 }
 
 #[tauri::command]
-pub async fn get_all_feats(state: State<'_, AppState>) -> CommandResult<Vec<FeatInfo>> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    ensure_feat_cache(&mut session, &game_data)?;
-    Ok(session.feat_cache.clone().unwrap())
-}
-
-#[tauri::command]
 pub async fn get_filtered_feats(
     state: State<'_, AppState>,
     page: i32,
@@ -527,10 +204,25 @@ pub async fn get_filtered_feats(
     search: Option<String>,
 ) -> CommandResult<FilteredFeatsResponse> {
     let game_data = state.game_data.read();
+    {
+        let session = state.session.read();
+        if let Some(cached) = &session.feat_cache {
+            return Ok(filter_feats(cached, page, limit, feat_type, search));
+        }
+    }
     let mut session = state.session.write();
     ensure_feat_cache(&mut session, &game_data)?;
-
     let cached = session.feat_cache.as_ref().unwrap();
+    Ok(filter_feats(cached, page, limit, feat_type, search))
+}
+
+fn filter_feats(
+    cached: &[FeatInfo],
+    page: i32,
+    limit: i32,
+    feat_type: Option<i32>,
+    search: Option<String>,
+) -> FilteredFeatsResponse {
     let search_lower = search.as_ref().map(|s| s.to_lowercase());
 
     let filtered_feats: Vec<&FeatInfo> = cached
@@ -575,7 +267,7 @@ pub async fn get_filtered_feats(
         Vec::new()
     };
 
-    Ok(FilteredFeatsResponse {
+    FilteredFeatsResponse {
         feats: paged_feats,
         total,
         page,
@@ -583,5 +275,5 @@ pub async fn get_filtered_feats(
         pages,
         has_next: page < pages,
         has_previous: page > 1,
-    })
+    }
 }

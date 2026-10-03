@@ -1,13 +1,14 @@
 use crate::character::{
-    AddItemResult, BaseItemId, BasicItemInfo, EquipResult, EquipmentSlot, FullInventorySummary,
-    InventoryItem, RemoveItemResult, TransformResult, UnequipResult,
+    AddItemResult, EquipResult, EquipmentSlot, FullInventorySummary, RemoveItemResult,
+    TransformResult, UnequipResult,
 };
 use crate::commands::{CommandError, CommandResult};
+use crate::loaders::GameData;
 use crate::services::item_property_decoder::{
-    EditorContext, ItemBonuses, PropertyMetadata, is_invalid_label, load_2da_options_from_rm,
+    EditorContext, PropertyMetadata, is_invalid_label, load_2da_options_from_rm,
 };
 use crate::state::AppState;
-use crate::utils::parsing::{row_int, row_str};
+use crate::utils::parsing::{row_int, row_str, row_string};
 use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -25,10 +26,10 @@ pub(super) async fn ensure_decoder_initialized(state: &AppState) {
         let (skills, classes, feats, racial_groups) = {
             let game_data = state.game_data.read();
             (
-                load_skills_from_game_data(&game_data),
-                load_classes_from_game_data(&game_data),
-                load_feats_from_game_data(&game_data),
-                load_racial_groups_from_game_data(&game_data),
+                load_names_from_game_data(&game_data, "skills", "name"),
+                load_names_from_game_data(&game_data, "classes", "name"),
+                load_names_from_game_data(&game_data, "feat", "feat"),
+                load_names_from_game_data(&game_data, "racialtypes", "name"),
             )
         };
         let spells = {
@@ -58,35 +59,6 @@ pub struct IndexedTemplate {
     pub source: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EquippedItem {
-    pub slot: EquipmentSlot,
-    pub item: InventoryItem,
-    pub bonuses: ItemBonuses,
-}
-
-#[tauri::command]
-pub async fn get_inventory_items(state: State<'_, AppState>) -> CommandResult<Vec<BasicItemInfo>> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.inventory_items())
-}
-
-#[tauri::command]
-pub async fn get_equipped_items(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<(usize, BasicItemInfo)>> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.equipped_items())
-}
-
 #[tauri::command]
 pub async fn get_inventory_summary(
     state: State<'_, AppState>,
@@ -94,8 +66,8 @@ pub async fn get_inventory_summary(
     ensure_decoder_initialized(&state).await;
 
     let rm = state.resource_manager.read().await;
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -119,56 +91,12 @@ pub async fn get_inventory_summary(
 }
 
 #[tauri::command]
-pub async fn get_gold(state: State<'_, AppState>) -> CommandResult<u32> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.gold())
-}
-
-#[tauri::command]
 pub async fn set_gold(state: State<'_, AppState>, amount: u32) -> CommandResult<u32> {
     let mut session = state.session.write();
-    session.record_history(format!("Set gold to {amount}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    character.set_gold(amount);
-    Ok(character.gold())
-}
-
-#[tauri::command]
-pub async fn add_gold(state: State<'_, AppState>, amount: i32) -> CommandResult<u32> {
-    let mut session = state.session.write();
-    session.record_history(format!("Add {amount} gold"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let current = character.gold();
-    let new_amount = if amount < 0 {
-        current.saturating_sub(amount.unsigned_abs())
-    } else {
-        current.saturating_add(amount as u32)
-    };
-    character.set_gold(new_amount);
-    Ok(new_amount)
-}
-
-#[tauri::command]
-pub async fn get_equipment_bonuses(state: State<'_, AppState>) -> CommandResult<ItemBonuses> {
-    ensure_decoder_initialized(&state).await;
-
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_equipment_bonuses(&game_data, &session.item_property_decoder))
+    session.record_edit(format!("Set gold to {amount}"), |character| {
+        character.set_gold(amount);
+        Ok(character.gold())
+    })
 }
 
 #[tauri::command]
@@ -179,12 +107,9 @@ pub async fn equip_item(
 ) -> CommandResult<EquipResult> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(format!("Equip item to {slot:?}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.equip_item(inventory_index, slot, &game_data)?)
+    session.record_edit(format!("Equip item to {slot:?}"), |character| {
+        Ok(character.equip_item(inventory_index, slot, &game_data)?)
+    })
 }
 
 #[tauri::command]
@@ -193,12 +118,9 @@ pub async fn unequip_item(
     slot: EquipmentSlot,
 ) -> CommandResult<UnequipResult> {
     let mut session = state.session.write();
-    session.record_history(format!("Unequip {slot:?}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.unequip_item(slot)?)
+    session.record_edit(format!("Unequip {slot:?}"), |character| {
+        Ok(character.unequip_item(slot)?)
+    })
 }
 
 #[tauri::command]
@@ -235,25 +157,20 @@ pub async fn add_to_inventory(
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    let item_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_base_item_name(base_item_id, &game_data)
-    };
-    session.record_history(format!("Add {item_label} (x{stack_size})"));
-    let character = session
+    let item_label = session
         .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.add_item(
-        base_item_id,
-        stack_size,
-        icon_id,
-        armor_visual_type,
-        &game_data,
-    )?)
+        .as_ref()
+        .ok_or(CommandError::NoCharacterLoaded)?
+        .get_base_item_name(base_item_id, &game_data);
+    session.record_edit(format!("Add {item_label} (x{stack_size})"), |character| {
+        Ok(character.add_item(
+            base_item_id,
+            stack_size,
+            icon_id,
+            armor_visual_type,
+            &game_data,
+        )?)
+    })
 }
 
 #[tauri::command]
@@ -262,41 +179,9 @@ pub async fn remove_from_inventory(
     index: usize,
 ) -> CommandResult<RemoveItemResult> {
     let mut session = state.session.write();
-    session.record_history(format!("Remove item from slot {index}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.remove_item(index)?)
-}
-
-#[tauri::command]
-pub async fn get_equipped_item(
-    state: State<'_, AppState>,
-    slot: EquipmentSlot,
-) -> CommandResult<Option<EquippedItem>> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    if let Some(basic_info) = character.get_equipped_item_by_slot(slot) {
-        Ok(Some(EquippedItem {
-            slot,
-            item: InventoryItem {
-                index: 0,
-                base_item_id: BaseItemId(basic_info.base_item),
-                name: basic_info.tag.clone(),
-                tag: basic_info.tag,
-                stack_size: basic_info.stack_size,
-                identified: basic_info.identified,
-            },
-            bonuses: ItemBonuses::default(),
-        }))
-    } else {
-        Ok(None)
-    }
+    session.record_edit(format!("Remove item from slot {index}"), |character| {
+        Ok(character.remove_item(index)?)
+    })
 }
 
 #[tauri::command]
@@ -597,10 +482,8 @@ async fn load_item_template(
     CommandError,
 > {
     let rm = state.resource_manager.read().await;
-    let templates = rm.get_all_item_templates();
-    let template_info = templates
-        .get(resref)
-        .cloned()
+    let template_info = rm
+        .get_item_template(resref)
         .ok_or_else(|| CommandError::NotFound {
             item: format!("Item template '{resref}'"),
         })?;
@@ -632,13 +515,9 @@ pub async fn add_item_from_template(
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(format!("Add {item_label} from template"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    Ok(character.add_new_item(item_fields, &game_data)?)
+    session.record_edit(format!("Add {item_label} from template"), |character| {
+        Ok(character.add_new_item(item_fields, &game_data)?)
+    })
 }
 
 /// Response for the item editor metadata endpoint.
@@ -649,217 +528,81 @@ pub struct ItemEditorMetadataResponse {
     pub skills: HashMap<u32, String>,
     pub damage_types: HashMap<u32, String>,
     pub alignment_groups: HashMap<u32, String>,
-    pub alignments: HashMap<u32, String>,
     pub racial_groups: HashMap<u32, String>,
     pub saving_throws: HashMap<u32, String>,
-    pub save_elements: HashMap<u32, String>,
     pub immunity_types: HashMap<u32, String>,
     pub classes: HashMap<u32, String>,
     pub spells: HashMap<u32, String>,
-    pub light: HashMap<u32, String>,
 }
 
-/// Load skills from game data skills.2da table.
-fn load_skills_from_game_data(game_data: &crate::loaders::GameData) -> HashMap<u32, String> {
-    let mut skills = HashMap::new();
-    let Some(skill_table) = game_data.get_table("skills") else {
-        return skills;
+/// Display names for a 2DA table: the strref in `name_column`, else the row label.
+fn load_names_from_game_data(
+    game_data: &GameData,
+    table: &str,
+    name_column: &str,
+) -> HashMap<u32, String> {
+    let mut names = HashMap::new();
+    let Some(table) = game_data.get_table(table) else {
+        return names;
     };
 
-    for row_idx in 0..skill_table.row_count() {
-        let Ok(row) = skill_table.get_row(row_idx) else {
+    for row_idx in 0..table.row_count() {
+        let Ok(row) = table.get_row(row_idx) else {
             continue;
         };
 
-        let name: Option<String> = row
-            .get("name")
-            .and_then(|v| v.as_ref())
-            .and_then(|s| s.parse::<i32>().ok())
-            .and_then(|str_ref| game_data.get_string(str_ref));
+        let label = row_string(game_data, &row, name_column)
+            .or_else(|| row_str(&row, "label").filter(|s| !s.starts_with("DEL_")));
 
-        let label = name.or_else(|| {
-            row.get("label")
-                .and_then(|v| v.clone())
-                .filter(|s| !s.is_empty() && !s.starts_with("DEL_"))
-        });
-
-        if let Some(skill_name) = label.filter(|s| !is_invalid_label(s)) {
-            skills.insert(row_idx as u32, skill_name);
+        if let Some(name) = label.filter(|s| !is_invalid_label(s)) {
+            names.insert(row_idx as u32, name);
         }
     }
-    skills
-}
-
-/// Load classes from game data classes.2da table.
-fn load_classes_from_game_data(game_data: &crate::loaders::GameData) -> HashMap<u32, String> {
-    let mut classes = HashMap::new();
-    let Some(class_table) = game_data.get_table("classes") else {
-        return classes;
-    };
-
-    for row_idx in 0..class_table.row_count() {
-        let Ok(row) = class_table.get_row(row_idx) else {
-            continue;
-        };
-
-        let name: Option<String> = row
-            .get("name")
-            .and_then(|v| v.as_ref())
-            .and_then(|s| s.parse::<i32>().ok())
-            .and_then(|str_ref| game_data.get_string(str_ref));
-
-        let label = name.or_else(|| {
-            row.get("label")
-                .and_then(|v| v.clone())
-                .filter(|s| !s.is_empty() && !s.starts_with("DEL_"))
-        });
-
-        if let Some(class_name) = label.filter(|s| !is_invalid_label(s)) {
-            classes.insert(row_idx as u32, class_name);
-        }
-    }
-    classes
-}
-
-/// Load racial types from game data racialtypes.2da table.
-fn load_racial_groups_from_game_data(game_data: &crate::loaders::GameData) -> HashMap<u32, String> {
-    let mut races = HashMap::new();
-    let Some(race_table) = game_data.get_table("racialtypes") else {
-        return races;
-    };
-
-    for row_idx in 0..race_table.row_count() {
-        let Ok(row) = race_table.get_row(row_idx) else {
-            continue;
-        };
-
-        let name: Option<String> = row
-            .get("name")
-            .and_then(|v| v.as_ref())
-            .and_then(|s| s.parse::<i32>().ok())
-            .and_then(|str_ref| game_data.get_string(str_ref));
-
-        let label = name.or_else(|| {
-            row.get("label")
-                .and_then(|v| v.clone())
-                .filter(|s| !s.is_empty() && !s.starts_with("DEL_"))
-        });
-
-        if let Some(race_name) = label.filter(|s| !is_invalid_label(s)) {
-            races.insert(row_idx as u32, race_name);
-        }
-    }
-    races
-}
-
-/// Load feats from game data feat.2da table.
-fn load_feats_from_game_data(game_data: &crate::loaders::GameData) -> HashMap<u32, String> {
-    let mut feats = HashMap::new();
-    let Some(feat_table) = game_data.get_table("feat") else {
-        return feats;
-    };
-
-    for row_idx in 0..feat_table.row_count() {
-        let Ok(row) = feat_table.get_row(row_idx) else {
-            continue;
-        };
-
-        let name: Option<String> = row
-            .get("feat")
-            .and_then(|v| v.as_ref())
-            .and_then(|s| s.parse::<i32>().ok())
-            .and_then(|str_ref| game_data.get_string(str_ref));
-
-        let label = name.or_else(|| {
-            row.get("label")
-                .and_then(|v| v.clone())
-                .filter(|s| !s.is_empty() && !s.starts_with("DEL_"))
-        });
-
-        if let Some(feat_name) = label.filter(|s| !is_invalid_label(s)) {
-            feats.insert(row_idx as u32, feat_name);
-        }
-    }
-    feats
+    names
 }
 
 /// Get editor metadata for the item property editor.
 #[tauri::command]
-pub fn get_editor_metadata(
+pub async fn get_editor_metadata(
     state: State<'_, AppState>,
 ) -> CommandResult<ItemEditorMetadataResponse> {
-    let rm = state.resource_manager.blocking_read();
+    ensure_decoder_initialized(&state).await;
 
-    let abilities = load_2da_options_from_rm(&rm, "iprp_abilities");
-    let saving_throws = load_2da_options_from_rm(&rm, "iprp_savingthrow");
-    let damage_types = load_2da_options_from_rm(&rm, "iprp_damagetype");
-    let immunity_types = load_2da_options_from_rm(&rm, "iprp_immunity");
-    let save_elements = load_2da_options_from_rm(&rm, "iprp_saveelement");
-    let alignment_groups = load_2da_options_from_rm(&rm, "iprp_aligngrp");
-    let alignments = load_2da_options_from_rm(&rm, "iprp_alignment");
-    let light = load_2da_options_from_rm(&rm, "iprp_lightcost");
-
-    let (skills, classes, racial_groups, feats) = {
-        let game_data = state.game_data.read();
-        (
-            load_skills_from_game_data(&game_data),
-            load_classes_from_game_data(&game_data),
-            load_racial_groups_from_game_data(&game_data),
-            load_feats_from_game_data(&game_data),
-        )
-    };
-
-    let spells = load_2da_options_from_rm(&rm, "iprp_spells");
-
-    {
-        let mut session = state.session.write();
-        session.item_property_decoder.initialize_with_rm(&rm);
-        session.item_property_decoder.set_lookup_tables(
-            skills.clone(),
-            classes.clone(),
-            feats.clone(),
-            spells.clone(),
-            racial_groups.clone(),
-        );
-    }
+    let rm = state.resource_manager.read().await;
+    let game_data = state.game_data.read();
+    let session = state.session.read();
 
     let context = EditorContext {
-        abilities: abilities.clone(),
-        skills: skills.clone(),
-        spells: spells.clone(),
-        damage_types: damage_types.clone(),
-        immunity_types: immunity_types.clone(),
-        saving_throws: saving_throws.clone(),
-        save_elements: save_elements.clone(),
-        classes: classes.clone(),
-        racial_groups: racial_groups.clone(),
-        alignment_groups: alignment_groups.clone(),
-        alignments: alignments.clone(),
-        light: light.clone(),
-        feats: feats.clone(),
+        abilities: load_2da_options_from_rm(&rm, "iprp_abilities"),
+        skills: load_names_from_game_data(&game_data, "skills", "name"),
+        spells: load_2da_options_from_rm(&rm, "iprp_spells"),
+        damage_types: load_2da_options_from_rm(&rm, "iprp_damagetype"),
+        immunity_types: load_2da_options_from_rm(&rm, "iprp_immunity"),
+        saving_throws: load_2da_options_from_rm(&rm, "iprp_savingthrow"),
+        save_elements: load_2da_options_from_rm(&rm, "iprp_saveelement"),
+        classes: load_names_from_game_data(&game_data, "classes", "name"),
+        racial_groups: load_names_from_game_data(&game_data, "racialtypes", "name"),
+        alignment_groups: load_2da_options_from_rm(&rm, "iprp_aligngrp"),
+        alignments: load_2da_options_from_rm(&rm, "iprp_alignment"),
+        light: load_2da_options_from_rm(&rm, "iprp_lightcost"),
+        feats: load_names_from_game_data(&game_data, "feat", "feat"),
     };
 
-    let property_types = {
-        let session = state.session.read();
-        session
-            .item_property_decoder
-            .get_editor_property_metadata_with_rm(&context, &rm)
-    };
+    let property_types = session
+        .item_property_decoder
+        .get_editor_property_metadata_with_rm(&context, &rm);
 
     Ok(ItemEditorMetadataResponse {
         property_types,
-        abilities,
-        skills,
-        damage_types,
-        alignment_groups,
-        alignments,
-        racial_groups,
-        saving_throws,
-        save_elements,
-        immunity_types,
-        classes,
-        spells,
-        light,
+        abilities: context.abilities,
+        skills: context.skills,
+        damage_types: context.damage_types,
+        alignment_groups: context.alignment_groups,
+        racial_groups: context.racial_groups,
+        saving_throws: context.saving_throws,
+        immunity_types: context.immunity_types,
+        classes: context.classes,
+        spells: context.spells,
     })
 }
 
@@ -895,64 +638,44 @@ pub struct UpdateItemRequest {
     pub appearance: Option<crate::character::ItemAppearance>,
 }
 
-#[derive(Debug, Serialize, Type)]
-pub struct UpdateItemResponse {
-    pub success: bool,
-    pub message: String,
-    pub has_unsaved_changes: bool,
-}
-
 #[tauri::command]
 pub async fn update_item(
     state: State<'_, AppState>,
     request: UpdateItemRequest,
-) -> CommandResult<UpdateItemResponse> {
+) -> CommandResult<()> {
     let game_data = state.game_data.read();
-
     let mut session = state.session.write();
     let label = match (&request.slot, request.item_index) {
         (Some(slot), _) => format!("Update item at slot {slot}"),
         (None, Some(idx)) => format!("Update item at slot {idx}"),
         _ => "Update item".to_string(),
     };
-    session.record_history(label);
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    if let Some(slot_str) = &request.slot {
-        let slot = parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
-            field: "slot".to_string(),
-            expected: "valid equipment slot".to_string(),
-            actual: slot_str.clone(),
-        })?;
-        character.update_equipped_item(slot, &request.item_data, &game_data)?;
-        if let Some(appearance) = &request.appearance {
-            character.apply_equipped_item_appearance(slot, appearance, &game_data)?;
+    session.record_edit(label, |character| {
+        if let Some(slot_str) = &request.slot {
+            let slot =
+                parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
+                    field: "slot".to_string(),
+                    expected: "valid equipment slot".to_string(),
+                    actual: slot_str.clone(),
+                })?;
+            character.update_equipped_item(slot, &request.item_data, &game_data)?;
+            if let Some(appearance) = &request.appearance {
+                character.apply_equipped_item_appearance(slot, appearance, &game_data)?;
+            }
+        } else if let Some(index) = request.item_index {
+            character.update_inventory_item(index, &request.item_data, &game_data)?;
+            if let Some(appearance) = &request.appearance {
+                character.apply_inventory_item_appearance(index, appearance, &game_data)?;
+            }
+        } else {
+            return Err(CommandError::InvalidValue {
+                field: "request".to_string(),
+                expected: "either slot or item_index".to_string(),
+                actual: "neither provided".to_string(),
+            });
         }
-        Ok(UpdateItemResponse {
-            success: true,
-            message: format!("Updated equipped item in {}", slot.display_name()),
-            has_unsaved_changes: true,
-        })
-    } else if let Some(index) = request.item_index {
-        character.update_inventory_item(index, &request.item_data, &game_data)?;
-        if let Some(appearance) = &request.appearance {
-            character.apply_inventory_item_appearance(index, appearance, &game_data)?;
-        }
-        Ok(UpdateItemResponse {
-            success: true,
-            message: "Updated inventory item".to_string(),
-            has_unsaved_changes: true,
-        })
-    } else {
-        Err(CommandError::InvalidValue {
-            field: "request".to_string(),
-            expected: "either slot or item_index".to_string(),
-            actual: "neither provided".to_string(),
-        })
-    }
+        Ok(())
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -971,26 +694,23 @@ pub async fn transform_item(
 
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    session.record_history(format!("Transform item into {item_label}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    if let Some(slot_str) = &request.slot {
-        let slot = parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
-            field: "slot".to_string(),
-            expected: "valid equipment slot".to_string(),
-            actual: slot_str.clone(),
-        })?;
-        Ok(character.transform_equipped_item(slot, item_fields, &game_data)?)
-    } else if let Some(index) = request.item_index {
-        Ok(character.transform_inventory_item(index, item_fields, &game_data)?)
-    } else {
-        Err(CommandError::InvalidValue {
-            field: "request".to_string(),
-            expected: "either slot or item_index".to_string(),
-            actual: "neither provided".to_string(),
-        })
-    }
+    session.record_edit(format!("Transform item into {item_label}"), |character| {
+        if let Some(slot_str) = &request.slot {
+            let slot =
+                parse_equipment_slot(slot_str).ok_or_else(|| CommandError::InvalidValue {
+                    field: "slot".to_string(),
+                    expected: "valid equipment slot".to_string(),
+                    actual: slot_str.clone(),
+                })?;
+            Ok(character.transform_equipped_item(slot, item_fields, &game_data)?)
+        } else if let Some(index) = request.item_index {
+            Ok(character.transform_inventory_item(index, item_fields, &game_data)?)
+        } else {
+            Err(CommandError::InvalidValue {
+                field: "request".to_string(),
+                expected: "either slot or item_index".to_string(),
+                actual: "neither provided".to_string(),
+            })
+        }
+    })
 }

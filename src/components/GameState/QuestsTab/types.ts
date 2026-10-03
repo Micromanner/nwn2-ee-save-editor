@@ -265,7 +265,5 @@ export interface SaveGraph {
   campaign: CampaignSummary;
   modules: AggregatedModule[];
   quests: QuestSummary[];
-  globals: XmlData;
-  current_module_variables: LiveModuleVar[];
   orphans: OrphanNote[];
 }

@@ -1255,35 +1255,6 @@ impl Character {
         Ok(removed)
     }
 
-    pub fn change_cleric_domains(
-        &mut self,
-        old_domain_ids: &[DomainId],
-        new_domain_ids: &[DomainId],
-        game_data: &GameData,
-    ) -> Result<(Vec<FeatId>, Vec<FeatId>), CharacterError> {
-        let old_set: std::collections::HashSet<_> = old_domain_ids.iter().collect();
-        let new_set: std::collections::HashSet<_> = new_domain_ids.iter().collect();
-
-        let mut removed = Vec::new();
-        let mut added = Vec::new();
-
-        for domain_id in old_domain_ids {
-            if !new_set.contains(domain_id) {
-                let feats = self.remove_domain(*domain_id, game_data)?;
-                removed.extend(feats);
-            }
-        }
-
-        for domain_id in new_domain_ids {
-            if !old_set.contains(domain_id) {
-                let feats = self.add_domain(*domain_id, game_data)?;
-                added.extend(feats);
-            }
-        }
-
-        Ok((removed, added))
-    }
-
     // ========== FEAT SLOTS CALCULATION (Blueprint Method) ==========
 
     const QUICK_TO_MASTER_FEAT_ID: i32 = 258;
@@ -1581,16 +1552,6 @@ impl Character {
         }
 
         row_str(&feat_data, "label").unwrap_or_else(|| format!("Feat {}", feat_id.0))
-    }
-
-    pub fn get_domain_name(&self, domain_id: DomainId, game_data: &GameData) -> String {
-        let Some(domains_table) = game_data.get_table("domains") else {
-            return format!("#{}", domain_id.0);
-        };
-        let Some(domain_data) = domains_table.get_by_id(domain_id.0) else {
-            return format!("#{}", domain_id.0);
-        };
-        Self::resolve_domain_name(&domain_data, game_data)
     }
 
     // ========== BONUS CALCULATION FROM FEAT DESCRIPTIONS ==========

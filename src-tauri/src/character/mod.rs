@@ -61,7 +61,7 @@ pub use item_appearance::{
 };
 pub use overview::OverviewState;
 pub use pets::{PetSlot, PetTypeOption, PetsState};
-pub use race::{SizeCategory, SubraceInfo};
+pub use race::SizeCategory;
 pub use save_summary::{SaveBreakdown, SaveChange, SaveSummary, SaveType, SavingThrows};
 pub use saves::SaveBonuses;
 pub use skills::{ABLE_LEARNER_FEAT_ID, SkillPointsSummary, SkillSummaryEntry};
@@ -169,56 +169,6 @@ impl Character {
                 Err(e)
             }
         }
-    }
-
-    /// Basic character validation.
-    ///
-    /// Performs fundamental checks to ensure character integrity.
-    /// Returns ValidationResult with errors/warnings.
-    pub fn validate(&self, game_data: &crate::loaders::GameData) -> ValidationResult {
-        let mut result = ValidationResult::ok();
-
-        if self.first_name().is_empty() {
-            result.add_warning("Character has no first name");
-        }
-
-        let race_id = self.race_id();
-        if game_data.get_table("racialtypes").is_some()
-            && let Some(races) = game_data.get_table("racialtypes")
-            && races.get_by_id(race_id.0).is_none()
-        {
-            result.add_error(format!("Invalid race ID: {}", race_id.0));
-        }
-
-        let level = self.total_level();
-        if level < 1 {
-            result.add_error("Character level is less than 1");
-        }
-        if level > types::MAX_TOTAL_LEVEL {
-            result.add_error(format!(
-                "Character level {} exceeds maximum {}",
-                level,
-                types::MAX_TOTAL_LEVEL
-            ));
-        }
-
-        let alignment = self.alignment();
-        if alignment.law_chaos < types::ALIGNMENT_MIN || alignment.law_chaos > types::ALIGNMENT_MAX
-        {
-            result.add_error(format!(
-                "Law/Chaos alignment {} out of range",
-                alignment.law_chaos
-            ));
-        }
-        if alignment.good_evil < types::ALIGNMENT_MIN || alignment.good_evil > types::ALIGNMENT_MAX
-        {
-            result.add_error(format!(
-                "Good/Evil alignment {} out of range",
-                alignment.good_evil
-            ));
-        }
-
-        result
     }
 }
 

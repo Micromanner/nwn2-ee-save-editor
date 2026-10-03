@@ -3,8 +3,6 @@ pub mod content;
 pub mod globals;
 pub mod settings;
 
-// use tracing::error;
-
 use self::backup::{
     backup_campaign_variables, list_campaign_variable_backups as list_cv_bk,
     list_module_backups as list_module_bk, restore_campaign_variable_backup as restore_cv_bk,
@@ -13,7 +11,7 @@ use self::backup::{
 use self::content::{
     ModuleInfo, ModuleSummary, ModuleVariables,
     batch_update_module_variables as batch_update_mod_vars, extract_module_info,
-    extract_module_info_by_id, list_modules as list_mods, update_module_variable as update_mod_var,
+    extract_module_info_by_id, list_modules as list_mods,
 };
 use self::globals::GlobalsParser;
 use self::settings::{
@@ -91,41 +89,7 @@ impl CampaignManager {
         name: &str,
         value: i32,
     ) -> Result<(), String> {
-        if let Err(e) = backup_campaign_variables(handler) {
-            tracing::warn!("Failed to backup globals.xml: {}", e);
-        }
-
-        let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
-        let mut parser = GlobalsParser::from_string(&xml_content)?;
-
-        parser.data.integers.insert(name.to_string(), value);
-
-        let new_xml = parser.to_xml_string()?;
-        handler
-            .update_file("globals.xml", new_xml.as_bytes())
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub fn update_global_float(
-        handler: &mut SaveGameHandler,
-        name: &str,
-        value: f32,
-    ) -> Result<(), String> {
-        if let Err(e) = backup_campaign_variables(handler) {
-            tracing::warn!("Failed to backup globals.xml: {}", e);
-        }
-
-        let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
-        let mut parser = GlobalsParser::from_string(&xml_content)?;
-
-        parser.data.floats.insert(name.to_string(), value);
-
-        let new_xml = parser.to_xml_string()?;
-        handler
-            .update_file("globals.xml", new_xml.as_bytes())
-            .map_err(|e| e.to_string())?;
-        Ok(())
+        Self::update_campaign_variable(handler, name, &value.to_string(), "int")
     }
 
     pub fn update_global_string(
@@ -133,23 +97,7 @@ impl CampaignManager {
         name: &str,
         value: &str,
     ) -> Result<(), String> {
-        if let Err(e) = backup_campaign_variables(handler) {
-            tracing::warn!("Failed to backup globals.xml: {}", e);
-        }
-
-        let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
-        let mut parser = GlobalsParser::from_string(&xml_content)?;
-
-        parser
-            .data
-            .strings
-            .insert(name.to_string(), value.to_string());
-
-        let new_xml = parser.to_xml_string()?;
-        handler
-            .update_file("globals.xml", new_xml.as_bytes())
-            .map_err(|e| e.to_string())?;
-        Ok(())
+        Self::update_campaign_variable(handler, name, value, "string")
     }
 
     /// Influence as it will be once the pending quest edits are saved.
@@ -164,28 +112,21 @@ impl CampaignManager {
         Ok(parser.get_companion_status(&ros_names))
     }
 
-    /// Returns the global the influence is stored in.
+    /// The global the companion's influence is stored in.
+    pub fn companion_influence_var(companion_id: &str) -> Result<&'static str, String> {
+        get_companion_definitions()
+            .get(companion_id)
+            .map(|def| def.influence_var)
+            .ok_or_else(|| format!("Unknown companion: {companion_id}"))
+    }
+
     pub fn update_companion_influence(
         handler: &mut SaveGameHandler,
         companion_id: &str,
         new_influence: i32,
-    ) -> Result<&'static str, String> {
-        let defs = get_companion_definitions();
-        let def = defs
-            .get(companion_id)
-            .ok_or_else(|| format!("Unknown companion: {companion_id}"))?;
-        Self::update_global_int(handler, def.influence_var, new_influence)?;
-        Ok(def.influence_var)
-    }
-
-    pub fn update_module_variable(
-        handler: &SaveGameHandler,
-        var_name: &str,
-        value: &str,
-        var_type: &str,
-        module_id: Option<&str>,
     ) -> Result<(), String> {
-        update_mod_var(handler, var_name, value, var_type, module_id)
+        let variable = Self::companion_influence_var(companion_id)?;
+        Self::update_global_int(handler, variable, new_influence)
     }
 
     pub fn batch_update_module_variables(
@@ -217,22 +158,14 @@ impl CampaignManager {
         value: &str,
         var_type: &str,
     ) -> Result<(), String> {
-        match var_type {
-            "int" => {
-                let v: i32 = value
-                    .parse()
-                    .map_err(|e| format!("Invalid int value: {e}"))?;
-                Self::update_global_int(handler, var_name, v)
-            }
-            "float" => {
-                let v: f32 = value
-                    .parse()
-                    .map_err(|e| format!("Invalid float value: {e}"))?;
-                Self::update_global_float(handler, var_name, v)
-            }
-            "string" => Self::update_global_string(handler, var_name, value),
-            _ => Err(format!("Unknown variable type: {var_type}")),
-        }
+        Self::batch_update_campaign_variables(
+            handler,
+            &[(
+                var_name.to_string(),
+                value.to_string(),
+                var_type.to_string(),
+            )],
+        )
     }
 
     pub fn batch_update_campaign_variables(
@@ -243,9 +176,7 @@ impl CampaignManager {
             return Ok(());
         }
 
-        if let Err(e) = backup_campaign_variables(handler) {
-            tracing::warn!("Failed to backup globals.xml: {}", e);
-        }
+        backup_campaign_variables(handler)?;
 
         let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
         let mut parser = GlobalsParser::from_string(&xml_content)?;

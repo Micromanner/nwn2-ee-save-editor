@@ -1,172 +1,54 @@
 use crate::character::types::{ClassId, SpellId};
-use crate::character::{
-    MemorizedSpellRaw, SpellDetails, SpellSummary, is_displayable_spell, is_mod_prefixed_name,
-};
+use crate::character::{Character, is_displayable_spell, is_mod_prefixed_name};
 use crate::commands::{CommandError, CommandResult};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tauri::State;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SpellAction {
-    Learned,
-    Forgotten,
-    Prepared,
-    Unprepared,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpellChangeResult {
-    pub spell_id: SpellId,
-    pub action: SpellAction,
-    pub success: bool,
-    pub message: String,
-}
-
-#[tauri::command]
-pub async fn is_spellcaster(state: State<'_, AppState>, class_id: i32) -> CommandResult<bool> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.is_spellcaster(ClassId(class_id), &game_data))
-}
-
-#[tauri::command]
-pub async fn get_spell_summary(state: State<'_, AppState>) -> CommandResult<SpellSummary> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character
-        .get_spells_state(&game_data, &session.item_property_decoder)
-        .spell_summary)
-}
-
-#[tauri::command]
-pub async fn get_known_spells(
-    state: State<'_, AppState>,
-    class_id: i32,
-    spell_level: i32,
-) -> CommandResult<Vec<SpellId>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_all_known_spells(ClassId(class_id), spell_level, &game_data))
-}
-
-#[tauri::command]
-pub fn get_class_available_spells(
-    state: State<'_, AppState>,
-    class_id: i32,
-    spell_level: i32,
-) -> CommandResult<Vec<SpellId>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_spells_available_to_class(ClassId(class_id), spell_level, &game_data))
-}
-
-#[tauri::command]
-pub async fn get_memorized_spells(
-    state: State<'_, AppState>,
-    class_id: i32,
-    spell_level: i32,
-) -> CommandResult<Vec<MemorizedSpellRaw>> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.memorized_spells(ClassId(class_id), spell_level))
-}
-
-#[tauri::command]
-pub async fn get_domain_spells(
-    state: State<'_, AppState>,
-    class_id: i32,
-) -> CommandResult<HashMap<i32, Vec<SpellId>>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_domain_spells(ClassId(class_id), &game_data))
-}
-
-#[tauri::command]
-pub async fn get_spell_details(
-    state: State<'_, AppState>,
+fn spell_edit_label(
+    character: &crate::character::Character,
+    game_data: &crate::loaders::GameData,
+    verb: &str,
+    class_index: usize,
     spell_id: i32,
-) -> CommandResult<SpellDetails> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    character
-        .get_spell_details(SpellId(spell_id), &game_data)
-        .ok_or_else(|| CommandError::NotFound {
-            item: format!("Spell {spell_id}"),
-        })
+) -> String {
+    let spell_label = character.get_spell_name(SpellId(spell_id), game_data);
+    let class_label = character
+        .class_entries()
+        .get(class_index)
+        .map(|e| character.get_class_name(e.class_id, game_data))
+        .unwrap_or_else(|| format!("#{class_index}"));
+    format!("{verb} {spell_label} ({class_label})")
 }
 
 #[tauri::command]
 pub async fn add_known_spell(
     state: State<'_, AppState>,
     class_index: usize,
-    spell_level: i32,
     spell_id: i32,
-) -> CommandResult<SpellChangeResult> {
+) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    let (spell_label, class_label) = {
-        let character = session
+    let label = spell_edit_label(
+        session
             .character
             .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        let spell_label = character.get_spell_name(SpellId(spell_id), &game_data);
-        let class_label = character
-            .class_entries()
-            .get(class_index)
-            .map(|e| character.get_class_name(e.class_id, &game_data))
-            .unwrap_or_else(|| format!("#{class_index}"));
-        (spell_label, class_label)
-    };
-    session.record_history(format!("Learn {spell_label} ({class_label})"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    match character.add_known_spell(class_index, spell_level, SpellId(spell_id), &game_data) {
-        Ok(()) => Ok(SpellChangeResult {
-            spell_id: SpellId(spell_id),
-            action: SpellAction::Learned,
-            success: true,
-            message: "Spell added successfully".to_string(),
-        }),
-        Err(e) => Ok(SpellChangeResult {
-            spell_id: SpellId(spell_id),
-            action: SpellAction::Learned,
-            success: false,
-            message: e.to_string(),
-        }),
-    }
+            .ok_or(CommandError::NoCharacterLoaded)?,
+        &game_data,
+        "Learn",
+        class_index,
+        spell_id,
+    );
+    session.record_edit(label, |character| {
+        let spell_level = character
+            .spell_level_for_class_index(class_index, SpellId(spell_id), &game_data)
+            .ok_or_else(|| CommandError::InvalidValue {
+                field: "spell_id".to_string(),
+                expected: "a spell on the class's spell list".to_string(),
+                actual: spell_id.to_string(),
+            })?;
+        Ok(character.add_known_spell(class_index, spell_level, SpellId(spell_id), &game_data)?)
+    })
 }
 
 #[tauri::command]
@@ -175,123 +57,36 @@ pub async fn remove_known_spell(
     class_index: usize,
     spell_level: i32,
     spell_id: i32,
-) -> CommandResult<SpellChangeResult> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    let (spell_label, class_label) = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        let spell_label = character.get_spell_name(SpellId(spell_id), &game_data);
-        let class_label = character
-            .class_entries()
-            .get(class_index)
-            .map(|e| character.get_class_name(e.class_id, &game_data))
-            .unwrap_or_else(|| format!("#{class_index}"));
-        (spell_label, class_label)
-    };
-    session.record_history(format!("Forget {spell_label} ({class_label})"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    match character.remove_known_spell(class_index, spell_level, SpellId(spell_id), &game_data) {
-        Ok(()) => Ok(SpellChangeResult {
-            spell_id: SpellId(spell_id),
-            action: SpellAction::Forgotten,
-            success: true,
-            message: "Spell removed successfully".to_string(),
-        }),
-        Err(e) => Ok(SpellChangeResult {
-            spell_id: SpellId(spell_id),
-            action: SpellAction::Forgotten,
-            success: false,
-            message: e.to_string(),
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn prepare_spell(
-    state: State<'_, AppState>,
-    class_index: usize,
-    spell_level: i32,
-    spell_id: i32,
-    metamagic: u32,
-    ready: bool,
-) -> CommandResult<SpellChangeResult> {
-    let game_data = state.game_data.read();
-    let mut session = state.session.write();
-    let spell_label = {
-        let character = session
-            .character
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character.get_spell_name(SpellId(spell_id), &game_data)
-    };
-    session.record_history(format!("Prepare {spell_label}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    let spell = MemorizedSpellRaw {
-        spell_id: SpellId(spell_id),
-        meta_magic: metamagic,
-        ready,
-    };
-
-    match character.add_memorized_spell(class_index, spell_level, spell) {
-        Ok(()) => Ok(SpellChangeResult {
-            spell_id: SpellId(spell_id),
-            action: SpellAction::Prepared,
-            success: true,
-            message: "Spell prepared successfully".to_string(),
-        }),
-        Err(e) => Ok(SpellChangeResult {
-            spell_id: SpellId(spell_id),
-            action: SpellAction::Prepared,
-            success: false,
-            message: e.to_string(),
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn clear_memorized_spells(
-    state: State<'_, AppState>,
-    class_index: usize,
-    spell_level: Option<i32>,
 ) -> CommandResult<()> {
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    let class_label = {
-        let character = session
+    let label = spell_edit_label(
+        session
             .character
             .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-        character
-            .class_entries()
-            .get(class_index)
-            .map(|e| character.get_class_name(e.class_id, &game_data))
-            .unwrap_or_else(|| format!("#{class_index}"))
-    };
-    session.record_history(format!("Clear prepared spells: {class_label}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
+            .ok_or(CommandError::NoCharacterLoaded)?,
+        &game_data,
+        "Forget",
+        class_index,
+        spell_id,
+    );
+    session.record_edit(label, |character| {
+        Ok(
+            character.remove_known_spell(
+                class_index,
+                spell_level,
+                SpellId(spell_id),
+                &game_data,
+            )?,
+        )
+    })
+}
 
-    match spell_level {
-        Some(level) => character
-            .clear_memorized_spells(class_index, level)
-            .map_err(CommandError::from),
-        None => character
-            .clear_all_memorized_spells(class_index)
-            .map_err(CommandError::from),
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpellClassLevel {
+    pub class_id: i32,
+    pub class_name: String,
+    pub level: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,8 +97,7 @@ pub struct AvailableSpellInfo {
     pub icon: String,
     pub school_id: Option<i32>,
     pub school_name: Option<String>,
-    pub level: i32,
-    pub available_classes: Vec<String>,
+    pub class_levels: Vec<SpellClassLevel>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -331,10 +125,9 @@ pub async fn get_character_available_spells(
     spell_level: Option<i32>,
     school_ids: Option<Vec<i32>>,
     search: Option<String>,
-    show_all: Option<bool>,
 ) -> CommandResult<AvailableSpellsResponse> {
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -342,7 +135,6 @@ pub async fn get_character_available_spells(
 
     let page = page.unwrap_or(1).max(1);
     let limit = limit.unwrap_or(50).clamp(10, 10000);
-    let show_all = show_all.unwrap_or(false);
 
     let spells_table = game_data
         .get_table("spells")
@@ -364,7 +156,7 @@ pub async fn get_character_available_spells(
         })
         .collect();
 
-    if !show_all && class_columns.is_empty() {
+    if class_columns.is_empty() {
         return Ok(AvailableSpellsResponse {
             spells: vec![],
             pagination: PaginationInfo {
@@ -393,65 +185,36 @@ pub async fn get_character_available_spells(
         // Only include spells on a traditional caster class list - excludes Warlock
         // invocations, Stormlord abilities, and other class features that only appear
         // in Warlock/Innate columns
-        let on_caster_list = learnable_class_labels.iter().any(|(col, _)| {
-            spell_row
-                .get(col.as_str())
-                .and_then(|v| v.as_ref())
-                .is_some_and(|v| {
-                    !v.is_empty() && v != "****" && v.parse::<i32>().is_ok_and(|n| n >= 0)
-                })
-        });
+        let on_caster_list = learnable_class_labels
+            .iter()
+            .any(|(col, _)| Character::spell_level_in_row(&spell_row, col).is_some());
         if !on_caster_list {
             continue;
         }
 
-        // Check which classes can cast this spell and at what level
-        let mut available_classes: Vec<String> = Vec::new();
-        let mut found_level: Option<i32> = None;
-
-        if show_all {
-            for (col, class_name) in &learnable_class_labels {
-                if let Some(level_str) = spell_row.get(col.as_str()).and_then(|v| v.as_ref())
-                    && let Ok(lvl) = level_str.parse::<i32>()
-                    && lvl >= 0
-                {
-                    if let Some(filter_level) = spell_level
-                        && lvl != filter_level
-                    {
-                        continue;
-                    }
-                    available_classes.push(class_name.clone());
-                    if found_level.is_none() {
-                        found_level = Some(lvl);
-                    }
-                }
+        let mut class_levels: Vec<SpellClassLevel> = Vec::new();
+        for (cid, col, class_name) in &class_columns {
+            if let Some(filter_class) = class_id
+                && cid.0 != filter_class
+            {
+                continue;
             }
-        } else {
-            for (cid, col, class_name) in &class_columns {
-                if let Some(filter_class) = class_id
-                    && cid.0 != filter_class
+
+            if let Some(lvl) = Character::spell_level_in_row(&spell_row, col) {
+                if let Some(filter_level) = spell_level
+                    && lvl != filter_level
                 {
                     continue;
                 }
-
-                if let Some(level_str) = spell_row.get(col).and_then(|v| v.as_ref())
-                    && let Ok(lvl) = level_str.parse::<i32>()
-                    && lvl >= 0
-                {
-                    if let Some(filter_level) = spell_level
-                        && lvl != filter_level
-                    {
-                        continue;
-                    }
-                    available_classes.push(class_name.clone());
-                    if found_level.is_none() {
-                        found_level = Some(lvl);
-                    }
-                }
+                class_levels.push(SpellClassLevel {
+                    class_id: cid.0,
+                    class_name: class_name.clone(),
+                    level: lvl,
+                });
             }
         }
 
-        if available_classes.is_empty() {
+        if class_levels.is_empty() {
             continue;
         }
 
@@ -550,8 +313,7 @@ pub async fn get_character_available_spells(
             icon,
             school_id,
             school_name,
-            level: found_level.unwrap_or(0),
-            available_classes,
+            class_levels,
         });
     }
 
@@ -581,17 +343,4 @@ pub async fn get_character_available_spells(
             has_previous: page > 1,
         },
     })
-}
-
-#[tauri::command]
-pub async fn get_character_ability_spells(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<crate::character::AbilitySpellEntry>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_ability_spells(&game_data))
 }

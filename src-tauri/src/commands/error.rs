@@ -90,7 +90,48 @@ impl From<&str> for CommandError {
 
 impl From<crate::character::CharacterError> for CommandError {
     fn from(e: crate::character::CharacterError) -> Self {
-        Self::Internal(e.to_string())
+        use crate::character::CharacterError;
+        let reason = e.to_string();
+        match e {
+            CharacterError::OutOfRange {
+                field,
+                value,
+                min,
+                max,
+            } => Self::InvalidValue {
+                field: field.to_string(),
+                expected: format!("{min}-{max}"),
+                actual: value.to_string(),
+            },
+            CharacterError::ValidationFailed { field, message } => Self::ValidationError {
+                field: field.to_string(),
+                reason: message,
+            },
+            CharacterError::NotFound { entity, id } => Self::NotFound {
+                item: format!("{entity} {id}"),
+            },
+            CharacterError::FeatNotFound(id) => Self::NotFound {
+                item: format!("feat {id}"),
+            },
+            CharacterError::TableNotFound(table) => Self::NotFound { item: table },
+            CharacterError::AlreadyExists { entity, id } => Self::AlreadyExists {
+                item: format!("{entity} {id}"),
+            },
+            CharacterError::FeatAlreadyExists(id) => Self::AlreadyExists {
+                item: format!("feat {id}"),
+            },
+            CharacterError::Protected { entity, .. } => Self::OperationFailed {
+                operation: entity.to_string(),
+                reason,
+            },
+            CharacterError::InvalidOperation(message) => Self::OperationFailed {
+                operation: "edit".to_string(),
+                reason: message,
+            },
+            CharacterError::FieldMissing { .. } | CharacterError::Internal(_) => {
+                Self::Internal(reason)
+            }
+        }
     }
 }
 

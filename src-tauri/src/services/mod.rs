@@ -33,8 +33,7 @@ pub use item_property_decoder::{
 };
 
 pub use class_categorizer::{
-    Categories, CategorizedClasses, ClassFocus, ClassInfo, ClassType, FocusInfo,
-    get_categorized_classes,
+    Categories, ClassFocus, ClassInfo, ClassType, FocusInfo, get_categorized_classes,
 };
 
 pub use item_cost_calculator::ItemCostCalculator;

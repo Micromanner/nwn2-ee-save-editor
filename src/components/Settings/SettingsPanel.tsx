@@ -4,7 +4,7 @@ import {
 } from '@blueprintjs/core';
 import { GiFullFolder, GiCheckMark, GiBrokenShield } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
-import { open } from '@tauri-apps/plugin-dialog';
+import { ask, open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useLocale } from '@/providers/LocaleProvider';
@@ -13,8 +13,17 @@ import { usePathsChangedEvent } from '@/hooks/usePathsChangedEvent';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useUpdateCheck } from '@/hooks/useUpdateCheck';
 import { pathService, PathConfig } from '@/lib/api/paths';
+import { CharacterStateAPI } from '@/lib/api/character-state';
 import { T } from '../theme';
 import { KVRow, ParchmentDialog } from '../shared';
+
+async function confirmDiscardUnsaved(t: (key: string) => string): Promise<boolean> {
+  if (!(await CharacterStateAPI.hasUnsavedChanges())) return true;
+  return ask(t('settings.unsavedChanges.warning'), {
+    title: t('settings.unsavedChanges.title'),
+    kind: 'warning',
+  });
+}
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -156,6 +165,7 @@ function GeneralTab() {
   const [language, setLanguage] = useState('en');
   const [debugExporting, setDebugExporting] = useState(false);
   const [debugResult, setDebugResult] = useState<{ success: boolean; message: string } | null>(null);
+  const { handleError } = useErrorHandler();
 
   useEffect(() => {
     invoke<{ language: string }>('get_app_config')
@@ -165,10 +175,16 @@ function GeneralTab() {
       .catch(() => {});
   }, []);
 
-  const handleLanguageChange = (newLocale: string) => {
-    setLanguage(newLocale);
-    setLocale(newLocale);
-    invoke('update_app_config', { updates: { language: newLocale } }).catch(() => {});
+  const handleLanguageChange = async (newLocale: string) => {
+    if (newLocale === language) return;
+    try {
+      if (!(await confirmDiscardUnsaved(t))) return;
+      await invoke('update_app_config', { updates: { language: newLocale } });
+      setLanguage(newLocale);
+      setLocale(newLocale);
+    } catch (error) {
+      handleError(error);
+    }
   };
 
   const handleFontSizeChange = (size: string) => {
@@ -183,12 +199,12 @@ function GeneralTab() {
           <Popover
             content={
               <Menu>
-                <MenuItem text={t('settings.general.languageEnglish')} active={language === 'en'} onClick={() => handleLanguageChange('en')} />
-                <MenuItem text={t('settings.general.languageGerman')} active={language === 'de'} onClick={() => handleLanguageChange('de')} />
-                <MenuItem text={t('settings.general.languageSpanish')} active={language === 'es'} onClick={() => handleLanguageChange('es')} />
-                <MenuItem text={t('settings.general.languageFrench')} active={language === 'fr'} onClick={() => handleLanguageChange('fr')} />
-                <MenuItem text={t('settings.general.languagePolish')} active={language === 'pl'} onClick={() => handleLanguageChange('pl')} />
-                <MenuItem text={t('settings.general.languageRussian')} active={language === 'ru'} onClick={() => handleLanguageChange('ru')} />
+                <MenuItem text={t('settings.general.languageEnglish')} active={language === 'en'} onClick={() => void handleLanguageChange('en')} />
+                <MenuItem text={t('settings.general.languageGerman')} active={language === 'de'} onClick={() => void handleLanguageChange('de')} />
+                <MenuItem text={t('settings.general.languageSpanish')} active={language === 'es'} onClick={() => void handleLanguageChange('es')} />
+                <MenuItem text={t('settings.general.languageFrench')} active={language === 'fr'} onClick={() => void handleLanguageChange('fr')} />
+                <MenuItem text={t('settings.general.languagePolish')} active={language === 'pl'} onClick={() => void handleLanguageChange('pl')} />
+                <MenuItem text={t('settings.general.languageRussian')} active={language === 'ru'} onClick={() => void handleLanguageChange('ru')} />
               </Menu>
             }
             placement="bottom-end"
@@ -335,7 +351,10 @@ function PathsTab() {
 
   const runBusy = async (key: string, action: () => Promise<unknown>) => {
     setBusyKey(key);
-    try { await action(); } catch (error) { handleError(error); }
+    try {
+      if (!(await confirmDiscardUnsaved(t))) return;
+      await action();
+    } catch (error) { handleError(error); }
     finally { setBusyKey(null); }
   };
 

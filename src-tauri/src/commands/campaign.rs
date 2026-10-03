@@ -1,5 +1,6 @@
 use crate::commands::{CommandError, CommandResult};
-use crate::parsers::xml::{CompanionStatus, FullSummary, XmlData};
+use crate::loaders::GameData;
+use crate::parsers::xml::{CompanionStatus, XmlData};
 use crate::services::campaign::CampaignManager;
 use crate::services::campaign::content::{
     ModuleInfo, ModuleSummary, ModuleVariables, area_name_from_resref, strip_area_code,
@@ -9,16 +10,6 @@ use crate::services::savegame_handler::backup_manifest::VariableChange;
 use crate::state::AppState;
 use indexmap::IndexMap;
 use tauri::State;
-
-#[tauri::command]
-pub async fn get_campaign_summary(state: State<'_, AppState>) -> CommandResult<FullSummary> {
-    let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::get_summary(handler).map_err(CommandError::from)
-}
 
 #[tauri::command]
 pub async fn get_campaign_variables(state: State<'_, AppState>) -> CommandResult<XmlData> {
@@ -39,26 +30,26 @@ pub fn cached_module_info(
         return Ok(cached);
     }
 
+    let game_data = state.game_data.read();
+    let paths = state.paths.read();
     let mut session = state.session.write();
     if let Some(cached) = session.module_info_cache.clone() {
         return Ok(cached);
     }
-    let paths = state.paths.read();
     let handler = session
         .savegame_handler
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     let mut result =
         CampaignManager::get_module_info(handler, &paths).map_err(CommandError::from)?;
-    resolve_area_names(&mut result.0, state);
+    resolve_area_names(&mut result.0, &game_data);
     session.module_info_cache = Some(result.clone());
     Ok(result)
 }
 
 /// Replace the raw area resrefs with their TLK names (area-code prefix
 /// stripped), falling back to a title-cased resref.
-fn resolve_area_names(info: &mut ModuleInfo, state: &State<'_, AppState>) {
-    let game_data = state.game_data.read();
+fn resolve_area_names(info: &mut ModuleInfo, game_data: &GameData) {
     let resolve = |strref: i32, resref: &str| {
         game_data
             .get_string(strref)
@@ -102,6 +93,7 @@ pub async fn get_module_info_by_id(
     state: State<'_, AppState>,
     module_id: String,
 ) -> CommandResult<(ModuleInfo, ModuleVariables)> {
+    let game_data = state.game_data.read();
     let paths = state.paths.read();
     let session = state.session.read();
     let handler = session
@@ -110,59 +102,11 @@ pub async fn get_module_info_by_id(
         .ok_or(CommandError::NoCharacterLoaded)?;
     let mut result = CampaignManager::get_module_info_by_id(handler, &paths, &module_id)
         .map_err(CommandError::from)?;
-    resolve_area_names(&mut result.0, &state);
+    resolve_area_names(&mut result.0, &game_data);
     session
         .quest_edits
         .overlay_module(&module_id, &mut result.1);
     Ok(result)
-}
-
-#[tauri::command]
-pub async fn update_global_int(
-    state: State<'_, AppState>,
-    name: String,
-    value: i32,
-) -> CommandResult<()> {
-    let mut session = state.session.write();
-    let handler = session
-        .savegame_handler
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_global_int(handler, &name, value).map_err(CommandError::from)?;
-    session.record_variable_changes([VariableChange::new(None, &name, value)]);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn update_global_float(
-    state: State<'_, AppState>,
-    name: String,
-    value: f32,
-) -> CommandResult<()> {
-    let mut session = state.session.write();
-    let handler = session
-        .savegame_handler
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_global_float(handler, &name, value).map_err(CommandError::from)?;
-    session.record_variable_changes([VariableChange::new(None, &name, value)]);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn update_global_string(
-    state: State<'_, AppState>,
-    name: String,
-    value: String,
-) -> CommandResult<()> {
-    let mut session = state.session.write();
-    let handler = session
-        .savegame_handler
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_global_string(handler, &name, &value).map_err(CommandError::from)?;
-    session.record_variable_changes([VariableChange::new(None, &name, value)]);
-    Ok(())
 }
 
 #[tauri::command]
@@ -202,55 +146,17 @@ pub async fn update_companion_influence(
     companion_id: String,
     new_influence: i32,
 ) -> CommandResult<()> {
+    let variable =
+        CampaignManager::companion_influence_var(&companion_id).map_err(CommandError::from)?;
     let mut session = state.session.write();
+    check_pending_quest_variable(&session, None, variable, "int")?;
     let handler = session
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    let variable =
-        CampaignManager::update_companion_influence(handler, &companion_id, new_influence)
-            .map_err(CommandError::from)?;
+    CampaignManager::update_companion_influence(handler, &companion_id, new_influence)
+        .map_err(CommandError::from)?;
     session.record_variable_changes([VariableChange::new(None, variable, new_influence)]);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn update_module_variable(
-    state: State<'_, AppState>,
-    variable_name: String,
-    value: String,
-    variable_type: String,
-    module_id: Option<String>,
-) -> CommandResult<()> {
-    let mut session = state.session.write();
-    let target_module = Some(module_id.clone().unwrap_or_else(|| {
-        session
-            .savegame_handler
-            .as_ref()
-            .and_then(|h| h.extract_current_module().ok())
-            .unwrap_or_default()
-    }));
-    check_pending_quest_variable(
-        &session,
-        target_module.as_deref(),
-        &variable_name,
-        &variable_type,
-    )?;
-
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_module_variable(
-        handler,
-        &variable_name,
-        &value,
-        &variable_type,
-        module_id.as_deref(),
-    )
-    .map_err(CommandError::from)?;
-    session.invalidate_module_info_cache();
-    session.record_variable_changes([VariableChange::new(target_module, &variable_name, &value)]);
     Ok(())
 }
 

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { PATHS_CHANGED_EVENT } from './usePathsChangedEvent';
 
 const ICON_CACHE_LIMIT = 500;
 const MAX_CONCURRENT = 8;
@@ -7,6 +9,8 @@ const MAX_CONCURRENT = 8;
 const iconCache = new Map<string, string>();
 const failedIcons = new Set<string>();
 const pendingRequests = new Map<string, Promise<string>>();
+
+listen(PATHS_CHANGED_EVENT, () => failedIcons.clear()).catch(() => {});
 
 let inFlight = 0;
 const queue: Array<() => void> = [];

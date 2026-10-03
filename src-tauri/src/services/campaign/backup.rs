@@ -1,8 +1,8 @@
 use crate::services::campaign::settings::CampaignBackupInfo;
-use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::savegame_handler::backup::{
-    BACKUP_TIMESTAMP_FORMAT, INNER_BACKUPS_DIR, created_at_secs,
+    BACKUP_TIMESTAMP_FORMAT, INNER_BACKUPS_DIR, PRE_RESTORE_PREFIX, created_at_secs,
 };
+use crate::services::savegame_handler::{SaveGameHandler, commit_outputs};
 use chrono::Local;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -41,7 +41,19 @@ pub(crate) fn ensure_backup_in_dir(backup: &Path, dir: &Path) -> Result<(), Stri
     Ok(())
 }
 
+/// Replace `dest` with the bytes of `source` through a temp file and rename.
+pub(crate) fn replace_file_atomically(source: &Path, dest: &Path) -> Result<(), String> {
+    let bytes =
+        fs::read(source).map_err(|e| format!("Failed to read {}: {e}", source.display()))?;
+    commit_outputs(vec![(dest.to_path_buf(), bytes)])
+        .map_err(|e| format!("Failed to write {}: {e}", dest.display()))
+}
+
 pub fn backup_campaign_variables(handler: &SaveGameHandler) -> Result<(), String> {
+    backup_globals(handler, false)
+}
+
+fn backup_globals(handler: &SaveGameHandler, pre_restore: bool) -> Result<(), String> {
     let save_dir = handler.save_dir();
     let source = save_dir.join("globals.xml");
 
@@ -53,9 +65,10 @@ pub fn backup_campaign_variables(handler: &SaveGameHandler) -> Result<(), String
     fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
 
     let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT);
-    let dest = backup_dir.join(format!("{GLOBALS_BACKUP_PREFIX}{timestamp}.xml"));
+    let label = if pre_restore { PRE_RESTORE_PREFIX } else { "" };
+    let dest = backup_dir.join(format!("{GLOBALS_BACKUP_PREFIX}{label}{timestamp}.xml"));
     // Edits within the same second keep the first backup, the state before them.
-    if dest.exists() {
+    if dest.exists() && !pre_restore {
         return Ok(());
     }
 
@@ -83,13 +96,22 @@ pub fn restore_campaign_variable_backup(
         &get_campaign_variables_backup_dir(handler.save_dir()),
     )?;
 
+    backup_globals(handler, true)?;
     let dest = handler.save_dir().join("globals.xml");
-    fs::copy(&backup, &dest).map_err(|e| format!("Failed to restore globals.xml backup: {e}"))?;
+    replace_file_atomically(&backup, &dest)?;
     info!("Restored globals.xml from backup: {}", backup.display());
     Ok(())
 }
 
 pub fn backup_module_z(handler: &SaveGameHandler, module_id: &str) -> Result<(), String> {
+    backup_module(handler, module_id, false)
+}
+
+fn backup_module(
+    handler: &SaveGameHandler,
+    module_id: &str,
+    pre_restore: bool,
+) -> Result<(), String> {
     let save_dir = handler.save_dir();
 
     // Try both casings: EE uses `.z`, original NWN2 uses `.Z`. Preserve whichever the
@@ -110,8 +132,10 @@ pub fn backup_module_z(handler: &SaveGameHandler, module_id: &str) -> Result<(),
     fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
 
     let timestamp = Local::now().format(BACKUP_TIMESTAMP_FORMAT);
-    let dest = backup_dir.join(format!("{module_id}_{timestamp}.{ext}"));
-    if dest.exists() {
+    // The suffix keeps `module_id_of_backup` parsing and the name distinct from an edit backup of the same second.
+    let suffix = if pre_restore { "pre" } else { "" };
+    let dest = backup_dir.join(format!("{module_id}_{timestamp}{suffix}.{ext}"));
+    if dest.exists() && !pre_restore {
         return Ok(());
     }
 
@@ -147,8 +171,8 @@ pub fn restore_module_backup(handler: &SaveGameHandler, backup_path: &str) -> Re
     let upper = handler.save_dir().join(format!("{module_id}.Z"));
     let ext = if upper.exists() { "Z" } else { "z" };
     let dest = handler.save_dir().join(format!("{module_id}.{ext}"));
-    fs::copy(&backup, &dest)
-        .map_err(|e| format!("Failed to restore {module_id}.{ext} backup: {e}"))?;
+    backup_module(handler, module_id, true)?;
+    replace_file_atomically(&backup, &dest)?;
     info!(
         "Restored {}.{} from backup: {}",
         module_id,

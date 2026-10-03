@@ -8,7 +8,6 @@ import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { useToast } from '@/contexts/ToastContext';
 import { useInventoryManagement } from '@/hooks/useInventoryManagement';
 import { inventoryAPI, BaseItem, ItemTemplate, ITEM_CATEGORIES, CATEGORIES_WITH_SUBS, SUB_CATEGORY_LABELS, isVanillaSource } from '@/services/inventoryApi';
 import { display } from '@/utils/dataHelpers';
@@ -34,7 +33,6 @@ const CATEGORY_ORDER = ['Weapons', 'Armor & Clothing', 'Magic Items', 'Miscellan
 export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, onItemTransformed }: AddItemDialogProps) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
-  const { showToast } = useToast();
   const { characterId } = useCharacterContext();
   const { addItemByBaseType, addItemFromTemplate, transformItem } = useInventoryManagement();
   const isTransform = !!transformTarget;
@@ -207,13 +205,7 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
     setIsAdding(true);
     try {
       if (isTransform && transformTarget && selectedResref) {
-        const response = await transformItem(transformTarget, selectedResref);
-        if (!response.success) {
-          // Slot-legality reject from the backend, not an error: keep the
-          // dialog open so the user can pick a fitting template.
-          showToast(response.message, 'warning');
-          return;
-        }
+        await transformItem(transformTarget, selectedResref);
         onClose();
         onItemTransformed?.();
         return;

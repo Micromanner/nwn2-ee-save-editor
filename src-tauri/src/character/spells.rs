@@ -358,73 +358,6 @@ impl Character {
         Ok(())
     }
 
-    /// Add a memorized spell to a class at a specific spell level.
-    ///
-    /// `class_index` is the index into ClassList (0, 1, or 2 for most characters).
-    pub fn add_memorized_spell(
-        &mut self,
-        class_index: usize,
-        spell_level: i32,
-        spell: MemorizedSpellRaw,
-    ) -> Result<(), CharacterError> {
-        let mut class_list = self.class_list_for_spell_edit(class_index, spell_level)?;
-        let spell_word = spell_word(spell.spell_id)?;
-
-        let class_entry = &mut class_list[class_index];
-        let field_name = format!("MemorizedList{spell_level}");
-
-        let mut mem_list = match class_entry.get(&field_name) {
-            Some(GffValue::ListOwned(list)) => list.clone(),
-            _ => Vec::new(),
-        };
-
-        let mut new_spell = IndexMap::new();
-        new_spell.insert("Spell".to_string(), GffValue::Word(spell_word));
-        // NWN2-EE renamed SpellMetaMagic (Byte) to SpellMetaMagicN2 (Dword) to
-        // support more metamagic flags; writing the old name/type leaves a
-        // phantom field that the engine ignores.
-        new_spell.insert(
-            "SpellMetaMagicN2".to_string(),
-            GffValue::Dword(spell.meta_magic),
-        );
-        new_spell.insert("Ready".to_string(), GffValue::Byte(u8::from(spell.ready)));
-        mem_list.push(new_spell);
-
-        class_entry.insert(field_name, GffValue::ListOwned(mem_list));
-        self.set_list("ClassList", class_list);
-
-        Ok(())
-    }
-
-    /// Clear all memorized spells for a class at a specific spell level.
-    ///
-    /// `class_index` is the index into ClassList (0, 1, or 2 for most characters).
-    pub fn clear_memorized_spells(
-        &mut self,
-        class_index: usize,
-        spell_level: i32,
-    ) -> Result<(), CharacterError> {
-        let mut class_list = self.class_list_for_spell_edit(class_index, spell_level)?;
-
-        let class_entry = &mut class_list[class_index];
-        let field_name = format!("MemorizedList{spell_level}");
-
-        class_entry.insert(field_name, GffValue::ListOwned(Vec::new()));
-        self.set_list("ClassList", class_list);
-
-        Ok(())
-    }
-
-    /// Clear all memorized spells for a class across all spell levels.
-    ///
-    /// `class_index` is the index into ClassList (0, 1, or 2 for most characters).
-    pub fn clear_all_memorized_spells(&mut self, class_index: usize) -> Result<(), CharacterError> {
-        for spell_level in 0..=MAX_SPELL_LEVEL {
-            self.clear_memorized_spells(class_index, spell_level)?;
-        }
-        Ok(())
-    }
-
     /// Check if a class is a spellcaster.
     ///
     /// Returns true if the class has a SpellCaster field > 0 in the classes table.
@@ -1248,6 +1181,33 @@ impl Character {
         Self::spell_table_column_from_row(&class_data)
     }
 
+    /// Spell level of `spell_id` on the class list entry at `class_index`, read from that
+    /// class's `spells.2da` column. `None` when the class has no list entry, no spell column,
+    /// or does not offer the spell.
+    pub fn spell_level_for_class_index(
+        &self,
+        class_index: usize,
+        spell_id: SpellId,
+        game_data: &GameData,
+    ) -> Option<i32> {
+        let class_id = self.class_entries().get(class_index)?.class_id;
+        let column = self.get_spell_table_column_for_class(class_id, game_data)?;
+        let spell_row = game_data.get_table("spells")?.get_by_id(spell_id.0)?;
+        Self::spell_level_in_row(&spell_row, &column.to_lowercase())
+    }
+
+    /// Level of a `spells.2da` row in one class column; `None` for `****` or no access.
+    pub(crate) fn spell_level_in_row(
+        spell_row: &ahash::AHashMap<String, Option<String>>,
+        column: &str,
+    ) -> Option<i32> {
+        spell_row
+            .get(column)
+            .and_then(|v| v.as_ref())
+            .and_then(|v| v.parse::<i32>().ok())
+            .filter(|level| *level >= 0)
+    }
+
     /// `spells.2da` column for a `classes.2da` row: its `SpellTableColumn` when the
     /// table carries one (vanilla does not; some mods add it), else derived from
     /// the class label the way the shipped classes map to columns.
@@ -1537,10 +1497,7 @@ impl Character {
                 continue;
             }
 
-            if let Some(level_str) = spell_row.get(&target_col).and_then(|v| v.as_ref())
-                && let Ok(lvl) = level_str.parse::<i32>()
-                && lvl == spell_level
-            {
+            if Self::spell_level_in_row(&spell_row, &target_col) == Some(spell_level) {
                 available.push(SpellId(row_id as i32));
             }
         }
@@ -1760,43 +1717,6 @@ mod tests {
         let mut character = create_test_character_with_wizard();
         let result = character.remove_known_spell(0, 0, SpellId(99), &empty_game_data());
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_add_memorized_spell() {
-        let mut character = create_test_character_with_wizard();
-        let spell = MemorizedSpellRaw {
-            spell_id: SpellId(1),
-            meta_magic: 2,
-            ready: false,
-        };
-        assert!(character.add_memorized_spell(0, 0, spell).is_ok());
-
-        let memorized = character.memorized_spells(ClassId(10), 0);
-        assert_eq!(memorized.len(), 2);
-        assert_eq!(memorized[1].spell_id, SpellId(1));
-        assert_eq!(memorized[1].meta_magic, 2);
-        assert!(!memorized[1].ready);
-    }
-
-    #[test]
-    fn test_clear_memorized_spells() {
-        let mut character = create_test_character_with_wizard();
-        assert!(character.clear_memorized_spells(0, 0).is_ok());
-
-        let memorized = character.memorized_spells(ClassId(10), 0);
-        assert_eq!(memorized.len(), 0);
-    }
-
-    #[test]
-    fn test_clear_all_memorized_spells() {
-        let mut character = create_test_character_with_wizard();
-        assert!(character.clear_all_memorized_spells(0).is_ok());
-
-        for level in 0..=MAX_SPELL_LEVEL {
-            let memorized = character.memorized_spells(ClassId(10), level);
-            assert_eq!(memorized.len(), 0);
-        }
     }
 
     #[test]

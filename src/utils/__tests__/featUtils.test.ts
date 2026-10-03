@@ -5,10 +5,26 @@ import {
   sortFeats,
   filterOwnedFeats,
 } from '../featUtils';
-import type { FeatInfo } from '@/components/Feats/types';
+import type { BackendFeatPrerequisites, FeatInfo } from '@/components/Feats/types';
+
+const noPrerequisites: BackendFeatPrerequisites = {
+  feats: [],
+  any_feats: [],
+  abilities: [],
+  bab: null,
+  level: null,
+  class_level: null,
+  max_level: null,
+  epic: null,
+  base_fortitude: null,
+  caster_level: null,
+  spell_level: null,
+  skills: [],
+};
 
 const makeFeat = (id: number, name: string, type = 0): FeatInfo => ({
   id, name, label: name, type, description: '', protected: false, custom: false,
+  prerequisites: noPrerequisites,
 });
 
 describe('aggregateFeats', () => {

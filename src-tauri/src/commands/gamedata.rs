@@ -1,7 +1,7 @@
 use crate::commands::{CommandError, CommandResult};
 use crate::loaders::data_model_loader::DataModelLoader;
 use crate::state::AppState;
-use crate::utils::parsing::{row_int, row_str};
+use crate::utils::parsing::{row_int, row_name, row_str, row_string};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
@@ -26,16 +26,6 @@ static RE_TITLE_STRIP: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 #[tauri::command]
-pub async fn get_tlk_string(state: State<'_, AppState>, str_ref: u32) -> CommandResult<String> {
-    let game_data = state.game_data.read();
-    game_data
-        .get_string(str_ref as i32)
-        .ok_or_else(|| CommandError::NotFound {
-            item: format!("String ref {str_ref}"),
-        })
-}
-
-#[tauri::command]
 pub async fn tlk_get_strings(
     state: State<'_, AppState>,
     str_refs: Vec<u32>,
@@ -44,106 +34,6 @@ pub async fn tlk_get_strings(
     let signed: Vec<i32> = str_refs.iter().map(|&r| r as i32).collect();
     let batch = game_data.get_strings_batch(&signed);
     Ok(batch.into_iter().map(|(k, v)| (k as u32, v)).collect())
-}
-
-#[tauri::command]
-pub async fn get_2da_row(
-    state: State<'_, AppState>,
-    table_name: String,
-    row_index: usize,
-) -> CommandResult<HashMap<String, String>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table(&table_name)
-        .ok_or_else(|| CommandError::NotFound {
-            item: format!("Table {table_name}"),
-        })?;
-
-    let row = table
-        .get_row(row_index)
-        .map_err(|_| CommandError::NotFound {
-            item: format!("Row {row_index} in table {table_name}"),
-        })?;
-
-    let mut result = HashMap::new();
-    for (k, v) in &row {
-        if let Some(val) = v {
-            result.insert(k.clone(), val.clone());
-        }
-    }
-
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn list_2da_tables(state: State<'_, AppState>) -> CommandResult<Vec<String>> {
-    let game_data = state.game_data.read();
-    Ok(game_data
-        .table_names()
-        .map(std::string::ToString::to_string)
-        .collect())
-}
-
-#[tauri::command]
-pub async fn get_2da_table(
-    state: State<'_, AppState>,
-    table_name: String,
-) -> CommandResult<Vec<HashMap<String, Option<String>>>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table(&table_name.to_lowercase())
-        .ok_or_else(|| CommandError::NotFound {
-            item: format!("Table: {table_name}"),
-        })?;
-
-    let mut rows = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let standard_map: HashMap<String, Option<String>> = row.into_iter().collect();
-            rows.push(standard_map);
-        }
-    }
-    Ok(rows)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableClass {
-    pub id: i32,
-    pub name: Option<String>,
-    pub is_prestige: bool,
-}
-
-#[tauri::command]
-pub async fn get_available_classes(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableClass>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("classes")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Classes table".to_string(),
-        })?;
-
-    let mut classes = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name = row_str(&row, "name");
-            let is_prestige = row_str(&row, "prereqtable").is_some();
-            classes.push(AvailableClass {
-                id: i as i32,
-                name,
-                is_prestige,
-            });
-        }
-    }
-    Ok(classes)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableFeat {
-    pub id: i32,
-    pub name: Option<String>,
-    pub description: Option<i32>,
 }
 
 #[derive(serde::Serialize)]
@@ -175,35 +65,6 @@ pub async fn get_available_icons(state: State<'_, AppState>) -> CommandResult<Ve
         }
     }
     Ok(icons)
-}
-
-#[tauri::command]
-pub async fn get_available_feats(state: State<'_, AppState>) -> CommandResult<Vec<AvailableFeat>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("feat")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Feat table".to_string(),
-        })?;
-
-    let mut feats = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name = row_str(&row, "label");
-            let description = row_int(&row, "description", -1);
-            let description = if description >= 0 {
-                Some(description)
-            } else {
-                None
-            };
-            feats.push(AvailableFeat {
-                id: i as i32,
-                name,
-                description,
-            });
-        }
-    }
-    Ok(feats)
 }
 
 pub use crate::state::app_state::InitStatus;
@@ -246,6 +107,18 @@ pub async fn initialize_game_data(state: State<'_, AppState>) -> CommandResult<b
 }
 
 pub(crate) async fn load_game_data_impl(state: &AppState) -> CommandResult<bool> {
+    let result = run_game_data_load(state).await;
+    if let Err(e) = &result {
+        let message = match e {
+            CommandError::OperationFailed { operation, reason } => format!("{operation}: {reason}"),
+            other => other.to_string(),
+        };
+        update_init_status(state, "error", 0.0, &message);
+    }
+    result
+}
+
+async fn run_game_data_load(state: &AppState) -> CommandResult<bool> {
     info!("Starting game data initialization");
     update_init_status(state, "initializing", 0.0, "Starting initialization...");
 
@@ -383,6 +256,13 @@ pub(crate) async fn apply_module_content(
     }
 
     let paths = state.paths.read().clone();
+    let previous = state
+        .resource_manager
+        .read()
+        .await
+        .module_content()
+        .cloned();
+    let rescan_paths = paths.clone();
     let scan = tokio::task::spawn_blocking(move || {
         crate::services::ResourceManager::scan_module_content(&paths, content)
     })
@@ -394,10 +274,25 @@ pub(crate) async fn apply_module_content(
         rm.set_module_content(scan);
         rm.get_tlk_parser()
     };
-    match tlk_parser {
-        Some(tlk_parser) => rebuild_game_data(state, tlk_parser, None).await,
-        None => Ok(()),
+    let Some(tlk_parser) = tlk_parser else {
+        return Ok(());
+    };
+    if let Err(e) = rebuild_game_data(state, tlk_parser, None).await {
+        // The game data still describes the previous content; point the
+        // resource manager back at it so the next sync sees a difference and retries.
+        let scan = tokio::task::spawn_blocking(move || {
+            crate::services::ResourceManager::scan_module_content(&rescan_paths, previous)
+        })
+        .await
+        .map_err(|e| CommandError::Internal(format!("Module scan failed: {e}")))?;
+        state
+            .resource_manager
+            .write()
+            .await
+            .set_module_content(scan);
+        return Err(e);
     }
+    Ok(())
 }
 
 fn update_init_status(state: &AppState, step: &str, progress: f32, message: &str) {
@@ -409,72 +304,6 @@ fn update_init_status(state: &AppState, step: &str, progress: f32, message: &str
     };
 }
 
-#[derive(serde::Serialize)]
-pub struct AvailableSkill {
-    pub id: i32,
-    pub name: Option<String>,
-    pub key_ability: Option<String>,
-}
-
-#[tauri::command]
-pub async fn get_available_skills(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableSkill>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("skills")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Skills table".to_string(),
-        })?;
-
-    let mut skills = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name = row_str(&row, "name");
-            let key_ability = row_str(&row, "keyability");
-            skills.push(AvailableSkill {
-                id: i as i32,
-                name,
-                key_ability,
-            });
-        }
-    }
-    Ok(skills)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableSpell {
-    pub id: i32,
-    pub name: Option<String>,
-    pub school: Option<String>,
-}
-
-#[tauri::command]
-pub async fn get_available_spells(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableSpell>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("spells")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Spells table".to_string(),
-        })?;
-
-    let mut spells = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name = row_str(&row, "label");
-            let school = row_str(&row, "school");
-            spells.push(AvailableSpell {
-                id: i as i32,
-                name,
-                school,
-            });
-        }
-    }
-    Ok(spells)
-}
-
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AvailableRace {
     pub id: i32,
@@ -482,49 +311,7 @@ pub struct AvailableRace {
     pub icon: Option<String>,
     pub description: Option<String>,
     pub ability_adjustments: crate::character::types::AbilityModifiers,
-    pub favored_class: Option<String>,
-    pub default_subrace: Option<i32>,
     pub appearance: i32,
-}
-
-fn resolve_class_name(class_id: i32, game_data: &crate::loaders::GameData) -> Option<String> {
-    if class_id < 0 {
-        return None;
-    }
-    game_data
-        .get_table("classes")
-        .and_then(|ct| ct.get_by_id(class_id))
-        .and_then(|cr| {
-            let name_ref = row_int(&cr, "name", -1);
-            if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                row_str(&cr, "label")
-            }
-        })
-}
-
-fn resolve_size_from_appearance(
-    appearance_idx: i32,
-    game_data: &crate::loaders::GameData,
-) -> Option<String> {
-    let appearance = game_data.get_table("appearance")?;
-    let row = appearance.get_by_id(appearance_idx)?;
-    let size_id = row_int(&row, "sizecategory", -1);
-    if size_id < 0 {
-        return None;
-    }
-    let size_table = game_data.get_table("creaturesize")?;
-    let size_row = size_table.get_by_id(size_id)?;
-    row_str(&size_row, "label").map(|label| {
-        let mut chars = label.chars();
-        match chars.next() {
-            None => label,
-            Some(first) => {
-                first.to_uppercase().collect::<String>() + chars.as_str().to_lowercase().as_str()
-            }
-        }
-    })
 }
 
 #[tauri::command]
@@ -544,29 +331,9 @@ pub async fn get_available_races(state: State<'_, AppState>) -> CommandResult<Ve
                 continue;
             }
 
-            let name_ref = row_int(&row, "name", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .or_else(|| row_str(&row, "label"))
-            .unwrap_or_else(|| format!("Race {i}"));
-
-            let desc_ref = row_int(&row, "description", -1);
-            let description = if desc_ref >= 0 {
-                game_data.get_string(desc_ref)
-            } else {
-                None
-            };
-
+            let name = row_name(&game_data, &row, "name").unwrap_or_else(|| format!("Race {i}"));
+            let description = row_string(&game_data, &row, "description");
             let ability_adjustments = crate::character::types::AbilityModifiers::from_row(&row);
-
-            let favored_class = resolve_class_name(row_int(&row, "favored", -1), &game_data);
-
-            let default_subrace =
-                row_str(&row, "defaultsubrace").and_then(|s| s.parse::<i32>().ok());
-
             let icon = row_str(&row, "male_race_icon");
 
             let appearance = row_int(&row, "appearance", -1);
@@ -578,8 +345,6 @@ pub async fn get_available_races(state: State<'_, AppState>) -> CommandResult<Ve
                 icon,
                 description,
                 ability_adjustments,
-                favored_class,
-                default_subrace,
                 appearance,
             });
         }
@@ -595,8 +360,6 @@ pub struct AvailableSubrace {
     pub icon: Option<String>,
     pub description: Option<String>,
     pub ability_adjustments: crate::character::types::AbilityModifiers,
-    pub favored_class: Option<String>,
-    pub size: Option<String>,
     pub base_race: i32,
     pub base_race_name: String,
     pub appearance: i32,
@@ -606,19 +369,11 @@ fn lookup_race_name(game_data: &crate::loaders::GameData, race_id: i32) -> Strin
     if race_id < 0 {
         return String::new();
     }
-    let Some(table) = game_data.get_table("racialtypes") else {
-        return format!("Race {race_id}");
-    };
-    let Some(row) = table.get_by_id(race_id) else {
-        return format!("Race {race_id}");
-    };
-    let name_ref = row_int(&row, "name", -1);
-    if name_ref >= 0
-        && let Some(s) = game_data.get_string(name_ref)
-    {
-        return s;
-    }
-    row_str(&row, "label").unwrap_or_else(|| format!("Race {race_id}"))
+    game_data
+        .get_table("racialtypes")
+        .and_then(|table| table.get_by_id(race_id))
+        .and_then(|row| row_name(game_data, &row, "name"))
+        .unwrap_or_else(|| format!("Race {race_id}"))
 }
 
 fn build_subrace(
@@ -628,42 +383,16 @@ fn build_subrace(
 ) -> AvailableSubrace {
     let base_race = row_int(row, "baserace", -1);
     let base_race_name = lookup_race_name(game_data, base_race);
-
-    let name_ref = row_int(row, "name", -1);
-    let name = if name_ref >= 0 {
-        game_data.get_string(name_ref)
-    } else {
-        None
-    }
-    .or_else(|| row_str(row, "label"))
-    .unwrap_or_else(|| format!("Subrace {row_idx}"));
-
+    let name = row_name(game_data, row, "name").unwrap_or_else(|| format!("Subrace {row_idx}"));
     let label = row_str(row, "label").unwrap_or_else(|| name.clone());
-
-    let desc_ref = row_int(row, "description", -1);
-    let description = if desc_ref >= 0 {
-        game_data.get_string(desc_ref)
-    } else {
-        None
-    };
-
+    let description = row_string(game_data, row, "description");
     let ability_adjustments = crate::character::types::AbilityModifiers::from_row(row);
-
-    let has_favored = row_int(row, "hasfavoredclass", 1);
-    let favored_class = if has_favored == 0 {
-        Some("Any".to_string())
-    } else {
-        resolve_class_name(row_int(row, "favored", -1), game_data)
-    };
-
     let appearance_idx = row_int(row, "appearanceindex", -1);
-    let size = resolve_size_from_appearance(appearance_idx, game_data);
     let appearance = if appearance_idx < 0 {
         base_race
     } else {
         appearance_idx
     };
-
     let icon = row_str(row, "male_race_icon");
 
     AvailableSubrace {
@@ -673,8 +402,6 @@ fn build_subrace(
         icon,
         description,
         ability_adjustments,
-        favored_class,
-        size,
         base_race,
         base_race_name,
         appearance,
@@ -736,109 +463,6 @@ pub async fn get_all_playable_subraces(
 }
 
 #[derive(serde::Serialize)]
-pub struct AvailableGender {
-    pub id: i32,
-    pub name: String,
-}
-
-#[tauri::command]
-pub async fn get_available_genders(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableGender>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("gender")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Gender table".to_string(),
-        })?;
-
-    let mut genders = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name_ref = row_int(&row, "name", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .unwrap_or_else(|| format!("Gender {i}"));
-            genders.push(AvailableGender { id: i as i32, name });
-        }
-    }
-    Ok(genders)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableAlignment {
-    pub id: i32,
-    pub name: String,
-    pub law_chaos: i32,
-    pub good_evil: i32,
-}
-
-#[tauri::command]
-pub async fn get_available_alignments(
-    _state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableAlignment>> {
-    Ok(vec![
-        AvailableAlignment {
-            id: 0,
-            name: "Lawful Good".to_string(),
-            law_chaos: 0,
-            good_evil: 0,
-        },
-        AvailableAlignment {
-            id: 1,
-            name: "Neutral Good".to_string(),
-            law_chaos: 50,
-            good_evil: 0,
-        },
-        AvailableAlignment {
-            id: 2,
-            name: "Chaotic Good".to_string(),
-            law_chaos: 100,
-            good_evil: 0,
-        },
-        AvailableAlignment {
-            id: 3,
-            name: "Lawful Neutral".to_string(),
-            law_chaos: 0,
-            good_evil: 50,
-        },
-        AvailableAlignment {
-            id: 4,
-            name: "True Neutral".to_string(),
-            law_chaos: 50,
-            good_evil: 50,
-        },
-        AvailableAlignment {
-            id: 5,
-            name: "Chaotic Neutral".to_string(),
-            law_chaos: 100,
-            good_evil: 50,
-        },
-        AvailableAlignment {
-            id: 6,
-            name: "Lawful Evil".to_string(),
-            law_chaos: 0,
-            good_evil: 100,
-        },
-        AvailableAlignment {
-            id: 7,
-            name: "Neutral Evil".to_string(),
-            law_chaos: 50,
-            good_evil: 100,
-        },
-        AvailableAlignment {
-            id: 8,
-            name: "Chaotic Evil".to_string(),
-            law_chaos: 100,
-            good_evil: 100,
-        },
-    ])
-}
-
-#[derive(serde::Serialize)]
 pub struct AvailableDeity {
     pub id: i32,
     pub name: String,
@@ -878,6 +502,9 @@ pub async fn get_available_deities(
         let removed = get_str_ci(&row, "Removed").unwrap_or_else(|| "0".to_string());
         let first = get_str_ci(&row, "FirstName");
         let last = get_str_ci(&row, "LastName");
+        let name_ref = get_str_ci(&row, "NameStringref")
+            .and_then(|s| s.parse::<i32>().ok())
+            .filter(|r| *r > 0);
         let icon = get_str_ci(&row, "IconID").unwrap_or_default();
         let desc_id_str = get_str_ci(&row, "DescID").unwrap_or_default();
         let desc_ref = desc_id_str.parse::<u32>().unwrap_or(0);
@@ -889,15 +516,17 @@ pub async fn get_available_deities(
             continue;
         }
 
-        let name = if first_str.is_empty() && last_str.is_empty() {
-            String::new()
-        } else if first_str.is_empty() {
-            last_str.to_string()
-        } else if last_str.is_empty() {
-            first_str.to_string()
-        } else {
-            format!("{first_str} {last_str}")
-        };
+        let label_name = [first_str, last_str]
+            .iter()
+            .filter(|part| !part.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let name = name_ref
+            .and_then(|r| game_data.get_string(r))
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or(label_name);
 
         if name.is_empty() {
             continue;
@@ -1036,131 +665,6 @@ fn extract_static(text: &mut String, re: &Regex) -> String {
 }
 
 #[derive(serde::Serialize)]
-pub struct AvailableDomain {
-    pub id: i32,
-    pub name: String,
-    pub granted_feat: Option<i32>,
-}
-
-#[tauri::command]
-pub async fn get_all_domains(state: State<'_, AppState>) -> CommandResult<Vec<AvailableDomain>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("domains")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Domains table".to_string(),
-        })?;
-
-    let mut domains = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name_ref = row_int(&row, "name", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .or_else(|| row_str(&row, "label"))
-            .unwrap_or_else(|| format!("Domain {i}"));
-            let granted_feat = row_int(&row, "grantedfeat", -1);
-            let granted_feat = if granted_feat >= 0 {
-                Some(granted_feat)
-            } else {
-                None
-            };
-            domains.push(AvailableDomain {
-                id: i as i32,
-                name,
-                granted_feat,
-            });
-        }
-    }
-    Ok(domains)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableBackground {
-    pub id: i32,
-    pub name: String,
-    pub description: Option<String>,
-}
-
-#[tauri::command]
-pub async fn get_available_backgrounds(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableBackground>> {
-    let game_data = state.game_data.read();
-    let table = match game_data.get_table("backgrounds") {
-        Some(t) => t,
-        None => return Ok(Vec::new()),
-    };
-
-    let mut backgrounds = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name_ref = row_int(&row, "name", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .or_else(|| row_str(&row, "label"))
-            .unwrap_or_else(|| format!("Background {i}"));
-            let desc_ref = row_int(&row, "description", -1);
-            let description = if desc_ref >= 0 {
-                game_data.get_string(desc_ref)
-            } else {
-                None
-            };
-            backgrounds.push(AvailableBackground {
-                id: i as i32,
-                name,
-                description,
-            });
-        }
-    }
-    Ok(backgrounds)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableAbility {
-    pub id: i32,
-    pub name: String,
-    pub short_name: String,
-}
-
-#[tauri::command]
-pub async fn get_available_abilities(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableAbility>> {
-    let game_data = state.game_data.read();
-    let abilities = vec![
-        (0, 135, "Strength", "STR"),
-        (1, 133, "Dexterity", "DEX"),
-        (2, 132, "Constitution", "CON"),
-        (3, 134, "Intelligence", "INT"),
-        (4, 136, "Wisdom", "WIS"),
-        (5, 131, "Charisma", "CHA"),
-    ];
-
-    let result = abilities
-        .into_iter()
-        .map(|(id, strref, default_name, short_name)| {
-            let name = game_data
-                .get_string(strref)
-                .unwrap_or_else(|| default_name.to_string());
-            AvailableAbility {
-                id,
-                name,
-                short_name: short_name.to_string(),
-            }
-        })
-        .collect();
-
-    Ok(result)
-}
-
-#[derive(serde::Serialize)]
 pub struct AvailableBaseItem {
     pub id: i32,
     pub name: String,
@@ -1185,14 +689,7 @@ pub async fn get_available_base_items(
     let mut items = Vec::new();
     for i in 0..table.row_count() {
         if let Some(row) = table.get_by_id(i as i32) {
-            let name_ref = row_int(&row, "name", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .or_else(|| row_str(&row, "label"))
-            .unwrap_or_else(|| format!("Item {i}"));
+            let name = row_name(&game_data, &row, "name").unwrap_or_else(|| format!("Item {i}"));
 
             let name_lower = name.to_lowercase();
             if name.is_empty()
@@ -1229,96 +726,6 @@ pub async fn get_available_base_items(
         }
     }
     Ok(items)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableSpellSchool {
-    pub id: i32,
-    pub name: String,
-    pub opposition_school: Option<i32>,
-}
-
-#[tauri::command]
-pub async fn get_available_spell_schools(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableSpellSchool>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("spellschools")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Spellschools table".to_string(),
-        })?;
-
-    let mut schools = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name_ref = row_int(&row, "stringref", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .or_else(|| row_str(&row, "label"))
-            .unwrap_or_else(|| format!("School {i}"));
-            let opposition_school = row_int(&row, "oppositionschool", -1);
-            let opposition_school = if opposition_school >= 0 {
-                Some(opposition_school)
-            } else {
-                None
-            };
-            schools.push(AvailableSpellSchool {
-                id: i as i32,
-                name,
-                opposition_school,
-            });
-        }
-    }
-    Ok(schools)
-}
-
-#[derive(serde::Serialize)]
-pub struct AvailableItemProperty {
-    pub id: i32,
-    pub name: String,
-    pub cost_table: Option<i32>,
-}
-
-#[tauri::command]
-pub async fn get_available_item_properties(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<AvailableItemProperty>> {
-    let game_data = state.game_data.read();
-    let table = game_data
-        .get_table("itempropdef")
-        .ok_or_else(|| CommandError::NotFound {
-            item: "Itempropdef table".to_string(),
-        })?;
-
-    let mut props = Vec::new();
-    for i in 0..table.row_count() {
-        if let Some(row) = table.get_by_id(i as i32) {
-            let name_ref = row_int(&row, "name", -1);
-            let name = if name_ref >= 0 {
-                game_data.get_string(name_ref)
-            } else {
-                None
-            }
-            .or_else(|| row_str(&row, "label"))
-            .unwrap_or_else(|| format!("Property {i}"));
-            let cost_table = row_int(&row, "costtableresref", -1);
-            let cost_table = if cost_table >= 0 {
-                Some(cost_table)
-            } else {
-                None
-            };
-            props.push(AvailableItemProperty {
-                id: i as i32,
-                name,
-                cost_table,
-            });
-        }
-    }
-    Ok(props)
 }
 
 pub(super) fn compute_sub_category(

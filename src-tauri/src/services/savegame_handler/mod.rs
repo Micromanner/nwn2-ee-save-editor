@@ -82,7 +82,7 @@ pub struct PlayerOutputs {
     pub player_bic: Option<Vec<u8>>,
 }
 
-fn commit_outputs(outputs: Vec<(PathBuf, Vec<u8>)>) -> SaveGameResult<()> {
+pub(crate) fn commit_outputs(outputs: Vec<(PathBuf, Vec<u8>)>) -> SaveGameResult<()> {
     commit_outputs_with(outputs, |from, to| fs::rename(from, to))
 }
 

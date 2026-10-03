@@ -131,16 +131,25 @@ fn redact_with_home(input: &str, home: &str) -> String {
     if home.is_empty() {
         return input.to_string();
     }
-    let mut out = input.replace(home, "~");
-    out = out.replace(&home.replace('\\', "/"), "~");
+    let mut out = replace_ignore_case(input, home, "~");
+    out = replace_ignore_case(&out, &home.replace('\\', "/"), "~");
     // Split manually: Path::file_name() is platform-dependent and does not
     // treat `\` as a separator on Unix (breaks tests on Linux CI).
     if let Some(user) = home.rsplit(['\\', '/']).next()
         && !user.is_empty()
     {
-        out = out.replace(user, "<user>");
+        out = replace_ignore_case(&out, user, "<user>");
     }
     out
+}
+
+/// Windows paths are case-insensitive, so a path logged in another casing must
+/// be redacted like the canonical one.
+fn replace_ignore_case(input: &str, needle: &str, with: &str) -> String {
+    match regex::Regex::new(&format!("(?i){}", regex::escape(needle))) {
+        Ok(re) => re.replace_all(input, regex::NoExpand(with)).into_owned(),
+        Err(_) => input.to_string(),
+    }
 }
 
 fn path_source_to_string(source: PathSource) -> String {
@@ -168,8 +177,8 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
     ) = {
         let paths = state.paths.read();
         let config = state.config.read();
-        let session = state.session.read();
         let game_data = state.game_data.read();
+        let session = state.session.read();
 
         let paths_debug = PathsDebug {
             game_folder: paths.game_folder().map(|p| redact(&p.to_string_lossy())),
@@ -443,6 +452,13 @@ mod tests {
         let home = r"C:\Users\Vino";
         let input = r"D:\Games\Vino\char.bic";
         assert_eq!(redact_with_home(input, home), r"D:\Games\<user>\char.bic");
+    }
+
+    #[test]
+    fn redacts_in_any_letter_case() {
+        let home = r"C:\Users\Vino";
+        let input = r"c:\users\vino\Documents\save.zip";
+        assert_eq!(redact_with_home(input, home), r"~\Documents\save.zip");
     }
 
     #[test]

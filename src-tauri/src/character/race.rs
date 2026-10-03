@@ -47,14 +47,6 @@ impl SizeCategory {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct SubraceInfo {
-    pub id: i32,
-    pub name: String,
-    pub label: String,
-    pub parent_race: RaceId,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct SubraceData {
     pub id: i32,
     pub label: String,
@@ -197,52 +189,6 @@ impl Character {
         }
 
         format!("Race {race_id}")
-    }
-
-    pub fn available_subraces(&self, game_data: &GameData) -> Vec<SubraceInfo> {
-        self.get_available_subraces_for_race(self.race_id().0, game_data)
-    }
-
-    pub fn get_available_subraces_for_race(
-        &self,
-        race_id: i32,
-        game_data: &GameData,
-    ) -> Vec<SubraceInfo> {
-        let Some(subrace_table) = game_data.get_table("racialsubtypes") else {
-            return Vec::new();
-        };
-
-        let mut subraces = Vec::new();
-
-        for row_idx in 0..subrace_table.row_count() {
-            let Ok(row_data) = subrace_table.parser.get_row_dict(row_idx) else {
-                continue;
-            };
-
-            let base_race_id = row_int(&row_data, "baserace", -1);
-
-            if base_race_id != race_id {
-                continue;
-            }
-
-            let player_race = row_int(&row_data, "playerrace", 1);
-
-            if player_race == 0 {
-                continue;
-            }
-
-            let name = row_str(&row_data, "name").unwrap_or_default();
-            let label = row_str(&row_data, "label").unwrap_or_else(|| name.clone());
-
-            subraces.push(SubraceInfo {
-                id: row_idx as i32,
-                name,
-                label,
-                parent_race: RaceId(race_id),
-            });
-        }
-
-        subraces
     }
 
     /// Finds a subrace by `racialsubtypes` label or TLK display name (case-insensitive).

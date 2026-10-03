@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use image::{ImageBuffer, RgbaImage};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::{debug, error, info};
 
 use crate::services::model_loader::{self, ModelData};
+use crate::services::resource_manager::ResourceManager;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,34 +25,38 @@ fn strip_extension(name: &str) -> &str {
 }
 
 #[tauri::command]
-pub fn load_model(state: State<'_, AppState>, resref: String) -> Result<ModelData, String> {
+pub async fn load_model(state: State<'_, AppState>, resref: String) -> Result<ModelData, String> {
     info!("Loading model: {}", resref);
-    let rm = state.resource_manager.blocking_read();
-    match model_loader::load_model(&rm, &resref, "none", "none") {
-        Ok(data) => {
-            info!(
-                "Model loaded: {} meshes, {} hooks, skeleton={}",
-                data.meshes.len(),
-                data.hooks.len(),
-                data.skeleton.is_some()
-            );
-            for mesh in &data.meshes {
-                debug!(
-                    "  Mesh '{}' ({}): {} verts, {} indices, diffuse='{}'",
-                    mesh.name,
-                    mesh.mesh_type,
-                    mesh.positions.len() / 3,
-                    mesh.indices.len(),
-                    mesh.material.diffuse_map
+    let rm = Arc::clone(&state.resource_manager).read_owned().await;
+    tokio::task::spawn_blocking(move || {
+        match model_loader::load_model(&rm, &resref, "none", "none") {
+            Ok(data) => {
+                info!(
+                    "Model loaded: {} meshes, {} hooks, skeleton={}",
+                    data.meshes.len(),
+                    data.hooks.len(),
+                    data.skeleton.is_some()
                 );
+                for mesh in &data.meshes {
+                    debug!(
+                        "  Mesh '{}' ({}): {} verts, {} indices, diffuse='{}'",
+                        mesh.name,
+                        mesh.mesh_type,
+                        mesh.positions.len() / 3,
+                        mesh.indices.len(),
+                        mesh.material.diffuse_map
+                    );
+                }
+                Ok(data)
             }
-            Ok(data)
+            Err(e) => {
+                error!("Failed to load model '{}': {}", resref, e);
+                Err(e)
+            }
         }
-        Err(e) => {
-            error!("Failed to load model '{}': {}", resref, e);
-            Err(e)
-        }
-    }
+    })
+    .await
+    .map_err(|e| format!("Model load task failed: {e}"))?
 }
 
 #[tauri::command]
@@ -76,11 +83,16 @@ pub async fn get_texture_bytes(
 }
 
 #[tauri::command]
-pub fn get_icon_png(state: State<'_, AppState>, name: String) -> Result<String, String> {
-    let rm = state.resource_manager.blocking_read();
+pub async fn get_icon_png(state: State<'_, AppState>, name: String) -> Result<String, String> {
+    let rm = Arc::clone(&state.resource_manager).read_owned().await;
+    tokio::task::spawn_blocking(move || icon_png_data_url(&rm, &name))
+        .await
+        .map_err(|e| format!("Icon task failed: {e}"))?
+}
 
+fn icon_png_data_url(rm: &ResourceManager, name: &str) -> Result<String, String> {
     // 1. Check indexed icon files (upscaled DDS, workshop overrides)
-    if let Some(icon_path) = rm.get_icon_path(&name) {
+    if let Some(icon_path) = rm.get_icon_path(name) {
         let path: &std::path::Path = &icon_path;
         let bytes = std::fs::read(path).map_err(|e| format!("Failed to read icon {name}: {e}"))?;
 
@@ -101,13 +113,13 @@ pub fn get_icon_png(state: State<'_, AppState>, name: String) -> Result<String, 
     }
 
     // 2. Fallback to get_resource_bytes (HAKs, override, zips)
-    if let Ok(dds_bytes) = rm.get_resource_bytes(&name, "dds") {
+    if let Ok(dds_bytes) = rm.get_resource_bytes(name, "dds") {
         let png_bytes = decode_dds_to_png(&dds_bytes)
             .map_err(|e| format!("Failed to decode icon {name}: {e}"))?;
         return encode_png_data_url(&png_bytes);
     }
 
-    if let Ok(tga_bytes) = rm.get_resource_bytes(&name, "tga") {
+    if let Ok(tga_bytes) = rm.get_resource_bytes(name, "tga") {
         let png_bytes = decode_tga_to_png(&tga_bytes)
             .map_err(|e| format!("Failed to decode TGA icon {name}: {e}"))?;
         return encode_png_data_url(&png_bytes);
@@ -144,30 +156,32 @@ pub(crate) fn decode_dds_to_png(dds_bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
-pub fn list_available_models(state: State<'_, AppState>) -> Result<Vec<ModelEntry>, String> {
-    let mut cache = state.model_list_cache.lock();
-    if let Some(cached) = cache.as_ref() {
+pub async fn list_available_models(state: State<'_, AppState>) -> Result<Vec<ModelEntry>, String> {
+    if let Some(cached) = state.model_list_cache.lock().as_ref() {
         info!("Returning {} cached MDB models", cached.len());
         return Ok(cached.clone());
     }
 
     info!("Scanning for available models...");
-    let rm = state.resource_manager.blocking_read();
-    let files = rm.list_resources_by_extension("mdb");
-    let count = files.len();
-    let result: Vec<ModelEntry> = files
-        .into_iter()
-        .map(|(filename, zip_source)| {
-            let basename = filename.rsplit('/').next().unwrap_or(&filename);
-            let resref = strip_extension(basename).to_string();
-            ModelEntry {
-                filename,
-                resref,
-                zip_source,
-            }
-        })
-        .collect();
-    info!("Found {} MDB models", count);
-    *cache = Some(result.clone());
+    let rm = Arc::clone(&state.resource_manager).read_owned().await;
+    let result = tokio::task::spawn_blocking(move || {
+        let files = rm.list_resources_by_extension("mdb");
+        info!("Found {} MDB models", files.len());
+        files
+            .into_iter()
+            .map(|(filename, zip_source)| {
+                let basename = filename.rsplit('/').next().unwrap_or(&filename);
+                let resref = strip_extension(basename).to_string();
+                ModelEntry {
+                    filename,
+                    resref,
+                    zip_source,
+                }
+            })
+            .collect::<Vec<ModelEntry>>()
+    })
+    .await
+    .map_err(|e| format!("Model scan task failed: {e}"))?;
+    *state.model_list_cache.lock() = Some(result.clone());
     Ok(result)
 }

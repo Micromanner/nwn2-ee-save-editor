@@ -97,13 +97,32 @@ impl Character {
         skill_id: SkillId,
         game_data: &GameData,
     ) -> bool {
-        let Some(classes_table) = game_data.get_table("classes") else {
-            return false;
-        };
-        let Some(class_data) = classes_table.get_by_id(class_id.0) else {
-            return false;
-        };
+        Self::for_each_class_skill(class_id, game_data, |id| id == skill_id)
+    }
 
+    /// Skills flagged `ClassSkill` in a class's `classes.SkillsTable`.
+    pub fn class_skill_ids(class_id: super::ClassId, game_data: &GameData) -> Vec<SkillId> {
+        let mut ids = Vec::new();
+        Self::for_each_class_skill(class_id, game_data, |id| {
+            ids.push(id);
+            false
+        });
+        ids
+    }
+
+    /// Visit the class skills of a class until `visit` returns true; returns
+    /// whether it did.
+    fn for_each_class_skill(
+        class_id: super::ClassId,
+        game_data: &GameData,
+        mut visit: impl FnMut(SkillId) -> bool,
+    ) -> bool {
+        let Some(class_data) = game_data
+            .get_table("classes")
+            .and_then(|table| table.get_by_id(class_id.0))
+        else {
+            return false;
+        };
         let skills_table_name = class_data
             .get("skillstable")
             .and_then(|opt| opt.as_deref())
@@ -111,7 +130,6 @@ impl Character {
         if skills_table_name.is_empty() {
             return false;
         }
-
         let Some(class_skills_table) = game_data.get_table(&skills_table_name.to_lowercase())
         else {
             return false;
@@ -120,13 +138,14 @@ impl Character {
         // The table is a list of skills, not indexed by SkillId.
         (0..class_skills_table.row_count())
             .filter_map(|i| class_skills_table.get_by_id(i as i32))
-            .find(|row| {
+            .filter(|row| row_bool(row, "classskill", false))
+            .filter_map(|row| {
                 row.get("skillindex")
                     .and_then(|v| v.as_deref())
                     .and_then(|v| v.parse::<i32>().ok())
-                    == Some(skill_id.0)
+                    .map(SkillId)
             })
-            .is_some_and(|row| row_bool(&row, "classskill", false))
+            .any(&mut visit)
     }
 
     /// Cost of `ranks` bought while levelling `class_id`: 1 per rank for that

@@ -8,6 +8,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { TauriAPI } from '@/lib/tauri-api';
 import { CharacterProvider, useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterStateAPI } from '@/lib/api/character-state';
+import { getTranslatedError, isCommandError } from '@/lib/api/errors';
 import { useTranslations } from '@/hooks/useTranslations';
 import { T, PATTERN_BG } from '../theme';
 import '../blueprint.css';
@@ -163,11 +164,19 @@ export default function Shell() {
 
   useEffect(() => {
     invoke('show_main_window').catch(() => {});
-    TauriAPI.initializeGameData().catch(err => {
+    let cancelled = false;
+    TauriAPI.initializeGameData().catch(async err => {
       console.error('Failed to initialize game data:', err);
+      cancelled = true;
+      const status = await TauriAPI.getInitializationStatus().catch(() => null);
+      const message = status?.step === 'error'
+        ? status.message
+        : isCommandError(err)
+          ? getTranslatedError(err, t).message
+          : err instanceof Error ? err.message : typeof err === 'string' ? err : t('startup.error.unknown');
+      setInitProgress({ step: 'error', progress: 0, message });
     });
 
-    let cancelled = false;
     const poll = async () => {
       try {
         const status = await TauriAPI.getInitializationStatus();
@@ -177,6 +186,7 @@ export default function Shell() {
           setInitReady(true);
           return;
         }
+        if (status.step === 'error') return;
       } catch {
         // backend not ready yet
       }
@@ -214,6 +224,44 @@ export default function Shell() {
               text={t('startup.notFound.retry')}
               onClick={() => { relaunch().catch(err => console.error('Relaunch failed:', err)); }}
             />
+          </div>
+        </div>
+        <SettingsDialog
+          isOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          defaultTab="paths"
+        />
+      </div>
+    );
+  }
+
+  if (initProgress.step === 'error') {
+    return (
+      <div className="bp-app" style={{
+        display: 'flex', flexDirection: 'column',
+        height: '100vh', background: T.bg,
+        backgroundImage: PATTERN_BG, backgroundSize: '200px 200px',
+      }}>
+        <TitleBar onAboutClick={() => {}} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 480, textAlign: 'center' }}>
+            <div className="t-2xl t-bold" style={{ color: T.accent, marginBottom: 12 }}>
+              {t('startup.error.title')}
+            </div>
+            <div style={{ color: T.textMuted, marginBottom: 20, wordBreak: 'break-word' }}>
+              {initProgress.message}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <Button
+                text={t('startup.error.openSettings')}
+                onClick={() => setSettingsOpen(true)}
+              />
+              <Button
+                intent="primary"
+                text={t('startup.notFound.retry')}
+                onClick={() => { relaunch().catch(err => console.error('Relaunch failed:', err)); }}
+              />
+            </div>
           </div>
         </div>
         <SettingsDialog

@@ -1132,6 +1132,10 @@
     }
   },
   "settings": {
+    "unsavedChanges": {
+      "title": "Ungespeicherte Änderungen",
+      "warning": "Dieser Charakter hat ungespeicherte Änderungen. Wenn Sie diese Einstellung ändern, werden die Spieldaten neu geladen und die Änderungen gehen verloren."
+    },
     "title": "Einstellungen",
     "tabs": {
       "general": "Allgemein",
@@ -1420,6 +1424,11 @@
     "otherRosterEntriesHint": "Roster-Einträge, die nicht als Teil der Begleiter-Besetzung dieser Kampagne erkannt wurden (z. B. Story-NPCs). Sie können weiterhin umgeschaltet werden, zählen aber nicht zum Gruppenlimit."
   },
   "startup": {
+    "error": {
+      "openSettings": "Einstellungen öffnen",
+      "title": "Spieldaten konnten nicht geladen werden",
+      "unknown": "Unbekannter Fehler"
+    },
     "notFound": {
       "description": "Es wurde keine Neverwinter Nights 2-Installation gefunden. Bitte legen Sie Ihren Spielordner fest, um fortzufahren.",
       "retry": "Erneut versuchen",

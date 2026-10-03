@@ -23,21 +23,7 @@ import type {
   SaveSummary,
   FullInventorySummary,
   CharacterUpdates,
-  AbilitiesUpdates,
-  SessionInfo,
-  SkillChangeResult,
-  SpellChangeResult,
-  EquipResult,
-  UnequipResult,
-  AddItemResult,
-  RemoveItemResult,
   NaturalArmorChange,
-  SaveChange,
-  HitPoints,
-  EquipmentSlot,
-  FeatId,
-  SpellId,
-  SkillId,
   UndoResult,
   HistoryState,
   CharacterHistory,
@@ -75,12 +61,6 @@ export const CharacterStateAPI = {
   // ===========================================================================
   // Aggregated State Getters (1 call per screen)
   // ===========================================================================
-
-  /**
-   * Get complete overview state for the character overview screen.
-   * Includes identity, classes, HP, AC, BAB, saves, gold, domains.
-   */
-  getOverview: () => invoke<OverviewState>('get_overview_state'),
 
   /**
    * Get abilities state including base/effective scores, modifiers, HP, encumbrance.
@@ -139,13 +119,6 @@ export const CharacterStateAPI = {
     invoke<OverviewState>('update_character', { updates }),
 
   /**
-   * Update multiple ability scores at once.
-   * Returns the updated AbilitiesState.
-   */
-  updateAbilities: (updates: AbilitiesUpdates) =>
-    invoke<AbilitiesState>('update_abilities', { updates }),
-
-  /**
    * Apply point buy scores - resets level-up ability history and sets new base scores.
    * Returns the updated AbilitiesState.
    */
@@ -183,18 +156,6 @@ export const CharacterStateAPI = {
   // ===========================================================================
 
   /**
-   * Load a character from a save file.
-   */
-  loadCharacter: (filePath: string, playerIndex?: number) =>
-    invoke<boolean>('load_character', { filePath, playerIndex }),
-
-  /**
-   * Save the current character.
-   */
-  saveCharacter: (filePath?: string) =>
-    invoke<SaveCharacterResult>('save_character', { filePath }),
-
-  /**
    * List all roster (companion) entries available for the loaded module.
    */
   listRoster: () => invoke<RosterEntryInfo[]>('list_roster'),
@@ -227,61 +188,13 @@ export const CharacterStateAPI = {
   closeCharacter: () => invoke<boolean>('close_character'),
 
   /**
-   * Get session information.
-   */
-  getSessionInfo: () => invoke<SessionInfo>('get_session_info'),
-
-  /**
    * Check if there are unsaved changes.
    */
   hasUnsavedChanges: () => invoke<boolean>('has_unsaved_changes'),
 
-  // ===========================================================================
-  // Individual Field Updates (for backwards compatibility or specific needs)
-  // ===========================================================================
-
-  // Skills
-  setSkillRank: (skillId: SkillId, ranks: number) =>
-    invoke<SkillChangeResult>('set_skill_rank', { skillId, ranks }),
-
-  resetAllSkills: () => invoke<number>('reset_all_skills'),
-
-  // Feats
-  addFeat: (featId: FeatId) => invoke<void>('add_feat', { featId }),
-  removeFeat: (featId: FeatId) => invoke<void>('remove_feat', { featId }),
-
-  // Spells
-  addKnownSpell: (classIndex: number, spellLevel: number, spellId: SpellId) =>
-    invoke<SpellChangeResult>('add_known_spell', { classIndex, spellLevel, spellId }),
-
-  removeKnownSpell: (classIndex: number, spellLevel: number, spellId: SpellId) =>
-    invoke<SpellChangeResult>('remove_known_spell', { classIndex, spellLevel, spellId }),
-
   // Combat
   updateNaturalArmor: (value: number) =>
     invoke<NaturalArmorChange>('update_natural_armor', { value }),
-
-
-  setMiscSaveBonus: (saveType: number, value: number) =>
-    invoke<SaveChange>('set_misc_save_bonus', { saveType, value }),
-
-  updateHitPoints: (current?: number, max?: number) =>
-    invoke<HitPoints>('update_hit_points', { current, max }),
-
-  // Inventory
-  setGold: (amount: number) => invoke<number>('set_gold', { amount }),
-
-  equipItem: (inventoryIndex: number, slot: EquipmentSlot) =>
-    invoke<EquipResult>('equip_item', { inventoryIndex, slot }),
-
-  unequipItem: (slot: EquipmentSlot) =>
-    invoke<UnequipResult>('unequip_item', { slot }),
-
-  addToInventory: (baseItemId: number, stackSize: number) =>
-    invoke<AddItemResult>('add_to_inventory', { baseItemId, stackSize }),
-
-  removeFromInventory: (index: number) =>
-    invoke<RemoveItemResult>('remove_from_inventory', { index }),
 
   // History
   getHistoryState: () => invoke<HistoryState>('get_history_state'),

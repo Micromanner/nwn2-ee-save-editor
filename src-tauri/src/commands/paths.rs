@@ -101,7 +101,7 @@ pub(crate) async fn sync_resource_manager_paths(
     app: &AppHandle,
     state: &AppState,
     snapshot: crate::config::NWN2Paths,
-) -> PathConfig {
+) -> CommandResult<PathConfig> {
     let config = build_path_config(&snapshot);
 
     {
@@ -117,19 +117,77 @@ pub(crate) async fn sync_resource_manager_paths(
         session.close_character();
     }
 
-    if let Err(err) = crate::commands::gamedata::load_game_data_impl(state).await {
+    let reloaded = crate::commands::gamedata::load_game_data_impl(state).await;
+    if let Err(err) = &reloaded {
         error!(
             error = %err,
             "Failed to reload game data after path change; clearing stale state"
         );
-        let mut game_data = state.game_data.write();
-        game_data.clear();
+        state.game_data.write().clear();
     }
 
     if let Err(err) = app.emit(PATHS_CHANGED_EVENT, config.clone()) {
         error!(error = %err, "Failed to emit paths-changed event");
     }
-    config
+    reloaded?;
+    Ok(config)
+}
+
+fn path_error(operation: &str, path: &str, reason: String) -> CommandError {
+    if reason.contains("does not exist") {
+        CommandError::NotFound {
+            item: format!("Path: {path}"),
+        }
+    } else {
+        operation_error(operation, reason)
+    }
+}
+
+fn custom_folder_error(
+    operation: &str,
+    field: &str,
+    kind: &str,
+    path: &str,
+    reason: String,
+) -> CommandError {
+    if reason.contains("already scanned") {
+        CommandError::ValidationError {
+            field: field.to_string(),
+            reason: format!(
+                "This folder is already scanned automatically as the built-in {kind} directory. Custom folders are only needed for additional {kind} directories outside the standard location."
+            ),
+        }
+    } else {
+        path_error(operation, path, reason)
+    }
+}
+
+fn operation_error(operation: &str, reason: String) -> CommandError {
+    CommandError::OperationFailed {
+        operation: operation.to_string(),
+        reason,
+    }
+}
+
+/// Applies `change` to the stored paths, reloads everything that depends on them
+/// and reports a failed reload as an error.
+async fn apply_path_change(
+    app: &AppHandle,
+    state: &AppState,
+    message: String,
+    change: impl FnOnce(&mut crate::config::NWN2Paths) -> CommandResult<()>,
+) -> CommandResult<PathUpdateResponse> {
+    let snapshot = {
+        let mut paths = state.paths.write();
+        change(&mut paths)?;
+        paths.clone()
+    };
+    let paths = sync_resource_manager_paths(app, state, snapshot).await?;
+    Ok(PathUpdateResponse {
+        success: true,
+        message,
+        paths,
+    })
 }
 
 #[tauri::command]
@@ -148,30 +206,13 @@ pub async fn set_game_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Setting game folder to: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
-        paths.set_game_folder(&path).map_err(|e| {
-            if e.contains("does not exist") {
-                CommandError::NotFound {
-                    item: format!("Path: {path}"),
-                }
-            } else {
-                CommandError::OperationFailed {
-                    operation: "set_game_folder".to_string(),
-                    reason: e,
-                }
-            }
-        })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("Game folder set to: {path}"),
-        paths,
+    let message = format!("Game folder set to: {path}");
+    apply_path_change(&app, &state, message, |paths| {
+        paths
+            .set_game_folder(&path)
+            .map_err(|e| path_error("set_game_folder", &path, e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -182,30 +223,13 @@ pub async fn set_documents_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Setting documents folder to: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
-        paths.set_documents_folder(&path).map_err(|e| {
-            if e.contains("does not exist") {
-                CommandError::NotFound {
-                    item: format!("Path: {path}"),
-                }
-            } else {
-                CommandError::OperationFailed {
-                    operation: "set_documents_folder".to_string(),
-                    reason: e,
-                }
-            }
-        })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("Documents folder set to: {path}"),
-        paths,
+    let message = format!("Documents folder set to: {path}");
+    apply_path_change(&app, &state, message, |paths| {
+        paths
+            .set_documents_folder(&path)
+            .map_err(|e| path_error("set_documents_folder", &path, e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -216,30 +240,13 @@ pub async fn set_steam_workshop_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Setting Steam workshop folder to: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
-        paths.set_steam_workshop_folder(&path).map_err(|e| {
-            if e.contains("does not exist") {
-                CommandError::NotFound {
-                    item: format!("Path: {path}"),
-                }
-            } else {
-                CommandError::OperationFailed {
-                    operation: "set_steam_workshop_folder".to_string(),
-                    reason: e,
-                }
-            }
-        })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("Steam workshop folder set to: {path}"),
-        paths,
+    let message = format!("Steam workshop folder set to: {path}");
+    apply_path_change(&app, &state, message, |paths| {
+        paths
+            .set_steam_workshop_folder(&path)
+            .map_err(|e| path_error("set_steam_workshop_folder", &path, e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -250,35 +257,19 @@ pub async fn add_override_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Adding override folder: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
+    let message = format!("Override folder added: {path}");
+    apply_path_change(&app, &state, message, |paths| {
         paths.add_custom_override_folder(&path).map_err(|e| {
-            if e.contains("does not exist") {
-                CommandError::NotFound {
-                    item: format!("Path: {path}"),
-                }
-            } else if e.contains("already scanned") {
-                CommandError::ValidationError {
-                    field: "override_folder".to_string(),
-                    reason: "This folder is already scanned automatically as the built-in Override directory. Custom folders are only needed for additional override directories outside the standard location.".to_string(),
-                }
-            } else {
-                CommandError::OperationFailed {
-                    operation: "add_override_folder".to_string(),
-                    reason: e,
-                }
-            }
-        })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("Override folder added: {path}"),
-        paths,
+            custom_folder_error(
+                "add_override_folder",
+                "override_folder",
+                "Override",
+                &path,
+                e,
+            )
+        })
     })
+    .await
 }
 
 #[tauri::command]
@@ -289,24 +280,13 @@ pub async fn remove_override_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Removing override folder: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
+    let message = format!("Override folder removed: {path}");
+    apply_path_change(&app, &state, message, |paths| {
         paths
             .remove_custom_override_folder(&path)
-            .map_err(|e| CommandError::OperationFailed {
-                operation: "remove_override_folder".to_string(),
-                reason: e,
-            })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("Override folder removed: {path}"),
-        paths,
+            .map_err(|e| operation_error("remove_override_folder", e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -317,35 +297,13 @@ pub async fn add_hak_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Adding HAK folder: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
-        paths.add_custom_hak_folder(&path).map_err(|e| {
-            if e.contains("does not exist") {
-                CommandError::NotFound {
-                    item: format!("Path: {path}"),
-                }
-            } else if e.contains("already scanned") {
-                CommandError::ValidationError {
-                    field: "hak_folder".to_string(),
-                    reason: "This folder is already scanned automatically as the built-in HAK directory. Custom folders are only needed for additional HAK directories outside the standard location.".to_string(),
-                }
-            } else {
-                CommandError::OperationFailed {
-                    operation: "add_hak_folder".to_string(),
-                    reason: e,
-                }
-            }
-        })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("HAK folder added: {path}"),
-        paths,
+    let message = format!("HAK folder added: {path}");
+    apply_path_change(&app, &state, message, |paths| {
+        paths
+            .add_custom_hak_folder(&path)
+            .map_err(|e| custom_folder_error("add_hak_folder", "hak_folder", "HAK", &path, e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -356,24 +314,13 @@ pub async fn remove_hak_folder(
     path: String,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Removing HAK folder: {}", path);
-    let snapshot = {
-        let mut paths = state.paths.write();
-
+    let message = format!("HAK folder removed: {path}");
+    apply_path_change(&app, &state, message, |paths| {
         paths
             .remove_custom_hak_folder(&path)
-            .map_err(|e| CommandError::OperationFailed {
-                operation: "remove_hak_folder".to_string(),
-                reason: e,
-            })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: format!("HAK folder removed: {path}"),
-        paths,
+            .map_err(|e| operation_error("remove_hak_folder", e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -383,24 +330,13 @@ pub async fn reset_game_folder(
     state: State<'_, AppState>,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Resetting game folder to auto-detected");
-    let snapshot = {
-        let mut paths = state.paths.write();
-
+    let message = "Game folder reset to auto-detected".to_string();
+    apply_path_change(&app, &state, message, |paths| {
         paths
             .reset_game_folder()
-            .map_err(|e| CommandError::OperationFailed {
-                operation: "reset_game_folder".to_string(),
-                reason: e,
-            })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: "Game folder reset to auto-detected".to_string(),
-        paths,
+            .map_err(|e| operation_error("reset_game_folder", e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -410,24 +346,13 @@ pub async fn reset_documents_folder(
     state: State<'_, AppState>,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Resetting documents folder to auto-detected");
-    let snapshot = {
-        let mut paths = state.paths.write();
-
+    let message = "Documents folder reset to auto-detected".to_string();
+    apply_path_change(&app, &state, message, |paths| {
         paths
             .reset_documents_folder()
-            .map_err(|e| CommandError::OperationFailed {
-                operation: "reset_documents_folder".to_string(),
-                reason: e,
-            })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: "Documents folder reset to auto-detected".to_string(),
-        paths,
+            .map_err(|e| operation_error("reset_documents_folder", e))
     })
+    .await
 }
 
 #[tauri::command]
@@ -437,24 +362,13 @@ pub async fn reset_steam_workshop_folder(
     state: State<'_, AppState>,
 ) -> CommandResult<PathUpdateResponse> {
     debug!("Resetting Steam workshop folder to auto-detected");
-    let snapshot = {
-        let mut paths = state.paths.write();
-
+    let message = "Steam workshop folder reset to auto-detected".to_string();
+    apply_path_change(&app, &state, message, |paths| {
         paths
             .reset_steam_workshop_folder()
-            .map_err(|e| CommandError::OperationFailed {
-                operation: "reset_steam_workshop_folder".to_string(),
-                reason: e,
-            })?;
-        paths.clone()
-    };
-    let paths = sync_resource_manager_paths(&app, &state, snapshot).await;
-
-    Ok(PathUpdateResponse {
-        success: true,
-        message: "Steam workshop folder reset to auto-detected".to_string(),
-        paths,
+            .map_err(|e| operation_error("reset_steam_workshop_folder", e))
     })
+    .await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -490,7 +404,7 @@ pub async fn auto_detect_paths(
     let steam_workshop = snapshot
         .steam_workshop_folder()
         .map(|p| p.to_string_lossy().to_string());
-    let current_paths = sync_resource_manager_paths(&app, &state, snapshot).await;
+    let current_paths = sync_resource_manager_paths(&app, &state, snapshot).await?;
 
     Ok(AutoDetectResponse {
         game_installations,

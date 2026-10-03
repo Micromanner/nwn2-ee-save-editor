@@ -126,15 +126,15 @@ fn companion_pet_fields_read_from_ros() {
 fn undo_history_survives_character_switch() {
     let mut session = make_session();
     load_save(&mut session, "Classic_Campaign");
-    session.record_history("player edit");
+    session.record_edit("player edit", |_| Ok(())).unwrap();
 
     session.load_companion("khelgar").expect("load companion");
     assert!(
         !session.can_undo(),
         "fresh companion starts with empty history"
     );
-    session.record_history("khelgar edit");
-    session.record_history("khelgar edit 2");
+    session.record_edit("khelgar edit", |_| Ok(())).unwrap();
+    session.record_edit("khelgar edit 2", |_| Ok(())).unwrap();
 
     session.load_player().expect("load player");
     assert_eq!(session.undo_labels(), vec!["player edit".to_string()]);
@@ -545,10 +545,12 @@ fn save_appends_change_record_to_load_backup_manifest() {
     assert_eq!(initial.reason, backup_manifest::BackupReason::Load);
     assert!(initial.saves.is_empty());
 
-    session.record_history("Set gold to 5000");
+    session.record_edit("Set gold to 5000", |_| Ok(())).unwrap();
     session.undo();
     session.load_companion("khelgar").expect("load khelgar");
-    session.record_history("Set strength to 18");
+    session
+        .record_edit("Set strength to 18", |_| Ok(()))
+        .unwrap();
     let roster = session.list_roster().expect("roster");
     let (name, was_in_party) = {
         let entry = roster.first().expect("roster entry");

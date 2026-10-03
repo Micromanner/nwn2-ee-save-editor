@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { ask } from '@tauri-apps/plugin-dialog';
-import type { SaveSummary } from '@/lib/bindings';
 
 export interface SaveFile {
   path: string;
@@ -41,10 +40,6 @@ export class TauriAPI {
 
   static async getInitializationStatus(): Promise<{ step: string; progress: number; message: string }> {
     return await invoke('get_initialization_status');
-  }
-
-  static async getSaveSummary(): Promise<SaveSummary> {
-    return await invoke('get_save_summary');
   }
 
   // File Operations

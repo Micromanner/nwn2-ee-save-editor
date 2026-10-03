@@ -28,7 +28,7 @@ interface FeatManagementActions {
   loadCategoryFeats: (category: string, subcategory?: string | null) => Promise<void>;
   loadFeatDetails: (feat: FeatInfo) => Promise<void>;
   addFeat: (featId: number) => Promise<FeatActionResponse>;
-  removeFeat: (featId: number) => Promise<FeatActionResponse>;
+  removeFeat: (featId: number) => Promise<void>;
   selectFeat: (feat: FeatInfo | null) => void;
   clearSelection: () => void;
 }
@@ -124,16 +124,15 @@ export function useFeatManagement(
     return response;
   }, [t, character?.id, feats, invalidateSubsystems, refreshCharacter]);
 
-  const removeFeat = useCallback(async (featId: number): Promise<FeatActionResponse> => {
+  const removeFeat = useCallback(async (featId: number): Promise<void> => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    const response = await CharacterAPI.removeFeat(character.id, featId);
+    await CharacterAPI.removeFeat(character.id, featId);
     await Promise.all([
       feats.load({ force: true }),
       invalidateSubsystems([...FEAT_DEPENDENT_SUBSYSTEMS]),
       refreshCharacter(),
     ]);
-    return response;
   }, [t, character?.id, feats, invalidateSubsystems, refreshCharacter]);
 
   const selectFeat = useCallback((feat: FeatInfo | null) => {

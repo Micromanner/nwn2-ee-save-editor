@@ -1,4 +1,5 @@
 use tauri::State;
+use tracing::warn;
 
 use crate::character::overview::CampaignOverviewInfo;
 use crate::character::{AbilitiesState, ClassesState, FeatsState, OverviewState, SpellsState};
@@ -7,20 +8,22 @@ use crate::commands::{CommandError, CommandResult};
 use crate::services::campaign::CampaignManager;
 use crate::state::AppState;
 
-use super::types::{AbilitiesUpdates, CharacterUpdates};
+use super::types::CharacterUpdates;
 
 #[tauri::command]
 pub async fn get_overview_state(state: State<'_, AppState>) -> CommandResult<OverviewState> {
     super::inventory::ensure_decoder_initialized(&state).await;
 
-    let module_info_result = cached_module_info(&state).ok();
+    let module_info_result = cached_module_info(&state)
+        .inspect_err(|e| warn!("Module info unavailable for overview: {e}"))
+        .ok();
 
+    let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    let game_data = state.game_data.read();
     let decoder = &session.item_property_decoder;
 
     let mut overview = character.get_overview_state(&game_data, decoder);
@@ -38,10 +41,13 @@ pub async fn get_overview_state(state: State<'_, AppState>) -> CommandResult<Ove
             info.game_hour = Some(module_info.game_hour);
         }
 
-        if let Ok(summary) = CampaignManager::get_summary(handler) {
-            info.game_act = summary.general_info.get("game_act").cloned().flatten();
-            info.last_saved = summary.general_info.get("last_saved").cloned().flatten();
-            info.difficulty = summary.general_info.get("difficulty").cloned().flatten();
+        match CampaignManager::get_summary(handler) {
+            Ok(summary) => {
+                info.game_act = summary.general_info.get("game_act").cloned().flatten();
+                info.last_saved = summary.general_info.get("last_saved").cloned().flatten();
+                info.difficulty = summary.general_info.get("difficulty").cloned().flatten();
+            }
+            Err(e) => warn!("Campaign summary unavailable for overview: {e}"),
         }
 
         overview.campaign_info = Some(info);
@@ -57,71 +63,54 @@ pub async fn update_character(
 ) -> CommandResult<OverviewState> {
     super::inventory::ensure_decoder_initialized(&state).await;
 
-    let mut session = state.session.write();
-    {
-        let mut changed_fields: Vec<&str> = Vec::new();
-        if updates.first_name.is_some() {
-            changed_fields.push("first_name");
-        }
-        if updates.last_name.is_some() {
-            changed_fields.push("last_name");
-        }
-        if updates.age.is_some() {
-            changed_fields.push("age");
-        }
-        if updates.gender.is_some() {
-            changed_fields.push("gender");
-        }
-        if updates.deity.is_some() {
-            changed_fields.push("deity");
-        }
-        if updates.description.is_some() {
-            changed_fields.push("description");
-        }
-        if updates.alignment.is_some() {
-            changed_fields.push("alignment");
-        }
-        if updates.experience.is_some() {
-            changed_fields.push("experience");
-        }
-        let label = if changed_fields.is_empty() {
-            "Update character".to_string()
-        } else {
-            format!("Update character: {}", changed_fields.join(", "))
-        };
-        session.record_history(label);
-    }
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    if let Some(first_name) = updates.first_name {
-        character.set_first_name(first_name);
-    }
-    if let Some(last_name) = updates.last_name {
-        character.set_last_name(last_name);
-    }
-    if let Some(age) = updates.age {
-        character.set_age(age)?;
-    }
-    if let Some(gender) = updates.gender {
-        character.set_gender(gender)?;
-    }
-    if let Some(deity) = updates.deity {
-        character.set_deity(deity);
-    }
-    if let Some(description) = updates.description {
-        character.set_description(description);
-    }
-    if let Some((law_chaos, good_evil)) = updates.alignment {
-        character.set_alignment(Some(law_chaos), Some(good_evil))?;
-    }
-    if let Some(experience) = updates.experience {
-        character.set_experience(experience)?;
-    }
-
     let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    let changed_fields: Vec<&str> = [
+        ("first_name", updates.first_name.is_some()),
+        ("last_name", updates.last_name.is_some()),
+        ("age", updates.age.is_some()),
+        ("gender", updates.gender.is_some()),
+        ("deity", updates.deity.is_some()),
+        ("description", updates.description.is_some()),
+        ("alignment", updates.alignment.is_some()),
+        ("experience", updates.experience.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(name, changed)| changed.then_some(name))
+    .collect();
+    let label = if changed_fields.is_empty() {
+        "Update character".to_string()
+    } else {
+        format!("Update character: {}", changed_fields.join(", "))
+    };
+    session.record_edit(label, |character| {
+        if let Some(first_name) = updates.first_name {
+            character.set_first_name(first_name);
+        }
+        if let Some(last_name) = updates.last_name {
+            character.set_last_name(last_name);
+        }
+        if let Some(age) = updates.age {
+            character.set_age(age)?;
+        }
+        if let Some(gender) = updates.gender {
+            character.set_gender(gender)?;
+        }
+        if let Some(deity) = updates.deity {
+            character.set_deity(deity);
+        }
+        if let Some(description) = updates.description {
+            character.set_description(description);
+        }
+        if let Some((law_chaos, good_evil)) = updates.alignment {
+            character.set_alignment(Some(law_chaos), Some(good_evil))?;
+        }
+        if let Some(experience) = updates.experience {
+            character.set_experience(experience)?;
+        }
+        Ok(())
+    })?;
+
     let character = session
         .character
         .as_ref()
@@ -134,106 +123,14 @@ pub async fn update_character(
 pub async fn get_abilities_state(state: State<'_, AppState>) -> CommandResult<AbilitiesState> {
     super::inventory::ensure_decoder_initialized(&state).await;
 
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
     let game_data = state.game_data.read();
-    let decoder = &session.item_property_decoder;
-
-    Ok(character.get_abilities_state(&game_data, decoder))
-}
-
-#[tauri::command]
-pub async fn update_abilities(
-    state: State<'_, AppState>,
-    updates: AbilitiesUpdates,
-) -> CommandResult<AbilitiesState> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let game_data = state.game_data.read();
-
-    {
-        let mut session = state.session.write();
-        let changes: Vec<(&str, i32)> = [
-            ("Strength", updates.str_),
-            ("Dexterity", updates.dex),
-            ("Constitution", updates.con),
-            ("Intelligence", updates.int),
-            ("Wisdom", updates.wis),
-            ("Charisma", updates.cha),
-        ]
-        .into_iter()
-        .filter_map(|(name, val)| val.map(|v| (name, v)))
-        .collect();
-        let label = match changes.as_slice() {
-            [] => "Update abilities".to_string(),
-            [(name, value)] => format!("Set {name} to {value}"),
-            multi => format!(
-                "Set {}",
-                multi
-                    .iter()
-                    .map(|(n, v)| format!("{n} to {v}"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        };
-        session.record_history(label);
-        let character = session
-            .character
-            .as_mut()
-            .ok_or(CommandError::NoCharacterLoaded)?;
-
-        if let Some(str_val) = updates.str_ {
-            character.set_ability_with_cascades(
-                crate::character::types::AbilityIndex::STR,
-                str_val,
-                &game_data,
-            )?;
-        }
-        if let Some(dex_val) = updates.dex {
-            character.set_ability_with_cascades(
-                crate::character::types::AbilityIndex::DEX,
-                dex_val,
-                &game_data,
-            )?;
-        }
-        if let Some(con_val) = updates.con {
-            character.set_ability_with_cascades(
-                crate::character::types::AbilityIndex::CON,
-                con_val,
-                &game_data,
-            )?;
-        }
-        if let Some(int_val) = updates.int {
-            character.set_ability_with_cascades(
-                crate::character::types::AbilityIndex::INT,
-                int_val,
-                &game_data,
-            )?;
-        }
-        if let Some(wis_val) = updates.wis {
-            character.set_ability_with_cascades(
-                crate::character::types::AbilityIndex::WIS,
-                wis_val,
-                &game_data,
-            )?;
-        }
-        if let Some(cha_val) = updates.cha {
-            character.set_ability_with_cascades(
-                crate::character::types::AbilityIndex::CHA,
-                cha_val,
-                &game_data,
-            )?;
-        }
-    }
-
     let session = state.session.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     let decoder = &session.item_property_decoder;
+
     Ok(character.get_abilities_state(&game_data, decoder))
 }
 
@@ -277,25 +174,22 @@ pub async fn apply_point_buy(
 
     {
         let mut session = state.session.write();
-        session.record_history("Apply point buy");
-        let character = session
-            .character
-            .as_mut()
-            .ok_or(CommandError::NoCharacterLoaded)?;
+        session.record_edit("Apply point buy", |character| {
+            character.clear_ability_level_up_history()?;
 
-        character.clear_ability_level_up_history()?;
+            let old_con = character.base_ability(AbilityIndex::CON);
+            character.set_ability(AbilityIndex::STR, new_scores.str_)?;
+            character.set_ability(AbilityIndex::DEX, new_scores.dex)?;
+            character.set_ability(AbilityIndex::CON, new_scores.con)?;
+            character.set_ability(AbilityIndex::INT, new_scores.int)?;
+            character.set_ability(AbilityIndex::WIS, new_scores.wis)?;
+            character.set_ability(AbilityIndex::CHA, new_scores.cha)?;
 
-        let old_con = character.base_ability(AbilityIndex::CON);
-        character.set_ability(AbilityIndex::STR, new_scores.str_)?;
-        character.set_ability(AbilityIndex::DEX, new_scores.dex)?;
-        character.set_ability(AbilityIndex::CON, new_scores.con)?;
-        character.set_ability(AbilityIndex::INT, new_scores.int)?;
-        character.set_ability(AbilityIndex::WIS, new_scores.wis)?;
-        character.set_ability(AbilityIndex::CHA, new_scores.cha)?;
-
-        if new_scores.con != old_con {
-            character.recalculate_hit_points(old_con, new_scores.con);
-        }
+            if new_scores.con != old_con {
+                character.recalculate_hit_points(old_con, new_scores.con);
+            }
+            Ok(())
+        })?;
     }
 
     let session = state.session.read();
@@ -309,24 +203,24 @@ pub async fn apply_point_buy(
 
 #[tauri::command]
 pub async fn get_classes_state(state: State<'_, AppState>) -> CommandResult<ClassesState> {
+    let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    let game_data = state.game_data.read();
 
     Ok(character.get_classes_state(&game_data))
 }
 
 #[tauri::command]
 pub async fn get_feats_state(state: State<'_, AppState>) -> CommandResult<FeatsState> {
+    let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    let game_data = state.game_data.read();
 
     Ok(character.get_feats_state(&game_data))
 }
@@ -334,12 +228,12 @@ pub async fn get_feats_state(state: State<'_, AppState>) -> CommandResult<FeatsS
 #[tauri::command]
 pub async fn get_spells_state(state: State<'_, AppState>) -> CommandResult<SpellsState> {
     super::inventory::ensure_decoder_initialized(&state).await;
+    let game_data = state.game_data.read();
     let session = state.session.read();
     let character = session
         .character
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    let game_data = state.game_data.read();
 
     Ok(character.get_spells_state(&game_data, &session.item_property_decoder))
 }

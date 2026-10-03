@@ -27,8 +27,6 @@ pub struct SaveGraphSummary {
     pub campaign: CampaignSummary,
     pub modules: Vec<AggregatedModule>,
     pub quests: Vec<QuestSummary>,
-    pub globals: XmlData,
-    pub current_module_variables: Vec<LiveModuleVar>,
     pub orphans: Vec<OrphanNote>,
 }
 
@@ -49,8 +47,6 @@ impl From<&SaveGraph> for SaveGraphSummary {
             campaign: g.campaign.clone(),
             modules: g.modules.clone(),
             quests,
-            globals: g.globals.clone(),
-            current_module_variables: g.current_module_variables.clone(),
             orphans: g.orphans.clone(),
         }
     }

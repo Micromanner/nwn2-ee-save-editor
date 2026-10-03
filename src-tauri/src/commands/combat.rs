@@ -1,7 +1,4 @@
-use crate::character::{
-    ArmorClass, AttackBonuses, CombatSummary, Initiative, NaturalArmorChange, SaveChange,
-    SaveSummary, SaveType, SavingThrows,
-};
+use crate::character::{CombatSummary, NaturalArmorChange, SaveChange, SaveSummary, SaveType};
 use crate::commands::{CommandError, CommandResult};
 use crate::state::AppState;
 use tauri::State;
@@ -9,8 +6,8 @@ use tauri::State;
 #[tauri::command]
 pub async fn get_combat_summary(state: State<'_, AppState>) -> CommandResult<CombatSummary> {
     super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -20,53 +17,26 @@ pub async fn get_combat_summary(state: State<'_, AppState>) -> CommandResult<Com
 }
 
 #[tauri::command]
-pub async fn calculate_base_attack_bonus(state: State<'_, AppState>) -> CommandResult<i32> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.calculate_bab(&game_data))
-}
-
-#[tauri::command]
-pub async fn get_attack_sequence(state: State<'_, AppState>) -> CommandResult<Vec<i32>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_attack_sequence(&game_data))
-}
-
-#[tauri::command]
 pub async fn update_natural_armor(
     state: State<'_, AppState>,
     value: i32,
 ) -> CommandResult<NaturalArmorChange> {
     let mut session = state.session.write();
-    session.record_history(format!("Set natural armor to {value}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    let old_value = character.natural_ac();
-    character.set_natural_ac(value)?;
-
-    Ok(NaturalArmorChange {
-        old_value,
-        new_value: value,
+    session.record_edit(format!("Set natural armor to {value}"), |character| {
+        let old_value = character.natural_ac();
+        character.set_natural_ac(value)?;
+        Ok(NaturalArmorChange {
+            old_value,
+            new_value: value,
+        })
     })
 }
 
 #[tauri::command]
 pub async fn get_save_summary(state: State<'_, AppState>) -> CommandResult<SaveSummary> {
     super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -95,91 +65,23 @@ pub async fn set_misc_save_bonus(
     };
 
     let mut session = state.session.write();
-    session.record_history(format!("Set misc save bonus to {value}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
+    session.record_edit(format!("Set misc save bonus to {value}"), |character| {
+        let old_misc = match save_enum {
+            SaveType::Fortitude => character.base_fortitude(),
+            SaveType::Reflex => character.base_reflex(),
+            SaveType::Will => character.base_will(),
+        };
 
-    let old_misc = match save_enum {
-        SaveType::Fortitude => character.base_fortitude(),
-        SaveType::Reflex => character.base_reflex(),
-        SaveType::Will => character.base_will(),
-    };
+        match save_enum {
+            SaveType::Fortitude => character.set_fortitude(value)?,
+            SaveType::Reflex => character.set_reflex(value)?,
+            SaveType::Will => character.set_will(value)?,
+        }
 
-    match save_enum {
-        SaveType::Fortitude => character.set_fortitude(value)?,
-        SaveType::Reflex => character.set_reflex(value)?,
-        SaveType::Will => character.set_will(value)?,
-    }
-
-    Ok(SaveChange {
-        save_type: save_enum,
-        old_misc,
-        new_misc: value,
+        Ok(SaveChange {
+            save_type: save_enum,
+            old_misc,
+            new_misc: value,
+        })
     })
-}
-
-#[tauri::command]
-pub async fn get_armor_class(state: State<'_, AppState>) -> CommandResult<ArmorClass> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let decoder = &session.item_property_decoder;
-    Ok(character.get_armor_class(&game_data, decoder))
-}
-
-#[tauri::command]
-pub async fn get_attack_bonuses(state: State<'_, AppState>) -> CommandResult<AttackBonuses> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let decoder = &session.item_property_decoder;
-    Ok(character.get_attack_bonuses(&game_data, decoder))
-}
-
-#[tauri::command]
-pub async fn get_initiative(state: State<'_, AppState>) -> CommandResult<Initiative> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let decoder = &session.item_property_decoder;
-    Ok(character.get_initiative_breakdown(&game_data, decoder))
-}
-
-#[tauri::command]
-pub async fn get_attacks_per_round(state: State<'_, AppState>) -> CommandResult<i32> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let attack_sequence = character.get_attack_sequence(&game_data);
-    Ok(attack_sequence.len() as i32)
-}
-
-#[tauri::command]
-pub async fn get_saving_throws(state: State<'_, AppState>) -> CommandResult<SavingThrows> {
-    super::inventory::ensure_decoder_initialized(&state).await;
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let decoder = &session.item_property_decoder;
-    Ok(character.get_saving_throws(&game_data, decoder))
 }

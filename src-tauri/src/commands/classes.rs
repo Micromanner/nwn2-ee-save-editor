@@ -1,9 +1,8 @@
 use crate::character::classes::{
     AlignmentRestriction, ClassProgression, LevelUpResult, PrestigeClassOption,
-    PrestigeClassValidation, PrestigeRequirements, ResolvedLevelHistoryEntry,
-    get_class_progression,
+    PrestigeRequirements, get_class_progression,
 };
-use crate::character::{Character, ClassEntry, ClassId, ClassSummaryEntry, XpProgress};
+use crate::character::{Character, ClassId};
 use crate::commands::{CommandError, CommandResult};
 use crate::services::class_categorizer::{CategorizedClasses, get_categorized_classes};
 use crate::state::AppState;
@@ -13,52 +12,9 @@ use specta::Type;
 use tauri::State;
 
 #[tauri::command]
-pub async fn get_total_level(state: State<'_, AppState>) -> CommandResult<i32> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.total_level())
-}
-
-#[tauri::command]
-pub async fn get_class_entries(state: State<'_, AppState>) -> CommandResult<Vec<ClassEntry>> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.class_entries())
-}
-
-#[tauri::command]
-pub async fn get_class_level(state: State<'_, AppState>, class_id: i32) -> CommandResult<i32> {
-    let session = state.session.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.class_level(ClassId(class_id)))
-}
-
-#[tauri::command]
-pub async fn get_class_summary(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<ClassSummaryEntry>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_class_summary(&game_data))
-}
-
-#[tauri::command]
 pub async fn get_class_name(state: State<'_, AppState>, class_id: i32) -> CommandResult<String> {
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -81,43 +37,12 @@ pub async fn get_class_icon(
 }
 
 #[tauri::command]
-pub async fn get_xp_progress(state: State<'_, AppState>) -> CommandResult<XpProgress> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.get_xp_progress(&game_data))
-}
-
-#[tauri::command]
-pub async fn get_level_history(
-    state: State<'_, AppState>,
-) -> CommandResult<Vec<ResolvedLevelHistoryEntry>> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.level_history_resolved(&game_data))
-}
-
-#[tauri::command]
 pub async fn set_experience(state: State<'_, AppState>, xp: i32) -> CommandResult<()> {
     let mut session = state.session.write();
-    session.record_history(format!("Set XP to {xp}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    character
-        .set_experience(xp)
-        .map_err(|e| CommandError::ValidationError {
-            field: "experience".to_string(),
-            reason: e.to_string(),
-        })
+    session.record_edit(format!("Set XP to {xp}"), |character| {
+        character.set_experience(xp)?;
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -131,50 +56,18 @@ pub async fn remove_class_entry(state: State<'_, AppState>, class_id: i32) -> Co
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Remove class: {class_label}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    character
-        .remove_class(ClassId(class_id), &game_data)
-        .map_err(|e| CommandError::ValidationError {
-            field: "class".to_string(),
-            reason: e.to_string(),
-        })
-}
-
-#[tauri::command]
-pub async fn is_prestige_class(state: State<'_, AppState>, class_id: i32) -> CommandResult<bool> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.is_prestige_class(ClassId(class_id), &game_data))
-}
-
-#[tauri::command]
-pub async fn check_prestige_class_requirements(
-    state: State<'_, AppState>,
-    class_id: i32,
-) -> CommandResult<PrestigeClassValidation> {
-    let session = state.session.read();
-    let game_data = state.game_data.read();
-    let character = session
-        .character
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    Ok(character.validate_prestige_class_requirements(ClassId(class_id), &game_data))
+    session.record_edit(format!("Remove class: {class_label}"), |character| {
+        character.remove_class(ClassId(class_id), &game_data)?;
+        Ok(())
+    })
 }
 
 #[tauri::command]
 pub async fn get_available_prestige_classes(
     state: State<'_, AppState>,
 ) -> CommandResult<Vec<PrestigeClassOption>> {
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
     let character = session
         .character
         .as_ref()
@@ -205,24 +98,13 @@ pub async fn add_class_level(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Add {count} {class_label} level(s)"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    character
-        .transactional(|c| -> Result<_, crate::character::CharacterError> {
-            let mut results = Vec::with_capacity(count as usize);
-            for _ in 0..count {
-                results.push(c.level_up(ClassId(class_id), &game_data)?);
-            }
-            Ok(results)
-        })
-        .map_err(|e| CommandError::ValidationError {
-            field: "level_up".to_string(),
-            reason: e.to_string(),
-        })
+    session.record_edit(format!("Add {count} {class_label} level(s)"), |character| {
+        let mut results = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            results.push(character.level_up(ClassId(class_id), &game_data)?);
+        }
+        Ok(results)
+    })
 }
 
 #[tauri::command]
@@ -243,18 +125,13 @@ pub async fn change_class(
             character.get_class_name(ClassId(new_class_id), &game_data),
         )
     };
-    session.record_history(format!("Change class: {old_label} -> {new_label}"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    character
-        .swap_class(ClassId(old_class_id), ClassId(new_class_id), &game_data)
-        .map_err(|e| CommandError::ValidationError {
-            field: "change_class".to_string(),
-            reason: e.to_string(),
-        })
+    session.record_edit(
+        format!("Change class: {old_label} -> {new_label}"),
+        |character| {
+            character.swap_class(ClassId(old_class_id), ClassId(new_class_id), &game_data)?;
+            Ok(())
+        },
+    )
 }
 
 #[tauri::command]
@@ -279,23 +156,15 @@ pub async fn remove_class_levels(
             .ok_or(CommandError::NoCharacterLoaded)?;
         character.get_class_name(ClassId(class_id), &game_data)
     };
-    session.record_history(format!("Remove {count} {class_label} level(s)"));
-    let character = session
-        .character
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-
-    character
-        .transactional(|c| -> Result<(), crate::character::CharacterError> {
+    session.record_edit(
+        format!("Remove {count} {class_label} level(s)"),
+        |character| {
             for _ in 0..count {
-                c.level_down(ClassId(class_id), &game_data)?;
+                character.level_down(ClassId(class_id), &game_data)?;
             }
             Ok(())
-        })
-        .map_err(|e| CommandError::ValidationError {
-            field: "level_down".to_string(),
-            reason: e.to_string(),
-        })
+        },
+    )
 }
 
 #[tauri::command]
@@ -304,7 +173,6 @@ pub async fn get_class_progression_details(
     class_id: i32,
     max_level: Option<i32>,
 ) -> CommandResult<ClassProgression> {
-    let _session = state.session.read();
     let game_data = state.game_data.read();
     let max = max_level.unwrap_or(20);
     get_class_progression(class_id, max, &game_data).ok_or_else(|| CommandError::NotFound {
@@ -359,8 +227,8 @@ pub async fn get_class_detail(
     state: State<'_, AppState>,
     class_id: i32,
 ) -> CommandResult<ClassDetailResponse> {
-    let session = state.session.read();
     let game_data = state.game_data.read();
+    let session = state.session.read();
 
     let classes_table = game_data
         .get_table("classes")
@@ -422,36 +290,24 @@ pub async fn get_class_detail(
         None
     };
 
-    // Class skills from cls_skill_* table
-    let class_skills = row_str(&class_data, "skillstable")
-        .and_then(|table_name| {
-            let table = game_data.get_table(&table_name.to_lowercase())?;
-            let skills_table = game_data.get_table("skills")?;
-            let mut skills = Vec::new();
-            for row_idx in 0..table.row_count() {
-                let Ok(row) = table.get_row(row_idx) else {
-                    continue;
-                };
-                let is_class_skill = row_int(&row, "classsflag", 0) == 1;
-                if is_class_skill {
-                    let skill_name = skills_table
-                        .get_by_id(row_idx as i32)
-                        .and_then(|skill_row| {
-                            let strref = row_int(&skill_row, "name", -1);
-                            if strref >= 0 {
-                                game_data.get_string(strref)
-                            } else {
-                                row_str(&skill_row, "label")
-                            }
-                        })
-                        .unwrap_or_else(|| format!("Skill {row_idx}"));
-                    skills.push(skill_name);
-                }
-            }
-            skills.sort();
-            Some(skills)
+    let mut class_skills: Vec<String> = Character::class_skill_ids(ClassId(class_id), &game_data)
+        .into_iter()
+        .map(|skill_id| {
+            game_data
+                .get_table("skills")
+                .and_then(|table| table.get_by_id(skill_id.0))
+                .and_then(|skill_row| {
+                    let strref = row_int(&skill_row, "name", -1);
+                    if strref >= 0 {
+                        game_data.get_string(strref)
+                    } else {
+                        row_str(&skill_row, "label")
+                    }
+                })
+                .unwrap_or_else(|| format!("Skill {}", skill_id.0))
         })
-        .unwrap_or_default();
+        .collect();
+    class_skills.sort();
 
     // Save progression (high/low per save)
     let save_progression = row_str(&class_data, "savingthrowtable")

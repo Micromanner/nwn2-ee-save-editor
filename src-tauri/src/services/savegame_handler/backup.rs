@@ -16,7 +16,7 @@ pub const BACKUP_TIMESTAMP_FORMAT: &str = "%Y%m%d_%H%M%S";
 /// backups never copy it and restores never touch it.
 pub const INNER_BACKUPS_DIR: &str = "backups";
 const LOAD_PREFIX: &str = "backup_";
-const PRE_RESTORE_PREFIX: &str = "pre_restore_";
+pub(crate) const PRE_RESTORE_PREFIX: &str = "pre_restore_";
 const RESTORE_STAGING_DIR: &str = ".restore_staging";
 const RESTORE_DISPLACED_DIR: &str = ".restore_displaced";
 

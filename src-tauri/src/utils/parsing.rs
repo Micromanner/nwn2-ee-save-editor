@@ -1,3 +1,4 @@
+use crate::loaders::GameData;
 use ahash::AHashMap;
 
 pub type Row = AHashMap<String, Option<String>>;
@@ -16,6 +17,20 @@ pub fn row_str(row: &Row, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+}
+
+pub fn row_string(game_data: &GameData, row: &Row, strref_column: &str) -> Option<String> {
+    let strref = row_int(row, strref_column, -1);
+    if strref >= 0 {
+        game_data.get_string(strref)
+    } else {
+        None
+    }
+}
+
+/// The localized name behind `strref_column`, falling back to the row's label.
+pub fn row_name(game_data: &GameData, row: &Row, strref_column: &str) -> Option<String> {
+    row_string(game_data, row, strref_column).or_else(|| row_str(row, "label"))
 }
 
 /// Parse an optional string to i32, returning `default` on None/empty/unparseable.

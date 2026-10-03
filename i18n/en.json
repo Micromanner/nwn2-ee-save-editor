@@ -1131,6 +1131,10 @@
     }
   },
   "settings": {
+    "unsavedChanges": {
+      "title": "Unsaved Changes",
+      "warning": "This character has unsaved changes. Changing this setting reloads the game data and discards them."
+    },
     "title": "Settings",
     "tabs": {
       "general": "General",
@@ -1199,6 +1203,11 @@
     }
   },
   "startup": {
+    "error": {
+      "openSettings": "Open Settings",
+      "title": "Failed to load game data",
+      "unknown": "Unknown error"
+    },
     "notFound": {
       "title": "NWN2 installation not found",
       "description": "We couldn't find a Neverwinter Nights 2 installation. Please set your game folder to continue.",

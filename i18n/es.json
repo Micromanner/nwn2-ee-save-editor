@@ -1133,6 +1133,10 @@
     }
   },
   "settings": {
+    "unsavedChanges": {
+      "title": "Cambios sin guardar",
+      "warning": "Este personaje tiene cambios sin guardar. Cambiar este ajuste recarga los datos del juego y los descarta."
+    },
     "title": "Ajustes",
     "tabs": {
       "general": "General",
@@ -1421,6 +1425,11 @@
     "otherRosterEntriesHint": "Entradas del grupo no reconocidas como parte del elenco de compañeros de esta campaña (p. ej. PNJ de la historia). Se pueden alternar igualmente, pero no cuentan para el límite del grupo."
   },
   "startup": {
+    "error": {
+      "openSettings": "Abrir ajustes",
+      "title": "No se pudieron cargar los datos del juego",
+      "unknown": "Error desconocido"
+    },
     "notFound": {
       "description": "No se encontró una instalación de Neverwinter Nights 2. Configura tu carpeta del juego para continuar.",
       "retry": "Reintentar",

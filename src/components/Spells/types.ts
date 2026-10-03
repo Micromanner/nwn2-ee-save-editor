@@ -1,3 +1,9 @@
+export interface SpellClassLevel {
+  class_id: number;
+  class_name: string;
+  level: number;
+}
+
 export interface SpellInfo {
   id: number;
   name: string;
@@ -17,6 +23,7 @@ export interface SpellInfo {
   available_metamagic?: string;
 
   available_classes: string[];
+  class_levels?: SpellClassLevel[];
   class_id?: number;
 
   isLearned?: boolean;

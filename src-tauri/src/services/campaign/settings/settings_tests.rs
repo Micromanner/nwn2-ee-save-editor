@@ -109,6 +109,7 @@ mod tests {
 
         let mut settings = read_campaign_settings_from_path(&cam_file).expect("read settings");
         settings.campaign_file_path = cam_file.to_string_lossy().to_string();
+        settings.guid = campaign_guid(&original);
         update_campaign_settings(&settings, &paths).expect("write settings");
 
         let after_bytes = fs::read(&cam_file).unwrap();

@@ -121,20 +121,18 @@ export function SpellsPanel() {
     [casterClasses]
   );
 
-  const handleAddSpell = useCallback(async (spellId: number, classIndex: number, spellLevel: number) => {
+  const handleAddSpell = useCallback(async (spellId: number, classIndex: number) => {
     try {
-      const response = await addSpell(spellId, classIndex, spellLevel);
-      const isSimple = response.message === 'Spell added successfully';
-      showToast(isSimple ? t('placeholders.spellAdded') : response.message, 'success');
+      await addSpell(spellId, classIndex);
+      showToast(t('placeholders.spellAdded'), 'success');
       setSelectedSpell(null);
     } catch (error) { handleError(error); }
   }, [addSpell, showToast, handleError, t]);
 
   const handleRemoveSpell = useCallback(async (spellId: number, classIndex: number, spellLevel: number) => {
     try {
-      const response = await removeSpell(spellId, classIndex, spellLevel);
-      const isSimple = response.message === 'Spell removed successfully';
-      showToast(isSimple ? t('placeholders.spellRemoved') : response.message, 'success');
+      await removeSpell(spellId, classIndex, spellLevel);
+      showToast(t('placeholders.spellRemoved'), 'success');
       setSelectedSpell(null);
     } catch (error) { handleError(error); }
   }, [removeSpell, showToast, handleError, t]);

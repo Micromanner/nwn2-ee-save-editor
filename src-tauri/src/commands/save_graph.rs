@@ -22,10 +22,6 @@ pub async fn save_get_quest_graph(
 ) -> CommandResult<SaveGraphSummary> {
     let graph = ensure_quest_graph(&app, &state)?;
     let mut summary = SaveGraphSummary::from(graph.as_ref());
-    // The cached graph is only rebuilt on load; save state is read live.
-    let (module_info, module_vars) = cached_module_info(&state)?;
-    summary.current_module_variables =
-        save_graph::flatten_module_vars(&module_info.current_module, &module_vars);
     let session = state.session.read();
     let handler = session
         .savegame_handler
@@ -41,8 +37,6 @@ pub async fn save_get_quest_graph(
     for quest in &mut summary.quests {
         quest.live_state = journal.iter().find(|j| j.tag == quest.tag).map(|j| j.state);
     }
-    summary.globals = crate::services::campaign::CampaignManager::get_campaign_variables(handler)
-        .unwrap_or_default();
     Ok(summary)
 }
 
@@ -124,6 +118,8 @@ pub async fn save_stage_quest_edit(
     let graph = ensure_quest_graph(&app, &state)?;
     let resources = state.resource_manager.read().await;
     let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
+    let game_data = state.game_data.read();
+    let paths = state.paths.read();
     let mut session = state.session.write();
     let handler = session
         .savegame_handler
@@ -135,7 +131,7 @@ pub async fn save_stage_quest_edit(
             &graph,
             &tables,
             handler,
-            &state.paths.read(),
+            &paths,
             session
                 .primary_player_index
                 .unwrap_or(session.selected_player_index),
@@ -150,7 +146,7 @@ pub async fn save_stage_quest_edit(
         ));
     }
     session
-        .stage_quest_edit(preview, &graph, &selected, replace, &state.game_data.read())
+        .stage_quest_edit(preview, &graph, &selected, replace, &game_data)
         .map_err(CommandError::from)?;
     Ok(session.quest_edits.pending.clone())
 }
@@ -292,9 +288,13 @@ fn ensure_quest_graph(
     app: &AppHandle,
     state: &State<'_, AppState>,
 ) -> CommandResult<Arc<SaveGraph>> {
-    if let Some(cached) = state.session.read().quest_graph_cache.clone() {
-        return Ok(cached);
-    }
+    let generation = {
+        let session = state.session.read();
+        if let Some(cached) = session.quest_graph_cache.clone() {
+            return Ok(cached);
+        }
+        session.load_generation
+    };
 
     // cached_module_info internally takes session read/write locks — resolve it
     // before we take our own session lock for the build.
@@ -314,9 +314,7 @@ fn ensure_quest_graph(
             OrphanKind::EnhancedEditionRequired,
             explanation,
         )?;
-        let shared = Arc::new(graph);
-        state.session.write().quest_graph_cache = Some(shared.clone());
-        return Ok(shared);
+        return store_quest_graph(state, generation, graph);
     }
 
     let client = match toolset_bridge::build_client(app, state) {
@@ -329,9 +327,7 @@ fn ensure_quest_graph(
                 OrphanKind::PlatformUnsupported,
                 format!("Quest graph is Windows-only. {msg}"),
             )?;
-            let shared = Arc::new(graph);
-            state.session.write().quest_graph_cache = Some(shared.clone());
-            return Ok(shared);
+            return store_quest_graph(state, generation, graph);
         }
         Err(e) => return Err(CommandError::from(e)),
     };
@@ -347,6 +343,7 @@ fn ensure_quest_graph(
     };
 
     let graph_result = {
+        let paths = state.paths.read();
         let session = state.session.read();
         let handler = session
             .savegame_handler
@@ -355,7 +352,6 @@ fn ensure_quest_graph(
         let player_index = session
             .primary_player_index
             .unwrap_or(session.selected_player_index);
-        let paths = state.paths.read();
 
         save_graph::build(BuildContext {
             handler,
@@ -380,8 +376,27 @@ fn ensure_quest_graph(
         }
     };
 
+    store_quest_graph(state, generation, graph)
+}
+
+/// Caches a built graph unless the save changed during the build; if another
+/// build stored first, that one wins.
+fn store_quest_graph(
+    state: &State<'_, AppState>,
+    generation: u64,
+    graph: SaveGraph,
+) -> CommandResult<Arc<SaveGraph>> {
+    let mut session = state.session.write();
+    if session.load_generation != generation {
+        return Err(CommandError::from(
+            "The save changed while the quest graph was being built".to_string(),
+        ));
+    }
+    if let Some(existing) = &session.quest_graph_cache {
+        return Ok(existing.clone());
+    }
     let shared = Arc::new(graph);
-    state.session.write().quest_graph_cache = Some(shared.clone());
+    session.quest_graph_cache = Some(shared.clone());
     Ok(shared)
 }
 

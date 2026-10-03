@@ -219,7 +219,6 @@ async fn test_equip_unequip_flow() {
         .unequip_item(slot_to_test)
         .expect("Failed to unequip item");
 
-    assert!(unequip_res.success);
     assert!(unequip_res.unequipped_item.is_some());
 
     // 3. Verify changes
@@ -234,14 +233,9 @@ async fn test_equip_unequip_flow() {
 
     // 4. Equip it back
     if let Some(inv_idx) = unequip_res.inventory_index {
-        let equip_res = character
+        character
             .equip_item(inv_idx, slot_to_test, game_data)
             .expect("Failed to re-equip item");
-
-        if !equip_res.success {
-            println!("Equip failed: {}", equip_res.message);
-        }
-        assert!(equip_res.success);
 
         // 5. Verify restoration
         let final_ac = equipment_ac(&character, game_data, &ctx.decoder);
@@ -355,16 +349,9 @@ async fn test_classic_campaign_inventory_equip() {
             .equip_item(idx, slot, game_data)
             .expect("Failed to execute equip command");
 
-        if !res.success {
-            println!("Equip Failed: {}", res.message);
-        } else {
-            println!("Equip Success: {}", res.message);
-            if let Some(swapped) = res.swapped_item {
-                println!("Swapped out: {}", swapped.tag);
-            }
+        if let Some(swapped) = res.swapped_item {
+            println!("Swapped out: {}", swapped.tag);
         }
-
-        assert!(res.success, "Should satisfy equip attempt");
     } else {
         println!("No equipable items found in inventory, skipping equip test");
     }

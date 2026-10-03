@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tracing::{debug, info, instrument, warn};
 
 use crate::character::{Character, FeatInfo};
+use crate::commands::error::CommandError;
 use crate::loaders::GameData;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::services::PlayerInfo;
@@ -86,6 +87,9 @@ pub struct SessionState {
     /// per-quest fetch both read through the shared pointer.
     /// Cleared whenever the save changes (`load_character`, `close_character`).
     pub quest_graph_cache: Option<Arc<SaveGraph>>,
+    /// Bumped whenever the loaded save changes, so background work started for
+    /// an earlier load can tell its result is stale.
+    pub load_generation: u64,
     pub quest_edits: crate::services::save_graph::editing::QuestEdits,
     pub history: History,
     pub character_source: CharacterSource,
@@ -127,6 +131,7 @@ impl SessionState {
             feat_cache: None,
             module_info_cache: None,
             quest_graph_cache: None,
+            load_generation: 0,
             quest_edits: crate::services::save_graph::editing::QuestEdits::default(),
             history: History::default(),
             character_source: CharacterSource::Player,
@@ -284,9 +289,7 @@ impl SessionState {
         self.savegame_handler = Some(handler);
         self.current_file_path = Some(path);
         self.save_dir = Some(save_dir);
-        self.feat_cache = None;
-        self.module_info_cache = None;
-        self.quest_graph_cache = None;
+        self.reset_save_caches();
         self.selected_player_index = selected_player_index;
         self.primary_player_index = primary_player_index;
         self.character_source = CharacterSource::Player;
@@ -330,9 +333,7 @@ impl SessionState {
         self.savegame_handler = None;
         self.current_file_path = Some(path.to_path_buf());
         self.save_dir = None;
-        self.feat_cache = None;
-        self.module_info_cache = None;
-        self.quest_graph_cache = None;
+        self.reset_save_caches();
         self.selected_player_index = 0;
         self.primary_player_index = None;
         self.character_source = CharacterSource::Standalone;
@@ -703,6 +704,15 @@ impl SessionState {
         Ok(warning)
     }
 
+    /// Drop everything derived from the previous save and invalidate builds
+    /// still running against it.
+    fn reset_save_caches(&mut self) {
+        self.feat_cache = None;
+        self.module_info_cache = None;
+        self.quest_graph_cache = None;
+        self.load_generation += 1;
+    }
+
     pub fn close_character(&mut self) {
         self.character = None;
         self.savegame_handler = None;
@@ -710,9 +720,7 @@ impl SessionState {
         self.save_dir = None;
         self.selected_player_index = 0;
         self.primary_player_index = None;
-        self.feat_cache = None;
-        self.module_info_cache = None;
-        self.quest_graph_cache = None;
+        self.reset_save_caches();
         self.character_source = CharacterSource::Player;
         self.standalone_backup_done = false;
         self.parked.clear();
@@ -722,16 +730,37 @@ impl SessionState {
         self.clear_history();
     }
 
-    pub fn record_history(&mut self, label: impl Into<String>) {
-        let Some(character) = self.character.as_ref() else {
-            return;
-        };
-        let entry = HistoryEntry {
-            label: label.into(),
-            gff_snapshot: character.clone_gff(),
-            modified_snapshot: character.is_modified(),
-            quest: None,
-        };
+    /// Run `edit` on the loaded character as one undo entry. A failed edit is
+    /// rolled back and records nothing.
+    pub fn record_edit<T>(
+        &mut self,
+        label: impl Into<String>,
+        edit: impl FnOnce(&mut Character) -> Result<T, CommandError>,
+    ) -> Result<T, CommandError> {
+        let character = self
+            .character
+            .as_mut()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        let gff_snapshot = character.clone_gff();
+        let modified_snapshot = character.is_modified();
+        match edit(character) {
+            Ok(value) => {
+                self.push_history(HistoryEntry {
+                    label: label.into(),
+                    gff_snapshot,
+                    modified_snapshot,
+                    quest: None,
+                });
+                Ok(value)
+            }
+            Err(e) => {
+                character.restore_snapshot(gff_snapshot, modified_snapshot);
+                Err(e)
+            }
+        }
+    }
+
+    fn push_history(&mut self, entry: HistoryEntry) {
         self.change_log
             .push((self.character_source.clone(), entry.label.clone()));
         self.history.undo_stack.push_back(entry);
@@ -1898,7 +1927,9 @@ mod tests {
     #[test]
     fn quest_save_survives_later_character_saves_and_undo() {
         let (_dir, mut session, data) = quest_save_session();
-        session.record_history("Before character edit");
+        session
+            .record_edit("Before character edit", |_| Ok(()))
+            .unwrap();
         session
             .character
             .as_mut()
@@ -1985,7 +2016,7 @@ mod tests {
 
         // A tab edit after staging, then discarding the quest: undoing the tab edit
         // must not bring the quest's gold back.
-        session.record_history("Tab edit");
+        session.record_edit("Tab edit", |_| Ok(())).unwrap();
         session
             .character
             .as_mut()
@@ -2075,7 +2106,7 @@ mod tests {
         let initial_gff = make_gff_with_str(10);
         let mut session = make_session_with_character(initial_gff);
 
-        session.record_history("Set STR to 18");
+        session.record_edit("Set STR to 18", |_| Ok(())).unwrap();
 
         let mutated = make_gff_with_str(18);
         session
@@ -2096,15 +2127,29 @@ mod tests {
     }
 
     #[test]
+    fn failed_edit_rolls_back_and_records_nothing() {
+        let mut session = make_session_with_character(make_gff_with_str(10));
+
+        let result = session.record_edit("Set STR to 18", |c| {
+            c.gff_mut().insert("Str".into(), GffValue::Byte(18));
+            Err::<(), _>(CommandError::Internal("fail".into()))
+        });
+
+        assert!(result.is_err());
+        assert_eq!(read_str(session.character.as_ref().unwrap().gff()), 10);
+        assert!(!session.can_undo());
+    }
+
+    #[test]
     fn redo_cleared_on_new_history() {
         let gff = make_gff_with_str(10);
         let mut session = make_session_with_character(gff);
 
-        session.record_history("first");
+        session.record_edit("first", |_| Ok(())).unwrap();
         session.undo();
         assert_eq!(session.history.redo_stack.len(), 1);
 
-        session.record_history("second");
+        session.record_edit("second", |_| Ok(())).unwrap();
         assert_eq!(session.history.redo_stack.len(), 0);
     }
 
@@ -2113,8 +2158,8 @@ mod tests {
         let gff = make_gff_with_str(10);
         let mut session = make_session_with_character(gff);
 
-        session.record_history("op1");
-        session.record_history("op2");
+        session.record_edit("op1", |_| Ok(())).unwrap();
+        session.record_edit("op2", |_| Ok(())).unwrap();
         session.undo();
         session.clear_history();
 
@@ -2128,7 +2173,7 @@ mod tests {
         let mut session = make_session_with_character(gff);
 
         for i in 0..=HISTORY_LIMIT {
-            session.record_history(format!("op{i}"));
+            session.record_edit(format!("op{i}"), |_| Ok(())).unwrap();
         }
 
         assert_eq!(session.history.undo_stack.len(), HISTORY_LIMIT);

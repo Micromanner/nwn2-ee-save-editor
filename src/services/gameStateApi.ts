@@ -302,15 +302,6 @@ export interface UpdateModuleVariableRequest {
   variable_type: string;
 }
 
-export interface UpdateModuleVariableResponse {
-  success: boolean;
-  variable_name: string;
-  old_value: number | string;
-  new_value: number | string;
-  message: string;
-  has_unsaved_changes: boolean;
-}
-
 export interface QuestGraphProgress {
   step: 'idle' | 'starting' | 'campaign' | 'modules' | 'journal' | 'globals' | 'ready' | 'error';
   progress: number;
@@ -508,29 +499,6 @@ export class GameStateAPI {
     return {
       ...variables,
       total_count: totalCount
-    };
-  }
-
-  async updateModuleVariable(
-    characterId: number,
-    variableName: string,
-    value: number | string,
-    variableType: string,
-    moduleId?: string
-  ): Promise<UpdateModuleVariableResponse> {
-    await invoke('update_module_variable', {
-      variableName,
-      value: String(value),
-      variableType,
-      moduleId: moduleId ?? null,
-    });
-    return {
-      success: true,
-      variable_name: variableName,
-      old_value: value,
-      new_value: value,
-      message: 'Updated',
-      has_unsaved_changes: true,
     };
   }
 

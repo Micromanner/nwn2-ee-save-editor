@@ -89,43 +89,32 @@ pub struct InventoryItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct EquipResult {
-    pub success: bool,
     pub slot: EquipmentSlot,
     pub equipped_item: Option<InventoryItem>,
     pub swapped_item: Option<InventoryItem>,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct UnequipResult {
-    pub success: bool,
     pub slot: EquipmentSlot,
     pub unequipped_item: Option<InventoryItem>,
     pub inventory_index: Option<usize>,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct AddItemResult {
-    pub success: bool,
     pub inventory_index: Option<usize>,
     pub stacked: bool,
-    pub message: String,
     pub item: Option<BasicItemInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct RemoveItemResult {
-    pub success: bool,
     pub removed_item: Option<InventoryItem>,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct TransformResult {
-    pub success: bool,
-    pub message: String,
-}
+pub struct TransformResult {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct BasicItemInfo {
@@ -838,15 +827,10 @@ impl super::Character {
 
         let can_equip = self.can_item_equip_in_slot(base_item_id, slot, game_data);
         if !can_equip {
-            let item_info = self.parse_basic_item_info(&item_struct);
-            let item_name = item_info.as_ref().map_or("Item", |i| i.tag.as_str());
-            return Ok(EquipResult {
-                success: false,
-                slot,
-                equipped_item: None,
-                swapped_item: None,
-                message: format!("Cannot equip {} in {} slot", item_name, slot.display_name()),
-            });
+            return Err(CharacterError::InvalidOperation(format!(
+                "Base item {base_item_id} cannot be equipped in {} slot",
+                slot.display_name()
+            )));
         }
 
         let mut swapped_item = None;
@@ -873,7 +857,6 @@ impl super::Character {
         let equipped_item_info = self.parse_basic_item_info(&item_struct);
 
         Ok(EquipResult {
-            success: true,
             slot,
             equipped_item: equipped_item_info.map(|info| InventoryItem {
                 index: 0,
@@ -884,7 +867,6 @@ impl super::Character {
                 identified: info.identified,
             }),
             swapped_item,
-            message: format!("Equipped item in {}", slot.display_name()),
         })
     }
 
@@ -913,13 +895,10 @@ impl super::Character {
         }
 
         let Some(item_struct) = item_to_unequip else {
-            return Ok(UnequipResult {
-                success: false,
-                slot,
-                unequipped_item: None,
-                inventory_index: None,
-                message: format!("No item equipped in {} slot", slot.display_name()),
-            });
+            return Err(CharacterError::InvalidOperation(format!(
+                "No item equipped in {} slot",
+                slot.display_name()
+            )));
         };
 
         if let Some(index) = found_index {
@@ -937,7 +916,6 @@ impl super::Character {
         let unequipped_info = self.parse_basic_item_info(&item_struct);
 
         Ok(UnequipResult {
-            success: true,
             slot,
             unequipped_item: unequipped_info.map(|info| InventoryItem {
                 index: inventory_index,
@@ -948,7 +926,6 @@ impl super::Character {
                 identified: info.identified,
             }),
             inventory_index: Some(inventory_index),
-            message: format!("Unequipped item from {}", slot.display_name()),
         })
     }
 
@@ -1048,10 +1025,8 @@ impl super::Character {
         self.set_list("ItemList", inv_list);
 
         Ok(AddItemResult {
-            success: true,
             inventory_index: Some(index),
             stacked: false,
-            message: "Item added to inventory".to_string(),
             item: info,
         })
     }
@@ -1062,10 +1037,9 @@ impl super::Character {
             .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
 
         if index >= inv_list.len() {
-            return Ok(RemoveItemResult {
-                success: false,
-                removed_item: None,
-                message: format!("No item at index {index}"),
+            return Err(CharacterError::ValidationFailed {
+                field: "index",
+                message: format!("Index {index} out of bounds"),
             });
         }
 
@@ -1075,7 +1049,6 @@ impl super::Character {
         let removed_info = self.parse_basic_item_info(&removed_struct);
 
         Ok(RemoveItemResult {
-            success: true,
             removed_item: removed_info.map(|info| InventoryItem {
                 index,
                 base_item_id: BaseItemId(info.base_item),
@@ -1084,7 +1057,6 @@ impl super::Character {
                 stack_size: info.stack_size,
                 identified: info.identified,
             }),
-            message: "Item removed from inventory".to_string(),
         })
     }
 
@@ -1113,14 +1085,11 @@ impl super::Character {
         inv_list[index] = new_item;
         self.set_list("ItemList", inv_list);
 
-        Ok(TransformResult {
-            success: true,
-            message: "Item transformed".to_string(),
-        })
+        Ok(TransformResult {})
     }
 
     /// Replaces the item equipped in `slot` with `new_item`, keeping only the
-    /// slot itself. Rejects (success: false, like equip_item) when the new
+    /// slot itself. Rejects (like equip_item) when the new
     /// item's BaseItem can't legally occupy the slot, so a transform never
     /// silently relocates an item.
     pub fn transform_equipped_item(
@@ -1136,13 +1105,10 @@ impl super::Character {
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
         if !self.can_item_equip_in_slot(base_item_id, slot, game_data) {
-            return Ok(TransformResult {
-                success: false,
-                message: format!(
-                    "New item cannot be equipped in {} slot",
-                    slot.display_name()
-                ),
-            });
+            return Err(CharacterError::InvalidOperation(format!(
+                "New item cannot be equipped in {} slot",
+                slot.display_name()
+            )));
         }
 
         let mut equip_list =
@@ -1159,10 +1125,10 @@ impl super::Character {
                 .unwrap_or(0) as u32
                 == slot_bitmask
         }) else {
-            return Ok(TransformResult {
-                success: false,
-                message: format!("No item equipped in {} slot", slot.display_name()),
-            });
+            return Err(CharacterError::InvalidOperation(format!(
+                "No item equipped in {} slot",
+                slot.display_name()
+            )));
         };
 
         let mut replacement = new_item;
@@ -1170,10 +1136,7 @@ impl super::Character {
         equip_list[pos] = replacement;
         self.set_list("Equip_ItemList", equip_list);
 
-        Ok(TransformResult {
-            success: true,
-            message: format!("Transformed item in {}", slot.display_name()),
-        })
+        Ok(TransformResult {})
     }
 
     fn can_item_equip_in_slot(
@@ -1414,10 +1377,8 @@ impl super::Character {
             && let Some(index) = stacked_index
         {
             return Ok(AddItemResult {
-                success: true,
                 inventory_index: Some(index),
                 stacked: true,
-                message: format!("Stacked {stack_size} onto existing {tag}"),
                 item: Some(BasicItemInfo {
                     base_item: base_item_id,
                     tag,
@@ -1438,10 +1399,8 @@ impl super::Character {
         let index = inv_list.len() - 1;
 
         Ok(AddItemResult {
-            success: true,
             inventory_index: Some(index),
             stacked: false,
-            message: format!("Added {tag}"),
             item: Some(BasicItemInfo {
                 base_item: base_item_id,
                 tag,
@@ -2662,11 +2621,10 @@ mod tests {
         let game_data = game_data_with_stackable_baseitem();
         let mut character = Character::from_gff(create_test_fields());
 
-        let result = character
+        character
             .transform_inventory_item(0, stackable_item("new_item", 1, &[(52, 21)]), &game_data)
             .unwrap();
 
-        assert!(result.success);
         assert_eq!(character.inventory_count(), 2);
         let item = character.get_inventory_item_at(0).unwrap();
         assert_eq!(
@@ -2690,7 +2648,7 @@ mod tests {
         let game_data = game_data_with_stackable_baseitem();
         let mut character = Character::from_gff(create_test_fields());
 
-        let result = character
+        character
             .transform_equipped_item(
                 EquipmentSlot::RightHand,
                 stackable_item("new_blade", 1, &[]),
@@ -2698,7 +2656,6 @@ mod tests {
             )
             .unwrap();
 
-        assert!(result.success);
         let item = character
             .get_equipped_item_raw(EquipmentSlot::RightHand)
             .unwrap();
@@ -2719,15 +2676,13 @@ mod tests {
         let game_data = game_data_with_stackable_baseitem();
         let mut character = Character::from_gff(create_test_fields());
 
-        let result = character
-            .transform_equipped_item(
-                EquipmentSlot::Boots,
-                stackable_item("new_boots", 1, &[]),
-                &game_data,
-            )
-            .unwrap();
+        let result = character.transform_equipped_item(
+            EquipmentSlot::Boots,
+            stackable_item("new_boots", 1, &[]),
+            &game_data,
+        );
 
-        assert!(!result.success);
+        assert!(result.is_err());
         let unchanged = character
             .get_equipped_item_raw(EquipmentSlot::RightHand)
             .unwrap();

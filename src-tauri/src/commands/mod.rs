@@ -20,8 +20,6 @@ pub mod savegame;
 pub mod session;
 pub mod skills;
 pub mod spells;
-pub mod test_deities;
-pub mod toolset;
 pub mod types;
 
 pub use error::{CommandError, CommandResult};

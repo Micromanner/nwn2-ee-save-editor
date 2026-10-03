@@ -438,8 +438,8 @@ fn query_character(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_overview(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         let decoder = &session_lock.item_property_decoder;
         Ok(serde_json::to_value(
@@ -451,8 +451,8 @@ fn get_overview(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_classes(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         Ok(serde_json::to_value(
             char_ref.get_classes_state(&game_data_lock),
@@ -463,8 +463,8 @@ fn get_classes(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_feats(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         Ok(serde_json::to_value(
             char_ref.get_feats_state(&game_data_lock),
@@ -475,8 +475,8 @@ fn get_feats(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_spells(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         let decoder = &session_lock.item_property_decoder;
         Ok(serde_json::to_value(
@@ -488,8 +488,8 @@ fn get_spells(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_skills(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         let decoder = &session_lock.item_property_decoder;
         Ok(serde_json::to_value(
@@ -501,8 +501,8 @@ fn get_skills(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_abilities(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         let decoder = &session_lock.item_property_decoder;
         Ok(serde_json::to_value(
@@ -514,8 +514,8 @@ fn get_abilities(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_saves(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         let decoder = &session_lock.item_property_decoder;
         Ok(serde_json::to_value(
@@ -527,8 +527,8 @@ fn get_saves(state: McpState, _params: Value) -> anyhow::Result<Value> {
 }
 
 fn get_inventory(state: McpState, _params: Value) -> anyhow::Result<Value> {
-    let session_lock = state.session.read();
     let game_data_lock = state.game_data.read();
+    let session_lock = state.session.read();
     if let Some(char_ref) = session_lock.character() {
         let decoder = &session_lock.item_property_decoder;
         let summary = char_ref.get_full_inventory_summary(&game_data_lock, decoder, None);

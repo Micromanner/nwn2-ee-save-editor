@@ -7,11 +7,12 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::info;
 
-use super::backup::{collect_backups, ensure_backup_in_dir};
+use super::backup::{collect_backups, ensure_backup_in_dir, replace_file_atomically};
 use super::content::find_campaign_path;
 use crate::services::savegame_handler::backup::BACKUP_TIMESTAMP_FORMAT;
+use crate::services::savegame_handler::commit_outputs;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CampaignSettings {
@@ -30,6 +31,14 @@ pub struct CampaignSettings {
     pub module_names: Vec<String>,
     pub display_name: String,
     pub description: String,
+}
+
+fn campaign_guid(root: &IndexMap<String, GffValue<'_>>) -> String {
+    match root.get("GUID") {
+        Some(GffValue::Void(bytes)) => hex::encode(bytes),
+        Some(GffValue::String(s)) => s.to_string(),
+        _ => String::new(),
+    }
 }
 
 pub fn read_campaign_settings(
@@ -83,12 +92,7 @@ pub fn read_campaign_settings(
         }
     };
 
-    // GUID
-    settings.guid = match root.get("GUID") {
-        Some(GffValue::Void(bytes)) => hex::encode(bytes),
-        Some(GffValue::String(s)) => s.to_string(),
-        _ => String::new(),
-    };
+    settings.guid = campaign_guid(&root);
 
     settings.level_cap = get_u32("LvlCap");
     settings.xp_cap = get_u32("XPCap");
@@ -136,18 +140,10 @@ pub fn update_campaign_settings(
     settings: &CampaignSettings,
     paths: &NWN2Paths,
 ) -> Result<(), String> {
-    let campaign_file = PathBuf::from(&settings.campaign_file_path);
-    if !campaign_file.exists() {
-        return Err(format!(
-            "Campaign file not found: {}",
-            settings.campaign_file_path
-        ));
-    }
+    let campaign_file = find_campaign_path(&settings.guid, paths)
+        .ok_or_else(|| format!("Campaign file for GUID {} not found", settings.guid))?;
 
-    // Backup
-    if let Err(e) = backup_campaign_file(&campaign_file, settings, paths) {
-        warn!("Failed to backup campaign file: {}", e);
-    }
+    backup_campaign_file(&campaign_file, settings, paths)?;
     // Read existing GFF into memory to preserve fields not in CampaignSettings
     let file_bytes =
         fs::read(&campaign_file).map_err(|e| format!("Failed to read campaign file: {e}"))?;
@@ -192,7 +188,8 @@ pub fn update_campaign_settings(
         .write(owned_fields)
         .map_err(|e| format!("Failed to serialize campaign settings: {e:?}"))?;
 
-    fs::write(&campaign_file, bytes).map_err(|e| format!("Failed to write campaign file: {e}"))?;
+    commit_outputs(vec![(campaign_file.clone(), bytes)])
+        .map_err(|e| format!("Failed to write campaign file: {e}"))?;
 
     info!("Updated campaign settings in {:?}", campaign_file);
     Ok(())
@@ -229,11 +226,7 @@ fn backup_campaign_file(
         .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-' || *c == '_')
         .collect();
     let safe_name = safe_name.replace(' ', "_");
-    let safe_name = if safe_name.len() > 30 {
-        &safe_name[..30]
-    } else {
-        &safe_name
-    };
+    let safe_name: String = safe_name.chars().take(30).collect();
 
     let guid_prefix: String = settings.guid.chars().take(8).collect();
     let filename = format!("{safe_name}_{guid_prefix}_{timestamp}.cam");
@@ -266,8 +259,17 @@ pub fn restore_campaign_from_backup(
     let campaign_file = find_campaign_path(campaign_id, paths)
         .ok_or_else(|| format!("Campaign file for GUID {campaign_id} not found"))?;
 
-    fs::copy(&backup, &campaign_file)
-        .map_err(|e| format!("Failed to restore campaign backup: {e}"))?;
+    let backup_root = GffParser::new(&backup)
+        .and_then(|p| p.read_struct_fields(0))
+        .map_err(|e| format!("Failed to read campaign backup: {e}"))?;
+    if !campaign_guid(&backup_root).eq_ignore_ascii_case(campaign_id) {
+        return Err(format!(
+            "Backup {} belongs to a different campaign",
+            backup.display()
+        ));
+    }
+
+    replace_file_atomically(&backup, &campaign_file)?;
 
     info!(
         "Restored campaign from backup: {} -> {}",

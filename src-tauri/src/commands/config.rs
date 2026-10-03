@@ -87,28 +87,30 @@ pub async fn update_app_config(
     updates: AppConfigUpdate,
 ) -> CommandResult<AppConfigResponse> {
     debug!("Updating app configuration: {:?}", updates);
-    let (response, changed_language) = {
-        let mut config = state.config.write();
-        let previous = GameLanguage::from_locale(&config.language);
-        updates.apply_to(&mut config);
-        config.save().map_err(|e| CommandError::OperationFailed {
-            operation: "save_app_config".to_string(),
-            reason: e.to_string(),
-        })?;
-        let current = GameLanguage::from_locale(&config.language);
-        (
-            build_response(&config),
-            (current != previous).then_some(current),
-        )
+    let (updated, previous) = {
+        let config = state.config.read();
+        let mut updated = config.clone();
+        updates.apply_to(&mut updated);
+        (updated, GameLanguage::from_locale(&config.language))
     };
 
     // The game language selects the TLK and VO archives, so it reloads
     // game data exactly like a game-folder change.
-    if let Some(language) = changed_language {
+    let language = GameLanguage::from_locale(&updated.language);
+    if language != previous {
         set_game_language(language);
         let snapshot = state.paths.read().clone();
-        sync_resource_manager_paths(&app, &state, snapshot).await;
+        if let Err(err) = sync_resource_manager_paths(&app, &state, snapshot).await {
+            set_game_language(previous);
+            return Err(err);
+        }
     }
 
+    updated.save().map_err(|e| CommandError::OperationFailed {
+        operation: "save_app_config".to_string(),
+        reason: e.to_string(),
+    })?;
+    let response = build_response(&updated);
+    *state.config.write() = updated;
     Ok(response)
 }

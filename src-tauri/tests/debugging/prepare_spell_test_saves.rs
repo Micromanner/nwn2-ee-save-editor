@@ -65,7 +65,6 @@ async fn prepare_spell_test_saves() {
 
     if std::env::var("SKIP_EDITS").is_err() {
         let mut session = load(&saves, 962);
-        session.record_history("Add +2 INT amulet");
         {
             let character = session.character_mut().expect("character");
             let added = character
@@ -92,12 +91,11 @@ async fn prepare_spell_test_saves() {
             let equipped = character
                 .equip_item(index, EquipmentSlot::Neck, game_data)
                 .expect("equip amulet");
-            println!("962 amulet: {}", equipped.message);
+            println!("962 amulet slot: {:?}", equipped.slot);
         }
         session.save_character(game_data, 0).expect("save 962");
 
         let mut session = load(&saves, 965);
-        session.record_history("Add Dark Blessing");
         session
             .character_mut()
             .expect("character")

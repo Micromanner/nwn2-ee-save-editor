@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { BackendFeatPrerequisites } from '@/components/Feats/types';
+import type { SpellClassLevel } from '@/components/Spells/types';
 
 // Helper to format alignment string from numbers
 const formatAlignment = (lawChaos: number, goodEvil: number): string => {
@@ -56,23 +57,9 @@ export interface AvailableDeitiesResponse {
   total: number;
 }
 
-export interface DeityResponse {
-  deity: string;
-}
-
 export interface SetDeityResponse {
   success: boolean;
   deity: string;
-}
-
-export interface BiographyResponse {
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  age: number;
-  description: string;
-  background?: string;
-  experience: number;
 }
 
 export interface SetBiographyResponse {
@@ -83,12 +70,6 @@ export interface SetBiographyResponse {
 export interface DamageResistance {
   type: string;
   amount: number;
-}
-
-export interface SaveResult {
-  success: boolean;
-  changes: Record<string, unknown>;
-  backup_created: boolean;
 }
 
 export interface SaveCharacterClass {
@@ -119,11 +100,6 @@ export interface FeatResponse {
   has_feat?: boolean;
 }
 
-export interface AvailableFeatsResponse {
-  available_feats: FeatResponse[];
-  total: number;
-}
-
 export interface LegitimateFeatsResponse {
   feats: FeatResponse[];
   pagination: {
@@ -151,12 +127,8 @@ export interface AbilityChange {
 }
 
 export interface FeatActionResponse {
-  feat_id: number;
-  success: boolean;
-  message: string;
-  auto_added_feats?: AutoAddedFeat[];
-  auto_modified_abilities?: AbilityChange[];
-  character_feats?: FeatResponse[];
+  auto_added_feats: AutoAddedFeat[];
+  auto_modified_abilities: AbilityChange[];
 }
 
 export interface FeatDetailsResponse {
@@ -190,6 +162,7 @@ export interface SpellResponse {
   target_type?: string;
   metamagic?: string;
   available_classes: string[];
+  class_levels: SpellClassLevel[];
 }
 
 export interface LegitimateSpellsResponse {
@@ -204,70 +177,6 @@ export interface LegitimateSpellsResponse {
   };
 }
 
-export interface SpellManageResponse {
-  message: string;
-  spell_summary: Record<string, unknown>;
-  has_unsaved_changes: boolean;
-}
-
-export interface SkillEntry {
-  skill_id: number;
-  name: string;
-  ranks: number;
-  max_ranks: number;
-  bonus: number;
-  total: number;
-  is_class_skill: boolean;
-}
-
-export interface SkillInfo {
-  name: string;
-  description?: string;
-  key_ability: string;
-}
-
-export interface SkillsStateResponse {
-  // Primary data from Rust get_skills_state command
-  class_skills: Array<{
-    id: number;
-    name: string;
-    current_ranks: number;
-    max_ranks: number;
-    total_modifier: number;
-    is_class_skill: boolean;
-    untrained: boolean;
-  }>;
-  cross_class_skills: Array<{
-    id: number;
-    name: string;
-    current_ranks: number;
-    max_ranks: number;
-    total_modifier: number;
-    is_class_skill: boolean;
-    untrained: boolean;
-  }>;
-  total_available: number;
-  spent_points: number;
-  // Legacy compatibility fields
-  character_skills: Record<number, SkillEntry>;
-  available_points: number;
-  total_points: number;
-  skill_info: Record<number, SkillInfo>;
-  skills: Array<{
-    id: number;
-    name: string;
-    current_ranks: number;
-    max_ranks: number;
-    total_modifier: number;
-    is_class_skill: boolean;
-    untrained: boolean;
-  }>;
-  skill_points: {
-    available: number;
-    spent: number;
-  };
-}
-
 export interface SkillsUpdateResponse {
   success: boolean;
   updated_skills: Record<number, number>;
@@ -276,32 +185,6 @@ export interface SkillsUpdateResponse {
   skill_summary?: {
     total_spent?: number;
     available?: number;
-  };
-}
-
-export interface AbilitiesStateResponse {
-  abilities: {
-    strength: number;
-    dexterity: number;
-    constitution: number;
-    intelligence: number;
-    wisdom: number;
-    charisma: number;
-  };
-  modifiers: {
-    strength: number;
-    dexterity: number;
-    constitution: number;
-    intelligence: number;
-    wisdom: number;
-    charisma: number;
-  };
-  available_points?: number;
-  point_summary?: {
-    total: number;
-    spent: number;
-    available: number;
-    overdrawn: number;
   };
 }
 
@@ -586,15 +469,6 @@ export class CharacterAPI {
     }
   }
 
-  static async getCharacterDetails(characterId: number): Promise<CharacterData> {
-    // In Rust mode, details and state are effectively the same aggregation
-    return this.getCharacterState(characterId);
-  }
-
-  static async listCharacters(): Promise<CharacterData[]> {
-    return [];
-  }
-
   static async listSaveCharacters(savePath: string): Promise<SaveCharacterOption[]> {
     try {
       return await invoke<SaveCharacterOption[]>('list_save_characters', { filePath: savePath });
@@ -651,41 +525,6 @@ export class CharacterAPI {
     }
   }
 
-  static async saveCharacter(characterId: number, updates: Record<string, unknown> = {}): Promise<SaveResult> {
-    try {
-       // 1. Apply updates
-      if (Object.keys(updates).length > 0) {
-        // Cast to partial for updateCharacter - simplistic but works for now logic
-        await this.updateCharacter(characterId, updates as any);
-      }
-
-      // 2. Save
-      await invoke('save_character', { filePath: null }); // Null = overwrite current
-
-      return {
-        success: true,
-        changes: updates,
-        backup_created: false // Rust side handles backup logic internally usually
-      };
-    } catch (error) {
-      console.error("Error saving character:", error);
-      throw error;
-    }
-  }
-
-  static async getAvailableFeats(characterId: number, featType?: number): Promise<AvailableFeatsResponse> {
-      try {
-          const feats = await invoke<FeatResponse[]>('get_all_feats');
-          const filtered = featType
-              ? feats.filter(f => (f.type & featType) !== 0)
-              : feats;
-          return { available_feats: filtered, total: filtered.length };
-      } catch (error) {
-          console.error("Error fetching available feats:", error);
-          return { available_feats: [], total: 0 };
-      }
-  }
-
   static async getLegitimateFeats(
     _characterId: number,
     options: { page?: number; limit?: number; featType?: number; search?: string; category?: string; subcategory?: string } = {}
@@ -727,31 +566,11 @@ export class CharacterAPI {
   }
 
   static async addFeat(characterId: number, featId: number): Promise<FeatActionResponse> {
-    try {
-        const result = await invoke<FeatActionResponse>('add_feat', { featId: featId });
-        return {
-            feat_id: featId,
-            success: result.success,
-            message: result.message || "Feat added",
-            auto_added_feats: result.auto_added_feats || [],
-            auto_modified_abilities: result.auto_modified_abilities || [],
-        };
-    } catch (error) {
-        throw error;
-    }
+    return invoke<FeatActionResponse>('add_feat', { featId });
   }
 
-  static async removeFeat(characterId: number, featId: number): Promise<FeatActionResponse> {
-      try {
-        const result = await invoke<any>('remove_feat', { featId: featId });
-        return { 
-            feat_id: featId, 
-            success: result.success,
-            message: result.message || "Feat removed"
-        };
-    } catch (error) {
-        throw error;
-    }
+  static async removeFeat(characterId: number, featId: number): Promise<void> {
+    await invoke('remove_feat', { featId });
   }
 
   static async getFeatDetails(characterId: number, featId: number): Promise<FeatDetailsResponse> {
@@ -767,7 +586,6 @@ export class CharacterAPI {
       levels?: string;
       schools?: string;
       search?: string;
-      show_all?: boolean;
     } = {}
   ): Promise<LegitimateSpellsResponse> {
     const result = await invoke<{
@@ -778,8 +596,7 @@ export class CharacterAPI {
         icon: string;
         school_id?: number;
         school_name?: string;
-        level: number;
-        available_classes: string[];
+        class_levels: SpellClassLevel[];
       }>;
       pagination: {
         page: number;
@@ -792,11 +609,10 @@ export class CharacterAPI {
     }>('get_character_available_spells', {
       page: options.page,
       limit: options.limit,
-      classId: options.show_all ? undefined : options.class_id,
+      classId: options.class_id,
       spellLevel: options.levels ? parseInt(options.levels.split(',')[0], 10) : undefined,
       schoolIds: options.schools ? options.schools.split(',').map(name => SPELL_SCHOOL_NAME_TO_ID[name]).filter((id): id is number => id !== undefined) : undefined,
       search: options.search,
-      showAll: options.show_all || undefined,
     });
 
     return {
@@ -807,77 +623,20 @@ export class CharacterAPI {
         icon: s.icon,
         school_id: s.school_id,
         school_name: s.school_name,
-        level: s.level,
-        available_classes: s.available_classes,
+        level: s.class_levels[0].level,
+        available_classes: s.class_levels.map(cl => cl.class_name),
+        class_levels: s.class_levels,
       })),
       pagination: result.pagination,
     };
   }
 
-  static async getAbilitySpells(): Promise<Array<{
-    spell_id: number;
-    name: string;
-    icon: string;
-    description?: string;
-    school_name?: string;
-    innate_level: number;
-  }>> {
-    return await invoke('get_character_ability_spells');
+  static async addSpell(characterId: number, spellId: number, classIndex: number): Promise<void> {
+    await invoke('add_known_spell', { classIndex, spellId });
   }
 
-  static async manageSpell(
-    characterId: number,
-    action: 'add' | 'remove',
-    spellId: number,
-    classIndex: number,
-    spellLevel?: number
-  ): Promise<SpellManageResponse> {
-      try {
-        const result = action === 'add'
-          ? await invoke<{ success: boolean; message: string }>('add_known_spell', { classIndex, spellLevel: spellLevel ?? 0, spellId })
-          : await invoke<{ success: boolean; message: string }>('remove_known_spell', { classIndex, spellLevel: spellLevel ?? 0, spellId });
-
-        if (!result.success) {
-          throw new Error(result.message);
-        }
-
-        return {
-            message: result.message,
-            spell_summary: {},
-            has_unsaved_changes: true
-        };
-      } catch (error) {
-          throw error;
-      }
-  }
-
-  static async getSkillsState(characterId: number): Promise<SkillsStateResponse> {
-    try {
-        // Use the new get_skills_state command that returns properly structured data
-        const state = await invoke<{
-            class_skills: Array<{id: number; name: string; current_ranks: number; max_ranks: number; total_modifier: number; is_class_skill: boolean; untrained: boolean}>;
-            cross_class_skills: Array<{id: number; name: string; current_ranks: number; max_ranks: number; total_modifier: number; is_class_skill: boolean; untrained: boolean}>;
-            total_available: number;
-            spent_points: number;
-            levelling_class_id: number | null;
-            levelling_class_name: string | null;
-        }>('get_skills_state');
-
-        return {
-            class_skills: state.class_skills,
-            cross_class_skills: state.cross_class_skills,
-            total_available: state.total_available,
-            spent_points: state.spent_points,
-            character_skills: {},
-            available_points: state.total_available - state.spent_points,
-            total_points: state.total_available,
-            skill_info: {},
-            skills: [...state.class_skills, ...state.cross_class_skills],
-            skill_points: { available: state.total_available - state.spent_points, spent: state.spent_points }
-        };
-    } catch (error) {
-        throw error;
-    }
+  static async removeSpell(characterId: number, spellId: number, classIndex: number, spellLevel: number): Promise<void> {
+    await invoke('remove_known_spell', { classIndex, spellLevel, spellId });
   }
 
   static async updateSkills(characterId: number, skills: Record<number, number>): Promise<SkillsUpdateResponse> {
@@ -900,88 +659,6 @@ export class CharacterAPI {
     return { success: true, updated_skills: {}, available_points: 0 };
   }
 
-  static async getAttributesState(characterId: number): Promise<AbilitiesStateResponse> {
-    try {
-        // Rust now serializes ability scores with Str, Dex, Con, Int, Wis, Cha keys directly
-        type AbilityScores = { Str: number; Dex: number; Con: number; Int: number; Wis: number; Cha: number };
-
-        const [scores, modifiers, hp, saves, combat, kp_summary, base_scores] = await Promise.all([
-             invoke<AbilityScores>('get_ability_scores'),
-             invoke<AbilityScores>('get_ability_modifiers'),
-             invoke<{current: number, max: number}>('get_hit_points'),
-             invoke<{fortitude: {total: number}, reflex: {total: number}, will: {total: number}}>('get_save_summary'),
-             invoke<{
-                base_attack_bonus: number,
-                armor_class: {total: number, breakdown: {natural: number, dex: number, armor: number, shield: number}},
-                initiative: {total: number, dex: number, feat: number}
-             }>('get_combat_summary'),
-             invoke<{total_points: number, available_points: number}>('get_ability_points_summary').catch(() => ({ total_points: 0, available_points: 0 })),
-             invoke<AbilityScores>('get_base_ability_scores')
-        ]);
-
-        return {
-            abilities: {
-                strength: scores.Str,
-                dexterity: scores.Dex,
-                constitution: scores.Con,
-                intelligence: scores.Int,
-                wisdom: scores.Wis,
-                charisma: scores.Cha
-            },
-            modifiers: {
-                strength: modifiers.Str,
-                dexterity: modifiers.Dex,
-                constitution: modifiers.Con,
-                intelligence: modifiers.Int,
-                wisdom: modifiers.Wis,
-                charisma: modifiers.Cha
-            },
-
-            // Fields for useAbilityScores hook - now direct from Rust
-            base_attributes: base_scores,
-            effective_attributes: scores,
-            attribute_modifiers: modifiers,
-
-            derived_stats: {
-                hit_points: {
-                    current: hp.current,
-                    maximum: hp.max
-                }
-            },
-            combat_stats: {
-                armor_class: {
-                    total: combat.armor_class.total,
-                    components: {
-                        natural: combat.armor_class.breakdown.natural,
-                        dex: combat.armor_class.breakdown.dex,
-                        armor: combat.armor_class.breakdown.armor,
-                        shield: combat.armor_class.breakdown.shield
-                    }
-                },
-                initiative: {
-                    total: combat.initiative.total,
-                    dex_modifier: combat.initiative.dex,
-                    improved_initiative: combat.initiative.feat
-                }
-            },
-            saving_throws: {
-                fortitude: saves.fortitude,
-                reflex: saves.reflex,
-                will: saves.will
-            },
-            point_summary: {
-                 total: kp_summary.total_points || 0,
-                 spent: 0,
-                 available: kp_summary.available_points || 0,
-                 overdrawn: 0
-            }
-        } as any;
-    } catch (error) {
-        console.error("Error fetching attributes state:", error);
-        throw error;
-    }
-  }
-
   static async updateAttributes(characterId: number, attributes: Record<string, number>): Promise<AbilitiesUpdateResponse> {
        // Rust now uses Str, Dex, Con, Int, Wis, Cha keys (matching frontend)
        type AbilityScores = { Str: number; Dex: number; Con: number; Int: number; Wis: number; Cha: number };
@@ -992,25 +669,6 @@ export class CharacterAPI {
 
        await invoke('set_all_ability_scores', { scores: merged });
        return { success: true, updated_abilities: attributes };
-  }
-
-  static async setAttribute(characterId: number, attribute: string, value: number): Promise<{ success: boolean; attribute: string; value: number }> {
-     // Map string "Str"/"strength" to AbilityIndex
-     // AbilityIndex in Rust: 0=Str, 1=Dex...
-     const map: Record<string, number> = {
-         'Str': 0, 'strength': 0, 'Strength': 0,
-         'Dex': 1, 'dexterity': 1, 'Dexterity': 1,
-         'Con': 2, 'constitution': 2, 'Constitution': 2,
-         'Int': 3, 'intelligence': 3, 'Intelligence': 3,
-         'Wis': 4, 'wisdom': 4, 'Wisdom': 4,
-         'Cha': 5, 'charisma': 5, 'Charisma': 5
-     };
-     
-     const index = map[attribute];
-     if (index === undefined) throw new Error(`Unknown attribute ${attribute}`);
-     
-     await invoke('set_attribute', { ability: index, value: value });
-     return { success: true, attribute, value };
   }
 
   static async getAlignment(characterId: number): Promise<AlignmentResponse> {
@@ -1035,18 +693,9 @@ export class CharacterAPI {
      };
   }
 
-  static async getBiography(characterId: number): Promise<string> {
-    const bio = await invoke<{biography: string}>('get_biography');
-    return bio.biography;
-  }
-
   static async setBiography(characterId: number, biography: string): Promise<SetBiographyResponse> {
     await invoke('set_biography', { description: biography });
     return { success: true, biography_length: biography.length };
-  }
-
-  static async getDeity(characterId: number): Promise<string> {
-    return await invoke<string>('get_deity');
   }
 
   static async setDeity(characterId: number, deityName: string): Promise<SetDeityResponse> {
@@ -1086,25 +735,5 @@ export class CharacterAPI {
     
     await Promise.all(promises);
     return { success: true, updated: Object.keys(saveUpdates) };
-  }
-
-  static async getClassesState(characterId: number): Promise<any> {
-      return await invoke('get_class_summary');
-  }
-
-  static async getSpellsState(characterId: number): Promise<any> {
-      return await invoke('get_spell_summary');
-  }
-
-  static async getInventoryState(characterId: number): Promise<any> {
-      return await invoke('get_inventory_summary');
-  }
-
-  static async getCombatState(characterId: number): Promise<any> {
-      return await invoke('get_combat_summary');
-  }
-  
-  static async getSaveSummary(characterId: number): Promise<any> {
-      return await invoke('get_save_summary');
   }
 }

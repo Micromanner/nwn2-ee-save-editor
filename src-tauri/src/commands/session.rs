@@ -230,17 +230,16 @@ pub async fn close_character(state: State<'_, AppState>) -> CommandResult<bool> 
 /// Points the resource manager at the loaded save's module content; a
 /// standalone `.bic` or a closed session gets none.
 pub(crate) async fn sync_module_content(state: &AppState) {
-    let save = state
-        .session
-        .read()
-        .savegame_handler
-        .as_ref()
-        .map(|handler| {
+    let (generation, save) = {
+        let session = state.session.read();
+        let save = session.savegame_handler.as_ref().map(|handler| {
             (
                 handler.save_dir().to_path_buf(),
                 handler.extract_current_module(),
             )
         });
+        (session.load_generation, save)
+    };
     let content = match save {
         Some((save_dir, Ok(module_id))) => tokio::task::spawn_blocking(move || {
             crate::services::campaign::content::save_module_content(&save_dir, &module_id)
@@ -256,34 +255,13 @@ pub(crate) async fn sync_module_content(state: &AppState) {
         }
         None => None,
     };
+    if state.session.read().load_generation != generation {
+        info!("Dropping module content scanned for a save that is no longer loaded");
+        return;
+    }
     if let Err(e) = super::gamedata::apply_module_content(state, content).await {
         warn!("Failed to apply module content: {e}");
     }
-}
-
-#[derive(serde::Serialize, specta::Type)]
-pub struct SessionInfo {
-    pub character_loaded: bool,
-    pub file_path: Option<String>,
-    pub dirty: bool,
-    pub player_index: Option<usize>,
-}
-
-#[tauri::command]
-pub async fn get_session_info(state: State<'_, AppState>) -> CommandResult<SessionInfo> {
-    let session = state.session.read();
-    Ok(SessionInfo {
-        character_loaded: session.character.is_some(),
-        file_path: session
-            .current_file_path
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string()),
-        dirty: session.has_unsaved_changes(),
-        player_index: session
-            .character
-            .as_ref()
-            .map(|_| session.selected_player_index),
-    })
 }
 
 /// `None` for original-format saves, whose name lives only in the folder name.
@@ -377,8 +355,8 @@ pub async fn get_session_history(
 pub async fn export_to_localvault(state: State<'_, AppState>) -> CommandResult<String> {
     info!("Export to localvault command invoked");
 
-    let session = state.session.read();
     let paths = state.paths.read();
+    let session = state.session.read();
     match session.export_to_localvault(&paths) {
         Ok(path) => {
             info!("Character exported to vault: {}", path);
