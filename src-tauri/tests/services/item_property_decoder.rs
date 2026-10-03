@@ -372,3 +372,25 @@ async fn metadata_carries_the_itemprops_allow_list() {
     );
     assert!(allowed(43).contains(&0), "Keen on melee weapons");
 }
+
+/// AC Bonus takes its type from `baseitems.AC_Enchant`: amulet natural, boots
+/// dodge, ring deflection. Same-type deflection/natural from several items does
+/// not stack in-game, dodge does.
+#[tokio::test]
+async fn ac_bonus_type_follows_the_base_item() {
+    let context = common::create_test_context().await;
+    let decoder = init_decoder(&context).await;
+
+    let mut bonuses = ItemBonuses::default();
+    for (base_item, ac) in [(19, 3), (26, 1), (26, 2), (52, 2), (52, 4)] {
+        decoder.add_item_bonuses(&mut bonuses, &[property(1, 0, ac)], base_item);
+    }
+
+    assert_eq!(bonuses.ac_natural_bonus, 3);
+    assert_eq!(bonuses.ac_dodge_bonus, 3);
+    assert_eq!(bonuses.ac_deflection_bonus, 4);
+    assert_eq!(
+        decoder.decode_item_properties(&[property(1, 0, 3)], 19)[0],
+        "AC Bonus: + 3 (Natural)"
+    );
+}

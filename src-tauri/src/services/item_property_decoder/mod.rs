@@ -28,12 +28,8 @@ const PROPERTY_ID_SKILL_BONUS: u32 = 52;
 const PROPERTY_ID_ATTACK_BONUS: u32 = 56;
 const PROPERTY_ID_ATTACK_PENALTY: u32 = 60;
 
-/// `baseitems.2da` `AC_Enchant` column value the engine treats as armor.
-const AC_ENCHANT_ARMOR: i32 = 2;
-/// `baseitems.2da` `AC_Enchant` column value the engine treats as a shield.
-const AC_ENCHANT_SHIELD: i32 = 3;
-
-/// `iprp_acmodtype.2da` rows.
+/// `iprp_acmodtype.2da` rows, also the values of the `baseitems.2da`
+/// `AC_Enchant` column.
 const AC_MOD_DODGE: u32 = 0;
 const AC_MOD_NATURAL: u32 = 1;
 const AC_MOD_ARMOR: u32 = 2;
@@ -69,9 +65,9 @@ pub struct ItemPropertyDecoder {
     cost_tables: HashMap<u32, CostTableData>,
     /// Row names per lowercase `SubTypeResRef` (e.g. `iprp_combatdam`).
     subtype_tables: HashMap<String, HashMap<u32, String>>,
-    /// `baseitems.2da` `AC_Enchant` column: 2 = armor enchantment, 3 = shield
-    /// enchantment, anything else (including missing rows) = deflection.
-    ac_enchant: HashMap<i32, i32>,
+    /// `baseitems.2da` `AC_Enchant` column, an `iprp_acmodtype` row (amulet 1
+    /// natural, boots 0 dodge, armor 2, shields 3, most others 4 deflection).
+    ac_enchant: HashMap<i32, u32>,
     editor_metadata: Vec<PropertyMetadata>,
 }
 
@@ -144,14 +140,12 @@ impl ItemPropertyDecoder {
     }
 
     /// `iprp_acmodtype` row the engine applies to an AC bonus property on this
-    /// base item: armor enchantment on armor, shield enchantment on shields,
-    /// deflection everywhere else.
+    /// base item; base items without an `AC_Enchant` value give deflection.
     fn ac_bonus_type(&self, base_item_id: i32) -> u32 {
-        match self.ac_enchant.get(&base_item_id) {
-            Some(&AC_ENCHANT_ARMOR) => AC_MOD_ARMOR,
-            Some(&AC_ENCHANT_SHIELD) => AC_MOD_SHIELD,
-            _ => AC_MOD_DEFLECTION,
-        }
+        self.ac_enchant
+            .get(&base_item_id)
+            .copied()
+            .unwrap_or(AC_MOD_DEFLECTION)
     }
 
     /// The property as the game prints it on the item: its GameStrRef text
@@ -347,6 +341,8 @@ pub struct ItemBonuses {
     pub spell_resistance: i32,
     /// Keyed by `skills.2da` row.
     pub skill_bonuses: HashMap<u32, i32>,
+    highest_deflection: i32,
+    highest_natural: i32,
 }
 
 impl ItemBonuses {
@@ -364,7 +360,27 @@ impl ItemBonuses {
         *field += value;
     }
 
+    /// Deflection and natural armor bonuses from several items do not stack,
+    /// only the highest counts (in-game: "the effects will not stack");
+    /// penalties still add up.
     fn add_ac(&mut self, ac_mod_type: u32, value: i32) {
+        let highest = match ac_mod_type {
+            AC_MOD_DEFLECTION if value > 0 => {
+                Some((&mut self.ac_deflection_bonus, &mut self.highest_deflection))
+            }
+            AC_MOD_NATURAL if value > 0 => {
+                Some((&mut self.ac_natural_bonus, &mut self.highest_natural))
+            }
+            _ => None,
+        };
+        if let Some((total, highest)) = highest {
+            if value > *highest {
+                *total += value - *highest;
+                *highest = value;
+            }
+            return;
+        }
+
         let field = match ac_mod_type {
             AC_MOD_DODGE => &mut self.ac_dodge_bonus,
             AC_MOD_NATURAL => &mut self.ac_natural_bonus,
@@ -378,10 +394,10 @@ impl ItemBonuses {
 
     /// Enhancement is AC on armor and shields, attack on everything else.
     fn add_enhancement(&mut self, ac_bonus_type: u32, value: i32) {
-        if ac_bonus_type == AC_MOD_DEFLECTION {
-            self.attack_bonus += value;
-        } else {
+        if matches!(ac_bonus_type, AC_MOD_ARMOR | AC_MOD_SHIELD) {
             self.add_ac(ac_bonus_type, value);
+        } else {
+            self.attack_bonus += value;
         }
     }
 
@@ -504,7 +520,7 @@ fn load_itemprops_columns(rm: &ResourceManager) -> Option<HashMap<u32, Vec<u32>>
 /// `baseitems.2da` `AC_Enchant` column, keyed by base item row: the engine's
 /// own record of which AC family (armor/shield/deflection) an item's AC
 /// enchantment belongs to.
-fn load_baseitem_ac_enchant(rm: &ResourceManager) -> HashMap<i32, i32> {
+fn load_baseitem_ac_enchant(rm: &ResourceManager) -> HashMap<i32, u32> {
     let mut ac_enchant = HashMap::new();
     let Ok(table) = rm.get_2da_with_overrides("baseitems") else {
         warn!("baseitems.2da not available; AC bonuses will default to deflection");
@@ -515,8 +531,7 @@ fn load_baseitem_ac_enchant(rm: &ResourceManager) -> HashMap<i32, i32> {
         let Ok(row) = table.get_row_dict(row_idx) else {
             continue;
         };
-        let value = row_int(&row, "ac_enchant", -1);
-        if value >= 0 {
+        if let Ok(value) = u32::try_from(row_int(&row, "ac_enchant", -1)) {
             ac_enchant.insert(row_idx as i32, value);
         }
     }
@@ -686,6 +701,22 @@ mod tests {
         assert_eq!(bonuses.ac_dodge_bonus, -2);
         assert_eq!(bonuses.skill_bonuses.get(&7), Some(&-5));
         assert_eq!(bonuses.str_bonus, -2);
+    }
+
+    #[test]
+    fn deflection_from_several_items_takes_the_highest() {
+        let decoder = ItemPropertyDecoder::default();
+        let mut bonuses = ItemBonuses::default();
+        for item in [
+            [property(PROPERTY_ID_AC_BONUS, 0, 2)],
+            [property(PROPERTY_ID_AC_BONUS, 0, 3)],
+            [property(PROPERTY_ID_AC_BONUS, 0, 1)],
+            [property(PROPERTY_ID_DECREASED_AC, AC_MOD_DEFLECTION, 1)],
+        ] {
+            decoder.add_item_bonuses(&mut bonuses, &item, 0);
+        }
+
+        assert_eq!(bonuses.ac_deflection_bonus, 2);
     }
 
     #[test]
