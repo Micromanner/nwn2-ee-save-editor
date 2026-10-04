@@ -3089,7 +3089,7 @@ mod tests {
                 level_entry(None, &[]),
             ]),
         );
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
 
         character.record_feat_change(FeatId(8), false);
 
@@ -3199,7 +3199,7 @@ mod tests {
         // Add skill points
         fields.insert("SkillPoints".to_string(), GffValue::Short(0));
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn create_mock_game_data() -> GameData {
@@ -3359,7 +3359,7 @@ mod tests {
         class1.insert("ClassLevel".to_string(), GffValue::Short(5));
         fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![class1]));
 
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
         let game_data = create_mock_game_data();
 
         let result = character.remove_class(ClassId(0), &game_data);
@@ -3378,7 +3378,7 @@ mod tests {
     #[test]
     fn test_empty_class_list() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         assert_eq!(character.total_level(), 0);
         assert_eq!(character.class_count(), 0);
@@ -3416,7 +3416,7 @@ mod tests {
             GffValue::ListOwned(vec![lvl1, lvl2]),
         );
 
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let history = character.level_history();
 
         assert_eq!(history.len(), 2);
@@ -3439,7 +3439,7 @@ mod tests {
     #[test]
     fn test_level_history_empty() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         let history = character.level_history();
         assert_eq!(history.len(), 0);
@@ -3615,7 +3615,7 @@ mod tests {
         wizard.insert("Class".to_string(), GffValue::Byte(5));
         wizard.insert("ClassLevel".to_string(), GffValue::Short(5));
         fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![wizard]));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let game_data = create_game_data_with_prestige_classes();
 
         let validation = character.validate_prestige_class_requirements(ClassId(3), &game_data);
@@ -3840,7 +3840,7 @@ mod tests {
         fields.insert("MaxHitPoints".to_string(), GffValue::Int(28));
         fields.insert("CurrentHitPoints".to_string(), GffValue::Int(28));
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]

@@ -19,7 +19,7 @@ fn i32_of(v: Option<&GffValue>) -> Option<i32> {
 }
 
 fn list_of(v: Option<&GffValue>) -> Vec<IndexMap<String, GffValue<'static>>> {
-    match v.map(|v| v.clone().force_owned()) {
+    match v.map(|v| v.clone().force_owned().expect("force owned")) {
         Some(GffValue::ListOwned(l)) => l,
         _ => Vec::new(),
     }

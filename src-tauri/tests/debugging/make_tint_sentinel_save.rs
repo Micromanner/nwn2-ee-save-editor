@@ -44,9 +44,9 @@ fn make_tint_sentinel_save() {
         .read_struct_fields(0)
         .expect("root")
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
-    let mut character = Character::from_gff(fields);
+    let mut character = Character::from_gff(fields).expect("character from gff");
 
     // Write RAW GFF channel order (no UI 2/3 swap) so the in-game result maps
     // directly to GFF Tint_*.channel{1,2,3}. set_tint_hair already writes raw

@@ -107,12 +107,13 @@ pub struct KeyEntry {
 }
 
 impl KeyEntry {
+    /// `resref.ext`; an unknown type keeps its numeric id as the extension so
+    /// two unknown types never share a key.
     pub fn full_name(&self) -> String {
-        format!(
-            "{}.{}",
-            self.resource_name,
-            resource_type_to_extension(self.resource_type)
-        )
+        match resource_type_to_extension(self.resource_type) {
+            Some(ext) => format!("{}.{ext}", self.resource_name),
+            None => format!("{}.{}", self.resource_name, self.resource_type),
+        }
     }
 }
 
@@ -147,8 +148,10 @@ pub struct FileMetadata {
     pub build_date: String,
 }
 
-pub fn resource_type_to_extension(resource_type: u16) -> &'static str {
-    match resource_type {
+/// NWN2 resource type ids (xoreos list; ids observed in shipped modules,
+/// HAKs and save `.z` archives match it).
+pub fn resource_type_to_extension(resource_type: u16) -> Option<&'static str> {
+    Some(match resource_type {
         0 => "res",
         1 => "bmp",
         2 => "mve",
@@ -222,167 +225,40 @@ pub fn resource_type_to_extension(resource_type: u16) -> &'static str {
         2065 => "ptm",
         2066 => "ptt",
         2067 => "bak",
-        2068 => "osc",
-        2069 => "usc",
-        2070 => "trn",
-        2071 => "utr",
-        2072 => "uen",
-        2073 => "ult",
-        2074 => "sef",
-        2075 => "pfx",
-        2076 => "cam",
-        2077 => "lfx",
-        2078 => "bfx",
-        2079 => "upe",
-        2080 => "ros",
-        2081 => "rst",
-        2082 => "ifx",
-        2083 => "pfb",
-        2084 => "zip",
-        2085 => "wmp",
-        2086 => "bbx",
-        2087 => "tfx",
-        2088 => "wlk",
-        2089 => "xml",
-        2090 => "scc",
-        2091 => "ptx",
-        2092 => "ltx",
-        2093 => "trx",
-        3000 => "trn",
-        3001 => "trx",
+        3000 => "osc",
+        3001 => "usc",
         3002 => "trn",
-        3003 => "trx",
-        3004 => "xml",
-        3005 => "mdb",
-        3006 => "mda",
-        3007 => "spt",
-        3008 => "gr2",
-        3009 => "fxa",
-        3010 => "fxe",
-        3011 => "jpg",
-        3012 => "pwc",
-        3013 => "nwn2",
-        3014 => "amc",
-        3015 => "icc",
-        3016 => "ogg",
-        3017 => "con",
-        3018 => "obr",
-        3019 => "obs",
-        3020 => "wdb",
-        3021 => "stn",
-        3022 => "lod",
-        3023 => "wrw",
-        3024 => "pfr",
-        3025 => "emt",
-        3026 => "gdc",
-        3027 => "gdf",
-        3028 => "gft",
-        3029 => "crf",
-        3030 => "cre",
-        3031 => "crm",
-        3032 => "crt",
-        3033 => "wda",
-        _ => "unk",
-    }
-}
-
-pub fn extension_to_resource_type(ext: &str) -> Option<u16> {
-    let ext_lower = ext.to_lowercase();
-    match ext_lower.as_str() {
-        "2da" => Some(2017),
-        "tlk" => Some(2018),
-        "gff" => Some(2037),
-        "ifo" => Some(2014),
-        "bic" => Some(2015),
-        "uti" => Some(2025),
-        "utc" => Some(2027),
-        "utm" => Some(2051),
-        "utp" => Some(2044),
-        "utw" => Some(2058),
-        "are" => Some(2012),
-        "git" => Some(2023),
-        "dlg" => Some(2029),
-        "jrl" => Some(2056),
-        "ros" => Some(2080),
-        "rst" => Some(2081),
-        "xml" => Some(2089),
-        "nss" => Some(2009),
-        "ncs" => Some(2010),
-        "mod" => Some(2011),
-        "hak" => Some(2061),
-        "sav" => Some(2057),
-        _ => None,
-    }
-}
-
-pub struct ErfBuilder {
-    erf_type: ErfType,
-    version: ErfVersion,
-    resources: Vec<(String, u16, Vec<u8>)>,
-    build_year: u32,
-    build_day: u32,
-    description_str_ref: u32,
-}
-
-impl ErfBuilder {
-    pub fn new(erf_type: ErfType) -> Self {
-        Self {
-            erf_type,
-            version: ErfVersion::V11,
-            resources: Vec::new(),
-            build_year: 125,
-            build_day: 1,
-            description_str_ref: 0xFFFFFFFF,
-        }
-    }
-
-    pub fn version(mut self, version: ErfVersion) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub fn build_date(mut self, year: u32, day: u32) -> Self {
-        self.build_year = year;
-        self.build_day = day;
-        self
-    }
-
-    pub fn description_str_ref(mut self, str_ref: u32) -> Self {
-        self.description_str_ref = str_ref;
-        self
-    }
-
-    pub fn add_resource(mut self, name: &str, data: Vec<u8>) -> Self {
-        let resource_type = if let Some(dot_pos) = name.rfind('.') {
-            let ext = &name[dot_pos + 1..];
-            extension_to_resource_type(ext).unwrap_or(2037)
-        } else {
-            2037
-        };
-        self.resources.push((name.to_string(), resource_type, data));
-        self
-    }
-
-    pub fn add_resource_with_type(mut self, name: &str, resource_type: u16, data: Vec<u8>) -> Self {
-        self.resources.push((name.to_string(), resource_type, data));
-        self
-    }
-
-    pub fn build(self) -> super::parser::ErfParser {
-        use super::parser::ErfParser;
-
-        let mut parser = ErfParser::new_archive(self.erf_type, self.version);
-
-        if let Some(header) = &mut parser.header {
-            header.build_year = self.build_year;
-            header.build_day = self.build_day;
-            header.description_str_ref = self.description_str_ref;
-        }
-
-        for (name, resource_type, data) in self.resources {
-            let _ = parser.add_resource(&name, resource_type, data);
-        }
-
-        parser
-    }
+        3003 => "utr",
+        3004 => "uen",
+        3005 => "ult",
+        3006 => "sef",
+        3007 => "pfx",
+        3008 => "cam",
+        3009 => "lfx",
+        3010 => "bfx",
+        3011 => "upe",
+        3012 => "ros",
+        3013 => "rst",
+        3014 => "ifx",
+        3015 => "pfb",
+        3016 => "zip",
+        3017 => "wmp",
+        3018 => "bbx",
+        3019 => "tfx",
+        3020 => "wlk",
+        3021 => "xml",
+        3022 => "scc",
+        3033 => "ptx",
+        3034 => "ltx",
+        3035 => "trx",
+        4000 => "mdb",
+        4001 => "mda",
+        4002 => "spt",
+        4003 => "gr2",
+        4004 => "fxa",
+        4005 => "fxe",
+        4007 => "jpg",
+        4008 => "pwc",
+        _ => return None,
+    })
 }

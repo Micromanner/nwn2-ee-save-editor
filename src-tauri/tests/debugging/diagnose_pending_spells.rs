@@ -34,7 +34,7 @@ async fn diagnose_pending_spells() {
         let Ok(root) = parser.read_struct_fields(0) else {
             continue;
         };
-        let c = Character::from_gff(root);
+        let c = Character::from_gff(root).expect("character from gff");
         let classes: Vec<_> = c
             .class_entries()
             .iter()

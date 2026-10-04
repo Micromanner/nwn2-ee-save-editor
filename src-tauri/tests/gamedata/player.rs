@@ -62,7 +62,7 @@ fn test_list_available_character_fixtures() {
                                 let first_class = classes
                                     .first()
                                     .map(|c| {
-                                        let fields = c.force_load();
+                                        let fields = c.force_load().expect("load struct");
                                         match fields.get("Class") {
                                             Some(GffValue::Int(id)) => *id,
                                             _ => 0,
@@ -73,7 +73,7 @@ fn test_list_available_character_fixtures() {
                                 let lvls = classes
                                     .iter()
                                     .map(|c| {
-                                        let fields = c.force_load();
+                                        let fields = c.force_load().expect("load struct");
                                         match fields.get("ClassLevel") {
                                             Some(GffValue::Short(l)) => i32::from(*l),
                                             _ => 0,
@@ -160,7 +160,7 @@ fn test_class_list_structure() {
     println!("Classes: {}", class_list.len());
 
     for (idx, lazy_struct) in class_list.iter().enumerate() {
-        let class_entry = lazy_struct.force_load();
+        let class_entry = lazy_struct.force_load().expect("load struct");
 
         let class_id = match class_entry.get("Class") {
             Some(GffValue::Int(id)) => *id,
@@ -193,7 +193,7 @@ fn test_lvlstatlist_structure() {
     println!("Levels: {}", lvlstat_list.len());
 
     for (idx, lazy_struct) in lvlstat_list.iter().take(5).enumerate() {
-        let level_entry = lazy_struct.force_load();
+        let level_entry = lazy_struct.force_load().expect("load struct");
 
         let class_id = match level_entry.get("LvlStatClass") {
             Some(GffValue::Byte(id)) => i32::from(*id),
@@ -232,7 +232,7 @@ fn test_feat_list_structure() {
 
     let mut feat_ids = Vec::new();
     for lazy_struct in feat_list {
-        let feat_entry = lazy_struct.force_load();
+        let feat_entry = lazy_struct.force_load().expect("load struct");
 
         if let Some(GffValue::Word(id)) = feat_entry.get("Feat") {
             feat_ids.push(*id);
@@ -259,7 +259,7 @@ fn test_skill_list_structure() {
     println!("Skills: {}", skill_list.len());
 
     for (idx, lazy_struct) in skill_list.iter().take(10).enumerate() {
-        let skill_entry = lazy_struct.force_load();
+        let skill_entry = lazy_struct.force_load().expect("load struct");
 
         let rank = match skill_entry.get("Rank") {
             Some(GffValue::Byte(r)) => *r,
@@ -315,7 +315,7 @@ fn test_equipment_slots() {
 
     if let Some(GffValue::List(equip_list)) = root.get("Equip_ItemList") {
         for lazy_struct in equip_list {
-            let item = lazy_struct.force_load();
+            let item = lazy_struct.force_load().expect("load struct");
 
             let struct_id = match item.get("__struct_id__") {
                 Some(GffValue::Dword(id)) => *id as u16,
@@ -362,7 +362,11 @@ fn test_equipment_slots() {
             equip_list.len()
         );
 
-        let first = equip_list.first().unwrap().force_load();
+        let first = equip_list
+            .first()
+            .unwrap()
+            .force_load()
+            .expect("load struct");
         println!("First entry fields: {:?}", first.keys().collect::<Vec<_>>());
     }
 }
@@ -385,7 +389,7 @@ fn test_equipment_across_characters() {
 
         if let Some(GffValue::List(equip_list)) = root.get("Equip_ItemList") {
             for lazy_struct in equip_list {
-                let item = lazy_struct.force_load();
+                let item = lazy_struct.force_load().expect("load struct");
 
                 let struct_id = match item.get("__struct_id__") {
                     Some(GffValue::Dword(id)) => *id as u16,
@@ -429,7 +433,7 @@ fn test_high_level_character() {
     println!("Classes taken: {}", class_list.len());
 
     for lazy_struct in class_list {
-        let class_entry = lazy_struct.force_load();
+        let class_entry = lazy_struct.force_load().expect("load struct");
 
         let class_id = match class_entry.get("Class") {
             Some(GffValue::Int(id)) => *id,
@@ -453,7 +457,7 @@ fn test_spell_memorization() {
 
     if let Some(GffValue::List(class_list)) = root.get("ClassList") {
         for lazy_struct in class_list {
-            let class_entry = lazy_struct.force_load();
+            let class_entry = lazy_struct.force_load().expect("load struct");
 
             let class_id = match class_entry.get("Class") {
                 Some(GffValue::Int(id)) => *id,

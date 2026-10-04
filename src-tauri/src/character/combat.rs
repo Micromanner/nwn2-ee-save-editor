@@ -110,7 +110,7 @@ mod tests {
     fn create_test_character() -> Character {
         let mut fields = IndexMap::new();
         fields.insert("NaturalAC".to_string(), GffValue::Byte(2));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_base_attack_bonus_default() {
-        let character = Character::from_gff(IndexMap::new());
+        let character = Character::from_gff(IndexMap::new()).expect("character from gff");
         assert_eq!(character.base_attack_bonus(), 0);
     }
 
@@ -166,7 +166,7 @@ mod tests {
     fn test_base_attack_bonus_stored() {
         let mut fields = IndexMap::new();
         fields.insert("BaseAttackBonus".to_string(), GffValue::Byte(15));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         assert_eq!(character.base_attack_bonus(), 15);
     }
 
@@ -176,29 +176,29 @@ mod tests {
 
         // NWN2 creaturesize.2da: 1=Tiny(+2), 2=Small(+1), 3=Medium(0), 4=Large(-1), 5=Huge(-2)
         fields.insert("CreatureSize".to_string(), GffValue::Int(1));
-        let character = Character::from_gff(fields.clone());
+        let character = Character::from_gff(fields.clone()).expect("character from gff");
         assert_eq!(character.size_modifier(), 2);
 
         fields.insert("CreatureSize".to_string(), GffValue::Int(2));
-        let character = Character::from_gff(fields.clone());
+        let character = Character::from_gff(fields.clone()).expect("character from gff");
         assert_eq!(character.size_modifier(), 1);
 
         fields.insert("CreatureSize".to_string(), GffValue::Int(3));
-        let character = Character::from_gff(fields.clone());
+        let character = Character::from_gff(fields.clone()).expect("character from gff");
         assert_eq!(character.size_modifier(), 0);
 
         fields.insert("CreatureSize".to_string(), GffValue::Int(4));
-        let character = Character::from_gff(fields.clone());
+        let character = Character::from_gff(fields.clone()).expect("character from gff");
         assert_eq!(character.size_modifier(), -1);
 
         fields.insert("CreatureSize".to_string(), GffValue::Int(5));
-        let character = Character::from_gff(fields.clone());
+        let character = Character::from_gff(fields.clone()).expect("character from gff");
         assert_eq!(character.size_modifier(), -2);
     }
 
     #[test]
     fn test_get_class_level_no_class() {
-        let character = Character::from_gff(IndexMap::new());
+        let character = Character::from_gff(IndexMap::new()).expect("character from gff");
         assert_eq!(character.get_class_level(ClassId(0)), 0);
     }
 }

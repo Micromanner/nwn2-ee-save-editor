@@ -108,7 +108,9 @@ pub fn read_campaign_settings(
     // Module Names
     if let Some(GffValue::List(mod_names)) = root.get("ModNames") {
         for item in mod_names {
-            let fields = item.force_load();
+            let fields = item
+                .force_load()
+                .map_err(|e| format!("Failed to read ModNames entry: {e}"))?;
             if let Some(GffValue::String(s) | GffValue::ResRef(s)) = fields.get("ModuleName") {
                 settings.module_names.push(s.to_string());
             }
@@ -149,13 +151,9 @@ pub fn update_campaign_settings(
         fs::read(&campaign_file).map_err(|e| format!("Failed to read campaign file: {e}"))?;
     let parser = GffParser::from_bytes(file_bytes)
         .map_err(|e| format!("Failed to parse campaign file for update: {e}"))?;
-    let root_fields = parser
-        .read_struct_fields(0)
-        .map_err(|e| format!("Failed to read root struct: {e}"))?;
-    let mut owned_fields: IndexMap<String, GffValue<'static>> = root_fields
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut owned_fields = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("Failed to read campaign file: {e}"))?;
 
     insert_u32_preserving_type(&mut owned_fields, "LvlCap", settings.level_cap);
     insert_u32_preserving_type(&mut owned_fields, "XPCap", settings.xp_cap);

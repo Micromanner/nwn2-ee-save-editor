@@ -6,7 +6,7 @@ fn load_character(fixture_path: &str) -> Character {
     let bytes = load_test_gff(fixture_path);
     let parser = GffParser::from_bytes(bytes).expect("Failed to parse GFF");
     let root = parser.read_struct_fields(0).expect("Failed to read root");
-    Character::from_gff(root)
+    Character::from_gff(root).expect("character from gff")
 }
 
 #[tokio::test]

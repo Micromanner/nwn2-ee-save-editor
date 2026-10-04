@@ -20,7 +20,7 @@ fn load_character_from_save() -> Character {
 
     let parser = GffParser::from_bytes(bic_data).expect("Failed to parse BIC");
     let root = parser.read_struct_fields(0).expect("Failed to read root");
-    Character::from_gff(root)
+    Character::from_gff(root).expect("character from gff")
 }
 
 #[test]

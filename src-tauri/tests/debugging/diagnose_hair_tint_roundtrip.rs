@@ -29,13 +29,14 @@ fn resolve_struct(val: &GffValue<'_>) -> Option<IndexMap<String, GffValue<'stati
             s.as_ref()
                 .clone()
                 .into_iter()
-                .map(|(k, v)| (k, v.force_owned()))
+                .map(|(k, v)| (k, v.force_owned().expect("force owned")))
                 .collect(),
         ),
         GffValue::Struct(lazy) => Some(
             lazy.force_load()
+                .expect("load struct")
                 .into_iter()
-                .map(|(k, v)| (k, v.force_owned()))
+                .map(|(k, v)| (k, v.force_owned().expect("force owned")))
                 .collect(),
         ),
         _ => None,
@@ -110,7 +111,7 @@ fn diagnose_hair_tint_roundtrip() {
         .read_struct_fields(0)
         .expect("root")
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     let mut out = String::new();
@@ -121,7 +122,7 @@ fn diagnose_hair_tint_roundtrip() {
     dump_tint_struct(&mut out, "Tintable(root)", fields.get("Tintable"));
     dump_tint_struct(&mut out, "ArmorTint", fields.get("ArmorTint"));
 
-    let mut character = Character::from_gff(fields);
+    let mut character = Character::from_gff(fields).expect("character from gff");
 
     // Distinct sentinels: hair = pure R/G/B, head = recognizable triples
     let hair = TintChannels {
@@ -183,7 +184,7 @@ fn diagnose_hair_tint_roundtrip() {
         .read_struct_fields(0)
         .expect("root2")
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     writeln!(out, "\n=== AFTER round-trip (raw GFF) ===").unwrap();
@@ -200,9 +201,9 @@ fn diagnose_hair_tint_roundtrip() {
             .read_struct_fields(0)
             .expect("cycle root")
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect();
-        let mut c = Character::from_gff(f);
+        let mut c = Character::from_gff(f).expect("character from gff");
         let hair_now = c.tint_hair();
         let head_now = c.tint_head();
         // Simulate the frontend confirm: write back what was read
@@ -228,7 +229,7 @@ fn diagnose_hair_tint_roundtrip() {
         .read_struct_fields(0)
         .expect("final root")
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
     writeln!(
         out,

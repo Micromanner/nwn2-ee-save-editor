@@ -37,7 +37,7 @@ async fn test_item_property_decoding_from_fixture() {
 
     if let Some(app_lib::parsers::gff::GffValue::List(items)) = root_struct.get("ItemList") {
         for lazy_item in items {
-            let item_struct_fields = lazy_item.force_load();
+            let item_struct_fields = lazy_item.force_load().expect("load struct");
             if let Some(app_lib::parsers::gff::GffValue::List(props)) =
                 item_struct_fields.get("PropertiesList")
                 && !props.is_empty()
@@ -54,7 +54,7 @@ async fn test_item_property_decoding_from_fixture() {
             root_struct.get("Equip_ItemList")
         {
             for lazy_item in items {
-                let item_struct_fields = lazy_item.force_load();
+                let item_struct_fields = lazy_item.force_load().expect("load struct");
                 if let Some(app_lib::parsers::gff::GffValue::List(props)) =
                     item_struct_fields.get("PropertiesList")
                     && !props.is_empty()
@@ -74,7 +74,7 @@ async fn test_item_property_decoding_from_fixture() {
     // GffParser values are explicitly typed.
 
     for lazy_prop in properties_list {
-        let prop_fields = lazy_prop.force_load();
+        let prop_fields = lazy_prop.force_load().expect("load struct");
         let mut prop_map = HashMap::new();
 
         if let Some(app_lib::parsers::gff::GffValue::Word(v)) = prop_fields.get("PropertyName") {

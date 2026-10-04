@@ -92,7 +92,13 @@ fn index_resource(by_tag: &mut HashMap<String, SpeakerName>, name: &str, bytes: 
         return;
     };
     for creature in creatures {
-        let fields = creature.force_load();
+        let fields = match creature.force_load() {
+            Ok(fields) => fields,
+            Err(e) => {
+                tracing::warn!("Skipping unreadable creature entry: {e}");
+                continue;
+            }
+        };
         if let Some(entry) = speaker_from_fields(&fields, None)
             && !by_tag.contains_key(&entry.tag)
         {

@@ -124,22 +124,12 @@ impl super::Character {
     pub fn get_list(&self, field: &str) -> Option<&Vec<IndexMap<String, GffValue<'static>>>> {
         match self.gff.get(field)? {
             GffValue::ListOwned(maps) => Some(maps),
-            GffValue::List(_lazy_structs) => None,
             _ => None,
         }
     }
 
     pub fn get_list_owned(&self, field: &str) -> Option<Vec<IndexMap<String, GffValue<'static>>>> {
-        match self.gff.get(field)? {
-            GffValue::ListOwned(maps) => Some(maps.clone()),
-            GffValue::List(lazy_structs) => Some(
-                lazy_structs
-                    .iter()
-                    .map(super::super::parsers::gff::types::LazyStruct::force_load)
-                    .collect(),
-            ),
-            _ => None,
-        }
+        extract_list_from_map(&self.gff, field)
     }
 
     pub fn get_list_mut(
@@ -158,7 +148,6 @@ impl super::Character {
     pub fn get_struct(&self, field: &str) -> Option<&IndexMap<String, GffValue<'static>>> {
         match self.gff.get(field)? {
             GffValue::StructOwned(map) => Some(map),
-            GffValue::Struct(_lazy_struct) => None,
             _ => None,
         }
     }
@@ -166,7 +155,6 @@ impl super::Character {
     pub fn get_struct_owned(&self, field: &str) -> Option<IndexMap<String, GffValue<'static>>> {
         match self.gff.get(field)? {
             GffValue::StructOwned(map) => Some((**map).clone()),
-            GffValue::Struct(lazy_struct) => Some(lazy_struct.force_load()),
             _ => None,
         }
     }
@@ -318,12 +306,6 @@ pub fn extract_list_from_map(
 ) -> Option<Vec<IndexMap<String, GffValue<'static>>>> {
     match map.get(field)? {
         GffValue::ListOwned(maps) => Some(maps.clone()),
-        GffValue::List(lazy_structs) => Some(
-            lazy_structs
-                .iter()
-                .map(crate::parsers::gff::types::LazyStruct::force_load)
-                .collect(),
-        ),
         _ => None,
     }
 }
@@ -374,28 +356,28 @@ mod tests {
 
     #[test]
     fn test_get_i32_from_byte() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         let value = character.get_i32("Str");
         assert_eq!(value, Some(16));
     }
 
     #[test]
     fn test_get_i32_from_int() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         let value = character.get_i32("Int");
         assert_eq!(value, Some(10));
     }
 
     #[test]
     fn test_get_string() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         let value = character.get_string("Name");
         assert_eq!(value, Some("Test"));
     }
 
     #[test]
     fn test_set_i32() {
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         assert!(!character.is_modified());
 
         character.set_i32("Str", 20);
@@ -413,7 +395,7 @@ mod tests {
         fields.insert("WordField".to_string(), GffValue::Word(5));
         fields.insert("DwordField".to_string(), GffValue::Dword(5));
         fields.insert("IntField".to_string(), GffValue::Int(5));
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
 
         character.set_i32("ByteField", 50);
         character.set_i32("ShortField", 1000);
@@ -450,14 +432,14 @@ mod tests {
 
     #[test]
     fn test_has_field() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         assert!(character.has_field("Str"));
         assert!(!character.has_field("NonExistent"));
     }
 
     #[test]
     fn test_remove_field() {
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         assert!(character.has_field("Str"));
         assert!(!character.is_modified());
 
@@ -469,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_field_names() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         let names = character.field_names();
         assert!(names.contains(&"Str"));
         assert!(names.contains(&"Dex"));
@@ -490,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_set_string() {
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         character.set_string("NewField", "NewValue".to_string());
         assert_eq!(character.get_string("NewField"), Some("NewValue"));
         assert!(character.is_modified());
@@ -529,7 +511,8 @@ mod tests {
                     GffValue::List(lazy) => lazy
                         .iter()
                         .map(crate::parsers::gff::types::LazyStruct::force_load)
-                        .collect(),
+                        .collect::<Result<_, _>>()
+                        .expect("nested struct"),
                     GffValue::ListOwned(v) => v.clone(),
                     _ => continue,
                 };
@@ -610,7 +593,7 @@ mod tests {
         };
         fields.insert("Description".to_string(), GffValue::LocString(ls));
 
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
         character.set_localized_string("Description", "Updated".to_string());
 
         let updated = character.get_localized_string("Description").unwrap();
@@ -639,7 +622,7 @@ mod tests {
         };
         fields.insert("Description".to_string(), GffValue::LocString(ls));
 
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
         character.set_localized_string("Description", "Updated".to_string());
 
         let updated = character.get_localized_string("Description").unwrap();

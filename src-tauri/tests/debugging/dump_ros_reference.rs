@@ -26,7 +26,7 @@ fn parse_root(path: &std::path::Path) -> IndexMap<String, GffValue<'static>> {
         .read_struct_fields(0)
         .expect("root struct")
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect()
 }
 

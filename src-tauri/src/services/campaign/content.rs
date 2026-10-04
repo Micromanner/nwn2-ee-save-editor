@@ -238,7 +238,7 @@ fn player_area_id(handler: &SaveGameHandler) -> Option<u32> {
     let Some(GffValue::List(players)) = root.get("Mod_PlayerList") else {
         return None;
     };
-    let player = players.first()?.force_load();
+    let player = players.first()?.force_load().ok()?;
     match player.get("AreaId") {
         Some(GffValue::Dword(id)) => Some(*id),
         Some(GffValue::Int(id)) => Some(*id as u32),
@@ -252,7 +252,7 @@ fn area_resref_by_object_id(root: &IndexMap<String, GffValue<'_>>, area_id: u32)
         return None;
     };
     areas.iter().find_map(|area| {
-        let fields = area.force_load();
+        let fields = area.force_load().ok()?;
         let matches = match fields.get("ObjectId") {
             Some(GffValue::Dword(id)) => *id == area_id,
             Some(GffValue::Int(id)) => *id as u32 == area_id,
@@ -290,7 +290,7 @@ fn read_module_ifo(path: &Path) -> Result<(ErfParser, Arc<GffParser>), String> {
 fn module_content(
     root: &IndexMap<String, GffValue<'_>>,
     module_id: &str,
-) -> crate::services::resource_manager::ModuleContent {
+) -> Result<crate::services::resource_manager::ModuleContent, String> {
     let campaign_id = match root.get("Campaign_ID") {
         Some(GffValue::Void(bytes)) => hex::encode(bytes),
         Some(GffValue::String(s) | GffValue::ResRef(s)) => s.to_string(),
@@ -304,7 +304,9 @@ fn module_content(
     let mut hak_list = Vec::new();
     if let Some(GffValue::List(haks)) = root.get("Mod_HakList") {
         for hak_lazy in haks {
-            let fields = hak_lazy.force_load();
+            let fields = hak_lazy
+                .force_load()
+                .map_err(|e| format!("Failed to read Mod_HakList entry: {e}"))?;
             if let Some(GffValue::String(s) | GffValue::ResRef(s)) = fields.get("Mod_Hak")
                 && !s.is_empty()
             {
@@ -313,12 +315,12 @@ fn module_content(
         }
     }
 
-    crate::services::resource_manager::ModuleContent {
+    Ok(crate::services::resource_manager::ModuleContent {
         name: module_id.to_string(),
         custom_tlk,
         hak_list,
         campaign_id: (!campaign_id.is_empty()).then_some(campaign_id),
-    }
+    })
 }
 
 /// The module the save plays in (`currentmodule.txt`), with the HAKs, custom
@@ -332,7 +334,7 @@ pub fn save_module_content(
     let root = gff
         .read_struct_fields(0)
         .map_err(|e| format!("Failed to read root struct: {e}"))?;
-    Ok(module_content(&root, module_id))
+    module_content(&root, module_id)
 }
 
 fn parse_module_z_file(
@@ -378,7 +380,7 @@ fn parse_module_z_file(
         read_area_name_strref(&mut erf_parser, module_id, &current_area, nwn2_paths);
     let entry_area_strref =
         read_area_name_strref(&mut erf_parser, module_id, &entry_area, nwn2_paths);
-    let content = module_content(&root, module_id);
+    let content = module_content(&root, module_id)?;
     let campaign_id = content.campaign_id.clone().unwrap_or_default();
 
     let campaign = if campaign_id.is_empty() {
@@ -427,7 +429,9 @@ fn parse_module_z_file(
     let mut vars = ModuleVariables::default();
     if let Some(GffValue::List(var_entries)) = root.get("VarTable") {
         for var_lazy in var_entries {
-            let fields = var_lazy.force_load();
+            let fields = var_lazy
+                .force_load()
+                .map_err(|e| format!("Failed to read VarTable entry: {e}"))?;
             let name = match fields.get("Name") {
                 Some(GffValue::String(s)) => s.to_string(),
                 _ => continue,
@@ -546,14 +550,9 @@ fn update_module_ifo_vars(
 
     let gff = GffParser::from_bytes(module_ifo_bytes)
         .map_err(|e| format!("Failed to parse module.ifo GFF: {e}"))?;
-    let root = gff
-        .read_struct_fields(0)
-        .map_err(|e| format!("Failed to read root struct: {e}"))?;
-
-    let mut owned_fields: IndexMap<String, GffValue<'static>> = root
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut owned_fields = gff
+        .read_owned_struct(0)
+        .map_err(|e| format!("Failed to read module.ifo: {e}"))?;
 
     let var_table = owned_fields
         .entry("VarTable".to_string())

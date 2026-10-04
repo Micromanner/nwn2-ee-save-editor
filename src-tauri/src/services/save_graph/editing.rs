@@ -2378,12 +2378,7 @@ fn gff_integer(value: &GffValue) -> Option<i64> {
 
 fn owned_root(bytes: &[u8]) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
     let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
-    Ok(parser
-        .read_struct_fields(0)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect())
+    parser.read_owned_struct(0).map_err(|e| e.to_string())
 }
 
 /// The player's own struct out of `playerlist.ifo` (`Mod_PlayerList[player]`).
@@ -2539,7 +2534,7 @@ fn give_items(
     items: &[(Arc<ItemBlueprint>, i64)],
     game_data: &GameData,
 ) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
-    let mut character = Character::from_gff(fields);
+    let mut character = Character::from_gff(fields).map_err(|e| e.to_string())?;
     give_items_to(&mut character, items, game_data)?;
     Ok(character.into_gff())
 }
@@ -2772,7 +2767,7 @@ pub fn set_player_feats(
         return Err("Mod_PlayerList missing".into());
     };
     let slot = players.get_mut(player).ok_or("Primary player missing")?;
-    let fields = set_feats(std::mem::take(slot), feats);
+    let fields = set_feats(std::mem::take(slot), feats)?;
     let list = fields
         .get("FeatList")
         .cloned()
@@ -2796,19 +2791,14 @@ fn update_companion(
     let file_type = parser.file_type.clone();
     let file_version = parser.file_version.clone();
     let root_struct_id = parser.get_struct_id(0).map_err(|e| e.to_string())?;
-    let mut root: indexmap::IndexMap<String, GffValue<'static>> = parser
-        .read_struct_fields(0)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root = parser.read_owned_struct(0).map_err(|e| e.to_string())?;
     let mut written = Vec::new();
     for (name, delta) in rewards {
         let value = add_to_field(&mut root, name, *delta)?;
         written.push((name.clone(), value));
     }
     if !feats.is_empty() {
-        root = set_feats(root, feats);
+        root = set_feats(root, feats)?;
         let list = root
             .get("FeatList")
             .cloned()
@@ -2826,7 +2816,7 @@ pub fn set_bic_feats(bytes: &[u8], feats: &[(i32, bool)]) -> Result<Vec<u8>, Str
     if feats.is_empty() {
         return Ok(bytes.to_vec());
     }
-    let root = set_feats(owned_root(bytes)?, feats);
+    let root = set_feats(owned_root(bytes)?, feats)?;
     GffWriter::new("BIC ", "V3.2")
         .write(root)
         .map_err(|e| e.to_string())
@@ -2837,8 +2827,8 @@ pub fn set_bic_feats(bytes: &[u8], feats: &[(i32, bool)]) -> Result<Vec<u8>, Str
 fn set_feats(
     fields: indexmap::IndexMap<String, GffValue<'static>>,
     feats: &[(i32, bool)],
-) -> indexmap::IndexMap<String, GffValue<'static>> {
-    let mut character = Character::from_gff(fields);
+) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
+    let mut character = Character::from_gff(fields).map_err(|e| e.to_string())?;
     for (feat, owned) in feats {
         set_feat(&mut character, *feat, *owned);
     }
@@ -2846,7 +2836,7 @@ fn set_feats(
     fields
         .entry("FeatList".into())
         .or_insert_with(|| GffValue::ListOwned(Vec::new()));
-    fields
+    Ok(fields)
 }
 
 /// The PC local the journal keeps a quest's state in.
@@ -2894,12 +2884,7 @@ pub fn write_pc_int_locals(
     edits: &[(String, i64)],
 ) -> Result<Vec<u8>, String> {
     let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
-    let mut root: indexmap::IndexMap<_, _> = parser
-        .read_struct_fields(0)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root = parser.read_owned_struct(0).map_err(|e| e.to_string())?;
     let Some(GffValue::ListOwned(players)) = root.get_mut("Mod_PlayerList") else {
         return Err("Mod_PlayerList missing".into());
     };
@@ -3733,7 +3718,8 @@ mod tests {
                 "Feat".into() => GffValue::Word(10),
             }]),
             "ItemList".into() => GffValue::ListOwned(vec![item("qe_head", 4), item("other", 1)]),
-        });
+        })
+        .unwrap();
         let blueprint = Arc::new(ItemBlueprint {
             fields: item("reward", 1),
             name: None,
@@ -4231,8 +4217,11 @@ mod tests {
     fn owned_players(bytes: &[u8]) -> Vec<indexmap::IndexMap<String, GffValue<'static>>> {
         let parser = GffParser::from_bytes(bytes.to_vec()).unwrap();
         let mut root = parser.read_struct_fields(0).unwrap();
-        let GffValue::ListOwned(players) =
-            root.swap_remove("Mod_PlayerList").unwrap().force_owned()
+        let GffValue::ListOwned(players) = root
+            .swap_remove("Mod_PlayerList")
+            .unwrap()
+            .force_owned()
+            .unwrap()
         else {
             panic!()
         };

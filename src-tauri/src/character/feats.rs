@@ -2338,11 +2338,11 @@ mod tests {
             GffValue::ListOwned(vec![feat1, feat2, feat3]),
         );
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn create_empty_character() -> Character {
-        Character::from_gff(IndexMap::new())
+        Character::from_gff(IndexMap::new()).expect("character from gff")
     }
 
     #[test]

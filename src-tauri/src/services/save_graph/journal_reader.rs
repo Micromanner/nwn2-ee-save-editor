@@ -50,7 +50,8 @@ pub fn read_live_journal(
                 players.len()
             )
         })?
-        .force_load();
+        .force_load()
+        .map_err(|e| e.to_string())?;
 
     let Some(GffValue::List(var_table)) = entry.get("VarTable") else {
         return Ok(Vec::new());
@@ -58,7 +59,7 @@ pub fn read_live_journal(
 
     let mut out = Vec::new();
     for var_lazy in var_table {
-        let fields = var_lazy.force_load();
+        let fields = var_lazy.force_load().map_err(|e| e.to_string())?;
         let Some(GffValue::String(name)) = fields.get("Name") else {
             continue;
         };

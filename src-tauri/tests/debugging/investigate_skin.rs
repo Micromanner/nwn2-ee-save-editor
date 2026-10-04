@@ -55,7 +55,7 @@ fn scan_value(val: &GffValue, path: &str, depth: usize) {
         }
         GffValue::List(list) => {
             for (idx, lazy) in list.iter().enumerate() {
-                let item = lazy.force_load();
+                let item = lazy.force_load().expect("load struct");
                 let new_path = format!("{}[{}]", path, idx);
                 check_item_properties(&item, &new_path);
                 let struct_val = GffValue::StructOwned(Box::new(item));
@@ -63,7 +63,7 @@ fn scan_value(val: &GffValue, path: &str, depth: usize) {
             }
         }
         GffValue::Struct(lazy) => {
-            let item = lazy.force_load();
+            let item = lazy.force_load().expect("load struct");
             let struct_val = GffValue::StructOwned(Box::new(item));
             scan_value(&struct_val, path, depth);
         }
@@ -91,7 +91,7 @@ fn check_item_properties(item: &indexmap::IndexMap<String, GffValue>, path: &str
             }
             GffValue::List(l) => {
                 for lazy in l {
-                    properties.push(lazy.force_load());
+                    properties.push(lazy.force_load().expect("load struct"));
                 }
             }
             _ => {}

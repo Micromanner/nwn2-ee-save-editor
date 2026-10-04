@@ -192,7 +192,7 @@ async fn test_gff_list_field() {
         );
 
         for (i, lazy_struct) in items.iter().enumerate() {
-            let fields = lazy_struct.force_load();
+            let fields = lazy_struct.force_load().expect("load struct");
             println!("  Class {}: {} fields", i, fields.len());
             if let Some(GffValue::Int(class_id)) = fields.get("Class") {
                 println!("    Class ID: {class_id}");
@@ -215,7 +215,7 @@ async fn test_gff_nested_struct() {
     if let Some(GffValue::List(feats)) = root.get("FeatList") {
         println!("Character has {} feats", feats.len());
         for (i, feat) in feats.iter().take(5).enumerate() {
-            let fields = feat.force_load();
+            let fields = feat.force_load().expect("load struct");
             if let Some(GffValue::Word(feat_id)) = fields.get("Feat") {
                 println!("  Feat {i}: ID {feat_id}");
             }
@@ -232,7 +232,7 @@ async fn test_gff_skill_list() {
     if let Some(GffValue::List(skills)) = root.get("SkillList") {
         println!("SkillList has {} entries", skills.len());
         for (i, skill) in skills.iter().take(5).enumerate() {
-            let fields = skill.force_load();
+            let fields = skill.force_load().expect("load struct");
             if let Some(GffValue::Byte(rank)) = fields.get("Rank") {
                 println!("  Skill {i}: Rank {rank}");
             }
@@ -251,7 +251,7 @@ async fn test_gff_lvlstatlist() {
         assert!(!levels.is_empty(), "Character should have level history");
 
         for (i, level) in levels.iter().enumerate() {
-            let fields = level.force_load();
+            let fields = level.force_load().expect("load struct");
             println!("  Level {} entry has {} fields", i + 1, fields.len());
 
             if let Some(GffValue::Byte(class)) = fields.get("LvlStatClass") {
@@ -317,7 +317,7 @@ async fn test_gff_round_trip() {
 
     let mut root_owned = indexmap::IndexMap::new();
     for (k, v) in root_fields {
-        root_owned.insert(k, v.force_owned());
+        root_owned.insert(k, v.force_owned().expect("force owned"));
     }
 
     let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
@@ -361,7 +361,7 @@ async fn test_gff_round_trip_preserves_data() {
 
     let mut root_owned = indexmap::IndexMap::new();
     for (k, v) in root1 {
-        root_owned.insert(k, v.force_owned());
+        root_owned.insert(k, v.force_owned().expect("force owned"));
     }
 
     let mut writer = GffWriter::new(&parser1.file_type, &parser1.file_version);
@@ -485,7 +485,7 @@ async fn test_gff_equipped_items() {
     if let Some(GffValue::List(items)) = root.get("Equip_ItemList") {
         println!("Equipped items: {}", items.len());
         for item in items {
-            let fields = item.force_load();
+            let fields = item.force_load().expect("load struct");
             println!("  Slot __struct_id__: {}", item.struct_id);
             if let Some(GffValue::LocString(name)) = fields.get("LocalizedName")
                 && let Some(sub) = name.substrings.first()
@@ -505,7 +505,7 @@ async fn test_gff_inventory_items() {
     if let Some(GffValue::List(items)) = root.get("ItemList") {
         println!("Inventory items: {}", items.len());
         for (i, item) in items.iter().take(10).enumerate() {
-            let fields = item.force_load();
+            let fields = item.force_load().expect("load struct");
             if let Some(GffValue::LocString(name)) = fields.get("LocalizedName")
                 && let Some(sub) = name.substrings.first()
             {
@@ -608,7 +608,7 @@ async fn test_russian_client_save_names_are_utf8() {
     let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
     let root_owned = root
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
     let written = writer.write(root_owned).expect("write");
     let reparsed = GffParser::from_bytes(written).expect("re-parse");

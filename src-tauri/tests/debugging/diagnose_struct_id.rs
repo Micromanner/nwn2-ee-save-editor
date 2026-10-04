@@ -21,7 +21,7 @@ fn load_via_playerlist_ifo(
         GffValue::List(lazy_structs) => lazy_structs,
         _ => panic!("Mod_PlayerList is not a list"),
     };
-    list.first().expect("Empty Mod_PlayerList").force_load()
+    list.first().expect("Empty Mod_PlayerList").force_load().expect("load struct")
 }
 
 fn load_via_bic(
@@ -60,7 +60,7 @@ fn dump_equip_list(fields: &indexmap::IndexMap<String, GffValue<'static>>) {
                         "    LazyStruct: struct_index={}, struct_id={}",
                         ls.struct_index, ls.struct_id
                     );
-                    ls.force_load()
+                    ls.force_load().expect("load struct")
                 })
                 .collect::<Vec<_>>()
         }
@@ -115,7 +115,7 @@ fn dump_equip_list(fields: &indexmap::IndexMap<String, GffValue<'static>>) {
                 }
             }
             Some(GffValue::Struct(lazy)) => {
-                let loaded = lazy.force_load();
+                let loaded = lazy.force_load().expect("load struct");
                 println!(
                     "       Tintable (lazy): {:?}",
                     loaded.keys().collect::<Vec<_>>()
@@ -132,7 +132,7 @@ fn force_own_all(
 ) -> indexmap::IndexMap<String, GffValue<'static>> {
     fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect()
 }
 
@@ -159,14 +159,14 @@ fn dump_value(value: &GffValue<'static>, indent: usize) {
             }
         }
         GffValue::Struct(lazy) => {
-            let loaded = lazy.force_load();
+            let loaded = lazy.force_load().expect("load struct");
             print!("LazyStruct -> ");
             let owned = GffValue::StructOwned(Box::new(loaded));
             dump_value(&owned, indent);
         }
         GffValue::List(lazys) => {
             let owned: Vec<indexmap::IndexMap<String, GffValue<'static>>> =
-                lazys.iter().map(|l| l.force_load()).collect();
+                lazys.iter().map(|l| l.force_load().expect("load struct")).collect();
             dump_value(&GffValue::ListOwned(owned), indent);
         }
         other => println!("{other:?}"),

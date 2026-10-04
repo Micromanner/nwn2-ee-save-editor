@@ -223,7 +223,6 @@ impl Character {
         };
         let tintable = match outer.get("Tintable") {
             Some(GffValue::StructOwned(s)) => s.as_ref().clone(),
-            Some(GffValue::Struct(lazy)) => lazy.force_load(),
             _ => return TintChannels::default(),
         };
         read_tint_from_tintable(&tintable)
@@ -919,7 +918,6 @@ impl Character {
                 // Boots and Gloves are nested structs with their own ArmorVisualType + Variation
                 let boots_fields = match item_struct.get("Boots") {
                     Some(GffValue::StructOwned(s)) => Some(s.as_ref().clone()),
-                    Some(GffValue::Struct(lazy)) => Some(lazy.force_load()),
                     _ => None,
                 };
                 if let Some(ref fields) = boots_fields {
@@ -934,7 +932,6 @@ impl Character {
                 }
                 let gloves_fields = match item_struct.get("Gloves") {
                     Some(GffValue::StructOwned(s)) => Some(s.as_ref().clone()),
-                    Some(GffValue::Struct(lazy)) => Some(lazy.force_load()),
                     _ => None,
                 };
                 if let Some(ref fields) = gloves_fields {
@@ -1043,9 +1040,6 @@ impl Character {
                 Some(GffValue::StructOwned(s)) => {
                     Some(super::appearance_helpers::read_tint_channels(s))
                 }
-                Some(GffValue::Struct(lazy)) => Some(
-                    super::appearance_helpers::read_tint_channels(&lazy.force_load()),
-                ),
                 _ => None,
             };
             debug!(
@@ -1087,7 +1081,6 @@ impl Character {
     ) -> Option<TintChannels> {
         let tintable = match item_struct.get("Tintable") {
             Some(GffValue::StructOwned(s)) => Some(s.as_ref().clone()),
-            Some(GffValue::Struct(lazy)) => Some(lazy.force_load()),
             _ => None,
         };
         if let Some(ref t) = tintable {
@@ -1109,12 +1102,12 @@ impl Character {
         };
         let uti_bytes = resource_manager.get_resource_bytes(&resref, "uti").ok()?;
         let gff = crate::parsers::gff::parser::GffParser::from_bytes(uti_bytes).ok()?;
-        let fields = gff.read_struct_fields(0).ok()?;
+        let fields = gff.read_owned_struct(0).ok()?;
         let tintable = match fields.get("Tintable") {
-            Some(GffValue::Struct(lazy)) => lazy.force_load(),
+            Some(GffValue::StructOwned(s)) => s.as_ref(),
             _ => return None,
         };
-        let tint = read_tint_from_tintable(&tintable);
+        let tint = read_tint_from_tintable(tintable);
         if tint.has_color() {
             debug!(
                 "Template '{}' tint: ch1=({},{},{},{}), ch2=({},{},{},{}), ch3=({},{},{},{})",
@@ -1177,7 +1170,7 @@ mod tests {
         fields.insert("Tail".to_string(), GffValue::Byte(0));
         fields.insert("Race".to_string(), GffValue::Byte(1));
         fields.insert("Gender".to_string(), GffValue::Byte(0));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -1263,7 +1256,7 @@ mod tests {
         let mut fields = IndexMap::new();
         fields.insert("ArmorVisualType".to_string(), GffValue::Byte(0));
         fields.insert("Variation".to_string(), GffValue::Byte(8));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let visuals = character.resolve_equipped_visuals(
             &game_data_with_armor_and_baseitems(),
             &test_resource_manager(),
@@ -1278,7 +1271,7 @@ mod tests {
         fields.insert("ArmorVisualType".to_string(), GffValue::Byte(2));
         fields.insert("Variation".to_string(), GffValue::Byte(2));
         fields.insert("Equip_ItemList".to_string(), GffValue::ListOwned(vec![]));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let visuals = character.resolve_equipped_visuals(
             &game_data_with_armor_and_baseitems(),
             &test_resource_manager(),
@@ -1291,7 +1284,7 @@ mod tests {
     fn creature_body_tint_is_root_tintable_raw_order() {
         let mut fields = IndexMap::new();
         fields.insert("Variation".to_string(), GffValue::Byte(2));
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
         let mut body = TintChannels::default();
         body.channel2 = TintChannel {
             r: 166,
@@ -1321,7 +1314,7 @@ mod tests {
         fields.insert("ArmorVisualType".to_string(), GffValue::Byte(0));
         fields.insert("Variation".to_string(), GffValue::Byte(8));
         fields.insert("Equip_ItemList".to_string(), chest_item(1, 4));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let visuals = character.resolve_equipped_visuals(
             &game_data_with_armor_and_baseitems(),
             &test_resource_manager(),
@@ -1336,7 +1329,7 @@ mod tests {
         fields.insert("Gender".to_string(), GffValue::Byte(0));
         fields.insert("ArmorVisualType".to_string(), GffValue::Byte(2));
         fields.insert("Variation".to_string(), GffValue::Byte(4));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let parts = character
             .resolve_model_parts(
                 &game_data_with_armor_and_baseitems(),
@@ -1369,7 +1362,7 @@ mod tests {
         fields.insert("Gender".to_string(), GffValue::Byte(1));
         fields.insert("Variation".to_string(), GffValue::Byte(13));
         fields.insert("Boots".to_string(), GffValue::StructOwned(Box::new(boots)));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let parts = character
             .resolve_model_parts(
                 &game_data_with_armor_and_baseitems(),
@@ -1395,7 +1388,7 @@ mod tests {
         let mut fields = IndexMap::new();
         fields.insert("Gender".to_string(), GffValue::Byte(0));
         fields.insert("Equip_ItemList".to_string(), chest_item(1, 4));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let parts = character
             .resolve_model_parts(
                 &game_data_with_armor_and_baseitems(),
@@ -1426,7 +1419,7 @@ mod tests {
         fields.insert("Variation".to_string(), GffValue::Byte(4));
         fields.insert("NeverShowArmor".to_string(), GffValue::Byte(1));
         fields.insert("Equip_ItemList".to_string(), chest_item(1, 4));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let visuals = character.resolve_equipped_visuals(
             &game_data_with_armor_and_baseitems(),
             &test_resource_manager(),
@@ -1457,7 +1450,7 @@ mod tests {
     fn test_set_never_draw_helmet_repairs_byte_type() {
         let mut fields = IndexMap::new();
         fields.insert("NeverDrawHelmet".to_string(), GffValue::Byte(1));
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
         character.set_never_draw_helmet(false);
         match character.gff.get("NeverDrawHelmet") {
             Some(GffValue::Int(v)) => assert_eq!(*v, 0),

@@ -162,7 +162,7 @@ mod tests {
         fields.insert("fortbonus".to_string(), GffValue::Short(5));
         fields.insert("refbonus".to_string(), GffValue::Short(3));
         fields.insert("willbonus".to_string(), GffValue::Short(7));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_save_bonuses_with_missing_fields() {
-        let character = Character::from_gff(IndexMap::new());
+        let character = Character::from_gff(IndexMap::new()).expect("character from gff");
         let saves = character.save_bonuses();
         assert_eq!(saves.fortitude, 0);
         assert_eq!(saves.reflex, 0);

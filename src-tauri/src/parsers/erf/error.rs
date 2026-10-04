@@ -21,7 +21,7 @@ pub enum ErfError {
     #[error("Resource not found: '{name}'")]
     ResourceNotFound { name: String },
 
-    #[error("Invalid resource name: contains non-ASCII characters")]
+    #[error("Invalid resource name: must be ASCII and fit the key length")]
     InvalidResourceName,
 
     #[error("Security violation: {message}")]

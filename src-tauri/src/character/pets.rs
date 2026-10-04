@@ -267,7 +267,7 @@ mod tests {
             GffValue::String(Cow::Owned("Karnwyr".to_string())),
         );
         fields.insert(COMPANION_TYPE.to_string(), GffValue::Int(1));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn missing_fields_read_as_unset() {
-        let character = Character::from_gff(IndexMap::new());
+        let character = Character::from_gff(IndexMap::new()).expect("character from gff");
         assert_eq!(character.animal_companion_name(), "");
         assert_eq!(character.animal_companion_type(), PET_TYPE_NONE);
         assert_eq!(character.familiar_name(), "");
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn writes_schema_types_when_fields_are_absent() {
-        let mut character = Character::from_gff(IndexMap::new());
+        let mut character = Character::from_gff(IndexMap::new()).expect("character from gff");
         character.set_familiar_name("Whiskers".to_string());
         character.set_familiar_type(1);
 
@@ -307,7 +307,7 @@ mod tests {
     fn retypes_mistyped_type_field_to_int() {
         let mut fields = IndexMap::new();
         fields.insert(COMPANION_TYPE.to_string(), GffValue::Byte(2));
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
 
         character.set_animal_companion_type(4);
 

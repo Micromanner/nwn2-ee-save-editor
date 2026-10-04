@@ -1,27 +1,29 @@
 use super::error::{ErfError, ErfResult};
 use super::types::{
     ErfHeader, ErfResource, ErfStatistics, ErfType, ErfVersion, FileMetadata, KeyEntry,
-    ResourceEntry, SecurityLimits, resource_type_to_extension,
+    ResourceEntry, SecurityLimits,
 };
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use indexmap::IndexMap;
-use lasso::Rodeo;
+use indexmap::map::Entry;
 use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::Instant;
+use tracing::warn;
 
 pub struct ErfParser {
     pub header: Option<ErfHeader>,
     pub erf_type: Option<ErfType>,
     pub version: Option<ErfVersion>,
     pub resources: IndexMap<String, ErfResource>,
-    pub interner: Rodeo,
     pub security_limits: SecurityLimits,
     pub stats: ErfStatistics,
     pub metadata: Option<FileMetadata>,
+    /// Raw localized string list, written back unchanged by `to_bytes`.
+    localized_strings: Vec<u8>,
     mmap: Option<Mmap>,
     file_data: Option<Vec<u8>>,
 }
@@ -39,7 +41,6 @@ impl ErfParser {
             erf_type: None,
             version: None,
             resources: IndexMap::new(),
-            interner: Rodeo::default(),
             security_limits: SecurityLimits::default(),
             stats: ErfStatistics {
                 total_resources: 0,
@@ -49,6 +50,7 @@ impl ErfParser {
                 parse_time_ms: 0,
             },
             metadata: None,
+            localized_strings: Vec::new(),
             mmap: None,
             file_data: None,
         }
@@ -82,7 +84,7 @@ impl ErfParser {
         if let Some(header) = self.header.clone() {
             self.validate_header(&header, file_size)?;
 
-            // Parse key and resource lists
+            self.localized_strings = Self::read_localized_strings(&mmap, &header);
             let keys = self.parse_key_list(&mut cursor, &header)?;
             let resources = self.parse_resource_list(&mut cursor, &header)?;
 
@@ -140,6 +142,7 @@ impl ErfParser {
         if let Some(header) = self.header.clone() {
             self.validate_header(&header, file_size)?;
 
+            self.localized_strings = Self::read_localized_strings(data, &header);
             let keys = self.parse_key_list(&mut cursor, &header)?;
             let resources = self.parse_resource_list(&mut cursor, &header)?;
 
@@ -227,6 +230,21 @@ impl ErfParser {
         Ok(())
     }
 
+    fn read_localized_strings(data: &[u8], header: &ErfHeader) -> Vec<u8> {
+        if header.language_count == 0 {
+            return Vec::new();
+        }
+        let start = header.offset_to_localized_string as usize;
+        let end = start + header.localized_string_size as usize;
+        data.get(start..end).map_or_else(
+            || {
+                warn!("ERF localized string list {start}..{end} is outside the file, dropped");
+                Vec::new()
+            },
+            <[u8]>::to_vec,
+        )
+    }
+
     fn parse_key_list<R: Read + Seek>(
         &mut self,
         reader: &mut R,
@@ -252,20 +270,17 @@ impl ErfParser {
                 .unwrap_or(name_length);
             let name_slice = &name_bytes[..name_end];
 
-            // Validate ASCII
-            if !name_slice.iter().all(|&b| b.is_ascii()) {
-                return Err(ErfError::InvalidResourceName);
-            }
-
             let resource_name = String::from_utf8_lossy(name_slice).into_owned();
+            if !name_slice.is_ascii() {
+                warn!("ERF key name is not ASCII: {resource_name:?}");
+            }
 
             let resource_id = reader.read_u32::<LittleEndian>()?;
             let resource_type = reader.read_u16::<LittleEndian>()?;
             let reserved = reader.read_u16::<LittleEndian>()?;
 
-            let interned_name = self.interner.get_or_intern(&resource_name);
             keys.push(KeyEntry {
-                resource_name: self.interner.resolve(&interned_name).to_string(),
+                resource_name,
                 resource_id,
                 resource_type,
                 reserved,
@@ -330,15 +345,18 @@ impl ErfParser {
                 largest = Some((key.full_name(), size));
             }
 
-            let full_name = key.full_name().to_lowercase();
-            self.resources.insert(
-                full_name,
-                ErfResource {
-                    key,
-                    entry,
-                    data: None,
-                },
-            );
+            match self.resources.entry(key.full_name().to_lowercase()) {
+                Entry::Occupied(slot) => {
+                    warn!("ERF holds {} twice, keeping the first", slot.key());
+                }
+                Entry::Vacant(slot) => {
+                    slot.insert(ErfResource {
+                        key,
+                        entry,
+                        data: None,
+                    });
+                }
+            }
         }
 
         self.stats.largest_resource = largest;
@@ -465,53 +483,46 @@ impl ErfParser {
         }
     }
 
-    pub fn add_resource(&mut self, name: &str, resource_type: u16, data: Vec<u8>) -> ErfResult<()> {
-        let version = self.version.unwrap_or(ErfVersion::V11);
-        let max_name_len = version.max_resource_name_length();
-
-        let (base_name, ext) = if let Some(dot_pos) = name.rfind('.') {
-            (&name[..dot_pos], &name[dot_pos + 1..])
-        } else {
-            (name, "")
-        };
-
-        if base_name.len() > max_name_len {
+    /// Adds or replaces `resref` of `resource_type`; the key extension
+    /// always follows the type.
+    pub fn add_resource(
+        &mut self,
+        resref: &str,
+        resource_type: u16,
+        data: Vec<u8>,
+    ) -> ErfResult<()> {
+        let max_name_len = self
+            .version
+            .unwrap_or(ErfVersion::V11)
+            .max_resource_name_length();
+        if resref.len() > max_name_len || !resref.is_ascii() {
             return Err(ErfError::InvalidResourceName);
         }
 
-        if !base_name.bytes().all(|b| b.is_ascii()) {
-            return Err(ErfError::InvalidResourceName);
-        }
-
-        let full_name = if ext.is_empty() {
-            format!(
-                "{}.{}",
-                base_name,
-                resource_type_to_extension(resource_type)
-            )
-        } else {
-            name.to_string()
-        };
-
-        let key = KeyEntry {
-            resource_name: base_name.to_string(),
-            resource_id: self.resources.len() as u32,
+        let mut key = KeyEntry {
+            resource_name: resref.to_string(),
+            resource_id: 0,
             resource_type,
             reserved: 0,
         };
-
-        let entry = ResourceEntry {
-            offset: 0,
-            size: data.len() as u32,
-        };
-
+        let slot = self.resources.entry(key.full_name().to_lowercase());
+        key.resource_id = slot.index() as u32;
         let resource = ErfResource {
             key,
-            entry,
+            entry: ResourceEntry {
+                offset: 0,
+                size: data.len() as u32,
+            },
             data: Some(data),
         };
-
-        self.resources.insert(full_name.to_lowercase(), resource);
+        match slot {
+            Entry::Occupied(mut slot) => {
+                slot.insert(resource);
+            }
+            Entry::Vacant(slot) => {
+                slot.insert(resource);
+            }
+        }
 
         if let Some(header) = &mut self.header {
             header.entry_count = self.resources.len() as u32;
@@ -581,21 +592,27 @@ impl ErfParser {
         let key_size = version.key_entry_size();
         let resource_count = self.resources.len();
 
+        let header = self.header.as_ref();
+        let language_count = if self.localized_strings.is_empty() {
+            0
+        } else {
+            header.map_or(0, |h| h.language_count)
+        };
+
         let header_size = 160u32;
-        let offset_to_keys = header_size;
+        let offset_to_keys = header_size + self.localized_strings.len() as u32;
         let offset_to_resources = offset_to_keys + (resource_count as u32 * key_size as u32);
 
         output.extend_from_slice(erf_type.signature());
         output.extend_from_slice(version.version_bytes());
 
-        output.write_u32::<LittleEndian>(0)?;
-        output.write_u32::<LittleEndian>(0)?;
+        output.write_u32::<LittleEndian>(language_count)?;
+        output.write_u32::<LittleEndian>(self.localized_strings.len() as u32)?;
         output.write_u32::<LittleEndian>(resource_count as u32)?;
         output.write_u32::<LittleEndian>(header_size)?;
         output.write_u32::<LittleEndian>(offset_to_keys)?;
         output.write_u32::<LittleEndian>(offset_to_resources)?;
 
-        let header = self.header.as_ref();
         let build_year = header.map_or(125, |h| h.build_year);
         let build_day = header.map_or(1, |h| h.build_day);
         let description_str_ref = header.map_or(0xFFFFFFFF, |h| h.description_str_ref);
@@ -605,6 +622,7 @@ impl ErfParser {
         output.write_u32::<LittleEndian>(description_str_ref)?;
 
         output.extend_from_slice(&[0u8; 116]);
+        output.extend_from_slice(&self.localized_strings);
 
         Ok(())
     }
@@ -634,7 +652,7 @@ impl ErfParser {
         let key_size = version.key_entry_size();
         let resource_count = self.resources.len();
 
-        let header_size = 160u32;
+        let header_size = 160u32 + self.localized_strings.len() as u32;
         let keys_size = (resource_count * key_size) as u32;
         let resource_list_size = (resource_count * 8) as u32;
         let mut data_offset = header_size + keys_size + resource_list_size;
@@ -684,7 +702,6 @@ impl ErfParser {
             erf_type: Some(erf_type),
             version: Some(version),
             resources: IndexMap::new(),
-            interner: Rodeo::default(),
             security_limits: SecurityLimits::default(),
             stats: ErfStatistics {
                 total_resources: 0,
@@ -694,6 +711,7 @@ impl ErfParser {
                 parse_time_ms: 0,
             },
             metadata: None,
+            localized_strings: Vec::new(),
             mmap: None,
             file_data: None,
         }

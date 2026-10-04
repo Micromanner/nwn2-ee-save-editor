@@ -417,7 +417,7 @@ fn dump_bic_structured() {
 
     let owned: IndexMap<String, GffValue<'static>> = root_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     println!("Dumping player.bic:");
@@ -439,7 +439,7 @@ fn dump_ifo_structured() {
 
     let owned: IndexMap<String, GffValue<'static>> = root_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     let ifo_dir = output_dir().join("ifo");
@@ -509,7 +509,7 @@ fn dump_ifo_to(save_name: &str, out_subdir: &str) {
 
     let owned: IndexMap<String, GffValue<'static>> = root_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     let ifo_dir = output_dir().join("cheatdebug").join(out_subdir);

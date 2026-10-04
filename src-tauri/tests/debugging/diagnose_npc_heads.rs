@@ -16,7 +16,7 @@ fn save_dir() -> PathBuf {
 fn character_from_bytes(bytes: Vec<u8>) -> Character {
     let parser = GffParser::from_bytes(bytes).expect("Failed to parse GFF");
     let root = parser.read_struct_fields(0).expect("Failed to read root");
-    Character::from_gff(root)
+    Character::from_gff(root).expect("character from gff")
 }
 
 /// `NPC_HEADS_SAVE=<dir relative to src-tauri> cargo test --features integration-tests --test debugging diagnose_npc_heads -- --ignored --nocapture`

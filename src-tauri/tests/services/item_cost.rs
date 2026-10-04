@@ -20,7 +20,7 @@ async fn load_template(
     gff.read_struct_fields(0)
         .expect("root struct")
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect()
 }
 
@@ -110,7 +110,7 @@ async fn survey_item_costs() {
 
         let mut prop_costs = Vec::new();
         if let Some(list) = fields.get("PropertiesList") {
-            let list = list.clone().force_owned();
+            let list = list.clone().force_owned().expect("force owned");
             if let GffValue::ListOwned(props) = list {
                 for prop in props {
                     let pget = |n: &str| prop.get(n).and_then(gff_value_to_i32).unwrap_or(0);

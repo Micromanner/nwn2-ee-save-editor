@@ -116,7 +116,13 @@ fn index_module_git(objects: &mut ModuleObjects, area: &str, bytes: Vec<u8>) {
             continue;
         };
         for (index, entry) in entries.iter().enumerate() {
-            let fields = entry.force_load();
+            let fields = match entry.force_load() {
+                Ok(fields) => fields,
+                Err(e) => {
+                    tracing::warn!("Skipping unreadable {} entry in {area}: {e}", field.list());
+                    continue;
+                }
+            };
             if field == AreaField::MapNoteEnabled
                 && fields.get("HasMapNote").and_then(integer) != Some(1)
             {
@@ -170,7 +176,10 @@ fn saved_value(
     let Some(GffValue::List(entries)) = root.get(field.list()) else {
         return Err(format!("{} has no {}", object.area, field.list()));
     };
-    let entries: Vec<_> = entries.iter().map(|e| e.force_load()).collect();
+    let entries: Vec<_> = entries
+        .iter()
+        .map(|e| e.force_load().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
     Ok(entries[saved_position(&entries, tag, object)?]
         .get(field.field())
         .and_then(integer)
@@ -211,12 +220,7 @@ fn edit_git(
     let file_type = gff.file_type.clone();
     let file_version = gff.file_version.clone();
     let root_id = gff.get_struct_id(0).map_err(|e| e.to_string())?;
-    let mut root: IndexMap<String, GffValue<'static>> = gff
-        .read_struct_fields(0)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root = gff.read_owned_struct(0).map_err(|e| e.to_string())?;
     for &(field, tag, object, value) in edits {
         let Some(GffValue::ListOwned(entries)) = root.get_mut(field.list()) else {
             return Err(format!("{} has no {}", object.area, field.list()));
@@ -458,7 +462,7 @@ mod tests {
         let Some(GffValue::List(doors)) = root.get("Door List") else {
             panic!("Door List missing");
         };
-        let hagen = doors[1].force_load();
+        let hagen = doors[1].force_load().unwrap();
         assert!(matches!(hagen.get("Locked"), Some(GffValue::Byte(0))));
         assert!(matches!(hagen.get("ObjectId"), Some(GffValue::Dword(85))));
         assert!(matches!(

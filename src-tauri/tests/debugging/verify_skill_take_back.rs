@@ -12,7 +12,7 @@ fn load(rel: &str) -> Character {
         .join(rel);
     let bytes = std::fs::read(path).unwrap();
     let gff = GffParser::from_bytes(bytes).unwrap();
-    Character::from_gff(gff.read_struct_fields(0).unwrap())
+    Character::from_gff(gff.read_struct_fields(0).unwrap()).expect("character from gff")
 }
 
 fn history_of(c: &Character, skill: SkillId) -> Vec<(i32, i32)> {

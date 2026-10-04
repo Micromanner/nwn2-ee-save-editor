@@ -22,10 +22,10 @@ fn load_ifo_character(save_path: &Path) -> IndexMap<String, GffValue<'static>> {
         GffValue::List(lazy_structs) => lazy_structs,
         _ => panic!("not a list"),
     };
-    let fields = list.first().expect("empty list").force_load();
+    let fields = list.first().expect("empty list").force_load().expect("load struct");
     fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect()
 }
 
@@ -37,7 +37,7 @@ fn load_bic_character(save_path: &Path) -> Option<IndexMap<String, GffValue<'sta
     Some(
         fields
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect(),
     )
 }
@@ -66,7 +66,7 @@ fn variant_name(v: &GffValue) -> &'static str {
 fn count_struct_fields(v: &GffValue) -> usize {
     match v {
         GffValue::StructOwned(m) => m.len(),
-        GffValue::Struct(lazy) => lazy.force_load().len(),
+        GffValue::Struct(lazy) => lazy.force_load().expect("load struct").len(),
         _ => 0,
     }
 }
@@ -82,7 +82,7 @@ fn count_list_items(v: &GffValue) -> usize {
 fn get_struct_keys(v: &GffValue) -> BTreeSet<String> {
     match v {
         GffValue::StructOwned(m) => m.keys().cloned().collect(),
-        GffValue::Struct(lazy) => lazy.force_load().keys().cloned().collect(),
+        GffValue::Struct(lazy) => lazy.force_load().expect("load struct").keys().cloned().collect(),
         _ => BTreeSet::new(),
     }
 }

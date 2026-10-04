@@ -266,7 +266,7 @@ mod tests {
         fields.insert("Dex".to_string(), GffValue::Byte(14));
         fields.insert("NaturalAC".to_string(), GffValue::Byte(2));
         fields.insert("CreatureSize".to_string(), GffValue::Int(3)); // 3 = Medium in NWN2
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn create_test_game_data() -> GameData {

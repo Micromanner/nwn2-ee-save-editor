@@ -169,13 +169,22 @@ pub async fn list_save_characters(
     }
 
     let game_data = state.game_data.read();
-    Ok(player_entries
+    player_entries
         .into_iter()
         .enumerate()
         .map(|(player_index, fields)| {
-            summarize_save_character(player_index, Character::from_gff(fields), &game_data)
+            let character = Character::from_gff(fields).map_err(|e| CommandError::ParseError {
+                message: format!("Failed to read player {player_index}: {e}"),
+                context: Some(file_path.clone()),
+                diagnostics_path: None,
+            })?;
+            Ok(summarize_save_character(
+                player_index,
+                character,
+                &game_data,
+            ))
         })
-        .collect())
+        .collect()
 }
 
 #[derive(Clone, serde::Serialize, specta::Type)]

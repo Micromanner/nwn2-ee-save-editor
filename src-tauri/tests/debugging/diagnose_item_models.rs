@@ -25,7 +25,7 @@ fn i32_of(fields: &indexmap::IndexMap<String, GffValue<'_>>, key: &str) -> Optio
 fn resolve_struct<'a>(val: &'a GffValue<'a>) -> Option<indexmap::IndexMap<String, GffValue<'a>>> {
     match val {
         GffValue::StructOwned(s) => Some(s.as_ref().clone()),
-        GffValue::Struct(lazy) => Some(lazy.force_load()),
+        GffValue::Struct(lazy) => Some(lazy.force_load().expect("load struct")),
         _ => None,
     }
 }
@@ -117,7 +117,7 @@ async fn diagnose_item_models() {
     let fields = gff.read_struct_fields(0).expect("read root");
     let owned: indexmap::IndexMap<String, GffValue<'static>> = fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     // Full GameData to run resolve_model_resrefs against.
@@ -146,7 +146,7 @@ async fn diagnose_item_models() {
         let uti_fields = uti.read_struct_fields(0).expect("read");
         let owned: indexmap::IndexMap<String, GffValue<'static>> = uti_fields
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect();
         for key in ["Variation", "ArmorVisualType", "BaseItem"] {
             writeln!(out, "  {key}: {:?}", owned.get(key)).unwrap();
@@ -161,7 +161,7 @@ async fn diagnose_item_models() {
         let uti_fields = uti.read_struct_fields(0).expect("read");
         let owned: indexmap::IndexMap<String, GffValue<'static>> = uti_fields
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect();
         for key in ["Variation", "ArmorVisualType", "BaseItem"] {
             writeln!(out, "  {key}: {:?}", owned.get(key)).unwrap();
@@ -212,7 +212,7 @@ async fn diagnose_item_models() {
             let uti_fields = uti.read_struct_fields(0).expect("read");
             let owned: indexmap::IndexMap<String, GffValue<'static>> = uti_fields
                 .into_iter()
-                .map(|(k, v)| (k, v.force_owned()))
+                .map(|(k, v)| (k, v.force_owned().expect("force owned")))
                 .collect();
             for key in ["Variation", "ArmorVisualType", "BaseItem"] {
                 writeln!(out, "  {key}: {:?}", owned.get(key)).unwrap();

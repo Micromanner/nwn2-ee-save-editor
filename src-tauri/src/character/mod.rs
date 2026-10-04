@@ -3,7 +3,7 @@
 //! Replaces the 11-manager architecture with a single Character struct
 //! that directly owns GFF data without Arc<RwLock<>> overhead.
 
-use crate::parsers::gff::GffValue;
+use crate::parsers::gff::{GffError, GffValue, force_owned_map};
 use indexmap::IndexMap;
 use tracing::{debug, instrument};
 
@@ -90,20 +90,17 @@ impl Character {
     /// Uses `force_owned()` to recursively convert all LazyStruct values
     /// to StructOwned, eliminating Arc<RwLock<>> from nested data.
     #[instrument(name = "Character::from_gff", skip_all, fields(field_count = fields.len()))]
-    pub fn from_gff(fields: IndexMap<String, GffValue<'static>>) -> Self {
+    pub fn from_gff(fields: IndexMap<String, GffValue<'static>>) -> Result<Self, GffError> {
         debug!("Converting {} GFF fields to owned values", fields.len());
 
-        let owned_gff: IndexMap<String, GffValue<'static>> = fields
-            .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
-            .collect();
+        let owned_gff = force_owned_map(fields)?;
 
         debug!("GFF fields converted to owned values");
 
-        Self {
+        Ok(Self {
             gff: owned_gff,
             modified: false,
-        }
+        })
     }
 
     /// Convert Character back to GFF fields for saving.

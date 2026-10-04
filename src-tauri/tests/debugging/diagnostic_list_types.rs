@@ -153,14 +153,14 @@ fn diagnostic_dump_module_ifo_field_types() {
                 std::collections::BTreeMap::new();
 
             for (i, entry) in entries.iter().take(5).enumerate() {
-                let fields = entry.force_load();
+                let fields = entry.force_load().expect("load struct");
                 println!("  -- Entry {i}:");
                 for k in &var_entry_keys {
                     dump_field("    ", &fields, k);
                 }
             }
             for entry in entries {
-                let fields = entry.force_load();
+                let fields = entry.force_load().expect("load struct");
                 if let Some(v) = fields.get("Type") {
                     *type_field_variants
                         .entry(variant_name(v).to_string())

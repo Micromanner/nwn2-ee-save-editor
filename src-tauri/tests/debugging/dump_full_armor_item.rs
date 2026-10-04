@@ -38,7 +38,7 @@ fn dump_value(out: &mut String, key: &str, val: &GffValue, depth: usize) {
             writeln!(out, "{pad}}}").unwrap();
         }
         GffValue::Struct(lazy) => {
-            let loaded = lazy.force_load();
+            let loaded = lazy.force_load().expect("load struct");
             writeln!(out, "{pad}{key}: Struct {{").unwrap();
             for (k, v) in &loaded {
                 dump_value(out, k, v, depth + 1);
@@ -59,7 +59,7 @@ fn dump_value(out: &mut String, key: &str, val: &GffValue, depth: usize) {
         GffValue::List(lazy_list) => {
             writeln!(out, "{pad}{key}: List[{}] [", lazy_list.len()).unwrap();
             for (i, lazy) in lazy_list.iter().enumerate() {
-                let loaded = lazy.force_load();
+                let loaded = lazy.force_load().expect("load struct");
                 writeln!(out, "{pad}  [{i}] {{").unwrap();
                 for (k, v) in &loaded {
                     dump_value(out, k, v, depth + 2);
@@ -124,7 +124,7 @@ async fn dump_full_armor_item() {
             .read_struct_fields(0)
             .expect("read")
             .into_iter()
-            .map(|(key, value)| (key, value.force_owned()))
+            .map(|(key, value)| (key, value.force_owned().expect("force owned")))
             .collect();
         if let Some(GffValue::ListOwned(equip)) = fields.get("Equip_ItemList") {
             for item in equip {

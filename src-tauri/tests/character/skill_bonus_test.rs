@@ -13,7 +13,7 @@ mod tests {
         let decoder = ItemPropertyDecoder::default();
 
         let fields = IndexMap::new();
-        let mut char = Character::from_gff(fields);
+        let mut char = Character::from_gff(fields).expect("character from gff");
 
         // Add a skill (Concentration = ID 0) with rank 5
         char.set_skill_rank(SkillId(0), 5).unwrap();

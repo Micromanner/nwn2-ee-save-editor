@@ -1630,7 +1630,6 @@ fn coerce_json_to_gff_type(
         GffValue::StructOwned(existing_struct) => {
             return coerce_json_to_struct(json_val, *existing_struct);
         }
-        GffValue::Struct(lazy) => return coerce_json_to_struct(json_val, lazy.force_load()),
         _ => json_to_gff_best_guess(json_val),
     };
     coerced.ok_or_else(String::new)
@@ -1821,20 +1820,16 @@ fn write_accessories_into_item(
     use crate::character::AccessorySlot;
     use crate::character::appearance_helpers::build_tintable_struct;
 
-    fn load_struct(value: &GffValue<'static>) -> Option<IndexMap<String, GffValue<'static>>> {
-        match value {
-            GffValue::StructOwned(s) => Some(s.as_ref().clone()),
-            GffValue::Struct(lazy) => Some(lazy.force_load()),
-            _ => None,
-        }
-    }
     fn sibling_template(
         item: &IndexMap<String, GffValue<'static>>,
         slot: AccessorySlot,
     ) -> IndexMap<String, GffValue<'static>> {
         let mut inner = AccessorySlot::all()
             .iter()
-            .find_map(|s| item.get(s.uti_field()).and_then(load_struct))
+            .find_map(|s| match item.get(s.uti_field()) {
+                Some(GffValue::StructOwned(found)) => Some(found.as_ref().clone()),
+                _ => None,
+            })
             .unwrap_or_default();
         inner.insert(
             "__struct_id__".to_string(),
@@ -1848,9 +1843,9 @@ fn write_accessories_into_item(
             continue;
         };
         let key = slot.uti_field();
-        let mut inner = match item.get(key).and_then(load_struct) {
-            Some(existing) => existing,
-            None => sibling_template(item, *slot),
+        let mut inner = match item.get(key) {
+            Some(GffValue::StructOwned(existing)) => existing.as_ref().clone(),
+            _ => sibling_template(item, *slot),
         };
         let accessory = match inner.get("Accessory") {
             Some(GffValue::Int(_)) => GffValue::Int(data.id),
@@ -2347,13 +2342,13 @@ mod tests {
 
     #[test]
     fn test_gold() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         assert_eq!(character.gold(), 1000);
     }
 
     #[test]
     fn test_set_gold() {
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         character.set_gold(500);
         assert_eq!(character.gold(), 500);
         assert!(character.is_modified());
@@ -2361,19 +2356,19 @@ mod tests {
 
     #[test]
     fn test_inventory_count() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         assert_eq!(character.inventory_count(), 2);
     }
 
     #[test]
     fn test_equipped_count() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         assert_eq!(character.equipped_count(), 1);
     }
 
     #[test]
     fn test_inventory_items() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         let items = character.inventory_items();
 
         assert_eq!(items.len(), 2);
@@ -2390,7 +2385,7 @@ mod tests {
 
     #[test]
     fn test_equipped_items() {
-        let character = Character::from_gff(create_test_fields());
+        let character = Character::from_gff(create_test_fields()).expect("character from gff");
         let items = character.equipped_items();
 
         assert_eq!(items.len(), 1);
@@ -2404,7 +2399,7 @@ mod tests {
     #[test]
     fn test_empty_inventory() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         assert_eq!(character.gold(), 0);
         assert_eq!(character.inventory_count(), 0);
@@ -2466,7 +2461,7 @@ mod tests {
     fn character_with_items(items: Vec<IndexMap<String, GffValue<'static>>>) -> Character {
         let mut fields = IndexMap::new();
         fields.insert("ItemList".to_string(), GffValue::ListOwned(items));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn stack_size_at(character: &Character, index: usize) -> i32 {
@@ -2558,7 +2553,7 @@ mod tests {
     #[test]
     fn test_transform_inventory_item_replaces_struct_cleanly() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
 
         character
             .transform_inventory_item(0, stackable_item("new_item", 1, &[(52, 21)]), &game_data)
@@ -2576,7 +2571,7 @@ mod tests {
     #[test]
     fn test_transform_inventory_item_out_of_bounds_errors() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         let result =
             character.transform_inventory_item(99, stackable_item("x", 1, &[]), &game_data);
         assert!(result.is_err());
@@ -2585,7 +2580,7 @@ mod tests {
     #[test]
     fn test_transform_equipped_item_preserves_slot_bitmask() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
 
         character
             .transform_equipped_item(
@@ -2613,7 +2608,7 @@ mod tests {
     #[test]
     fn test_transform_equipped_item_rejects_illegal_slot() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
 
         let result = character.transform_equipped_item(
             EquipmentSlot::Boots,
@@ -2683,7 +2678,7 @@ mod tests {
     #[test]
     fn test_transform_inventory_item_clamps_stack_to_new_base_item() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
 
         character
             .transform_inventory_item(0, stackable_item("bundle", 50, &[]), &game_data)
@@ -2725,7 +2720,7 @@ mod tests {
     #[test]
     fn test_clamp_keeps_stack_of_unknown_base_item() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         let mut item = stackable_item("custom_ammo", 50, &[]);
         item.insert("BaseItem".to_string(), GffValue::Int(9999));
 
@@ -2739,7 +2734,7 @@ mod tests {
     #[test]
     fn test_clamp_preserves_dword_stack_size() {
         let game_data = game_data_with_stackable_baseitem();
-        let mut character = Character::from_gff(create_test_fields());
+        let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         let mut item = stackable_item("bundle", 1, &[]);
         item.insert("StackSize".to_string(), GffValue::Dword(50));
 
@@ -2905,7 +2900,7 @@ mod tests {
             "Equip_ItemList".to_string(),
             GffValue::ListOwned(vec![equipped_item]),
         );
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
 
         assert!(
             character

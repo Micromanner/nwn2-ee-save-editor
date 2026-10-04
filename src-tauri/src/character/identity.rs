@@ -350,7 +350,7 @@ mod tests {
             GffValue::String(Cow::Owned(String::new())),
         );
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -611,7 +611,7 @@ mod tests {
             }),
         );
         fields.insert("Age".to_string(), GffValue::Byte(0));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]

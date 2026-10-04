@@ -536,7 +536,7 @@ mod tests {
         fields.insert("Race".to_string(), GffValue::Byte(1));
         fields.insert("Subrace".to_string(), GffValue::Byte(0));
         fields.insert("CreatureSize".to_string(), GffValue::Int(3));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -567,7 +567,7 @@ mod tests {
         let mut fields = IndexMap::new();
         fields.insert("Race".to_string(), GffValue::Byte(21));
         fields.insert("Subrace".to_string(), GffValue::Byte(13));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         assert_eq!(character.subrace_index(), Some(13));
     }
 
@@ -579,7 +579,7 @@ mod tests {
 
     #[test]
     fn test_subrace_index_missing_field_is_none() {
-        let character = Character::from_gff(IndexMap::new());
+        let character = Character::from_gff(IndexMap::new()).expect("character from gff");
         assert_eq!(character.subrace_index(), None);
     }
 
@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_creature_size_defaults_to_medium() {
-        let character = Character::from_gff(IndexMap::new());
+        let character = Character::from_gff(IndexMap::new()).expect("character from gff");
         assert_eq!(character.creature_size(), 3);
     }
 

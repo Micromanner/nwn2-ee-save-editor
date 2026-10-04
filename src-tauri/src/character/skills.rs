@@ -690,7 +690,7 @@ mod tests {
             GffValue::ListOwned(vec![skill0, skill1, skill2, skill3]),
         );
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_skill_rank_empty_list() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         assert_eq!(character.skill_rank(SkillId(0)), 0);
     }
 
@@ -733,7 +733,7 @@ mod tests {
     #[test]
     fn test_skill_ranks_empty_list() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let ranks = character.skill_ranks();
         assert_eq!(ranks.len(), 0);
     }
@@ -751,7 +751,7 @@ mod tests {
             GffValue::ListOwned(vec![skill0, skill1]),
         );
 
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let ranks = character.skill_ranks();
         assert_eq!(ranks.len(), 0);
     }
@@ -772,7 +772,7 @@ mod tests {
         let mut fields = IndexMap::new();
         fields.insert("SkillList".to_string(), GffValue::ListOwned(vec![]));
 
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
 
         character.set_skill_rank(SkillId(5), 7).unwrap();
         assert_eq!(character.skill_rank(SkillId(5)), 7);
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn test_is_class_skill_no_classes() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let game_data = create_mock_game_data();
 
         assert!(!character.is_class_skill(SkillId(0), &game_data));
@@ -901,7 +901,7 @@ mod tests {
             GffValue::ListOwned(vec![skill0, skill1]),
         );
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn create_mock_game_data() -> crate::loaders::GameData {
@@ -948,7 +948,7 @@ mod tests {
             GffValue::ListOwned(vec![item_struct]),
         );
 
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         let mut game_data = create_mock_game_data();
 
@@ -1019,7 +1019,7 @@ mod tests {
             .collect();
         fields.insert("SkillList".to_string(), GffValue::ListOwned(injected));
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn game_data_with_rogue_class() -> crate::loaders::GameData {
@@ -1236,7 +1236,7 @@ mod tests {
         let totals = level_entry(0, &[(LORE, 4), (PARRY, 2)]);
         fields.insert("SkillList".to_string(), totals["SkillList"].clone());
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]

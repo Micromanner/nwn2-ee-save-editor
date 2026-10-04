@@ -576,7 +576,6 @@ impl ItemAppearance {
             .get("Tintable")
             .and_then(|v| match v {
                 GffValue::StructOwned(s) => Some(s.as_ref().clone()),
-                GffValue::Struct(lazy) => Some(lazy.force_load()),
                 _ => None,
             })
             .map(|t| read_tint_from_tintable(&t))
@@ -1262,7 +1261,6 @@ fn read_accessories(
         };
         let sub = match field {
             GffValue::StructOwned(s) => s.as_ref().clone(),
-            GffValue::Struct(lazy) => lazy.force_load(),
             _ => continue,
         };
         let Some(id) = sub.get("Accessory").and_then(gff_value_to_i32) else {
@@ -1274,7 +1272,6 @@ fn read_accessories(
             .get("Tintable")
             .and_then(|v| match v {
                 GffValue::StructOwned(s) => Some(s.as_ref().clone()),
-                GffValue::Struct(lazy) => Some(lazy.force_load()),
                 _ => None,
             })
             .map(|t| read_tint_from_tintable(&t))
@@ -1296,7 +1293,6 @@ pub(crate) fn read_nested_armor_part(
 ) -> Option<NestedArmorPart> {
     let part_fields = match fields.get(key)? {
         GffValue::StructOwned(s) => s.as_ref().clone(),
-        GffValue::Struct(lazy) => lazy.force_load(),
         _ => return None,
     };
 
@@ -1318,9 +1314,6 @@ pub(crate) fn read_nested_armor_part(
             Some(GffValue::StructOwned(s)) => {
                 Some(super::appearance_helpers::read_tint_channels(s))
             }
-            Some(GffValue::Struct(lazy)) => Some(super::appearance_helpers::read_tint_channels(
-                &lazy.force_load(),
-            )),
             _ => None,
         },
     })

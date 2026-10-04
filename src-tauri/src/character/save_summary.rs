@@ -184,7 +184,7 @@ mod tests {
         fields.insert("Con".to_string(), GffValue::Byte(14));
         fields.insert("Dex".to_string(), GffValue::Byte(12));
         fields.insert("Wis".to_string(), GffValue::Byte(16));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     fn create_test_game_data() -> GameData {

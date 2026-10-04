@@ -57,7 +57,11 @@ pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String>
     let Some(members_value) = root.get("RosMembers") else {
         return Ok(Vec::new());
     };
-    let GffValue::ListOwned(entries) = members_value.clone().force_owned() else {
+    let GffValue::ListOwned(entries) = members_value
+        .clone()
+        .force_owned()
+        .map_err(|e| format!("roster members error: {e}"))?
+    else {
         return Err("RosMembers is not a list".into());
     };
 
@@ -120,12 +124,9 @@ pub fn sync_member(
     let root_struct_id = parser
         .get_struct_id(0)
         .map_err(|e| format!("roster root id error: {e}"))?;
-    let mut root: IndexMap<String, GffValue<'static>> = parser
-        .read_struct_fields(0)
-        .map_err(|e| format!("roster root error: {e}"))?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("roster root error: {e}"))?;
 
     let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
         return Ok(None);
@@ -206,12 +207,9 @@ fn set_member_int(
     let root_struct_id = parser
         .get_struct_id(0)
         .map_err(|e| format!("roster root id error: {e}"))?;
-    let mut root: IndexMap<String, GffValue<'static>> = parser
-        .read_struct_fields(0)
-        .map_err(|e| format!("roster root error: {e}"))?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("roster root error: {e}"))?;
 
     let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
         return Err("roster has no RosMembers list".into());
@@ -254,7 +252,7 @@ pub fn pc_party_faction(handler: &SaveGameHandler) -> Option<u16> {
     let GffValue::List(players) = root.get("Mod_PlayerList")? else {
         return None;
     };
-    let first = players.first()?.force_load();
+    let first = players.first()?.force_load().ok()?;
     match first.get("FactionID")? {
         GffValue::Byte(v) => Some(u16::from(*v)),
         GffValue::Word(v) => Some(*v),
@@ -380,12 +378,9 @@ pub fn set_faction_id(bytes: Vec<u8>, faction: u16) -> Result<Vec<u8>, String> {
     let root_struct_id = parser
         .get_struct_id(0)
         .map_err(|e| format!("ros root id error: {e}"))?;
-    let mut root: IndexMap<String, GffValue<'static>> = parser
-        .read_struct_fields(0)
-        .map_err(|e| format!("ros root error: {e}"))?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("ros root error: {e}"))?;
 
     set_faction_in_fields(&mut root, faction);
 
@@ -506,7 +501,11 @@ mod tests {
         let GffValue::List(entries) = root.get("RosMembers").expect("RosMembers") else {
             panic!("RosMembers not a list");
         };
-        let entry = entries.first().expect("entry").force_load();
+        let entry = entries
+            .first()
+            .expect("entry")
+            .force_load()
+            .expect("entry fields");
         assert!(matches!(entry.get("RosClass0"), Some(GffValue::Dword(4))));
         assert!(matches!(entry.get("RosLevel0"), Some(GffValue::Int(9))));
         assert!(matches!(entry.get("RosClass1"), Some(GffValue::Dword(23))));
@@ -550,7 +549,11 @@ mod tests {
         let GffValue::List(entries) = root.get("RosMembers").expect("RosMembers") else {
             panic!("RosMembers not a list");
         };
-        let entry = entries.first().expect("entry").force_load();
+        let entry = entries
+            .first()
+            .expect("entry")
+            .force_load()
+            .expect("entry fields");
         assert!(matches!(entry.get("RosAvailable"), Some(GffValue::Byte(0))));
     }
 
@@ -567,7 +570,11 @@ mod tests {
         let GffValue::List(entries) = root.get("RosMembers").expect("RosMembers") else {
             panic!("RosMembers not a list");
         };
-        let entry = entries.first().expect("entry").force_load();
+        let entry = entries
+            .first()
+            .expect("entry")
+            .force_load()
+            .expect("entry fields");
         assert!(matches!(entry.get("RosAvailable"), Some(GffValue::Int(1))));
     }
 

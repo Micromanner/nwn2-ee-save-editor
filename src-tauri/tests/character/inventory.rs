@@ -21,7 +21,7 @@ async fn test_inventory_loading() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let character = app_lib::character::Character::from_gff(fields);
+    let character = app_lib::character::Character::from_gff(fields).expect("character from gff");
 
     // DEBUG: Print all keys and Gold
     println!("Character Fields Count: {}", character.field_names().len());
@@ -65,7 +65,7 @@ async fn test_encumbrance() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let character = app_lib::character::Character::from_gff(fields);
+    let character = app_lib::character::Character::from_gff(fields).expect("character from gff");
 
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
     let encumbrance = character
@@ -100,7 +100,7 @@ async fn test_progression_comparison() {
     let fields_low = parser_low
         .read_struct_fields(0)
         .expect("Failed to read top level struct low");
-    let char_low = app_lib::character::Character::from_gff(fields_low);
+    let char_low = app_lib::character::Character::from_gff(fields_low).expect("character from gff");
 
     // Load High Level
     let data_high = load_test_gff("ryathstrongarm/ryathstrongarm4.bic");
@@ -108,7 +108,8 @@ async fn test_progression_comparison() {
     let fields_high = parser_high
         .read_struct_fields(0)
         .expect("Failed to read top level struct high");
-    let char_high = app_lib::character::Character::from_gff(fields_high);
+    let char_high =
+        app_lib::character::Character::from_gff(fields_high).expect("character from gff");
 
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
 
@@ -152,7 +153,8 @@ async fn test_equip_unequip_flow() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let mut character = app_lib::character::Character::from_gff(fields);
+    let mut character =
+        app_lib::character::Character::from_gff(fields).expect("character from gff");
     let game_data = ctx.loader.game_data().expect("Game data not loaded");
 
     // 1. Snapshot initial state
@@ -269,7 +271,8 @@ async fn test_classic_campaign_inventory_equip() {
 
     let parser = GffParser::from_bytes(player_data).expect("Failed to parse GFF");
     let fields = parser.read_struct_fields(0).expect("Failed to read root");
-    let mut character = app_lib::character::Character::from_gff(fields);
+    let mut character =
+        app_lib::character::Character::from_gff(fields).expect("character from gff");
 
     println!(
         "Loaded Classic Campaign Character: {}",
@@ -370,7 +373,8 @@ async fn test_stack_size_clamped_to_base_item_stacking() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let mut character = app_lib::character::Character::from_gff(fields);
+    let mut character =
+        app_lib::character::Character::from_gff(fields).expect("character from gff");
 
     const CLOAK: i32 = 80;
     const ARROW: i32 = 20;

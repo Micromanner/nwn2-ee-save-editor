@@ -289,7 +289,7 @@ fn playerlist_with_transition_fields(
         .expect("Failed to read playerlist root");
     let mut root_fields = root_fields_raw
         .into_iter()
-        .map(|(key, value)| (key, value.force_owned()))
+        .map(|(key, value)| (key, value.force_owned().expect("force owned")))
         .collect::<indexmap::IndexMap<_, _>>();
 
     let players = match root_fields.get_mut("Mod_PlayerList") {
@@ -318,7 +318,8 @@ fn copy_transition_fields(
             .get(*field_name)
             .unwrap_or_else(|| panic!("after fixture slot must include {field_name}"))
             .clone()
-            .force_owned();
+            .force_owned()
+            .expect("force owned");
         target_fields.insert((*field_name).to_string(), value);
     }
 }
@@ -335,7 +336,8 @@ fn read_transition_snapshot(playerlist_data: Vec<u8>, player_index: usize) -> Tr
     let fields = players
         .get(player_index)
         .expect("Expected player slot after write")
-        .force_load();
+        .force_load()
+        .expect("load struct");
     TransitionSnapshot::from_fields(&fields)
 }
 
@@ -356,8 +358,8 @@ fn find_player_fields(
         .iter()
         .enumerate()
         .find_map(|(index, player)| {
-            let fields = player.force_load();
-            let character = Character::from_gff(fields.clone());
+            let fields = player.force_load().expect("load struct");
+            let character = Character::from_gff(fields.clone()).expect("character from gff");
             (character.full_name() == full_name).then_some((index, fields))
         })
         .unwrap_or_else(|| panic!("{full_name} must exist in Mod_PlayerList"))
@@ -369,7 +371,12 @@ fn non_transition_snapshot(
     fields
         .iter()
         .filter(|(key, _)| !TRANSITION_FIELD_NAMES.contains(&key.as_str()))
-        .map(|(key, value)| (key.clone(), format!("{:?}", value.clone().force_owned())))
+        .map(|(key, value)| {
+            (
+                key.clone(),
+                format!("{:?}", value.clone().force_owned().expect("force owned")),
+            )
+        })
         .collect()
 }
 
@@ -423,7 +430,7 @@ fn list_entry_snapshots(
         .map(|entry| {
             let owned_entry = entry
                 .into_iter()
-                .map(|(key, value)| (key, value.force_owned()))
+                .map(|(key, value)| (key, value.force_owned().expect("force owned")))
                 .collect::<IndexMap<_, _>>();
             format!("{owned_entry:?}")
         })
@@ -447,7 +454,10 @@ fn list_entries(
 ) -> Vec<IndexMap<String, GffValue<'static>>> {
     match fields.get(list_name) {
         Some(GffValue::ListOwned(items)) => items.clone(),
-        Some(GffValue::List(items)) => items.iter().map(|item| item.force_load()).collect(),
+        Some(GffValue::List(items)) => items
+            .iter()
+            .map(|item| item.force_load().expect("load struct"))
+            .collect(),
         _ => Vec::new(),
     }
 }

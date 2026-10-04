@@ -17,7 +17,7 @@ async fn test_skills_progression() {
         let fields = parser
             .read_struct_fields(0)
             .expect("Failed to read root fields");
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     };
 
     // Load Level 1 Character (Qara - Sorcerer)
@@ -104,7 +104,7 @@ async fn test_skill_summary_parity() {
         let fields = parser
             .read_struct_fields(0)
             .expect("Failed to read root fields");
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     };
 
     let data = common::load_test_gff("occidiooctavon/occidiooctavon4.bic");
@@ -150,7 +150,7 @@ async fn test_skill_costs_and_points() {
         let fields = parser
             .read_struct_fields(0)
             .expect("Failed to read root fields");
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     };
 
     // Load L1 Character
@@ -297,7 +297,8 @@ async fn level_history_skill_points_are_pool_remainders() {
 
     for path in fixtures {
         let parser = GffParser::from_bytes(common::load_test_gff(path)).expect("parse GFF");
-        let character = Character::from_gff(parser.read_struct_fields(0).expect("root"));
+        let character = Character::from_gff(parser.read_struct_fields(0).expect("root"))
+            .expect("character from gff");
 
         let granted = character.skill_points_granted_per_level(game_data);
         let history = character.level_history();

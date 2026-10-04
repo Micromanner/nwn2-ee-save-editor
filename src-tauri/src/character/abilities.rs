@@ -448,7 +448,7 @@ mod tests {
         fields.insert("MaxHitPoints".to_string(), GffValue::Int(100));
         fields.insert("HitPoints".to_string(), GffValue::Int(80));
         fields.insert("TempHitPoints".to_string(), GffValue::Int(5));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -572,7 +572,7 @@ mod tests {
     #[test]
     fn test_base_ability_missing_field() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         assert_eq!(character.base_ability(AbilityIndex::STR), 10);
     }
 
@@ -592,7 +592,7 @@ mod tests {
     #[test]
     fn test_get_level_up_ability_history_empty() {
         let fields = IndexMap::new();
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let history = character.get_level_up_ability_history();
         assert!(history.is_empty());
     }
@@ -616,7 +616,7 @@ mod tests {
             "LvlStatList".to_string(),
             GffValue::ListOwned(lvl_stat_list),
         );
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         let history = character.get_level_up_ability_history();
         assert_eq!(history.len(), 2);
@@ -658,7 +658,7 @@ mod tests {
             GffValue::ListOwned(lvl_stat_list),
         );
 
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let summary = character.get_ability_points_summary();
 
         assert_eq!(summary.expected_increases, 2);
@@ -683,7 +683,7 @@ mod tests {
         fields.insert("CurrentHitPoints".to_string(), GffValue::Int(80));
         fields.insert("HitPoints".to_string(), GffValue::Int(100));
 
-        let mut character = Character::from_gff(fields);
+        let mut character = Character::from_gff(fields).expect("character from gff");
 
         let game_data = crate::loaders::GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::default(),
@@ -735,7 +735,7 @@ mod tests {
             GffValue::ListOwned(vec![item_struct]),
         );
 
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         let game_data = crate::loaders::GameData::new(std::sync::Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::default(),
@@ -768,7 +768,7 @@ mod tests {
             })
             .collect();
         fields.insert("LvlStatList".to_string(), GffValue::ListOwned(levels));
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]
@@ -779,7 +779,7 @@ mod tests {
         class.insert("Class".to_string(), GffValue::Byte(0));
         class.insert("ClassLevel".to_string(), GffValue::Short(7));
         fields.insert("ClassList".to_string(), GffValue::ListOwned(vec![class]));
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
         let summary = character.get_ability_points_summary();
         assert_eq!(summary.expected_increases, 0);
         assert_eq!(summary.available, 0);

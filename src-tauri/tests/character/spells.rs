@@ -14,7 +14,7 @@ async fn test_wizard_progression() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     // Find Wizard Class (ID 10)
     let wizard_id = ClassId(10);
@@ -62,7 +62,7 @@ async fn test_cleric_domains() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     // Find Cleric Class (ID 2)
     let cleric_id = ClassId(2);
@@ -105,7 +105,7 @@ async fn test_sorcerer_spells() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     // Find Sorcerer Class (ID 9)
     let sorcerer_id = ClassId(9);
@@ -145,7 +145,7 @@ async fn test_paladin_spells() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     // Find Paladin Class (ID 6)
     let paladin_id = ClassId(6);
@@ -185,7 +185,7 @@ async fn test_wizard_slots_modification() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let mut character = Character::from_gff(gff);
+    let mut character = Character::from_gff(gff).expect("character from gff");
 
     let wizard_id = ClassId(10); // Wizard
 
@@ -230,7 +230,7 @@ async fn test_aasimar_ability_spells() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     // Verify this is an Aasimar
     let race_name = character.race_display_name(game_data);
@@ -283,7 +283,7 @@ async fn test_ability_spells_via_spells_state() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     // Verify ability spells come through the full SpellsState pipeline
     let spells_state = character.get_spells_state(game_data, &ctx.decoder);
@@ -314,7 +314,7 @@ async fn test_non_caster_has_no_class_ability_spells_overlap() {
     let gff = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    let character = Character::from_gff(gff);
+    let character = Character::from_gff(gff).expect("character from gff");
 
     let race_name = character.race_display_name(game_data);
     println!("Race: {race_name}");
@@ -345,6 +345,7 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
     let load = |name: &str| {
         let parser = GffParser::from_bytes(load_test_gff(name)).expect("Failed to parse GFF");
         Character::from_gff(parser.read_struct_fields(0).expect("root"))
+            .expect("character from gff")
     };
 
     let mut qara = load("qaraofblacklake/qaraofblacklake1.bic");
@@ -427,6 +428,7 @@ async fn test_spell_gain_table_access_and_domain_slots() {
     let load = |name: &str| {
         let parser = GffParser::from_bytes(load_test_gff(name)).expect("Failed to parse GFF");
         Character::from_gff(parser.read_struct_fields(0).expect("root"))
+            .expect("character from gff")
     };
 
     let mut occidio = load("occidiooctavon/occidiooctavon4.bic");
@@ -463,7 +465,8 @@ async fn test_non_caster_has_no_caster_level() {
 
     let parser = GffParser::from_bytes(load_test_gff("occidiooctavon/occidiooctavon4.bic"))
         .expect("Failed to parse GFF");
-    let occidio = Character::from_gff(parser.read_struct_fields(0).expect("root"));
+    let occidio = Character::from_gff(parser.read_struct_fields(0).expect("root"))
+        .expect("character from gff");
     let divine_champion = ClassId(32);
     assert!(occidio.has_class(divine_champion));
     assert_eq!(occidio.get_caster_level(divine_champion, game_data), 0);

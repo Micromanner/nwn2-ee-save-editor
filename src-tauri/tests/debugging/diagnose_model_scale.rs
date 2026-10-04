@@ -23,7 +23,7 @@ fn read_model_scale(label: &str, path: &std::path::Path) {
 
     let owned: IndexMap<String, GffValue<'static>> = root
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     let fields: &IndexMap<String, GffValue<'static>> = match owned.get("ModelScale") {

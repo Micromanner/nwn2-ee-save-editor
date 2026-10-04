@@ -68,7 +68,7 @@ fn parse_and_own(
     let fields = gff.read_struct_fields(0).expect("read root");
     let owned: indexmap::IndexMap<String, GffValue<'static>> = fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
     (owned, file_type, file_version)
 }

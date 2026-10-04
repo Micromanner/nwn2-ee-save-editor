@@ -46,7 +46,6 @@ pub fn read_tint_channel(fields: &IndexMap<String, GffValue<'_>>) -> TintChannel
 pub fn read_tint_from_tintable(tintable: &IndexMap<String, GffValue<'_>>) -> TintChannels {
     let tint = match tintable.get("Tint") {
         Some(GffValue::StructOwned(s)) => s.as_ref().clone(),
-        Some(GffValue::Struct(lazy)) => lazy.force_load(),
         _ => return TintChannels::default(),
     };
     read_tint_channels(&tint)
@@ -56,7 +55,6 @@ pub(crate) fn read_tint_channels(tint: &IndexMap<String, GffValue<'_>>) -> TintC
     let ch = |key: &str| -> TintChannel {
         match tint.get(key) {
             Some(GffValue::StructOwned(s)) => read_tint_channel(s),
-            Some(GffValue::Struct(lazy)) => read_tint_channel(&lazy.force_load()),
             _ => TintChannel::default(),
         }
     };

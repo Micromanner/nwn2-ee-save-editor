@@ -161,20 +161,6 @@ impl SessionState {
             return self.load_standalone_bic(&path, report);
         }
 
-        let fatal = |report: &mut LoadReport,
-                     stage: LoadStage,
-                     message: String,
-                     context: serde_json::Value|
-         -> LoadError {
-            warn!("{message}");
-            report.set_fatal(stage, message.clone(), context.clone());
-            LoadError {
-                stage,
-                message,
-                context,
-            }
-        };
-
         debug!("Creating SaveGameHandler");
         let handler = SaveGameHandler::new(&path, create_load_backup).map_err(|e| {
             fatal(
@@ -264,7 +250,14 @@ impl SessionState {
         info!("Character data extracted ({} fields)", fields.len());
 
         debug!("Creating Character from GFF fields");
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).map_err(|e| {
+            fatal(
+                report,
+                LoadStage::Playerlist,
+                format!("Failed to read character data: {e}"),
+                serde_json::json!({ "selected_player_index": selected_player_index }),
+            )
+        })?;
         info!(
             "Character created: {} (Level {})",
             character.full_name(),
@@ -310,18 +303,16 @@ impl SessionState {
     ) -> Result<(), LoadError> {
         info!("Loading standalone character file");
 
-        let fields = standalone_bic::load_fields(path).map_err(|message| {
-            warn!("{message}");
+        let bic_error = |report: &mut LoadReport, message: String| {
             let context = serde_json::json!({ "file_path": path.display().to_string() });
-            report.set_fatal(LoadStage::Bic, message.clone(), context.clone());
-            LoadError {
-                stage: LoadStage::Bic,
-                message,
-                context,
-            }
-        })?;
+            fatal(report, LoadStage::Bic, message, context)
+        };
 
-        let character = Character::from_gff(fields);
+        let fields =
+            standalone_bic::load_fields(path).map_err(|message| bic_error(report, message))?;
+
+        let character =
+            Character::from_gff(fields).map_err(|e| bic_error(report, e.to_string()))?;
         info!(
             "Standalone character created: {} (Level {})",
             character.full_name(),
@@ -867,7 +858,8 @@ impl SessionState {
                 .iter_mut()
                 .skip(marker.map_or(0, |i| i + 1))
             {
-                let mut snapshot = Character::from_gff(std::mem::take(&mut entry.gff_snapshot));
+                let mut snapshot = Character::from_gff(std::mem::take(&mut entry.gff_snapshot))
+                    .map_err(|e| e.to_string())?;
                 editing::revert_on_player(changes, &mut snapshot)?;
                 entry.gff_snapshot = snapshot.into_gff();
             }
@@ -1203,14 +1195,11 @@ impl SessionState {
             .map_err(|e| format!("Failed to extract companion '{ros_name}': {e}"))?;
         let gff = GffParser::from_bytes(bytes)
             .map_err(|e| format!("Failed to parse companion file: {e}"))?;
-        let fields: IndexMap<String, GffValue<'static>> = gff
+        let fields = gff
             .read_struct_fields(0)
-            .map_err(|e| format!("Failed to read companion fields: {e}"))?
-            .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
-            .collect();
+            .map_err(|e| format!("Failed to read companion fields: {e}"))?;
 
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).map_err(|e| e.to_string())?;
         info!(
             "Companion loaded: {} ({ros_name}, level {})",
             character.full_name(),
@@ -1230,10 +1219,10 @@ impl SessionState {
         if self.character_source == target
             && let Some(character) = &self.character
         {
-            return Ok(Character::from_gff(character.clone_gff()));
+            return Character::from_gff(character.clone_gff()).map_err(|e| e.to_string());
         }
         if let Some((_, character, _)) = self.parked.iter().find(|(s, _, _)| *s == target) {
-            return Ok(Character::from_gff(character.clone_gff()));
+            return Character::from_gff(character.clone_gff()).map_err(|e| e.to_string());
         }
         let handler = self
             .savegame_handler
@@ -1244,13 +1233,10 @@ impl SessionState {
             .map_err(|e| format!("Failed to extract companion '{ros_name}': {e}"))?;
         let gff = GffParser::from_bytes(bytes)
             .map_err(|e| format!("Failed to parse companion file: {e}"))?;
-        let fields: IndexMap<String, GffValue<'static>> = gff
+        let fields = gff
             .read_struct_fields(0)
-            .map_err(|e| format!("Failed to read companion fields: {e}"))?
-            .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
-            .collect();
-        Ok(Character::from_gff(fields))
+            .map_err(|e| format!("Failed to read companion fields: {e}"))?;
+        Character::from_gff(fields).map_err(|e| e.to_string())
     }
 
     /// Make the player the active character again, restoring in-memory edits if
@@ -1272,7 +1258,7 @@ impl SessionState {
             self.selected_player_index,
             self.primary_player_index,
         )?;
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).map_err(|e| e.to_string())?;
         info!(
             "Player reloaded: {} (level {})",
             character.full_name(),
@@ -1609,12 +1595,9 @@ fn serialize_playerlist_bytes(
     let file_type = gff.file_type.clone();
     let file_version = gff.file_version.clone();
 
-    let mut root_fields: IndexMap<String, GffValue<'static>> = gff
-        .read_struct_fields(0)
-        .map_err(|e| format!("Failed to read playerlist.ifo root struct: {e}"))?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let mut root_fields = gff
+        .read_owned_struct(0)
+        .map_err(|e| format!("Failed to read playerlist.ifo root struct: {e}"))?;
 
     let Some(GffValue::ListOwned(players)) = root_fields.get_mut("Mod_PlayerList") else {
         return Err("playerlist.ifo Mod_PlayerList is missing or not a list".to_string());
@@ -1708,10 +1691,10 @@ pub(crate) fn read_playerlist_entries(
             return Err("Mod_PlayerList is empty".to_string());
         }
 
-        Ok(lazy_structs
+        lazy_structs
             .iter()
-            .map(|entry| entry.force_load())
-            .collect())
+            .map(|entry| entry.force_load().map_err(|e| e.to_string()))
+            .collect()
     } else {
         warn!("Mod_PlayerList is not a list");
         Err("Mod_PlayerList is not a list".to_string())
@@ -1730,6 +1713,21 @@ fn read_playerlist_entry_from_entries(
     })
 }
 
+fn fatal(
+    report: &mut LoadReport,
+    stage: LoadStage,
+    message: String,
+    context: serde_json::Value,
+) -> LoadError {
+    warn!("{message}");
+    report.set_fatal(stage, message.clone(), context.clone());
+    LoadError {
+        stage,
+        message,
+        context,
+    }
+}
+
 pub(crate) fn read_player_bic_entry(
     player_bic_data: Vec<u8>,
 ) -> Result<IndexMap<String, GffValue<'static>>, String> {
@@ -1738,15 +1736,10 @@ pub(crate) fn read_player_bic_entry(
         format!("Failed to parse player.bic: {e}")
     })?;
 
-    let root_fields = gff.read_struct_fields(0).map_err(|e| {
+    gff.read_owned_struct(0).map_err(|e| {
         warn!("Failed to read player.bic root struct: {}", e);
         format!("Failed to read player.bic root struct: {e}")
-    })?;
-
-    Ok(root_fields
-        .into_iter()
-        .map(|(key, value)| (key, value.force_owned()))
-        .collect())
+    })
 }
 
 pub(crate) fn resolve_primary_player_index(
@@ -1759,7 +1752,9 @@ pub(crate) fn resolve_primary_player_index(
 
     let player_bic_fields = player_bic_fields?;
 
-    let player_bic_name = Character::from_gff(player_bic_fields.clone()).full_name();
+    let player_bic_name = Character::from_gff(player_bic_fields.clone())
+        .ok()?
+        .full_name();
     if player_bic_name.trim().is_empty() {
         warn!("player.bic has no character name; refusing to infer a primary multiplayer slot");
         return None;
@@ -1769,7 +1764,9 @@ pub(crate) fn resolve_primary_player_index(
         .iter()
         .enumerate()
         .filter_map(|(index, fields)| {
-            (Character::from_gff(fields.clone()).full_name() == player_bic_name).then_some(index)
+            Character::from_gff(fields.clone())
+                .is_ok_and(|c| c.full_name() == player_bic_name)
+                .then_some(index)
         })
         .collect::<Vec<_>>();
 
@@ -1812,7 +1809,7 @@ mod tests {
 
     fn make_session_with_character(gff: IndexMap<String, GffValue<'static>>) -> SessionState {
         let mut session = SessionState::new();
-        session.character = Some(Character::from_gff(gff));
+        session.character = Some(Character::from_gff(gff).unwrap());
         session
     }
 
@@ -2040,7 +2037,7 @@ mod tests {
             panic!("Mod_PlayerList missing");
         };
         assert!(matches!(
-            players[0].force_load().get("Gold"),
+            players[0].force_load().unwrap().get("Gold"),
             Some(GffValue::Dword(50))
         ));
         assert!(session.quest_edits.pending.is_empty());
@@ -2055,7 +2052,7 @@ mod tests {
         session.character_source = CharacterSource::Companion {
             ros_name: "companion".into(),
         };
-        session.character = Some(Character::from_gff(make_gff_with_str(10)));
+        session.character = Some(Character::from_gff(make_gff_with_str(10)).unwrap());
         session.save_character(&data, 5).unwrap();
         let journal = crate::services::save_graph::read_live_journal(
             session.savegame_handler.as_ref().unwrap(),

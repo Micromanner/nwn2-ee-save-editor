@@ -13,7 +13,7 @@ async fn test_race_data_loading() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let character = Character::from_gff(fields);
+    let character = Character::from_gff(fields).expect("character from gff");
 
     // Basic consistency checks
     let race_id = character.race_id();
@@ -70,7 +70,7 @@ async fn test_race_progression_consistency() {
         let fields = parser
             .read_struct_fields(0)
             .expect("Failed to read top level struct");
-        let character = Character::from_gff(fields);
+        let character = Character::from_gff(fields).expect("character from gff");
 
         let race_id = character.race_id();
         let subrace = character.subrace_index();
@@ -115,7 +115,7 @@ async fn test_diverse_races() {
             let fields = parser
                 .read_struct_fields(0)
                 .expect("Failed to read top level struct");
-            let character = Character::from_gff(fields);
+            let character = Character::from_gff(fields).expect("character from gff");
 
             let race_name = character.race_display_name(game_data);
             let size = character.size_category();
@@ -154,7 +154,7 @@ async fn test_race_change_validation() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let character = Character::from_gff(fields);
+    let character = Character::from_gff(fields).expect("character from gff");
 
     // Validate a known valid change (to Human, ID 6)
     let human_id = 6; // Standard Human ID in NWN2
@@ -194,7 +194,7 @@ async fn test_race_change_execution() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let mut character = Character::from_gff(fields);
+    let mut character = Character::from_gff(fields).expect("character from gff");
     character.set_age(30).ok(); // Arbitrary age since set_game_data is gone
 
     // Snapshot initial state
@@ -282,7 +282,7 @@ async fn test_aasimar_subrace_from_byte_index() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let character = Character::from_gff(fields);
+    let character = Character::from_gff(fields).expect("character from gff");
 
     // player.bic has Race=21 (Planetouched) and Subrace=13 (Byte index for Aasimar)
     let race_id = character.race_id();
@@ -327,7 +327,7 @@ async fn test_rejected_race_change_leaves_character_untouched() {
     let fields = parser
         .read_struct_fields(0)
         .expect("Failed to read top level struct");
-    let mut character = Character::from_gff(fields);
+    let mut character = Character::from_gff(fields).expect("character from gff");
     let race_before = character.race_id();
 
     assert!(

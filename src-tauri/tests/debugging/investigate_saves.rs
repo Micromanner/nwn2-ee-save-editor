@@ -34,7 +34,7 @@ fn compare_khelgar_and_playerlist() {
         .expect("Failed to read ROS fields");
     let khelgar_owned: IndexMap<String, GffValue<'static>> = khelgar_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
     dump_to_json(&khelgar_owned, &output_dir().join("khelgar_ros.json"));
 
@@ -48,7 +48,7 @@ fn compare_khelgar_and_playerlist() {
         .expect("Failed to read IFO fields");
     let ifo_owned: IndexMap<String, GffValue<'static>> = ifo_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
     dump_to_json(&ifo_owned, &output_dir().join("playerlist_ifo.json"));
 
@@ -62,7 +62,7 @@ fn compare_khelgar_and_playerlist() {
         .expect("Failed to read BIC fields");
     let bic_owned: IndexMap<String, GffValue<'static>> = bic_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
     dump_to_json(&bic_owned, &output_dir().join("player_bic.json"));
 

@@ -131,6 +131,9 @@ impl GffWriter {
         struct_ids: &mut Vec<u32>,
     ) -> Result<GffValue<'static>, GffError> {
         match val {
+            lazy @ (GffValue::Struct(_) | GffValue::List(_)) => {
+                self.process_field_value_with_id(lazy.force_owned()?, flat_list, struct_ids)
+            }
             GffValue::StructOwned(map) => {
                 let idx = self.flatten_value_with_id(
                     GffValue::StructOwned(map),
@@ -183,6 +186,11 @@ impl GffWriter {
     }
 
     fn encode_field(&mut self, label: String, value: GffValue<'static>) -> Result<(), GffError> {
+        if label.len() > 16 {
+            return Err(GffError::Serialization(format!(
+                "Label '{label}' is longer than 16 bytes"
+            )));
+        }
         let label_idx = self.get_label_index(label);
         let (type_id, data) = match value {
             GffValue::Byte(v) => (GffFieldType::Byte, u32::from(v)),
@@ -219,9 +227,13 @@ impl GffWriter {
             GffValue::ResRef(v) => {
                 let offset = self.field_data.position() as u32;
                 let bytes = v.as_bytes();
-                let len = bytes.len().min(32) as u8;
-                self.field_data.write_u8(len)?;
-                self.field_data.write_all(&bytes[..len as usize])?;
+                if bytes.len() > 32 {
+                    return Err(GffError::Serialization(format!(
+                        "ResRef '{v}' is longer than 32 bytes"
+                    )));
+                }
+                self.field_data.write_u8(bytes.len() as u8)?;
+                self.field_data.write_all(bytes)?;
                 (GffFieldType::ResRef, offset)
             }
             GffValue::Void(v) => {
@@ -338,9 +350,7 @@ impl GffWriter {
 
         for (label, _) in &self.labels {
             let mut label_bytes = [0u8; 16];
-            let bytes = label.as_bytes();
-            let len = bytes.len().min(16);
-            label_bytes[..len].copy_from_slice(&bytes[..len]);
+            label_bytes[..label.len()].copy_from_slice(label.as_bytes());
             buffer.write_all(&label_bytes)?;
         }
 

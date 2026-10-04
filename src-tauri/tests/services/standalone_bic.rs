@@ -17,7 +17,7 @@ fn fixture_bic() -> PathBuf {
 fn load_fields_parses_fixture_bic() {
     let fields = standalone_bic::load_fields(&fixture_bic()).unwrap();
     assert!(!fields.is_empty());
-    let character = Character::from_gff(fields);
+    let character = Character::from_gff(fields).expect("character from gff");
     assert!(character.total_level() > 0);
 }
 
@@ -42,13 +42,15 @@ fn save_round_trips_gold_change_and_creates_backup() {
     let bic_path = dir.path().join("Hero.bic");
     std::fs::copy(fixture_bic(), &bic_path).unwrap();
 
-    let mut character = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap());
+    let mut character = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap())
+        .expect("character from gff");
     let original_gold = character.gold();
     character.set_gold(original_gold + 111);
 
     standalone_bic::save(&bic_path, &character.clone_gff(), 3, true).unwrap();
 
-    let reloaded = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap());
+    let reloaded = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap())
+        .expect("character from gff");
     assert_eq!(reloaded.gold(), original_gold + 111);
 
     let backup_dir = dir.path().join("backups").join("Hero");
@@ -67,7 +69,8 @@ fn save_skips_backup_when_disabled() {
     let bic_path = dir.path().join("Hero.bic");
     std::fs::copy(fixture_bic(), &bic_path).unwrap();
 
-    let character = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap());
+    let character = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap())
+        .expect("character from gff");
     standalone_bic::save(&bic_path, &character.clone_gff(), 3, false).unwrap();
 
     assert!(!dir.path().join("backups").exists());
@@ -85,7 +88,8 @@ fn save_prunes_old_backups_to_keep_count() {
     std::fs::write(backup_dir.join("backup_20200102_000000.bic"), b"old2").unwrap();
     std::fs::write(backup_dir.join("backup_20200103_000000.bic"), b"old3").unwrap();
 
-    let character = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap());
+    let character = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap())
+        .expect("character from gff");
     standalone_bic::save(&bic_path, &character.clone_gff(), 3, true).unwrap();
 
     let mut names: Vec<String> = std::fs::read_dir(&backup_dir)
@@ -168,7 +172,8 @@ fn session_saves_standalone_bic_with_single_backup() {
     session.character.as_mut().unwrap().set_gold(gold + 2);
     session.save_character(&game_data, 3).unwrap();
 
-    let reloaded = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap());
+    let reloaded = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap())
+        .expect("character from gff");
     assert_eq!(reloaded.gold(), gold + 2);
 
     let backup_dir = dir.path().join("backups").join("Hero");

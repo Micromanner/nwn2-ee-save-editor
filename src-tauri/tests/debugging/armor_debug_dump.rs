@@ -44,7 +44,7 @@ fn locstring_first(fields: &IndexMap<String, GffValue<'_>>, key: &str) -> String
 
 fn force_struct(v: &GffValue<'_>) -> Option<IndexMap<String, GffValue<'static>>> {
     match v {
-        GffValue::Struct(lazy) => Some(lazy.force_load()),
+        GffValue::Struct(lazy) => Some(lazy.force_load().expect("load struct")),
         GffValue::StructOwned(map) => Some(
             map.iter()
                 .map(|(k, v)| (k.clone(), v.clone().into_owned()))
@@ -462,7 +462,10 @@ fn dump_armor_debug_data() -> Result<()> {
 
     // ── Walk Equip_ItemList ───────────────────────────────────────────────────
     let equip_list: Vec<IndexMap<String, GffValue<'static>>> = match root.get("Equip_ItemList") {
-        Some(GffValue::List(lazy_list)) => lazy_list.iter().map(|lazy| lazy.force_load()).collect(),
+        Some(GffValue::List(lazy_list)) => lazy_list
+            .iter()
+            .map(|lazy| lazy.force_load().expect("load struct"))
+            .collect(),
         _ => Vec::new(),
     };
 

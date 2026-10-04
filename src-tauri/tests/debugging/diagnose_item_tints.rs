@@ -16,7 +16,7 @@ fn get_byte(fields: &indexmap::IndexMap<String, GffValue<'_>>, key: &str) -> u8 
 fn resolve_struct<'a>(val: &'a GffValue<'a>) -> Option<indexmap::IndexMap<String, GffValue<'a>>> {
     match val {
         GffValue::StructOwned(s) => Some(s.as_ref().clone()),
-        GffValue::Struct(lazy) => Some(lazy.force_load()),
+        GffValue::Struct(lazy) => Some(lazy.force_load().expect("load struct")),
         _ => None,
     }
 }
@@ -62,7 +62,7 @@ fn dump_gff_tintable(
     writeln!(out, "\n{label}:").unwrap();
     match fields.get("Tintable") {
         Some(GffValue::StructOwned(s)) => dump_tintable(out, s, "  "),
-        Some(GffValue::Struct(lazy)) => dump_tintable(out, &lazy.force_load(), "  "),
+        Some(GffValue::Struct(lazy)) => dump_tintable(out, &lazy.force_load().expect("load struct"), "  "),
         _ => {
             writeln!(out, "  No Tintable field").unwrap();
         }
@@ -89,7 +89,7 @@ async fn diagnose_item_tints() {
         let fields = gff.read_struct_fields(0).expect("read root");
         let owned: indexmap::IndexMap<String, GffValue<'static>> = fields
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect();
 
         // Dump ALL fields that might be relevant
@@ -133,7 +133,7 @@ async fn diagnose_item_tints() {
         let fields = gff.read_struct_fields(0).expect("read root");
         let owned: indexmap::IndexMap<String, GffValue<'static>> = fields
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect();
 
         // Find chest armor in Equip_ItemList

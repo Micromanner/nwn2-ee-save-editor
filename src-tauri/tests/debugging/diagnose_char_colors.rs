@@ -44,7 +44,7 @@ fn dump_char_color_fields() {
     writeln!(out, "\n=== ArmorTint struct ===").unwrap();
     if let Some(val) = fields.get("ArmorTint") {
         let at = match val {
-            GffValue::Struct(lazy) => Some(lazy.force_load()),
+            GffValue::Struct(lazy) => Some(lazy.force_load().expect("load struct")),
             GffValue::StructOwned(s) => Some(s.as_ref().clone()),
             _ => None,
         };
@@ -53,7 +53,7 @@ fn dump_char_color_fields() {
                 writeln!(out, "  {k}: {v:?}").unwrap();
                 // If it's a struct, dig one level deeper
                 let inner = match v {
-                    GffValue::Struct(lazy) => Some(lazy.force_load()),
+                    GffValue::Struct(lazy) => Some(lazy.force_load().expect("load struct")),
                     GffValue::StructOwned(s) => Some(s.as_ref().clone()),
                     _ => None,
                 };
@@ -61,7 +61,7 @@ fn dump_char_color_fields() {
                     for (ik, iv) in &inner {
                         writeln!(out, "    {ik}: {iv:?}").unwrap();
                         let deep = match iv {
-                            GffValue::Struct(lazy) => Some(lazy.force_load()),
+                            GffValue::Struct(lazy) => Some(lazy.force_load().expect("load struct")),
                             GffValue::StructOwned(s) => Some(s.as_ref().clone()),
                             _ => None,
                         };

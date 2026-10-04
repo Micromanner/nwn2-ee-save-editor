@@ -30,14 +30,9 @@ pub fn merge_fields_into_gff(
     let root_struct_id = gff
         .get_struct_id(0)
         .map_err(|e| format!("Failed to read root struct_id: {e}"))?;
-    let existing = gff
-        .read_struct_fields(0)
+    let mut merged = gff
+        .read_owned_struct(0)
         .map_err(|e| format!("Failed to read root fields: {e}"))?;
-
-    let mut merged: IndexMap<String, GffValue<'static>> = existing
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
     for (key, value) in fields {
         if key.starts_with("__") {
             continue;

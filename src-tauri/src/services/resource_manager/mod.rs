@@ -345,14 +345,9 @@ impl ResourceManager {
             ResourceManagerError::InvalidGffFormat(format!("Failed to parse template: {e}"))
         })?;
 
-        let fields = gff.read_struct_fields(0).map_err(|e| {
+        gff.read_owned_struct(0).map_err(|e| {
             ResourceManagerError::InvalidGffFormat(format!("Failed to read template fields: {e}"))
-        })?;
-
-        Ok(fields
-            .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
-            .collect())
+        })
     }
 
     pub fn get_cache_stats(&self) -> CacheStats {
@@ -619,7 +614,6 @@ fn read_erf(path: &Path) -> ResourceManagerResult<ErfParser> {
 fn erf_entries(path: &Path, erf: &ErfParser, source: &OverrideSource) -> IndexEntries {
     erf.resources
         .keys()
-        .filter(|name| name.contains('.'))
         .map(|name| {
             (
                 name.clone(),

@@ -37,6 +37,7 @@ fn load_player(env_var: &str) -> Character {
         .expect("no player.bic in save");
     let parser = GffParser::from_bytes(bic).expect("parse player.bic");
     Character::from_gff(parser.read_struct_fields(0).expect("read root"))
+        .expect("character from gff")
 }
 
 fn int(fields: &Fields, key: &str) -> Option<i32> {

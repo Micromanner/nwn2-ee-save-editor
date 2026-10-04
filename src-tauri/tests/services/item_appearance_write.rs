@@ -31,6 +31,7 @@ async fn creature_appearances_resolve_body_and_optional_head() {
             ("Appearance_Head".into(), GffValue::Byte(1)),
             ("Equip_ItemList".into(), GffValue::ListOwned(vec![])),
         ]))
+        .expect("character from gff")
     };
 
     let parts = make_character(find_row("Golem_Blade"), 4)
@@ -68,6 +69,7 @@ async fn equipped_part_precedence_and_nested_tints_match_item_preview() {
             ("Appearance_Head".into(), GffValue::Byte(1)),
             ("Equip_ItemList".into(), GffValue::ListOwned(items)),
         ]))
+        .expect("character from gff")
     };
     let part = |avt, variation| {
         IndexMap::from([

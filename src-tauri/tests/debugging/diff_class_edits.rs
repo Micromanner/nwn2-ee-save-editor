@@ -32,7 +32,7 @@ fn load_bic(save_path: &Path) -> IndexMap<String, GffValue<'static>> {
     let fields = gff.read_struct_fields(0).expect("root");
     fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect()
 }
 

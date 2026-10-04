@@ -17,8 +17,9 @@ fn dump_roster_flags() {
     };
     let gff = GffParser::from_bytes(bytes).expect("parse roster");
     let root = gff.read_struct_fields(0).expect("root");
-    let Some(GffValue::ListOwned(members)) =
-        root.get("RosMembers").map(|v| v.clone().force_owned())
+    let Some(GffValue::ListOwned(members)) = root
+        .get("RosMembers")
+        .map(|v| v.clone().force_owned().expect("force owned"))
     else {
         println!("no RosMembers");
         return;

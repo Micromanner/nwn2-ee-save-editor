@@ -21,10 +21,10 @@ fn parse_playerlist_ifo(
     let mod_player_list = root.get("Mod_PlayerList").expect("No Mod_PlayerList");
     if let GffValue::List(lazy_structs) = mod_player_list {
         let first = lazy_structs.first().expect("Mod_PlayerList is empty");
-        let fields = first.force_load();
+        let fields = first.force_load().expect("load struct");
         fields
             .into_iter()
-            .map(|(k, v)| (k, v.force_owned()))
+            .map(|(k, v)| (k, v.force_owned().expect("force owned")))
             .collect()
     } else {
         panic!("Mod_PlayerList is not a list");
@@ -100,7 +100,7 @@ fn test_bic_sync_preserves_bic_only_fields_and_updates_matching() {
     // Merge: overwrite matching fields from char_fields
     let mut merged: IndexMap<String, GffValue<'static>> = bic_fields
         .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
         .collect();
 
     for (key, value) in &char_fields {

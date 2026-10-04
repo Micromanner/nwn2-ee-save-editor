@@ -37,7 +37,7 @@ async fn test_file_modify_experience_and_save() {
         if k == "Experience" {
             root_owned.insert(k, GffValue::Dword(original_exp + 50000));
         } else {
-            root_owned.insert(k, v.force_owned());
+            root_owned.insert(k, v.force_owned().expect("force owned"));
         }
     }
 
@@ -85,7 +85,10 @@ async fn test_file_modify_all_abilities_and_save() {
             .find(|(name, _)| *name == k.as_str())
             .map(|(_, val)| GffValue::Byte(*val));
 
-        root_owned.insert(k, new_value.unwrap_or_else(|| v.force_owned()));
+        root_owned.insert(
+            k,
+            new_value.unwrap_or_else(|| v.force_owned().expect("force owned")),
+        );
     }
 
     let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
@@ -128,7 +131,7 @@ async fn test_file_modify_name_and_save() {
             };
             root_owned.insert(k, GffValue::LocString(new_locstring));
         } else {
-            root_owned.insert(k, v.force_owned());
+            root_owned.insert(k, v.force_owned().expect("force owned"));
         }
     }
 
@@ -182,7 +185,7 @@ async fn test_file_save_preserves_lists() {
         if k == "Gold" {
             root_owned.insert(k, GffValue::Dword(999999));
         } else {
-            root_owned.insert(k, v.force_owned());
+            root_owned.insert(k, v.force_owned().expect("force owned"));
         }
     }
 
@@ -248,7 +251,7 @@ async fn test_file_save_all_fixtures() {
 
         let mut root_owned = indexmap::IndexMap::new();
         for (k, v) in root {
-            root_owned.insert(k, v.force_owned());
+            root_owned.insert(k, v.force_owned().expect("force owned"));
         }
 
         let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);
@@ -288,10 +291,10 @@ async fn test_file_multiple_saves() {
                 if let GffValue::Dword(exp) = v {
                     root_owned.insert(k, GffValue::Dword(exp + 1000));
                 } else {
-                    root_owned.insert(k, v.force_owned());
+                    root_owned.insert(k, v.force_owned().expect("force owned"));
                 }
             } else {
-                root_owned.insert(k, v.force_owned());
+                root_owned.insert(k, v.force_owned().expect("force owned"));
             }
         }
 
@@ -358,7 +361,7 @@ async fn test_roundtrip_non_ascii_locstring_stable() {
                 }),
             );
         } else {
-            root_owned.insert(k, v.force_owned());
+            root_owned.insert(k, v.force_owned().expect("force owned"));
         }
     }
 
@@ -400,7 +403,7 @@ async fn test_roundtrip_non_ascii_locstring_stable() {
         let mut next_root: indexmap::IndexMap<String, GffValue<'static>> =
             indexmap::IndexMap::new();
         for (k, v) in r {
-            next_root.insert(k, v.force_owned());
+            next_root.insert(k, v.force_owned().expect("force owned"));
         }
         let mut writer = GffWriter::new(&p.file_type, &p.file_version);
         current_bytes = writer.write(next_root).expect("Write");
@@ -430,7 +433,7 @@ async fn test_file_verify_bytes_on_disk() {
 
     let mut root_owned = indexmap::IndexMap::new();
     for (k, v) in root {
-        root_owned.insert(k, v.force_owned());
+        root_owned.insert(k, v.force_owned().expect("force owned"));
     }
 
     let mut writer = GffWriter::new(&parser.file_type, &parser.file_version);

@@ -1648,7 +1648,7 @@ mod tests {
             GffValue::ListOwned(vec![wizard_class]),
         );
 
-        Character::from_gff(fields)
+        Character::from_gff(fields).expect("character from gff")
     }
 
     #[test]

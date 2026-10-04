@@ -126,12 +126,7 @@ impl<'a> ItemBlueprints<'a> {
 
 fn parse_blueprint(bytes: &[u8]) -> Option<ItemBlueprint> {
     let parser = GffParser::from_bytes(bytes.to_vec()).ok()?;
-    let fields = parser
-        .read_struct_fields(0)
-        .ok()?
-        .into_iter()
-        .map(|(k, v)| (k, v.force_owned()))
-        .collect();
+    let fields = parser.read_owned_struct(0).ok()?;
     Some(blueprint_from_fields(fields))
 }
 

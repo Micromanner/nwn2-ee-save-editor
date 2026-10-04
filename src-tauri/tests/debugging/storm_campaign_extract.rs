@@ -17,7 +17,7 @@ fn load_storm_player() -> Character {
     let root = parser
         .read_struct_fields(0)
         .expect("Failed to read root struct");
-    Character::from_gff(root)
+    Character::from_gff(root).expect("character from gff")
 }
 
 #[tokio::test]

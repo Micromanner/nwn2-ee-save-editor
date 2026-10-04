@@ -21,7 +21,9 @@ async fn test_pet_options_resolve_tlk_names() {
     let ctx = create_test_context().await;
     let game_data = ctx.loader.game_data().expect("game data loaded");
 
-    let state = Character::from_gff(IndexMap::new()).pets_state(game_data);
+    let state = Character::from_gff(IndexMap::new())
+        .expect("character from gff")
+        .pets_state(game_data);
 
     assert_eq!(state.animal_companion.type_id, PET_TYPE_NONE);
     assert_eq!(state.familiar.type_id, PET_TYPE_NONE);

@@ -286,7 +286,7 @@ fn loaded_without_items(state: &AppState) -> Result<Loaded, String> {
         .gff()
         .iter()
         .filter(|(k, _)| !matches!(k.as_str(), "Equip_ItemList" | "ItemList"))
-        .map(|(k, v)| (k.clone(), v.clone().force_owned()))
+        .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     Ok(Loaded {
         fields,
@@ -336,7 +336,7 @@ async fn engine_level_up(state: &AppState, args: &Value) -> Result<Value, String
         .unwrap_or(1)
         .clamp(1, 40) as i32;
     let loaded = loaded_without_items(state)?;
-    let mut character = Character::from_gff(loaded.fields.clone());
+    let mut character = Character::from_gff(loaded.fields.clone()).map_err(|e| e.to_string())?;
 
     let mut request = copy_args(args, &["package"]);
     request["class"] = json!(class_id);
@@ -389,7 +389,7 @@ async fn engine_level_up(state: &AppState, args: &Value) -> Result<Value, String
 
 async fn engine_check(state: &AppState, args: &Value) -> Result<Value, String> {
     let loaded = loaded_without_items(state)?;
-    let stripped = Character::from_gff(loaded.fields.clone());
+    let stripped = Character::from_gff(loaded.fields.clone()).map_err(|e| e.to_string())?;
     let levelling_class = stripped
         .levelling_class()
         .ok_or("the character has no class")?;
