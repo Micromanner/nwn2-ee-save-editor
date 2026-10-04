@@ -3,11 +3,11 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs::{self};
+use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
@@ -94,68 +94,10 @@ pub fn extract_module_info(
     handler: &SaveGameHandler,
     paths: &NWN2Paths,
 ) -> Result<(ModuleInfo, ModuleVariables), String> {
-    let current_module_id = handler.extract_current_module().unwrap_or_default();
-    let save_dir = handler.save_dir();
-    let player_area_id = player_area_id(handler);
-
-    info!("ContentManager: Current module is '{}'", current_module_id);
-
-    // Find all .z files
-    let mut z_files = Vec::new();
-    if let Ok(entries) = fs::read_dir(save_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() && has_z_extension(&path) {
-                z_files.push(path);
-            }
-        }
-    }
-
-    if z_files.is_empty() {
-        warn!("ContentManager: No .z files found in save directory");
-        return Ok((ModuleInfo::default(), ModuleVariables::default()));
-    }
-
-    let mut found_module_info = None;
-    let mut found_module_vars = None;
-
-    // Try to find the current module first
-    for z_file in &z_files {
-        let file_stem = z_file
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        if file_stem == current_module_id {
-            info!(
-                "ContentManager: Parsing current module .z file: {}",
-                file_stem
-            );
-            if let Ok(res) = parse_module_z_file(z_file, &current_module_id, paths, player_area_id)
-            {
-                found_module_info = Some(res.0);
-                found_module_vars = Some(res.1);
-                break;
-            }
-        }
-    }
-
-    // If not found, fallback to first .z file
-    if found_module_info.is_none() && !z_files.is_empty() {
-        let z_file = &z_files[0];
-        let file_stem = z_file
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        info!("ContentManager: Fallback to parsing: {}", file_stem);
-        if let Ok(res) = parse_module_z_file(z_file, &file_stem, paths, None) {
-            found_module_info = Some(res.0);
-            found_module_vars = Some(res.1);
-        }
-    }
-
-    let info = found_module_info.unwrap_or_default();
-
-    Ok((info, found_module_vars.unwrap_or_default()))
+    let current_module_id = handler
+        .extract_current_module()
+        .map_err(|e| e.to_string())?;
+    extract_module_info_by_id(handler, paths, &current_module_id)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -875,13 +817,11 @@ fn campaign_index(paths: &NWN2Paths) -> Arc<CampaignIndex> {
                     }
                     _ => None,
                 };
-                idx.insert(
-                    guid.to_lowercase(),
-                    CampaignEntry {
-                        path: cam_file,
-                        display_name,
-                    },
-                );
+                // Documents copy wins over the install copy of the same campaign.
+                idx.entry(guid.to_lowercase()).or_insert(CampaignEntry {
+                    path: cam_file,
+                    display_name,
+                });
             }
         }
     }
