@@ -4,12 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::{self};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tracing::{info, warn};
-use xz2::read::XzDecoder;
-use xz2::stream::Stream;
 
 use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
@@ -721,14 +719,13 @@ fn decompress_z_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 fn decompress_z_lzma(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    let stream = Stream::new_lzma_decoder(u64::MAX)
-        .map_err(|e| format!("Failed to create LZMA decoder: {e}"))?;
-    let mut decoder = XzDecoder::new_stream(bytes, stream);
-    let mut decompressed = Vec::new();
-    decoder
-        .read_to_end(&mut decompressed)
-        .map_err(|e| format!("Failed to decompress .z file (LZMA): {e}"))?;
-    Ok(decompressed)
+    let decode = || -> std::io::Result<Vec<u8>> {
+        let mut decompressed = Vec::new();
+        lzma_rust2::LzmaReader::new_mem_limit(bytes, u32::MAX, None)?
+            .read_to_end(&mut decompressed)?;
+        Ok(decompressed)
+    };
+    decode().map_err(|e| format!("Failed to decompress .z file (LZMA): {e}"))
 }
 
 fn decompress_z_zip(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -748,20 +745,20 @@ fn decompress_z_zip(bytes: &[u8]) -> Result<Vec<u8>, String> {
     Ok(decompressed)
 }
 
+/// LZMA-alone the way the game writes `.z`: props `0x5d`, 4 MiB dictionary, the real
+/// size in the header and no end marker. A header with unknown size breaks the save.
+/// Preset 1 matches the game's file size (OC module: 343 KB vs 341 KB) at a seventh of
+/// preset 6's time, which matters because saves encode under the session write lock.
 fn compress_lzma_for_nwn2(data: &[u8]) -> Result<Vec<u8>, String> {
-    // NWN2 .z files use LZMA alone format with known uncompressed size and 4MB dictionary.
-    // The lzma-rs crate produces the correct header with uncompressed_size set.
-    let mut output = Vec::new();
-    lzma_rs::lzma_compress_with_options(
-        &mut &data[..],
-        &mut output,
-        &lzma_rs::compress::Options {
-            unpacked_size: lzma_rs::compress::UnpackedSize::WriteToHeader(Some(data.len() as u64)),
-        },
-    )
-    .map_err(|e| format!("LZMA compression failed: {e}"))?;
-
-    Ok(output)
+    let mut options = lzma_rust2::LzmaOptions::with_preset(1);
+    options.dict_size = 4 * 1024 * 1024;
+    let encode = || -> std::io::Result<Vec<u8>> {
+        let mut writer =
+            lzma_rust2::LzmaWriter::new_use_header(Vec::new(), &options, Some(data.len() as u64))?;
+        writer.write_all(data)?;
+        writer.finish()
+    };
+    encode().map_err(|e| format!("LZMA compression failed: {e}"))
 }
 
 /// Wrap an ERF payload in the original-NWN2 PK zip envelope (single unnamed entry).
@@ -778,7 +775,6 @@ fn compress_zip_for_original(data: &[u8]) -> Result<Vec<u8>, String> {
         writer
             .start_file::<&str, ()>("", options)
             .map_err(|e| format!("Failed to start zip entry: {e}"))?;
-        use std::io::Write;
         writer
             .write_all(data)
             .map_err(|e| format!("Failed to write zip entry: {e}"))?;
@@ -912,4 +908,21 @@ pub fn find_campaign_name(campaign_id: &str, paths: &NWN2Paths) -> Option<String
     campaign_index(paths)
         .get(&campaign_id.to_lowercase())
         .and_then(|e| e.display_name.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lzma_matches_game_header_and_round_trips() {
+        let data: Vec<u8> = (0..200_000u32)
+            .flat_map(|i| (i % 1000).to_le_bytes())
+            .collect();
+        let compressed = compress_lzma_for_nwn2(&data).unwrap();
+
+        assert_eq!(&compressed[..5], &[0x5d, 0x00, 0x00, 0x40, 0x00]);
+        assert_eq!(&compressed[5..13], &(data.len() as u64).to_le_bytes());
+        assert_eq!(decompress_z_bytes(&compressed).unwrap(), data);
+    }
 }

@@ -100,8 +100,7 @@ lasso = { version = "0.7", features = ["multi-threaded", "serialize"] }
 ahash = "0.8"
 smallvec = { version = "1.13", features = ["serde"] }
 flate2 = "1.0"
-xz2 = "0.1"
-lzma-rs = "0.3"
+lzma-rust2 = { version = "0.21", default-features = false, features = ["std", "encoder", "optimization"] }
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 libdeflater = "1.0"
 miniz_oxide = { version = "0.9", features = ["simd"] }

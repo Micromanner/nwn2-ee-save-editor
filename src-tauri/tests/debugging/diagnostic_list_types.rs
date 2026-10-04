@@ -15,8 +15,6 @@ use indexmap::IndexMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use xz2::read::XzDecoder;
-use xz2::stream::Stream;
 
 fn fixtures_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/saves")
@@ -31,10 +29,11 @@ fn dump_field(prefix: &str, fields: &IndexMap<String, GffValue<'_>>, key: &str) 
 
 fn decompress_z(path: &Path) -> Vec<u8> {
     let file = fs::File::open(path).expect("open .z file");
-    let stream = Stream::new_lzma_decoder(u64::MAX).expect("lzma decoder");
-    let mut decoder = XzDecoder::new_stream(file, stream);
     let mut out = Vec::new();
-    decoder.read_to_end(&mut out).expect("decompress .z");
+    lzma_rust2::LzmaReader::new_mem_limit(file, u32::MAX, None)
+        .expect("lzma decoder")
+        .read_to_end(&mut out)
+        .expect("decompress .z");
     out
 }
 
