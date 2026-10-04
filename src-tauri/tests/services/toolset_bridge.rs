@@ -81,6 +81,7 @@ fn graph_loads_tutorial_and_caches() {
         return;
     }
 
+    let install_temp_before = tutorial_temp_dirs(&install);
     let tmp = TempDir::new().unwrap();
     let client =
         BridgeClient::new(bridge, install.clone(), tmp.path().to_path_buf()).expect("client");
@@ -124,4 +125,23 @@ fn graph_loads_tutorial_and_caches() {
         })
         .collect();
     assert_eq!(cache_entries.len(), 1, "expected one cache entry");
+
+    // Opening a module must not unpack it into the install folder.
+    let leaked: Vec<_> = tutorial_temp_dirs(&install)
+        .into_iter()
+        .filter(|d| !install_temp_before.contains(d))
+        .collect();
+    assert!(
+        leaked.is_empty(),
+        "module unpacked into the install: {leaked:?}"
+    );
+}
+
+fn tutorial_temp_dirs(install: &Path) -> Vec<String> {
+    std::fs::read_dir(install)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with("temp_") && n.ends_with("_0_Tutorial"))
+        .collect()
 }

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -59,20 +60,33 @@ pub struct BridgeClient {
 }
 
 struct ServeConnection {
-    child: std::process::Child,
+    child: Option<std::process::Child>,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
 }
 
+/// How long a serve process gets to exit on its own before it is killed.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+
 impl Drop for ServeConnection {
     fn drop(&mut self) {
-        // Best-effort graceful shutdown: ask the serve loop to exit, close our write
-        // end so it reads EOF even if the write failed, then detach. We don't
-        // wait() here because Drop should stay fast; leftover zombies are the OS's
-        // problem at this point (the app is typically shutting down too).
+        // Ask the serve loop to exit on its own; a detached thread kills it only if it
+        // is still running after the grace period, so dropping never blocks the caller.
         let _ = writeln!(self.stdin, "{{\"op\":\"shutdown\"}}");
         let _ = self.stdin.flush();
-        let _ = self.child.kill();
+        let Some(mut child) = self.child.take() else {
+            return;
+        };
+        std::thread::spawn(move || {
+            let deadline = Instant::now() + SHUTDOWN_GRACE;
+            while Instant::now() < deadline {
+                match child.try_wait() {
+                    Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+                    Ok(Some(_)) | Err(_) => return,
+                }
+            }
+            let _ = child.kill();
+        });
     }
 }
 
@@ -287,7 +301,7 @@ impl BridgeClient {
         spawn_stderr_forwarder(stderr);
 
         Ok(ServeConnection {
-            child,
+            child: Some(child),
             stdin,
             stdout,
         })

@@ -9,7 +9,7 @@ using OEIShared.Utils;
 
 namespace ToolsetBridge.Adapters;
 
-public sealed class LoadedContext
+public sealed class LoadedContext : IDisposable
 {
     public string RootPath { get; init; } = "";
     public string Name { get; init; } = "";
@@ -18,6 +18,11 @@ public sealed class LoadedContext
 
     // Campaign override resolution deferred (see README). Always "module" in v1.
     public string Source { get; init; } = "module";
+
+    /// Removes the module's resource repository and extracted files.
+    public IDisposable? Opened { get; init; }
+
+    public void Dispose() => Opened?.Dispose();
 }
 
 public static class ToolsetLoader
@@ -57,6 +62,8 @@ public static class ToolsetLoader
         // OEIUnserialize; GuiStubPatches detours it to a plain field assignment.
         Timing.Measure("gui_stub_patch", () => GuiStubPatches.Apply());
 
+        Timing.Measure("sweep_extractions", () => HeadlessModuleOpen.SweepStaleExtractions());
+
         s_resourceManagerReady = true;
     }
 
@@ -68,7 +75,7 @@ public static class ToolsetLoader
             throw new FileNotFoundException($"module path not found: {modulePath}");
 
         var module = new NWN2GameModule(bDoNothing: true);
-        HeadlessModuleOpen.Open(module, modulePath, isFile);
+        var opened = HeadlessModuleOpen.Open(module, modulePath, isFile);
 
         var haks = module.ModuleInfo?.HakPaks?
             .Cast<object>()
@@ -83,6 +90,7 @@ public static class ToolsetLoader
             Haks = haks,
             Module = module,
             Source = "module",
+            Opened = opened,
         };
     }
 

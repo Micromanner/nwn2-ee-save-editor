@@ -111,6 +111,10 @@ public static class Program
             Log.Error($"adapter failed: {ex}");
             return ExitCodes.AdapterFailed;
         }
+        finally
+        {
+            ctx.Dispose();
+        }
     }
 
     private static int UnknownSubcommand(string name)

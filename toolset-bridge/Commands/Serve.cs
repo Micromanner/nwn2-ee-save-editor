@@ -93,9 +93,11 @@ public static class Serve
             return;
         }
 
-        var output = Graph.Compute(ctx);
-        var json = Timing.Measure("serialize", () => Json.Serialize(output, indented: false));
-        EmitOkRaw(json);
+        using (ctx)
+        {
+            var output = Graph.Compute(ctx);
+            EmitOkRaw(Timing.Measure("serialize", () => Json.Serialize(output, indented: false)));
+        }
     }
 
     private static void HandleListModules(string campaignPath, string nwn2Install)
