@@ -547,6 +547,14 @@ impl SessionState {
             self.primary_player_index.is_some(),
             game_data,
         )?;
+        let modules = crate::services::roster::remove_staged_companion_area_copies(handler)
+            .map_err(|e| format!("companion area copies: {e}"))?;
+        if !modules.is_empty() {
+            info!(
+                "Removed parked companion copies from {}",
+                modules.join(", ")
+            );
+        }
         if let Some(name) = &self.staged_save_name {
             handler
                 .update_file(SAVENAME_TXT, name.as_bytes())

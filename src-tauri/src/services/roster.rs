@@ -4,7 +4,10 @@ use indexmap::IndexMap;
 use tracing::warn;
 
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
+use crate::services::campaign::content;
 use crate::services::savegame_handler::SaveGameHandler;
+
+const RES_TYPE_GIT: u16 = 2023;
 
 pub struct RosterMember {
     pub ros_name: String,
@@ -335,6 +338,104 @@ pub fn apply_party_membership(
             warnings.join(", ")
         )))
     }
+}
+
+/// Delete the area copies of every companion whose `.ros` the open batch rewrites,
+/// in all module states of the save. A benched companion parked in an area (OC Act 1:
+/// the Sunken Flagon) is also a full creature in that area's `.git`, and the game
+/// loads that object instead of the `.ros`; joining the party in-game deletes it.
+/// Without the copy the game spawns the companion from the `.ros`
+/// (`SpawnRosterMember`, as the Flagon's enter script does). Returns the module ids
+/// whose state changed.
+pub fn remove_staged_companion_area_copies(
+    handler: &mut SaveGameHandler,
+) -> Result<Vec<String>, String> {
+    let mut tags = Vec::new();
+    for name in handler.staged_files() {
+        if !name.to_ascii_lowercase().ends_with(".ros") {
+            continue;
+        }
+        let bytes = handler.extract_file(&name).map_err(|e| e.to_string())?;
+        let parser = GffParser::from_bytes(bytes).map_err(|e| format!("{name}: {e}"))?;
+        let root = parser
+            .read_struct_fields(0)
+            .map_err(|e| format!("{name}: {e}"))?;
+        if let Some(tag) = root.get("Tag").and_then(gff_str)
+            && !tag.trim().is_empty()
+        {
+            tags.push(tag.trim().to_ascii_lowercase());
+        }
+    }
+    if tags.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut changed = Vec::new();
+    for module in content::module_state_ids(handler.save_dir()) {
+        let (z_path, mut erf) = content::open_module_state(handler, &module)?;
+        let mut edited = false;
+        for (area, _, _) in erf.list_resources(Some(RES_TYPE_GIT)) {
+            let bytes = erf
+                .extract_resource(&area)
+                .map_err(|e| format!("{module}/{area}: {e}"))?;
+            if let Some(bytes) = without_creatures(bytes, &tags)? {
+                erf.update_resource(&area, bytes)
+                    .map_err(|e| format!("{module}/{area}: {e}"))?;
+                edited = true;
+            }
+        }
+        if !edited {
+            continue;
+        }
+        let bytes = content::serialize_module_state(&erf, &z_path)?;
+        let file_name = z_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("Invalid module filename")?;
+        handler
+            .update_file(file_name, &bytes)
+            .map_err(|e| format!("Failed to write {file_name}: {e}"))?;
+        changed.push(module);
+    }
+    Ok(changed)
+}
+
+/// An area `.git` without the `Creature List` entries tagged with one of `tags`
+/// (lowercase), or `None` when it holds none of them.
+fn without_creatures(bytes: Vec<u8>, tags: &[String]) -> Result<Option<Vec<u8>>, String> {
+    let lower = bytes.to_ascii_lowercase();
+    if !tags
+        .iter()
+        .any(|tag| lower.windows(tag.len()).any(|w| w == tag.as_bytes()))
+    {
+        return Ok(None);
+    }
+    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("git parse error: {e}"))?;
+    let file_type = parser.file_type.clone();
+    let file_version = parser.file_version.clone();
+    let root_struct_id = parser
+        .get_struct_id(0)
+        .map_err(|e| format!("git root id error: {e}"))?;
+    let mut root = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("git root error: {e}"))?;
+    let Some(GffValue::ListOwned(creatures)) = root.get_mut("Creature List") else {
+        return Ok(None);
+    };
+    let before = creatures.len();
+    creatures.retain(|creature| {
+        creature
+            .get("Tag")
+            .and_then(gff_str)
+            .is_none_or(|tag| !tags.contains(&tag.trim().to_ascii_lowercase()))
+    });
+    if creatures.len() == before {
+        return Ok(None);
+    }
+    GffWriter::new(&file_type, &file_version)
+        .write_with_struct_id(root, root_struct_id)
+        .map(Some)
+        .map_err(|e| format!("git serialization error: {e}"))
 }
 
 /// Set `RosSelectable` on the named members, in the save or the open batch.

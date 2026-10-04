@@ -491,6 +491,79 @@ fn save_character_flushes_parked_companion_and_player_edits() {
     );
 }
 
+/// Lowercase tags of the `Creature List` in the Sunken Flagon's saved area state.
+fn flagon_creature_tags(save_path: &std::path::Path) -> Vec<String> {
+    use app_lib::parsers::gff::{GffParser, GffValue};
+
+    let handler =
+        app_lib::services::savegame_handler::SaveGameHandler::new(save_path).expect("handler");
+    let (_, mut erf) =
+        app_lib::services::campaign::content::open_module_state(&handler, "1000_neverwinter_a1")
+            .expect("module state");
+    let bytes = erf
+        .extract_resource("{1001}sunkenflag.git")
+        .expect("flagon git");
+    let root = GffParser::from_bytes(bytes)
+        .expect("parse git")
+        .read_owned_struct(0)
+        .expect("git root");
+    let Some(GffValue::ListOwned(creatures)) = root.get("Creature List") else {
+        panic!("flagon git has no Creature List");
+    };
+    creatures
+        .iter()
+        .filter_map(|c| match c.get("Tag") {
+            Some(GffValue::String(tag)) => Some(tag.to_ascii_lowercase()),
+            _ => None,
+        })
+        .collect()
+}
+
+// Fixture reality: Bishop is benched and parked in the Sunken Flagon, a full creature
+// in `{1001}sunkenflag.git` that the game loads instead of bishop.ros.
+#[test]
+fn companion_save_removes_parked_area_copy() {
+    let (_tmp, save_path) = temp_save_copy("user_save_linux");
+    let before = flagon_creature_tags(&save_path);
+    assert!(before.iter().any(|t| t == "bishop"), "fixture parks Bishop");
+
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    session.load_companion("bishop").expect("load bishop");
+    session
+        .character_mut()
+        .expect("bishop")
+        .set_ability(app_lib::character::AbilityIndex::STR, 18)
+        .expect("set str");
+    session
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
+        .expect("save");
+
+    let after = flagon_creature_tags(&save_path);
+    let expected: Vec<String> = before.into_iter().filter(|t| t != "bishop").collect();
+    assert_eq!(after, expected, "only Bishop's copy is gone");
+}
+
+#[test]
+fn player_only_save_leaves_module_state_untouched() {
+    let (_tmp, save_path) = temp_save_copy("user_save_linux");
+    let z_path = save_path.join("1000_neverwinter_a1.z");
+    let before = std::fs::read(&z_path).expect("read .z");
+
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    session
+        .character_mut()
+        .expect("player")
+        .set_ability(app_lib::character::AbilityIndex::STR, 17)
+        .expect("set str");
+    session
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
+        .expect("save");
+
+    assert_eq!(std::fs::read(&z_path).expect("read .z"), before);
+}
+
 #[test]
 fn staged_party_membership_counts_as_dirty_and_flushes_on_save() {
     let (_tmp, save_path) = temp_save_copy("Classic_Campaign");

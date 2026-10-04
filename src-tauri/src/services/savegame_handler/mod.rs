@@ -317,6 +317,15 @@ impl SaveGameHandler {
         self.batch = None;
     }
 
+    /// Names of the files staged in the open batch.
+    pub fn staged_files(&self) -> Vec<String> {
+        self.batch
+            .iter()
+            .flat_map(|batch| batch.zip.keys().chain(batch.loose.keys()))
+            .cloned()
+            .collect()
+    }
+
     /// Run `stage` inside the open batch, or inside a batch of its own that is
     /// committed right after.
     fn in_batch(

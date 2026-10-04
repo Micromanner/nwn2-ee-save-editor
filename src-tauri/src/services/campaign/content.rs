@@ -482,13 +482,21 @@ pub fn batch_update_module_variables(
 }
 
 /// The saved state of a module (`<module>.z`) as a fully loaded ERF, ready to
-/// edit and re-serialize, with the path it came from.
+/// edit and re-serialize, with the path it came from. Reads through the handler,
+/// so a `.z` already staged in the open batch is edited on top of, not replaced.
 pub fn open_module_state(
     handler: &SaveGameHandler,
     module_id: &str,
 ) -> Result<(PathBuf, ErfParser), String> {
     let z_path = find_module_z_file(handler.save_dir(), module_id)?;
-    let decompressed = decompress_z_file(&z_path)?;
+    let file_name = z_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid module filename")?;
+    let bytes = handler
+        .extract_file(file_name)
+        .map_err(|e| format!("Failed to read {file_name}: {e}"))?;
+    let decompressed = decompress_z_bytes(&bytes)?;
     let mut erf_parser = ErfParser::new();
     erf_parser
         .parse_from_bytes(&decompressed)
@@ -522,11 +530,17 @@ pub fn prepare_module_variable_updates(
         update_module_ifo_vars(&mut erf_parser, updates)?;
     }
 
+    let compressed = serialize_module_state(&erf_parser, &z_path)?;
+    Ok((z_path, compressed))
+}
+
+/// An edited module state as `.z` bytes, in the envelope `z_path` already uses.
+pub fn serialize_module_state(erf_parser: &ErfParser, z_path: &Path) -> Result<Vec<u8>, String> {
     let erf_bytes = erf_parser
         .to_bytes()
         .map_err(|e| format!("Failed to serialize ERF: {e}"))?;
 
-    let compressed = compress_z_matching_existing(&erf_bytes, &z_path)?;
+    let compressed = compress_z_matching_existing(&erf_bytes, z_path)?;
 
     info!(
         "Compressed {} -> {} bytes, writing to {:?}",
@@ -534,8 +548,20 @@ pub fn prepare_module_variable_updates(
         compressed.len(),
         z_path
     );
+    Ok(compressed)
+}
 
-    Ok((z_path, compressed))
+/// Module ids of every module state (`<module>.z`) in a save folder.
+pub fn module_state_ids(save_dir: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(save_dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && has_z_extension(path))
+        .filter_map(|path| Some(path.file_stem()?.to_string_lossy().into_owned()))
+        .collect()
 }
 
 fn update_module_ifo_vars(
@@ -679,29 +705,25 @@ pub fn area_name_from_resref(resref: &str) -> String {
 }
 
 fn decompress_z_file(path: &Path) -> Result<Vec<u8>, String> {
+    let bytes = fs::read(path).map_err(|e| format!("Failed to open .z file: {e}"))?;
+    decompress_z_bytes(&bytes)
+}
+
+fn decompress_z_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     // EE saves use LZMA-alone compression for .z; original NWN2 saves
     // wrap the same ERF payload in a PK zip (.Z) instead. Sniff the first 4
     // bytes and dispatch — the ERF parser sees the same bytes either way.
-    let mut header = [0u8; 4];
-    {
-        let mut file = fs::File::open(path).map_err(|e| format!("Failed to open .z file: {e}"))?;
-        // Short reads (< 4 bytes) leave the rest zero; either branch below
-        // will then fail with a clearer error than a silent truncation.
-        let _ = file.read(&mut header);
-    }
-
-    if &header == b"PK\x03\x04" {
-        decompress_z_file_zip(path)
+    if bytes.starts_with(b"PK\x03\x04") {
+        decompress_z_zip(bytes)
     } else {
-        decompress_z_file_lzma(path)
+        decompress_z_lzma(bytes)
     }
 }
 
-fn decompress_z_file_lzma(path: &Path) -> Result<Vec<u8>, String> {
-    let file = fs::File::open(path).map_err(|e| format!("Failed to open .z file: {e}"))?;
+fn decompress_z_lzma(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let stream = Stream::new_lzma_decoder(u64::MAX)
         .map_err(|e| format!("Failed to create LZMA decoder: {e}"))?;
-    let mut decoder = XzDecoder::new_stream(file, stream);
+    let mut decoder = XzDecoder::new_stream(bytes, stream);
     let mut decompressed = Vec::new();
     decoder
         .read_to_end(&mut decompressed)
@@ -709,10 +731,9 @@ fn decompress_z_file_lzma(path: &Path) -> Result<Vec<u8>, String> {
     Ok(decompressed)
 }
 
-fn decompress_z_file_zip(path: &Path) -> Result<Vec<u8>, String> {
-    let file = fs::File::open(path).map_err(|e| format!("Failed to open .Z file: {e}"))?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| format!("Failed to open .Z file as zip: {e}"))?;
+fn decompress_z_zip(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
+        .map_err(|e| format!("Failed to open .Z file as zip: {e}"))?;
     if archive.is_empty() {
         return Err("Original-NWN2 .Z zip is empty".to_string());
     }
