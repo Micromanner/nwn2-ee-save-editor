@@ -218,6 +218,10 @@ impl ItemPropertyDecoder {
         base_item_id: i32,
     ) {
         let ac_bonus_type = self.ac_bonus_type(base_item_id);
+        let enhances_ac = matches!(ac_bonus_type, AC_MOD_ARMOR | AC_MOD_SHIELD);
+        // Attack Bonus and Enhancement on one item do not stack: the higher
+        // one counts toward attack (NWN2 wiki "Attack bonus").
+        let mut item_attack = 0;
 
         for prop in properties {
             let Some(property_id) = get_u32(prop, "PropertyName") else {
@@ -235,10 +239,16 @@ impl ItemPropertyDecoder {
                 PROPERTY_ID_DECREASED_ABILITY => bonuses.add_ability(subtype, penalty),
                 PROPERTY_ID_AC_BONUS => bonuses.add_ac(ac_bonus_type, value),
                 PROPERTY_ID_DECREASED_AC => bonuses.add_ac(subtype, penalty),
-                PROPERTY_ID_ENHANCEMENT => bonuses.add_enhancement(ac_bonus_type, value),
-                PROPERTY_ID_ENHANCEMENT_PENALTY => bonuses.add_enhancement(ac_bonus_type, penalty),
-                PROPERTY_ID_ATTACK_BONUS => bonuses.attack_bonus += value,
-                PROPERTY_ID_ATTACK_PENALTY => bonuses.attack_bonus += penalty,
+                PROPERTY_ID_ENHANCEMENT if enhances_ac => bonuses.add_ac(ac_bonus_type, value),
+                PROPERTY_ID_ENHANCEMENT_PENALTY if enhances_ac => {
+                    bonuses.add_ac(ac_bonus_type, penalty);
+                }
+                PROPERTY_ID_ENHANCEMENT | PROPERTY_ID_ATTACK_BONUS => {
+                    item_attack = item_attack.max(value);
+                }
+                PROPERTY_ID_ENHANCEMENT_PENALTY | PROPERTY_ID_ATTACK_PENALTY => {
+                    bonuses.attack_bonus += penalty;
+                }
                 PROPERTY_ID_SAVE_SPECIFIC => bonuses.add_save(subtype, value),
                 PROPERTY_ID_REDUCED_SAVE_SPECIFIC => bonuses.add_save(subtype, penalty),
                 PROPERTY_ID_SAVE_VS_ELEMENT if subtype == SAVE_ELEMENT_UNIVERSAL => {
@@ -255,6 +265,7 @@ impl ItemPropertyDecoder {
                 _ => {}
             }
         }
+        bonuses.attack_bonus += item_attack;
     }
 
     /// Item property editor metadata (subtypes, cost tables, param tables),
@@ -341,14 +352,27 @@ pub struct ItemBonuses {
     pub spell_resistance: i32,
     /// Keyed by `skills.2da` row.
     pub skill_bonuses: HashMap<u32, i32>,
+    highest_abilities: [i32; 6],
     highest_deflection: i32,
     highest_natural: i32,
 }
 
+/// Adds a bonus that does not stack across items: only the highest counts,
+/// penalties still add up.
+fn add_highest(total: &mut i32, highest: &mut i32, value: i32) {
+    if value <= 0 {
+        *total += value;
+    } else if value > *highest {
+        *total += value - *highest;
+        *highest = value;
+    }
+}
+
 impl ItemBonuses {
-    /// `ability` is an `iprp_abilities` row (0 Str ... 5 Cha).
+    /// `ability` is an `iprp_abilities` row (0 Str ... 5 Cha). Bonuses to the
+    /// same ability from several items do not stack (user-verified in-game).
     fn add_ability(&mut self, ability: u32, value: i32) {
-        let field = match ability {
+        let total = match ability {
             0 => &mut self.str_bonus,
             1 => &mut self.dex_bonus,
             2 => &mut self.con_bonus,
@@ -357,47 +381,25 @@ impl ItemBonuses {
             5 => &mut self.cha_bonus,
             _ => return,
         };
-        *field += value;
+        add_highest(total, &mut self.highest_abilities[ability as usize], value);
     }
 
-    /// Deflection and natural armor bonuses from several items do not stack,
-    /// only the highest counts (in-game: "the effects will not stack");
-    /// penalties still add up.
+    /// Deflection and natural armor bonuses from several items do not stack
+    /// (in-game: "the effects will not stack"); dodge does.
     fn add_ac(&mut self, ac_mod_type: u32, value: i32) {
-        let highest = match ac_mod_type {
-            AC_MOD_DEFLECTION if value > 0 => {
-                Some((&mut self.ac_deflection_bonus, &mut self.highest_deflection))
+        match ac_mod_type {
+            AC_MOD_DODGE => self.ac_dodge_bonus += value,
+            AC_MOD_NATURAL => {
+                add_highest(&mut self.ac_natural_bonus, &mut self.highest_natural, value);
             }
-            AC_MOD_NATURAL if value > 0 => {
-                Some((&mut self.ac_natural_bonus, &mut self.highest_natural))
-            }
-            _ => None,
-        };
-        if let Some((total, highest)) = highest {
-            if value > *highest {
-                *total += value - *highest;
-                *highest = value;
-            }
-            return;
-        }
-
-        let field = match ac_mod_type {
-            AC_MOD_DODGE => &mut self.ac_dodge_bonus,
-            AC_MOD_NATURAL => &mut self.ac_natural_bonus,
-            AC_MOD_ARMOR => &mut self.ac_armor_bonus,
-            AC_MOD_SHIELD => &mut self.ac_shield_bonus,
-            AC_MOD_DEFLECTION => &mut self.ac_deflection_bonus,
-            _ => return,
-        };
-        *field += value;
-    }
-
-    /// Enhancement is AC on armor and shields, attack on everything else.
-    fn add_enhancement(&mut self, ac_bonus_type: u32, value: i32) {
-        if matches!(ac_bonus_type, AC_MOD_ARMOR | AC_MOD_SHIELD) {
-            self.add_ac(ac_bonus_type, value);
-        } else {
-            self.attack_bonus += value;
+            AC_MOD_ARMOR => self.ac_armor_bonus += value,
+            AC_MOD_SHIELD => self.ac_shield_bonus += value,
+            AC_MOD_DEFLECTION => add_highest(
+                &mut self.ac_deflection_bonus,
+                &mut self.highest_deflection,
+                value,
+            ),
+            _ => {}
         }
     }
 
@@ -717,6 +719,34 @@ mod tests {
         }
 
         assert_eq!(bonuses.ac_deflection_bonus, 2);
+    }
+
+    #[test]
+    fn ability_bonus_from_several_items_takes_the_highest() {
+        let decoder = ItemPropertyDecoder::default();
+        let mut bonuses = ItemBonuses::default();
+        for item in [
+            [property(PROPERTY_ID_ABILITY_BONUS, 0, 3)],
+            [property(PROPERTY_ID_ABILITY_BONUS, 0, 2)],
+            [property(PROPERTY_ID_ABILITY_BONUS, 1, 1)],
+            [property(PROPERTY_ID_DECREASED_ABILITY, 0, 1)],
+        ] {
+            decoder.add_item_bonuses(&mut bonuses, &item, 0);
+        }
+
+        assert_eq!(bonuses.str_bonus, 2);
+        assert_eq!(bonuses.dex_bonus, 1);
+    }
+
+    #[test]
+    fn weapon_attack_takes_the_higher_of_attack_and_enhancement() {
+        let bonuses = bonuses_of(&[
+            property(PROPERTY_ID_ATTACK_BONUS, 0, 3),
+            property(PROPERTY_ID_ENHANCEMENT, 0, 5),
+            property(PROPERTY_ID_ATTACK_PENALTY, 0, 1),
+        ]);
+
+        assert_eq!(bonuses.attack_bonus, 4);
     }
 
     #[test]
