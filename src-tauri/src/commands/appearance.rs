@@ -432,7 +432,7 @@ pub async fn get_available_tails(
 }
 
 #[tauri::command]
-pub fn get_parts_based_appearances(
+pub async fn get_parts_based_appearances(
     state: State<'_, AppState>,
 ) -> CommandResult<Vec<AppearanceOption>> {
     let game_data = state.game_data.read();

@@ -38,6 +38,35 @@ pub struct History {
     pub redo_stack: Vec<HistoryEntry>,
 }
 
+impl History {
+    /// Record a new edit: older entries beyond the limit drop off, redo is lost.
+    fn push(&mut self, entry: HistoryEntry) {
+        self.undo_stack.push_back(entry);
+        if self.undo_stack.len() > HISTORY_LIMIT {
+            self.undo_stack.pop_front();
+        }
+        self.redo_stack.clear();
+    }
+
+    /// Undo labels newest first.
+    pub fn undo_labels(&self) -> Vec<String> {
+        self.undo_stack
+            .iter()
+            .rev()
+            .map(|e| e.label.clone())
+            .collect()
+    }
+
+    /// Redo labels nearest first.
+    pub fn redo_labels(&self) -> Vec<String> {
+        self.redo_stack
+            .iter()
+            .rev()
+            .map(|e| e.label.clone())
+            .collect()
+    }
+}
+
 #[derive(serde::Serialize, specta::Type)]
 pub struct CharacterHistory {
     /// `None` for the player / standalone character.
@@ -89,6 +118,9 @@ pub struct SessionState {
     /// Bumped whenever the loaded save changes, so background work started for
     /// an earlier load can tell its result is stale.
     pub load_generation: u64,
+    /// Bumped whenever the active character changes (edit, undo, switch, load),
+    /// so caches built in the background can tell they are stale.
+    pub character_revision: u64,
     pub quest_edits: crate::services::save_graph::editing::QuestEdits,
     pub history: History,
     pub character_source: CharacterSource,
@@ -131,6 +163,7 @@ impl SessionState {
             module_info_cache: None,
             quest_graph_cache: None,
             load_generation: 0,
+            character_revision: 0,
             quest_edits: crate::services::save_graph::editing::QuestEdits::default(),
             history: History::default(),
             character_source: CharacterSource::Player,
@@ -162,7 +195,7 @@ impl SessionState {
         }
 
         debug!("Creating SaveGameHandler");
-        let handler = SaveGameHandler::new(&path, create_load_backup).map_err(|e| {
+        let mut handler = SaveGameHandler::new(&path).map_err(|e| {
             fatal(
                 report,
                 LoadStage::SaveOpen,
@@ -277,6 +310,15 @@ impl SessionState {
             ));
         };
 
+        if create_load_backup && let Err(e) = handler.create_load_backup() {
+            return Err(fatal(
+                report,
+                LoadStage::SaveOpen,
+                format!("Failed to back up save: {e}"),
+                serde_json::json!({ "file_path": file_path }),
+            ));
+        }
+
         self.character = Some(character);
         self.savegame_handler = Some(handler);
         self.current_file_path = Some(path);
@@ -343,124 +385,68 @@ impl SessionState {
     /// single archive rewrite. Every character is attempted even when one fails;
     /// the collected failures (with any warnings) come back as one error, and
     /// serialization failures abort the batch. Archive and loose-file replacements
-    /// roll back together; nothing is marked saved until the batch commits.
+    /// roll back together; nothing is marked saved until the batch commits. A
+    /// successful save clears every undo history: older snapshots no longer
+    /// match the save on disk.
     pub fn save_character(
         &mut self,
         game_data: &GameData,
+        paths: &crate::config::NWN2Paths,
         backup_keep_count: usize,
     ) -> Result<Option<String>, String> {
         if self.character_source == CharacterSource::Standalone {
             return self.save_standalone_inner(backup_keep_count);
         }
 
+        let player_index = self
+            .primary_player_index
+            .unwrap_or(self.selected_player_index);
         if !self.quest_edits.pending.is_empty() {
             let handler = self.savegame_handler.as_ref().ok_or("No save loaded")?;
-            self.quest_edits.validate_saved(
-                handler,
-                &crate::config::NWN2Paths::new(),
-                self.primary_player_index
-                    .unwrap_or(self.selected_player_index),
-            )?;
+            self.quest_edits
+                .validate_saved(handler, paths, player_index)?;
         }
         let record = self.build_save_record(game_data);
-        let mut active = self.character.take().ok_or("No character loaded")?;
-        if let Some(handler) = self.savegame_handler.as_mut() {
-            handler.begin_batch();
-        }
-
-        let mut warnings = Vec::new();
-        let mut errors = Vec::new();
-
-        let active_source = self.character_source.clone();
-        let active_saved = match self.save_one(&active_source, &mut active, game_data) {
-            Ok(warning) => {
-                warnings.extend(warning);
-                true
-            }
-            Err(e) => {
-                errors.push(format!("{}: {e}", describe_source(&active_source)));
-                false
-            }
-        };
-        self.character = Some(active);
-
-        let parked = std::mem::take(&mut self.parked);
-        let mut restored = Vec::with_capacity(parked.len());
-        let mut saved_parked = Vec::new();
-        for (source, mut character, history) in parked {
-            match self.save_one(&source, &mut character, game_data) {
-                Ok(warning) => {
-                    warnings.extend(warning);
-                    saved_parked.push(restored.len());
-                }
-                Err(e) => errors.push(format!("{}: {e}", describe_source(&source))),
-            }
-            restored.push((source, character, history));
-        }
-        self.parked = restored;
-
-        let flushed_party = match self.flush_staged_party() {
-            Ok(warning) => {
-                warnings.extend(warning);
-                true
-            }
-            Err(e) => {
-                errors.push(format!("party changes: {e}"));
-                false
-            }
-        };
-
-        let mut rewarded_fields = crate::services::save_graph::editing::FlushedWrites::default();
-        if let Some(handler) = self.savegame_handler.as_mut() {
-            if errors.is_empty() {
-                match self.quest_edits.flush(
-                    handler,
-                    self.primary_player_index
-                        .unwrap_or(self.selected_player_index),
-                    self.primary_player_index.is_some(),
-                    game_data,
-                ) {
-                    Ok(written) => rewarded_fields = written,
-                    Err(e) => errors.push(e),
-                }
-            }
-            if errors.is_empty()
-                && let Some(name) = &self.staged_save_name
-                && let Err(e) = handler.update_file(SAVENAME_TXT, name.as_bytes())
-            {
-                errors.push(format!("{SAVENAME_TXT}: {e}"));
-            }
-            if errors.is_empty()
-                && let Err(e) = strip_cheat_markers(handler)
-            {
-                errors.push(format!("globals.xml: {e}"));
-            }
-            if !errors.is_empty() {
+        self.savegame_handler
+            .as_mut()
+            .ok_or("No active save handler")?
+            .begin_batch();
+        // Whatever happens while staging, the batch must not stay open: later
+        // writes would be staged into it and never committed.
+        let staged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.stage_save_writes(game_data, player_index)
+        }));
+        let handler = self
+            .savegame_handler
+            .as_mut()
+            .ok_or("No active save handler")?;
+        let (rewarded_fields, flushed_party, warnings) = match staged {
+            Ok(Ok(staged)) => staged,
+            Ok(Err(e)) => {
                 handler.abort_batch();
-                return Err(errors.join("\n"));
+                return Err(e);
             }
-        }
+            Err(panic) => {
+                handler.abort_batch();
+                std::panic::resume_unwind(panic);
+            }
+        };
+        handler
+            .commit_batch()
+            .map_err(|e| format!("Failed to write save file: {e}"))?;
 
-        if let Some(handler) = self.savegame_handler.as_mut()
-            && let Err(e) = handler.commit_batch()
+        for character in self
+            .character
+            .iter_mut()
+            .chain(self.parked.iter_mut().map(|(_, character, _)| character))
         {
-            errors.push(format!("Failed to write save file: {e}"));
-            return Err(errors.join("\n"));
-        }
-
-        if active_saved && let Some(character) = self.character.as_mut() {
             character.mark_saved();
-        }
-        for idx in saved_parked {
-            self.parked[idx].1.mark_saved();
         }
         // Quest rewards landed in the save on top of the serialized player; mirror them
         // into the loaded player so the character tabs match without a reload.
+        let rewarded = !rewarded_fields.player.is_empty() || !rewarded_fields.companions.is_empty();
         if !rewarded_fields.player.is_empty()
-            && self
-                .primary_player_index
-                .unwrap_or(self.selected_player_index)
-                == self.selected_player_index
+            && player_index == self.selected_player_index
             && let Some(player) = self.player_character_mut()
         {
             for (name, value) in rewarded_fields.player {
@@ -489,121 +475,85 @@ impl SessionState {
                 character.mark_saved();
             }
         }
+        if rewarded {
+            self.on_character_changed();
+        }
         if flushed_party {
             self.staged_party.clear();
         }
         self.staged_save_name = None;
         self.quest_edits.clear();
-        // Written quest edits are no longer pending: their undo entries are plain edits.
-        for history in std::iter::once(&mut self.history)
-            .chain(self.parked.iter_mut().map(|(_, _, history)| history))
-        {
-            for entry in history
-                .undo_stack
-                .iter_mut()
-                .chain(history.redo_stack.iter_mut())
-            {
-                entry.quest = None;
-            }
-        }
         self.module_info_cache = None;
         self.append_to_load_backup(&record);
-        self.change_log.clear();
+        self.clear_history();
 
-        if !errors.is_empty() {
-            if !warnings.is_empty() {
-                errors.extend(warnings);
-            }
-            return Err(errors.join("\n"));
-        }
-
-        Ok(if warnings.is_empty() {
-            None
-        } else {
-            Some(warnings.join("\n"))
-        })
+        Ok((!warnings.is_empty()).then(|| warnings.join("\n")))
     }
 
-    fn save_one(
+    /// Stage every write of a save into the open batch: all modified characters
+    /// (each attempted even when one fails), staged party changes, then quest
+    /// edits, save name and cheat flags once everything before succeeded.
+    fn stage_save_writes(
         &mut self,
-        source: &CharacterSource,
-        character: &mut Character,
         game_data: &GameData,
-    ) -> Result<Option<String>, String> {
-        match source {
-            CharacterSource::Companion { ros_name } => {
-                let prefix = Self::companion_blueprint_prefix(character, game_data);
-                self.save_companion_inner(character, ros_name, prefix.as_deref())
-            }
-            CharacterSource::Player => self.save_player_inner(character, game_data),
-            CharacterSource::Standalone => Err("Standalone character cannot be parked".into()),
-        }
-    }
-
-    fn save_player_inner(
-        &mut self,
-        character: &mut Character,
-        game_data: &GameData,
-    ) -> Result<Option<String>, String> {
-        if !character.is_modified() {
-            info!("No changes to save");
-            return Ok(None);
-        }
-        let companion_prefix = Self::companion_blueprint_prefix(character, game_data);
+        player_index: usize,
+    ) -> Result<(editing::FlushedWrites, bool, Vec<String>), String> {
+        let slot = PlayerSlot {
+            save_dir: self.save_dir.clone(),
+            selected_index: self.selected_player_index,
+            primary_index: self.primary_player_index,
+        };
+        let active = self.character.as_mut().ok_or("No character loaded")?;
         let handler = self
             .savegame_handler
             .as_mut()
-            .ok_or_else(|| "No active save handler".to_string())?;
+            .ok_or("No active save handler")?;
 
-        let char_fields = character.clone_gff();
-        let selected_player_index = self.selected_player_index;
-        let update_primary_player_files = self.primary_player_index == Some(selected_player_index);
-
-        handler
-            .rewrite_player_files(|src| {
-                let playerlist = serialize_playerlist_bytes(
-                    src.playerlist,
-                    &char_fields,
-                    selected_player_index,
-                    companion_prefix.as_deref(),
-                )?;
-                let player_bic = if update_primary_player_files {
-                    Some(crate::parsers::gff::merge_fields_into_gff(
-                        src.player_bic,
-                        &char_fields,
-                        "BIC ",
-                        false,
-                    )?)
-                } else {
-                    None
-                };
-                Ok(PlayerOutputs {
-                    playerlist,
-                    player_bic,
-                })
-            })
-            .map_err(|e| format!("Failed to write save file: {e}"))?;
-
-        if update_primary_player_files {
-            let save_dir = self.save_dir.as_ref().ok_or("No current save path")?;
-            let bytes = playerinfo_for_character(save_dir, character, game_data)?;
-            handler
-                .update_file("playerinfo.bin", &bytes)
-                .map_err(|e| e.to_string())?;
+        let mut warnings = Vec::new();
+        let mut errors = Vec::new();
+        let characters = std::iter::once((&self.character_source, active)).chain(
+            self.parked
+                .iter_mut()
+                .map(|(source, character, _)| (&*source, character)),
+        );
+        for (source, character) in characters {
+            match save_one(handler, &slot, source, character, game_data) {
+                Ok(warning) => warnings.extend(warning),
+                Err(e) => errors.push(format!("{}: {e}", describe_source(source))),
+            }
         }
 
-        info!(
-            "Character saved successfully (player.bic_updated={})",
-            update_primary_player_files
-        );
-        Ok(None)
-    }
+        let flushed_party = match self.flush_staged_party() {
+            Ok(warning) => {
+                warnings.extend(warning);
+                true
+            }
+            Err(e) => {
+                errors.push(format!("party changes: {e}"));
+                false
+            }
+        };
+        if !errors.is_empty() {
+            return Err(errors.join("\n"));
+        }
 
-    fn companion_blueprint_prefix(character: &Character, game_data: &GameData) -> Option<String> {
-        crate::character::pets::companion_blueprint_prefix(
-            character.animal_companion_type(),
+        let handler = self
+            .savegame_handler
+            .as_mut()
+            .ok_or("No active save handler")?;
+        let rewarded_fields = self.quest_edits.flush(
+            handler,
+            player_index,
+            self.primary_player_index.is_some(),
             game_data,
-        )
+        )?;
+        if let Some(name) = &self.staged_save_name {
+            handler
+                .update_file(SAVENAME_TXT, name.as_bytes())
+                .map_err(|e| format!("{SAVENAME_TXT}: {e}"))?;
+        }
+        strip_cheat_markers(handler).map_err(|e| format!("globals.xml: {e}"))?;
+        Ok((rewarded_fields, flushed_party, warnings))
     }
 
     fn save_standalone_inner(
@@ -614,7 +564,7 @@ impl SessionState {
             .current_file_path
             .clone()
             .ok_or("No character file loaded")?;
-        let character = self.character.as_ref().ok_or("No character loaded")?;
+        let character = self.character.as_mut().ok_or("No character loaded")?;
 
         if !character.is_modified() {
             info!("No changes to save");
@@ -627,80 +577,27 @@ impl SessionState {
             backup_keep_count,
             !self.standalone_backup_done,
         )?;
+        character.mark_saved();
         self.standalone_backup_done = true;
-        self.character.as_mut().unwrap().mark_saved();
+        self.clear_history();
         Ok(None)
-    }
-
-    fn save_companion_inner(
-        &mut self,
-        character: &mut Character,
-        ros_name: &str,
-        companion_prefix: Option<&str>,
-    ) -> Result<Option<String>, String> {
-        let handler = self
-            .savegame_handler
-            .as_mut()
-            .ok_or("No active save handler")?;
-
-        if !character.is_modified() {
-            info!("No changes to save");
-            return Ok(None);
-        }
-
-        let stored_name = handler
-            .companion_stored_name(ros_name)
-            .map_err(|e| format!("Failed to locate companion file: {e}"))?;
-        let original = handler
-            .extract_file(&stored_name)
-            .map_err(|e| format!("Failed to read companion file: {e}"))?;
-        let mut fields = character.clone_gff();
-        if let Some(prefix) = companion_prefix {
-            crate::character::pets::sync_mod_companion_variable(&mut fields, prefix);
-        }
-        // roster.rst RosAvailable is the party-membership record; the engine
-        // mirrors it into the .ros FactionID. Re-assert it from the roster so
-        // a membership change made after this companion was parsed isn't
-        // clobbered by the stale in-memory value.
-        if let Some(faction) = companion_faction_from_roster(handler, ros_name) {
-            crate::services::roster::set_faction_in_fields(&mut fields, faction);
-        }
-        let bytes =
-            crate::parsers::gff::merge_fields_into_gff(Some(&original), &fields, "ROS ", true)?;
-        handler
-            .update_file(&stored_name, &bytes)
-            .map_err(|e| format!("Failed to write companion file: {e}"))?;
-
-        let classes: Vec<(i32, i32)> = character
-            .class_entries()
-            .into_iter()
-            .map(|e| (e.class_id.0, e.level))
-            .collect();
-        let identity = crate::services::roster::RosterIdentity {
-            gender: character.gender(),
-            subrace: character.subrace_index().unwrap_or(0),
-        };
-        let warning = match sync_roster(handler, ros_name, &classes, identity) {
-            Ok(()) => None,
-            Err(e) => {
-                warn!("Roster sync failed after companion save: {e}");
-                Some(format!(
-                    "Companion saved, but updating the party roster failed: {e}"
-                ))
-            }
-        };
-
-        info!("Companion saved: {stored_name}");
-        Ok(warning)
     }
 
     /// Drop everything derived from the previous save and invalidate builds
     /// still running against it.
     fn reset_save_caches(&mut self) {
-        self.feat_cache = None;
+        self.on_character_changed();
         self.module_info_cache = None;
         self.quest_graph_cache = None;
         self.load_generation += 1;
+    }
+
+    /// Drop caches derived from the active character and invalidate builds
+    /// still running against it. Every path that changes the active character
+    /// goes through here.
+    fn on_character_changed(&mut self) {
+        self.feat_cache = None;
+        self.character_revision += 1;
     }
 
     pub fn close_character(&mut self) {
@@ -753,12 +650,8 @@ impl SessionState {
     fn push_history(&mut self, entry: HistoryEntry) {
         self.change_log
             .push((self.character_source.clone(), entry.label.clone()));
-        self.history.undo_stack.push_back(entry);
-        if self.history.undo_stack.len() > HISTORY_LIMIT {
-            self.history.undo_stack.pop_front();
-        }
-        self.history.redo_stack.clear();
-        self.feat_cache = None;
+        self.history.push(entry);
+        self.on_character_changed();
     }
 
     /// Stage a quest edit and apply its player changes (gold, XP, alignment, feats,
@@ -772,8 +665,15 @@ impl SessionState {
         replace: bool,
         game_data: &GameData,
     ) -> Result<(), String> {
+        let tag = preview.tag.clone();
         let replaced = self.quest_edits.stage(preview, graph, selected, replace)?;
-        self.revert_quest_edits(&replaced)?;
+        if let Err(e) = self.revert_quest_edits(&replaced) {
+            self.quest_edits.discard(Some(&tag));
+            for edit in replaced {
+                self.quest_edits.restore(edit);
+            }
+            return Err(e);
+        }
         // The player loaded in memory must be the one the quest edits write to.
         if self
             .primary_player_index
@@ -814,19 +714,15 @@ impl SessionState {
                 return Err(e);
             }
         }
-        history.undo_stack.push_back(HistoryEntry {
+        history.push(HistoryEntry {
             label: label.clone(),
             gff_snapshot,
             modified_snapshot,
             quest: Some(edit.clone()),
         });
-        if history.undo_stack.len() > HISTORY_LIMIT {
-            history.undo_stack.pop_front();
-        }
-        history.redo_stack.clear();
         self.change_log.push((CharacterSource::Player, label));
         self.quest_edits.restore(edit);
-        self.feat_cache = None;
+        self.on_character_changed();
         Ok(())
     }
 
@@ -834,40 +730,69 @@ impl SessionState {
     /// back off the loaded player.
     pub fn discard_quest_edits(&mut self, tag: Option<&str>) -> Result<(), String> {
         let removed = self.quest_edits.discard(tag);
-        self.feat_cache = None;
-        self.revert_quest_edits(&removed)
+        if let Err(e) = self.revert_quest_edits(&removed) {
+            for edit in removed {
+                self.quest_edits.restore(edit);
+            }
+            return Err(e);
+        }
+        self.on_character_changed();
+        Ok(())
     }
 
     /// Take removed edits' changes back off the player and out of the undo snapshots
-    /// taken after they were staged; their own undo entries go away.
+    /// taken after they were staged; their own undo entries go away. All or nothing:
+    /// on error the player and its history are left untouched.
     fn revert_quest_edits(&mut self, edits: &[PendingQuestEdit]) -> Result<(), String> {
+        if edits.iter().all(|edit| edit.applied.is_none()) {
+            return Ok(());
+        }
+        let Some((character, history)) = self.player_with_history_mut() else {
+            return Ok(());
+        };
+        let mut player = Character::from_gff(character.clone_gff()).map_err(|e| e.to_string())?;
+        let mut snapshots: Vec<Option<Character>> = std::iter::repeat_with(|| None)
+            .take(history.undo_stack.len())
+            .collect();
         for edit in edits {
             let Some(changes) = &edit.applied else {
                 continue;
             };
-            let Some((character, history)) = self.player_with_history_mut() else {
-                continue;
-            };
-            editing::revert_on_player(changes, character)?;
+            editing::revert_on_player(changes, &mut player)?;
             let marker = history
                 .undo_stack
                 .iter()
                 .position(|e| e.quest.as_ref().is_some_and(|q| q.tag == edit.tag));
-            for entry in history
+            for (entry, snapshot) in history
                 .undo_stack
-                .iter_mut()
+                .iter()
+                .zip(snapshots.iter_mut())
                 .skip(marker.map_or(0, |i| i + 1))
             {
-                let mut snapshot = Character::from_gff(std::mem::take(&mut entry.gff_snapshot))
-                    .map_err(|e| e.to_string())?;
-                editing::revert_on_player(changes, &mut snapshot)?;
+                let snapshot = match snapshot {
+                    Some(snapshot) => snapshot,
+                    None => snapshot.insert(
+                        Character::from_gff(entry.gff_snapshot.clone())
+                            .map_err(|e| e.to_string())?,
+                    ),
+                };
+                editing::revert_on_player(changes, snapshot)?;
+            }
+        }
+
+        character.restore_snapshot(player.into_gff(), true);
+        for (entry, snapshot) in history.undo_stack.iter_mut().zip(snapshots) {
+            if let Some(snapshot) = snapshot {
                 entry.gff_snapshot = snapshot.into_gff();
             }
-            if let Some(i) = marker {
-                history.undo_stack.remove(i);
-            }
-            history.redo_stack.clear();
         }
+        history.undo_stack.retain(|entry| {
+            !entry
+                .quest
+                .as_ref()
+                .is_some_and(|q| edits.iter().any(|edit| edit.tag == q.tag))
+        });
+        history.redo_stack.clear();
         Ok(())
     }
 
@@ -1017,7 +942,7 @@ impl SessionState {
         if let Some(redo) = redo_entry {
             self.history.redo_stack.push(redo);
         }
-        self.feat_cache = None;
+        self.on_character_changed();
         Some(label)
     }
 
@@ -1041,13 +966,16 @@ impl SessionState {
         if let Some(undo) = undo_entry {
             self.history.undo_stack.push_back(undo);
         }
-        self.feat_cache = None;
+        self.on_character_changed();
         Some(label)
     }
 
+    /// Drop the undo history of every character of this session.
     pub fn clear_history(&mut self) {
-        self.history.undo_stack.clear();
-        self.history.redo_stack.clear();
+        self.history = History::default();
+        for (_, _, history) in &mut self.parked {
+            *history = History::default();
+        }
         self.change_log.clear();
     }
 
@@ -1067,26 +995,6 @@ impl SessionState {
         self.history.redo_stack.last().map(|e| e.label.as_str())
     }
 
-    /// Undo labels newest first.
-    pub fn undo_labels(&self) -> Vec<String> {
-        self.history
-            .undo_stack
-            .iter()
-            .rev()
-            .map(|e| e.label.clone())
-            .collect()
-    }
-
-    /// Redo labels nearest first.
-    pub fn redo_labels(&self) -> Vec<String> {
-        self.history
-            .redo_stack
-            .iter()
-            .rev()
-            .map(|e| e.label.clone())
-            .collect()
-    }
-
     /// Every character of this session that has undo history: the active one
     /// first, then parked ones.
     pub fn session_history(&self, game_data: &GameData) -> Vec<CharacterHistory> {
@@ -1099,18 +1007,8 @@ impl SessionState {
                     },
                     name: crate::character::resolved_full_name(character, game_data),
                     active,
-                    undo_labels: history
-                        .undo_stack
-                        .iter()
-                        .rev()
-                        .map(|e| e.label.clone())
-                        .collect(),
-                    redo_labels: history
-                        .redo_stack
-                        .iter()
-                        .rev()
-                        .map(|e| e.label.clone())
-                        .collect(),
+                    undo_labels: history.undo_labels(),
+                    redo_labels: history.redo_labels(),
                 }
             };
         let mut out = Vec::new();
@@ -1161,6 +1059,9 @@ impl SessionState {
             return Err("Original-format saves have no savename.txt".into());
         }
         let name = name.trim();
+        if name.is_empty() {
+            return Err("Save name cannot be empty".into());
+        }
         self.staged_save_name = (name != saved_save_name(handler)).then(|| name.to_string());
         Ok(())
     }
@@ -1298,7 +1199,7 @@ impl SessionState {
         }
         self.character = Some(character);
         self.character_source = source;
-        self.feat_cache = None;
+        self.on_character_changed();
         self.history = history;
     }
 
@@ -1314,13 +1215,8 @@ impl SessionState {
             warn!("No roster file found in save; companion list empty");
             return Ok(Vec::new());
         };
-        let members = match crate::services::roster::parse_roster_members(bytes) {
-            Ok(m) => m,
-            Err(e) => {
-                warn!("Roster file unparseable, treating as empty: {e}");
-                return Ok(Vec::new());
-            }
-        };
+        let members = crate::services::roster::parse_roster_members(bytes)
+            .map_err(|e| format!("Failed to parse roster: {e}"))?;
         let companion_files = handler
             .list_companions()
             .map_err(|e| format!("Failed to list companions: {e}"))?;
@@ -1392,13 +1288,17 @@ impl SessionState {
             return Err("Save has no roster file".into());
         };
         let members = crate::services::roster::parse_roster_members(bytes)?;
-        for (name, in_party) in desired {
-            let Some(member) = members
-                .iter()
-                .find(|m| m.ros_name.eq_ignore_ascii_case(name))
-            else {
-                return Err(format!("roster member not found: {name}"));
-            };
+        let found = desired
+            .iter()
+            .map(|(name, in_party)| {
+                members
+                    .iter()
+                    .find(|m| m.ros_name.eq_ignore_ascii_case(name))
+                    .map(|member| (member, in_party))
+                    .ok_or_else(|| format!("roster member not found: {name}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for (member, in_party) in found {
             let key = member.ros_name.to_ascii_lowercase();
             if member.available == *in_party {
                 self.staged_party.insert(key, *in_party);
@@ -1460,10 +1360,17 @@ impl SessionState {
                 .map_err(|e| format!("Failed to create localvault directory: {e}"))?;
         }
 
-        let player_bic_data = handler
+        let saved_bic = handler
             .extract_player_bic()
             .map_err(|e| format!("Failed to extract player.bic: {e}"))?
             .ok_or("No player.bic found in save")?;
+        // The character as the editor shows it, unsaved edits included.
+        let player_bic_data = crate::parsers::gff::merge_fields_into_gff(
+            Some(&saved_bic),
+            character.gff(),
+            "BIC ",
+            false,
+        )?;
 
         let first_name = character.first_name();
         let last_name = character.last_name();
@@ -1473,10 +1380,17 @@ impl SessionState {
             format!("{first_name} {last_name}.bic")
         };
 
-        let sanitized_filename = filename
+        let mut sanitized_filename = filename
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '.' || *c == '-' || *c == '_')
             .collect::<String>();
+        if !sanitized_filename
+            .trim_end_matches(".bic")
+            .chars()
+            .any(char::is_alphanumeric)
+        {
+            sanitized_filename = "Character.bic".into();
+        }
 
         let dest_path = vault_path.join(&sanitized_filename);
 
@@ -1520,6 +1434,149 @@ fn playerinfo_for_character(
     let mut bytes = Vec::new();
     player_info.write(&mut bytes).map_err(|e| e.to_string())?;
     Ok(bytes)
+}
+
+/// Where the player's files of the loaded save go.
+struct PlayerSlot {
+    save_dir: Option<PathBuf>,
+    selected_index: usize,
+    primary_index: Option<usize>,
+}
+
+fn save_one(
+    handler: &mut SaveGameHandler,
+    slot: &PlayerSlot,
+    source: &CharacterSource,
+    character: &Character,
+    game_data: &GameData,
+) -> Result<Option<String>, String> {
+    if !character.is_modified() {
+        return Ok(None);
+    }
+    let companion_prefix = crate::character::pets::companion_blueprint_prefix(
+        character.animal_companion_type(),
+        game_data,
+    );
+    match source {
+        CharacterSource::Companion { ros_name } => {
+            save_companion(handler, character, ros_name, companion_prefix.as_deref())
+        }
+        CharacterSource::Player => save_player(
+            handler,
+            slot,
+            character,
+            companion_prefix.as_deref(),
+            game_data,
+        ),
+        CharacterSource::Standalone => Err("Standalone character cannot be parked".into()),
+    }
+}
+
+fn save_player(
+    handler: &mut SaveGameHandler,
+    slot: &PlayerSlot,
+    character: &Character,
+    companion_prefix: Option<&str>,
+    game_data: &GameData,
+) -> Result<Option<String>, String> {
+    let char_fields = character.gff();
+    let selected_player_index = slot.selected_index;
+    let update_primary_player_files = slot.primary_index == Some(selected_player_index);
+
+    handler
+        .rewrite_player_files(|src| {
+            let playerlist = serialize_playerlist_bytes(
+                src.playerlist,
+                char_fields,
+                selected_player_index,
+                companion_prefix,
+            )?;
+            let player_bic = if update_primary_player_files {
+                Some(crate::parsers::gff::merge_fields_into_gff(
+                    src.player_bic,
+                    char_fields,
+                    "BIC ",
+                    false,
+                )?)
+            } else {
+                None
+            };
+            Ok(PlayerOutputs {
+                playerlist,
+                player_bic,
+            })
+        })
+        .map_err(|e| format!("Failed to write save file: {e}"))?;
+
+    if update_primary_player_files {
+        let save_dir = slot.save_dir.as_ref().ok_or("No current save path")?;
+        let bytes = playerinfo_for_character(save_dir, character, game_data)?;
+        handler
+            .update_file("playerinfo.bin", &bytes)
+            .map_err(|e| e.to_string())?;
+    }
+
+    info!(
+        "Character saved successfully (player.bic_updated={})",
+        update_primary_player_files
+    );
+    Ok(None)
+}
+
+fn save_companion(
+    handler: &mut SaveGameHandler,
+    character: &Character,
+    ros_name: &str,
+    companion_prefix: Option<&str>,
+) -> Result<Option<String>, String> {
+    let stored_name = handler
+        .companion_stored_name(ros_name)
+        .map_err(|e| format!("Failed to locate companion file: {e}"))?;
+    let original = handler
+        .extract_file(&stored_name)
+        .map_err(|e| format!("Failed to read companion file: {e}"))?;
+    let mut fields = character.clone_gff();
+    if let Some(prefix) = companion_prefix {
+        crate::character::pets::sync_mod_companion_variable(&mut fields, prefix);
+    }
+    let mut warnings = Vec::new();
+    // roster.rst RosAvailable is the party-membership record; the engine
+    // mirrors it into the .ros FactionID. Re-assert it from the roster so
+    // a membership change made after this companion was parsed isn't
+    // clobbered by the stale in-memory value.
+    match companion_faction_from_roster(handler, ros_name) {
+        Ok(Some(faction)) => crate::services::roster::set_faction_in_fields(&mut fields, faction),
+        Ok(None) => {}
+        Err(e) => {
+            warn!("Companion faction not updated: {e}");
+            warnings.push(format!(
+                "Companion saved, but its party faction could not be updated: {e}"
+            ));
+        }
+    }
+    let bytes = crate::parsers::gff::merge_fields_into_gff(Some(&original), &fields, "ROS ", true)?;
+    handler
+        .update_file(&stored_name, &bytes)
+        .map_err(|e| format!("Failed to write companion file: {e}"))?;
+
+    let classes: Vec<(i32, i32)> = character
+        .class_entries()
+        .into_iter()
+        .map(|e| (e.class_id.0, e.level))
+        .collect();
+    let identity = crate::services::roster::RosterIdentity {
+        gender: character.gender(),
+        subrace: character.subrace_index().unwrap_or(0),
+    };
+    if let Err(e) = sync_roster(handler, ros_name, &classes, identity) {
+        warn!("Roster sync failed after companion save: {e}");
+        warnings.push(format!(
+            "Companion saved, but updating the party roster failed: {e}"
+        ));
+    }
+
+    info!("Companion saved: {stored_name}");
+    Ok((!warnings.is_empty()).then(|| warnings.join("\n")))
 }
 
 fn describe_source(source: &CharacterSource) -> String {
@@ -1647,27 +1704,44 @@ fn read_player_fields(
     let gff =
         GffParser::from_bytes(playerlist_data).map_err(|e| format!("GFF parse error: {e}"))?;
     let entries = read_playerlist_entries(gff)?;
-    if primary_index == Some(selected_index)
-        && let Ok(Some(bic)) = handler.extract_player_bic()
-        && let Ok(fields) = read_player_bic_entry(bic)
-    {
-        return Ok(fields);
+    if primary_index == Some(selected_index) {
+        match handler.extract_player_bic() {
+            Ok(Some(bic)) => match read_player_bic_entry(bic) {
+                Ok(fields) => return Ok(fields),
+                Err(e) => warn!("Failed to parse player.bic, using the playerlist slot: {e}"),
+            },
+            Ok(None) => {}
+            Err(e) => warn!("Failed to extract player.bic, using the playerlist slot: {e}"),
+        }
     }
     read_playerlist_entry_from_entries(&entries, selected_index)
 }
 
 /// FactionID a companion's `.ros` should carry per the roster's membership
-/// record; `None` when the roster or playerlist can't be read.
-fn companion_faction_from_roster(handler: &SaveGameHandler, ros_name: &str) -> Option<u16> {
-    let (_, bytes) = handler.extract_roster().ok()??;
-    let members = crate::services::roster::parse_roster_members(bytes).ok()?;
-    let member = members
+/// record; `None` when the save has no roster or the roster has no such member.
+fn companion_faction_from_roster(
+    handler: &SaveGameHandler,
+    ros_name: &str,
+) -> Result<Option<u16>, String> {
+    let Some((_, bytes)) = handler
+        .extract_roster()
+        .map_err(|e| format!("Failed to read roster: {e}"))?
+    else {
+        return Ok(None);
+    };
+    let members = crate::services::roster::parse_roster_members(bytes)?;
+    let Some(member) = members
         .iter()
-        .find(|m| m.ros_name.eq_ignore_ascii_case(ros_name))?;
+        .find(|m| m.ros_name.eq_ignore_ascii_case(ros_name))
+    else {
+        return Ok(None);
+    };
     if member.available {
-        Some(crate::services::roster::BENCHED_FACTION)
+        Ok(Some(crate::services::roster::BENCHED_FACTION))
     } else {
         crate::services::roster::pc_party_faction(handler)
+            .map(Some)
+            .ok_or_else(|| "the player's party faction could not be read".into())
     }
 }
 
@@ -1841,7 +1915,7 @@ mod tests {
         .unwrap();
         let mut session = make_session_with_character(fields);
         session.save_dir = Some(save.clone());
-        session.savegame_handler = Some(SaveGameHandler::new(save, false).unwrap());
+        session.savegame_handler = Some(SaveGameHandler::new(save).unwrap());
         session.primary_player_index = Some(0);
         session
             .quest_edits
@@ -1888,13 +1962,14 @@ mod tests {
 
         let mut session = make_session_with_character(fields);
         session.save_dir = Some(save.clone());
-        session.savegame_handler = Some(SaveGameHandler::new(save.clone(), false).unwrap());
+        session.savegame_handler = Some(SaveGameHandler::new(save.clone()).unwrap());
         session.primary_player_index = Some(0);
         let data = GameData::new(Arc::new(std::sync::RwLock::new(
             crate::parsers::tlk::TLKParser::new(),
         )));
 
         assert_eq!(session.save_name().as_deref(), Some("Old Name"));
+        assert!(session.stage_save_name("   ").is_err());
         session.stage_save_name("  Old Name ").unwrap();
         assert!(!session.has_unsaved_changes());
         session.stage_save_name("Jörg's Save").unwrap();
@@ -1904,7 +1979,9 @@ mod tests {
             "Old Name"
         );
 
-        session.save_character(&data, 5).unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
         assert!(!session.has_unsaved_changes());
         assert_eq!(
             std::fs::read_to_string(save.join("savename.txt")).unwrap(),
@@ -1927,12 +2004,22 @@ mod tests {
             .gff_mut()
             .insert("Str".into(), GffValue::Byte(12));
         assert!(session.has_unsaved_changes());
-        session.save_character(&data, 5).unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
         assert!(!session.has_unsaved_changes());
         assert!(session.quest_edits.pending.is_empty());
-        session.undo();
-        session.character.as_mut().unwrap().mark_modified();
-        session.save_character(&data, 5).unwrap();
+        assert!(!session.can_undo(), "a save clears the undo history");
+        assert!(session.undo().is_none());
+        session
+            .record_edit("After save", |c| {
+                c.gff_mut().insert("Str".into(), GffValue::Byte(14));
+                Ok(())
+            })
+            .unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
         let journal = crate::services::save_graph::read_live_journal(
             session.savegame_handler.as_ref().unwrap(),
             0,
@@ -2022,7 +2109,9 @@ mod tests {
         session
             .stage_quest_edit(preview(), &graph, &[0], false, &data)
             .unwrap();
-        session.save_character(&data, 5).unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
         let bytes = session
             .savegame_handler
             .as_ref()
@@ -2041,9 +2130,106 @@ mod tests {
             Some(GffValue::Dword(50))
         ));
         assert!(session.quest_edits.pending.is_empty());
-        // After the save the quest entry is a plain edit: undo leaves nothing pending.
+        assert!(
+            !session.can_undo(),
+            "undo cannot reach past the saved quest"
+        );
+    }
+
+    #[test]
+    fn undo_after_save_restores_the_saved_state_as_clean() {
+        let (_dir, mut session, data) = quest_save_session();
+        session.quest_edits.pending.clear();
+        let set_str = |value: u8| {
+            move |c: &mut Character| {
+                c.gff_mut().insert("Str".into(), GffValue::Byte(value));
+                Ok(())
+            }
+        };
+        session.record_edit("Str 12", set_str(12)).unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
+        session.record_edit("Str 14", set_str(14)).unwrap();
+        assert!(session.has_unsaved_changes());
         session.undo();
-        assert!(session.quest_edits.pending.is_empty());
+        assert_eq!(read_str(session.character.as_ref().unwrap().gff()), 12);
+        assert!(
+            !session.has_unsaved_changes(),
+            "the undone state is the saved one"
+        );
+    }
+
+    #[test]
+    fn failed_quest_discard_leaves_player_history_and_pending_untouched() {
+        use crate::services::save_graph::editing::{CHARACTER_TYPE, VariableKey, VariableWrite};
+        let (_dir, mut session, data) = quest_save_session();
+        session.quest_edits.pending.clear();
+        let graph = crate::services::save_graph::build_without_bridge(
+            session.savegame_handler.as_ref().unwrap(),
+            &ModuleInfo::default(),
+            &ModuleVariables::default(),
+            crate::services::save_graph::OrphanKind::PlatformUnsupported,
+            String::new(),
+        );
+        let preview = QuestPreview {
+            revision: String::new(),
+            tag: "test".into(),
+            target: 20,
+            saved_state: Some(10),
+            before_state: Some(10),
+            route: None,
+            writes: vec![VariableWrite {
+                key: VariableKey {
+                    module: None,
+                    name: "Gold".into(),
+                    value_type: CHARACTER_TYPE.into(),
+                },
+                saved: None,
+                before: None,
+                after: serde_json::json!(50),
+                action_index: 0,
+                label: None,
+                label_strref: None,
+                derived_from: None,
+                line: None,
+            }],
+            effects: Vec::new(),
+            followed: Vec::new(),
+            follow_stop: None,
+            next_steps: Vec::new(),
+            blueprints: std::collections::BTreeMap::new(),
+        };
+        session
+            .stage_quest_edit(preview, &graph, &[0], false, &data)
+            .unwrap();
+        session.record_edit("Tab edit", |_| Ok(())).unwrap();
+        // An undo snapshot the quest's gold cannot be taken out of.
+        session
+            .history
+            .undo_stack
+            .back_mut()
+            .unwrap()
+            .gff_snapshot
+            .insert("Gold".into(), GffValue::String("broken".into()));
+
+        assert!(session.discard_quest_edits(Some("test")).is_err());
+        assert_eq!(session.quest_edits.pending.len(), 1);
+        assert!(matches!(
+            session.character.as_ref().unwrap().gff().get("Gold"),
+            Some(GffValue::Dword(50))
+        ));
+        assert_eq!(session.history.undo_stack.len(), 2);
+        assert!(matches!(
+            session
+                .history
+                .undo_stack
+                .back()
+                .unwrap()
+                .gff_snapshot
+                .get("Gold"),
+            Some(GffValue::String(_))
+        ));
     }
 
     #[test]
@@ -2053,7 +2239,9 @@ mod tests {
             ros_name: "companion".into(),
         };
         session.character = Some(Character::from_gff(make_gff_with_str(10)).unwrap());
-        session.save_character(&data, 5).unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
         let journal = crate::services::save_graph::read_live_journal(
             session.savegame_handler.as_ref().unwrap(),
             0,
@@ -2074,7 +2262,11 @@ mod tests {
             .unwrap()
             .gff_mut()
             .insert("Str".into(), GffValue::Byte(12));
-        assert!(session.save_character(&data, 5).is_err());
+        assert!(
+            session
+                .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+                .is_err()
+        );
         assert!(session.has_unsaved_changes());
         assert_eq!(session.quest_edits.pending.len(), 1);
         assert_eq!(
@@ -2087,7 +2279,9 @@ mod tests {
             before
         );
         session.quest_edits.pending[0].target = 20;
-        session.save_character(&data, 5).unwrap();
+        session
+            .save_character(&data, &crate::config::NWN2Paths::new(), 5)
+            .unwrap();
         assert!(!session.has_unsaved_changes());
     }
 

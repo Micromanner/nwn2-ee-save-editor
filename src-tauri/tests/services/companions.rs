@@ -133,15 +133,21 @@ fn undo_history_survives_character_switch() {
     session.record_edit("khelgar edit 2", |_| Ok(())).unwrap();
 
     session.load_player().expect("load player");
-    assert_eq!(session.undo_labels(), vec!["player edit".to_string()]);
+    assert_eq!(
+        session.history.undo_labels(),
+        vec!["player edit".to_string()]
+    );
 
     session.load_companion("khelgar").expect("reload companion");
     assert_eq!(
-        session.undo_labels(),
+        session.history.undo_labels(),
         vec!["khelgar edit 2".to_string(), "khelgar edit".to_string()]
     );
     assert_eq!(session.undo().as_deref(), Some("khelgar edit 2"));
-    assert_eq!(session.redo_labels(), vec!["khelgar edit 2".to_string()]);
+    assert_eq!(
+        session.history.redo_labels(),
+        vec!["khelgar edit 2".to_string()]
+    );
 }
 
 #[test]
@@ -241,7 +247,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
     assert!(session.character().expect("khelgar").is_modified());
 
     let warning = session
-        .save_character(&empty_game_data(), 3)
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
         .expect("save companion");
     assert!(warning.is_none(), "roster sync should succeed: {warning:?}");
     assert!(!session.has_unsaved_changes());
@@ -312,7 +318,7 @@ fn companion_save_roundtrip_creates_missing_familiar_fields() {
     }
     assert!(
         session
-            .save_character(&empty_game_data(), 3)
+            .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
             .expect("save companion")
             .is_none()
     );
@@ -394,7 +400,7 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
         app_lib::loaders::LoadedTable::new("hen_companion".to_string(), Arc::new(hen)),
     );
     session
-        .save_character(&game_data, 3)
+        .save_character(&game_data, &app_lib::config::NWN2Paths::new(), 3)
         .expect("save companion");
 
     let mut session2 = make_session();
@@ -445,7 +451,7 @@ fn save_character_flushes_parked_companion_and_player_edits() {
     assert!(session.has_unsaved_changes());
 
     session
-        .save_character(&empty_game_data(), 3)
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
         .expect("save all");
     assert!(!session.has_unsaved_changes());
 
@@ -507,7 +513,7 @@ fn staged_party_membership_counts_as_dirty_and_flushes_on_save() {
     );
 
     session
-        .save_character(&empty_game_data(), 3)
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
         .expect("save with staged party change");
     assert!(!session.has_unsaved_changes());
 
@@ -556,7 +562,9 @@ fn save_appends_change_record_to_load_backup_manifest() {
         .stage_party_membership(&[(name.clone(), !was_in_party)])
         .expect("stage membership");
 
-    session.save_character(&empty_game_data(), 3).expect("save");
+    session
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
+        .expect("save");
 
     let manifest = backup_manifest::read(&load_backup).expect("manifest after save");
     assert_eq!(manifest.saves.len(), 1);
@@ -589,7 +597,7 @@ fn save_appends_change_record_to_load_backup_manifest() {
 
     // Nothing pending after the save: a second save with no edits adds no record.
     session
-        .save_character(&empty_game_data(), 3)
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
         .expect("second save");
     assert_eq!(
         backup_manifest::read(&load_backup)
@@ -628,4 +636,48 @@ fn variable_changes_are_recorded_on_the_load_backup_manifest() {
     assert_eq!(record.variables.len(), 1);
     assert_eq!(record.variables[0].name, "00_nInfluencekhelgar");
     assert_eq!(record.variables[0].value, "50");
+}
+
+#[test]
+fn list_roster_errors_on_unparseable_roster() {
+    let (_tmp, save_path) = temp_save_copy("000055 - SAVE GAME COMPLETE");
+    std::fs::write(save_path.join("ROSTER.rst"), b"not a gff").expect("corrupt roster");
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    assert!(session.list_roster().is_err());
+}
+
+#[test]
+fn stage_party_membership_stages_nothing_when_a_name_is_unknown() {
+    let mut session = make_session();
+    load_save(&mut session, "Classic_Campaign");
+    let roster = session.list_roster().expect("roster");
+    let first = roster.first().expect("roster entry");
+
+    let result = session.stage_party_membership(&[
+        (first.ros_name.clone(), !first.in_party),
+        ("nobody".to_string(), true),
+    ]);
+    assert!(result.is_err());
+    assert!(!session.has_unsaved_changes());
+}
+
+#[test]
+fn failed_load_takes_no_load_backup() {
+    let (_tmp, save_path) = temp_save_copy("000055 - SAVE GAME COMPLETE");
+    std::fs::write(save_path.join("playerlist.ifo"), b"not a gff").expect("corrupt playerlist");
+    let mut session = make_session();
+    let mut report = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: save_path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    assert!(
+        session
+            .load_character(&save_path.to_string_lossy(), None, true, &mut report)
+            .is_err()
+    );
+    assert!(!backup::get_backup_dir_for_save(&save_path).exists());
 }

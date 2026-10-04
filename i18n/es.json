@@ -125,6 +125,7 @@
     "saving": "Guardando...",
     "exportingVault": "Exportando...",
     "exportSuccess": "Personaje exportado al LocalVault",
+    "exportUnsavedMessage": "La partida guardada tiene cambios sin guardar. La exportación incluye los cambios sin guardar del jugador, pero la partida no cambia hasta que pulses Guardar.",
     "saveSuccess": "Personaje guardado con éxito",
     "launchGame": "Iniciar Juego",
     "launching": "Iniciando...",

@@ -167,10 +167,14 @@ fn session_saves_standalone_bic_with_single_backup() {
     let gold = session.character.as_ref().unwrap().gold();
 
     session.character.as_mut().unwrap().set_gold(gold + 1);
-    session.save_character(&game_data, 3).unwrap();
+    session
+        .save_character(&game_data, &app_lib::config::NWN2Paths::new(), 3)
+        .unwrap();
 
     session.character.as_mut().unwrap().set_gold(gold + 2);
-    session.save_character(&game_data, 3).unwrap();
+    session
+        .save_character(&game_data, &app_lib::config::NWN2Paths::new(), 3)
+        .unwrap();
 
     let reloaded = Character::from_gff(standalone_bic::load_fields(&bic_path).unwrap())
         .expect("character from gff");

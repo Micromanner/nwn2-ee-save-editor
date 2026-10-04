@@ -127,6 +127,7 @@
     "saving": "Zapisywanie...",
     "exportingVault": "Eksportowanie...",
     "exportSuccess": "Postać wyeksportowana do LocalVault",
+    "exportUnsavedMessage": "Zapis gry ma niezapisane zmiany. Eksport zawiera niezapisane zmiany postaci gracza, ale sam zapis gry pozostaje bez zmian, dopóki nie klikniesz Zapisz.",
     "saveSuccess": "Postać zapisana pomyślnie",
     "launchGame": "Uruchom Grę",
     "launching": "Uruchamianie...",

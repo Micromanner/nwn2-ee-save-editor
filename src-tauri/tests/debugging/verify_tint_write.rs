@@ -28,7 +28,7 @@ fn verify_tint_write() {
         return;
     }
 
-    let handler = SaveGameHandler::new(&save_path, false).expect("handler");
+    let handler = SaveGameHandler::new(&save_path).expect("handler");
     let bic_data = handler
         .extract_player_bic()
         .expect("extract")

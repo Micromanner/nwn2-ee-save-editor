@@ -25,7 +25,7 @@ fn test_savegame_handler_read_operations() {
 
     common::copy_dir_recursive(&fixture_path, &save_path).expect("Failed to copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false).expect("Failed to create handler");
+    let handler = SaveGameHandler::new(&save_path).expect("Failed to create handler");
 
     // Test extract_file
     let globals = handler
@@ -67,7 +67,7 @@ fn test_savegame_handler_write_operations() {
 
     common::copy_dir_recursive(&fixture_path, &save_path).expect("Failed to copy fixture");
 
-    let mut handler = SaveGameHandler::new(&save_path, false).expect("Failed to create handler");
+    let mut handler = SaveGameHandler::new(&save_path).expect("Failed to create handler");
 
     // Test update_file
     let test_filename = "test_file.txt";
@@ -116,9 +116,9 @@ fn test_multiplayer_non_primary_slot_write_preserves_primary_mirrors() {
     let save_path = temp_dir.path().join("Multiplayer_Slot_Aware_Write");
     common::copy_dir_recursive(&before_fixture_path, &save_path).expect("Failed to copy fixture");
 
-    let mut handler = SaveGameHandler::new(&save_path, false).expect("Failed to create handler");
-    let after_handler = SaveGameHandler::new(&after_fixture_path, false)
-        .expect("Failed to create after fixture handler");
+    let mut handler = SaveGameHandler::new(&save_path).expect("Failed to create handler");
+    let after_handler =
+        SaveGameHandler::new(&after_fixture_path).expect("Failed to create after fixture handler");
 
     let original_player_bic = handler
         .extract_player_bic()
@@ -485,7 +485,7 @@ fn original_handler_detects_format_for_2006_fixture() {
     let save_path = temp_dir.path().join("original_2006");
     common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false).expect("open original-format save");
+    let handler = SaveGameHandler::new(&save_path).expect("open original-format save");
     assert_eq!(handler.format(), SaveFormat::Original);
 }
 
@@ -496,7 +496,7 @@ fn original_handler_reads_player_files_for_2006_fixture() {
     let save_path = temp_dir.path().join("original_2006_read");
     common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false).unwrap();
+    let handler = SaveGameHandler::new(&save_path).unwrap();
 
     let ifo = handler.extract_player_data().expect("read playerlist.ifo");
     assert!(
@@ -518,7 +518,7 @@ fn original_handler_lists_companions_with_ros_prefix_stripped() {
     let save_path = temp_dir.path().join("original_2006_companions");
     common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false).unwrap();
+    let handler = SaveGameHandler::new(&save_path).unwrap();
     let companions = handler.list_companions().unwrap();
     assert!(
         companions.iter().any(|c| c == "khelgar"),
@@ -537,7 +537,7 @@ fn original_handler_lists_companions_for_modern_fixture() {
     let save_path = temp_dir.path().join("original_modern_companions");
     common::copy_dir_recursive(&fixture_path, &save_path).expect("copy fixture");
 
-    let handler = SaveGameHandler::new(&save_path, false).unwrap();
+    let handler = SaveGameHandler::new(&save_path).unwrap();
     let companions = handler.list_companions().unwrap();
     assert!(
         companions.iter().any(|c| c == "khelgar"),
@@ -551,7 +551,7 @@ fn original_handler_extract_companion_works_for_both_prefix_styles() {
     let old_tmp = TempDir::new().unwrap();
     let old_dst = old_tmp.path().join("original_old");
     common::copy_dir_recursive(&old_src, &old_dst).expect("copy old fixture");
-    let old_handler = SaveGameHandler::new(&old_dst, false).unwrap();
+    let old_handler = SaveGameHandler::new(&old_dst).unwrap();
     let khelgar_old = old_handler
         .extract_companion("khelgar")
         .expect("ROS- prefix fallback should find khelgar");
@@ -561,7 +561,7 @@ fn original_handler_extract_companion_works_for_both_prefix_styles() {
     let new_tmp = TempDir::new().unwrap();
     let new_dst = new_tmp.path().join("original_new");
     common::copy_dir_recursive(&new_src, &new_dst).expect("copy new fixture");
-    let new_handler = SaveGameHandler::new(&new_dst, false).unwrap();
+    let new_handler = SaveGameHandler::new(&new_dst).unwrap();
     let khelgar_new = new_handler
         .extract_companion("khelgar")
         .expect("direct read should find khelgar");
@@ -578,7 +578,7 @@ fn original_handler_round_trips_player_files_without_creating_zip() {
     let original_ifo = std::fs::read(save_path.join("playerlist.ifo")).unwrap();
     let original_bic = std::fs::read(save_path.join("player.bic")).unwrap();
 
-    let mut handler = SaveGameHandler::new(&save_path, false).unwrap();
+    let mut handler = SaveGameHandler::new(&save_path).unwrap();
     handler
         .rewrite_player_files(|src| {
             Ok(PlayerOutputs {

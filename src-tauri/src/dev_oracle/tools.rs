@@ -232,6 +232,7 @@ async fn make_test_save(state: &AppState, args: Value) -> Result<Value, String> 
 
     {
         let game_data = state.game_data.read();
+        let paths = state.paths.read();
         let mut session = state.session.write();
         let character = session
             .character_mut()
@@ -239,7 +240,7 @@ async fn make_test_save(state: &AppState, args: Value) -> Result<Value, String> 
         apply::apply(character, &build, &game_data, &name);
         session.stage_save_name(&name)?;
         session
-            .save_character(&game_data, 0)
+            .save_character(&game_data, &paths, 0)
             .map_err(|e| format!("writing {folder_str} failed: {e}"))?;
     }
 

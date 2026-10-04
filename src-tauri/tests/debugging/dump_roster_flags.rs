@@ -8,7 +8,7 @@ use app_lib::services::savegame_handler::SaveGameHandler;
 #[ignore = "diagnostic; needs ROSTER_DUMP_SAVE"]
 fn dump_roster_flags() {
     let save = std::env::var("ROSTER_DUMP_SAVE").expect("ROSTER_DUMP_SAVE not set");
-    let handler = SaveGameHandler::new(&save, false).expect("handler");
+    let handler = SaveGameHandler::new(&save).expect("handler");
     let files = handler.list_companions().unwrap_or_default();
     println!("== {save}\n.ros files: {files:?}");
     let Ok(Some((_, bytes))) = handler.extract_roster() else {

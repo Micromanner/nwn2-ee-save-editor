@@ -125,6 +125,7 @@
     "saving": "Enregistrement...",
     "exportingVault": "Exportation...",
     "exportSuccess": "Personnage exporté vers LocalVault",
+    "exportUnsavedMessage": "La sauvegarde contient des modifications non enregistrées. L'export inclut les modifications non enregistrées du joueur, mais la sauvegarde elle-même reste inchangée jusqu'à ce que vous cliquiez sur Enregistrer.",
     "saveSuccess": "Personnage enregistré avec succès",
     "launchGame": "Lancer le Jeu",
     "launching": "Lancement...",

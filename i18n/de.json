@@ -125,6 +125,7 @@
     "saving": "Wird gespeichert...",
     "exportingVault": "Wird exportiert...",
     "exportSuccess": "Charakter in LocalVault exportiert",
+    "exportUnsavedMessage": "Der Spielstand hat ungespeicherte Änderungen. Der Export enthält die ungespeicherten Änderungen am Spielercharakter, der Spielstand selbst bleibt aber unverändert, bis du auf Speichern klickst.",
     "saveSuccess": "Charakter erfolgreich gespeichert",
     "launchGame": "Spiel starten",
     "launching": "Wird gestartet...",

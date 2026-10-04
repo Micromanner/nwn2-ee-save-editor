@@ -14,7 +14,7 @@ const FIXTURE_SAVES: &[&str] = &[
 ];
 
 fn load_ifo_character(save_path: &Path) -> IndexMap<String, GffValue<'static>> {
-    let handler = SaveGameHandler::new(save_path, false).expect("handler");
+    let handler = SaveGameHandler::new(save_path).expect("handler");
     let data = handler.extract_player_data().expect("extract ifo");
     let gff = GffParser::from_bytes(data).expect("parse ifo");
     let root = gff.read_struct_fields(0).expect("root");
@@ -30,7 +30,7 @@ fn load_ifo_character(save_path: &Path) -> IndexMap<String, GffValue<'static>> {
 }
 
 fn load_bic_character(save_path: &Path) -> Option<IndexMap<String, GffValue<'static>>> {
-    let handler = SaveGameHandler::new(save_path, false).expect("handler");
+    let handler = SaveGameHandler::new(save_path).expect("handler");
     let data = handler.extract_player_bic().ok()??;
     let gff = GffParser::from_bytes(data).expect("parse bic");
     let fields = gff.read_struct_fields(0).expect("root");
@@ -221,7 +221,7 @@ fn check_player_bic_presence() {
             println!("  SKIP (not found): {save_name}");
             continue;
         }
-        let handler = SaveGameHandler::new(path, false).expect("handler");
+        let handler = SaveGameHandler::new(path).expect("handler");
 
         let has_ifo = handler.extract_player_data().is_ok();
         let has_bic = handler.extract_player_bic().ok().and_then(|v| v).is_some();

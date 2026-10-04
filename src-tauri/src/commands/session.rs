@@ -3,6 +3,7 @@ use crate::commands::{CommandError, CommandResult};
 use crate::loaders::GameData;
 use crate::parsers::gff::GffParser;
 use crate::services::load_diagnostics::{self, LoadInput, LoadReport, LoadStage, LoadStatus};
+use crate::services::save_graph::QuestGraphProgress;
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::state::AppState;
 use crate::state::session_state::CharacterHistory;
@@ -31,6 +32,7 @@ pub async fn load_character(
         let mut session = state.session.write();
         session.load_character(&file_path, player_index, create_load_backup, &mut report)
     };
+    *state.quest_graph_progress.write() = QuestGraphProgress::default();
 
     // Snapshot capture walks override/hak/workshop directories — skip on clean
     // loads so heavy mod installs don't pay 100ms+ on every successful load.
@@ -49,14 +51,14 @@ pub async fn load_character(
                 let state = app.state::<AppState>();
 
                 // Pre-warm feat cache
-                let cache = {
+                let (cache, revision) = {
                     let game_data = state.game_data.read();
                     let session = state.session.read();
                     let Some(character) = session.character.as_ref() else {
                         return;
                     };
                     match super::feats::build_feat_list(character, &game_data) {
-                        Ok(c) => c,
+                        Ok(c) => (c, session.character_revision),
                         Err(e) => {
                             warn!("Failed to pre-warm feat cache: {e}");
                             return;
@@ -64,10 +66,9 @@ pub async fn load_character(
                     }
                 };
                 let mut session = state.session.write();
-                if session.feat_cache.is_none() {
+                if session.character_revision == revision && session.feat_cache.is_none() {
                     session.feat_cache = Some(cache);
                 }
-                drop(session);
             });
             Ok(true)
         }
@@ -139,7 +140,7 @@ pub async fn list_save_characters(
     state: State<'_, AppState>,
     file_path: String,
 ) -> CommandResult<Vec<SaveCharacterOption>> {
-    let handler = SaveGameHandler::new(&file_path, false).map_err(CommandError::from)?;
+    let handler = SaveGameHandler::new(&file_path).map_err(CommandError::from)?;
     let playerlist_data = handler.extract_player_data().map_err(CommandError::from)?;
     let gff = GffParser::from_bytes(playerlist_data).map_err(|e| CommandError::ParseError {
         message: format!("Failed to parse playerlist.ifo: {e}"),
@@ -203,8 +204,9 @@ pub async fn save_character(
 
     let backup_keep_count = state.config.read().backup_count as usize;
     let game_data = state.game_data.read();
+    let paths = state.paths.read();
     let mut session = state.session.write();
-    match session.save_character(&game_data, backup_keep_count) {
+    match session.save_character(&game_data, &paths, backup_keep_count) {
         Ok(warning) => {
             info!("Character saved successfully via command");
             Ok(SaveCharacterResult {
@@ -231,6 +233,7 @@ pub async fn save_character(
 pub async fn close_character(state: State<'_, AppState>) -> CommandResult<bool> {
     info!("Close character command invoked");
     state.session.write().close_character();
+    *state.quest_graph_progress.write() = QuestGraphProgress::default();
     sync_module_content(&state).await;
     info!("Character closed successfully");
     Ok(true)

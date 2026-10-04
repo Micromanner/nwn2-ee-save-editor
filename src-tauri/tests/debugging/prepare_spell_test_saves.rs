@@ -88,7 +88,9 @@ async fn prepare_spell_test_saves() {
                 .expect("equip amulet");
             println!("962 amulet slot: {:?}", equipped.slot);
         }
-        session.save_character(game_data, 0).expect("save 962");
+        session
+            .save_character(game_data, &app_lib::config::NWN2Paths::new(), 0)
+            .expect("save 962");
 
         let mut session = load(&saves, 965);
         session
@@ -96,7 +98,9 @@ async fn prepare_spell_test_saves() {
             .expect("character")
             .add_feat(FEAT_DARK_BLESSING)
             .expect("add Dark Blessing");
-        session.save_character(game_data, 0).expect("save 965");
+        session
+            .save_character(game_data, &app_lib::config::NWN2Paths::new(), 0)
+            .expect("save 965");
     }
 
     for slot in 962..=971 {

@@ -134,8 +134,7 @@ async fn test_classic_campaign_identity() {
     let save_path = fixtures_path().join("saves/Classic_Campaign");
     println!("Loading save from: {save_path:?}");
 
-    let handler =
-        SaveGameHandler::new(&save_path, false).expect("Failed to create SaveGameHandler");
+    let handler = SaveGameHandler::new(&save_path).expect("Failed to create SaveGameHandler");
 
     let player_data = handler
         .extract_player_bic()

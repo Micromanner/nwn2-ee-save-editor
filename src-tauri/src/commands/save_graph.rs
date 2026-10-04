@@ -9,6 +9,7 @@ use crate::services::save_graph::editing::{PendingQuestEdit, QuestPreview};
 use crate::services::save_graph::{
     self, BuildContext, OrphanKind, QuestGraphProgress, SaveGraph, SaveGraphSummary, TransitionNode,
 };
+use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::toolset_bridge::{self, BridgeError};
 use crate::state::AppState;
 
@@ -20,7 +21,7 @@ pub async fn save_get_quest_graph(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<SaveGraphSummary> {
-    let graph = ensure_quest_graph(&app, &state)?;
+    let graph = ensure_quest_graph(&app, &state).await?;
     let mut summary = SaveGraphSummary::from(graph.as_ref());
     let session = state.session.read();
     let handler = session
@@ -48,7 +49,7 @@ pub async fn save_preview_quest_edit(
     target: u32,
     route: Option<usize>,
 ) -> CommandResult<QuestPreview> {
-    let graph = ensure_quest_graph(&app, &state)?;
+    let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
     let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
     let session = state.session.read();
@@ -80,7 +81,7 @@ pub async fn save_summarize_quest_routes(
     tag: String,
     target: u32,
 ) -> CommandResult<Vec<crate::services::save_graph::editing::RouteSummary>> {
-    let graph = ensure_quest_graph(&app, &state)?;
+    let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
     let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
     let session = state.session.read();
@@ -115,7 +116,7 @@ pub async fn save_stage_quest_edit(
     selected: Vec<usize>,
     replace: bool,
 ) -> CommandResult<Vec<PendingQuestEdit>> {
-    let graph = ensure_quest_graph(&app, &state)?;
+    let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
     let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
     let game_data = state.game_data.read();
@@ -152,12 +153,14 @@ pub async fn save_stage_quest_edit(
 }
 
 #[tauri::command]
-pub fn save_list_quest_edits(state: State<'_, AppState>) -> Vec<PendingQuestEdit> {
-    state.session.read().quest_edits.pending.clone()
+pub async fn save_list_quest_edits(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<PendingQuestEdit>> {
+    Ok(state.session.read().quest_edits.pending.clone())
 }
 
 #[tauri::command]
-pub fn save_discard_quest_edits(
+pub async fn save_discard_quest_edits(
     state: State<'_, AppState>,
     tag: Option<String>,
 ) -> CommandResult<Vec<PendingQuestEdit>> {
@@ -182,7 +185,7 @@ pub async fn save_get_quest_variables(
     state: State<'_, AppState>,
     tag: String,
 ) -> CommandResult<Vec<QuestVariableValue>> {
-    let graph = ensure_quest_graph(&app, &state)?;
+    let graph = ensure_quest_graph(&app, &state).await?;
     let quest = graph
         .quests
         .iter()
@@ -267,7 +270,7 @@ pub async fn save_get_quest_transitions(
     state: State<'_, AppState>,
     tag: String,
 ) -> CommandResult<Vec<TransitionNode>> {
-    let graph = ensure_quest_graph(&app, &state)?;
+    let graph = ensure_quest_graph(&app, &state).await?;
     let transitions = graph
         .quests
         .iter()
@@ -280,11 +283,13 @@ pub async fn save_get_quest_transitions(
 /// Snapshot of the current (or most recent) `save_get_quest_graph` build progress.
 /// Polled by the Quests-tab loading UI.
 #[tauri::command]
-pub fn save_get_quest_graph_progress(state: State<'_, AppState>) -> QuestGraphProgress {
-    state.quest_graph_progress.read().clone()
+pub async fn save_get_quest_graph_progress(
+    state: State<'_, AppState>,
+) -> CommandResult<QuestGraphProgress> {
+    Ok(state.quest_graph_progress.read().clone())
 }
 
-fn ensure_quest_graph(
+async fn ensure_quest_graph(
     app: &AppHandle,
     state: &State<'_, AppState>,
 ) -> CommandResult<Arc<SaveGraph>> {
@@ -338,12 +343,10 @@ fn ensure_quest_graph(
         progress: 0.0,
         message: "Resolving campaign…".to_string(),
     };
-    let progress_sink = |snapshot: QuestGraphProgress| {
-        *progress_handle.write() = snapshot;
-    };
-
-    let graph_result = {
-        let paths = state.paths.read();
+    // Build from copies outside the session lock: the build takes seconds and a
+    // held read lock would stall every edit and save queued behind it.
+    let paths = state.paths.read().clone();
+    let (save_dir, player_index) = {
         let session = state.session.read();
         let handler = session
             .savegame_handler
@@ -352,9 +355,15 @@ fn ensure_quest_graph(
         let player_index = session
             .primary_player_index
             .unwrap_or(session.selected_player_index);
-
+        (handler.save_dir().to_path_buf(), player_index)
+    };
+    let graph_result = tokio::task::spawn_blocking(move || {
+        let handler = SaveGameHandler::new(&save_dir).map_err(|e| e.to_string())?;
+        let progress_sink = |snapshot: QuestGraphProgress| {
+            *progress_handle.write() = snapshot;
+        };
         save_graph::build(BuildContext {
-            handler,
+            handler: &handler,
             paths: &paths,
             client: &client,
             player_index,
@@ -362,7 +371,9 @@ fn ensure_quest_graph(
             current_module_vars: &module_vars,
             progress: Some(&progress_sink),
         })
-    };
+    })
+    .await
+    .map_err(|e| CommandError::from(format!("Quest graph build failed: {e}")))?;
 
     let graph = match graph_result {
         Ok(g) => g,

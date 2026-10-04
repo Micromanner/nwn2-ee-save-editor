@@ -30,7 +30,7 @@ type Fields = IndexMap<String, GffValue<'static>>;
 
 fn load_player(env_var: &str) -> Character {
     let dir = PathBuf::from(std::env::var(env_var).unwrap_or_else(|_| panic!("{env_var} not set")));
-    let handler = SaveGameHandler::new(&dir, false).expect("open save");
+    let handler = SaveGameHandler::new(&dir).expect("open save");
     let bic = handler
         .extract_player_bic()
         .expect("extract player.bic")

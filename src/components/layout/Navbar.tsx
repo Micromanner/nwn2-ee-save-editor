@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Button, Navbar as BPNavbar, NavbarDivider, NavbarGroup, Tooltip,
+  Alert, Button, Navbar as BPNavbar, NavbarDivider, NavbarGroup, Tooltip,
 } from '@blueprintjs/core';
 import { GiCog, GiExitDoor, GiScrollUnfurled, GiTiedScroll, GiAnticlockwiseRotation, GiClockwiseRotation, GiScrollQuill } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
@@ -37,6 +37,7 @@ export function Navbar({ onBack }: NavbarProps) {
   const [showGameLaunch, setShowGameLaunch] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
   const handleSave = useCallback(async () => {
@@ -61,7 +62,7 @@ export function Navbar({ onBack }: NavbarProps) {
     }
   }, [showToast, t, handleError]);
 
-  const handleExport = async () => {
+  const exportCharacter = async () => {
     setIsExporting(true);
     try {
       await invoke('export_to_localvault');
@@ -70,6 +71,14 @@ export function Navbar({ onBack }: NavbarProps) {
       handleError(err);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleExport = () => {
+    if (dirty) {
+      setShowExportConfirm(true);
+    } else {
+      void exportCharacter();
     }
   };
 
@@ -129,6 +138,17 @@ export function Navbar({ onBack }: NavbarProps) {
       </BPNavbar>
       {showSettings && <SettingsDialog isOpen onClose={() => setShowSettings(false)} />}
       {showHistory && <HistoryDialog isOpen onClose={() => setShowHistory(false)} />}
+      <Alert
+        isOpen={showExportConfirm}
+        onCancel={() => setShowExportConfirm(false)}
+        onConfirm={() => { setShowExportConfirm(false); void exportCharacter(); }}
+        cancelButtonText={t('common.cancel')}
+        confirmButtonText={t('actions.exportCharacter')}
+        intent="warning"
+        icon={<GameIcon icon={GiScrollUnfurled} size={14} />}
+      >
+        <p>{t('actions.exportUnsavedMessage')}</p>
+      </Alert>
       <GameLaunchDialog
         isOpen={showGameLaunch}
         onClose={() => setShowGameLaunch(false)}

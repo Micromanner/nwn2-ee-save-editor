@@ -404,7 +404,7 @@ pub(crate) fn dump_character_fields(
 
 #[test]
 fn dump_bic_structured() {
-    let handler = SaveGameHandler::new(saves_dir(), false).expect("Failed to open save");
+    let handler = SaveGameHandler::new(saves_dir()).expect("Failed to open save");
 
     let bic_bytes = handler
         .extract_file("player.bic")
@@ -426,7 +426,7 @@ fn dump_bic_structured() {
 
 #[test]
 fn dump_ifo_structured() {
-    let handler = SaveGameHandler::new(saves_dir(), false).expect("Failed to open save");
+    let handler = SaveGameHandler::new(saves_dir()).expect("Failed to open save");
 
     let ifo_bytes = handler
         .extract_file("playerlist.ifo")
@@ -495,8 +495,7 @@ fn cheatdebug_dir(save_name: &str) -> PathBuf {
 }
 
 fn dump_ifo_to(save_name: &str, out_subdir: &str) {
-    let handler =
-        SaveGameHandler::new(cheatdebug_dir(save_name), false).expect("Failed to open save");
+    let handler = SaveGameHandler::new(cheatdebug_dir(save_name)).expect("Failed to open save");
 
     let ifo_bytes = handler
         .extract_file("playerlist.ifo")

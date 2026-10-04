@@ -26,7 +26,7 @@ fn dump_quest_decodes() {
     if common::skip_if_toolset_prereqs_missing(&bridge, &install) {
         return;
     }
-    let handler = SaveGameHandler::new(std::path::Path::new(&save), false).expect("handler");
+    let handler = SaveGameHandler::new(std::path::Path::new(&save)).expect("handler");
     let mut paths = NWN2Paths::new();
     paths.set_game_folder(&install).expect("game folder");
     if let Ok(docs) = std::env::var("QUEST_DECODE_DOCS") {

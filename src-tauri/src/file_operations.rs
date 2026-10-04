@@ -93,7 +93,7 @@ fn read_save_character_name(save_path: &std::path::Path) -> Option<String> {
         return Some(name);
     }
 
-    SaveGameHandler::new(save_path, false)
+    SaveGameHandler::new(save_path)
         .ok()?
         .read_character_name()
         .ok()

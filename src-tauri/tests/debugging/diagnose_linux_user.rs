@@ -11,7 +11,7 @@ fn linux_save_dir() -> PathBuf {
 }
 
 fn load_character_from_save() -> Character {
-    let handler = SaveGameHandler::new(linux_save_dir(), false).expect("Failed to open save");
+    let handler = SaveGameHandler::new(linux_save_dir()).expect("Failed to open save");
 
     let bic_data = handler
         .extract_player_bic()

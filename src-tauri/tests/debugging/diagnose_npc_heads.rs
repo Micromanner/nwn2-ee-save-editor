@@ -23,7 +23,7 @@ fn character_from_bytes(bytes: Vec<u8>) -> Character {
 #[test]
 #[ignore]
 fn diagnose_npc_heads() {
-    let handler = SaveGameHandler::new(save_dir(), false).expect("Failed to open save");
+    let handler = SaveGameHandler::new(save_dir()).expect("Failed to open save");
     let ctx = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(common::create_test_context());

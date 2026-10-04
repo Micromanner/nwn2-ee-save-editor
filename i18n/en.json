@@ -125,6 +125,7 @@
     "saving": "Saving...",
     "exportingVault": "Exporting...",
     "exportSuccess": "Character exported to LocalVault",
+    "exportUnsavedMessage": "The save game has unsaved changes. The export includes the player's unsaved edits, but the save game itself stays unchanged until you click Save.",
     "saveSuccess": "Character saved successfully",
     "launchGame": "Launch Game",
     "launching": "Launching...",

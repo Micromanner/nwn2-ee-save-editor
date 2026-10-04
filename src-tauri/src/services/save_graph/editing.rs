@@ -3116,7 +3116,7 @@ mod tests {
             .unwrap();
         zip.write_all(&bic).unwrap();
         zip.finish().unwrap();
-        let handler = SaveGameHandler::new(dir.path(), false).unwrap();
+        let handler = SaveGameHandler::new(dir.path()).unwrap();
         (dir, handler)
     }
 
@@ -3177,7 +3177,7 @@ mod tests {
             zip.write_all(&bytes).unwrap();
         }
         zip.finish().unwrap();
-        let handler = SaveGameHandler::new(dir.path(), false).unwrap();
+        let handler = SaveGameHandler::new(dir.path()).unwrap();
         (dir, handler)
     }
 
@@ -4257,7 +4257,7 @@ mod tests {
             .unwrap();
         zip.write_all(&playerlist()).unwrap();
         zip.finish().unwrap();
-        let handler = SaveGameHandler::new(dir.path(), false).unwrap();
+        let handler = SaveGameHandler::new(dir.path()).unwrap();
         (dir, handler)
     }
 
@@ -4840,7 +4840,7 @@ mod tests {
             eprintln!("Classic_Campaign fixture unavailable");
             return;
         }
-        let handler = SaveGameHandler::new(path, false).unwrap();
+        let handler = SaveGameHandler::new(path).unwrap();
         let bytes = handler.extract_player_data().unwrap();
         let players = owned_players(&bytes);
         let mut count = 0;

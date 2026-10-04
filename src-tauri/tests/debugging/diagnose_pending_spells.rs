@@ -14,7 +14,7 @@ async fn diagnose_pending_spells() {
     let ctx = create_test_context().await;
     let gd = ctx.loader.game_data().expect("Game data not loaded");
     let save = std::env::var("PENDING_SAVE").expect("PENDING_SAVE not set");
-    let handler = SaveGameHandler::new(&save, false).expect("handler");
+    let handler = SaveGameHandler::new(&save).expect("handler");
     let mut files = vec![(
         "player".to_string(),
         handler

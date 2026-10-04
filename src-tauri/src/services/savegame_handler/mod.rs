@@ -148,7 +148,7 @@ mod transaction_tests {
         fs::write(dir.path().join("playerlist.ifo"), b"original player").unwrap();
         fs::write(dir.path().join("player.bic"), b"original bic").unwrap();
         fs::write(dir.path().join("globals.xml"), b"original globals").unwrap();
-        let mut handler = SaveGameHandler::new(dir.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(dir.path()).unwrap();
         handler.begin_batch();
         handler.update_file("globals.xml", b"new globals").unwrap();
         assert_eq!(handler.extract_file("globals.xml").unwrap(), b"new globals");
@@ -236,7 +236,7 @@ pub struct SaveGameHandler {
     save_dir: PathBuf,
     zip_path: PathBuf,
     format: SaveFormat,
-    /// Backup taken by [`Self::new`] before any edit of this session.
+    /// Backup taken by [`Self::create_load_backup`] before any edit of this session.
     load_backup_path: Option<PathBuf>,
     /// `Some` while a batch is open: `update_file` writes are staged here and
     /// flushed by [`Self::commit_batch`] with one archive rewrite.
@@ -250,7 +250,7 @@ struct Batch {
 }
 
 impl SaveGameHandler {
-    pub fn new(save_path: impl AsRef<Path>, create_load_backup: bool) -> SaveGameResult<Self> {
+    pub fn new(save_path: impl AsRef<Path>) -> SaveGameResult<Self> {
         let save_path = save_path.as_ref();
 
         let (save_dir, zip_path) = if save_path.is_dir() {
@@ -270,22 +270,22 @@ impl SaveGameHandler {
 
         let format = SaveFormat::detect(&save_dir)?;
 
-        let load_backup_path = if create_load_backup {
-            Some(backup::create_backup(
-                &save_dir,
-                backup_manifest::BackupReason::Load,
-            )?)
-        } else {
-            None
-        };
-
         Ok(Self {
             save_dir,
             zip_path,
             format,
-            load_backup_path,
+            load_backup_path: None,
             batch: None,
         })
+    }
+
+    /// Back up the save as loaded, before any edit of this session.
+    pub fn create_load_backup(&mut self) -> SaveGameResult<()> {
+        self.load_backup_path = Some(backup::create_backup(
+            &self.save_dir,
+            backup_manifest::BackupReason::Load,
+        )?);
+        Ok(())
     }
 
     /// Stage subsequent `update_file` writes in memory so
@@ -698,7 +698,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC ").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false)
+        let handler = SaveGameHandler::new(tmp.path())
             .expect("Original-format save directory must be accepted");
         assert_eq!(handler.format(), SaveFormat::Original);
         assert_eq!(handler.save_dir(), tmp.path());
@@ -711,7 +711,7 @@ mod tests {
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy ifo payload").unwrap();
         std::fs::write(tmp.path().join("companion.ros"), b"ROS dummy ros payload").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
 
         assert_eq!(
             handler.extract_file("player.bic").unwrap(),
@@ -735,7 +735,7 @@ mod tests {
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO ").unwrap();
         std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"ROS khelgar bytes").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
 
         assert_eq!(
             handler.extract_companion("khelgar").unwrap(),
@@ -751,7 +751,7 @@ mod tests {
         std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"K").unwrap();
         std::fs::write(tmp.path().join("neeshka.ros"), b"N").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
         let mut companions = handler.list_companions().unwrap();
         companions.sort();
         assert_eq!(
@@ -768,7 +768,7 @@ mod tests {
         std::fs::write(tmp.path().join("globals.xml"), b"<xml/>").unwrap();
         std::fs::write(tmp.path().join("khelgar.ros"), b"K").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
         let files = handler.list_files().unwrap();
         let names: std::collections::HashSet<String> = files.into_iter().map(|f| f.name).collect();
         assert!(names.contains("player.bic"));
@@ -783,7 +783,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC original").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO original").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path()).unwrap();
 
         handler
             .update_file("player.bic", b"BIC rewritten")
@@ -818,7 +818,7 @@ mod tests {
             zw.finish().unwrap();
         }
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path()).unwrap();
         handler.begin_batch();
         handler
             .update_file("khelgar.ros", b"ROS khelgar new")
@@ -881,7 +881,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC old").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO old").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path()).unwrap();
         handler
             .rewrite_player_files(|src| {
                 assert_eq!(src.playerlist, b"IFO old");
@@ -909,7 +909,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC keep me").unwrap();
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO old").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path()).unwrap();
         handler
             .rewrite_player_files(|_| {
                 Ok(PlayerOutputs {
@@ -936,7 +936,7 @@ mod tests {
         std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
         std::fs::write(tmp.path().join("ROSTER.rst"), b"RST dummy roster").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
         let (name, bytes) = handler.extract_roster().unwrap().expect("roster present");
         assert_eq!(name, "ROSTER.rst");
         assert_eq!(bytes, b"RST dummy roster");
@@ -948,7 +948,7 @@ mod tests {
         std::fs::write(tmp.path().join("playerlist.ifo"), b"IFO dummy").unwrap();
         std::fs::write(tmp.path().join("player.bic"), b"BIC dummy").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
         assert!(handler.extract_roster().unwrap().is_none());
     }
 
@@ -960,7 +960,7 @@ mod tests {
         std::fs::write(tmp.path().join("ROS-khelgar.ros"), b"K").unwrap();
         std::fs::write(tmp.path().join("neeshka.ros"), b"N").unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
         assert_eq!(
             handler.companion_stored_name("khelgar").unwrap(),
             "ROS-khelgar.ros"
@@ -984,7 +984,7 @@ mod tests {
         zw.write_all(b"IFO ").unwrap();
         zw.finish().unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).expect("EE save must be accepted");
+        let handler = SaveGameHandler::new(tmp.path()).expect("EE save must be accepted");
         assert_eq!(handler.format(), SaveFormat::Ee);
     }
 
@@ -1008,7 +1008,7 @@ mod tests {
         );
         std::fs::write(tmp.path().join("khelgar.ros"), b"ROS loose").unwrap();
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path()).unwrap();
         assert_eq!(handler.extract_file("khelgar.ros").unwrap(), b"ROS zip");
         handler.update_file("khelgar.ros", b"ROS new").unwrap();
 
@@ -1028,7 +1028,7 @@ mod tests {
             &[("playerlist.ifo", b"IFO"), ("Player.bic", b"BIC old")],
         );
 
-        let mut handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let mut handler = SaveGameHandler::new(tmp.path()).unwrap();
         handler.update_file("player.bic", b"BIC new").unwrap();
 
         let mut archive = ZipArchive::new(std::fs::File::open(&zip_path).unwrap()).unwrap();
@@ -1056,7 +1056,7 @@ mod tests {
         );
         std::fs::create_dir(tmp.path().join("globals.xml")).unwrap();
 
-        let handler = SaveGameHandler::new(tmp.path(), false).unwrap();
+        let handler = SaveGameHandler::new(tmp.path()).unwrap();
         assert!(matches!(
             handler.extract_file("globals.xml"),
             Err(SaveGameError::Io(_))
