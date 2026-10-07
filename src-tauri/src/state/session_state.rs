@@ -1216,29 +1216,8 @@ impl SessionState {
             .savegame_handler
             .as_ref()
             .ok_or("No active save handler")?;
-        let Some((_, bytes)) = handler
-            .extract_roster()
-            .map_err(|e| format!("Failed to read roster: {e}"))?
-        else {
-            warn!("No roster file found in save; companion list empty");
-            return Ok(Vec::new());
-        };
-        let members = crate::services::roster::parse_roster_members(bytes)
-            .map_err(|e| format!("Failed to parse roster: {e}"))?;
-        let companion_files = handler
-            .list_companions()
-            .map_err(|e| format!("Failed to list companions: {e}"))?;
-
-        // Neither globals.xml `*_Joined` vars nor the RosAvailable/RosSelectable/
-        // RosCampaignNPC flags identify a companion: the game skips the vars for
-        // some companions and clears all three flags on an active party member.
-        Ok(members
+        Ok(crate::services::roster::companion_members(handler)?
             .into_iter()
-            .filter(|m| {
-                companion_files
-                    .iter()
-                    .any(|c| c.eq_ignore_ascii_case(&m.ros_name))
-            })
             .map(|m| RosterListing {
                 // Quest edits are written after the party tab's changes, so theirs win.
                 staged_in_party: self

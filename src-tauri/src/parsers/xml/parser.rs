@@ -7,16 +7,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::OnceLock;
 
-// Constants
-const BLACKLIST: &[&str] = &["of", "the", "level", "count", "quest", "plot", "state"];
-
-static INFLUENCE_PATTERN: OnceLock<Regex> = OnceLock::new();
 static PREFIX_PATTERN: OnceLock<Regex> = OnceLock::new();
-
-fn get_influence_pattern() -> &'static Regex {
-    INFLUENCE_PATTERN
-        .get_or_init(|| Regex::new(r"(?i)^(?:[a-zA-Z0-9_]*_)?(?:influence|inf)([a-z]+)$").unwrap())
-}
 
 fn get_prefix_pattern() -> &'static Regex {
     PREFIX_PATTERN.get_or_init(|| Regex::new(r"^([a-zA-Z0-9]+_)+|^([a-zA-Z]+)").unwrap())
@@ -304,42 +295,25 @@ impl RustXmlParser {
         Ok(result)
     }
 
-    pub fn discover_potential_companions(&self) -> IndexMap<String, DiscoveredCompanion> {
-        let mut discovered = IndexMap::new();
-        let blacklist_set: HashSet<&str> = BLACKLIST.iter().copied().collect();
-        let pattern = get_influence_pattern();
-
-        for (var_name, value) in &self.data.integers {
-            if let Some(caps) = pattern.captures(var_name)
-                && let Some(matched) = caps.get(1)
-            {
-                let companion_name = matched.as_str();
-                if companion_name.len() > 2 && !blacklist_set.contains(companion_name) {
-                    discovered
-                        .entry(companion_name.to_lowercase())
-                        .or_insert_with(|| DiscoveredCompanion {
-                            name: capitalize(companion_name),
-                            influence: *value,
-                            variable: var_name.clone(),
-                        });
-                }
-            }
-        }
-        discovered
-    }
-
     /// Status of every known companion of the campaign(s) this save is
-    /// playing. `ros_names` are the `.ros` files in the save; a campaign
-    /// counts as present when any of its companions has a `.ros` file or an
-    /// influence variable. Recruitment is deliberately not reported: the OC
-    /// writes `.ros` files for its whole cast at campaign start and skips the
-    /// `*_Joined`/`*Met` globals for most companions.
-    pub fn get_companion_status(&self, ros_names: &[String]) -> IndexMap<String, CompanionStatus> {
+    /// playing, plus the roster companions of other campaigns that store
+    /// influence in globals.
+    /// `roster` are the save's companions; a campaign counts as present
+    /// when any of its companions has a `.ros` file or an influence variable.
+    /// Recruitment is deliberately not reported: the OC writes `.ros` files for
+    /// its whole cast at campaign start and skips the `*_Joined`/`*Met` globals
+    /// for most companions.
+    pub fn get_companion_status(
+        &self,
+        roster: &[RosterCompanion],
+    ) -> IndexMap<String, CompanionStatus> {
         let mut companion_status = IndexMap::new();
         let defs = get_companion_definitions();
         let in_roster = |comp_id: &str, def: &CompanionDefinition| {
             let ros_name = def.ros_name.unwrap_or(comp_id);
-            ros_names.iter().any(|r| r.eq_ignore_ascii_case(ros_name))
+            roster
+                .iter()
+                .any(|r| r.ros_name.eq_ignore_ascii_case(ros_name))
         };
         let campaigns: HashSet<Campaign> = defs
             .iter()
@@ -365,17 +339,50 @@ impl RustXmlParser {
             );
         }
 
-        // 2. Discovered
-        let discovered = self.discover_potential_companions();
-        for (comp_id, found) in discovered {
+        // 2. Other roster companions. Campaigns name the global prefix + companion
+        // tag (`ginc_companion`: `00_nInfluence<tag>`, Westgate: `HF_COINF_<tag>`)
+        // and the OC companion system makes the tag the roster name.
+        let explicit_ros: HashSet<String> = defs
+            .iter()
+            .map(|(comp_id, def)| def.ros_name.unwrap_or(comp_id).to_ascii_lowercase())
+            .collect();
+        let mut prefixes = HashSet::new();
+        for (var_name, value) in &self.data.integers {
+            let Some(member) = roster_owner_of_influence_var(var_name, roster) else {
+                continue;
+            };
+            let ros_key = member.ros_name.to_ascii_lowercase();
+            if explicit_ros.contains(&ros_key) {
+                continue;
+            }
+            prefixes.insert(&var_name[..var_name.len() - member.ros_name.len()]);
             companion_status
-                .entry(comp_id)
+                .entry(ros_key)
                 .or_insert_with(|| CompanionStatus {
-                    name: found.name,
-                    influence: Some(found.influence),
-                    influence_var: found.variable,
-                    source: "discovered".to_string(),
+                    name: member.name.clone(),
+                    influence: Some(*value),
+                    influence_var: var_name.clone(),
+                    source: "roster".to_string(),
                 });
+        }
+
+        // 3. Roster companions whose global is not written yet (the game reads it
+        // as 0), named like the others when they all share one prefix. Defined
+        // campaigns list their cast above, so their story NPCs stay out.
+        if campaigns.is_empty()
+            && prefixes.len() == 1
+            && let Some(prefix) = prefixes.into_iter().next()
+        {
+            for member in roster {
+                companion_status
+                    .entry(member.ros_name.to_ascii_lowercase())
+                    .or_insert_with(|| CompanionStatus {
+                        name: member.name.clone(),
+                        influence: None,
+                        influence_var: format!("{prefix}{}", member.ros_name),
+                        source: "roster".to_string(),
+                    });
+            }
         }
 
         companion_status
@@ -512,10 +519,10 @@ impl RustXmlParser {
         info
     }
 
-    pub fn get_full_summary_struct(&self) -> FullSummary {
+    pub fn get_full_summary_struct(&self, roster: &[RosterCompanion]) -> FullSummary {
         FullSummary {
             general_info: self.get_general_info(),
-            companion_status: self.get_companion_status(&[]),
+            companion_status: self.get_companion_status(roster),
             quest_overview: self.get_quest_overview_struct(),
             raw_data_counts: HashMap::from([
                 ("integers".to_string(), self.data.integers.len()),
@@ -538,12 +545,32 @@ pub struct CompanionStatus {
     pub source: String,
 }
 
-/// A companion found through an influence-like integer global that no
-/// definition covers.
-pub struct DiscoveredCompanion {
+/// A companion `.ros` file of the save.
+pub struct RosterCompanion {
+    pub ros_name: String,
+    /// `RosCharName` from `roster.rst`.
     pub name: String,
-    pub influence: i32,
-    pub variable: String,
+}
+
+/// The roster companion `var_name` holds the influence of: the global ends in
+/// the companion's roster name and its prefix names influence ("inf"). The
+/// longest roster name wins, so `kipp` never claims `0_kipp`'s global.
+fn roster_owner_of_influence_var<'a>(
+    var_name: &str,
+    roster: &'a [RosterCompanion],
+) -> Option<&'a RosterCompanion> {
+    let var = var_name.as_bytes();
+    roster
+        .iter()
+        .filter(|member| {
+            let ros = member.ros_name.as_bytes();
+            var.len() > ros.len() && {
+                let (prefix, suffix) = var.split_at(var.len() - ros.len());
+                suffix.eq_ignore_ascii_case(ros)
+                    && prefix.windows(3).any(|w| w.eq_ignore_ascii_case(b"inf"))
+            }
+        })
+        .max_by_key(|member| member.ros_name.len())
 }
 
 #[derive(Serialize)]
@@ -567,12 +594,4 @@ pub struct FullSummary {
     pub companion_status: IndexMap<String, CompanionStatus>,
     pub quest_overview: QuestOverview,
     pub raw_data_counts: HashMap<String, usize>,
-}
-
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-    }
 }

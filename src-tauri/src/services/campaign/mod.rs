@@ -20,18 +20,39 @@ use self::settings::{
     update_campaign_settings as update_settings,
 };
 use crate::config::NWN2Paths;
-use crate::parsers::xml::{CompanionStatus, FullSummary, QuestOverview, XmlData};
+use crate::parsers::xml::{CompanionStatus, FullSummary, QuestOverview, RosterCompanion, XmlData};
+use crate::services::roster::companion_members;
 use crate::services::save_graph::editing::QuestEdits;
 use crate::services::savegame_handler::SaveGameHandler;
 use indexmap::IndexMap;
+use std::collections::HashMap;
 
 pub struct CampaignManager;
+
+/// The save's companions with their `roster.rst` `RosCharName`.
+fn roster_companions(handler: &SaveGameHandler) -> Result<Vec<RosterCompanion>, String> {
+    Ok(companion_members(handler)?
+        .into_iter()
+        .map(|m| RosterCompanion {
+            ros_name: m.ros_name,
+            name: m.char_name,
+        })
+        .collect())
+}
 
 impl CampaignManager {
     pub fn get_summary(handler: &SaveGameHandler) -> Result<FullSummary, String> {
         let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
         let parser = GlobalsParser::from_string(&xml_content)?;
-        Ok(parser.get_full_summary_struct())
+        Ok(parser.get_full_summary_struct(&roster_companions(handler)?))
+    }
+
+    pub fn get_general_info(
+        handler: &SaveGameHandler,
+    ) -> Result<HashMap<String, Option<String>>, String> {
+        let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
+        let parser = GlobalsParser::from_string(&xml_content)?;
+        Ok(parser.get_general_info())
     }
 
     pub fn get_campaign_variables(handler: &SaveGameHandler) -> Result<XmlData, String> {
@@ -106,8 +127,7 @@ impl CampaignManager {
         let xml_content = handler.extract_globals_xml().map_err(|e| e.to_string())?;
         let mut parser = GlobalsParser::from_string(&xml_content)?;
         quest_edits.overlay_globals(&mut parser.data);
-        let ros_names = handler.list_companions().map_err(|e| e.to_string())?;
-        Ok(parser.get_companion_status(&ros_names))
+        Ok(parser.get_companion_status(&roster_companions(handler)?))
     }
 
     pub fn batch_update_module_variables(

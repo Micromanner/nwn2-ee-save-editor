@@ -149,3 +149,78 @@ fn companion_influence_lists_whole_oc_cast() {
         "MotB cast must not leak into an OC save"
     );
 }
+
+fn mid_playthrough_influence(
+    save: &str,
+) -> indexmap::IndexMap<String, app_lib::parsers::xml::CompanionStatus> {
+    let handler = SaveGameHandler::new(
+        common::fixtures_path()
+            .join("saves/mid-playthrough-saves")
+            .join(save),
+    )
+    .expect("handler");
+    CampaignManager::get_companion_influence(&handler, &QuestEdits::default()).expect("influence")
+}
+
+// Westgate keeps influence in `HF_COINF_<tag>` (westgate2.hak `CompanionInfluence`);
+// Mantides has a .ros but no influence global yet, so he takes the shared prefix.
+#[test]
+fn westgate_influence_is_matched_to_roster_companions() {
+    let companions = mid_playthrough_influence("Westgate");
+
+    let rinara = &companions["c_rinara"];
+    assert_eq!(rinara.name, "Rinara");
+    assert_eq!(rinara.influence_var, "HF_COINF_c_rinara");
+    assert_eq!(rinara.source, "roster");
+    assert_eq!(
+        companions["c_charissa"].influence_var,
+        "HF_COINF_c_charissa"
+    );
+    let mantides = &companions["c_mantides"];
+    assert_eq!(mantides.influence_var, "HF_COINF_c_mantides");
+    assert_eq!(mantides.influence, None);
+    assert_eq!(companions.len(), 3);
+}
+
+// The OC Act 2 save carries influence-like globals that belong to no companion.
+#[test]
+fn oc_influence_ignores_globals_without_a_roster_companion() {
+    let companions = mid_playthrough_influence("OC_Act2");
+
+    let vars: Vec<&str> = companions
+        .values()
+        .map(|s| s.influence_var.as_str())
+        .collect();
+    for noise in [
+        "0bWolfInfluence",
+        "00_bInfluence_Glina",
+        "__00_kr_influence_id",
+        "0nDarmonInFlagon",
+    ] {
+        assert!(!vars.contains(&noise), "{noise} is not companion influence");
+    }
+    assert_eq!(
+        companions["npc_bevil"].influence_var,
+        "00_nInfluencenpc_bevil"
+    );
+    assert_eq!(
+        companions
+            .values()
+            .filter(|s| s.source == "explicit")
+            .count(),
+        12
+    );
+}
+
+// Campaigns without an influence system list nothing.
+#[test]
+fn campaigns_without_influence_list_no_companions() {
+    for save in ["BG_Reloaded", "SoZ", "IWD"] {
+        let companions = mid_playthrough_influence(save);
+        assert!(
+            companions.is_empty(),
+            "{save}: {:?}",
+            companions.keys().collect::<Vec<_>>()
+        );
+    }
+}

@@ -39,11 +39,11 @@ pub async fn get_overview_state(state: State<'_, AppState>) -> CommandResult<Ove
             info.game_hour = Some(module_info.game_hour);
         }
 
-        match CampaignManager::get_summary(handler) {
-            Ok(summary) => {
-                info.game_act = summary.general_info.get("game_act").cloned().flatten();
-                info.last_saved = summary.general_info.get("last_saved").cloned().flatten();
-                info.difficulty = summary.general_info.get("difficulty").cloned().flatten();
+        match CampaignManager::get_general_info(handler) {
+            Ok(general_info) => {
+                info.game_act = general_info.get("game_act").cloned().flatten();
+                info.last_saved = general_info.get("last_saved").cloned().flatten();
+                info.difficulty = general_info.get("difficulty").cloned().flatten();
             }
             Err(e) => warn!("Campaign summary unavailable for overview: {e}"),
         }

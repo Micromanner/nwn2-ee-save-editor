@@ -223,7 +223,7 @@ fn test_full_summary() {
 
     let parser = RustXmlParser::from_string(&content).expect("Failed to parse globals.xml");
 
-    let summary = parser.get_full_summary_struct();
+    let summary = parser.get_full_summary_struct(&[]);
 
     println!("Full Summary:");
     println!("  General info entries: {}", summary.general_info.len());
@@ -351,42 +351,6 @@ fn test_xml_round_trip_preserves_quests() {
         overview1.completed_count, overview2.completed_count,
         "Completed count should be preserved"
     );
-}
-
-// =============================================================================
-// COMPANION DISCOVERY TESTS
-// =============================================================================
-
-#[test]
-fn test_potential_companions_discovery() {
-    let Some(content) = load_globals_xml() else {
-        println!("globals.xml not found in fixtures, skipping");
-        return;
-    };
-
-    let parser = RustXmlParser::from_string(&content).expect("Failed to parse globals.xml");
-
-    let potential = parser.discover_potential_companions();
-
-    println!("Potential Companions Discovered:");
-    for (name, found) in &potential {
-        println!("  - {}: {} = {}", name, found.variable, found.influence);
-    }
-}
-
-#[test]
-fn test_discovered_companion_prefers_full_influence_prefix() {
-    let mut parser = RustXmlParser::new();
-    parser
-        .data
-        .integers
-        .insert("CC_InfluenceZorro".to_string(), 42);
-
-    let potential = parser.discover_potential_companions();
-    let zorro = potential.get("zorro").expect("Zorro discovered");
-    assert_eq!(zorro.name, "Zorro");
-    assert_eq!(zorro.variable, "CC_InfluenceZorro");
-    assert_eq!(zorro.influence, 42);
 }
 
 // =============================================================================
@@ -533,7 +497,7 @@ fn test_parse_all_campaign_globals() {
             let parser = RustXmlParser::from_string(&content);
             match parser {
                 Ok(p) => {
-                    let summary = p.get_full_summary_struct();
+                    let summary = p.get_full_summary_struct(&[]);
                     println!(
                         "  Quests: {}, Companions: {}",
                         summary.quest_overview.quest_groups.len(),
@@ -623,4 +587,33 @@ fn test_cheat_flags_stripped_on_write() {
         reparsed.data.booleans, expected_booleans,
         "Only Cheater/ShowCheatsWarning may be stripped; every other boolean must survive"
     );
+}
+
+#[test]
+fn roster_influence_global_goes_to_the_longest_roster_name() {
+    use app_lib::parsers::xml::RosterCompanion;
+    let mut parser = RustXmlParser::new();
+    parser
+        .data
+        .integers
+        .insert("00_nInfluence0_kipp".to_string(), 7);
+    parser.data.integers.insert("yuanti_inferno".to_string(), 1);
+    let roster = [
+        RosterCompanion {
+            ros_name: "kipp".to_string(),
+            name: "Kipp".to_string(),
+        },
+        RosterCompanion {
+            ros_name: "0_kipp".to_string(),
+            name: "Old Kipp".to_string(),
+        },
+    ];
+
+    let companions = parser.get_companion_status(&roster);
+
+    assert_eq!(companions["0_kipp"].name, "Old Kipp");
+    assert_eq!(companions["0_kipp"].influence, Some(7));
+    assert_eq!(companions["kipp"].influence, None);
+    assert_eq!(companions["kipp"].influence_var, "00_nInfluencekipp");
+    assert_eq!(companions.len(), 2);
 }
