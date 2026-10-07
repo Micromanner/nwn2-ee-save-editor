@@ -3,7 +3,7 @@ use crate::character::gff_helpers::{extract_list_from_map, gff_value_to_i32, gff
 use crate::character::item_appearance::{ItemAppearance, parse_equip_slots};
 use crate::character::types::BaseItemId;
 use crate::loaders::GameData;
-use crate::parsers::gff::GffValue;
+use crate::parsers::gff::{GffValue, LocalizedString, LocalizedSubstring};
 use crate::services::item_cost_calculator::calculate_item_cost;
 use crate::services::item_property_decoder::{ItemBonuses, ItemPropertyDecoder};
 use crate::utils::parsing::{row_int, row_str};
@@ -1612,13 +1612,15 @@ fn coerce_json_to_gff_type(
         GffValue::Int64(_) => signed().map(GffValue::Int64),
         GffValue::Float(_) => json_val.as_f64().map(|n| GffValue::Float(n as f32)),
         GffValue::Double(_) => json_val.as_f64().map(GffValue::Double),
-        GffValue::String(_) => json_val
-            .as_str()
-            .map(|s| GffValue::String(std::borrow::Cow::Owned(s.to_string()))),
-        GffValue::ResRef(_) => json_val
-            .as_str()
-            .map(|s| GffValue::ResRef(std::borrow::Cow::Owned(s.to_string()))),
-        GffValue::LocString(_) => json_to_locstring(json_val),
+        GffValue::String(mut old) => json_val.as_str().map(|s| {
+            old.set(s);
+            GffValue::String(old)
+        }),
+        GffValue::ResRef(mut old) => json_val.as_str().map(|s| {
+            old.set(s);
+            GffValue::ResRef(old)
+        }),
+        GffValue::LocString(old) => json_to_locstring(json_val, old.substrings),
         GffValue::ListOwned(existing_list) => {
             let arr = json_val.as_array().ok_or_else(String::new)?;
             return merge_json_list_into_gff_list(&existing_list, arr).map(GffValue::ListOwned);
@@ -1642,7 +1644,10 @@ fn coerce_json_to_struct(
     Ok(GffValue::StructOwned(Box::new(existing)))
 }
 
-fn json_to_locstring(json_val: &JsonValue) -> Option<GffValue<'static>> {
+fn json_to_locstring(
+    json_val: &JsonValue,
+    mut existing: Vec<LocalizedSubstring>,
+) -> Option<GffValue<'static>> {
     let obj = json_val.as_object()?;
     let string_ref = obj.get("string_ref")?.as_i64()? as i32;
     let substrings = obj
@@ -1652,24 +1657,33 @@ fn json_to_locstring(json_val: &JsonValue) -> Option<GffValue<'static>> {
             arr.iter()
                 .filter_map(|sub| {
                     let sub_obj = sub.as_object()?;
-                    Some(crate::parsers::gff::types::LocalizedSubstring {
-                        language: sub_obj.get("language")?.as_u64()? as u32,
-                        gender: sub_obj.get("gender")?.as_u64()? as u32,
-                        string: std::borrow::Cow::Owned(
-                            sub_obj.get("string")?.as_str()?.to_string(),
-                        ),
+                    let language = sub_obj.get("language")?.as_u64()? as u32;
+                    let gender = sub_obj.get("gender")?.as_u64()? as u32;
+                    let text = sub_obj.get("string")?.as_str()?;
+                    let string = existing
+                        .iter_mut()
+                        .find(|old| old.language == language && old.gender == gender)
+                        .map_or_else(
+                            || text.into(),
+                            |old| {
+                                old.string.set(text);
+                                std::mem::take(&mut old.string)
+                            },
+                        );
+                    Some(LocalizedSubstring {
+                        string,
+                        language,
+                        gender,
                     })
                 })
                 .collect()
         })
         .unwrap_or_default();
 
-    Some(GffValue::LocString(
-        crate::parsers::gff::types::LocalizedString {
-            string_ref,
-            substrings,
-        },
-    ))
+    Some(GffValue::LocString(LocalizedString {
+        string_ref,
+        substrings,
+    }))
 }
 
 fn json_to_list(json_val: &JsonValue) -> Option<GffValue<'static>> {
@@ -1710,12 +1724,12 @@ fn json_to_gff_best_guess(json_val: &JsonValue) -> Option<GffValue<'static>> {
                 n.as_f64().map(|f| GffValue::Float(f as f32))
             }
         }
-        JsonValue::String(s) => Some(GffValue::String(std::borrow::Cow::Owned(s.clone()))),
+        JsonValue::String(s) => Some(GffValue::String(s.clone().into())),
         JsonValue::Bool(b) => Some(GffValue::Byte(u8::from(*b))),
         JsonValue::Array(_) => json_to_list(json_val),
         JsonValue::Object(obj) => {
             if obj.contains_key("string_ref") {
-                json_to_locstring(json_val)
+                json_to_locstring(json_val, Vec::new())
             } else {
                 json_to_struct_owned(json_val)
             }
@@ -2127,7 +2141,21 @@ fn merge_json_list_into_gff_list(
 mod tests {
     use super::*;
     use crate::character::Character;
-    use std::borrow::Cow;
+    use crate::parsers::gff::GffText;
+
+    #[test]
+    fn test_coerce_keeps_unchanged_legacy_text() {
+        let legacy = [0xD2, 0xE5, 0xF1, 0xF2];
+        let text = GffText::decode(&legacy, 0);
+        let unchanged = JsonValue::String(text.to_string());
+        let existing = GffValue::String(text);
+
+        let kept = coerce_json_to_gff_type(&unchanged, existing.clone()).unwrap();
+        assert!(matches!(&kept, GffValue::String(t) if t.encoded() == legacy));
+
+        let edited = coerce_json_to_gff_type(&JsonValue::from("new"), existing).unwrap();
+        assert!(matches!(&edited, GffValue::String(t) if t.encoded() == b"new"));
+    }
 
     #[test]
     fn test_normalize_item_property_entry_types_and_aliases() {
@@ -2277,10 +2305,7 @@ mod tests {
 
         let item1 = {
             let mut item = IndexMap::new();
-            item.insert(
-                "Tag".to_string(),
-                GffValue::String(Cow::Owned("test_sword".to_string())),
-            );
+            item.insert("Tag".to_string(), GffValue::String("test_sword".into()));
             item.insert("BaseItem".to_string(), GffValue::Int(42));
             item.insert("StackSize".to_string(), GffValue::Short(1));
             item.insert("Identified".to_string(), GffValue::Byte(1));
@@ -2289,10 +2314,7 @@ mod tests {
 
         let item2 = {
             let mut item = IndexMap::new();
-            item.insert(
-                "Tag".to_string(),
-                GffValue::String(Cow::Owned("potion".to_string())),
-            );
+            item.insert("Tag".to_string(), GffValue::String("potion".into()));
             item.insert("BaseItem".to_string(), GffValue::Int(100));
             item.insert("StackSize".to_string(), GffValue::Short(5));
             item.insert("Identified".to_string(), GffValue::Byte(0));
@@ -2307,10 +2329,7 @@ mod tests {
         let equipped_item = {
             let mut item = IndexMap::new();
             item.insert("__struct_id__".to_string(), GffValue::Word(0x0010));
-            item.insert(
-                "Tag".to_string(),
-                GffValue::String(Cow::Owned("equipped_sword".to_string())),
-            );
+            item.insert("Tag".to_string(), GffValue::String("equipped_sword".into()));
             item.insert("BaseItem".to_string(), GffValue::Int(50));
             item.insert("StackSize".to_string(), GffValue::Short(1));
             item.insert("Identified".to_string(), GffValue::Byte(1));
@@ -2429,10 +2448,7 @@ mod tests {
     ) -> IndexMap<String, GffValue<'static>> {
         let mut item = IndexMap::new();
         item.insert("BaseItem".to_string(), GffValue::Int(0));
-        item.insert(
-            "Tag".to_string(),
-            GffValue::String(Cow::Owned(tag.to_string())),
-        );
+        item.insert("Tag".to_string(), GffValue::String(tag.into()));
         item.insert("StackSize".to_string(), GffValue::Short(stack));
         if !props.is_empty() {
             let list: Vec<_> = props
@@ -2899,7 +2915,7 @@ mod tests {
         equipped_item.insert("BaseItem".to_string(), GffValue::Int(0));
         equipped_item.insert(
             "Tag".to_string(),
-            GffValue::String(Cow::Owned("unidentified_blade".to_string())),
+            GffValue::String("unidentified_blade".into()),
         );
         equipped_item.insert("StackSize".to_string(), GffValue::Short(1));
 

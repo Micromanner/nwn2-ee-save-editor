@@ -368,7 +368,6 @@ fn export_to_localvault_rejected_for_companion() {
 fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
     use app_lib::parsers::gff::GffValue;
     use indexmap::IndexMap;
-    use std::borrow::Cow;
 
     let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
     let mut session = make_session();
@@ -376,14 +375,11 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
     session.load_companion("bishop").expect("load companion");
 
     let mut var = IndexMap::new();
-    var.insert(
-        "Name".to_string(),
-        GffValue::String(Cow::Borrowed("cmi_animcomp")),
-    );
+    var.insert("Name".to_string(), GffValue::String("cmi_animcomp".into()));
     var.insert("Type".to_string(), GffValue::Dword(3));
     var.insert(
         "Value".to_string(),
-        GffValue::String(Cow::Borrowed("c_ancom_wolf3")),
+        GffValue::String("c_ancom_wolf3".into()),
     );
     {
         let character = session.character_mut().expect("character");

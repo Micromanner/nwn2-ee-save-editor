@@ -1,7 +1,6 @@
 use indexmap::IndexMap;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -50,7 +49,16 @@ fn apply_var_entry_update(
                 .map_err(|e| format!("Invalid float value for '{var_name}': {e}"))?;
             (2, GffValue::Float(v))
         }
-        "string" => (3, GffValue::String(Cow::Owned(value.to_string()))),
+        "string" => {
+            let text = match entry.get_mut("Value") {
+                Some(GffValue::String(old)) => {
+                    old.set(value);
+                    std::mem::take(old)
+                }
+                _ => value.into(),
+            };
+            (3, GffValue::String(text))
+        }
         _ => return Err(format!("Unknown variable type: {var_type}")),
     };
     entry.insert("Type".to_string(), GffValue::Dword(type_id));
@@ -546,7 +554,7 @@ fn update_module_ifo_vars(
             let mut new_entry = IndexMap::new();
             new_entry.insert(
                 "Name".to_string(),
-                GffValue::String(Cow::Owned(var_name.clone())),
+                GffValue::String(var_name.clone().into()),
             );
             apply_var_entry_update(&mut new_entry, var_name, value, var_type)?;
             entries.push(new_entry);

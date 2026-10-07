@@ -218,7 +218,7 @@ impl GffWriter {
             }
             GffValue::String(v) => {
                 let offset = self.field_data.position() as u32;
-                let bytes = v.as_bytes();
+                let bytes = v.encoded();
                 self.field_data
                     .write_u32::<LittleEndian>(bytes.len() as u32)?;
                 self.field_data.write_all(bytes)?;
@@ -226,7 +226,7 @@ impl GffWriter {
             }
             GffValue::ResRef(v) => {
                 let offset = self.field_data.position() as u32;
-                let bytes = v.as_bytes();
+                let bytes = v.encoded();
                 if bytes.len() > 32 {
                     return Err(GffError::Serialization(format!(
                         "ResRef '{v}' is longer than 32 bytes"
@@ -248,7 +248,7 @@ impl GffWriter {
                 let encoded: Vec<&[u8]> = v
                     .substrings
                     .iter()
-                    .map(|sub| sub.string.as_bytes())
+                    .map(|sub| sub.string.encoded())
                     .collect();
 
                 let content_size: usize = encoded.iter().map(|b| 8 + b.len()).sum();

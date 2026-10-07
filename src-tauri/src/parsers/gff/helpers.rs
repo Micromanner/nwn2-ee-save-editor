@@ -89,7 +89,6 @@ pub fn variant_name(v: &GffValue<'_>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Cow;
 
     fn make_fields() -> IndexMap<String, GffValue<'static>> {
         let mut f = IndexMap::new();
@@ -98,10 +97,7 @@ mod tests {
         f.insert("AsDword".to_string(), GffValue::Dword(3));
         f.insert("AsShort".to_string(), GffValue::Short(4));
         f.insert("AsWord".to_string(), GffValue::Word(5));
-        f.insert(
-            "AsString".to_string(),
-            GffValue::String(Cow::Borrowed("hi")),
-        );
+        f.insert("AsString".to_string(), GffValue::String("hi".into()));
         f
     }
 

@@ -122,7 +122,7 @@ pub fn read_campaign_settings(
         settings.display_name = ls
             .substrings
             .first()
-            .map(|s| s.string.clone().into_owned())
+            .map(|s| s.string.to_string())
             .unwrap_or_default();
     }
 
@@ -131,7 +131,7 @@ pub fn read_campaign_settings(
         settings.description = ls
             .substrings
             .first()
-            .map(|s| s.string.clone().into_owned())
+            .map(|s| s.string.to_string())
             .unwrap_or_default();
     }
 

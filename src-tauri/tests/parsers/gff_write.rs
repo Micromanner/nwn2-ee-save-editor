@@ -2,7 +2,6 @@ use super::super::common::load_test_gff;
 use app_lib::parsers::gff::parser::GffParser;
 use app_lib::parsers::gff::types::{GffValue, LocalizedString, LocalizedSubstring};
 use app_lib::parsers::gff::writer::GffWriter;
-use std::borrow::Cow;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -124,7 +123,7 @@ async fn test_file_modify_name_and_save() {
             let new_locstring = LocalizedString {
                 string_ref: -1,
                 substrings: vec![LocalizedSubstring {
-                    string: Cow::Owned(new_name.to_string()),
+                    string: new_name.into(),
                     language: 0,
                     gender: 0,
                 }],
@@ -348,7 +347,7 @@ async fn test_roundtrip_non_ascii_locstring_stable() {
             let substrings = samples
                 .iter()
                 .map(|(lang, text)| LocalizedSubstring {
-                    string: Cow::Owned((*text).to_string()),
+                    string: (*text).into(),
                     language: *lang,
                     gender: 0,
                 })
@@ -451,5 +450,65 @@ async fn test_file_verify_bytes_on_disk() {
     println!(
         "Verified {} bytes written correctly to disk",
         disk_bytes.len()
+    );
+}
+
+/// Legacy code-page strings (no UTF-8) are written back as their original
+/// bytes whatever the editor language guessed; only an edited string becomes UTF-8.
+#[test]
+fn test_roundtrip_legacy_bytes_unchanged() {
+    const CP1251_TEST: [u8; 4] = [0xD2, 0xE5, 0xF1, 0xF2];
+    let count = |haystack: &[u8], needle: &[u8]| {
+        haystack
+            .windows(needle.len())
+            .filter(|w| *w == needle)
+            .count()
+    };
+
+    let mut root = indexmap::IndexMap::new();
+    root.insert("Tag".to_string(), GffValue::String("QZQZ".into()));
+    root.insert("Edited".to_string(), GffValue::String("XKXK".into()));
+    root.insert("Conversation".to_string(), GffValue::ResRef("RRRR".into()));
+    root.insert(
+        "FirstName".to_string(),
+        GffValue::LocString(LocalizedString {
+            string_ref: -1,
+            substrings: vec![LocalizedSubstring {
+                string: "WYWY".into(),
+                language: 0,
+                gender: 0,
+            }],
+        }),
+    );
+    let mut bytes = GffWriter::new("BIC ", "V3.2").write(root).expect("Write");
+    for marker in [b"QZQZ", b"XKXK", b"RRRR", b"WYWY"] {
+        let pos = bytes
+            .windows(4)
+            .position(|w| w == marker)
+            .expect("marker written");
+        bytes[pos..pos + 4].copy_from_slice(&CP1251_TEST);
+    }
+
+    let parser = GffParser::from_bytes(bytes).expect("Parse");
+    let mut fields: indexmap::IndexMap<_, _> = parser
+        .read_struct_fields(0)
+        .expect("Read root")
+        .into_iter()
+        .map(|(k, v)| (k, v.force_owned().expect("force owned")))
+        .collect();
+    fields.insert("Edited".to_string(), GffValue::String("Тест".into()));
+
+    let rewritten = GffWriter::new("BIC ", "V3.2")
+        .write(fields)
+        .expect("Rewrite");
+    assert_eq!(
+        count(&rewritten, &CP1251_TEST),
+        3,
+        "untouched legacy bytes kept"
+    );
+    assert_eq!(
+        count(&rewritten, "Тест".as_bytes()),
+        1,
+        "edited string is UTF-8"
     );
 }

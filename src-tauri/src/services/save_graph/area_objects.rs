@@ -300,7 +300,6 @@ pub fn installed_module_objects(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Cow;
 
     fn entry(
         struct_id: u32,
@@ -312,7 +311,7 @@ mod tests {
     }
 
     fn tag(value: &str) -> GffValue<'static> {
-        GffValue::String(Cow::Owned(value.to_string()))
+        GffValue::String(value.into())
     }
 
     fn git(fields: Vec<(&str, GffValue<'static>)>) -> Vec<u8> {

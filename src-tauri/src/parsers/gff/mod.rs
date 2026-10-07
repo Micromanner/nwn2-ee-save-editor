@@ -13,6 +13,7 @@ pub use helpers::{
 pub use merge::merge_fields_into_gff;
 pub use parser::GffParser;
 pub use types::{
-    GffFieldType, GffValue, LazyStruct, LocalizedString, LocalizedSubstring, force_owned_map,
+    GffFieldType, GffText, GffValue, LazyStruct, LocalizedString, LocalizedSubstring,
+    force_owned_map,
 };
 pub use writer::GffWriter;

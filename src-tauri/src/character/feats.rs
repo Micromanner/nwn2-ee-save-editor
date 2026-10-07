@@ -685,7 +685,7 @@ impl Character {
         if source != FeatSource::Unknown {
             new_entry.insert(
                 "Source".to_string(),
-                GffValue::String(std::borrow::Cow::Owned(source.as_str().to_string())),
+                GffValue::String(source.as_str().into()),
             );
         }
 

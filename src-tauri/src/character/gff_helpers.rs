@@ -1,6 +1,5 @@
 use crate::parsers::gff::{GffValue, LocalizedString, LocalizedSubstring};
 use indexmap::IndexMap;
-use std::borrow::Cow;
 
 impl super::Character {
     pub fn get_byte(&self, field: &str) -> Option<u8> {
@@ -109,7 +108,7 @@ impl super::Character {
         }
     }
 
-    pub fn get_localized_string(&self, field: &str) -> Option<&LocalizedString<'static>> {
+    pub fn get_localized_string(&self, field: &str) -> Option<&LocalizedString> {
         match self.gff.get(field)? {
             GffValue::LocString(ls) => Some(ls),
             _ => None,
@@ -225,8 +224,12 @@ impl super::Character {
     }
 
     pub fn set_string(&mut self, field: &str, value: String) {
-        self.gff
-            .insert(field.to_string(), GffValue::String(Cow::Owned(value)));
+        if let Some(GffValue::String(old)) = self.gff.get_mut(field) {
+            old.set(&value);
+        } else {
+            self.gff
+                .insert(field.to_string(), GffValue::String(value.into()));
+        }
         self.modified = true;
     }
 
@@ -234,7 +237,7 @@ impl super::Character {
         if let Some(GffValue::LocString(ls)) = self.gff.get_mut(field)
             && let Some(first) = ls.substrings.first_mut()
         {
-            first.string = Cow::Owned(value);
+            first.string.set(&value);
             ls.string_ref = -1;
             self.modified = true;
             return;
@@ -243,7 +246,7 @@ impl super::Character {
         let ls = LocalizedString {
             string_ref: -1,
             substrings: vec![LocalizedSubstring {
-                string: Cow::Owned(value),
+                string: value.into(),
                 language: 0,
                 gender: 0,
             }],
@@ -253,8 +256,12 @@ impl super::Character {
     }
 
     pub fn set_resref(&mut self, field: &str, value: String) {
-        self.gff
-            .insert(field.to_string(), GffValue::ResRef(Cow::Owned(value)));
+        if let Some(GffValue::ResRef(old)) = self.gff.get_mut(field) {
+            old.set(&value);
+        } else {
+            self.gff
+                .insert(field.to_string(), GffValue::ResRef(value.into()));
+        }
         self.modified = true;
     }
 
@@ -291,7 +298,7 @@ impl super::Character {
     }
 }
 
-pub fn extract_localized_string(ls: &LocalizedString<'_>) -> Option<String> {
+pub fn extract_localized_string(ls: &LocalizedString) -> Option<String> {
     if let Some(substring) = ls.substrings.first()
         && !substring.string.is_empty()
     {
@@ -340,6 +347,7 @@ pub fn gff_value_to_string(value: &GffValue<'_>) -> Option<String> {
 mod tests {
     use super::*;
     use crate::character::Character;
+    use crate::parsers::gff::GffText;
 
     fn create_test_fields() -> IndexMap<String, GffValue<'static>> {
         let mut fields = IndexMap::new();
@@ -347,10 +355,7 @@ mod tests {
         fields.insert("Dex".to_string(), GffValue::Byte(14));
         fields.insert("Con".to_string(), GffValue::Byte(12));
         fields.insert("Int".to_string(), GffValue::Int(10));
-        fields.insert(
-            "Name".to_string(),
-            GffValue::String(Cow::Owned("Test".to_string())),
-        );
+        fields.insert("Name".to_string(), GffValue::String("Test".into()));
         fields
     }
 
@@ -464,10 +469,7 @@ mod tests {
         assert_eq!(gff_value_to_i32(&GffValue::Int(42)), Some(42));
         assert_eq!(gff_value_to_i32(&GffValue::Byte(10)), Some(10));
         assert_eq!(gff_value_to_i32(&GffValue::Short(-5)), Some(-5));
-        assert_eq!(
-            gff_value_to_i32(&GffValue::String(Cow::Borrowed("test"))),
-            None
-        );
+        assert_eq!(gff_value_to_i32(&GffValue::String("test".into())), None);
     }
 
     #[test]
@@ -581,12 +583,40 @@ mod tests {
     }
 
     #[test]
+    fn test_setting_unchanged_text_keeps_legacy_bytes() {
+        let legacy = [0xD2, 0xE5, 0xF1, 0xF2];
+        let text = GffText::decode(&legacy, 0);
+        let unchanged = text.to_string();
+        let mut fields = IndexMap::new();
+        fields.insert("Deity".to_string(), GffValue::String(text.clone()));
+        let ls = LocalizedString {
+            string_ref: -1,
+            substrings: vec![LocalizedSubstring {
+                string: text,
+                language: 0,
+                gender: 0,
+            }],
+        };
+        fields.insert("FirstName".to_string(), GffValue::LocString(ls));
+
+        let mut character = Character::from_gff(fields).expect("character from gff");
+        character.set_string("Deity", unchanged.clone());
+        character.set_localized_string("FirstName", unchanged);
+
+        assert!(
+            matches!(character.gff().get("Deity"), Some(GffValue::String(t)) if t.encoded() == legacy)
+        );
+        let first_name = character.get_localized_string("FirstName").unwrap();
+        assert_eq!(first_name.substrings[0].string.encoded(), legacy);
+    }
+
+    #[test]
     fn test_set_localized_string_preserves_language() {
         let mut fields = IndexMap::new();
         let ls = LocalizedString {
             string_ref: -1,
             substrings: vec![LocalizedSubstring {
-                string: Cow::Owned("Original".to_string()),
+                string: "Original".into(),
                 language: 5,
                 gender: 2,
             }],
@@ -599,7 +629,7 @@ mod tests {
         let updated = character.get_localized_string("Description").unwrap();
         assert_eq!(updated.substrings[0].language, 5);
         assert_eq!(updated.substrings[0].gender, 2);
-        assert_eq!(updated.substrings[0].string.as_ref(), "Updated");
+        assert_eq!(updated.substrings[0].string, "Updated");
     }
 
     #[test]
@@ -609,12 +639,12 @@ mod tests {
             string_ref: -1,
             substrings: vec![
                 LocalizedSubstring {
-                    string: Cow::Owned("Hello".to_string()),
+                    string: "Hello".into(),
                     language: 0,
                     gender: 0,
                 },
                 LocalizedSubstring {
-                    string: Cow::Owned("Hallo".to_string()),
+                    string: "Hallo".into(),
                     language: 2,
                     gender: 0,
                 },
@@ -627,8 +657,8 @@ mod tests {
 
         let updated = character.get_localized_string("Description").unwrap();
         assert_eq!(updated.substrings.len(), 2);
-        assert_eq!(updated.substrings[0].string.as_ref(), "Updated");
-        assert_eq!(updated.substrings[1].string.as_ref(), "Hallo");
+        assert_eq!(updated.substrings[0].string, "Updated");
+        assert_eq!(updated.substrings[1].string, "Hallo");
         assert_eq!(updated.substrings[1].language, 2);
     }
 }

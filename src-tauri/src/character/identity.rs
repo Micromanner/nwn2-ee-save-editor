@@ -293,7 +293,6 @@ mod tests {
     use crate::parsers::gff::{GffValue, LocalizedString, LocalizedSubstring};
     use crate::parsers::tlk::TLKParser;
     use indexmap::IndexMap;
-    use std::borrow::Cow;
     use std::sync::{Arc, RwLock};
 
     fn create_test_game_data() -> GameData {
@@ -308,7 +307,7 @@ mod tests {
             GffValue::LocString(LocalizedString {
                 string_ref: -1,
                 substrings: vec![LocalizedSubstring {
-                    string: Cow::Owned("TestFirst".to_string()),
+                    string: "TestFirst".into(),
                     language: 0,
                     gender: 0,
                 }],
@@ -320,7 +319,7 @@ mod tests {
             GffValue::LocString(LocalizedString {
                 string_ref: -1,
                 substrings: vec![LocalizedSubstring {
-                    string: Cow::Owned("TestLast".to_string()),
+                    string: "TestLast".into(),
                     language: 0,
                     gender: 0,
                 }],
@@ -338,17 +337,14 @@ mod tests {
             GffValue::LocString(LocalizedString {
                 string_ref: -1,
                 substrings: vec![LocalizedSubstring {
-                    string: Cow::Owned("A brave hero".to_string()),
+                    string: "A brave hero".into(),
                     language: 0,
                     gender: 0,
                 }],
             }),
         );
 
-        fields.insert(
-            "Deity".to_string(),
-            GffValue::String(Cow::Owned(String::new())),
-        );
+        fields.insert("Deity".to_string(), GffValue::String(String::new().into()));
 
         Character::from_gff(fields).expect("character from gff")
     }

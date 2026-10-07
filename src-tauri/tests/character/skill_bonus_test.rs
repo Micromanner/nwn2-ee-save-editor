@@ -6,7 +6,6 @@ mod tests {
     use app_lib::parsers::tlk::TLKParser;
     use app_lib::services::item_property_decoder::ItemPropertyDecoder;
     use indexmap::IndexMap;
-    use std::borrow::Cow;
     use std::sync::Arc;
 
     fn setup_test_environment() -> (Character, ItemPropertyDecoder) {
@@ -28,10 +27,7 @@ mod tests {
         // 1. Create an item with Skill Bonus (Property 52), Subtype 0 (Concentration), Cost 5 (Value +5)
         let mut item = IndexMap::new();
         item.insert("BaseItem".to_string(), GffValue::Int(1)); // Arbitrary base item
-        item.insert(
-            "Tag".to_string(),
-            GffValue::String(Cow::Owned("TestHelmet".to_string())),
-        );
+        item.insert("Tag".to_string(), GffValue::String("TestHelmet".into()));
         item.insert("Identified".to_string(), GffValue::Byte(1));
 
         let mut prop = IndexMap::new();

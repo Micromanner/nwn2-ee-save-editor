@@ -8,10 +8,12 @@ use indexmap::IndexMap;
 use memmap2::Mmap;
 use tracing::{debug, instrument, trace};
 
-use crate::utils::text_encoding::{decode_localized_text, decode_text};
+use crate::utils::text_encoding::decode_text;
 
 use super::error::GffError;
-use super::types::{GffValue, LazyStruct, LocalizedString, LocalizedSubstring, force_owned_map};
+use super::types::{
+    GffText, GffValue, LazyStruct, LocalizedString, LocalizedSubstring, force_owned_map,
+};
 
 const HEADER_SIZE: usize = 56;
 const LABEL_SIZE: usize = 16;
@@ -321,18 +323,18 @@ impl GffParser {
         Ok(LittleEndian::read_f64(slice))
     }
 
-    fn read_string<'a>(&self, offset: u32) -> Result<Cow<'a, str>, GffError> {
+    fn read_string(&self, offset: u32) -> Result<GffText, GffError> {
         let offset = offset as usize;
         let len = LittleEndian::read_u32(self.get_data_slice(offset, 4)?) as usize;
         let str_slice = self.get_data_slice(offset + 4, len)?;
-        Ok(Cow::Owned(decode_text(str_slice)))
+        Ok(GffText::decode(str_slice, 0))
     }
 
-    fn read_resref<'a>(&self, offset: u32) -> Result<Cow<'a, str>, GffError> {
+    fn read_resref(&self, offset: u32) -> Result<GffText, GffError> {
         let offset = offset as usize;
         let len = self.get_data_slice(offset, 1)?[0] as usize;
         let str_slice = self.get_data_slice(offset + 1, len)?;
-        Ok(Cow::Owned(decode_text(str_slice)))
+        Ok(GffText::decode(str_slice, 0))
     }
 
     fn read_void<'a>(&self, offset: u32) -> Result<Cow<'a, [u8]>, GffError> {
@@ -342,7 +344,7 @@ impl GffParser {
         Ok(Cow::Owned(data.to_vec()))
     }
 
-    fn read_locstring<'a>(&self, offset: u32) -> Result<LocalizedString<'a>, GffError> {
+    fn read_locstring(&self, offset: u32) -> Result<LocalizedString, GffError> {
         let offset = offset as usize;
         let slice = self.get_data_slice(offset, 12)?;
         let string_ref = LittleEndian::read_i32(&slice[4..8]);
@@ -359,7 +361,7 @@ impl GffParser {
 
             let str_slice = self.get_data_slice(current_offset + 8, len)?;
             substrings.push(LocalizedSubstring {
-                string: Cow::Owned(decode_localized_text(str_slice, id / 2)),
+                string: GffText::decode(str_slice, id / 2),
                 language: id / 2,
                 gender: id % 2,
             });

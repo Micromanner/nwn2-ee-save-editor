@@ -19,7 +19,6 @@ use crate::parsers::gff::GffValue;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use std::borrow::Cow;
 use tracing::info;
 
 /// `feat.2da` row 199 (AnimalCompanion) - granted to druids at 1 and rangers at 4.
@@ -128,7 +127,7 @@ pub fn sync_mod_companion_variable(fields: &mut IndexMap<String, GffValue<'stati
         info!(
             "Retargeting {MOD_COMPANION_VAR} from '{value}' to '{new_value}' to follow CompanionType"
         );
-        var.insert("Value".to_string(), GffValue::String(Cow::Owned(new_value)));
+        var.insert("Value".to_string(), GffValue::String(new_value.into()));
         return;
     }
 }
@@ -205,15 +204,9 @@ mod tests {
 
     fn var(name: &str, value: &str) -> IndexMap<String, GffValue<'static>> {
         let mut v = IndexMap::new();
-        v.insert(
-            "Name".to_string(),
-            GffValue::String(Cow::Owned(name.to_string())),
-        );
+        v.insert("Name".to_string(), GffValue::String(name.into()));
         v.insert("Type".to_string(), GffValue::Dword(3));
-        v.insert(
-            "Value".to_string(),
-            GffValue::String(Cow::Owned(value.to_string())),
-        );
+        v.insert("Value".to_string(), GffValue::String(value.into()));
         v
     }
 
@@ -264,7 +257,7 @@ mod tests {
         let mut fields = IndexMap::new();
         fields.insert(
             COMPANION_NAME.to_string(),
-            GffValue::String(Cow::Owned("Karnwyr".to_string())),
+            GffValue::String("Karnwyr".into()),
         );
         fields.insert(COMPANION_TYPE.to_string(), GffValue::Int(1));
         Character::from_gff(fields).expect("character from gff")

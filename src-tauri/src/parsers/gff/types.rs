@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::error::GffError;
 use super::parser::GffParser;
+use crate::utils::text_encoding::decode_localized_text;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,17 +29,109 @@ pub enum GffFieldType {
     List = 15,
 }
 
+/// Decoded GFF text. Bytes that were not valid UTF-8 (a legacy code page) are
+/// kept so an unedited string is written back unchanged instead of re-encoding
+/// a guessed decode; any edit builds a new value, which is written as UTF-8.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GffText {
+    text: String,
+    legacy_bytes: Option<Box<[u8]>>,
+}
+
+impl GffText {
+    pub fn decode(bytes: &[u8], nwn_language_id: u32) -> Self {
+        match std::str::from_utf8(bytes) {
+            Ok(text) => text.into(),
+            Err(_) => Self {
+                text: decode_localized_text(bytes, nwn_language_id),
+                legacy_bytes: Some(bytes.into()),
+            },
+        }
+    }
+
+    /// Replaces the text, keeping the original bytes when it is unchanged.
+    pub fn set(&mut self, text: &str) {
+        if self.text != text {
+            *self = text.into();
+        }
+    }
+
+    /// The bytes to write: the original legacy bytes, else UTF-8.
+    pub fn encoded(&self) -> &[u8] {
+        self.legacy_bytes.as_deref().unwrap_or(self.text.as_bytes())
+    }
+}
+
+impl std::ops::Deref for GffText {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.text
+    }
+}
+
+impl AsRef<str> for GffText {
+    fn as_ref(&self) -> &str {
+        &self.text
+    }
+}
+
+impl std::fmt::Display for GffText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl From<String> for GffText {
+    fn from(text: String) -> Self {
+        Self {
+            text,
+            legacy_bytes: None,
+        }
+    }
+}
+
+impl From<&str> for GffText {
+    fn from(text: &str) -> Self {
+        text.to_owned().into()
+    }
+}
+
+impl PartialEq<str> for GffText {
+    fn eq(&self, other: &str) -> bool {
+        self.text == other
+    }
+}
+
+impl PartialEq<&str> for GffText {
+    fn eq(&self, other: &&str) -> bool {
+        self.text == *other
+    }
+}
+
+impl Serialize for GffText {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.text)
+    }
+}
+
+impl<'de> Deserialize<'de> for GffText {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer).map(Self::from)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocalizedSubstring<'a> {
-    pub string: Cow<'a, str>,
+pub struct LocalizedSubstring {
+    pub string: GffText,
     pub language: u32,
     pub gender: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocalizedString<'a> {
+pub struct LocalizedString {
     pub string_ref: i32,
-    pub substrings: Vec<LocalizedSubstring<'a>>,
+    pub substrings: Vec<LocalizedSubstring>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,9 +147,9 @@ pub enum GffValue<'a> {
     Int64(i64),
     Float(f32),
     Double(f64),
-    String(Cow<'a, str>),
-    ResRef(Cow<'a, str>),
-    LocString(LocalizedString<'a>),
+    String(GffText),
+    ResRef(GffText),
+    LocString(LocalizedString),
 
     #[serde(with = "serde_bytes")]
     Void(Cow<'a, [u8]>),
@@ -156,23 +249,9 @@ impl GffValue<'_> {
             GffValue::Int64(v) => GffValue::Int64(v),
             GffValue::Float(v) => GffValue::Float(v),
             GffValue::Double(v) => GffValue::Double(v),
-            GffValue::String(cow) => GffValue::String(Cow::Owned(cow.into_owned())),
-            GffValue::ResRef(cow) => GffValue::ResRef(Cow::Owned(cow.into_owned())),
-            GffValue::LocString(ls) => {
-                let owned_substrings = ls
-                    .substrings
-                    .into_iter()
-                    .map(|sub| LocalizedSubstring {
-                        string: Cow::Owned(sub.string.into_owned()),
-                        language: sub.language,
-                        gender: sub.gender,
-                    })
-                    .collect();
-                GffValue::LocString(LocalizedString {
-                    string_ref: ls.string_ref,
-                    substrings: owned_substrings,
-                })
-            }
+            GffValue::String(text) => GffValue::String(text),
+            GffValue::ResRef(text) => GffValue::ResRef(text),
+            GffValue::LocString(ls) => GffValue::LocString(ls),
             GffValue::Void(cow) => GffValue::Void(Cow::Owned(cow.into_owned())),
             GffValue::Struct(lazy) => GffValue::Struct(lazy),
             GffValue::List(vec) => GffValue::List(vec),
