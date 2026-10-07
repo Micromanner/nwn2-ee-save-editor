@@ -1265,6 +1265,7 @@ impl Character {
         } else {
             "Unknown Spell".to_string()
         };
+        let name = crate::utils::strip_markup(&name);
 
         let icon = spell_row
             .get("iconresref")
@@ -1417,7 +1418,7 @@ impl Character {
                 if let Some(name) = game_data.get_string(strref)
                     && !name.is_empty()
                 {
-                    return name;
+                    return crate::utils::strip_markup(&name);
                 }
             } else if !name_raw.is_empty() {
                 return name_raw.clone();

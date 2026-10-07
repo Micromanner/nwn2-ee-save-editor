@@ -37,7 +37,7 @@ export interface ClassInfo {
   id: number;
   name: string;
   label: string;
-  type: 'base' | 'prestige';
+  type: 'base' | 'prestige' | 'npc';
   focus: string;
   max_level: number;
   hit_die: number;
@@ -48,6 +48,7 @@ export interface ClassInfo {
   primary_ability: string;
   bab_progression: string;
   alignment_restricted: boolean;
+  icon: string | null;
   description?: string;
   prerequisites?: {
     base_attack_bonus: number | null;
@@ -72,12 +73,6 @@ export interface CategorizedClassesResponse {
   };
   focus_info: Record<string, FocusInfo>;
   total_classes: number;
-  character_context?: {
-    current_classes: unknown;
-    prestige_requirements?: unknown[];
-    can_multiclass: boolean;
-    multiclass_slots_used: number;
-  };
 }
 
 // Generic subsystem data structure
@@ -490,7 +485,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     }
   }, [characterId, loadMetadataInternal]);
 
-  const preloadGameData = useCallback((id: number) => {
+  const preloadGameData = useCallback(() => {
     // Track completion so character switching stays locked until every
     // background fetch has landed (a switch mid-preload would let stale
     // subsystem data from the previous character overwrite the new one).
@@ -498,13 +493,13 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     setIsPreloading(true);
 
     const tasks: Promise<unknown>[] = [
-      CharacterAPI.getLegitimateFeats(id, { page: 1, limit: 10000 })
+      CharacterAPI.getLegitimateFeats({ page: 1, limit: 10000 })
         .then(setAllFeatsCache)
         .catch(err => console.error('Background preload failed for all feats:', err)),
-      CharacterAPI.getLegitimateSpells(id, { page: 1, limit: 10000 })
+      CharacterAPI.getLegitimateSpells({ page: 1, limit: 10000 })
         .then(setAllSpellsCache)
         .catch(err => console.error('Background preload failed for all spells:', err)),
-      inventoryAPI.getEditorMetadata(id)
+      inventoryAPI.getEditorMetadata()
         .then(setItemEditorMetadata)
         .catch(err => console.error('Background preload failed for item editor metadata:', err)),
     ];
@@ -548,6 +543,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
       // Reset subsystems when loading new character
       setSubsystems(initializeSubsystems());
       setHistoryState(null);
+      await refreshHistoryState();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : t('errors.loadingFailed');
       setError(errorMessage);
@@ -557,8 +553,8 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
     // Load metadata and preload game data in background (non-blocking)
     loadMetadataInternal(id);
-    preloadGameData(id);
-  }, [t, loadMetadataInternal, preloadGameData]);
+    preloadGameData();
+  }, [t, loadMetadataInternal, preloadGameData, refreshHistoryState]);
 
   const refreshRoster = useCallback(async () => {
     try {
@@ -573,15 +569,13 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
     await CharacterStateAPI.loadCompanion(rosName);
     setActiveSource({ kind: 'companion', rosName });
     if (characterId) await loadCharacter(characterId);
-    await refreshHistoryState();
-  }, [characterId, loadCharacter, refreshHistoryState]);
+  }, [characterId, loadCharacter]);
 
   const switchToPlayer = useCallback(async () => {
     await CharacterStateAPI.loadPlayer();
     setActiveSource({ kind: 'player' });
     if (characterId) await loadCharacter(characterId);
-    await refreshHistoryState();
-  }, [characterId, loadCharacter, refreshHistoryState]);
+  }, [characterId, loadCharacter]);
 
   // Take over the session the backend holds. A fresh id makes id-keyed panels refetch.
   const adoptSession = useCallback(async (newCharacterId: number, isVault: boolean) => {
@@ -602,7 +596,7 @@ export function CharacterProvider({ children }: { children: ReactNode }) {
 
     // Load metadata and preload game data in background (non-blocking)
     loadMetadataInternal(newCharacterId);
-    preloadGameData(newCharacterId);
+    preloadGameData();
   }, [loadMetadataInternal, preloadGameData, refreshRoster]);
 
   const runSessionLoad = useCallback(async (load: () => Promise<void>) => {

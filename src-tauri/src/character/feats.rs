@@ -1914,14 +1914,8 @@ impl Character {
         row_str(feat_data, "description")
             .and_then(|s| s.parse::<i32>().ok())
             .and_then(resolve)
-            .map(|desc| Self::strip_html_tags(&desc))
+            .map(|desc| crate::utils::strip_markup(&desc))
             .unwrap_or_default()
-    }
-
-    fn strip_html_tags(text: &str) -> String {
-        static RE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"<[^>]+>").expect("Invalid HTML regex"));
-        RE.replace_all(text, "").to_string()
     }
 
     // ========== FEAT INFO AND METADATA ==========
@@ -2269,7 +2263,7 @@ impl Character {
             && let Some(name) = game_data.get_string(strref)
             && !name.is_empty()
         {
-            return Self::strip_html_tags(&name);
+            return crate::utils::strip_markup(&name);
         }
 
         row_str(feat_data, "label").unwrap_or_else(|| "Unknown".to_string())

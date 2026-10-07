@@ -16,8 +16,6 @@ static RE_ALIASES: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<b>\s*Aliases:?\s*</b>").expect("Invalid regex"));
 static RE_WEAPON: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<b>\s*Favored Weapon:?\s*</b>").expect("Invalid regex"));
-static RE_STRIP_HTML: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"<[^>]+>").expect("Invalid regex"));
 static RE_NEWLINES: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\n\s*\n").expect("Invalid regex"));
 static RE_TITLE_STRIP: LazyLock<Regex> = LazyLock::new(|| {
@@ -635,7 +633,7 @@ fn parse_deity_description(raw_desc: &str, _deity_name: &str) -> ParsedDeityDesc
     }
 
     // Remaining is description - strip HTML
-    let desc = RE_STRIP_HTML.replace_all(&cleaned, "");
+    let desc = crate::utils::strip_markup(&cleaned);
     // Collapse multiple newlines
     let desc = RE_NEWLINES.replace_all(&desc, "\n\n");
     data.description = desc.trim().to_string();
@@ -659,7 +657,7 @@ fn extract_static(text: &mut String, re: &Regex) -> String {
         if range_end <= text.len() {
             text.replace_range(mat.start()..range_end, "");
             // Also strip HTML from the extracted content
-            return RE_STRIP_HTML.replace_all(&content, "").trim().to_string();
+            return crate::utils::strip_markup(&content).trim().to_string();
         }
     }
     String::new()

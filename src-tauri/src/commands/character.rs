@@ -1,4 +1,6 @@
-use crate::character::{AbilityIndex, AbilityScores, Alignment, HitPoints, resolved_full_name};
+use crate::character::{
+    AbilityIndex, AbilityScores, Alignment, Character, HitPoints, resolved_full_name,
+};
 use crate::commands::{CommandError, CommandResult};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
@@ -162,7 +164,15 @@ pub async fn change_race(
         character
             .validate_race_change(race_id, subrace.as_deref(), &game_data)
             .into_result("race")?;
-        character.get_race_name_by_id(race_id, &game_data)
+        let subrace_id = match subrace.as_deref().filter(|s| !s.is_empty()) {
+            Some(name) => character
+                .get_subrace_data(name, &game_data)
+                .map(|data| data.id),
+            None => Character::default_subrace_for_race(race_id, &game_data),
+        };
+        subrace_id
+            .and_then(|id| character.get_subrace_name_by_index(id, &game_data))
+            .unwrap_or_else(|| character.get_race_name_by_id(race_id, &game_data))
     };
     session.record_edit(format!("Change race to {race_label}"), |character| {
         let result = character.change_race(race_id, subrace, false, &game_data)?;

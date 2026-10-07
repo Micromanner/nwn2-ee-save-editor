@@ -22,12 +22,11 @@ use tauri::image::Image;
 use tracing::{debug, info};
 
 use file_operations::{
-    browse_backups, browse_localvault, browse_saves, detect_nwn2_installation, find_nwn2_saves,
-    get_default_backups_path, get_default_localvault_path, get_default_saves_path,
-    get_save_thumbnail, get_steam_workshop_path, launch_nwn2_game, open_folder_in_explorer,
-    select_nwn2_directory, select_save_file, validate_nwn2_installation,
+    browse_backups, browse_localvault, browse_saves, find_nwn2_saves, get_default_backups_path,
+    get_default_localvault_path, get_default_saves_path, get_save_thumbnail, launch_nwn2_game,
+    open_folder_in_explorer,
 };
-use window_manager::{close_settings_window, open_settings_window, show_main_window};
+use window_manager::show_main_window;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -80,17 +79,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            select_save_file,
-            select_nwn2_directory,
             find_nwn2_saves,
-            get_steam_workshop_path,
-            validate_nwn2_installation,
             get_save_thumbnail,
-            detect_nwn2_installation,
             launch_nwn2_game,
             open_folder_in_explorer,
-            open_settings_window,
-            close_settings_window,
             show_main_window,
             browse_saves,
             get_default_saves_path,
@@ -142,7 +134,6 @@ pub fn run() {
             crate::commands::classes::change_class,
             crate::commands::classes::remove_class_levels,
             crate::commands::classes::get_available_prestige_classes,
-            crate::commands::classes::get_class_progression_details,
             crate::commands::classes::get_all_categorized_classes,
             crate::commands::classes::get_class_detail,
             // Feats
@@ -206,7 +197,6 @@ pub fn run() {
             crate::commands::paths::reset_game_folder,
             crate::commands::paths::reset_documents_folder,
             crate::commands::paths::reset_steam_workshop_folder,
-            crate::commands::paths::auto_detect_paths,
             // Config
             crate::commands::config::get_app_config,
             crate::commands::config::update_app_config,
@@ -223,7 +213,6 @@ pub fn run() {
             crate::commands::campaign::batch_update_campaign_variables,
             crate::commands::campaign::list_campaign_backups,
             crate::commands::campaign::restore_campaign_backup,
-            crate::commands::campaign::update_campaign_variable,
             crate::commands::campaign::list_campaign_variable_backups,
             crate::commands::campaign::restore_campaign_variable_backup,
             crate::commands::campaign::list_module_backups,

@@ -7,7 +7,6 @@ use crate::services::item_property_decoder::PropertyMetadata;
 use crate::state::AppState;
 use crate::utils::parsing::{row_int, row_str};
 use rayon::prelude::*;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use specta::Type;
@@ -189,8 +188,6 @@ pub async fn get_available_templates(
 
         (templates, cat_map, sub_map)
     };
-
-    let tag_regex = Regex::new(r"<[^>]+>").unwrap();
 
     let zip_read_start = Instant::now();
 
@@ -414,7 +411,7 @@ pub async fn get_available_templates(
                 .name
                 .or_else(|| p.string_ref.and_then(|sr| tlk_strings.get(&sr).cloned()))
                 .unwrap_or_else(|| p.resref.replace(".uti", ""));
-            let name = tag_regex.replace_all(&name, "").to_string();
+            let name = crate::utils::strip_markup(&name);
 
             IndexedTemplate {
                 resref: p.resref,

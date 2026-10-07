@@ -40,28 +40,28 @@ export function useInventoryManagement() {
   const equipItem = useCallback(async (request: EquipItemRequest) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await inventoryAPI.equipItem(character.id, request);
+    await inventoryAPI.equipItem(request);
     await refreshAfterMutation(refreshInventoryAndEquipStats);
   }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const unequipItem = useCallback(async (request: UnequipItemRequest) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await inventoryAPI.unequipItem(character.id, request);
+    await inventoryAPI.unequipItem(request);
     await refreshAfterMutation(refreshInventoryAndEquipStats);
   }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const deleteItem = useCallback(async (itemIndex: number) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await inventoryAPI.deleteItem(character.id, itemIndex);
+    await inventoryAPI.deleteItem(itemIndex);
     await refreshAfterMutation(refreshInventory);
   }, [t, character?.id, refreshAfterMutation, refreshInventory]);
 
   const addItemByBaseType = useCallback(async (baseItemId: number, iconTemplateResref?: string) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    const response = await inventoryAPI.addItemByBaseType(character.id, {
+    const response = await inventoryAPI.addItemByBaseType({
       base_item_id: baseItemId,
       icon_template_resref: iconTemplateResref,
     });
@@ -72,14 +72,14 @@ export function useInventoryManagement() {
   const updateItem = useCallback(async (request: UpdateItemRequest) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await inventoryAPI.updateItem(character.id, request);
+    await inventoryAPI.updateItem(request);
     await refreshAfterMutation(refreshInventoryAndEquipStats);
   }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
   const addItemFromTemplate = useCallback(async (resref: string) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    const response = await inventoryAPI.addItemFromTemplate(character.id, resref);
+    const response = await inventoryAPI.addItemFromTemplate(resref);
     await refreshAfterMutation(refreshInventoryAndEquipStats);
     return response;
   }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
@@ -87,7 +87,7 @@ export function useInventoryManagement() {
   const transformItem = useCallback(async (target: { itemIndex?: number; slot?: string }, targetResref: string) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await inventoryAPI.transformItem(character.id, {
+    await inventoryAPI.transformItem({
       item_index: target.itemIndex ?? null,
       slot: target.slot ?? null,
       target_resref: targetResref,

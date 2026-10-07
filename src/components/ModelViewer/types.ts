@@ -25,18 +25,18 @@ export interface MeshData {
   bone_weights: number[] | null;
   bone_indices: number[] | null;
   material: MaterialData;
-  skeleton_ref?: string | null;
+  skeleton_ref: string | null;
   /// Skeleton bone to parent this mesh under (rigid armor accessories).
-  attach_bone?: string | null;
+  attach_bone: string | null;
   /// Per-mesh tint channels overriding the item's top-level tint. Set for
   /// armor accessories so each slot can carry its own colour.
-  override_tints?: {
+  override_tints: {
     channel1: { r: number; g: number; b: number; a: number };
     channel2: { r: number; g: number; b: number; a: number };
     channel3: { r: number; g: number; b: number; a: number };
   } | null;
   /// Slot this accessory belongs to, if it is an armor accessory.
-  accessory_slot?: AccessorySlot | null;
+  accessory_slot: AccessorySlot | null;
 }
 
 export interface BoneData {
@@ -102,6 +102,6 @@ export interface ModelData {
   helm: HelmData[];
   skeleton: { bones: BoneData[] } | null;
   animations: AnimationData[];
-  attached_parts?: AttachedPart[];
-  secondary_skeletons?: NamedSkeleton[];
+  attached_parts: AttachedPart[];
+  secondary_skeletons: NamedSkeleton[];
 }

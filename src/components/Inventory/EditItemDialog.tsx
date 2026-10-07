@@ -361,39 +361,31 @@ export function EditItemDialog({
                   display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
                   padding: '10px 12px', background: T.sectionBg, border: `1px solid ${T.sectionBorder}`, borderRadius: 4,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {/* Absent Identified counts as identified, as the backend and the game read it. */}
-                    <Checkbox
-                      checked={(localData.Identified ?? 1) !== 0}
-                      onChange={(e) => handleBasicChange('Identified', (e.target as HTMLInputElement).checked ? 1 : 0)}
-                      style={{ margin: 0 }}
-                    />
-                    <span style={{ color: T.text }}>{t('inventory.identified')}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Checkbox
-                      checked={localData.Plot === 1}
-                      onChange={(e) => handleBasicChange('Plot', (e.target as HTMLInputElement).checked ? 1 : 0)}
-                      style={{ margin: 0 }}
-                    />
-                    <span style={{ color: T.accent }}>{t('inventory.plotItem')}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Checkbox
-                      checked={localData.Cursed === 1}
-                      onChange={(e) => handleBasicChange('Cursed', (e.target as HTMLInputElement).checked ? 1 : 0)}
-                      style={{ margin: 0 }}
-                    />
-                    <span style={{ color: T.negative }}>{t('inventory.cursedItem')}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Checkbox
-                      checked={localData.Stolen === 1}
-                      onChange={(e) => handleBasicChange('Stolen', (e.target as HTMLInputElement).checked ? 1 : 0)}
-                      style={{ margin: 0 }}
-                    />
-                    <span style={{ color: T.text }}>{t('inventory.stolenItem')}</span>
-                  </div>
+                  {/* Absent Identified counts as identified, as the backend and the game read it. */}
+                  <Checkbox
+                    checked={(localData.Identified ?? 1) !== 0}
+                    onChange={(e) => handleBasicChange('Identified', (e.target as HTMLInputElement).checked ? 1 : 0)}
+                    labelElement={<span style={{ color: T.text }}>{t('inventory.identified')}</span>}
+                    style={{ margin: 0 }}
+                  />
+                  <Checkbox
+                    checked={localData.Plot === 1}
+                    onChange={(e) => handleBasicChange('Plot', (e.target as HTMLInputElement).checked ? 1 : 0)}
+                    labelElement={<span style={{ color: T.accent }}>{t('inventory.plotItem')}</span>}
+                    style={{ margin: 0 }}
+                  />
+                  <Checkbox
+                    checked={localData.Cursed === 1}
+                    onChange={(e) => handleBasicChange('Cursed', (e.target as HTMLInputElement).checked ? 1 : 0)}
+                    labelElement={<span style={{ color: T.negative }}>{t('inventory.cursedItem')}</span>}
+                    style={{ margin: 0 }}
+                  />
+                  <Checkbox
+                    checked={localData.Stolen === 1}
+                    onChange={(e) => handleBasicChange('Stolen', (e.target as HTMLInputElement).checked ? 1 : 0)}
+                    labelElement={<span style={{ color: T.text }}>{t('inventory.stolenItem')}</span>}
+                    style={{ margin: 0 }}
+                  />
                 </div>
               </div>
             </div>

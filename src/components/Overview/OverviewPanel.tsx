@@ -163,7 +163,7 @@ export function OverviewPanel() {
   const handleBioSave = useCallback(async () => {
     if (!characterId) return;
     try {
-      await CharacterAPI.setBiography(characterId, biography);
+      await CharacterAPI.setBiography(biography);
       updateCharacterPartial({ biography });
       setSavedBiography(biography);
     } catch (err) {
@@ -180,7 +180,7 @@ export function OverviewPanel() {
   const handleDeitySelect = useCallback(async (deityName: string) => {
     if (!characterId) return;
     try {
-      await CharacterAPI.setDeity(characterId, deityName);
+      await CharacterAPI.setDeity(deityName);
       updateCharacterPartial({ deity: deityName });
     } catch (err) {
       handleError(err);
@@ -226,7 +226,7 @@ export function OverviewPanel() {
     if (!characterId || hpSaving) return;
     setHpSaving(true);
     try {
-      await CharacterAPI.updateHitPoints(characterId, newCurrent, newMax);
+      await CharacterAPI.updateHitPoints(newCurrent, newMax);
       updateCharacterPartial({ hitPoints: newCurrent, maxHitPoints: newMax });
     } catch (err) {
       handleError(err);
@@ -240,7 +240,7 @@ export function OverviewPanel() {
     setGoodEvil(ge);
     setAlignmentSaving(true);
     try {
-      const res = await CharacterAPI.updateAlignment(characterId, { law_chaos: lc, good_evil: ge });
+      const res = await CharacterAPI.updateAlignment({ law_chaos: lc, good_evil: ge });
       updateCharacterPartial({
         alignment: res.alignment_string,
         alignmentValues: { law_chaos: lc, good_evil: ge },

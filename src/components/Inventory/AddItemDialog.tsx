@@ -64,8 +64,8 @@ export function AddItemDialog({ isOpen, onClose, onItemAdded, transformTarget, o
     if (!isOpen || !characterId) return;
     setIsLoading(true);
     Promise.all([
-      inventoryAPI.getAllBaseItems(characterId),
-      inventoryAPI.getAvailableTemplates(characterId),
+      inventoryAPI.getAllBaseItems(),
+      inventoryAPI.getAvailableTemplates(),
     ]).then(([baseRes, templRes]) => {
       setBaseItems(baseRes.base_items);
       setTemplates(templRes.templates);

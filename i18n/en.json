@@ -228,6 +228,8 @@
     "shield": "Shield",
     "natural": "Natural",
     "deflect": "Deflect",
+    "dodge": "Dodge",
+    "items": "Items",
     "size": "Size",
     "ac": "AC",
     "touch": "Touch",
@@ -964,7 +966,8 @@
       "noVariables": "No variables found",
       "integers": "Integers",
       "strings": "Strings",
-      "floats": "Floats"
+      "floats": "Floats",
+      "booleans": "Booleans"
     },
     "module": {
       "module": "Module",

@@ -169,7 +169,7 @@ export function InventoryPanel() {
     if (isNaN(val) || val < 0) return;
     const clamped = Math.min(val, 99_999_999);
     try {
-      await inventoryAPI.updateGold(characterId!, clamped);
+      await inventoryAPI.updateGold(clamped);
       setGold(clamped);
       setGoldInput(clamped.toString());
       await inventorySubsystem.load({ silent: true });
@@ -186,7 +186,7 @@ export function InventoryPanel() {
     const equippableSlots = invItem?.equippable_slots ?? [];
     const resolvedSlot = resolveEquipSlot(defaultSlot, equippableSlots, equippedItems);
     try {
-      await equipItem({ inventory_index: index, slot: resolvedSlot, item_data: {} });
+      await equipItem({ inventory_index: index, slot: resolvedSlot });
       setSelectedItem(null);
     } catch (err) {
       handleError(err);

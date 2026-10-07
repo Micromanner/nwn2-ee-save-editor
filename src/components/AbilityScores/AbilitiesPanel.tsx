@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, Card, Elevation, HTMLTable, NonIdealState } from '@blueprintjs/core';
+import { Button, Card, Elevation, HTMLTable, NonIdealState, Tooltip } from '@blueprintjs/core';
 import { GiVisoredHelm, GiBrokenShield, GiAnticlockwiseRotation } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
@@ -115,10 +115,18 @@ export function AbilitiesPanel() {
   const touchTotal = combatData?.armor_class?.touch ?? 10;
   const flatFootedTotal = combatData?.armor_class?.flat_footed ?? 10;
 
+  const naturalBase = acBreakdown?.natural ?? 0;
+  const naturalItem = acBreakdown?.natural_item ?? 0;
+  const dodge = acBreakdown?.dodge ?? 0;
+  const deflection = acBreakdown?.deflection ?? 0;
+  const armor = acBreakdown?.armor ?? 0;
+  const shield = acBreakdown?.shield ?? 0;
+  const common = { base: acBreakdown?.base ?? 10, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0 };
+
   const acRows = [
-    { key: 'ac', name: t('abilityScores.ac'), base: acBreakdown?.base ?? 10, dex: acBreakdown?.dex ?? 0, armor: acBreakdown?.armor ?? 0, shield: acBreakdown?.shield ?? 0, natural: acBreakdown?.natural ?? 0, deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: acTotal },
-    { key: 'touch', name: t('abilityScores.touch'), base: acBreakdown?.base ?? 10, dex: acBreakdown?.dex ?? 0, armor: 0,                       shield: 0,                        natural: 0,                         deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: touchTotal },
-    { key: 'flatFooted', name: t('abilityScores.flatFooted'), base: acBreakdown?.base ?? 10, dex: 0,                     armor: acBreakdown?.armor ?? 0, shield: acBreakdown?.shield ?? 0, natural: acBreakdown?.natural ?? 0, deflection: acBreakdown?.deflection ?? 0, size: acBreakdown?.size ?? 0, misc: acBreakdown?.misc ?? 0, total: flatFootedTotal },
+    { key: 'ac', name: t('abilityScores.ac'), ...common, dex: acBreakdown?.dex ?? 0, armor, shield, natural: naturalBase, items: { natural: naturalItem, dodge, deflection }, total: acTotal },
+    { key: 'touch', name: t('abilityScores.touch'), ...common, dex: acBreakdown?.dex ?? 0, armor: 0, shield: 0, natural: 0, items: { natural: 0, dodge, deflection }, total: touchTotal },
+    { key: 'flatFooted', name: t('abilityScores.flatFooted'), ...common, dex: 0, armor, shield, natural: naturalBase, items: { natural: naturalItem, dodge: 0, deflection }, total: flatFootedTotal },
   ];
 
   const initDex = combatData?.initiative?.dex ?? stats.initiative.dexMod ?? 0;
@@ -357,7 +365,7 @@ export function AbilitiesPanel() {
               <th style={{ textAlign: 'center' }}>{t('abilityScores.armor')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.shield')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.natural')}</th>
-              <th style={{ textAlign: 'center' }}>{t('abilityScores.deflect')}</th>
+              <th style={{ textAlign: 'center' }}>{t('abilityScores.items')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.size')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.misc')}</th>
               <th style={{ textAlign: 'center' }}>{t('abilityScores.total')}</th>
@@ -382,7 +390,18 @@ export function AbilitiesPanel() {
                     <ModCell value={ac.natural} />
                   )}
                 </td>
-                <td style={{ textAlign: 'center' }}><ModCell value={ac.deflection} /></td>
+                <td style={{ textAlign: 'center' }}>
+                  <Tooltip
+                    content={[
+                      `${t('abilityScores.natural')} ${mod(ac.items.natural)}`,
+                      `${t('abilityScores.dodge')} ${mod(ac.items.dodge)}`,
+                      `${t('abilityScores.deflect')} ${mod(ac.items.deflection)}`,
+                    ].join(' / ')}
+                    placement="top"
+                  >
+                    <ModCell value={ac.items.natural + ac.items.dodge + ac.items.deflection} />
+                  </Tooltip>
+                </td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.size} /></td>
                 <td style={{ textAlign: 'center' }}><ModCell value={ac.misc} /></td>
                 <td className="t-bold" style={{ textAlign: 'center', color: T.text }}>{ac.total}</td>

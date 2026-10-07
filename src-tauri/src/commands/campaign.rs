@@ -140,23 +140,23 @@ pub async fn get_companion_influence(
         .map_err(CommandError::from)
 }
 
+/// Writes a companion's influence into `variable`, the `influence_var` that
+/// `get_companion_influence` reported for it.
 #[tauri::command]
 pub async fn update_companion_influence(
     state: State<'_, AppState>,
-    companion_id: String,
+    variable: String,
     new_influence: i32,
 ) -> CommandResult<()> {
-    let variable =
-        CampaignManager::companion_influence_var(&companion_id).map_err(CommandError::from)?;
     let mut session = state.session.write();
-    check_pending_quest_variable(&session, None, variable, "int")?;
+    check_pending_quest_variable(&session, None, &variable, "int")?;
     let handler = session
         .savegame_handler
         .as_mut()
         .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_companion_influence(handler, &companion_id, new_influence)
+    CampaignManager::update_global_int(handler, &variable, new_influence)
         .map_err(CommandError::from)?;
-    session.record_variable_changes([VariableChange::new(None, variable, new_influence)]);
+    session.record_variable_changes([VariableChange::new(None, &variable, new_influence)]);
     Ok(())
 }
 
@@ -236,32 +236,6 @@ pub async fn restore_campaign_backup(
     let paths = state.paths.read();
     CampaignManager::restore_campaign_backup(&backup_path, &campaign_id, &paths)
         .map_err(CommandError::from)
-}
-
-#[tauri::command]
-pub async fn update_campaign_variable(
-    state: State<'_, AppState>,
-    variable_name: String,
-    value: String,
-    variable_type: String,
-) -> CommandResult<()> {
-    let mut session = state.session.write();
-    let target_module = None::<String>;
-    check_pending_quest_variable(
-        &session,
-        target_module.as_deref(),
-        &variable_name,
-        &variable_type,
-    )?;
-
-    let handler = session
-        .savegame_handler
-        .as_mut()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    CampaignManager::update_campaign_variable(handler, &variable_name, &value, &variable_type)
-        .map_err(CommandError::from)?;
-    session.record_variable_changes([VariableChange::new(None, &variable_name, &value)]);
-    Ok(())
 }
 
 #[tauri::command]

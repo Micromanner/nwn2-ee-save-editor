@@ -369,9 +369,24 @@ fn test_potential_companions_discovery() {
     let potential = parser.discover_potential_companions();
 
     println!("Potential Companions Discovered:");
-    for (name, vars) in &potential {
-        println!("  - {}: {} related variables", name, vars.len());
+    for (name, found) in &potential {
+        println!("  - {}: {} = {}", name, found.variable, found.influence);
     }
+}
+
+#[test]
+fn test_discovered_companion_prefers_full_influence_prefix() {
+    let mut parser = RustXmlParser::new();
+    parser
+        .data
+        .integers
+        .insert("CC_InfluenceZorro".to_string(), 42);
+
+    let potential = parser.discover_potential_companions();
+    let zorro = potential.get("zorro").expect("Zorro discovered");
+    assert_eq!(zorro.name, "Zorro");
+    assert_eq!(zorro.variable, "CC_InfluenceZorro");
+    assert_eq!(zorro.influence, 42);
 }
 
 // =============================================================================

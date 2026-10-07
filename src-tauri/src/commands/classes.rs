@@ -168,19 +168,6 @@ pub async fn remove_class_levels(
 }
 
 #[tauri::command]
-pub async fn get_class_progression_details(
-    state: State<'_, AppState>,
-    class_id: i32,
-    max_level: Option<i32>,
-) -> CommandResult<ClassProgression> {
-    let game_data = state.game_data.read();
-    let max = max_level.unwrap_or(20);
-    get_class_progression(class_id, max, &game_data).ok_or_else(|| CommandError::NotFound {
-        item: format!("Class {class_id}"),
-    })
-}
-
-#[tauri::command]
 pub async fn get_all_categorized_classes(
     state: State<'_, AppState>,
 ) -> CommandResult<CategorizedClasses> {

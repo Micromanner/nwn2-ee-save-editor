@@ -3,7 +3,7 @@ import { Button } from '@blueprintjs/core';
 import { GiCancel, GiCheckMark } from 'react-icons/gi';
 import { T, FEAT_TYPE_COLORS } from '../theme';
 import { GameIcon } from '../shared/GameIcon';
-import type { FeatInfo, PrereqValue } from '@/components/Feats/types';
+import type { FeatInfo, PrereqValue } from '@/lib/bindings';
 import { FEAT_TYPE_LABELS, getFeatTypeLabel } from '@/utils/featUtils';
 import { DetailSection, FormattedDescription } from '../shared';
 import { display } from '@/utils/dataHelpers';

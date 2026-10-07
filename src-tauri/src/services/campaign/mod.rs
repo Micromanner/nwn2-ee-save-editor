@@ -20,9 +20,7 @@ use self::settings::{
     update_campaign_settings as update_settings,
 };
 use crate::config::NWN2Paths;
-use crate::parsers::xml::{
-    CompanionStatus, FullSummary, QuestOverview, XmlData, get_companion_definitions,
-};
+use crate::parsers::xml::{CompanionStatus, FullSummary, QuestOverview, XmlData};
 use crate::services::save_graph::editing::QuestEdits;
 use crate::services::savegame_handler::SaveGameHandler;
 use indexmap::IndexMap;
@@ -112,23 +110,6 @@ impl CampaignManager {
         Ok(parser.get_companion_status(&ros_names))
     }
 
-    /// The global the companion's influence is stored in.
-    pub fn companion_influence_var(companion_id: &str) -> Result<&'static str, String> {
-        get_companion_definitions()
-            .get(companion_id)
-            .map(|def| def.influence_var)
-            .ok_or_else(|| format!("Unknown companion: {companion_id}"))
-    }
-
-    pub fn update_companion_influence(
-        handler: &mut SaveGameHandler,
-        companion_id: &str,
-        new_influence: i32,
-    ) -> Result<(), String> {
-        let variable = Self::companion_influence_var(companion_id)?;
-        Self::update_global_int(handler, variable, new_influence)
-    }
-
     pub fn batch_update_module_variables(
         handler: &SaveGameHandler,
         updates: &[(String, String, String)],
@@ -183,11 +164,16 @@ impl CampaignManager {
 
         for (name, value, var_type) in updates {
             match var_type.as_str() {
-                "int" => {
+                "int" | "bool" => {
                     let v: i32 = value
                         .parse()
-                        .map_err(|e| format!("Invalid int value for '{name}': {e}"))?;
-                    parser.data.integers.insert(name.clone(), v);
+                        .map_err(|e| format!("Invalid {var_type} value for '{name}': {e}"))?;
+                    let map = if var_type == "int" {
+                        &mut parser.data.integers
+                    } else {
+                        &mut parser.data.booleans
+                    };
+                    map.insert(name.clone(), v);
                 }
                 "float" => {
                     let v: f32 = value

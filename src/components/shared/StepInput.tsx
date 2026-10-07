@@ -24,7 +24,10 @@ export function StepInput({
   disabled = false,
   zeroDisplay,
 }: StepInputProps) {
-  const clamp = (v: number) => Math.max(min, Math.min(max, v));
+  // Values keep as many decimals as `step` has, so an integer step rounds typed
+  // fractions and a fractional step avoids float noise like 0.30000000000000004.
+  const decimals = String(step).split('.')[1]?.length ?? 0;
+  const clamp = (v: number) => Math.max(min, Math.min(max, Number(v.toFixed(decimals))));
 
   // Typed text is held locally and committed on blur/Enter so a value like
   // "18" produces one history entry, not one per keystroke.
@@ -61,7 +64,7 @@ export function StepInput({
       />
       <input
         type="text"
-        inputMode="numeric"
+        inputMode={decimals > 0 ? 'decimal' : 'numeric'}
         value={displayValue}
         onChange={e => setDraft(e.target.value)}
         onBlur={commitDraft}

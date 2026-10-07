@@ -1,64 +1,6 @@
 // Shared type definitions for the Feats system
 
-export interface PrereqFeat {
-  id: number;
-  name: string;
-  met: boolean;
-}
-
-export interface PrereqAbility {
-  ability: string;
-  required: number;
-  current: number;
-  met: boolean;
-}
-
-export interface PrereqValue {
-  required: number;
-  current: number;
-  met: boolean;
-}
-
-export interface PrereqClassLevel extends PrereqValue {
-  class_name: string;
-}
-
-export interface PrereqSkill {
-  skill: string;
-  required: number;
-  current: number;
-  met: boolean;
-}
-
-export interface BackendFeatPrerequisites {
-  feats: PrereqFeat[];
-  any_feats: PrereqFeat[];
-  abilities: PrereqAbility[];
-  bab: PrereqValue | null;
-  level: PrereqValue | null;
-  class_level: PrereqClassLevel | null;
-  max_level: PrereqValue | null;
-  epic: PrereqValue | null;
-  base_fortitude: PrereqValue | null;
-  caster_level: PrereqValue | null;
-  spell_level: PrereqValue | null;
-  skills: PrereqSkill[];
-}
-
-export interface FeatInfo {
-  id: number;
-  feat_id?: number;
-  label: string;
-  name: string;
-  type: number;
-  category?: string;
-  protected: boolean;
-  custom: boolean;
-  description?: string;
-  icon?: string;
-  prerequisites: BackendFeatPrerequisites;
-  has_feat?: boolean;
-}
+import type { FeatInfo } from '@/lib/bindings';
 
 export interface FeatsState {
   summary: {
@@ -118,8 +60,6 @@ export const FEAT_TYPES = {
   RACIAL: 4096,
   DOMAIN: 8192,
 } as const;
-
-export type FeatType = typeof FEAT_TYPES[keyof typeof FEAT_TYPES];
 
 // View modes for feat display
 export type ViewMode = 'grid' | 'list';

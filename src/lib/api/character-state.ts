@@ -9,7 +9,6 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type {
-  OverviewState,
   AbilitiesState,
   AppearanceState,
   AppearanceOption,
@@ -22,7 +21,6 @@ import type {
   CombatSummary,
   SaveSummary,
   FullInventorySummary,
-  CharacterUpdates,
   NaturalArmorChange,
   UndoResult,
   HistoryState,
@@ -110,13 +108,6 @@ export const CharacterStateAPI = {
   // ===========================================================================
   // Batch Update Commands
   // ===========================================================================
-
-  /**
-   * Update multiple character fields at once.
-   * Returns the updated OverviewState.
-   */
-  updateCharacter: (updates: CharacterUpdates) =>
-    invoke<OverviewState>('update_character', { updates }),
 
   /**
    * Apply point buy scores - resets level-up ability history and sets new base scores.

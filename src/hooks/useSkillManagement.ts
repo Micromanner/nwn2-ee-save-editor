@@ -13,7 +13,7 @@ export function useSkillManagement() {
   const updateSkills = useCallback(async (updates: Record<number, number>) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await CharacterAPI.updateSkills(character.id, updates);
+    await CharacterAPI.updateSkills(updates);
     await skills.load({ silent: true });
     await invalidateSubsystems([...SKILL_DEPENDENT_SUBSYSTEMS]);
   }, [t, character?.id, skills, invalidateSubsystems]);
@@ -21,7 +21,7 @@ export function useSkillManagement() {
   const resetSkills = useCallback(async () => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await CharacterAPI.resetSkills(character.id);
+    await CharacterAPI.resetSkills();
     await skills.load({ silent: true });
     await invalidateSubsystems([...SKILL_DEPENDENT_SUBSYSTEMS]);
   }, [t, character?.id, skills, invalidateSubsystems]);

@@ -169,7 +169,7 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    gameStateAPI.getCompanionInfluence(characterId)
+    gameStateAPI.getCompanionInfluence()
       .then(res => {
         setCompanions(res.companions);
         initialRef.current = res.companions;
@@ -193,9 +193,9 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
     try {
       const updates = Object.entries(influences)
         .filter(([id, val]) => val !== (companions[id]?.influence ?? 0))
-        .map(([id, val]) => gameStateAPI.updateCompanionInfluence(characterId, id, val));
+        .map(([id, val]) => gameStateAPI.updateCompanionInfluence(companions[id].influence_var, val));
       const results = await Promise.allSettled(updates);
-      const res = await gameStateAPI.getCompanionInfluence(characterId);
+      const res = await gameStateAPI.getCompanionInfluence();
       setCompanions(res.companions);
       initialRef.current = res.companions;
       const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
@@ -318,16 +318,19 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
 }
 
 type VarEntry = { name: string; value: number | string };
+type VarType = 'int' | 'string' | 'float' | 'bool';
+type VarEdits = Partial<Record<VarType, Record<string, string>>>;
 
 function VariableTable({ variables, search, type, edits, onEdit, onRevert }: {
   variables: VarEntry[];
   search: string;
-  type: 'int' | 'string' | 'float';
-  edits: Record<string, string>;
-  onEdit: (name: string, value: string) => void;
-  onRevert: (name: string) => void;
+  type: VarType;
+  edits: VarEdits;
+  onEdit: (type: VarType, name: string, value: string) => void;
+  onRevert: (type: VarType, name: string) => void;
 }) {
   const t = useTranslations();
+  const typeEdits = edits[type] ?? {};
   const filtered = useMemo(() =>
     variables.filter(v => v.name.toLowerCase().includes(search.toLowerCase())),
     [variables, search],
@@ -343,27 +346,36 @@ function VariableTable({ variables, search, type, edits, onEdit, onRevert }: {
         {filtered.length === 0 ? (
           <tr><td colSpan={4} style={{ textAlign: 'center', color: T.textMuted, padding: 20 }}>{t('gameState.variables.noVariables')}</td></tr>
         ) : filtered.map(v => {
-          const isModified = v.name in edits;
+          const isModified = v.name in typeEdits;
+          const value = isModified ? typeEdits[v.name] : String(v.value);
           return (
             <tr key={v.name} style={{ borderLeft: isModified ? `3px solid ${MODIFIED}` : undefined, background: isModified ? `${MODIFIED}10` : undefined }}>
               <td className="t-mono" style={{ color: T.text }}>{v.name}</td>
               <td className="t-mono" style={{ color: T.textMuted }}>{String(v.value)}</td>
               <td>
-                <input
-                  className="bp6-input t-mono"
-                  type={type === 'string' ? 'text' : 'number'}
-                  value={isModified ? edits[v.name] : v.value}
-                  onChange={e => onEdit(v.name, e.target.value)}
-                  style={{
-                    width: '100%', height: 24,
-                    background: T.surface, border: `1px solid ${isModified ? MODIFIED : T.borderLight}`,
-                    borderRadius: 3, color: T.text, padding: '2px 6px',
-                  }}
-                />
+                {type === 'bool' ? (
+                  <Switch
+                    checked={value !== '0'}
+                    onChange={e => onEdit(type, v.name, e.currentTarget.checked ? '1' : '0')}
+                    style={{ margin: 0 }}
+                  />
+                ) : (
+                  <input
+                    className="bp6-input t-mono"
+                    type={type === 'string' ? 'text' : 'number'}
+                    value={value}
+                    onChange={e => onEdit(type, v.name, e.target.value)}
+                    style={{
+                      width: '100%', height: 24,
+                      background: T.surface, border: `1px solid ${isModified ? MODIFIED : T.borderLight}`,
+                      borderRadius: 3, color: T.text, padding: '2px 6px',
+                    }}
+                  />
+                )}
               </td>
               <td style={{ textAlign: 'center' }}>
                 {isModified && (
-                  <Button small minimal icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} style={{ color: MODIFIED }} onClick={() => onRevert(v.name)} />
+                  <Button small minimal icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} style={{ color: MODIFIED }} onClick={() => onRevert(type, v.name)} />
                 )}
               </td>
             </tr>
@@ -375,15 +387,16 @@ function VariableTable({ variables, search, type, edits, onEdit, onRevert }: {
 }
 
 function VariableSection({
-  integers, strings, floats, edits, onEdit, onRevert, onRevertAll, onSave, isSaving, changeCount, warningText,
+  integers, strings, floats, booleans, edits, onEdit, onRevert, onRevertAll, onSave, isSaving, changeCount, warningText,
   onRestoreClick,
 }: {
   integers: VarEntry[];
   strings: VarEntry[];
   floats: VarEntry[];
-  edits: Record<string, string>;
-  onEdit: (name: string, value: string) => void;
-  onRevert: (name: string) => void;
+  booleans?: VarEntry[];
+  edits: VarEdits;
+  onEdit: (type: VarType, name: string, value: string) => void;
+  onRevert: (type: VarType, name: string) => void;
   onRevertAll: () => void;
   onSave: () => void;
   isSaving: boolean;
@@ -393,7 +406,7 @@ function VariableSection({
 }) {
   const t = useTranslations();
   const [search, setSearch] = useState('');
-  const total = integers.length + strings.length + floats.length;
+  const total = integers.length + strings.length + floats.length + (booleans?.length ?? 0);
 
   return (
     <>
@@ -439,35 +452,43 @@ function VariableSection({
           <Tab id="floats" title={`${t('gameState.variables.floats')} (${floats.length})`}
             panel={<div style={{ paddingTop: 8 }}><VariableTable variables={floats} search={search} type="float" edits={edits} onEdit={onEdit} onRevert={onRevert} /></div>}
           />
+          {booleans && (
+            <Tab id="booleans" title={`${t('gameState.variables.booleans')} (${booleans.length})`}
+              panel={<div style={{ paddingTop: 8 }}><VariableTable variables={booleans} search={search} type="bool" edits={edits} onEdit={onEdit} onRevert={onRevert} /></div>}
+            />
+          )}
         </Tabs>
       </div>
     </>
   );
 }
 
-function useVariableEdits(onSaveCallback: (edits: Record<string, string>) => Promise<void>) {
+function useVariableEdits(onSaveCallback: (updates: Array<[string, string, VarType]>) => Promise<void>) {
   const { handleError } = useErrorHandler();
-  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [edits, setEdits] = useState<VarEdits>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  const onEdit = (name: string, value: string) => {
-    setEdits(prev => ({ ...prev, [name]: value }));
+  const onEdit = (type: VarType, name: string, value: string) => {
+    setEdits(prev => ({ ...prev, [type]: { ...prev[type], [name]: value } }));
   };
 
-  const onRevert = (name: string) => {
+  const onRevert = (type: VarType, name: string) => {
     setEdits(prev => {
-      const next = { ...prev };
-      delete next[name];
-      return next;
+      const typeEdits = { ...prev[type] };
+      delete typeEdits[name];
+      return { ...prev, [type]: typeEdits };
     });
   };
 
   const onRevertAll = () => setEdits({});
 
+  const updates = (Object.entries(edits) as Array<[VarType, Record<string, string>]>)
+    .flatMap(([type, byName]) => Object.entries(byName).map(([name, value]): [string, string, VarType] => [name, value, type]));
+
   const onSave = async () => {
     setIsSaving(true);
     try {
-      await onSaveCallback(edits);
+      await onSaveCallback(updates);
       setEdits({});
     } catch (err) {
       handleError(err);
@@ -476,7 +497,7 @@ function useVariableEdits(onSaveCallback: (edits: Record<string, string>) => Pro
     }
   };
 
-  return { edits, onEdit, onRevert, onRevertAll, onSave, isSaving, changeCount: Object.keys(edits).length };
+  return { edits, onEdit, onRevert, onRevertAll, onSave, isSaving, changeCount: updates.length };
 }
 
 function useBackupDialog(
@@ -549,7 +570,7 @@ function ModuleInfoSection({ characterId, onModuleIdChange }: { characterId: num
   useEffect(() => {
     if (!selectedModuleId) return;
     setIsLoading(true);
-    gameStateAPI.getModuleById(characterId, selectedModuleId)
+    gameStateAPI.getModuleById(selectedModuleId)
       .then(data => setModuleInfo(data))
       .catch(handleError)
       .finally(() => setIsLoading(false));
@@ -615,7 +636,7 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
     const request = ++requestRef.current;
     setIsLoading(true);
     setError(null);
-    gameStateAPI.getModuleVariables(characterId, moduleId)
+    gameStateAPI.getModuleVariables(moduleId)
       .then(data => { if (request === requestRef.current) setVars(data); })
       .catch(err => { if (request === requestRef.current) setError(err instanceof Error ? err.message : t('common.failedToLoad', { section: t('gameState.tabs.moduleAndVariables') })); })
       .finally(() => { if (request === requestRef.current) setIsLoading(false); });
@@ -623,13 +644,7 @@ function ModuleVariablesSection({ characterId, moduleId }: { characterId: number
 
   useEffect(() => { loadVars(); }, [loadVars]);
 
-  const varEdits = useVariableEdits(async (edits) => {
-    const updates: Array<[string, string, string]> = Object.entries(edits).map(([name, rawValue]) => {
-      const type = vars
-        ? (name in vars.integers ? 'int' : name in vars.floats ? 'float' : 'string')
-        : 'string';
-      return [name, String(rawValue), type];
-    });
+  const varEdits = useVariableEdits(async (updates) => {
     await gameStateAPI.batchUpdateModuleVariables(updates, moduleId || undefined);
     loadVars();
   });
@@ -707,14 +722,14 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
   useEffect(() => {
     setIsLoading(true);
     setError(null);
-    gameStateAPI.getCampaignSettings(characterId)
+    gameStateAPI.getCampaignSettings()
       .then(s => { setSettings(s); setCampaignGuid(s.guid || ''); populateFromSettings(s); })
       .catch(err => setError(err instanceof Error ? err.message : t('gameState.campaign.failedToLoad')))
       .finally(() => setIsLoading(false));
   }, [characterId]);
 
   const reloadSettings = useCallback(() => {
-    gameStateAPI.getCampaignSettings(characterId)
+    gameStateAPI.getCampaignSettings()
       .then(s => { setSettings(s); populateFromSettings(s); })
       .catch(() => {});
   }, [characterId]);
@@ -758,7 +773,7 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
         no_char_changing: noCharChange,
         use_personal_reputation: personalRep,
       };
-      await gameStateAPI.updateCampaignSettings(characterId, updated);
+      await gameStateAPI.updateCampaignSettings(updated);
       setSettings(updated);
     } catch (err) {
       const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null ? JSON.stringify(err) : String(err);
@@ -804,11 +819,11 @@ function CampaignSettingsSection({ characterId }: { characterId: number }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: T.textMuted }}>{t('gameState.campaign.companionXpWeight')}</span>
-                <StepInput value={compXp} onValueChange={setCompXp} min={0} max={1} width={100} />
+                <StepInput value={compXp} onValueChange={setCompXp} min={0} max={1} step={0.05} width={100} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: T.textMuted }}>{t('gameState.campaign.henchmanXpWeight')}</span>
-                <StepInput value={henchXp} onValueChange={setHenchXp} min={0} max={1} width={100} />
+                <StepInput value={henchXp} onValueChange={setHenchXp} min={0} max={1} step={0.05} width={100} />
               </div>
             </div>
           </div>
@@ -879,7 +894,7 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
   const loadVars = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    gameStateAPI.getCampaignVariables(characterId)
+    gameStateAPI.getCampaignVariables()
       .then(data => setVars(data))
       .catch(err => setError(err instanceof Error ? err.message : t('common.failedToLoad', { section: t('gameState.tabs.campaignAndVariables') })))
       .finally(() => setIsLoading(false));
@@ -887,13 +902,7 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
 
   useEffect(() => { loadVars(); }, [loadVars]);
 
-  const varEdits = useVariableEdits(async (edits) => {
-    const updates: Array<[string, string, string]> = Object.entries(edits).map(([name, rawValue]) => {
-      const type = vars
-        ? (name in vars.integers ? 'int' : name in vars.floats ? 'float' : 'string')
-        : 'string';
-      return [name, String(rawValue), type];
-    });
+  const varEdits = useVariableEdits(async (updates) => {
     await gameStateAPI.batchUpdateCampaignVariables(updates);
     loadVars();
     onGlobalsChanged();
@@ -911,6 +920,7 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
   const integers = vars ? recordToVarEntries(vars.integers) : [];
   const strings = vars ? recordToVarEntries(vars.strings) : [];
   const floats = vars ? recordToVarEntries(vars.floats) : [];
+  const booleans = vars ? recordToVarEntries(vars.booleans) : [];
 
   if (isLoading && !vars) {
     return <LoadingState text={t('common.loadingVariables')} />;
@@ -926,6 +936,7 @@ function CampaignVariablesSection({ characterId, onGlobalsChanged }: { character
         integers={integers}
         strings={strings}
         floats={floats}
+        booleans={booleans}
         warningText={t('gameState.warnings.campaignVariables')}
         onRestoreClick={backupDialog.open}
         {...varEdits}
@@ -956,7 +967,7 @@ export function GameStatePanel() {
 
   useEffect(() => {
     if (!characterId) return;
-    gameStateAPI.getCampaignSettings(characterId)
+    gameStateAPI.getCampaignSettings()
       .then(s => setCampaignId(s.guid || null))
       .catch(() => setCampaignId(null));
   }, [characterId, pathsVersion]);

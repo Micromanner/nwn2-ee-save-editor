@@ -4,24 +4,12 @@ import type { TransformItemRequest, AddItemResult, AvailableBaseItem } from '@/l
 export type { TransformItemRequest };
 
 export interface EquipItemRequest {
-  item_data: Record<string, unknown>;
   slot: string;
-  inventory_index?: number;
+  inventory_index: number;
 }
 
 export interface UnequipItemRequest {
   slot: string;
-}
-
-export interface UpdateGoldRequest {
-  gold: number;
-}
-
-export interface UpdateGoldResponse {
-  success: boolean;
-  gold: number;
-  message: string;
-  has_unsaved_changes: boolean;
 }
 
 export interface UpdateItemRequest {
@@ -65,7 +53,6 @@ export interface ItemEditorMetadataResponse {
 export interface BaseItem {
   id: number;
   name: string;
-  type: number;
   category: string;
   subCategory: string;
   itemClass: string | null;
@@ -87,12 +74,6 @@ export const ITEM_CATEGORIES = {
   3: 'Magic Items',
   4: 'Miscellaneous'
 } as const;
-
-interface TemplateInfo {
-    name?: string;
-    base_item?: number;
-    source?: string;
-}
 
 export const SUB_CATEGORY_LABELS: Record<string, string> = {
     swords: 'inventory.subcategories.swords',
@@ -138,11 +119,7 @@ export function isVanillaSource(source: string): boolean {
 }
 
 export class InventoryAPI {
-  async equipItem(characterId: number, request: EquipItemRequest): Promise<void> {
-    if (request.inventory_index === undefined) {
-         throw new Error("Inventory index required for Rust backend");
-    }
-
+  async equipItem(request: EquipItemRequest): Promise<void> {
     // Errors propagate as raw CommandError objects so useErrorHandler can
     // classify them; wrapping in new Error(String(e)) loses the error shape.
     await invoke('equip_item', {
@@ -151,25 +128,19 @@ export class InventoryAPI {
     });
   }
 
-  async unequipItem(characterId: number, request: UnequipItemRequest): Promise<void> {
+  async unequipItem(request: UnequipItemRequest): Promise<void> {
     await invoke('unequip_item', { slot: request.slot });
   }
 
-  async updateGold(characterId: number, gold: number): Promise<UpdateGoldResponse> {
-      const newTotal = await invoke<number>('set_gold', { amount: gold });
-      return {
-          success: true,
-          gold: newTotal,
-          message: "Gold updated",
-          has_unsaved_changes: true
-      };
+  async updateGold(gold: number): Promise<void> {
+      await invoke('set_gold', { amount: gold });
   }
 
-  async deleteItem(characterId: number, itemIndex: number): Promise<void> {
+  async deleteItem(itemIndex: number): Promise<void> {
       await invoke('remove_from_inventory', { index: itemIndex });
   }
 
-  async getEditorMetadata(_characterId: number): Promise<ItemEditorMetadataResponse> {
+  async getEditorMetadata(): Promise<ItemEditorMetadataResponse> {
       try {
           const result = await invoke<ItemEditorMetadataResponse>('get_editor_metadata');
           return result;
@@ -179,7 +150,7 @@ export class InventoryAPI {
       }
   }
 
-  async addItemByBaseType(characterId: number, request: AddItemByBaseTypeRequest): Promise<AddItemResponse> {
+  async addItemByBaseType(request: AddItemByBaseTypeRequest): Promise<AddItemResponse> {
       const result = await invoke<AddItemResult>('add_to_inventory', {
           baseItemId: request.base_item_id,
           stackSize: 1,
@@ -188,18 +159,17 @@ export class InventoryAPI {
       return { item_index: result.inventory_index ?? undefined };
   }
 
-  async updateItem(characterId: number, request: UpdateItemRequest): Promise<void> {
+  async updateItem(request: UpdateItemRequest): Promise<void> {
     await invoke('update_item', { request });
   }
 
-  async getAllBaseItems(_characterId: number): Promise<{ base_items: BaseItem[] }> {
+  async getAllBaseItems(): Promise<{ base_items: BaseItem[] }> {
     try {
         const items = await invoke<AvailableBaseItem[]>('get_available_base_items');
         return {
             base_items: items.map(item => ({
                 id: item.id,
                 name: item.name,
-                type: item.id,
                 category: ITEM_CATEGORIES[item.store_panel as keyof typeof ITEM_CATEGORIES] || 'Miscellaneous',
                 subCategory: item.sub_category,
                 itemClass: item.item_class,
@@ -211,8 +181,7 @@ export class InventoryAPI {
     }
   }
 
-
-  async getAvailableTemplates(_characterId: number): Promise<{ templates: ItemTemplate[] }> {
+  async getAvailableTemplates(): Promise<{ templates: ItemTemplate[] }> {
     try {
         const templates = await invoke<ItemTemplate[]>('get_available_templates');
         return { templates };
@@ -222,12 +191,12 @@ export class InventoryAPI {
     }
   }
 
-  async addItemFromTemplate(_characterId: number, resref: string): Promise<AddItemResponse> {
+  async addItemFromTemplate(resref: string): Promise<AddItemResponse> {
       const result = await invoke<AddItemResult>('add_item_from_template', { resref });
       return { item_index: result.inventory_index ?? undefined };
   }
 
-  async transformItem(_characterId: number, request: TransformItemRequest): Promise<void> {
+  async transformItem(request: TransformItemRequest): Promise<void> {
       await invoke('transform_item', { request });
   }
 }

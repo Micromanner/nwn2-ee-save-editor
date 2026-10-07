@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
+import type { ClassInfo } from '@/contexts/CharacterContext';
 import { invoke } from '@tauri-apps/api/core';
 import type { XpProgress } from '@/lib/bindings';
 
@@ -21,54 +22,6 @@ export interface ClassLevel {
   bab_progression?: string;
   alignment_restricted?: boolean;
   focus?: string;
-}
-
-export interface ClassInfo {
-  id: number;
-  name: string;
-  label: string;
-  type: 'base' | 'prestige';
-  focus: string;
-  max_level: number;
-  hit_die: number;
-  skill_points: number;
-  is_spellcaster: boolean;
-  has_arcane: boolean;
-  has_divine: boolean;
-  primary_ability: string;
-  bab_progression: string;
-  alignment_restricted: boolean;
-  icon?: string;
-  description?: string;
-  prerequisites?: {
-    base_attack_bonus: number | null;
-    skills: [string, number][];
-    feats: string[];
-    alignment: string | null;
-  } | null;
-}
-
-export interface FocusInfo {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-}
-
-export interface CategorizedClassesResponse {
-  categories: {
-    base: Record<string, ClassInfo[]>;
-    prestige: Record<string, ClassInfo[]>;
-    npc: Record<string, ClassInfo[]>;
-  };
-  focus_info: Record<string, FocusInfo>;
-  total_classes: number;
-  character_context?: {
-    current_classes: unknown;
-    prestige_requirements?: unknown[];
-    can_multiclass: boolean;
-    multiclass_slots_used: number;
-  };
 }
 
 // Re-export ClassesState from bindings as ClassesData for compatibility

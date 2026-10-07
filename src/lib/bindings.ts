@@ -15,9 +15,6 @@ export type FeatId = number;
 export type SpellId = number;
 export type SkillId = number;
 export type DomainId = number;
-export type ItemId = number;
-export type BaseItemId = number;
-
 // AbilityIndex: 0=STR, 1=DEX, 2=CON, 3=INT, 4=WIS, 5=CHA
 export type AbilityIndex = number;
 
@@ -41,12 +38,6 @@ export interface AbilityModifiers {
   Int: number;
   Wis: number;
   Cha: number;
-}
-
-export interface SaveBonuses {
-  fortitude: number;
-  reflex: number;
-  will: number;
 }
 
 export interface HitPoints {
@@ -245,46 +236,6 @@ export interface AppearanceUpdates {
 }
 
 // =============================================================================
-// Overview State (Aggregated)
-// =============================================================================
-
-export interface OverviewState {
-  // Identity
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  race_id: number;
-  race_name: string;
-  subrace: string | null;
-  gender: string;
-  gender_id: number;
-  age: number;
-  deity: string;
-  alignment: Alignment;
-  alignment_string: string;
-  description: string;
-
-  // Progression
-  total_level: number;
-  experience: number;
-  xp_progress: XpProgress;
-  classes: ClassSummaryEntry[];
-
-  // Combat Stats
-  hit_points: HitPoints;
-  armor_class: number;
-  base_attack_bonus: number;
-  saving_throws: SaveBonuses;
-
-  // Resources
-  gold: number;
-  skill_points_available: number;
-
-  // Domains (for clerics)
-  domains: DomainInfo[];
-}
-
-// =============================================================================
 // Animal Companion / Familiar
 // =============================================================================
 
@@ -345,11 +296,6 @@ export interface AbilitiesState {
 // Classes State (Aggregated)
 // =============================================================================
 
-export interface ClassEntry {
-  class_id: ClassId;
-  level: number;
-}
-
 export interface ClassSummaryEntry {
   class_id: ClassId;
   name: string;
@@ -369,11 +315,6 @@ export interface XpProgress {
   xp_for_next_level: number;
   xp_remaining: number;
   progress_percent: number;
-}
-
-export interface SkillRankEntry {
-  skill_id: SkillId;
-  ranks: number;
 }
 
 export interface ResolvedFeatEntry {
@@ -399,11 +340,6 @@ export interface LevelHistoryEntry {
   skills_gained: ResolvedSkillEntry[];
 }
 
-export interface SkillPointsSummary {
-  available_points: number;
-  total_points: number;
-}
-
 export interface ClassesState {
   total_level: number;
   entries: ClassSummaryEntry[];
@@ -415,23 +351,82 @@ export interface ClassesState {
 // Feats State (Aggregated)
 // =============================================================================
 
-export type FeatType = 'general' | 'bonus' | 'class' | 'racial' | 'epic' | 'domain' | 'background';
-export type FeatCategory = 'combat' | 'metamagic' | 'itemcreation' | 'divine' | 'spellcasting' | 'skill' | 'save' | 'other';
+/** Bitmask of `feat.2da` `FeatCategory` bits. */
+export type FeatType = number;
+export type FeatCategory =
+  | 'Unknown'
+  | 'General'
+  | 'Proficiency'
+  | 'SkillSave'
+  | 'Metamagic'
+  | 'Divine'
+  | 'Epic'
+  | 'Class'
+  | 'Background'
+  | 'Spellcasting'
+  | 'History'
+  | 'Heritage'
+  | 'ItemCreation'
+  | 'Racial'
+  | 'Domain';
+
+export interface PrereqFeat {
+  id: FeatId;
+  name: string;
+  met: boolean;
+}
+
+export interface PrereqAbility {
+  ability: string;
+  required: number;
+  current: number;
+  met: boolean;
+}
+
+export interface PrereqValue {
+  required: number;
+  current: number;
+  met: boolean;
+}
+
+export interface PrereqClassLevel extends PrereqValue {
+  class_name: string;
+}
+
+export interface PrereqSkill {
+  skill: string;
+  required: number;
+  current: number;
+  met: boolean;
+}
+
+export interface FeatPrerequisites {
+  feats: PrereqFeat[];
+  any_feats: PrereqFeat[];
+  abilities: PrereqAbility[];
+  bab: PrereqValue | null;
+  level: PrereqValue | null;
+  class_level: PrereqClassLevel | null;
+  max_level: PrereqValue | null;
+  epic: PrereqValue | null;
+  base_fortitude: PrereqValue | null;
+  caster_level: PrereqValue | null;
+  spell_level: PrereqValue | null;
+  skills: PrereqSkill[];
+}
 
 export interface FeatInfo {
   id: FeatId;
+  label: string;
   name: string;
   description: string;
-  icon: string | null;
-  feat_type: FeatType;
+  icon: string;
+  type: FeatType;
   category: FeatCategory;
-  prerequisites: string[];
-  benefits: string | null;
-}
-
-export interface FeatEntry {
-  feat_id: FeatId;
-  source: string;
+  protected: boolean;
+  custom: boolean;
+  has_feat: boolean;
+  prerequisites: FeatPrerequisites;
 }
 
 export interface FeatSummary {
@@ -481,6 +476,7 @@ export interface SpellcastingClass {
   caster_level: number;
   spell_type: string;
   can_edit_spells: boolean;
+  expected_spells_known: Record<number, number>;
 }
 
 export interface CasterClassSummary {
@@ -520,20 +516,6 @@ export interface MemorizedSpellEntry {
   ready: boolean;
 }
 
-export interface SpellDetails {
-  id: SpellId;
-  name: string;
-  icon: string;
-  school_id: number | null;
-  school_name: string | null;
-  description: string | null;
-  spell_range: string | null;
-  cast_time: string | null;
-  conjuration_time: string | null;
-  components: string | null;
-  target_type: string | null;
-}
-
 export interface PendingSpellLearning {
   class_id: number;
   class_name: string;
@@ -542,12 +524,22 @@ export interface PendingSpellLearning {
   total: number;
 }
 
+export interface AbilitySpellEntry {
+  spell_id: number;
+  name: string;
+  icon: string;
+  description: string | null;
+  school_name: string | null;
+  innate_level: number;
+}
+
 export interface SpellsState {
   spellcasting_classes: SpellcastingClass[];
   spell_summary: SpellSummary;
   memorized_spells: MemorizedSpellEntry[];
   known_spells: KnownSpellEntry[];
   pending_spell_learning: PendingSpellLearning[];
+  ability_spells: AbilitySpellEntry[];
 }
 
 // =============================================================================
@@ -558,6 +550,7 @@ export interface SkillSummaryEntry {
   skill_id: SkillId;
   name: string;
   ranks: number;
+  max_ranks: number;
   modifier: number;
   total: number;
   is_class_skill: boolean;
@@ -587,9 +580,11 @@ export interface ACBreakdown {
   armor: number;
   shield: number;
   dex: number;
-  size: number;
   natural: number;
+  natural_item: number;
+  dodge: number;
   deflection: number;
+  size: number;
   misc: number;
 }
 
@@ -598,21 +593,6 @@ export interface ArmorClass {
   touch: number;
   flat_footed: number;
   breakdown: ACBreakdown;
-}
-
-export interface AttackBreakdown {
-  base: number;
-  ability: number;
-  size: number;
-  misc: number;
-}
-
-export interface AttackBonuses {
-  melee_attack_bonus: number;
-  ranged_attack_bonus: number;
-  base_attack_bonus: number;
-  melee_breakdown: AttackBreakdown;
-  ranged_breakdown: AttackBreakdown;
 }
 
 export interface Initiative {
@@ -626,8 +606,6 @@ export interface CombatSummary {
   base_attack_bonus: number;
   initiative: Initiative;
 }
-
-export type SaveType = 'Fortitude' | 'Reflex' | 'Will';
 
 export interface SaveBreakdown {
   total: number;
@@ -646,8 +624,10 @@ export interface SavingThrows {
 }
 
 export interface SaveSummary {
+  fortitude: number;
+  reflex: number;
+  will: number;
   saves: SavingThrows;
-  hit_points: HitPoints;
 }
 
 export interface NaturalArmorChange {
@@ -658,26 +638,6 @@ export interface NaturalArmorChange {
 // =============================================================================
 // Inventory
 // =============================================================================
-
-export type EquipmentSlot =
-  | 'Head'
-  | 'Chest'
-  | 'Boots'
-  | 'Arms'
-  | 'RightHand'
-  | 'LeftHand'
-  | 'Cloak'
-  | 'RightRing'
-  | 'LeftRing'
-  | 'Neck'
-  | 'Belt'
-  | 'Arrows'
-  | 'Bullets'
-  | 'Bolts'
-  | 'CreatureWeaponLeft'
-  | 'CreatureWeaponRight'
-  | 'CreatureWeaponBite'
-  | 'CreatureArmor';
 
 export interface DecodedPropertyInfo {
   display_string: string;
@@ -765,27 +725,6 @@ export interface TransformItemRequest {
   target_resref: string;
 }
 
-export type TransformResult = Record<string, never>;
-
-// =============================================================================
-// Update Types (for batch operations)
-// =============================================================================
-
-export interface CharacterUpdates {
-  first_name?: string;
-  last_name?: string;
-  age?: number;
-  gender?: number;
-  deity?: string;
-  description?: string;
-  alignment?: [number, number]; // [law_chaos, good_evil]
-  experience?: number;
-}
-
-// =============================================================================
-// Class Categorization
-// =============================================================================
-
 // =============================================================================
 // Session
 // =============================================================================
@@ -813,43 +752,6 @@ export interface CharacterHistory {
   undo_labels: string[];
   /** Nearest first. */
   redo_labels: string[];
-}
-
-// =============================================================================
-// Error Handling
-// =============================================================================
-
-export type CommandErrorCode =
-  | 'NoCharacterLoaded'
-  | 'NoGameDataLoaded'
-  | 'CharacterNotFound'
-  | 'ValidationError'
-  | 'InvalidValue'
-  | 'FileError'
-  | 'ParseError'
-  | 'InsufficientResources'
-  | 'PrerequisitesNotMet'
-  | 'NotFound'
-  | 'AlreadyExists'
-  | 'OperationFailed'
-  | 'Internal';
-
-export interface CommandError {
-  code: CommandErrorCode;
-  details?: {
-    field?: string;
-    reason?: string;
-    path?: string;
-    message?: string;
-    item?: string;
-    resource?: string;
-    required?: number;
-    available?: number;
-    missing?: string[];
-    expected?: string;
-    actual?: string;
-    operation?: string;
-  };
 }
 
 // =============================================================================
@@ -885,131 +787,4 @@ export interface AvailableBaseItem {
   sub_category: string;
   weight: number | null;
   base_cost: number | null;
-}
-
-// =============================================================================
-// File Operations
-// =============================================================================
-
-export interface SaveFile {
-  path: string;
-  name: string;
-  thumbnail: string | null;
-  modified: number | null;
-}
-
-// =============================================================================
-// Paths Configuration
-// =============================================================================
-
-export interface PathInfo {
-  path: string | null;
-  exists: boolean;
-  source: string;
-}
-
-export interface CustomFolderInfo {
-  path: string;
-  exists: boolean;
-  priority: number;
-}
-
-export interface PathConfig {
-  game_folder: PathInfo;
-  documents_folder: PathInfo;
-  steam_workshop_folder: PathInfo;
-  custom_override_folders: CustomFolderInfo[];
-  custom_module_folders: CustomFolderInfo[];
-  custom_hak_folders: CustomFolderInfo[];
-}
-
-export interface AutoDetectResponse {
-  game_folder: string | null;
-  documents_folder: string | null;
-  steam_workshop_folder: string | null;
-}
-
-// =============================================================================
-// Campaign
-// =============================================================================
-
-export interface ModuleInfo {
-  name: string;
-  description: string | null;
-  hak_list: string[];
-  custom_tlk: string | null;
-  start_movie: string | null;
-}
-
-// =============================================================================
-// Initialization
-// =============================================================================
-
-// =============================================================================
-// Class Progression (for level up helper)
-// =============================================================================
-
-export interface ClassBasicInfo {
-  id: ClassId;
-  name: string;
-  hit_die: number;
-  is_prestige: boolean;
-  is_spellcaster: boolean;
-}
-
-export interface ClassFeature {
-  level: number;
-  name: string;
-  description: string | null;
-}
-
-export interface SpellSlots {
-  class_id: ClassId;
-  slots_by_level: Record<number, number>;
-}
-
-export interface LevelProgressionEntry {
-  level: number;
-  bab: number;
-  fort_save: number;
-  ref_save: number;
-  will_save: number;
-  features: ClassFeature[];
-  spell_slots: SpellSlots | null;
-}
-
-export interface ClassProgression {
-  class_info: ClassBasicInfo;
-  progression: LevelProgressionEntry[];
-}
-
-// =============================================================================
-// Race Types
-// =============================================================================
-
-export type SizeCategory = 'Fine' | 'Diminutive' | 'Tiny' | 'Small' | 'Medium' | 'Large' | 'Huge' | 'Gargantuan' | 'Colossal';
-
-export interface SubraceInfo {
-  name: string;
-  description: string | null;
-  ability_adjustments: AbilityModifiers;
-}
-
-// =============================================================================
-// Biography
-// =============================================================================
-
-// =============================================================================
-// Spell Change Result
-// =============================================================================
-
-// =============================================================================
-// File Info (for save listing)
-// =============================================================================
-
-export interface FileInfo {
-  path: string;
-  name: string;
-  size: number;
-  modified: number;
 }

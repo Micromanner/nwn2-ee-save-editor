@@ -9,7 +9,7 @@ import {
 import type { SkillSummaryEntry } from '@/lib/bindings';
 
 const makeSkill = (id: number, name: string, ranks: number, total: number, isClass = true): SkillSummaryEntry => ({
-  skill_id: id, name, ranks, total, is_class_skill: isClass,
+  skill_id: id, name, ranks, max_ranks: 23, total, is_class_skill: isClass,
   modifier: 0, feat_bonus: 0, item_bonus: 0, ability: 'STR',
   armor_check_penalty: false, untrained: true,
 });

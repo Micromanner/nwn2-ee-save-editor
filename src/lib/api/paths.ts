@@ -25,21 +25,10 @@ export interface PathsResponse {
   paths: PathConfig;
 }
 
-export interface AutoDetectResponse {
-  game_installations: string[];
-  documents_folder: string | null;
-  steam_workshop: string | null;
-  current_paths: PathConfig;
-}
-
 export interface PathUpdateResponse {
   success: boolean;
   message: string;
   paths: PathConfig;
-}
-
-export interface ErrorResponse {
-  error: string;
 }
 
 export class PathService {
@@ -86,10 +75,6 @@ export class PathService {
 
   async removeHakFolder(path: string): Promise<PathUpdateResponse> {
     return await invoke<PathUpdateResponse>('remove_hak_folder', { path });
-  }
-
-  async autoDetect(): Promise<AutoDetectResponse> {
-    return await invoke<AutoDetectResponse>('auto_detect_paths');
   }
 }
 

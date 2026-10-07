@@ -271,7 +271,7 @@ export function PartyPanel() {
       return;
     }
     let cancelled = false;
-    gameStateAPI.getCompanionInfluence(characterId)
+    gameStateAPI.getCompanionInfluence()
       .then(response => {
         if (cancelled) return;
         const names = new Set<string>();

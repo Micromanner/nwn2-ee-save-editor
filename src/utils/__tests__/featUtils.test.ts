@@ -5,9 +5,9 @@ import {
   sortFeats,
   filterOwnedFeats,
 } from '../featUtils';
-import type { BackendFeatPrerequisites, FeatInfo } from '@/components/Feats/types';
+import type { FeatPrerequisites, FeatInfo } from '@/lib/bindings';
 
-const noPrerequisites: BackendFeatPrerequisites = {
+const noPrerequisites: FeatPrerequisites = {
   feats: [],
   any_feats: [],
   abilities: [],
@@ -23,7 +23,7 @@ const noPrerequisites: BackendFeatPrerequisites = {
 };
 
 const makeFeat = (id: number, name: string, type = 0): FeatInfo => ({
-  id, name, label: name, type, description: '', protected: false, custom: false,
+  id, name, label: name, type, description: '', icon: '', category: 'Unknown', has_feat: false, protected: false, custom: false,
   prerequisites: noPrerequisites,
 });
 

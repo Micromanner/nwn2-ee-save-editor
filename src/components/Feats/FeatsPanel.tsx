@@ -10,7 +10,8 @@ import { FeatDetail } from './FeatDetail';
 import { useSubsystem, useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
 import { aggregateFeats, filterFeatsByType, sortFeats, FEAT_TYPE_LABELS, getFeatTypeLabel } from '@/utils/featUtils';
-import type { FeatInfo, FeatsState } from '@/components/Feats/types';
+import type { FeatInfo } from '@/lib/bindings';
+import type { FeatsState } from '@/components/Feats/types';
 import { FEAT_TYPES } from '@/components/Feats/types';
 import { display } from '@/utils/dataHelpers';
 import { useFeatManagement } from '@/hooks/useFeatManagement';
@@ -107,7 +108,7 @@ export function FeatsPanel() {
     const featTypeBitmask = activeTypeBit ?? undefined;
     const searchParam = debouncedSearch.length >= 3 ? debouncedSearch : undefined;
 
-    CharacterAPI.getLegitimateFeats(character.id, {
+    CharacterAPI.getLegitimateFeats({
       page: currentPage,
       limit: FEATS_PER_PAGE,
       featType: featTypeBitmask,

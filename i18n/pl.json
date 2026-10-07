@@ -230,6 +230,8 @@
     "shield": "Tarcza",
     "natural": "Naturalna",
     "deflect": "Odbicie",
+    "dodge": "Unik",
+    "items": "Przedmioty",
     "size": "Rozmiar",
     "ac": "KP",
     "touch": "Dotyk",
@@ -967,7 +969,8 @@
       "noVariables": "Nie znaleziono zmiennych",
       "integers": "Liczby całkowite",
       "strings": "Ciągi znaków",
-      "floats": "Liczby zmiennoprzecinkowe"
+      "floats": "Liczby zmiennoprzecinkowe",
+      "booleans": "Wartości logiczne"
     },
     "module": {
       "module": "Moduł",

@@ -44,6 +44,7 @@ const meshData: MeshData = {
   positions: [1, 2, 3], normals: [0, 0, 1], uvs: [0, 0],
   tangents: [0, 1, 0, -1], indices: [], bone_weights: null, bone_indices: null,
   material: materialData,
+  skeleton_ref: null, attach_bone: null, override_tints: null, accessory_slot: null,
 };
 
 describe('MDB rendering', () => {

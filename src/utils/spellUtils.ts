@@ -1,4 +1,5 @@
-import type { SpellInfo, SpellcastingClass, KnownSpell, MemorizedSpell } from '@/components/Spells/types';
+import type { SpellInfo } from '@/components/Spells/types';
+import type { SpellcastingClass, KnownSpellEntry, MemorizedSpellEntry } from '@/lib/bindings';
 
 export interface CasterClassInfo {
   index: number;
@@ -7,7 +8,7 @@ export interface CasterClassInfo {
   can_edit_spells: boolean;
 }
 
-export function mapKnownSpellsToSpellInfo(knownSpells: KnownSpell[] | null | undefined): SpellInfo[] {
+export function mapKnownSpellsToSpellInfo(knownSpells: KnownSpellEntry[] | null | undefined): SpellInfo[] {
   if (!knownSpells) return [];
   return knownSpells.map(ks => ({
     id: ks.spell_id,
@@ -22,7 +23,7 @@ export function mapKnownSpellsToSpellInfo(knownSpells: KnownSpell[] | null | und
   }));
 }
 
-export function groupMemorizedSpells(memorizedSpells: MemorizedSpell[] | null | undefined): SpellInfo[] {
+export function groupMemorizedSpells(memorizedSpells: MemorizedSpellEntry[] | null | undefined): SpellInfo[] {
   if (!memorizedSpells) return [];
 
   const spellMap = new Map<string, { spell: SpellInfo; count: number }>();

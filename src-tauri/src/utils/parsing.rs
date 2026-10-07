@@ -1,5 +1,7 @@
 use crate::loaders::GameData;
 use ahash::AHashMap;
+use regex::Regex;
+use std::sync::LazyLock;
 
 pub type Row = AHashMap<String, Option<String>>;
 
@@ -111,4 +113,11 @@ mod tests {
         assert!(!safe_bool(None, false));
         assert!(safe_bool(None, true));
     }
+}
+
+/// Removes the markup tags (`<b>`, `<color=Gold>`, ...) the game text carries.
+pub fn strip_markup(text: &str) -> String {
+    static TAG: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"<[^>]+>").expect("valid markup regex"));
+    TAG.replace_all(text, "").into_owned()
 }

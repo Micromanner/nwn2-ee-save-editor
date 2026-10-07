@@ -22,6 +22,7 @@ pub struct ACBreakdown {
     pub shield: i32,
     pub dex: i32,
     pub natural: i32,
+    pub natural_item: i32,
     pub dodge: i32,
     pub deflection: i32,
     pub size: i32,
@@ -105,7 +106,8 @@ impl Character {
             armor: item_bonuses.ac_armor_bonus,
             shield: item_bonuses.ac_shield_bonus,
             dex: capped_dex,
-            natural: natural_ac + item_bonuses.ac_natural_bonus,
+            natural: natural_ac,
+            natural_item: item_bonuses.ac_natural_bonus,
             dodge: item_bonuses.ac_dodge_bonus,
             deflection: item_bonuses.ac_deflection_bonus,
             size: size_mod,
@@ -117,6 +119,7 @@ impl Character {
             + breakdown.shield
             + breakdown.dex
             + breakdown.natural
+            + breakdown.natural_item
             + breakdown.dodge
             + breakdown.deflection
             + breakdown.size
@@ -133,6 +136,7 @@ impl Character {
             + breakdown.armor
             + breakdown.shield
             + breakdown.natural
+            + breakdown.natural_item
             + breakdown.deflection
             + breakdown.size
             + breakdown.misc;

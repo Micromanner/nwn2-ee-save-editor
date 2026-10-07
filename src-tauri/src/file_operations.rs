@@ -2,7 +2,6 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::State;
-use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_shell::ShellExt;
 
 use crate::services::playerinfo::PlayerInfo;
@@ -110,87 +109,6 @@ pub struct SaveFile {
 }
 
 #[tauri::command]
-pub async fn select_save_file(app: tauri::AppHandle) -> Result<SaveFile, String> {
-    log::info!("[Rust] The 'select_save_file' command has been invoked.");
-    let dialog = app.dialog().file();
-
-    // [FIX] Added logging to pinpoint the exact location of the freeze.
-    log::info!(
-        "[Rust] About to call blocking_pick_folder. If the app freezes, this is the last log you will see."
-    );
-
-    let dir_path = dialog
-        .blocking_pick_folder()
-        .ok_or("No save directory selected or the dialog was cancelled.")?;
-
-    // If the application doesn't freeze, you will see this log message.
-    log::info!("[Rust] blocking_pick_folder completed successfully. A folder was selected.");
-
-    let path_str = match &dir_path {
-        tauri_plugin_dialog::FilePath::Path(p) => p.to_string_lossy().to_string(),
-        _ => return Err("Invalid directory path format".to_string()),
-    };
-
-    let name = match &dir_path {
-        tauri_plugin_dialog::FilePath::Path(p) => {
-            let fallback = p.file_name().and_then(|n| n.to_str()).unwrap_or("Unknown");
-            read_save_display_name(p, fallback)
-        }
-        _ => "Unknown".to_string(),
-    };
-
-    let save_path = PathBuf::from(&path_str);
-    if !is_save_dir(&save_path) {
-        log::error!(
-            "[Rust] Validation failed: selected directory is not a valid NWN2 save (no resgff.zip and no loose player.bic+playerlist.ifo)"
-        );
-        return Err(
-            "Selected directory doesn't appear to be a valid NWN2 save (no resgff.zip and no loose player.bic+playerlist.ifo)"
-                .to_string(),
-        );
-    }
-
-    log::info!("[Rust] Save file validated. Returning path to frontend.");
-    let thumbnail = find_save_thumbnail(&save_path).map(|p| p.to_string_lossy().to_string());
-
-    let modified = save_path
-        .metadata()
-        .and_then(|m| m.modified())
-        .ok()
-        .map(|time| {
-            time.duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64
-        });
-
-    let character_name = read_save_character_name(&save_path);
-
-    Ok(SaveFile {
-        path: path_str,
-        name,
-        thumbnail,
-        modified,
-        character_name,
-    })
-}
-
-#[tauri::command]
-pub async fn select_nwn2_directory(app: tauri::AppHandle) -> Result<String, String> {
-    log::info!("[Rust] About to call blocking_pick_folder for NWN2 directory.");
-    let dir_path = app
-        .dialog()
-        .file()
-        .blocking_pick_folder()
-        .ok_or("No directory selected or the dialog was cancelled.")?;
-    log::info!("[Rust] blocking_pick_folder for NWN2 directory completed.");
-
-    match dir_path {
-        tauri_plugin_dialog::FilePath::Path(p) => Ok(p.to_string_lossy().to_string()),
-        _ => Err("Invalid directory path format".to_string()),
-    }
-}
-
-#[tauri::command]
 pub async fn find_nwn2_saves(
     state: State<'_, AppState>,
     save_mode: Option<String>,
@@ -284,36 +202,6 @@ pub async fn find_nwn2_saves(
 }
 
 #[tauri::command]
-pub async fn get_steam_workshop_path() -> Result<Option<String>, String> {
-    // This function is unchanged
-    let mut steam_paths = vec![PathBuf::from(
-        "C:/Program Files (x86)/Steam/steamapps/workshop/content/2760",
-    )];
-    if let Ok(home) = std::env::var("HOME") {
-        steam_paths.push(PathBuf::from(&home).join(".steam/steam/steamapps/workshop/content/2760"));
-    }
-    for path in steam_paths {
-        if path.exists() {
-            return Ok(Some(path.to_string_lossy().to_string()));
-        }
-    }
-    Ok(None)
-}
-
-#[tauri::command]
-pub async fn validate_nwn2_installation(path: String) -> Result<bool, String> {
-    // This function is unchanged
-    let base_path = PathBuf::from(path);
-    let required_items = vec!["Data", "dialog.tlk"];
-    for item in required_items {
-        if !base_path.join(item).exists() {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-#[tauri::command]
 pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String> {
     log::info!("[Rust] Starting thumbnail conversion process for: {thumbnail_path}");
 
@@ -377,25 +265,6 @@ pub async fn get_save_thumbnail(thumbnail_path: String) -> Result<String, String
     );
 
     Ok(base64_data)
-}
-
-#[tauri::command]
-pub async fn detect_nwn2_installation(
-    state: State<'_, AppState>,
-) -> Result<Option<String>, String> {
-    log::info!("[Rust] Detecting NWN2:EE installation");
-
-    let paths = state.paths.read();
-    if let Some(game_folder) = paths.game_folder()
-        && game_folder.exists()
-    {
-        let path_str = game_folder.to_string_lossy().to_string();
-        log::info!("[Rust] Found NWN2 installation: {path_str}");
-        return Ok(Some(path_str));
-    }
-
-    log::info!("[Rust] No NWN2 installation found");
-    Ok(None)
 }
 
 #[tauri::command]

@@ -5,7 +5,7 @@ import { GameIcon } from '../shared/GameIcon';
 import { LoadingState } from '../shared';
 import { display } from '@/utils/dataHelpers';
 import { nwn2ToHtml } from '@/utils/nwn2Markup';
-import type { ClassInfo } from '@/hooks/useClassesLevel';
+import type { ClassInfo } from '@/contexts/CharacterContext';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useIcon } from '@/hooks/useIcon';
 import { invoke } from '@tauri-apps/api/core';
@@ -56,40 +56,6 @@ function formatDescription(raw: string): string {
   text = text.replace(/<color=Gold>/gi, `<color=${T.accent}>`);
   return nwn2ToHtml(text);
 }
-
-// --- COMMENTED OUT: structured data sections ---
-// interface SpellSlots { level_0: number; level_1: number; level_2: number; level_3: number; level_4: number; level_5: number; level_6: number; level_7: number; level_8: number; level_9: number; }
-// interface LevelProgressionEntry { level: number; base_attack_bonus: number; fortitude_save: number; reflex_save: number; will_save: number; features: { name: string; feature_type: string; description: string }[]; spell_slots: SpellSlots | null; }
-// interface ClassProgression { class_id: number; class_name: string; basic_info: { hit_die: number; skill_points_per_level: number; bab_progression: string; save_progression: string; is_spellcaster: boolean; spell_type: string; }; level_progression: LevelProgressionEntry[]; max_level_shown: number; }
-//
-// interface ParsedDescription { flavor: string | null; abilities: string | null; }
-//
-// function parseDescription(raw: string): ParsedDescription {
-//   let text = raw.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
-//   text = text.replace(/\(PRESTIGE CLASS:.*?\)\s*/i, '');
-//   let flavor: string | null = text;
-//   const flavorCut = [/\bRequirements:\s*/i, /\bClass Features:\s*/i, /\bSpecial:\s*/i];
-//   for (const re of flavorCut) { const idx = flavor.search(re); if (idx > 0) flavor = flavor.substring(0, idx); }
-//   flavor = flavor.replace(/\s+/g, ' ').trim();
-//   if (flavor.length <= 10) flavor = null;
-//   let abilities: string | null = null;
-//   const abilitiesMatch = text.match(/\bClass Abilities:\s*([\s\S]*)/i);
-//   if (abilitiesMatch) { abilities = abilitiesMatch[1].trim(); }
-//   else { const levelMatch = text.match(/(Level \d+:[\s\S]*)/i); if (levelMatch) { abilities = levelMatch[1].trim(); } }
-//   if (abilities) { abilities = abilities.replace(/\s*(Level \d+:)/g, '\n$1').replace(/\s*- ([A-Z])/g, '\n- $1').replace(/^\n/, '').replace(/[ \t]+/g, ' ').trim(); if (abilities.length <= 5) abilities = null; }
-//   return { flavor, abilities };
-// }
-//
-// function formatBabProgression(table: string): string {
-//   const lower = table.toLowerCase();
-//   if (lower.includes('atk_1') || lower.includes('atk1')) return 'Full (+1/level)';
-//   if (lower.includes('atk_2') || lower.includes('atk2')) return '3/4 (+3/4 level)';
-//   if (lower.includes('atk_3') || lower.includes('atk3')) return 'Half (+1/2 level)';
-//   return table;
-// }
-//
-// const statRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' };
-// --- END COMMENTED OUT ---
 
 const sectionTitle: React.CSSProperties = {
   color: T.textMuted,
@@ -198,100 +164,6 @@ export function ClassDetail({ cls, canSelect, selectReason }: ClassDetailProps) 
           dangerouslySetInnerHTML={{ __html: formatDescription(detail.description) }}
         />
       )}
-
-      {/* --- COMMENTED OUT: structured data sections ---
-      {/* Class Stats *}
-      <div>
-        <div style={sectionTitle}>{t('classes.classStats')}</div>
-        <div style={{ background: T.surfaceAlt, borderRadius: 4, padding: '6px 10px' }}>
-          <div style={statRow}>
-            <span style={{ color: T.textMuted }}>{t('classes.hitDie')}</span>
-            <span className="t-medium" style={{ color: T.text }}>d{detail?.hit_die ?? cls.hit_die}</span>
-          </div>
-          <div style={statRow}>
-            <span style={{ color: T.textMuted }}>{t('classes.skillPoints')}</span>
-            <span className="t-medium" style={{ color: T.text }}>{detail?.skill_points ?? cls.skill_points}{t('classes.perLevel')}</span>
-          </div>
-          <div style={statRow}>
-            <span style={{ color: T.textMuted }}>{t('classes.bab')}</span>
-            <span className="t-medium" style={{ color: T.text }}>{formatBabProgression(detail?.bab_progression ?? cls.bab_progression)}</span>
-          </div>
-          {detail?.save_progression && (
-            <div style={statRow}>
-              <span style={{ color: T.textMuted }}>{t('classes.savingThrows')}</span>
-              <span className="t-medium" style={{ color: T.text }}>
-                {t('classes.fortitude')}: {detail.save_progression.fortitude}, {t('classes.reflex')}: {detail.save_progression.reflex}, {t('classes.will')}: {detail.save_progression.will}
-              </span>
-            </div>
-          )}
-          <div style={statRow}>
-            <span style={{ color: T.textMuted }}>{t('classes.spellcasting')}</span>
-            <span className="t-medium" style={{ color: T.text }}>
-              {detail?.is_spellcaster
-                ? (detail.spell_type === 'arcane' ? t('classes.arcane') : t('classes.divine'))
-                : t('classes.none')}
-            </span>
-          </div>
-          {(detail?.max_level ?? 0) > 0 && (
-            <div style={statRow}>
-              <span style={{ color: T.textMuted }}>{t('classes.level')}</span>
-              <span className="t-medium" style={{ color: T.text }}>Max {detail!.max_level}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Class Skills *}
-      {detail?.class_skills && detail.class_skills.length > 0 && (
-        <div>
-          <div style={sectionTitle}>{t('classes.classSkills')}</div>
-          <div className="t-body" style={{ color: T.text }}>
-            {detail.class_skills.join(', ')}
-          </div>
-        </div>
-      )}
-
-      {/* Level Progression Table *}
-      {detail?.progression && detail.progression.level_progression.length > 0 && (
-        <div>
-          <div style={sectionTitle}>{t('classes.levelProgression')}</div>
-          <HTMLTable compact bordered striped style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>{t('classes.lvl')}</th>
-                <th>{t('classes.bab')}</th>
-                <th>{t('classes.fortitude')}</th>
-                <th>{t('classes.reflex')}</th>
-                <th>{t('classes.will')}</th>
-                <th>{t('classes.feats')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.progression.level_progression.map((entry) => (
-                <tr key={entry.level}>
-                  <td>{entry.level}</td>
-                  <td>+{entry.base_attack_bonus}</td>
-                  <td>+{entry.fortitude_save}</td>
-                  <td>+{entry.reflex_save}</td>
-                  <td>+{entry.will_save}</td>
-                  <td>{entry.features.map(f => f.name).join(', ') || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </HTMLTable>
-        </div>
-      )}
-
-      {/* Class Abilities from description *}
-      {parsed?.abilities && (
-        <div>
-          <div style={sectionTitle}>{t('classes.classAbilities')}</div>
-          <div className="t-body" style={{ color: T.text, whiteSpace: 'pre-line' }}>
-            {parsed.abilities}
-          </div>
-        </div>
-      )}
-      --- END COMMENTED OUT --- */}
     </div>
   );
 }

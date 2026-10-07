@@ -7,11 +7,11 @@ export interface SpellClassLevel {
 export interface SpellInfo {
   id: number;
   name: string;
-  description?: string;
+  description?: string | null;
   icon?: string;
 
   school_id?: number;
-  school_name?: string;
+  school_name?: string | null;
   level: number;
 
   cast_time?: string;
@@ -35,79 +35,6 @@ export interface SpellInfo {
   memorized_count?: number;
 
   is_domain_spell?: boolean;
-}
-
-export interface SpellcastingClass {
-  index: number;
-  class_id: number;
-  class_name: string;
-  class_level: number;
-  caster_level: number;
-  spell_type: 'prepared' | 'spontaneous';
-  can_edit_spells: boolean;
-  expected_spells_known: Record<number, number>;
-}
-
-export interface SpellSummary {
-  caster_classes: Array<{
-    id: number;
-    name: string;
-    total_slots: number;
-    max_spell_level: number;
-    slots_by_level: Record<number, number>;
-  }>;
-  total_spell_levels: number;
-  spell_resistance: number;
-}
-
-export interface MemorizedSpell {
-  level: number;
-  spell_id: number;
-  name: string;
-  icon: string;
-  school_name?: string;
-  description?: string;
-  class_id: number;
-  metamagic: number;
-  ready: boolean;
-}
-
-export interface KnownSpell {
-  level: number;
-  spell_id: number;
-  name: string;
-  icon: string;
-  school_name?: string;
-  description?: string;
-  class_id: number;
-  is_domain_spell?: boolean;
-}
-
-export interface PendingSpellLearning {
-  class_id: number;
-  class_name: string;
-  caster_type: 'spontaneous' | 'spellbook';
-  by_level: Record<number, number>;
-  total: number;
-}
-
-export interface AbilitySpellEntry {
-  spell_id: number;
-  name: string;
-  icon: string;
-  description?: string;
-  school_name?: string;
-  innate_level: number;
-}
-
-export interface SpellsState {
-  spellcasting_classes: SpellcastingClass[];
-  spell_summary: SpellSummary;
-  memorized_spells: MemorizedSpell[];
-  known_spells: KnownSpell[];
-  pending_spell_learning: PendingSpellLearning[];
-  ability_spells: AbilitySpellEntry[];
-  available_by_level?: Record<number, SpellInfo[]>;
 }
 
 export interface ParsedSpellDescription {

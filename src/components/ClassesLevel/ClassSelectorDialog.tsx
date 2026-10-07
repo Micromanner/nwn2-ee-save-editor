@@ -7,7 +7,7 @@ import { ParchmentDialog, GroupedList, LoadingState } from '../shared';
 import type { ListSection } from '../shared';
 import { T } from '../theme';
 import { ClassDetail } from './ClassDetail';
-import type { CategorizedClassesResponse, ClassInfo } from '@/hooks/useClassesLevel';
+import type { CategorizedClassesResponse, ClassInfo } from '@/contexts/CharacterContext';
 import { useTranslations } from '@/hooks/useTranslations';
 import { display } from '@/utils/dataHelpers';
 

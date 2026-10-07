@@ -3,7 +3,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { CharacterAPI, FeatActionResponse } from '@/services/characterApi';
 import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
 import { useTranslations } from '@/hooks/useTranslations';
-import type { FeatInfo, FeatsState } from '@/components/Feats/types';
+import type { FeatInfo } from '@/lib/bindings';
+import type { FeatsState } from '@/components/Feats/types';
 
 const FEAT_DEPENDENT_SUBSYSTEMS = ['combat', 'abilityScores', 'saves', 'skills', 'classes'] as const;
 
@@ -15,9 +16,6 @@ interface FeatManagementState {
   featsData: FeatsState | null;
   isLoading: boolean;
   error: string | null;
-  categoryFeats: FeatInfo[];
-  categoryFeatsLoading: boolean;
-  categoryFeatsError: string | null;
   selectedFeat: FeatInfo | null;
   featDetails: FeatInfo | null;
   loadingDetails: boolean;
@@ -25,7 +23,6 @@ interface FeatManagementState {
 
 interface FeatManagementActions {
   loadFeats: (force?: boolean) => Promise<void>;
-  loadCategoryFeats: (category: string, subcategory?: string | null) => Promise<void>;
   loadFeatDetails: (feat: FeatInfo) => Promise<void>;
   addFeat: (featId: number) => Promise<FeatActionResponse>;
   removeFeat: (featId: number) => Promise<void>;
@@ -44,9 +41,6 @@ export function useFeatManagement(
   const { character, isLoading: characterLoading, error: characterError, invalidateSubsystems, refreshCharacter } = useCharacterContext();
   const feats = useSubsystem('feats');
   
-  const [categoryFeats, setCategoryFeats] = useState<FeatInfo[]>([]);
-  const [categoryFeatsLoading, setCategoryFeatsLoading] = useState(false);
-  const [categoryFeatsError, setCategoryFeatsError] = useState<string | null>(null);
   const [selectedFeat, setSelectedFeat] = useState<FeatInfo | null>(null);
   const [featDetails, setFeatDetails] = useState<FeatInfo | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -66,36 +60,6 @@ export function useFeatManagement(
     await feats.load({ force });
   }, [character, feats]);
 
-  const loadCategoryFeats = useCallback(async (
-    category: string, 
-    subcategory?: string | null
-  ) => {
-    if (!character?.id) {
-      setCategoryFeats([]);
-      return;
-    }
-    
-    setCategoryFeatsLoading(true);
-    setCategoryFeatsError(null);
-    
-    try {
-      const response = await CharacterAPI.getLegitimateFeats(character.id, {
-        category,
-        subcategory: subcategory || undefined,
-        page: 1,
-        limit: 500
-      });
-      
-      setCategoryFeats(response.feats);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('errors.loadingFailed');
-      setCategoryFeatsError(errorMessage);
-      setCategoryFeats([]);
-    } finally {
-      setCategoryFeatsLoading(false);
-    }
-  }, [t, character?.id]);
-
   const loadFeatDetails = useCallback(async (feat: FeatInfo) => {
     if (!character?.id) return;
     
@@ -103,7 +67,7 @@ export function useFeatManagement(
     setLoadingDetails(true);
     
     try {
-      const details = await CharacterAPI.getFeatDetails(character.id, feat.id);
+      const details = await CharacterAPI.getFeatDetails(feat.id);
       setFeatDetails(details);
     } catch {
       setFeatDetails(null);
@@ -115,7 +79,7 @@ export function useFeatManagement(
   const addFeat = useCallback(async (featId: number): Promise<FeatActionResponse> => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    const response = await CharacterAPI.addFeat(character.id, featId);
+    const response = await CharacterAPI.addFeat(featId);
     await Promise.all([
       feats.load({ force: true }),
       invalidateSubsystems([...FEAT_DEPENDENT_SUBSYSTEMS]),
@@ -127,7 +91,7 @@ export function useFeatManagement(
   const removeFeat = useCallback(async (featId: number): Promise<void> => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await CharacterAPI.removeFeat(character.id, featId);
+    await CharacterAPI.removeFeat(featId);
     await Promise.all([
       feats.load({ force: true }),
       invalidateSubsystems([...FEAT_DEPENDENT_SUBSYSTEMS]),
@@ -151,14 +115,10 @@ export function useFeatManagement(
     featsData,
     isLoading,
     error,
-    categoryFeats,
-    categoryFeatsLoading,
-    categoryFeatsError,
     selectedFeat,
     featDetails,
     loadingDetails,
     loadFeats,
-    loadCategoryFeats,
     loadFeatDetails,
     addFeat,
     removeFeat,

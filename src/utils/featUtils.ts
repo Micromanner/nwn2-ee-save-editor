@@ -1,4 +1,4 @@
-import type { FeatInfo } from '@/components/Feats/types';
+import type { FeatInfo } from '@/lib/bindings';
 import { FEAT_TYPES } from '@/components/Feats/types';
 
 export const FEAT_TYPE_LABELS: Record<number, string> = {

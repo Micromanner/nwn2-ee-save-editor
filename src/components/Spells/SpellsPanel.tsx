@@ -11,7 +11,8 @@ import { useSubsystem } from '@/contexts/CharacterContext';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import { CharacterAPI } from '@/services/characterApi';
 import { mapKnownSpellsToSpellInfo, groupMemorizedSpells, mapCasterClasses } from '@/utils/spellUtils';
-import type { SpellInfo, SpellsState, AbilitySpellEntry } from '@/components/Spells/types';
+import type { SpellInfo } from '@/components/Spells/types';
+import type { SpellsState } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
 import { useSpellManagement } from '@/hooks/useSpellManagement';
 import { useToast } from '@/contexts/ToastContext';
@@ -90,7 +91,7 @@ export function SpellsPanel() {
           : undefined;
         const classParam = foundClass?.class_id;
 
-        const response = await CharacterAPI.getLegitimateSpells(characterId, {
+        const response = await CharacterAPI.getLegitimateSpells({
           page: allSpellsPage,
           limit: SPELLS_PER_PAGE,
           schools: schoolParam,
@@ -182,7 +183,7 @@ export function SpellsPanel() {
     const cappedClassIds = new Set<number>();
 
     for (const cls of spellcastingClasses) {
-      const caps = cls.expected_spells_known ?? {};
+      const caps = cls.expected_spells_known;
       if (Object.keys(caps).length === 0) continue;
       if (activeClassObj && cls.class_id !== activeClassObj.class_id) continue;
       cappedClassIds.add(cls.class_id);

@@ -6,36 +6,7 @@ import { ParchmentDialog, LoadingState } from '../shared';
 import { useTranslations } from '@/hooks/useTranslations';
 import { stripNwn2Tags } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
-
-interface AbilityModifiers {
-  Str: number;
-  Dex: number;
-  Con: number;
-  Int: number;
-  Wis: number;
-  Cha: number;
-}
-
-interface RaceInfo {
-  id: number;
-  name: string;
-  icon: string | null;
-  description: string | null;
-  ability_adjustments: AbilityModifiers;
-  favored_class: string | null;
-  default_subrace: number | null;
-}
-
-interface SubraceInfo {
-  id: number;
-  name: string;
-  label: string;
-  icon: string | null;
-  description: string | null;
-  ability_adjustments: AbilityModifiers;
-  favored_class: string | null;
-  size: string | null;
-}
+import type { AbilityModifiers, AvailableRace, AvailableSubrace } from '@/lib/bindings';
 
 export interface RaceDialogProps {
   isOpen: boolean;
@@ -99,10 +70,10 @@ function formatAbilityMods(mods: AbilityModifiers, t: (key: string) => string): 
 export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onSelect }: RaceDialogProps) {
   const t = useTranslations();
   const [search, setSearch] = useState('');
-  const [races, setRaces] = useState<RaceInfo[]>([]);
+  const [races, setRaces] = useState<AvailableRace[]>([]);
   const [loadingRaces, setLoadingRaces] = useState(false);
   const [expandedRaceId, setExpandedRaceId] = useState<number | null>(null);
-  const [subraces, setSubraces] = useState<SubraceInfo[]>([]);
+  const [subraces, setSubraces] = useState<AvailableSubrace[]>([]);
   const [loadingSubraces, setLoadingSubraces] = useState(false);
   const [selectedRaceId, setSelectedRaceId] = useState<number | null>(null);
   const [selectedSubrace, setSelectedSubrace] = useState<string | null>(null);
@@ -110,7 +81,7 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
   useEffect(() => {
     if (!isOpen) return;
     setLoadingRaces(true);
-    invoke<RaceInfo[]>('get_available_races')
+    invoke<AvailableRace[]>('get_available_races')
       .then(res => setRaces(res))
       .catch(() => setRaces([]))
       .finally(() => setLoadingRaces(false));
@@ -127,7 +98,7 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
   useEffect(() => {
     if (!isOpen || expandedRaceId === null) return;
     setLoadingSubraces(true);
-    invoke<SubraceInfo[]>('get_subraces_for_race', { raceId: expandedRaceId })
+    invoke<AvailableSubrace[]>('get_subraces_for_race', { raceId: expandedRaceId })
       .then(res => {
         setSubraces(res);
         if (res.length === 1) {
@@ -151,7 +122,7 @@ export function RaceDialog({ isOpen, currentRaceId, currentSubrace, onClose, onS
     setSelectedSubrace(null);
   };
 
-  const handleSubraceClick = (sub: SubraceInfo) => {
+  const handleSubraceClick = (sub: AvailableSubrace) => {
     setSelectedRaceId(expandedRaceId);
     setSelectedSubrace(sub.name);
   };

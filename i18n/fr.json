@@ -228,6 +228,8 @@
     "shield": "Bouclier",
     "natural": "Naturelle",
     "deflect": "Parade",
+    "dodge": "Esquive",
+    "items": "Objets",
     "size": "Taille",
     "ac": "CA",
     "touch": "Contact",
@@ -965,7 +967,8 @@
       "noVariables": "Aucune variable trouvée",
       "integers": "Entiers",
       "strings": "Chaînes",
-      "floats": "Flottants"
+      "floats": "Flottants",
+      "booleans": "Booléens"
     },
     "module": {
       "module": "Module",

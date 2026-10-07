@@ -228,6 +228,8 @@
     "shield": "Escudo",
     "natural": "Natural",
     "deflect": "Desvío",
+    "dodge": "Esquiva",
+    "items": "Objetos",
     "size": "Tamaño",
     "ac": "CA",
     "touch": "Toque",
@@ -966,7 +968,8 @@
       "noVariables": "No hay variables",
       "integers": "Enteros",
       "strings": "Cadenas",
-      "floats": "Flotantes"
+      "floats": "Flotantes",
+      "booleans": "Booleanos"
     },
     "module": {
       "module": "Módulo",

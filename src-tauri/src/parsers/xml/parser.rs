@@ -15,7 +15,7 @@ static PREFIX_PATTERN: OnceLock<Regex> = OnceLock::new();
 
 fn get_influence_pattern() -> &'static Regex {
     INFLUENCE_PATTERN
-        .get_or_init(|| Regex::new(r"(?i)^(?:[a-zA-Z0-9_]*_)?(?:inf|influence)([a-z]+)$").unwrap())
+        .get_or_init(|| Regex::new(r"(?i)^(?:[a-zA-Z0-9_]*_)?(?:influence|inf)([a-z]+)$").unwrap())
 }
 
 fn get_prefix_pattern() -> &'static Regex {
@@ -304,7 +304,7 @@ impl RustXmlParser {
         Ok(result)
     }
 
-    pub fn discover_potential_companions(&self) -> IndexMap<String, BTreeMap<String, String>> {
+    pub fn discover_potential_companions(&self) -> IndexMap<String, DiscoveredCompanion> {
         let mut discovered = IndexMap::new();
         let blacklist_set: HashSet<&str> = BLACKLIST.iter().copied().collect();
         let pattern = get_influence_pattern();
@@ -315,14 +315,13 @@ impl RustXmlParser {
             {
                 let companion_name = matched.as_str();
                 if companion_name.len() > 2 && !blacklist_set.contains(companion_name) {
-                    let lower_name = companion_name.to_lowercase();
-                    discovered.entry(lower_name).or_insert_with(|| {
-                        let mut info = BTreeMap::new();
-                        info.insert("name".to_string(), capitalize(companion_name));
-                        info.insert("influence".to_string(), value.to_string());
-                        info.insert("source".to_string(), "discovered".to_string());
-                        info
-                    });
+                    discovered
+                        .entry(companion_name.to_lowercase())
+                        .or_insert_with(|| DiscoveredCompanion {
+                            name: capitalize(companion_name),
+                            influence: *value,
+                            variable: var_name.clone(),
+                        });
                 }
             }
         }
@@ -360,6 +359,7 @@ impl RustXmlParser {
                 CompanionStatus {
                     name: def.name.to_string(),
                     influence: self.data.integers.get(def.influence_var).copied(),
+                    influence_var: def.influence_var.to_string(),
                     source: "explicit".to_string(),
                 },
             );
@@ -367,16 +367,15 @@ impl RustXmlParser {
 
         // 2. Discovered
         let discovered = self.discover_potential_companions();
-        for (comp_id, status) in discovered {
-            companion_status.entry(comp_id).or_insert_with(|| {
-                let influence_val = status.get("influence").and_then(|s| s.parse::<i32>().ok());
-
-                CompanionStatus {
-                    name: status.get("name").cloned().unwrap_or_default(),
-                    influence: influence_val,
+        for (comp_id, found) in discovered {
+            companion_status
+                .entry(comp_id)
+                .or_insert_with(|| CompanionStatus {
+                    name: found.name,
+                    influence: Some(found.influence),
+                    influence_var: found.variable,
                     source: "discovered".to_string(),
-                }
-            });
+                });
         }
 
         companion_status
@@ -534,7 +533,17 @@ impl RustXmlParser {
 pub struct CompanionStatus {
     pub name: String,
     pub influence: Option<i32>,
+    /// The global the influence is stored in.
+    pub influence_var: String,
     pub source: String,
+}
+
+/// A companion found through an influence-like integer global that no
+/// definition covers.
+pub struct DiscoveredCompanion {
+    pub name: String,
+    pub influence: i32,
+    pub variable: String,
 }
 
 #[derive(Serialize)]

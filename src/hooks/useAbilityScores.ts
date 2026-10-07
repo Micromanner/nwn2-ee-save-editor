@@ -296,7 +296,7 @@ export function useAbilityScores(
       if (!characterId) return;
 
       try {
-        const alignmentData = await CharacterAPI.getAlignment(characterId);
+        const alignmentData = await CharacterAPI.getAlignment();
         setAlignment({
           law_chaos: alignmentData.law_chaos,
           good_evil: alignmentData.good_evil,
@@ -332,7 +332,7 @@ export function useAbilityScores(
     }));
     
     try {
-      await CharacterAPI.updateAttributes(characterId, {
+      await CharacterAPI.updateAttributes({
         [backendAttrName]: clampedValue
       });
       await invalidateSubsystems(['abilityScores', 'combat', 'saves', 'skills', 'classes']);
@@ -361,7 +361,7 @@ export function useAbilityScores(
     
     try {
       if (updates.armorClass?.base !== undefined) {
-        await CharacterAPI.updateArmorClass(characterId, updates.armorClass.base);
+        await CharacterAPI.updateArmorClass(updates.armorClass.base);
       }
       
       const saveUpdates: Record<string, number> = {};
@@ -370,7 +370,7 @@ export function useAbilityScores(
       if (updates.will?.base !== undefined) saveUpdates.will = updates.will.base;
       
       if (Object.keys(saveUpdates).length > 0) {
-        await CharacterAPI.updateSavingThrows(characterId, saveUpdates);
+        await CharacterAPI.updateSavingThrows(saveUpdates);
       }
 
       await invalidateSubsystems(['abilityScores', 'combat', 'saves']);
@@ -393,7 +393,7 @@ export function useAbilityScores(
     setAlignment(newAlignment);
 
     try {
-      const result = await CharacterAPI.updateAlignment(characterId, newAlignment);
+      const result = await CharacterAPI.updateAlignment(newAlignment);
 
       setAlignment({
         law_chaos: result.law_chaos,

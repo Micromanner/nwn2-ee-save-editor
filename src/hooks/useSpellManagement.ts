@@ -13,7 +13,7 @@ export function useSpellManagement() {
   const addSpell = useCallback(async (spellId: number, classIndex: number) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await CharacterAPI.addSpell(character.id, spellId, classIndex);
+    await CharacterAPI.addSpell(spellId, classIndex);
     await spells.load({ force: true });
     await invalidateSubsystems([...SPELL_DEPENDENT_SUBSYSTEMS]);
   }, [t, character?.id, spells, invalidateSubsystems]);
@@ -21,7 +21,7 @@ export function useSpellManagement() {
   const removeSpell = useCallback(async (spellId: number, classIndex: number, spellLevel: number) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await CharacterAPI.removeSpell(character.id, spellId, classIndex, spellLevel);
+    await CharacterAPI.removeSpell(spellId, classIndex, spellLevel);
     await spells.load({ force: true });
     await invalidateSubsystems([...SPELL_DEPENDENT_SUBSYSTEMS]);
   }, [t, character?.id, spells, invalidateSubsystems]);

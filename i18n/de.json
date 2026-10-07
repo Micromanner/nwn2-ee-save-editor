@@ -228,6 +228,8 @@
     "shield": "Schild",
     "natural": "Natürlich",
     "deflect": "Ablenkung",
+    "dodge": "Ausweichen",
+    "items": "Gegenstände",
     "size": "Größe",
     "ac": "RK",
     "touch": "Berührung",
@@ -965,7 +967,8 @@
       "noVariables": "Keine Variablen gefunden",
       "integers": "Ganzzahlen",
       "strings": "Zeichenketten",
-      "floats": "Gleitkommazahlen"
+      "floats": "Gleitkommazahlen",
+      "booleans": "Wahrheitswerte"
     },
     "module": {
       "module": "Modul",

@@ -325,6 +325,7 @@ async fn test_armor_class_breakdown() {
             + ac.breakdown.shield
             + ac.breakdown.dex
             + ac.breakdown.natural
+            + ac.breakdown.natural_item
             + ac.breakdown.dodge
             + ac.breakdown.deflection
             + ac.breakdown.size

@@ -1121,10 +1121,8 @@ impl super::Character {
             )));
         }
 
-        let had_identified = inv_list[index].contains_key("Identified");
         merge_json_into_gff_struct(&mut inv_list[index], updated_data)
             .map_err(invalid_item_field)?;
-        normalize_identified_field(&mut inv_list[index], had_identified);
         normalize_item_properties_list(&mut inv_list[index]);
         self.clamp_stack_size(&mut inv_list[index], game_data);
         self.set_list("ItemList", inv_list);
@@ -1192,10 +1190,8 @@ impl super::Character {
                 slot.display_name()
             )))?;
 
-        let had_identified = equip_list[item_idx].contains_key("Identified");
         merge_json_into_gff_struct(&mut equip_list[item_idx], updated_data)
             .map_err(invalid_item_field)?;
-        normalize_identified_field(&mut equip_list[item_idx], had_identified);
         normalize_item_properties_list(&mut equip_list[item_idx]);
         self.clamp_stack_size(&mut equip_list[item_idx], game_data);
         self.set_list("Equip_ItemList", equip_list);
@@ -1868,26 +1864,6 @@ fn write_accessories_into_item(
     }
 }
 
-/// `merge_json_into_gff_struct` preserves `Identified`'s existing GFF type when
-/// the field is already on the item, but creates a brand new field as
-/// `GffValue::Int` (the JSON-number merge default) when the item never had
-/// one. The engine only honours a Byte there, so rewrite just that
-/// freshly-created case.
-fn normalize_identified_field(
-    item: &mut IndexMap<String, GffValue<'static>>,
-    existed_before_merge: bool,
-) {
-    if existed_before_merge {
-        return;
-    }
-    if let Some(value) = item.get("Identified").and_then(gff_value_to_i32) {
-        item.insert(
-            "Identified".to_string(),
-            GffValue::Byte(value.clamp(0, 1) as u8),
-        );
-    }
-}
-
 /// Enforce NWN2 GFF schema types on every entry of an item's PropertiesList.
 ///
 /// The frontend sends new property entries as generic JSON, which the merge path
@@ -2101,14 +2077,29 @@ fn merge_json_into_gff_struct(
                     }
                 })?
             }
-            None => match json_to_gff_best_guess(json_val) {
-                Some(val) => val,
-                None => continue,
+            None => match new_item_field_type(key) {
+                Some(template) => {
+                    coerce_json_to_gff_type(json_val, template).map_err(|_| key.clone())?
+                }
+                None => match json_to_gff_best_guess(json_val) {
+                    Some(val) => val,
+                    None => continue,
+                },
             },
         };
         existing.insert(key.clone(), new_val);
     }
     Ok(())
+}
+
+/// Type the game writes for item fields the frontend may add to an item that
+/// lacks them; the engine ignores a field stored with another type.
+fn new_item_field_type(key: &str) -> Option<GffValue<'static>> {
+    match key {
+        "StackSize" => Some(typed_stack_size(None, 0)),
+        "Plot" | "Cursed" | "Stolen" | "Identified" | "Charges" => Some(GffValue::Byte(0)),
+        _ => None,
+    }
 }
 
 fn merge_json_list_into_gff_list(
@@ -2780,6 +2771,23 @@ mod tests {
         merge_json_into_gff_struct(&mut item, &updates).unwrap();
 
         assert!(matches!(item.get("Plot"), Some(GffValue::Byte(1))));
+    }
+
+    #[test]
+    fn test_merge_creates_missing_item_fields_with_game_types() {
+        let mut item = IndexMap::new();
+        let updates: HashMap<String, JsonValue> = serde_json::from_value(serde_json::json!({
+            "StackSize": 3, "Plot": 1, "Cursed": 0, "Stolen": 1, "Identified": 1, "Charges": 5
+        }))
+        .unwrap();
+
+        merge_json_into_gff_struct(&mut item, &updates).unwrap();
+
+        assert!(matches!(item.get("StackSize"), Some(GffValue::Word(3))));
+        assert!(matches!(item.get("Charges"), Some(GffValue::Byte(5))));
+        for flag in ["Plot", "Cursed", "Stolen", "Identified"] {
+            assert!(matches!(item.get(flag), Some(GffValue::Byte(_))), "{flag}");
+        }
     }
 
     #[test]
