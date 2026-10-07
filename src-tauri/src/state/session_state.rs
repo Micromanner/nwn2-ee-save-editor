@@ -499,7 +499,6 @@ impl SessionState {
         player_index: usize,
     ) -> Result<(editing::FlushedWrites, bool, Vec<String>), String> {
         let slot = PlayerSlot {
-            save_dir: self.save_dir.clone(),
             selected_index: self.selected_player_index,
             primary_index: self.primary_player_index,
         };
@@ -1390,42 +1389,8 @@ impl SessionState {
     }
 }
 
-fn playerinfo_for_character(
-    save_dir: &Path,
-    character: &Character,
-    game_data: &GameData,
-) -> Result<Vec<u8>, String> {
-    let playerinfo_path = save_dir.join("playerinfo.bin");
-
-    let mut player_info = if playerinfo_path.exists() {
-        PlayerInfo::load(&playerinfo_path)
-            .map_err(|e| format!("Failed to read playerinfo.bin: {e}"))?
-    } else {
-        PlayerInfo::new()
-    };
-
-    // playerinfo.bin's subrace field is the load-menu display text; NWN2 matches
-    // the icon by TLK name, so resolve labels/indices through race_display_name.
-    let subrace_label = character.race_display_name(game_data);
-    let alignment_name = character.alignment().alignment_string();
-    let classes = character
-        .class_entries()
-        .into_iter()
-        .map(|entry| {
-            let level = entry.level.clamp(0, i32::from(u8::MAX)) as u8;
-            (character.get_class_name(entry.class_id, game_data), level)
-        })
-        .collect::<Vec<_>>();
-
-    player_info.update_from_gff_data(character.gff(), &subrace_label, &alignment_name, &classes);
-    let mut bytes = Vec::new();
-    player_info.write(&mut bytes).map_err(|e| e.to_string())?;
-    Ok(bytes)
-}
-
 /// Where the player's files of the loaded save go.
 struct PlayerSlot {
-    save_dir: Option<PathBuf>,
     selected_index: usize,
     primary_index: Option<usize>,
 }
@@ -1496,8 +1461,10 @@ fn save_player(
         .map_err(|e| format!("Failed to write save file: {e}"))?;
 
     if update_primary_player_files {
-        let save_dir = slot.save_dir.as_ref().ok_or("No current save path")?;
-        let bytes = playerinfo_for_character(save_dir, character, game_data)?;
+        let mut bytes = Vec::new();
+        PlayerInfo::from_character(character, game_data)
+            .write(&mut bytes)
+            .map_err(|e| e.to_string())?;
         handler
             .update_file("playerinfo.bin", &bytes)
             .map_err(|e| e.to_string())?;

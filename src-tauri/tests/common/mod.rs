@@ -142,3 +142,29 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::
     }
     Ok(())
 }
+
+/// Copy of a `tests/fixtures/saves` save in a temp dir (kept alive by the guard).
+#[allow(dead_code)]
+pub fn temp_save_copy(save: &str) -> (TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dst = tmp.path().join("save");
+    copy_dir_recursive(&fixtures_path().join("saves").join(save), &dst).expect("copy save");
+    (tmp, dst)
+}
+
+#[allow(dead_code)]
+pub fn load_save(
+    session: &mut app_lib::state::session_state::SessionState,
+    path: &std::path::Path,
+) {
+    let mut report = app_lib::services::load_diagnostics::LoadReport::new(
+        app_lib::services::load_diagnostics::LoadInput {
+            file_path: path.to_string_lossy().to_string(),
+            player_index: None,
+            file_size: None,
+        },
+    );
+    session
+        .load_character(&path.to_string_lossy(), None, true, &mut report)
+        .expect("load save");
+}

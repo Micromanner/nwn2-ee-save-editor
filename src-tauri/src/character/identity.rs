@@ -19,24 +19,48 @@ impl Alignment {
         }
     }
 
-    pub fn alignment_string(&self) -> String {
-        let law_axis = match self.law_chaos {
-            0..=30 => "Chaotic",
-            31..=69 => "Neutral",
-            _ => "Lawful",
-        };
-
-        let good_axis = match self.good_evil {
-            0..=30 => "Evil",
-            31..=69 => "Neutral",
-            _ => "Good",
-        };
-
-        if law_axis == "Neutral" && good_axis == "Neutral" {
-            "True Neutral".to_string()
+    /// Axis bands: law 0 = Lawful, 1 = Neutral, 2 = Chaotic; good 0 = Good,
+    /// 1 = Neutral, 2 = Evil.
+    pub fn axis_indices(&self) -> (usize, usize) {
+        let law = if self.is_lawful() {
+            0
+        } else if self.is_chaotic() {
+            2
         } else {
-            format!("{law_axis} {good_axis}")
+            1
+        };
+        let good = if self.is_good() {
+            0
+        } else if self.is_evil() {
+            2
+        } else {
+            1
+        };
+        (law, good)
+    }
+
+    pub fn alignment_string(&self) -> String {
+        match self.axis_indices() {
+            (1, 1) => "True Neutral".to_string(),
+            (law, good) => format!(
+                "{} {}",
+                ["Lawful", "Neutral", "Chaotic"][law],
+                ["Good", "Neutral", "Evil"][good]
+            ),
         }
+    }
+
+    /// `dialog.tlk` alignment name the game writes to `playerinfo.bin`: strrefs
+    /// 112-120, Lawful/Neutral/Chaotic each followed by Good/Neutral/Evil.
+    pub fn name_strref(&self) -> i32 {
+        let (law, good) = self.axis_indices();
+        112 + (law * 3 + good) as i32
+    }
+
+    pub fn display_name(&self, game_data: &GameData) -> String {
+        game_data
+            .get_string(self.name_strref())
+            .unwrap_or_else(|| self.alignment_string())
     }
 
     pub fn is_lawful(&self) -> bool {
@@ -434,6 +458,15 @@ mod tests {
         assert_eq!(alignment.law_chaos, 75);
         assert_eq!(alignment.good_evil, 80);
         assert_eq!(alignment.alignment_string(), "Lawful Good");
+    }
+
+    #[test]
+    fn test_alignment_name_strref() {
+        assert_eq!(Alignment::new(75, 80).name_strref(), 112);
+        assert_eq!(Alignment::new(50, 50).name_strref(), 116);
+        assert_eq!(Alignment::new(50, 30).name_strref(), 117);
+        assert_eq!(Alignment::new(30, 31).name_strref(), 119);
+        assert_eq!(Alignment::new(0, 0).name_strref(), 120);
     }
 
     #[test]

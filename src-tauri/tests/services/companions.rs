@@ -13,17 +13,7 @@ fn make_session() -> SessionState {
 }
 
 fn load_save(session: &mut SessionState, save: &str) {
-    let path = saves_dir().join(save);
-    let mut report = app_lib::services::load_diagnostics::LoadReport::new(
-        app_lib::services::load_diagnostics::LoadInput {
-            file_path: path.to_string_lossy().to_string(),
-            player_index: None,
-            file_size: None,
-        },
-    );
-    session
-        .load_character(&path.to_string_lossy(), None, true, &mut report)
-        .expect("load save");
+    crate::common::load_save(session, &saves_dir().join(save));
 }
 
 // Fixture reality (verified with --nocapture): roster.rst lists 14 members,
@@ -201,16 +191,9 @@ fn empty_game_data() -> app_lib::loaders::GameData {
     )))
 }
 
-fn temp_save_copy(save: &str) -> (tempfile::TempDir, PathBuf) {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let dst = tmp.path().join("save");
-    crate::common::copy_dir_recursive(&saves_dir().join(save), &dst).expect("copy save");
-    (tmp, dst)
-}
-
 #[test]
 fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
 
     let mut session = make_session();
     let mut report = app_lib::services::load_diagnostics::LoadReport::new(
@@ -295,7 +278,7 @@ fn companion_save_roundtrip_persists_edit_and_syncs_roster() {
 fn companion_save_roundtrip_creates_missing_familiar_fields() {
     use app_lib::parsers::gff::GffValue;
 
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
 
     let mut session = make_session();
     let mut report = app_lib::services::load_diagnostics::LoadReport::new(
@@ -369,7 +352,7 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
     use app_lib::parsers::gff::GffValue;
     use indexmap::IndexMap;
 
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
     session.load_companion("bishop").expect("load companion");
@@ -418,7 +401,7 @@ fn companion_save_retargets_mod_companion_variable_in_ros_vartable() {
 
 #[test]
 fn save_character_flushes_parked_companion_and_player_edits() {
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
 
     let mut session = make_session();
     let mut report = app_lib::services::load_diagnostics::LoadReport::new(
@@ -519,7 +502,7 @@ fn flagon_creature_tags(save_path: &std::path::Path) -> Vec<String> {
 // in `{1001}sunkenflag.git` that the game loads instead of bishop.ros.
 #[test]
 fn companion_save_removes_parked_area_copy() {
-    let (_tmp, save_path) = temp_save_copy("user_save_linux");
+    let (_tmp, save_path) = crate::common::temp_save_copy("user_save_linux");
     let before = flagon_creature_tags(&save_path);
     assert!(before.iter().any(|t| t == "bishop"), "fixture parks Bishop");
 
@@ -542,7 +525,7 @@ fn companion_save_removes_parked_area_copy() {
 
 #[test]
 fn player_only_save_leaves_module_state_untouched() {
-    let (_tmp, save_path) = temp_save_copy("user_save_linux");
+    let (_tmp, save_path) = crate::common::temp_save_copy("user_save_linux");
     let z_path = save_path.join("1000_neverwinter_a1.z");
     let before = std::fs::read(&z_path).expect("read .z");
 
@@ -562,7 +545,7 @@ fn player_only_save_leaves_module_state_untouched() {
 
 #[test]
 fn staged_party_membership_counts_as_dirty_and_flushes_on_save() {
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
 
@@ -601,7 +584,7 @@ fn staged_party_membership_counts_as_dirty_and_flushes_on_save() {
 fn save_appends_change_record_to_load_backup_manifest() {
     use app_lib::services::savegame_handler::backup_manifest;
 
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
 
@@ -681,7 +664,7 @@ fn save_appends_change_record_to_load_backup_manifest() {
 fn variable_changes_are_recorded_on_the_load_backup_manifest() {
     use app_lib::services::savegame_handler::backup_manifest::{self, VariableChange};
 
-    let (_tmp, save_path) = temp_save_copy("Classic_Campaign");
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
 
@@ -709,7 +692,7 @@ fn variable_changes_are_recorded_on_the_load_backup_manifest() {
 
 #[test]
 fn list_roster_errors_on_unparseable_roster() {
-    let (_tmp, save_path) = temp_save_copy("000055 - SAVE GAME COMPLETE");
+    let (_tmp, save_path) = crate::common::temp_save_copy("000055 - SAVE GAME COMPLETE");
     std::fs::write(save_path.join("ROSTER.rst"), b"not a gff").expect("corrupt roster");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
@@ -733,7 +716,7 @@ fn stage_party_membership_stages_nothing_when_a_name_is_unknown() {
 
 #[test]
 fn failed_load_takes_no_load_backup() {
-    let (_tmp, save_path) = temp_save_copy("000055 - SAVE GAME COMPLETE");
+    let (_tmp, save_path) = crate::common::temp_save_copy("000055 - SAVE GAME COMPLETE");
     std::fs::write(save_path.join("playerlist.ifo"), b"not a gff").expect("corrupt playerlist");
     let mut session = make_session();
     let mut report = app_lib::services::load_diagnostics::LoadReport::new(

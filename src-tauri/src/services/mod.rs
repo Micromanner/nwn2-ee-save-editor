@@ -23,9 +23,7 @@ pub use rule_detector::{ColumnPurpose, RuleDetector, TableType};
 
 pub use savegame_handler::{FileInfo, SaveGameError, SaveGameHandler, SaveGameResult};
 
-pub use playerinfo::{
-    PlayerClassEntry, PlayerInfo, PlayerInfoData, PlayerInfoParseError, PlayerInfoResult,
-};
+pub use playerinfo::PlayerInfo;
 
 pub use item_property_decoder::{ItemBonuses, ItemPropertyDecoder, PropertyMetadata};
 
