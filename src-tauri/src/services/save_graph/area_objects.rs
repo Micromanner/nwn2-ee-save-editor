@@ -10,10 +10,8 @@ use std::path::Path;
 use indexmap::IndexMap;
 use tracing::debug;
 
-use crate::parsers::erf::{ErfParser, SecurityLimits};
-use crate::parsers::gff::{GffParser, GffValue, GffWriter};
-
-const RES_TYPE_GIT: u16 = 2023;
+use crate::parsers::erf::{ErfParser, RES_TYPE_GIT, SecurityLimits};
+use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer, gff_text};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AreaField {
@@ -124,11 +122,11 @@ fn index_module_git(objects: &mut ModuleObjects, area: &str, bytes: Vec<u8>) {
                 }
             };
             if field == AreaField::MapNoteEnabled
-                && fields.get("HasMapNote").and_then(integer) != Some(1)
+                && fields.get("HasMapNote").and_then(gff_integer) != Some(1)
             {
                 continue;
             }
-            let Some(tag) = text(&fields, "Tag").filter(|t| !t.is_empty()) else {
+            let Some(tag) = gff_text(&fields, "Tag").filter(|t| !t.is_empty()) else {
                 continue;
             };
             let label_strref = ["MapNote", "LocName", "LocalizedName"]
@@ -145,7 +143,7 @@ fn index_module_git(objects: &mut ModuleObjects, area: &str, bytes: Vec<u8>) {
                 .push(ModuleObject {
                     area: area.to_ascii_lowercase(),
                     index,
-                    value: fields.get(field.field()).and_then(integer).unwrap_or(0),
+                    value: fields.get(field.field()).and_then(gff_integer).unwrap_or(0),
                     label_strref,
                 });
         }
@@ -182,7 +180,7 @@ fn saved_value(
         .collect::<Result<_, _>>()?;
     Ok(entries[saved_position(&entries, tag, object)?]
         .get(field.field())
-        .and_then(integer)
+        .and_then(gff_integer)
         .unwrap_or(object.value))
 }
 
@@ -254,9 +252,11 @@ fn saved_position(
     let matches: Vec<usize> = entries
         .iter()
         .enumerate()
-        .filter(|(_, entry)| match text(entry, "Tag") {
+        .filter(|(_, entry)| match gff_text(entry, "Tag") {
             Some(own) => own.eq_ignore_ascii_case(tag),
-            None => entry.get("DIFF_INDEX").and_then(integer) == i64::try_from(object.index).ok(),
+            None => {
+                entry.get("DIFF_INDEX").and_then(gff_integer) == i64::try_from(object.index).ok()
+            }
         })
         .map(|(i, _)| i)
         .collect();
@@ -265,25 +265,6 @@ fn saved_position(
         [] => Err(format!("{tag} is no longer in the saved area")),
         _ => Err(format!("Several saved objects match {tag}")),
     }
-}
-
-fn text(fields: &IndexMap<String, GffValue<'_>>, name: &str) -> Option<String> {
-    match fields.get(name)? {
-        GffValue::String(s) => Some(s.trim().to_string()),
-        GffValue::ResRef(s) => Some(s.trim().to_string()),
-        _ => None,
-    }
-}
-
-fn integer(value: &GffValue) -> Option<i64> {
-    Some(match value {
-        GffValue::Byte(v) => i64::from(*v),
-        GffValue::Word(v) => i64::from(*v),
-        GffValue::Short(v) => i64::from(*v),
-        GffValue::Dword(v) => i64::from(*v),
-        GffValue::Int(v) => i64::from(*v),
-        _ => return None,
-    })
 }
 
 /// `read_module_objects` of the module a save's `<module>.z` belongs to.

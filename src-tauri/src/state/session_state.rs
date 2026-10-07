@@ -540,20 +540,17 @@ impl SessionState {
             .savegame_handler
             .as_mut()
             .ok_or("No active save handler")?;
-        let rewarded_fields = self.quest_edits.flush(
+        let mut rewarded_fields = self.quest_edits.flush(
             handler,
             player_index,
             self.primary_player_index.is_some(),
             game_data,
         )?;
-        let modules = crate::services::roster::remove_staged_companion_area_copies(handler)
-            .map_err(|e| format!("companion area copies: {e}"))?;
-        if !modules.is_empty() {
-            info!(
-                "Removed parked companion copies from {}",
-                modules.join(", ")
-            );
-        }
+        warnings.append(&mut rewarded_fields.warnings);
+        warnings.extend(
+            crate::services::roster::remove_staged_companion_area_copies(handler)
+                .map_err(|e| format!("companion area copies: {e}"))?,
+        );
         if let Some(name) = &self.staged_save_name {
             handler
                 .update_file(SAVENAME_TXT, name.as_bytes())
@@ -1296,12 +1293,12 @@ impl SessionState {
     }
 
     /// Write any staged party changes to the save (or the open batch). The
-    /// caller clears `staged_party` once the write is committed. Returns a
-    /// warning string when the roster was written but the faction mirror
-    /// partially failed.
-    fn flush_staged_party(&mut self) -> Result<Option<String>, String> {
+    /// caller clears `staged_party` once the write is committed. Returns the
+    /// warnings when the roster was written but the faction mirror partially
+    /// failed.
+    fn flush_staged_party(&mut self) -> Result<Vec<String>, String> {
         if self.staged_party.is_empty() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         let desired: Vec<(String, bool)> = self
             .staged_party
@@ -1314,7 +1311,7 @@ impl SessionState {
     fn apply_party_membership(
         &mut self,
         desired: &[(String, bool)],
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Vec<String>, String> {
         let handler = self
             .savegame_handler
             .as_mut()

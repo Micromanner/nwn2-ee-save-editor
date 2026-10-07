@@ -9,11 +9,8 @@ use std::path::Path;
 use serde::Serialize;
 use tracing::debug;
 
-use crate::parsers::erf::{ErfParser, SecurityLimits};
+use crate::parsers::erf::{ErfParser, RES_TYPE_GIT, RES_TYPE_UTC, SecurityLimits};
 use crate::parsers::gff::{GffParser, GffValue};
-
-const RES_TYPE_UTC: u16 = 2027;
-const RES_TYPE_GIT: u16 = 2023;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SpeakerName {

@@ -523,6 +523,30 @@ fn companion_save_removes_parked_area_copy() {
     assert_eq!(after, expected, "only Bishop's copy is gone");
 }
 
+// Fixture reality: the unrecruited SoZ cohort Umoja is a full creature in the
+// `g_x2.z` bazaar with a locked roster entry (RosSelectable 0); that creature is
+// the NPC the player hires, so a cohort edit must not remove it.
+#[test]
+fn locked_cohort_save_leaves_its_area_creature() {
+    let (_tmp, save_path) = crate::common::temp_save_copy("STORM_Campaign");
+    let z_path = save_path.join("g_x2.z");
+    let before = std::fs::read(&z_path).expect("read .z");
+
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    session.load_companion("co_umoja").expect("load umoja");
+    session
+        .character_mut()
+        .expect("umoja")
+        .set_ability(app_lib::character::AbilityIndex::STR, 18)
+        .expect("set str");
+    session
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
+        .expect("save");
+
+    assert_eq!(std::fs::read(&z_path).expect("read .z"), before);
+}
+
 #[test]
 fn player_only_save_leaves_module_state_untouched() {
     let (_tmp, save_path) = crate::common::temp_save_copy("user_save_linux");

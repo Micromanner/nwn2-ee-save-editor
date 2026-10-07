@@ -148,6 +148,9 @@ pub struct FileMetadata {
     pub build_date: String,
 }
 
+pub const RES_TYPE_GIT: u16 = 2023;
+pub const RES_TYPE_UTC: u16 = 2027;
+
 /// NWN2 resource type ids (xoreos list; ids observed in shipped modules,
 /// HAKs and save `.z` archives match it).
 pub fn resource_type_to_extension(resource_type: u16) -> Option<&'static str> {

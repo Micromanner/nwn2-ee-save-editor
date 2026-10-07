@@ -64,6 +64,29 @@ pub fn insert_bool_preserving_type(
     fields.insert(key.to_string(), new_value);
 }
 
+/// Any integer variant as `i64`; `None` for other types and `Dword64` values above `i64::MAX`.
+pub fn gff_integer(value: &GffValue<'_>) -> Option<i64> {
+    Some(match value {
+        GffValue::Byte(v) => i64::from(*v),
+        GffValue::Word(v) => i64::from(*v),
+        GffValue::Short(v) => i64::from(*v),
+        GffValue::Dword(v) => i64::from(*v),
+        GffValue::Int(v) => i64::from(*v),
+        GffValue::Dword64(v) => i64::try_from(*v).ok()?,
+        GffValue::Int64(v) => *v,
+        _ => return None,
+    })
+}
+
+/// A String or ResRef field, trimmed.
+pub fn gff_text(fields: &IndexMap<String, GffValue<'_>>, name: &str) -> Option<String> {
+    match fields.get(name)? {
+        GffValue::String(s) => Some(s.trim().to_string()),
+        GffValue::ResRef(s) => Some(s.trim().to_string()),
+        _ => None,
+    }
+}
+
 /// Name of the `GffValue` variant for diagnostics and assertions.
 pub fn variant_name(v: &GffValue<'_>) -> &'static str {
     match v {

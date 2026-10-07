@@ -1,13 +1,12 @@
 //! Parse and update the party roster file (`roster.rst` / `ROSTER.rst`).
 
 use indexmap::IndexMap;
-use tracing::warn;
+use tracing::{info, warn};
 
-use crate::parsers::gff::{GffParser, GffValue, GffWriter};
+use crate::parsers::erf::RES_TYPE_GIT;
+use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer, gff_text};
 use crate::services::campaign::content;
 use crate::services::savegame_handler::SaveGameHandler;
-
-const RES_TYPE_GIT: u16 = 2023;
 
 pub struct RosterMember {
     pub ros_name: String,
@@ -21,10 +20,22 @@ pub struct RosterMember {
     /// `RosSelectable`: 0 = locked (forced member or unrecruitable on the
     /// party screen), 1 = the player may pick them. Absent counts as selectable.
     pub selectable: bool,
+    /// `RosLoadedBefore`: the companion has spawned from the roster at least once.
+    pub loaded_before: bool,
     pub campaign_npc: bool,
     pub gender: Option<i32>,
     /// `RosRace` mirrors the creature's `Subrace` byte (a `racialsubtypes.2da` row).
     pub subrace: Option<i32>,
+}
+
+impl RosterMember {
+    /// Benched, selectable and spawned from the roster before: a recruited companion
+    /// the game may have parked as a creature in an area (OC Act 1: the Sunken Flagon).
+    /// Locked members are not: the area creature of an unrecruited SoZ cohort or a junk
+    /// NPC is the NPC the player hires or meets.
+    pub fn is_parked(&self) -> bool {
+        self.available && self.selectable && self.loaded_before
+    }
 }
 
 /// `FactionID` the engine writes on a benched companion's `.ros` ("Defender").
@@ -32,23 +43,28 @@ pub struct RosterMember {
 /// `playerlist.ifo` `Mod_PlayerList[0].FactionID`; never hardcode it).
 pub const BENCHED_FACTION: u16 = 4;
 
-fn gff_int(value: &GffValue<'_>) -> Option<i64> {
-    match value {
-        GffValue::Byte(v) => Some(i64::from(*v)),
-        GffValue::Word(v) => Some(i64::from(*v)),
-        GffValue::Short(v) => Some(i64::from(*v)),
-        GffValue::Dword(v) => Some(i64::from(*v)),
-        GffValue::Int(v) => Some(i64::from(*v)),
-        _ => None,
-    }
+fn int_field(fields: &IndexMap<String, GffValue<'_>>, name: &str) -> Option<i64> {
+    fields.get(name).and_then(gff_integer)
 }
 
-fn gff_str(value: &GffValue<'_>) -> Option<String> {
-    match value {
-        GffValue::String(s) => Some(s.to_string()),
-        GffValue::ResRef(s) => Some(s.to_string()),
-        _ => None,
-    }
+/// Parse a GFF, let `edit` change its root fields and write it back with the original
+/// file type, version and root struct id. `what` names the file in errors.
+fn rewrite_gff(
+    bytes: Vec<u8>,
+    what: &str,
+    edit: impl FnOnce(&mut IndexMap<String, GffValue<'static>>) -> Result<(), String>,
+) -> Result<Vec<u8>, String> {
+    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("{what} parse error: {e}"))?;
+    let root_struct_id = parser
+        .get_struct_id(0)
+        .map_err(|e| format!("{what} root id error: {e}"))?;
+    let mut root = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("{what} root error: {e}"))?;
+    edit(&mut root)?;
+    GffWriter::new(&parser.file_type, &parser.file_version)
+        .write_with_struct_id(root, root_struct_id)
+        .map_err(|e| format!("{what} serialization error: {e}"))
 }
 
 pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String> {
@@ -70,23 +86,14 @@ pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String>
 
     let mut out = Vec::new();
     for entry in &entries {
-        let Some(ros_name) = entry.get("RosName").and_then(gff_str) else {
+        let Some(ros_name) = gff_text(entry, "RosName") else {
             continue;
         };
-        let char_name = entry
-            .get("RosCharName")
-            .and_then(gff_str)
-            .unwrap_or_else(|| ros_name.clone());
+        let char_name = gff_text(entry, "RosCharName").unwrap_or_else(|| ros_name.clone());
         let mut classes = Vec::new();
         for i in 0..4 {
-            let class_id = entry
-                .get(format!("RosClass{i}").as_str())
-                .and_then(gff_int)
-                .unwrap_or(0);
-            let level = entry
-                .get(format!("RosLevel{i}").as_str())
-                .and_then(gff_int)
-                .unwrap_or(0);
+            let class_id = int_field(entry, &format!("RosClass{i}")).unwrap_or(0);
+            let level = int_field(entry, &format!("RosLevel{i}")).unwrap_or(0);
             if level > 0 {
                 classes.push((class_id as i32, level as i32));
             }
@@ -95,18 +102,17 @@ pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String>
             ros_name,
             char_name,
             classes,
-            available: entry.get("RosAvailable").and_then(gff_int).unwrap_or(0) != 0,
-            selectable: entry.get("RosSelectable").and_then(gff_int).unwrap_or(1) != 0,
-            campaign_npc: entry.get("RosCampaignNPC").and_then(gff_int).unwrap_or(0) != 0,
-            gender: entry.get("RosGender").and_then(gff_int).map(|v| v as i32),
-            subrace: entry.get("RosRace").and_then(gff_int).map(|v| v as i32),
+            available: int_field(entry, "RosAvailable").unwrap_or(0) != 0,
+            selectable: int_field(entry, "RosSelectable").unwrap_or(1) != 0,
+            loaded_before: int_field(entry, "RosLoadedBefore").unwrap_or(0) != 0,
+            campaign_npc: int_field(entry, "RosCampaignNPC").unwrap_or(0) != 0,
+            gender: int_field(entry, "RosGender").map(|v| v as i32),
+            subrace: int_field(entry, "RosRace").map(|v| v as i32),
         });
     }
     Ok(out)
 }
 
-/// Rewrite the cached class/level pairs for `ros_name`. `Ok(None)` means the
-/// roster has no matching member; callers surface that as a warning, not an error.
 /// Fields the roster caches from a member's `.ros` and shows in the party-selection UI.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RosterIdentity {
@@ -142,53 +148,36 @@ pub fn companion_members(handler: &SaveGameHandler) -> Result<Vec<RosterMember>,
         .collect())
 }
 
+/// Rewrite the cached class/level pairs and identity of every member named
+/// `ros_name`. `Ok(None)` means the roster has no matching member; callers surface
+/// that as a warning, not an error.
 pub fn sync_member(
     bytes: Vec<u8>,
     ros_name: &str,
     classes: &[(i32, i32)],
     identity: RosterIdentity,
 ) -> Result<Option<Vec<u8>>, String> {
-    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
-    let file_type = parser.file_type.clone();
-    let file_version = parser.file_version.clone();
-    let root_struct_id = parser
-        .get_struct_id(0)
-        .map_err(|e| format!("roster root id error: {e}"))?;
-    let mut root = parser
-        .read_owned_struct(0)
-        .map_err(|e| format!("roster root error: {e}"))?;
-
-    let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
-        return Ok(None);
-    };
-
     let mut found = false;
-    for entry in members.iter_mut() {
-        let matches = entry
-            .get("RosName")
-            .and_then(gff_str)
-            .is_some_and(|n| n.eq_ignore_ascii_case(ros_name));
-        if !matches {
-            continue;
+    let bytes = rewrite_gff(bytes, "roster", |root| {
+        let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
+            return Ok(());
+        };
+        for entry in members.iter_mut() {
+            if !gff_text(entry, "RosName").is_some_and(|n| n.eq_ignore_ascii_case(ros_name)) {
+                continue;
+            }
+            found = true;
+            for i in 0..4 {
+                let (class_id, level) = classes.get(i).copied().unwrap_or((0, 0));
+                set_int_preserving_type(entry, &format!("RosClass{i}"), i64::from(class_id));
+                set_int_preserving_type(entry, &format!("RosLevel{i}"), i64::from(level));
+            }
+            set_int_preserving_type(entry, "RosGender", i64::from(identity.gender));
+            set_int_preserving_type(entry, "RosRace", i64::from(identity.subrace));
         }
-        found = true;
-        for i in 0..4 {
-            let (class_id, level) = classes.get(i).copied().unwrap_or((0, 0));
-            set_int_preserving_type(entry, &format!("RosClass{i}"), i64::from(class_id));
-            set_int_preserving_type(entry, &format!("RosLevel{i}"), i64::from(level));
-        }
-        set_int_preserving_type(entry, "RosGender", i64::from(identity.gender));
-        set_int_preserving_type(entry, "RosRace", i64::from(identity.subrace));
-        break;
-    }
-    if !found {
-        return Ok(None);
-    }
-
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(root, root_struct_id)
-        .map(Some)
-        .map_err(|e| format!("roster serialization error: {e}"))
+        Ok(())
+    })?;
+    Ok(found.then_some(bytes))
 }
 
 /// `RosPartyLimit` from the roster root: how many companions the party screen
@@ -198,10 +187,7 @@ pub fn parse_party_limit(bytes: Vec<u8>) -> Result<Option<i32>, String> {
     let root = parser
         .read_struct_fields(0)
         .map_err(|e| format!("roster root error: {e}"))?;
-    Ok(root
-        .get("RosPartyLimit")
-        .and_then(gff_int)
-        .map(|v| v as i32))
+    Ok(int_field(&root, "RosPartyLimit").map(|v| v as i32))
 }
 
 /// Set `RosAvailable` for each `(ros_name, in_party)` change (in party = 0,
@@ -231,45 +217,34 @@ fn set_member_int(
     field: &str,
     changes: &[(String, i64)],
 ) -> Result<Vec<u8>, String> {
-    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("roster parse error: {e}"))?;
-    let file_type = parser.file_type.clone();
-    let file_version = parser.file_version.clone();
-    let root_struct_id = parser
-        .get_struct_id(0)
-        .map_err(|e| format!("roster root id error: {e}"))?;
-    let mut root = parser
-        .read_owned_struct(0)
-        .map_err(|e| format!("roster root error: {e}"))?;
-
-    let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
-        return Err("roster has no RosMembers list".into());
-    };
-
-    let mut missing: Vec<&str> = changes.iter().map(|(n, _)| n.as_str()).collect();
-    for entry in members.iter_mut() {
-        let Some(name) = entry.get("RosName").and_then(gff_str) else {
-            continue;
+    rewrite_gff(bytes, "roster", |root| {
+        let Some(GffValue::ListOwned(members)) = root.get_mut("RosMembers") else {
+            return Err("roster has no RosMembers list".into());
         };
-        let Some((_, value)) = changes.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name)) else {
-            continue;
-        };
-        missing.retain(|n| !n.eq_ignore_ascii_case(&name));
-        if entry.contains_key(field) {
-            set_int_preserving_type(entry, field, *value);
-        } else {
-            entry.insert(
-                field.into(),
-                GffValue::Int((*value).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32),
-            );
+        let mut missing: Vec<&str> = changes.iter().map(|(n, _)| n.as_str()).collect();
+        for entry in members.iter_mut() {
+            let Some(name) = gff_text(entry, "RosName") else {
+                continue;
+            };
+            let Some((_, value)) = changes.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name))
+            else {
+                continue;
+            };
+            missing.retain(|n| !n.eq_ignore_ascii_case(&name));
+            if entry.contains_key(field) {
+                set_int_preserving_type(entry, field, *value);
+            } else {
+                entry.insert(
+                    field.into(),
+                    GffValue::Int((*value).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32),
+                );
+            }
         }
-    }
-    if !missing.is_empty() {
-        return Err(format!("roster members not found: {}", missing.join(", ")));
-    }
-
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(root, root_struct_id)
-        .map_err(|e| format!("roster serialization error: {e}"))
+        if !missing.is_empty() {
+            return Err(format!("roster members not found: {}", missing.join(", ")));
+        }
+        Ok(())
+    })
 }
 
 /// The PC's dynamic party faction id (`Mod_PlayerList[0].FactionID`, one past
@@ -283,25 +258,18 @@ pub fn pc_party_faction(handler: &SaveGameHandler) -> Option<u16> {
         return None;
     };
     let first = players.first()?.force_load().ok()?;
-    match first.get("FactionID")? {
-        GffValue::Byte(v) => Some(u16::from(*v)),
-        GffValue::Word(v) => Some(*v),
-        GffValue::Short(v) => u16::try_from(*v).ok(),
-        GffValue::Dword(v) => u16::try_from(*v).ok(),
-        GffValue::Int(v) => u16::try_from(*v).ok(),
-        _ => None,
-    }
+    u16::try_from(int_field(&first, "FactionID")?).ok()
 }
 
 /// Change which companions are in the active party, in the save or the open
 /// batch. Writes `RosAvailable` in roster.rst (the record the engine reads on
 /// load) and mirrors the matching `FactionID` into each changed `.ros`. Only
-/// members whose desired state differs from the file are touched. Returns a
-/// warning string when the roster changed but the faction mirror failed.
+/// members whose desired state differs from the file are touched. Returns the
+/// warnings when the roster changed but the faction mirror failed.
 pub fn apply_party_membership(
     handler: &mut SaveGameHandler,
     desired: &[(String, bool)],
-) -> Result<Option<String>, String> {
+) -> Result<Vec<String>, String> {
     let Some((stored_name, bytes)) = handler
         .extract_roster()
         .map_err(|e| format!("Failed to read roster: {e}"))?
@@ -320,7 +288,7 @@ pub fn apply_party_membership(
         .cloned()
         .collect();
     if changes.is_empty() {
-        return Ok(None);
+        return Ok(Vec::new());
     }
 
     let updated = set_party_membership(bytes, &changes)?;
@@ -331,11 +299,11 @@ pub fn apply_party_membership(
     // Mirror the membership into each changed .ros FactionID. The engine
     // does not read it for membership, but writes it itself on save; a
     // failure here leaves a cosmetic inconsistency, not a broken party.
-    let mut warnings = Vec::new();
     let Some(party_faction) = pc_party_faction(handler) else {
         warn!("Could not read PC party faction from playerlist.ifo");
-        return Ok(Some("faction sync skipped".into()));
+        return Ok(vec!["faction sync skipped".into()]);
     };
+    let mut failed = Vec::new();
     for (ros_name, in_party) in &changes {
         let faction = if *in_party {
             party_faction
@@ -354,32 +322,49 @@ pub fn apply_party_membership(
             });
         if let Err(e) = result {
             warn!("Faction sync failed for {ros_name}: {e}");
-            warnings.push(ros_name.clone());
+            failed.push(ros_name.as_str());
         }
     }
-    if warnings.is_empty() {
-        Ok(None)
+    if failed.is_empty() {
+        Ok(Vec::new())
     } else {
-        Ok(Some(format!(
-            "faction sync failed: {}",
-            warnings.join(", ")
-        )))
+        Ok(vec![format!("faction sync failed: {}", failed.join(", "))])
     }
 }
 
-/// Delete the area copies of every companion whose `.ros` the open batch rewrites,
-/// in all module states of the save. A benched companion parked in an area (OC Act 1:
-/// the Sunken Flagon) is also a full creature in that area's `.git`, and the game
-/// loads that object instead of the `.ros`; joining the party in-game deletes it.
-/// Without the copy the game spawns the companion from the `.ros`
-/// (`SpawnRosterMember`, as the Flagon's enter script does). Returns the module ids
-/// whose state changed.
+/// Delete the area copies of the parked companions (see [`RosterMember::is_parked`])
+/// whose `.ros` the open batch rewrites, in all module states of the save. A parked
+/// companion is also a full creature in that area's `.git`, and the game loads that
+/// object instead of the `.ros`; joining the party in-game deletes it. Without the copy
+/// the game spawns the companion from the `.ros` (`SpawnRosterMember`, as the Flagon's
+/// enter script does). A module state that cannot be read is skipped; returns a
+/// warning for each.
 pub fn remove_staged_companion_area_copies(
     handler: &mut SaveGameHandler,
 ) -> Result<Vec<String>, String> {
+    let staged = handler.staged_files();
+    if !staged
+        .iter()
+        .any(|name| name.to_ascii_lowercase().ends_with(".ros"))
+    {
+        return Ok(Vec::new());
+    }
+    let Some((_, roster)) = handler
+        .extract_roster()
+        .map_err(|e| format!("Failed to read roster: {e}"))?
+    else {
+        return Ok(Vec::new());
+    };
+
     let mut tags = Vec::new();
-    for name in handler.staged_files() {
-        if !name.to_ascii_lowercase().ends_with(".ros") {
+    for member in parse_roster_members(roster)?
+        .iter()
+        .filter(|m| m.is_parked())
+    {
+        let Ok(name) = handler.companion_stored_name(&member.ros_name) else {
+            continue;
+        };
+        if !staged.iter().any(|s| s.eq_ignore_ascii_case(&name)) {
             continue;
         }
         let bytes = handler.extract_file(&name).map_err(|e| e.to_string())?;
@@ -387,82 +372,93 @@ pub fn remove_staged_companion_area_copies(
         let root = parser
             .read_struct_fields(0)
             .map_err(|e| format!("{name}: {e}"))?;
-        if let Some(tag) = root.get("Tag").and_then(gff_str)
-            && !tag.trim().is_empty()
-        {
-            tags.push(tag.trim().to_ascii_lowercase());
+        if let Some(tag) = gff_text(&root, "Tag").filter(|t| !t.is_empty()) {
+            tags.push(tag);
         }
     }
     if tags.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut changed = Vec::new();
+    let mut warnings = Vec::new();
     for module in content::module_state_ids(handler.save_dir()) {
-        let (z_path, mut erf) = content::open_module_state(handler, &module)?;
-        let mut edited = false;
-        for (area, _, _) in erf.list_resources(Some(RES_TYPE_GIT)) {
-            let bytes = erf
-                .extract_resource(&area)
-                .map_err(|e| format!("{module}/{area}: {e}"))?;
-            if let Some(bytes) = without_creatures(bytes, &tags)? {
-                erf.update_resource(&area, bytes)
-                    .map_err(|e| format!("{module}/{area}: {e}"))?;
-                edited = true;
+        match module_without_creatures(handler, &module, &tags) {
+            Ok(Some((file_name, bytes))) => {
+                handler
+                    .update_file(&file_name, &bytes)
+                    .map_err(|e| format!("Failed to write {file_name}: {e}"))?;
+                info!("Removed parked companion copies from {module}");
+            }
+            Ok(None) => {}
+            Err(e) => {
+                let warning = format!("Could not check {module} for parked companion copies: {e}");
+                warn!("{warning}");
+                warnings.push(warning);
             }
         }
-        if !edited {
-            continue;
-        }
-        let bytes = content::serialize_module_state(&erf, &z_path)?;
-        let file_name = z_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or("Invalid module filename")?;
-        handler
-            .update_file(file_name, &bytes)
-            .map_err(|e| format!("Failed to write {file_name}: {e}"))?;
-        changed.push(module);
     }
-    Ok(changed)
+    Ok(warnings)
 }
 
-/// An area `.git` without the `Creature List` entries tagged with one of `tags`
-/// (lowercase), or `None` when it holds none of them.
+/// The state of `module` without the creatures tagged with one of `tags`, as its `.z`
+/// file name and new bytes; `None` when no area holds one.
+fn module_without_creatures(
+    handler: &SaveGameHandler,
+    module: &str,
+    tags: &[String],
+) -> Result<Option<(String, Vec<u8>)>, String> {
+    let (z_path, mut erf) = content::open_module_state(handler, module)?;
+    let mut edited = false;
+    for (area, _, _) in erf.list_resources(Some(RES_TYPE_GIT)) {
+        let mut edit_area = || -> Result<bool, String> {
+            let bytes = erf.extract_resource(&area).map_err(|e| e.to_string())?;
+            let Some(bytes) = without_creatures(bytes, tags)? else {
+                return Ok(false);
+            };
+            erf.update_resource(&area, bytes)
+                .map_err(|e| e.to_string())?;
+            Ok(true)
+        };
+        edited |= edit_area().map_err(|e| format!("{area}: {e}"))?;
+    }
+    if !edited {
+        return Ok(None);
+    }
+    let bytes = content::serialize_module_state(&erf, &z_path)?;
+    let file_name = z_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid module filename")?;
+    Ok(Some((file_name.to_string(), bytes)))
+}
+
+/// An area `.git` without the `Creature List` entries tagged with one of `tags`, or
+/// `None` when it holds none of them. Tags compare case-insensitively.
 fn without_creatures(bytes: Vec<u8>, tags: &[String]) -> Result<Option<Vec<u8>>, String> {
-    let lower = bytes.to_ascii_lowercase();
-    if !tags
-        .iter()
-        .any(|tag| lower.windows(tag.len()).any(|w| w == tag.as_bytes()))
-    {
-        return Ok(None);
-    }
-    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("git parse error: {e}"))?;
-    let file_type = parser.file_type.clone();
-    let file_version = parser.file_version.clone();
-    let root_struct_id = parser
-        .get_struct_id(0)
-        .map_err(|e| format!("git root id error: {e}"))?;
-    let mut root = parser
-        .read_owned_struct(0)
-        .map_err(|e| format!("git root error: {e}"))?;
-    let Some(GffValue::ListOwned(creatures)) = root.get_mut("Creature List") else {
-        return Ok(None);
+    // A GFF string is stored as its u32 length followed by the text.
+    let holds = |tag: &String| {
+        let mut needle = (tag.len() as u32).to_le_bytes().to_vec();
+        needle.extend_from_slice(tag.as_bytes());
+        bytes
+            .windows(needle.len())
+            .any(|w| w.eq_ignore_ascii_case(&needle))
     };
-    let before = creatures.len();
-    creatures.retain(|creature| {
-        creature
-            .get("Tag")
-            .and_then(gff_str)
-            .is_none_or(|tag| !tags.contains(&tag.trim().to_ascii_lowercase()))
-    });
-    if creatures.len() == before {
+    if !tags.iter().any(holds) {
         return Ok(None);
     }
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(root, root_struct_id)
-        .map(Some)
-        .map_err(|e| format!("git serialization error: {e}"))
+    let mut removed = false;
+    let bytes = rewrite_gff(bytes, "git", |root| {
+        if let Some(GffValue::ListOwned(creatures)) = root.get_mut("Creature List") {
+            let before = creatures.len();
+            creatures.retain(|creature| {
+                gff_text(creature, "Tag")
+                    .is_none_or(|tag| !tags.iter().any(|t| t.eq_ignore_ascii_case(&tag)))
+            });
+            removed = creatures.len() != before;
+        }
+        Ok(())
+    })?;
+    Ok(removed.then_some(bytes))
 }
 
 /// Set `RosSelectable` on the named members, in the save or the open batch.
@@ -500,21 +496,10 @@ pub fn apply_selectable(
 /// read from `roster.rst`; the engine mirrors it here on save, so we keep the
 /// two consistent. Preserves the existing numeric variant, creates as Word.
 pub fn set_faction_id(bytes: Vec<u8>, faction: u16) -> Result<Vec<u8>, String> {
-    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("ros parse error: {e}"))?;
-    let file_type = parser.file_type.clone();
-    let file_version = parser.file_version.clone();
-    let root_struct_id = parser
-        .get_struct_id(0)
-        .map_err(|e| format!("ros root id error: {e}"))?;
-    let mut root = parser
-        .read_owned_struct(0)
-        .map_err(|e| format!("ros root error: {e}"))?;
-
-    set_faction_in_fields(&mut root, faction);
-
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(root, root_struct_id)
-        .map_err(|e| format!("ros serialization error: {e}"))
+    rewrite_gff(bytes, "ros", |root| {
+        set_faction_in_fields(root, faction);
+        Ok(())
+    })
 }
 
 /// In-memory variant of [`set_faction_id`] for callers that already hold the
@@ -711,6 +696,76 @@ mod tests {
         let bytes = build_roster(vec![member("khelgar", "Khelgar Ironfist", (4, 2), 1, 1)]);
         let err = set_party_membership(bytes, &[("bishop".into(), true)]).unwrap_err();
         assert!(err.contains("bishop"), "error names the member: {err}");
+    }
+
+    fn creature(fields: Vec<(&str, GffValue<'static>)>) -> IndexMap<String, GffValue<'static>> {
+        fields
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
+    }
+
+    fn tag(value: &str) -> GffValue<'static> {
+        GffValue::String(value.to_string().into())
+    }
+
+    fn git(root: Vec<(&str, GffValue<'static>)>) -> Vec<u8> {
+        GffWriter::new("GIT ", "V3.2")
+            .write(creature(root))
+            .expect("write git")
+    }
+
+    fn creature_tags(bytes: Vec<u8>) -> Vec<Option<String>> {
+        let root = GffParser::from_bytes(bytes)
+            .expect("parse")
+            .read_owned_struct(0)
+            .expect("root");
+        let Some(GffValue::ListOwned(creatures)) = root.get("Creature List") else {
+            panic!("no Creature List");
+        };
+        creatures.iter().map(|c| gff_text(c, "Tag")).collect()
+    }
+
+    #[test]
+    fn without_creatures_removes_tagged_entries_and_keeps_diff_entries() {
+        let bytes = git(vec![(
+            "Creature List",
+            GffValue::ListOwned(vec![
+                creature(vec![("Tag", tag("Bishop"))]),
+                creature(vec![("DIFF_INDEX", GffValue::Dword(3))]),
+                creature(vec![("Tag", tag("duncan"))]),
+            ]),
+        )]);
+        let updated = without_creatures(bytes, &["bishop".into()])
+            .expect("filter")
+            .expect("changed");
+        assert_eq!(creature_tags(updated), vec![None, Some("duncan".into())]);
+    }
+
+    #[test]
+    fn without_creatures_ignores_tags_inside_other_strings() {
+        let bytes = git(vec![(
+            "Creature List",
+            GffValue::ListOwned(vec![creature(vec![("Tag", tag("thousand"))])]),
+        )]);
+        assert!(
+            without_creatures(bytes, &["sand".into()])
+                .expect("filter")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn without_creatures_leaves_other_lists_alone() {
+        let bytes = git(vec![(
+            "WaypointList",
+            GffValue::ListOwned(vec![creature(vec![("Tag", tag("bishop"))])]),
+        )]);
+        assert!(
+            without_creatures(bytes, &["bishop".into()])
+                .expect("filter")
+                .is_none()
+        );
     }
 
     #[test]

@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tracing::warn;
 
 use super::aggregator::derived_call;
 use super::area_objects::{self, AreaField, ModuleObjects};
@@ -17,7 +16,7 @@ use crate::character::{Character, FeatId, FeatSource};
 use crate::config::NWN2Paths;
 use crate::loaders::GameData;
 use crate::parsers::erf::ErfParser;
-use crate::parsers::gff::{GffParser, GffValue, GffWriter};
+use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer};
 use crate::parsers::tda::TDAParser;
 use crate::services::campaign::{CampaignManager, content};
 use crate::services::resource_manager::ResourceManager;
@@ -935,10 +934,9 @@ impl QuestEdits {
                 .update_file("player.bic", &bic)
                 .map_err(|e| e.to_string())?;
         }
-        if !party.is_empty()
-            && let Some(warning) = roster::apply_party_membership(handler, &party)?
-        {
-            warn!("Quest party write: {warning}");
+        let mut warnings = Vec::new();
+        if !party.is_empty() {
+            warnings.extend(roster::apply_party_membership(handler, &party)?);
         }
         if !selectable.is_empty() {
             roster::apply_selectable(handler, &selectable)?;
@@ -1062,6 +1060,7 @@ impl QuestEdits {
         Ok(FlushedWrites {
             player: written,
             companions,
+            warnings,
         })
     }
 }
@@ -2363,19 +2362,6 @@ pub fn decode_assignment(
     ))
 }
 
-fn gff_integer(value: &GffValue) -> Option<i64> {
-    Some(match value {
-        GffValue::Byte(v) => i64::from(*v),
-        GffValue::Word(v) => i64::from(*v),
-        GffValue::Short(v) => i64::from(*v),
-        GffValue::Dword(v) => i64::from(*v),
-        GffValue::Int(v) => i64::from(*v),
-        GffValue::Dword64(v) => i64::try_from(*v).ok()?,
-        GffValue::Int64(v) => *v,
-        _ => return None,
-    })
-}
-
 fn owned_root(bytes: &[u8]) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
     let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
     parser.read_owned_struct(0).map_err(|e| e.to_string())
@@ -2441,6 +2427,8 @@ pub struct FlushedWrites {
     pub player: WrittenFields,
     /// Per companion (lowercase roster name) fields written to its `.ros`.
     pub companions: Vec<(String, WrittenFields)>,
+    /// Non-fatal problems to show with the save result.
+    pub warnings: Vec<String>,
 }
 
 /// Apply reward deltas to the player's struct in `playerlist.ifo`; returns the new bytes

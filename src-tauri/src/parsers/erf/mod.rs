@@ -7,5 +7,5 @@ pub use parser::ErfParser;
 pub use types::SecurityLimits;
 pub use types::{
     ErfHeader, ErfResource, ErfStatistics, ErfType, ErfVersion, FileMetadata, KeyEntry,
-    ResourceEntry, resource_type_to_extension,
+    RES_TYPE_GIT, RES_TYPE_UTC, ResourceEntry, resource_type_to_extension,
 };
