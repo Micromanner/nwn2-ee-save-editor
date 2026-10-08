@@ -9,7 +9,7 @@ use app_lib::parsers::gff::parser::GffParser;
 #[tokio::test]
 async fn test_skills_progression() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Helper to parse character from bytes since Character::from_bytes doesn't exist
     let parse_char = |bytes: Vec<u8>| {
@@ -97,7 +97,7 @@ async fn test_skills_progression() {
 #[tokio::test]
 async fn test_skill_summary_parity() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     let parse_char = |bytes: Vec<u8>| {
         let parser = GffParser::from_bytes(bytes).expect("Failed to parse GFF");
@@ -143,7 +143,7 @@ async fn test_skill_summary_parity() {
 #[tokio::test]
 async fn test_skill_costs_and_points() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     let parse_char = |bytes: Vec<u8>| {
         let parser = GffParser::from_bytes(bytes).expect("Failed to parse GFF");
@@ -268,7 +268,7 @@ async fn test_skill_costs_and_points() {
 #[tokio::test]
 async fn level_history_skill_points_are_pool_remainders() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let fixtures = [
         "player.bic",

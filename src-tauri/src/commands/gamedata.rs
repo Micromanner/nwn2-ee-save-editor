@@ -1,5 +1,4 @@
 use crate::commands::{CommandError, CommandResult};
-use crate::loaders::data_model_loader::DataModelLoader;
 use crate::state::AppState;
 use crate::utils::parsing::{row_int, row_name, row_str, row_string};
 use regex::Regex;
@@ -153,31 +152,10 @@ async fn run_game_data_load(state: &AppState) -> CommandResult<bool> {
     }
     info!("ResourceManager initialized");
 
-    update_init_status(state, "initializing", 2.0, "Loading TLK strings...");
-    let tlk_parser = {
-        let rm = state.resource_manager.read().await;
-        if let Some(parser) = rm.get_tlk_parser() {
-            parser
-        } else {
-            warn!(
-                "TLK parser unavailable after ResourceManager init - entering needsConfiguration state"
-            );
-            drop(rm);
-            update_init_status(
-                state,
-                "needsConfiguration",
-                0.0,
-                "dialog.tlk not found in configured game folder",
-            );
-            return Ok(false);
-        }
-    };
-
     update_init_status(state, "initializing", 5.0, "Loading 2DA tables...");
     let status_handle = Arc::clone(&state.init_status);
-    rebuild_game_data(
+    let loaded = rebuild_game_data(
         state,
-        tlk_parser,
         Some(Box::new(move |msg, progress| {
             *status_handle.write() = InitStatus {
                 step: "initializing".to_string(),
@@ -186,7 +164,19 @@ async fn run_game_data_load(state: &AppState) -> CommandResult<bool> {
             };
         })),
     )
-    .await?;
+    .await;
+    if !loaded {
+        warn!(
+            "TLK parser unavailable after ResourceManager init - entering needsConfiguration state"
+        );
+        update_init_status(
+            state,
+            "needsConfiguration",
+            0.0,
+            "dialog.tlk not found in configured game folder",
+        );
+        return Ok(false);
+    }
     update_init_status(state, "finalizing", 95.0, "Finalizing...");
 
     let table_count = state.game_data.read().table_count();
@@ -201,46 +191,23 @@ async fn run_game_data_load(state: &AppState) -> CommandResult<bool> {
 
 /// Loads every table through the resource manager into `GameData`, with the
 /// TLKs the manager holds, and drops the caches built from the previous data.
+/// `false` when the manager has no base TLK; the game data is left untouched.
 async fn rebuild_game_data(
     state: &AppState,
-    tlk_parser: Arc<std::sync::RwLock<crate::parsers::tlk::TLKParser>>,
-    progress: Option<crate::loaders::types::ProgressCallback>,
-) -> CommandResult<()> {
-    let mut loader = DataModelLoader::with_options(Arc::clone(&state.resource_manager), false);
-    if let Some(progress) = progress {
-        loader.set_progress_callback(progress);
-    }
-    let loaded_data = loader
-        .load_game_data(Arc::clone(&tlk_parser))
-        .await
-        .map_err(|e| {
-            warn!("Failed to load game data: {}", e);
-            CommandError::OperationFailed {
-                operation: "Load game data".to_string(),
-                reason: e.to_string(),
-            }
-        })?;
-    let (english_tlk, custom_tlk) = {
-        let rm = state.resource_manager.read().await;
-        (rm.get_english_tlk_parser(), rm.get_custom_tlk_parser())
+    progress: Option<crate::loaders::ProgressCallback>,
+) -> bool {
+    let Some(game_data) = crate::loaders::load_game_data(&state.resource_manager, progress).await
+    else {
+        return false;
     };
-
-    {
-        let mut game_data = state.game_data.write();
-        game_data.tables = loaded_data.tables;
-        game_data.strings = tlk_parser;
-        game_data.english_strings = english_tlk;
-        game_data.custom_strings = custom_tlk;
-        game_data.rule_detector = loaded_data.rule_detector;
-        game_data.priority_tables = loaded_data.priority_tables;
-    }
+    *state.game_data.write() = game_data;
     let item_property_decoder = {
         let rm = state.resource_manager.read().await;
         crate::services::item_property_decoder::ItemPropertyDecoder::load(&rm)
     };
     state.session.write().item_property_decoder = item_property_decoder;
     *state.model_list_cache.lock() = None;
-    Ok(())
+    true
 }
 
 /// Points the resource manager at a save's module content (module, campaign
@@ -255,42 +222,18 @@ pub(crate) async fn apply_module_content(
     }
 
     let paths = state.paths.read().clone();
-    let previous = state
-        .resource_manager
-        .read()
-        .await
-        .module_content()
-        .cloned();
-    let rescan_paths = paths.clone();
     let scan = tokio::task::spawn_blocking(move || {
         crate::services::ResourceManager::scan_module_content(&paths, content)
     })
     .await
     .map_err(|e| CommandError::Internal(format!("Module scan failed: {e}")))?;
 
-    let tlk_parser = {
-        let mut rm = state.resource_manager.write().await;
-        rm.set_module_content(scan);
-        rm.get_tlk_parser()
-    };
-    let Some(tlk_parser) = tlk_parser else {
-        return Ok(());
-    };
-    if let Err(e) = rebuild_game_data(state, tlk_parser, None).await {
-        // The game data still describes the previous content; point the
-        // resource manager back at it so the next sync sees a difference and retries.
-        let scan = tokio::task::spawn_blocking(move || {
-            crate::services::ResourceManager::scan_module_content(&rescan_paths, previous)
-        })
+    state
+        .resource_manager
+        .write()
         .await
-        .map_err(|e| CommandError::Internal(format!("Module scan failed: {e}")))?;
-        state
-            .resource_manager
-            .write()
-            .await
-            .set_module_content(scan);
-        return Err(e);
-    }
+        .set_module_content(scan);
+    rebuild_game_data(state, None).await;
     Ok(())
 }
 
@@ -492,7 +435,6 @@ pub async fn get_available_deities(
     let mut deities = Vec::new();
 
     for i in 0..table.row_count() {
-        // Use get_row which returns LoaderResult (Result<AHashMap...>)
         // We handle errors gracefully
         let Ok(row) = table.get_row(i) else {
             continue;

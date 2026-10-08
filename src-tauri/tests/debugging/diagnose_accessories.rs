@@ -280,7 +280,7 @@ async fn diagnose_accessory_mesh_names() {
     // Check what armor.2da says for visual type 4
     println!("\n=== armor.2da lookup ===");
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data");
+    let game_data = &ctx.game_data;
     if let Some(armor_table) = game_data.get_table("armor") {
         for row_id in 0..10 {
             if let Some(row) = armor_table.get_by_id(row_id) {

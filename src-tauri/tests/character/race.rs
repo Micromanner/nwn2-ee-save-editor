@@ -5,7 +5,7 @@ use app_lib::parsers::gff::GffParser;
 #[tokio::test]
 async fn test_race_data_loading() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     // Test with Ryath Strongarm (likely Human)
     let data = common::load_test_gff("ryathstrongarm/ryathstrongarm1.bic");
@@ -51,7 +51,7 @@ async fn test_race_data_loading() {
 #[tokio::test]
 async fn test_race_progression_consistency() {
     let ctx = common::create_test_context().await;
-    let _game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let _game_data = &ctx.game_data;
 
     // Compare Ryath at different stages/levels
     let files = [
@@ -97,7 +97,7 @@ async fn test_race_progression_consistency() {
 #[tokio::test]
 async fn test_diverse_races() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     // Test different characters to cover different races
     // Need to verify what characters we have.
@@ -146,7 +146,7 @@ async fn test_diverse_races() {
 #[tokio::test]
 async fn test_race_change_validation() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     // Load a character
     let data = common::load_test_gff("ryathstrongarm/ryathstrongarm1.bic");
@@ -186,7 +186,7 @@ async fn test_race_change_validation() {
 #[tokio::test]
 async fn test_race_change_execution() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     // Load Ryath (Human) - Load into memory ONLY, original file is untouched
     let data = common::load_test_gff("ryathstrongarm/ryathstrongarm1.bic");
@@ -275,7 +275,7 @@ async fn test_race_change_execution() {
 #[tokio::test]
 async fn test_aasimar_subrace_from_byte_index() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     let data = common::load_test_gff("player.bic");
     let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");
@@ -320,7 +320,7 @@ async fn test_aasimar_subrace_from_byte_index() {
 #[tokio::test]
 async fn test_rejected_race_change_leaves_character_untouched() {
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Failed to load game data");
+    let game_data = &ctx.game_data;
 
     let data = common::load_test_gff("ryathstrongarm/ryathstrongarm1.bic");
     let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");

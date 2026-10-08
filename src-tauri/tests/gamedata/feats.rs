@@ -17,7 +17,7 @@ async fn test_feat_table_loaded() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("feat")
         .expect("feat.2da should be loaded");
 
@@ -29,7 +29,7 @@ async fn test_feat_table_loaded() {
 async fn test_feat_columns() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
     let cols = table.column_names();
 
     let required_cols = [
@@ -51,7 +51,7 @@ async fn test_feat_columns() {
 async fn test_dump_first_feats() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     println!("\n=== First 20 Feats ===");
     println!("{:<4} {:<30} {:<10}", "ID", "Label", "AllClasses");
@@ -69,7 +69,7 @@ async fn test_dump_first_feats() {
 async fn test_feat_prerequisite_chain() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     let power_attack_row = (0..table.row_count()).find(|&row| {
         cell_value(table, row, "LABEL")
@@ -113,7 +113,7 @@ async fn test_feat_prerequisite_chain() {
 async fn test_metamagic_feats() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     let mut metamagic_feats = Vec::new();
 
@@ -142,7 +142,7 @@ async fn test_metamagic_feats() {
 async fn test_class_feat_table() {
     let ctx = create_test_context().await;
 
-    let cls_feat_fighter = ctx.loader.get_table("cls_feat_fight");
+    let cls_feat_fighter = ctx.game_data.get_table("cls_feat_fight");
 
     if let Some(table) = cls_feat_fighter {
         println!("\n=== Fighter Class Feats ===");
@@ -172,12 +172,12 @@ async fn test_class_feat_table() {
 async fn test_feat_strref_lookup() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     let name_strref = cell_int(table, 0, "FEAT");
 
     if let Some(strref) = name_strref {
-        let name = ctx.loader.get_string(strref);
+        let name = ctx.game_data.get_string(strref);
         println!("Feat 0 name (strref {strref}): {name:?}");
     }
 
@@ -187,7 +187,7 @@ async fn test_feat_strref_lookup() {
             let strref = cell_int(table, row_idx, "FEAT");
 
             if let Some(sr) = strref {
-                let name = ctx.loader.get_string(sr);
+                let name = ctx.game_data.get_string(sr);
                 println!(
                     "Feat {}: {} -> {:?}",
                     row_idx,
@@ -205,7 +205,7 @@ async fn test_feat_strref_lookup() {
 async fn test_epic_feats() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
     let cols = table.column_names();
 
     let has_prereq_epic = cols.iter().any(|c| c.eq_ignore_ascii_case("PreReqEpic"));
@@ -261,7 +261,7 @@ async fn test_epic_feats() {
 async fn test_epic_feat_categories() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     let mut epic_by_category: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
@@ -312,7 +312,7 @@ async fn test_epic_feat_categories() {
 async fn test_great_epic_feats() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     println!("\n=== Great [Ability] Feats ===");
 
@@ -343,7 +343,7 @@ async fn test_great_epic_feats() {
 async fn test_epic_spell_feats() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da missing");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da missing");
 
     let epic_spell_feats: Vec<_> = (0..table.row_count())
         .filter_map(|row| {

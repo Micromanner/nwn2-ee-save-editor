@@ -107,7 +107,7 @@ async fn test_ability_modifiers_formula() {
 #[tokio::test]
 async fn test_racial_ability_modifiers() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Racial Ability Modifiers ===");
 
@@ -167,7 +167,7 @@ async fn test_racial_ability_modifiers() {
 #[tokio::test]
 async fn test_effective_abilities_with_racial_bonuses() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Effective Abilities (Base + Racial) ===");
 
@@ -208,7 +208,7 @@ async fn test_effective_abilities_with_racial_bonuses() {
 #[tokio::test]
 async fn test_total_abilities_with_equipment() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let decoder = ItemPropertyDecoder::default();
 
@@ -345,7 +345,7 @@ async fn test_ability_points_summary() {
 #[tokio::test]
 async fn test_constitution_cascade_real_character() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Constitution Cascade (HP Recalculation) ===");
 
@@ -436,7 +436,7 @@ async fn test_hit_points_consistency() {
 #[tokio::test]
 async fn test_effective_ability_modifier() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Effective Ability Modifiers ===");
 

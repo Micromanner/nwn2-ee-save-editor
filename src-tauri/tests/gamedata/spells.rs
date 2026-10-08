@@ -17,7 +17,7 @@ async fn test_spells_table_loaded() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("spells")
         .expect("spells.2da should be loaded");
 
@@ -29,7 +29,10 @@ async fn test_spells_table_loaded() {
 async fn test_spells_columns() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
     let cols = table.column_names();
 
     let required_cols = ["Label", "School", "Wiz_Sorc", "Cleric", "Bard", "Druid"];
@@ -45,7 +48,10 @@ async fn test_spells_columns() {
 async fn test_dump_cantrips() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
 
     println!("\n=== Wizard Cantrips (Level 0) ===");
     println!(
@@ -75,7 +81,10 @@ async fn test_dump_cantrips() {
 async fn test_dump_first_level_spells() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
 
     println!("\n=== First Level Wizard Spells ===");
 
@@ -100,7 +109,10 @@ async fn test_dump_first_level_spells() {
 async fn test_spell_schools() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
 
     let mut schools = std::collections::HashMap::new();
 
@@ -125,7 +137,10 @@ async fn test_spell_schools() {
 async fn test_divine_vs_arcane_spells() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
 
     let mut wizard_only = 0;
     let mut cleric_only = 0;
@@ -153,7 +168,10 @@ async fn test_divine_vs_arcane_spells() {
 async fn test_bard_spell_list() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
 
     let mut bard_spells_by_level: std::collections::HashMap<i32, Vec<String>> =
         std::collections::HashMap::new();
@@ -179,7 +197,10 @@ async fn test_bard_spell_list() {
 #[tokio::test]
 async fn test_spell_desc_resolution() {
     let ctx = create_test_context().await;
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
     let cols = table.column_names();
 
     assert!(
@@ -196,7 +217,7 @@ async fn test_spell_desc_resolution() {
             }
             let desc_strref =
                 cell_value(table, row_idx, "SpellDesc").and_then(|s| s.parse::<i32>().ok());
-            let resolved = desc_strref.and_then(|strref| ctx.loader.get_string(strref));
+            let resolved = desc_strref.and_then(|strref| ctx.game_data.get_string(strref));
             assert!(
                 resolved.as_ref().is_some_and(|s| !s.is_empty()),
                 "Spell {label} should have a resolved description (strref={desc_strref:?})"
@@ -215,7 +236,7 @@ async fn test_spell_desc_resolution() {
         {
             total_with_strref += 1;
             if ctx
-                .loader
+                .game_data
                 .get_string(strref)
                 .as_ref()
                 .is_some_and(|r| !r.is_empty())
@@ -237,7 +258,10 @@ async fn test_spell_desc_resolution() {
 async fn test_metamagic_flags() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("spells").expect("spells.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("spells")
+        .expect("spells.2da missing");
 
     let cols = table.column_names();
     let has_metamagic = cols.iter().any(|c| c.eq_ignore_ascii_case("MetaMagic"));

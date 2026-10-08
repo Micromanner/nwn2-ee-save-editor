@@ -17,7 +17,7 @@ async fn test_classes_table_loaded() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da should be loaded");
 
@@ -30,7 +30,7 @@ async fn test_classes_columns() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da missing");
     let cols = table.column_names();
@@ -49,7 +49,7 @@ async fn test_dump_base_classes() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da missing");
 
@@ -74,7 +74,7 @@ async fn test_class_hit_dice() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da missing");
 
@@ -90,7 +90,7 @@ async fn test_class_bab_tables() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da missing");
 
@@ -112,7 +112,7 @@ async fn test_class_spellcaster_type() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da missing");
 
@@ -131,7 +131,7 @@ async fn test_prestige_classes_exist() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da missing");
 

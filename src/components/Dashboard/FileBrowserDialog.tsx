@@ -170,13 +170,12 @@ export function FileBrowserDialog({
         if (backupRootPath === '') {
           setBackupRootPath(currentPath);
         }
-        const isSaveFolder = !currentPath.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase().endsWith('/backups');
         const fileInfos: FileInfo[] = backups.map(b => ({
           name: b.name,
           path: b.path,
           size: b.size,
           modified: String(b.created_at),
-          is_directory: !isSaveFolder,
+          is_directory: isBackupRoot,
           save_name: b.save_name ?? (b.timestamp ? t('fileBrowser.backupName', { timestamp: b.timestamp }) : undefined),
           character_name: b.character_name ?? undefined,
           changes: b.changes,
@@ -207,11 +206,10 @@ export function FileBrowserDialog({
         interface BrowseSavesResponse {
           files: {
             name: string; path: string; size: number; modified: number;
-            is_directory: boolean; save_name: string | null;
+            save_name: string | null;
             character_name: string | null; thumbnail: string | null;
           }[];
           total_count: number;
-          path: string;
           current_path: string;
         }
         const response = await invoke<BrowseSavesResponse>('browse_saves', {
@@ -225,7 +223,7 @@ export function FileBrowserDialog({
           path: f.path,
           size: f.size,
           modified: String(f.modified),
-          is_directory: f.is_directory,
+          is_directory: true,
           save_name: f.save_name ?? undefined,
           character_name: f.character_name ?? undefined,
         }));
@@ -249,7 +247,7 @@ export function FileBrowserDialog({
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [mode, currentPath, onPathChange, files.length, backupRootPath, debouncedSearch]);
+  }, [mode, currentPath, onPathChange, files.length, backupRootPath, isBackupRoot, debouncedSearch]);
 
   useEffect(() => {
     if (isOpen) {

@@ -89,7 +89,6 @@ pub struct ResourcesDebug {
 #[derive(Debug, Serialize, Type)]
 pub struct GameDataDebug {
     pub table_count: usize,
-    pub priority_tables: Vec<String>,
     pub summary: String,
 }
 
@@ -166,15 +165,7 @@ fn path_source_to_string(source: PathSource) -> String {
 /// `export_debug_log` command and the automatic load diagnostics report.
 pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
     // Collect all sync-locked data before any .await (parking_lot guards are !Send)
-    let (
-        paths_debug,
-        mods_debug,
-        config_debug,
-        session_debug,
-        character_summary,
-        table_count,
-        priority_tables,
-    ) = {
+    let (paths_debug, mods_debug, config_debug, session_debug, character_summary, table_count) = {
         let paths = state.paths.read();
         let config = state.config.read();
         let game_data = state.game_data.read();
@@ -304,7 +295,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
         });
 
         let table_count = game_data.table_count();
-        let priority_tables = game_data.priority_tables.clone();
 
         (
             paths_debug,
@@ -313,7 +303,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
             session_debug,
             character_summary,
             table_count,
-            priority_tables,
         )
     };
     // All sync locks dropped here
@@ -375,7 +364,6 @@ pub(crate) async fn gather_debug_data(state: &AppState) -> DebugLog {
 
     let game_data_debug = GameDataDebug {
         table_count,
-        priority_tables,
         summary,
     };
 

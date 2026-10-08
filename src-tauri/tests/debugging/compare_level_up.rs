@@ -80,7 +80,7 @@ fn compare_level_up_with_game() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let ctx = runtime.block_on(common::create_test_context());
     let decoder = runtime.block_on(create_decoder());
-    let game_data = ctx.loader.game_data().expect("game data");
+    let game_data = &ctx.game_data;
 
     assert_eq!(
         game.total_level(),

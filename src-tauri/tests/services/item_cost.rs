@@ -28,7 +28,7 @@ async fn load_template(
 #[tokio::test]
 async fn item_cost_matches_toolset_computed_templates() {
     let context = common::create_test_context().await;
-    let game_data = context.loader.game_data().expect("game data");
+    let game_data = &context.game_data;
 
     // (resref, stored Cost): multiplier 2.0 weapons with 3 properties, a
     // 1.25-multiplier item with 10 immunities whose squared sum dominates, and
@@ -80,7 +80,7 @@ async fn survey_item_costs() {
     let out_path = std::env::var("ITEM_COST_SURVEY_OUT").expect("ITEM_COST_SURVEY_OUT not set");
     let context = common::create_test_context().await;
     let rm = context.resource_manager.read().await;
-    let game_data = context.loader.game_data().expect("game data");
+    let game_data = &context.game_data;
     let baseitems = game_data.get_table("baseitems").unwrap();
     let itempropdef = game_data.get_table("itempropdef").unwrap();
     let costtable = game_data.get_table("iprp_costtable").unwrap();

@@ -12,7 +12,7 @@ fn load_character(fixture_path: &str) -> Character {
 #[tokio::test]
 async fn test_bab_across_fixtures() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== BAB Across Fixtures ===");
 
@@ -46,7 +46,7 @@ async fn test_bab_across_fixtures() {
 #[tokio::test]
 async fn test_bab_progression_l1_vs_l30() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== BAB Progression L1 vs L30 ===");
 
@@ -98,7 +98,7 @@ async fn test_bab_progression_l1_vs_l30() {
 #[tokio::test]
 async fn test_attack_sequence_generation() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Attack Sequence Generation ===");
 
@@ -261,7 +261,7 @@ async fn create_decoder() -> app_lib::services::item_property_decoder::ItemPrope
 #[tokio::test]
 async fn test_combat_summary_across_fixtures() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = create_decoder().await;
 
     println!("\n=== Combat Summary Across Fixtures ===");
@@ -289,7 +289,7 @@ async fn test_combat_summary_across_fixtures() {
 #[tokio::test]
 async fn test_armor_class_breakdown() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = create_decoder().await;
 
     println!("\n=== Armor Class Breakdown ===");
@@ -346,7 +346,7 @@ async fn test_armor_class_breakdown() {
 #[tokio::test]
 async fn test_attack_bonuses_breakdown() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = create_decoder().await;
 
     println!("\n=== Attack Bonuses Breakdown ===");
@@ -389,7 +389,7 @@ async fn test_attack_bonuses_breakdown() {
 #[tokio::test]
 async fn test_initiative_breakdown() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Initiative Breakdown ===");
 
@@ -421,7 +421,7 @@ async fn test_initiative_breakdown() {
 #[tokio::test]
 async fn test_combat_summary_progression() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = create_decoder().await;
 
     println!("\n=== Combat Summary Progression L1 vs L30 ===");

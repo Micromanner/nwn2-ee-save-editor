@@ -17,7 +17,7 @@ async fn test_races_table_loaded() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da should be loaded");
 
@@ -30,7 +30,7 @@ async fn test_races_columns() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da missing");
     let cols = table.column_names();
@@ -63,7 +63,7 @@ async fn test_dump_playable_races() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da missing");
 
@@ -94,7 +94,7 @@ async fn test_human_no_adjustments() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da missing");
 
@@ -118,7 +118,7 @@ async fn test_dwarf_ability_adjustments() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da missing");
 
@@ -142,7 +142,7 @@ async fn test_race_favored_class() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da missing");
 
@@ -160,7 +160,7 @@ async fn test_playable_races_count() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da missing");
 
@@ -183,7 +183,7 @@ async fn test_playable_races_count() {
 async fn test_subraces_table_loaded() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("racialsubtypes");
+    let table = ctx.game_data.get_table("racialsubtypes");
 
     if let Some(table) = table {
         println!("\n=== Racialsubtypes Table ===");
@@ -194,7 +194,7 @@ async fn test_subraces_table_loaded() {
     } else {
         println!("racialsubtypes.2da not loaded as priority table, trying subrace.2da");
 
-        if let Some(table) = ctx.loader.get_table("subrace") {
+        if let Some(table) = ctx.game_data.get_table("subrace") {
             println!("Found subrace.2da with {} rows", table.row_count());
         } else {
             println!("No subrace table found in game data");
@@ -206,7 +206,7 @@ async fn test_subraces_table_loaded() {
 async fn test_dump_subraces() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("racialsubtypes");
+    let table = ctx.game_data.get_table("racialsubtypes");
 
     if let Some(table) = table {
         println!("\n=== Subraces ===");
@@ -238,7 +238,7 @@ async fn test_dump_subraces() {
 async fn test_subrace_columns() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("racialsubtypes") {
+    if let Some(table) = ctx.game_data.get_table("racialsubtypes") {
         let cols = table.column_names();
 
         println!("\n=== Racialsubtypes Columns ===");
@@ -257,7 +257,7 @@ async fn test_subrace_columns() {
 async fn test_playable_subraces() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("racialsubtypes") {
+    if let Some(table) = ctx.game_data.get_table("racialsubtypes") {
         let cols = table.column_names();
 
         let player_col = cols
@@ -300,7 +300,7 @@ async fn test_playable_subraces() {
 async fn test_drow_subrace() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("racialsubtypes") {
+    if let Some(table) = ctx.game_data.get_table("racialsubtypes") {
         let drow_row = (0..table.row_count()).find(|&row| {
             cell_value(table, row, "Label")
                 .map(|l| l.to_lowercase().contains("drow"))
@@ -326,7 +326,7 @@ async fn test_drow_subrace() {
 async fn test_aasimar_tiefling_subraces() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("racialsubtypes") {
+    if let Some(table) = ctx.game_data.get_table("racialsubtypes") {
         println!("\n=== Planetouched Subraces ===");
 
         for race_name in ["aasimar", "tiefling", "genasi"] {

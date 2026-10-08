@@ -230,7 +230,7 @@ async fn test_multiclass_characters() {
 #[tokio::test]
 async fn test_class_info_resolution() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Class Info Resolution ===");
 
@@ -257,7 +257,7 @@ async fn test_class_info_resolution() {
 #[tokio::test]
 async fn test_hit_die_lookup() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Hit Die Lookup ===");
 
@@ -285,7 +285,7 @@ async fn test_hit_die_lookup() {
 #[tokio::test]
 async fn test_xp_progress_calculation() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== XP Progress Calculation ===");
 
@@ -331,7 +331,7 @@ async fn test_xp_progress_calculation() {
 #[tokio::test]
 async fn test_class_summary() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Class Summary ===");
 
@@ -423,7 +423,7 @@ async fn test_level_progression_comparison() {
 #[tokio::test]
 async fn test_prestige_class_detection() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Prestige Class Detection ===");
 
@@ -455,7 +455,7 @@ async fn test_prestige_class_detection() {
 #[tokio::test]
 async fn test_xp_for_level_calculation() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== XP for Level Calculation ===");
 
@@ -526,7 +526,7 @@ async fn test_class_count_consistency() {
 #[tokio::test]
 async fn test_level_up_grants_only_automatic_class_feats() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
     let cleric = ClassId(2);
     let epic_spell_feats = [FeatId(874), FeatId(875), FeatId(878)];
@@ -549,7 +549,7 @@ async fn test_level_up_grants_only_automatic_class_feats() {
 #[tokio::test]
 async fn test_level_up_then_level_down_restores_character() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let original = load_character("occidiooctavon/occidiooctavon1.bic");
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
     let fighter = ClassId(4);
@@ -581,7 +581,7 @@ async fn test_level_up_then_level_down_restores_character() {
 #[tokio::test]
 async fn test_remove_class_keeps_feats_picked_at_other_class_levels() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
     let (rogue, barbarian, deflect_arrows) = (ClassId(8), ClassId(0), FeatId(8));
     assert!(!character.has_feat(deflect_arrows));
@@ -607,7 +607,7 @@ async fn test_remove_class_keeps_feats_picked_at_other_class_levels() {
 #[tokio::test]
 async fn test_remove_middle_class_realigns_ability_increases() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
     let (fighter, wizard) = (ClassId(4), ClassId(10));
     let str_before = character.base_ability(AbilityIndex::STR);

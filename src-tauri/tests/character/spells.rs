@@ -5,7 +5,7 @@ use app_lib::parsers::gff::GffParser;
 #[tokio::test]
 async fn test_wizard_progression() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load Sage Melchior (Wizard 5 / Cleric 7 / Warlock 18)
     let path = fixtures_path().join("gff/sagemelchior/sagemelchior4.bic");
@@ -53,7 +53,7 @@ async fn test_wizard_progression() {
 #[tokio::test]
 async fn test_cleric_domains() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load Sage Melchior (Wizard 5 / Cleric 7 / Warlock 18)
     let path = fixtures_path().join("gff/sagemelchior/sagemelchior4.bic");
@@ -96,7 +96,7 @@ async fn test_cleric_domains() {
 #[tokio::test]
 async fn test_sorcerer_spells() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load Qara (Sorcerer 10 / Arcane Scholar 10 / Dragon Disciple 10)
     let path = fixtures_path().join("gff/qaraofblacklake/qaraofblacklake4.bic");
@@ -136,7 +136,7 @@ async fn test_sorcerer_spells() {
 #[tokio::test]
 async fn test_paladin_spells() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load Occidio (Paladin 20 / Divine Champion 10)
     let path = fixtures_path().join("gff/occidiooctavon/occidiooctavon4.bic");
@@ -175,7 +175,7 @@ async fn test_paladin_spells() {
 #[tokio::test]
 async fn test_wizard_slots_modification() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load Sage Melchior (Wizard 5 / Cleric 7 / Warlock 18)
     // We use a real fixture to ensure valid GFF structure foundation
@@ -222,7 +222,7 @@ async fn test_wizard_slots_modification() {
 #[tokio::test]
 async fn test_aasimar_ability_spells() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load player.bic (Aasimar - Planetouched race with subrace index 13)
     let data = load_test_gff("player.bic");
@@ -275,7 +275,7 @@ async fn test_aasimar_ability_spells() {
 #[tokio::test]
 async fn test_ability_spells_via_spells_state() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load player.bic (Aasimar)
     let data = load_test_gff("player.bic");
@@ -304,7 +304,7 @@ async fn test_ability_spells_via_spells_state() {
 #[tokio::test]
 async fn test_non_caster_has_no_class_ability_spells_overlap() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Load Ryath Strongarm (Human) - should have no racial spell-like abilities
     // but may have feat-granted abilities from class features
@@ -340,7 +340,7 @@ async fn test_non_caster_has_no_class_ability_spells_overlap() {
 #[tokio::test]
 async fn test_pending_spell_picks_sorcerer_and_warlock() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let load = |name: &str| {
         let parser = GffParser::from_bytes(load_test_gff(name)).expect("Failed to parse GFF");
@@ -396,7 +396,7 @@ async fn test_pending_spell_picks_sorcerer_and_warlock() {
 #[tokio::test]
 async fn test_learnable_spell_columns_derived_from_2da() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let columns = Character::learnable_spell_columns(game_data);
     let mut names: Vec<&str> = columns.keys().map(String::as_str).collect();
@@ -423,7 +423,7 @@ async fn test_learnable_spell_columns_derived_from_2da() {
 #[tokio::test]
 async fn test_spell_gain_table_access_and_domain_slots() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let load = |name: &str| {
         let parser = GffParser::from_bytes(load_test_gff(name)).expect("Failed to parse GFF");
@@ -461,7 +461,7 @@ async fn test_spell_gain_table_access_and_domain_slots() {
 #[tokio::test]
 async fn test_non_caster_has_no_caster_level() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let parser = GffParser::from_bytes(load_test_gff("occidiooctavon/occidiooctavon4.bic"))
         .expect("Failed to parse GFF");

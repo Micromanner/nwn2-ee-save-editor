@@ -9,7 +9,7 @@ async fn test_pet_tables_loaded() {
 
     for name in ["hen_companion", "hen_familiar"] {
         let table = ctx
-            .loader
+            .game_data
             .get_table(name)
             .unwrap_or_else(|| panic!("{name}.2da should be loaded"));
         assert!(table.row_count() > 0, "{name} should have rows");
@@ -19,7 +19,7 @@ async fn test_pet_tables_loaded() {
 #[tokio::test]
 async fn test_pet_options_resolve_tlk_names() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("game data loaded");
+    let game_data = &ctx.game_data;
 
     let state = Character::from_gff(IndexMap::new())
         .expect("character from gff")

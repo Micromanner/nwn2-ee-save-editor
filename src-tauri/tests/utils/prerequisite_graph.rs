@@ -18,7 +18,7 @@ fn cell_int(table: &app_lib::loaders::types::LoadedTable, row: usize, col: &str)
 async fn test_build_prerequisite_graph_from_real_feats() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count() {
@@ -91,7 +91,7 @@ async fn test_build_prerequisite_graph_from_real_feats() {
 async fn test_power_attack_cleave_chain() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let power_attack_row = (0..table.row_count()).find(|&row| {
             cell_value(table, row, "LABEL")
                 .map(|l| l.eq_ignore_ascii_case("Power_Attack"))
@@ -125,7 +125,7 @@ async fn test_power_attack_cleave_chain() {
 async fn test_validate_feat_with_real_graph() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count().min(500) {
@@ -175,7 +175,7 @@ async fn test_validate_feat_with_real_graph() {
 async fn test_get_feat_requirements_chain() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count().min(500) {
@@ -218,7 +218,7 @@ async fn test_get_feat_requirements_chain() {
 async fn test_batch_validation_performance() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count() {
@@ -263,7 +263,7 @@ async fn test_batch_validation_performance() {
 async fn test_graph_statistics() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count() {
@@ -323,7 +323,7 @@ async fn test_graph_statistics() {
 async fn test_direct_prerequisites_lookup() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count().min(500) {
@@ -370,7 +370,7 @@ async fn test_direct_prerequisites_lookup() {
 async fn test_epic_feat_prerequisites() {
     let ctx = create_test_context().await;
 
-    if let Some(table) = ctx.loader.get_table("feat") {
+    if let Some(table) = ctx.game_data.get_table("feat") {
         let mut feat_data = Vec::new();
 
         for row_idx in 0..table.row_count() {

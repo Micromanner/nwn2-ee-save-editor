@@ -52,7 +52,7 @@ fn load(saves: &PathBuf, slot: u32) -> SessionState {
 #[ignore = "writes into the user's save folder"]
 async fn prepare_spell_test_saves() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let saves = NWN2Paths::new().saves().expect("saves folder");
     let decoder = app_lib::services::item_property_decoder::ItemPropertyDecoder::load(
         &*ctx.resource_manager.read().await,

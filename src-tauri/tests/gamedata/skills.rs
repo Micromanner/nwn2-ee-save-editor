@@ -17,7 +17,7 @@ async fn test_skills_table_loaded() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("skills")
         .expect("skills.2da should be loaded");
 
@@ -29,7 +29,10 @@ async fn test_skills_table_loaded() {
 async fn test_skills_columns() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("skills").expect("skills.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("skills")
+        .expect("skills.2da missing");
     let cols = table.column_names();
 
     let required_cols = ["Label", "KeyAbility", "ArmorCheckPenalty"];
@@ -45,7 +48,10 @@ async fn test_skills_columns() {
 async fn test_dump_all_skills() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("skills").expect("skills.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("skills")
+        .expect("skills.2da missing");
 
     println!("\n=== All Skills ===");
     println!("{:<4} {:<20} {:<8} {:<6}", "ID", "Label", "Ability", "ACP");
@@ -64,7 +70,10 @@ async fn test_dump_all_skills() {
 async fn test_skill_key_abilities() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("skills").expect("skills.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("skills")
+        .expect("skills.2da missing");
 
     let hide_row = (0..table.row_count()).find(|&row| {
         cell_value(table, row, "Label")
@@ -99,7 +108,10 @@ async fn test_skill_key_abilities() {
 async fn test_armor_check_penalty_skills() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("skills").expect("skills.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("skills")
+        .expect("skills.2da missing");
 
     let mut acp_skills = Vec::new();
     let mut no_acp_skills = Vec::new();
@@ -130,7 +142,7 @@ async fn test_armor_check_penalty_skills() {
 async fn test_class_skills_table() {
     let ctx = create_test_context().await;
 
-    let cls_skill_fight = ctx.loader.get_table("cls_skill_fight");
+    let cls_skill_fight = ctx.game_data.get_table("cls_skill_fight");
 
     if let Some(table) = cls_skill_fight {
         println!("\n=== Fighter Class Skills ===");
@@ -158,7 +170,10 @@ async fn test_class_skills_table() {
 async fn test_skill_untrained_usage() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("skills").expect("skills.2da missing");
+    let table = ctx
+        .game_data
+        .get_table("skills")
+        .expect("skills.2da missing");
 
     let cols = table.column_names();
     let has_untrained = cols.iter().any(|c| c.eq_ignore_ascii_case("Untrained"));

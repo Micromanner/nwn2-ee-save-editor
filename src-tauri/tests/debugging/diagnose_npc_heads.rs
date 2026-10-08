@@ -27,7 +27,7 @@ fn diagnose_npc_heads() {
     let ctx = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(common::create_test_context());
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.blocking_read();
     let cache = TintCapabilityCache::default();
 

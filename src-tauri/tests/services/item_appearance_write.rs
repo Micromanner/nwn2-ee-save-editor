@@ -12,7 +12,7 @@ use indexmap::IndexMap;
 #[tokio::test]
 async fn creature_appearances_resolve_body_and_optional_head() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.read().await;
     let appearance_table = game_data.get_table("appearance").unwrap();
     let find_row = |label: &str| {
@@ -52,7 +52,7 @@ async fn creature_appearances_resolve_body_and_optional_head() {
 #[tokio::test]
 async fn equipped_part_precedence_and_nested_tints_match_item_preview() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.read().await;
     let appearance_table = game_data.get_table("appearance").unwrap();
     let human = (0..appearance_table.row_count() as i32)
@@ -180,7 +180,7 @@ async fn accessory_palettes_cancel_the_viewer_swap_for_every_slot() {
     use app_lib::character::{AccessorySlot, AccessorySlotData, TintChannel};
 
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.read().await;
     let tints = TintChannels {
         channel1: TintChannel {
@@ -291,7 +291,7 @@ fn find_base_item_with_modeltype(game_data: &GameData, want: &str) -> i32 {
 #[tokio::test]
 async fn prepare_for_write_routes_single_part_variation_to_model_part1() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let base_item_id = find_base_item_with_modeltype(game_data, "0");
 
     let mut appearance = appearance_with_variation(3);
@@ -307,7 +307,7 @@ async fn prepare_for_write_routes_single_part_variation_to_model_part1() {
 #[tokio::test]
 async fn options_report_no_model_for_rings_and_a_model_for_shields() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.read().await;
 
     // Ring (row 52): modeltype=0 like shields, but no itemclass and no MDB
@@ -328,7 +328,7 @@ async fn options_report_no_model_for_rings_and_a_model_for_shields() {
 #[tokio::test]
 async fn options_list_only_materials_with_meshes_for_the_slot() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.read().await;
 
     let boots = find_base_item_by_label(game_data, "Boots");
@@ -364,7 +364,7 @@ async fn options_list_only_materials_with_meshes_for_the_slot() {
 #[tokio::test]
 async fn prepare_for_write_keeps_variation_field_for_weapons_and_armor() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
 
     for modeltype in ["2", "3"] {
         let base_item_id = find_base_item_with_modeltype(game_data, modeltype);
@@ -383,7 +383,7 @@ async fn options_list_accessory_meshes_only_for_chest_armor() {
     use app_lib::character::AccessorySlot;
 
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().unwrap();
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.read().await;
 
     let armor = find_base_item_by_label(game_data, "Armor");

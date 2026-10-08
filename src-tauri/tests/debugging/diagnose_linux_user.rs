@@ -30,7 +30,7 @@ fn diagnose_linux_save_skills() {
     let ctx = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(common::create_test_context());
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Linux User Save: Character ===");
     println!("Name: {}", character.full_name());
@@ -85,7 +85,7 @@ fn diagnose_linux_save_appearance() {
     let ctx = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(common::create_test_context());
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let rm = ctx.resource_manager.blocking_read();
 
     println!("\n=== Linux User Save: Appearance ===");
@@ -143,7 +143,7 @@ fn diagnose_linux_save_spells() {
     let ctx = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(common::create_test_context());
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Linux User Save: Spells ===");
 

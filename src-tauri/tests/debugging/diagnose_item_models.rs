@@ -122,7 +122,7 @@ async fn diagnose_item_models() {
 
     // Full GameData to run resolve_model_resrefs against.
     let ctx = common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data");
+    let game_data = &ctx.game_data;
 
     // Dump armor.2da rows 0-20 so we can see which prefix each VT maps to.
     writeln!(out, "\n=== armor.2da (rows 0..20) ===").unwrap();

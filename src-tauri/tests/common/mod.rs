@@ -4,14 +4,14 @@ use tempfile::TempDir;
 use tokio::sync::RwLock;
 
 use app_lib::config::NWN2Paths;
-use app_lib::loaders::GameDataLoader;
+use app_lib::loaders::GameData;
 use app_lib::services::ResourceManager;
 
 use app_lib::services::item_property_decoder::ItemPropertyDecoder;
 
 #[allow(dead_code)]
 pub struct TestContext {
-    pub loader: GameDataLoader,
+    pub game_data: GameData,
     pub resource_manager: Arc<RwLock<ResourceManager>>,
     pub decoder: ItemPropertyDecoder,
     pub _temp_dir: TempDir,
@@ -57,27 +57,15 @@ pub async fn create_test_context() -> TestContext {
             .expect("Failed to initialize ResourceManager");
     }
 
-    // Use the ResourceManager's TLK parser (includes Workshop TLK if available)
-    let tlk_parser = {
-        let rm = resource_manager.read().await;
-        rm.get_tlk_parser().unwrap_or_else(|| {
-            panic!("TLK parser not available after ResourceManager initialization");
-        })
-    };
-
-    // Initialize GameDataLoader
-    let mut loader = GameDataLoader::new(resource_manager.clone());
-
-    loader
-        .initialize(tlk_parser, false)
+    let game_data = app_lib::loaders::load_game_data(&resource_manager, None)
         .await
-        .expect("Failed to initialize GameDataLoader");
+        .expect("TLK parser not available after ResourceManager initialization");
 
     // Initialize ItemPropertyDecoder
     let decoder = ItemPropertyDecoder::default();
 
     TestContext {
-        loader,
+        game_data,
         resource_manager,
         decoder,
         _temp_dir: temp,

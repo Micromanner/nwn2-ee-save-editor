@@ -138,7 +138,7 @@ fn test_playerinfo_one_letter_last_name() {
 #[tokio::test]
 async fn test_player_save_rebuilds_game_written_playerinfo() {
     let ctx = crate::common::create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("game data");
+    let game_data = &ctx.game_data;
     let (_tmp, save_path) = crate::common::temp_save_copy("STORM_Campaign");
     let path = save_path.join("playerinfo.bin");
     let original = std::fs::read(&path).unwrap();

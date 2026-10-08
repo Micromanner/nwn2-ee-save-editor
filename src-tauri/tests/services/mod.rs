@@ -6,7 +6,6 @@ mod item_property_decoder;
 mod load_diagnostics;
 mod playerinfo;
 mod resource_manager;
-mod rule_detector;
 mod save_graph;
 mod savegame_handler;
 mod standalone_bic;

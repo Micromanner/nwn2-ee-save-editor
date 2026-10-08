@@ -702,9 +702,8 @@ async fn test_biography_aggregation() {
     println!("\n=== Biography Aggregation ===");
 
     let ctx = create_test_context().await;
-    let loader = ctx.loader;
-    assert!(loader.is_ready());
-    let game_data = loader.game_data().expect("Game data should be loaded");
+    let game_data = ctx.game_data;
+    let game_data = &game_data;
 
     let fixtures = [
         "occidiooctavon/occidiooctavon1.bic",
@@ -750,9 +749,8 @@ async fn test_biography_consistency_between_levels() {
     println!("\n=== Biography Consistency (L1 vs L30) ===");
 
     let ctx = create_test_context().await;
-    let loader = ctx.loader;
-    assert!(loader.is_ready());
-    let game_data = loader.game_data().expect("Game data should be loaded");
+    let game_data = ctx.game_data;
+    let game_data = &game_data;
 
     let characters = [
         (
@@ -964,10 +962,9 @@ async fn test_background_retrieval() {
     use app_lib::character::BackgroundId;
 
     let ctx = create_test_context().await;
-    let loader = ctx.loader;
-    assert!(loader.is_ready());
-    let game_data = loader.game_data().expect("Game data should be loaded");
-    let bg_table = loader
+    let game_data = ctx.game_data;
+    let game_data = &game_data;
+    let bg_table = game_data
         .get_table("backgrounds")
         .expect("backgrounds.2da should be loaded");
 

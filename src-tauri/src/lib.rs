@@ -23,8 +23,7 @@ use tracing::{debug, info};
 
 use file_operations::{
     browse_backups, browse_localvault, browse_saves, find_nwn2_saves, get_default_backups_path,
-    get_default_localvault_path, get_default_saves_path, get_save_thumbnail, launch_nwn2_game,
-    open_folder_in_explorer,
+    get_default_saves_path, get_save_thumbnail, launch_nwn2_game, open_folder_in_explorer,
 };
 use window_manager::show_main_window;
 
@@ -89,7 +88,6 @@ pub fn run() {
             get_default_backups_path,
             browse_backups,
             browse_localvault,
-            get_default_localvault_path,
             // Session
             crate::commands::session::load_character,
             crate::commands::session::list_save_characters,

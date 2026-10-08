@@ -67,7 +67,7 @@ async fn test_encumbrance() {
         .expect("Failed to read top level struct");
     let character = app_lib::character::Character::from_gff(fields).expect("character from gff");
 
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let encumbrance = character
         .get_full_inventory_summary(game_data, &ctx.decoder, None)
         .encumbrance;
@@ -111,7 +111,7 @@ async fn test_progression_comparison() {
     let char_high =
         app_lib::character::Character::from_gff(fields_high).expect("character from gff");
 
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Compare Gold
     println!("Gold High: {}, Low: {}", char_high.gold(), char_low.gold());
@@ -155,7 +155,7 @@ async fn test_equip_unequip_flow() {
         .expect("Failed to read top level struct");
     let mut character =
         app_lib::character::Character::from_gff(fields).expect("character from gff");
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // 1. Snapshot initial state
     let initial_ac = equipment_ac(&character, game_data, &ctx.decoder);
@@ -258,7 +258,7 @@ async fn test_equip_unequip_flow() {
 #[tokio::test]
 async fn test_classic_campaign_inventory_equip() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let save_path = fixtures_path().join("saves/Classic_Campaign");
     let handler = SaveGameHandler::new(&save_path).expect("Failed to create SaveGameHandler");
@@ -365,7 +365,7 @@ async fn test_classic_campaign_inventory_equip() {
 #[tokio::test]
 async fn test_stack_size_clamped_to_base_item_stacking() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let data = load_test_gff(TEST_CHAR_FILE);
     let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");

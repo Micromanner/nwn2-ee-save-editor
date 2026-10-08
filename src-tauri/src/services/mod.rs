@@ -7,7 +7,6 @@ pub mod model_loader;
 pub mod playerinfo;
 pub mod resource_manager;
 pub mod roster;
-pub mod rule_detector;
 pub mod save_graph;
 pub mod savegame_handler;
 pub mod texture_decode;
@@ -18,8 +17,6 @@ pub use resource_manager::{
     CacheStats, ContainerType, ModuleContent, OverrideSource, ResourceLocation, ResourceManager,
     ResourceManagerError, ResourceManagerResult,
 };
-
-pub use rule_detector::{ColumnPurpose, RuleDetector, TableType};
 
 pub use savegame_handler::{FileInfo, SaveGameError, SaveGameHandler, SaveGameResult};
 

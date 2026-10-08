@@ -17,7 +17,7 @@ async fn test_baseitems_table_loaded() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da should be loaded");
 
@@ -30,7 +30,7 @@ async fn test_baseitems_columns() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da missing");
     let cols = table.column_names();
@@ -49,7 +49,7 @@ async fn test_dump_weapon_types() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da missing");
 
@@ -83,7 +83,7 @@ async fn test_armor_types() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da missing");
 
@@ -109,7 +109,7 @@ async fn test_equipment_slots() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da missing");
 
@@ -143,7 +143,7 @@ async fn test_equipment_slots() {
 async fn test_item_property_tables() {
     let ctx = create_test_context().await;
 
-    let iprp_abilities = ctx.loader.get_table("iprp_abilities");
+    let iprp_abilities = ctx.game_data.get_table("iprp_abilities");
     if let Some(table) = iprp_abilities {
         println!("\n=== Item Property: Abilities ===");
         println!("Rows: {}", table.row_count());
@@ -153,7 +153,7 @@ async fn test_item_property_tables() {
         }
     }
 
-    let iprp_bonuscost = ctx.loader.get_table("iprp_bonuscost");
+    let iprp_bonuscost = ctx.game_data.get_table("iprp_bonuscost");
     if let Some(table) = iprp_bonuscost {
         println!("\n=== Item Property: Bonus Cost ===");
         println!("Rows: {}", table.row_count());
@@ -165,7 +165,7 @@ async fn test_weapon_damage_types() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da missing");
 
@@ -199,7 +199,7 @@ async fn test_critical_threat_ranges() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da missing");
 

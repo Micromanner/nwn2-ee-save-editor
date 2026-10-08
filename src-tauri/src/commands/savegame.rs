@@ -117,14 +117,9 @@ fn remove_backup(backup_path: &str, backups_root: &Path) -> CommandResult<()> {
 }
 
 fn backups_root(state: &AppState) -> CommandResult<PathBuf> {
-    state
-        .paths
-        .read()
-        .saves()
-        .map(|saves| saves.join(backup::INNER_BACKUPS_DIR))
-        .ok_or(CommandError::NotFound {
-            item: "Saves folder".to_string(),
-        })
+    crate::file_operations::backups_dir(state).map_err(|_| CommandError::NotFound {
+        item: "Saves folder".to_string(),
+    })
 }
 
 #[tauri::command]

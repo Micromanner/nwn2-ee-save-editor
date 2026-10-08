@@ -10,7 +10,7 @@ async fn test_cache_builder_with_real_table_structure() {
     let ctx = create_test_context().await;
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-    if let Some(table) = ctx.loader.get_table("classes") {
+    if let Some(table) = ctx.game_data.get_table("classes") {
         let builder = CacheBuilder::new(temp_dir.path().to_string_lossy().to_string()).unwrap();
 
         let mut tables_data = HashMap::new();
@@ -84,7 +84,7 @@ async fn test_cache_manager_with_built_cache() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let cache_path = temp_dir.path().to_string_lossy().to_string();
 
-    if let Some(classes_table) = ctx.loader.get_table("classes") {
+    if let Some(classes_table) = ctx.game_data.get_table("classes") {
         let builder = CacheBuilder::new(cache_path.clone()).unwrap();
 
         let test_data: Vec<u8> = (0..100).collect();
@@ -186,7 +186,7 @@ async fn test_cache_stats_with_real_data() {
     let mut tables_data = HashMap::new();
 
     for table_name in ["classes", "feat", "skills"] {
-        if ctx.loader.get_table(table_name).is_some() {
+        if ctx.game_data.get_table(table_name).is_some() {
             let data: Vec<u8> = (0..50).collect();
 
             let mut table_info = HashMap::new();
@@ -275,7 +275,7 @@ async fn test_cache_with_real_row_counts() {
 
     let mut tables_data = HashMap::new();
 
-    if let Some(classes) = ctx.loader.get_table("classes") {
+    if let Some(classes) = ctx.game_data.get_table("classes") {
         let mut info = HashMap::new();
         info.insert("section".to_string(), json!("base_game"));
         info.insert("data".to_string(), json!([1, 2, 3]));
@@ -283,7 +283,7 @@ async fn test_cache_with_real_row_counts() {
         tables_data.insert("classes.2da".to_string(), info);
     }
 
-    if let Some(feats) = ctx.loader.get_table("feat") {
+    if let Some(feats) = ctx.game_data.get_table("feat") {
         let mut info = HashMap::new();
         info.insert("section".to_string(), json!("base_game"));
         info.insert("data".to_string(), json!([4, 5, 6]));

@@ -12,7 +12,7 @@ use common::create_test_context;
 #[ignore = "diagnostic; needs PENDING_SAVE"]
 async fn diagnose_pending_spells() {
     let ctx = create_test_context().await;
-    let gd = ctx.loader.game_data().expect("Game data not loaded");
+    let gd = &ctx.game_data;
     let save = std::env::var("PENDING_SAVE").expect("PENDING_SAVE not set");
     let handler = SaveGameHandler::new(&save).expect("handler");
     let mut files = vec![(

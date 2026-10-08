@@ -199,7 +199,7 @@ async fn test_feat_progression_comparison() {
 #[tokio::test]
 async fn test_feat_info_resolution() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat Info Resolution ===");
 
@@ -233,7 +233,7 @@ async fn test_feat_info_resolution() {
 #[tokio::test]
 async fn test_feat_summary() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat Summary ===");
 
@@ -278,7 +278,7 @@ async fn test_feat_summary() {
 #[tokio::test]
 async fn test_feat_slots_calculation() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat Slots Calculation (Blueprint Method) ===");
 
@@ -332,7 +332,7 @@ async fn test_feat_slots_calculation() {
 #[tokio::test]
 async fn test_feat_prerequisite_validation() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat Prerequisite Validation ===");
 
@@ -424,7 +424,7 @@ async fn test_add_remove_feat_real_character() {
 #[tokio::test]
 async fn test_feat_save_bonuses() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat Save Bonuses ===");
 
@@ -454,7 +454,7 @@ async fn test_feat_save_bonuses() {
 #[tokio::test]
 async fn test_feat_save_bonuses_after_adding() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Use Qara who had 0 save bonuses from feats
     let mut character = load_character("qaraofblacklake/qaraofblacklake4.bic");
@@ -547,7 +547,7 @@ async fn test_feat_save_bonuses_after_adding() {
 #[tokio::test]
 async fn test_feat_ac_bonuses() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat AC Bonuses ===");
 
@@ -569,7 +569,7 @@ async fn test_feat_ac_bonuses() {
 #[tokio::test]
 async fn test_feat_initiative_bonus() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Feat Initiative Bonus ===");
 
@@ -652,7 +652,7 @@ async fn test_feat_source_tracking() {
 #[tokio::test]
 async fn test_protected_feats() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Protected Feats ===");
 
@@ -692,7 +692,7 @@ async fn test_protected_feats() {
 #[tokio::test]
 async fn test_domain_feats() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Domain Feats ===");
 
@@ -730,7 +730,7 @@ async fn test_domain_feats() {
 #[tokio::test]
 async fn test_add_domain_and_feats() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Add Domain and Granted Feats ===");
 
@@ -781,7 +781,7 @@ async fn test_add_domain_and_feats() {
 #[tokio::test]
 async fn test_find_domain_for_unwired_epithet_feat() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let character = load_character("sagemelchior/sagemelchior4.bic");
 
@@ -813,7 +813,7 @@ fn clear_all_domains(character: &mut Character, game_data: &app_lib::loaders::Ga
 #[tokio::test]
 async fn test_add_domain_does_not_inject_castable_boolean_as_feat() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let mut character = load_character("sagemelchior/sagemelchior4.bic");
     clear_all_domains(&mut character, game_data);
@@ -853,7 +853,7 @@ async fn test_add_domain_does_not_inject_castable_boolean_as_feat() {
 #[tokio::test]
 async fn test_remove_unwired_domain_frees_slot() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let mut character = load_character("sagemelchior/sagemelchior4.bic");
     clear_all_domains(&mut character, game_data);
@@ -887,7 +887,7 @@ async fn test_remove_unwired_domain_frees_slot() {
 #[tokio::test]
 async fn test_stale_domain_slot_is_reclaimed() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let mut character = load_character("sagemelchior/sagemelchior4.bic");
     clear_all_domains(&mut character, game_data);
@@ -929,7 +929,7 @@ async fn test_feat_name_resolution() {
     println!("\n=== Feat Name Resolution (via feat.2da + TLK) ===");
 
     let feat_table = ctx
-        .loader
+        .game_data
         .get_table("feat")
         .expect("feat.2da should be loaded");
     println!("Feat table loaded: {} rows", feat_table.row_count());
@@ -953,7 +953,7 @@ async fn test_feat_name_resolution() {
         let strref = cell_int(feat_table, row, "FEAT");
 
         let tlk_name = strref
-            .and_then(|sr| ctx.loader.get_string(sr))
+            .and_then(|sr| ctx.game_data.get_string(sr))
             .unwrap_or_default();
 
         if !label.is_empty() && !label.starts_with("****") {
@@ -998,9 +998,9 @@ fn first_selectable_background(table: &LoadedTable) -> Option<(BackgroundId, Fea
 #[tokio::test]
 async fn test_find_background_for_feat() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let bg_table = ctx
-        .loader
+        .game_data
         .get_table("backgrounds")
         .expect("backgrounds.2da should be loaded");
 
@@ -1025,9 +1025,9 @@ async fn test_char_background_is_dword_after_add() {
     use app_lib::parsers::gff::GffValue;
 
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let bg_table = ctx
-        .loader
+        .game_data
         .get_table("backgrounds")
         .expect("backgrounds.2da should be loaded");
 
@@ -1061,9 +1061,9 @@ async fn test_char_background_is_dword_after_add() {
 #[tokio::test]
 async fn test_add_background_sets_field_and_feat() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let bg_table = ctx
-        .loader
+        .game_data
         .get_table("backgrounds")
         .expect("backgrounds.2da should be loaded");
 
@@ -1102,9 +1102,9 @@ async fn test_add_background_sets_field_and_feat() {
 #[tokio::test]
 async fn test_remove_background_clears_field_and_feat() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let bg_table = ctx
-        .loader
+        .game_data
         .get_table("backgrounds")
         .expect("backgrounds.2da should be loaded");
 
@@ -1142,9 +1142,9 @@ async fn test_remove_background_clears_field_and_feat() {
 #[tokio::test]
 async fn test_add_background_replaces_previous_background() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let bg_table = ctx
-        .loader
+        .game_data
         .get_table("backgrounds")
         .expect("backgrounds.2da should be loaded");
 
@@ -1175,7 +1175,7 @@ async fn test_add_background_replaces_previous_background() {
 #[tokio::test]
 async fn test_add_feat_raises_ability_by_effective_score() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let power_attack = FeatId(28);
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
@@ -1207,7 +1207,7 @@ async fn test_add_feat_raises_ability_by_effective_score() {
 #[tokio::test]
 async fn test_add_feat_adds_prerequisite_chain_in_order() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let (power_attack, cleave) = (FeatId(28), FeatId(6));
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
@@ -1229,7 +1229,7 @@ async fn test_add_feat_adds_prerequisite_chain_in_order() {
 #[tokio::test]
 async fn test_feat_prerequisites_read_class_level_and_skills() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let character = load_character("occidiooctavon/occidiooctavon1.bic");
 
@@ -1253,7 +1253,7 @@ async fn test_feat_prerequisites_read_class_level_and_skills() {
 #[tokio::test]
 async fn test_history_feats_replace_each_other() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     let mut character = load_character("occidiooctavon/occidiooctavon1.bic");
     let history = [FeatId(1724), FeatId(1723), FeatId(1725)];

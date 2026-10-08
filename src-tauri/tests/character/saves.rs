@@ -13,7 +13,7 @@ fn load_character(fixture_path: &str) -> Character {
 #[tokio::test]
 async fn test_base_saves_calculation_sanity() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     println!("\n=== Base Saves Calculation Sanity ===");
 
@@ -80,7 +80,7 @@ async fn test_base_saves_calculation_sanity() {
 #[tokio::test]
 async fn test_total_saves_sanity() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = &ctx.decoder;
 
     println!("\n=== Total Saves Sanity ===");
@@ -117,7 +117,7 @@ async fn test_total_saves_sanity() {
 #[tokio::test]
 async fn test_save_breakdown_correctness() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = &ctx.decoder;
 
     println!("\n=== Save Breakdown Correctness ===");
@@ -159,7 +159,7 @@ async fn test_save_breakdown_correctness() {
 #[tokio::test]
 async fn test_level_progression_saves() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = &ctx.decoder;
 
     println!("\n=== Level Progression Saves (L1 vs L30) ===");
@@ -225,7 +225,7 @@ async fn test_level_progression_saves() {
 #[tokio::test]
 async fn test_epic_save_progression() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
 
     // Epic saves come straight from the 60-row class tables, with no separate epic bonus
     // (verified in-game 2026-09-26: Cleric 21 sheet = cls_savthr_cler row 21 + bonuses).
@@ -255,7 +255,7 @@ async fn test_epic_save_progression() {
 #[tokio::test]
 async fn test_divine_grace_adds_total_cha_modifier() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = &ctx.decoder;
 
     let occidio = load_character("occidiooctavon/occidiooctavon4.bic");

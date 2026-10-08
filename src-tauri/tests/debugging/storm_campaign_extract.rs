@@ -23,7 +23,7 @@ fn load_storm_player() -> Character {
 #[tokio::test]
 async fn extract_storm_campaign_character() {
     let ctx = create_test_context().await;
-    let game_data = ctx.loader.game_data().expect("Game data not loaded");
+    let game_data = &ctx.game_data;
     let decoder = &ctx.decoder;
     let character = load_storm_player();
 

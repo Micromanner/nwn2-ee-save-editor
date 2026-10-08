@@ -10,7 +10,7 @@ async fn test_2da_classes_basic() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
     assert!(table.row_count() > 0, "classes.2da should have rows");
@@ -22,7 +22,7 @@ async fn test_2da_column_names() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
     let cols = table.column_names();
@@ -52,7 +52,7 @@ async fn test_2da_cell_access_by_name() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -72,7 +72,7 @@ async fn test_2da_cell_access_by_index() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -93,7 +93,7 @@ async fn test_2da_row_dict() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -107,7 +107,7 @@ async fn test_2da_all_rows_dict() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -126,7 +126,7 @@ async fn test_2da_find_row() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -143,7 +143,7 @@ async fn test_2da_find_nonexistent_row() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -163,7 +163,7 @@ async fn test_2da_null_values() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("classes")
         .expect("classes.2da not found");
 
@@ -186,7 +186,7 @@ async fn test_2da_null_values() {
 async fn test_2da_feats_table() {
     let ctx = create_test_context().await;
 
-    let table = ctx.loader.get_table("feat").expect("feat.2da not found");
+    let table = ctx.game_data.get_table("feat").expect("feat.2da not found");
     println!("feat.2da has {} rows", table.row_count());
     assert!(table.row_count() > 100, "feat.2da should have many feats");
 
@@ -206,7 +206,7 @@ async fn test_2da_skills_table() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("skills")
         .expect("skills.2da not found");
     println!(
@@ -227,7 +227,7 @@ async fn test_2da_spells_table() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("spells")
         .expect("spells.2da not found");
     println!("spells.2da has {} rows", table.row_count());
@@ -242,7 +242,7 @@ async fn test_2da_races_table() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("racialtypes")
         .expect("racialtypes.2da not found");
     println!("racialtypes.2da has {} rows", table.row_count());
@@ -256,7 +256,7 @@ async fn test_2da_baseitems_table() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("baseitems")
         .expect("baseitems.2da not found");
     println!("baseitems.2da has {} rows", table.row_count());
@@ -275,7 +275,7 @@ async fn test_2da_cls_feat_fight() {
     let ctx = create_test_context().await;
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("cls_feat_fight")
         .expect("cls_feat_fight.2da not found");
     println!("cls_feat_fight.2da has {} rows", table.row_count());
@@ -580,7 +580,7 @@ async fn test_2da_tab_separated_parsing_verification() {
     );
 
     let table = ctx
-        .loader
+        .game_data
         .get_table("spells")
         .expect("spells.2da not found");
     println!("Parsed rows: {}", table.row_count());
