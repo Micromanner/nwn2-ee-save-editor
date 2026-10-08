@@ -324,7 +324,7 @@ Label       Name        Value
 fn test_2da_parse_quoted_values() {
     let content = r#"2DA V2.0
 
-Label       Description
+Description
 0           "A quoted description with spaces"
 1           Simple
 "#;
@@ -334,18 +334,24 @@ Label       Description
         .parse_from_string(content)
         .expect("Failed to parse 2DA string");
 
-    let desc0 = parser.get_cell_by_name(0, "Description").unwrap();
-    println!("Row 0 Description: {desc0:?}");
-    assert!(desc0.is_some());
+    assert_eq!(
+        parser.get_cell_by_name(0, "Description").unwrap(),
+        Some("A quoted description with spaces")
+    );
+    assert_eq!(
+        parser.get_cell_by_name(1, "Description").unwrap(),
+        Some("Simple")
+    );
 }
 
 #[test]
 fn test_2da_parse_null_values() {
     let content = r"2DA V2.0
 
-Label       Value       Optional
+Value       Optional
 0           10          ****
 1           ****        Value2
+2           30
 ";
 
     let mut parser = TDAParser::new();
@@ -353,72 +359,14 @@ Label       Value       Optional
         .parse_from_string(content)
         .expect("Failed to parse 2DA string");
 
-    println!(
-        "Parsed {} rows, {} columns",
-        parser.row_count(),
-        parser.column_count()
+    assert_eq!(parser.get_cell_by_name(0, "Value").unwrap(), Some("10"));
+    assert_eq!(parser.get_cell_by_name(0, "Optional").unwrap(), None);
+    assert_eq!(parser.get_cell_by_name(1, "Value").unwrap(), None);
+    assert_eq!(
+        parser.get_cell_by_name(1, "Optional").unwrap(),
+        Some("Value2")
     );
-
-    let opt0 = parser.get_cell_by_name(0, "Optional").unwrap();
-    let val1 = parser.get_cell_by_name(1, "Value").unwrap();
-
-    println!("Row 0 Optional: {opt0:?}");
-    println!("Row 1 Value: {val1:?}");
-
-    // **** values are parsed as None or empty string depending on parser implementation
-    let opt0_is_null = opt0.is_none() || opt0.map(|s| s == "****" || s.is_empty()).unwrap_or(false);
-    assert!(opt0_is_null, "Optional value should be null");
-    // Row 1 Value might have been parsed incorrectly due to column alignment
-    // Just verify we can access the data
-    println!("Test verifies null value handling works");
-}
-
-// =============================================================================
-// COLUMN ITERATION
-// =============================================================================
-
-#[tokio::test]
-async fn test_2da_column_iteration() {
-    let ctx = create_test_context().await;
-
-    let table = ctx
-        .loader
-        .get_table("classes")
-        .expect("classes.2da not found");
-
-    if let Some(labels) = table.parser.iter_column_by_name("Label") {
-        println!("First 10 class labels:");
-        for (i, label) in labels.enumerate().take(10) {
-            println!("  {i}: {label:?}");
-        }
-    } else {
-        panic!("Should find Label column");
-    }
-}
-
-// =============================================================================
-// CACHE/SERIALIZATION TESTS
-// =============================================================================
-
-#[test]
-fn test_2da_msgpack_round_trip() {
-    let content = r"2DA V2.0
-
-Label       Name        Value
-0           test1       100
-1           test2       200
-";
-
-    let mut parser = TDAParser::new();
-    parser.parse_from_string(content).expect("Failed to parse");
-
-    let compressed = parser.to_msgpack_compressed().expect("Failed to compress");
-    println!("Compressed to {} bytes", compressed.len());
-
-    let restored = TDAParser::from_msgpack_compressed(&compressed).expect("Failed to restore");
-
-    assert_eq!(parser.row_count(), restored.row_count());
-    assert_eq!(parser.column_count(), restored.column_count());
+    assert_eq!(parser.get_cell_by_name(2, "Optional").unwrap(), None);
 }
 
 // =============================================================================
@@ -473,28 +421,6 @@ Label       Value
 
     let result = parser.get_cell_by_name(0, "NonExistent");
     assert!(result.is_err(), "Nonexistent column should error");
-}
-
-// =============================================================================
-// STATISTICS TESTS
-// =============================================================================
-
-#[test]
-fn test_2da_statistics() {
-    let content = r"2DA V2.0
-
-Label       Value
-0           10
-1           20
-2           30
-";
-
-    let mut parser = TDAParser::new();
-    parser.parse_from_string(content).expect("Failed to parse");
-
-    let stats = parser.statistics();
-    println!("Parser stats: {stats:?}");
-    assert!(stats.total_cells > 0, "Should have cells counted");
 }
 
 // =============================================================================
@@ -675,4 +601,41 @@ async fn test_2da_tab_separated_parsing_verification() {
     assert!(table.parser.column_count() > 10, "Should have many columns");
     assert!(text.contains('\t'), "spells.2da should use tabs");
     println!("\nTab-separated parsing verified successfully!");
+}
+
+// =============================================================================
+// MIXED TAB/SPACE LINES (vanilla data, engine splits on whitespace runs)
+// =============================================================================
+
+#[tokio::test]
+async fn test_2da_mixed_tab_space_tables() {
+    let ctx = create_test_context().await;
+    let rm = ctx.resource_manager.read().await;
+
+    let drow = rm.get_2da("race_feat_drow").expect("race_feat_drow.2da");
+    for row in 0..drow.row_count() {
+        let index = drow.get_cell_by_name(row, "FeatIndex").unwrap();
+        assert!(
+            index.is_some_and(|v| v.parse::<i32>().is_ok()),
+            "race_feat_drow row {row} FeatIndex {index:?}"
+        );
+    }
+    assert_eq!(
+        drow.get_cell_by_name(0, "FeatLabel").unwrap(),
+        Some("immunitysleep")
+    );
+
+    let spell_schools = rm.get_2da("iprp_spellshl").expect("iprp_spellshl.2da");
+    assert_eq!(
+        spell_schools.column_names(),
+        ["Name", "Label", "Cost", "Letter"]
+    );
+    assert_eq!(spell_schools.get_cell(0, 1).unwrap(), Some("Abjuration"));
+
+    // Verified in-game: "Male, Seasoned Fighter" is missing from the voice list.
+    let soundset = rm.get_2da("soundset").expect("soundset.2da");
+    assert_eq!(
+        soundset.get_cell_by_name(467, "RESREF").unwrap(),
+        Some("Fighter_PCV")
+    );
 }

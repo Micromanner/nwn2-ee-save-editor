@@ -673,26 +673,7 @@ mod tests {
 
     #[test]
     fn resolve_localized_name_falls_back_to_tlk_strref() {
-        use crate::parsers::tlk::TLKStringEntry;
-        use crate::parsers::tlk::types::CachedString;
-
-        let mut tlk = TLKParser::default();
-        tlk.entries.push(TLKStringEntry {
-            flags: 1,
-            sound_resref: None,
-            volume_variance: 0,
-            pitch_variance: 0,
-            data_offset: 0,
-            string_size: 0,
-        });
-        let symbol = tlk.interner.get_or_intern("Khelgar Ironfist");
-        tlk.string_cache.insert(
-            0,
-            CachedString {
-                symbol,
-                byte_length: 0,
-            },
-        );
+        let tlk = TLKParser::from_strings(&["Khelgar Ironfist"]);
         let game_data = GameData::new(Arc::new(RwLock::new(tlk)));
 
         assert_eq!(

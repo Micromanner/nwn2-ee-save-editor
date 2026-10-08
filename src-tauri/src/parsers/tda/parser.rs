@@ -1,352 +1,106 @@
-use std::fs::File;
-use std::io::{BufReader, Read};
 use std::path::Path;
-use std::time::Instant;
 
-use ahash::AHashMap;
-use memmap2::Mmap;
 use tracing::{instrument, trace};
 
-use super::error::{SecurityLimits, TDAError, TDAResult};
-use super::tokenizer::{TDATokenizer, Token};
-use super::types::{CellValue, ColumnInfo, SerializableTDAParser, TDAParser, TDARow};
+use super::error::{TDAError, TDAResult};
+use super::tokenizer::tokenize_line;
+use super::types::{CellValue, TDAParser, TDARow};
+use crate::utils::text_encoding::decode_text;
+
+const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 
 impl TDAParser {
+    /// Parses a 2DA. Text that is not UTF-8 is decoded with the editor
+    /// language's legacy code page instead of rejecting the table.
     #[instrument(name = "TDAParser::parse_from_bytes", skip_all, fields(size = data.len()))]
     pub fn parse_from_bytes(&mut self, data: &[u8]) -> TDAResult<()> {
-        let start_time = Instant::now();
+        self.security_limits.validate_file_size(data.len())?;
 
-        self.security_limits().validate_file_size(data.len())?;
-
-        self.clear();
-
-        let content = std::str::from_utf8(data).map_err(|e| TDAError::InvalidUtf8 {
-            position: e.valid_up_to(),
-        })?;
-
-        self.parse_content(content)?;
-
-        self.metadata_mut().file_size = data.len();
-        self.metadata_mut().parse_time_ns = start_time.elapsed().as_nanos() as u64;
-
-        trace!(
-            "2DA parsed: {} rows, {} columns, {:.2}ms",
-            self.row_count(),
-            self.column_count(),
-            start_time.elapsed().as_secs_f64() * 1000.0
-        );
-
-        Ok(())
-    }
-
-    #[instrument(name = "TDAParser::parse_from_file", skip_all, fields(path = ?path.as_ref()))]
-    pub fn parse_from_file<P: AsRef<Path>>(&mut self, path: P) -> TDAResult<()> {
-        let file = File::open(&path)?;
-        let metadata = file.metadata()?;
-        let file_size = metadata.len() as usize;
-
-        self.security_limits().validate_file_size(file_size)?;
-
-        if file_size > 64 * 1024 {
-            self.parse_from_mmap(file)
-        } else {
-            let mut content = String::new();
-            let mut reader = BufReader::new(file);
-            reader.read_to_string(&mut content)?;
-            self.parse_from_bytes(content.as_bytes())
-        }
-    }
-
-    #[instrument(name = "TDAParser::parse_from_mmap", skip_all)]
-    fn parse_from_mmap(&mut self, file: File) -> TDAResult<()> {
-        let start_time = Instant::now();
-
-        let mmap = unsafe {
-            Mmap::map(&file).map_err(|e| TDAError::MemoryMapError {
-                details: e.to_string(),
-            })?
+        *self = Self {
+            security_limits: std::mem::take(&mut self.security_limits),
+            ..Self::default()
         };
 
-        self.clear();
-
-        let content = std::str::from_utf8(&mmap).map_err(|e| TDAError::InvalidUtf8 {
-            position: e.valid_up_to(),
-        })?;
-
-        self.parse_content(content)?;
-
-        self.metadata_mut().file_size = mmap.len();
-        self.metadata_mut().parse_time_ns = start_time.elapsed().as_nanos() as u64;
+        let data = data.strip_prefix(UTF8_BOM).unwrap_or(data);
+        match std::str::from_utf8(data) {
+            Ok(text) => self.parse_content(text)?,
+            Err(_) => self.parse_content(&decode_text(data))?,
+        }
 
         trace!(
-            "2DA parsed (mmap): {} rows, {} columns, {:.2}ms",
+            "2DA parsed: {} rows, {} columns",
             self.row_count(),
-            self.column_count(),
-            start_time.elapsed().as_secs_f64() * 1000.0
+            self.column_count()
         );
 
         Ok(())
+    }
+
+    pub fn parse_from_file<P: AsRef<Path>>(&mut self, path: P) -> TDAResult<()> {
+        let data = std::fs::read(path)?;
+        self.parse_from_bytes(&data)
     }
 
     fn parse_content(&mut self, content: &str) -> TDAResult<()> {
-        let mut tokenizer = TDATokenizer::new();
-        let mut header_parsed = false;
-        let mut columns_parsed = false;
-        let mut line_count = 0;
-
         for line in content.lines() {
-            line_count += 1;
-
-            self.security_limits().validate_line_length(line.len())?;
-
-            let tokens = tokenizer.tokenize_line(line)?;
-
-            if tokens.is_empty() {
-                continue;
-            }
-
-            if !header_parsed {
-                self.parse_header_direct(line.trim())?;
-                header_parsed = true;
-            } else if !columns_parsed {
-                self.parse_columns(&tokens)?;
-                self.security_limits()
-                    .validate_column_count(self.column_count())?;
-                columns_parsed = true;
-            } else {
-                self.parse_data_row(&tokens)?;
-                self.security_limits()
-                    .validate_row_count(self.row_count())?;
-            }
+            self.security_limits.validate_line_length(line.len())?;
         }
 
-        self.metadata_mut().line_count = line_count;
+        let mut lines = content
+            .lines()
+            .map(|line| (line, tokenize_line(line)))
+            .filter(|(_, tokens)| !tokens.is_empty());
 
-        Ok(())
-    }
-
-    fn parse_header_direct(&mut self, line: &str) -> TDAResult<()> {
-        let bytes = line.as_bytes();
-
-        if bytes.len() < 8 {
-            return Err(TDAError::InvalidHeader(line.to_string()));
-        }
-
-        let is_2dam = bytes.len() >= 4 && &bytes[0..4] == b"2DAM";
-        let is_2da = &bytes[0..3] == b"2DA";
-
-        if !is_2da && !is_2dam {
-            return Err(TDAError::InvalidHeader(line.to_string()));
-        }
-
-        let version = if is_2dam {
-            if bytes.len() >= 8 {
-                std::str::from_utf8(&bytes[4..8]).unwrap_or("")
-            } else {
-                ""
-            }
-        } else if bytes.len() >= 8 && (bytes[3] == b' ' || bytes[3] == b'\t') {
-            std::str::from_utf8(&bytes[4..8]).unwrap_or("")
-        } else {
-            ""
-        };
-
-        if version != "V2.0" && version != "V1.0" {
-            return Err(TDAError::InvalidHeader(line.to_string()));
-        }
-
-        if is_2dam {
-            self.metadata_mut().format_version = format!("2DAM{version}");
-            self.metadata_mut().has_warnings = true;
-        } else {
-            self.metadata_mut().format_version = format!("2DA {version}");
-        }
-
-        Ok(())
-    }
-
-    fn parse_columns(&mut self, tokens: &[Token]) -> TDAResult<()> {
-        if tokens.is_empty() {
-            return Err(TDAError::MalformedLine {
-                line_number: 2,
-                details: "No column headers found".to_string(),
-            });
-        }
-
-        let column_tokens = if tokens.len() > 1 && tokens[0].content.is_empty() {
-            &tokens[1..]
-        } else {
-            tokens
-        };
-
-        if column_tokens.is_empty() {
-            return Err(TDAError::MalformedLine {
-                line_number: 2,
-                details: "No valid column headers found after skipping empty first column"
-                    .to_string(),
-            });
-        }
-
-        self.columns_mut().reserve(column_tokens.len());
-        self.column_map_mut().reserve(column_tokens.len());
-
-        for (index, token) in column_tokens.iter().enumerate() {
-            let symbol = self.interner_mut().get_or_intern(token.content);
-            let column_info = ColumnInfo {
-                name: symbol,
-                index,
-            };
-
-            self.columns_mut().push(column_info);
-            self.column_map_mut()
-                .insert(token.content.to_lowercase(), index);
-        }
-
-        Ok(())
-    }
-
-    fn parse_data_row(&mut self, tokens: &[Token]) -> TDAResult<()> {
-        if tokens.is_empty() {
+        let Some((header, _)) = lines.next() else {
             return Ok(());
-        }
+        };
+        Self::parse_header(header.trim())?;
 
-        let data_tokens = if tokens.len() > 1 { &tokens[1..] } else { &[] };
-
-        let mut row = TDARow::new();
-        row.reserve(self.columns().len());
-
-        for (col_index, token) in data_tokens.iter().enumerate() {
-            if col_index >= self.column_count() {
-                break;
+        if let Some((_, columns)) = lines.next() {
+            for column in &columns {
+                self.add_column(column);
             }
-
-            let cell_value = CellValue::new(token.content, self.interner_mut());
-            row.push(cell_value);
+            self.security_limits
+                .validate_column_count(self.column_count())?;
         }
 
-        while row.len() < self.column_count() {
-            row.push(CellValue::Empty);
+        for (_, tokens) in lines {
+            self.parse_data_row(&tokens);
+            self.security_limits.validate_row_count(self.row_count())?;
         }
 
-        self.rows_mut().push(row);
         Ok(())
+    }
+
+    fn parse_header(line: &str) -> TDAResult<()> {
+        let version = line
+            .strip_prefix("2DA")
+            .filter(|rest| rest.starts_with([' ', '\t']))
+            .and_then(|rest| rest.get(1..5));
+
+        match version {
+            Some("V2.0" | "V1.0") => Ok(()),
+            _ => Err(TDAError::InvalidHeader(line.to_string())),
+        }
+    }
+
+    /// The first token is the row label, which the engine ignores (rows are
+    /// positional). Missing trailing cells read as `****`.
+    fn parse_data_row(&mut self, tokens: &[&str]) {
+        let column_count = self.column_count();
+        let mut row: TDARow = tokens
+            .iter()
+            .skip(1)
+            .take(column_count)
+            .map(|token| CellValue::new(token, &mut self.interner))
+            .collect();
+        row.resize(column_count, CellValue::Null);
+        self.rows.push(row);
     }
 
     pub fn parse_from_string(&mut self, data: &str) -> TDAResult<()> {
         self.parse_from_bytes(data.as_bytes())
     }
-
-    pub fn to_msgpack_compressed(&self) -> TDAResult<Vec<u8>> {
-        use flate2::{Compression, write::ZlibEncoder};
-        use std::io::Write;
-
-        let serializable = SerializableTDAParser::from_parser(self);
-
-        let msgpack_data = rmp_serde::to_vec(&serializable)?;
-
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(&msgpack_data)
-            .map_err(|e| TDAError::CompressionError {
-                details: e.to_string(),
-            })?;
-
-        encoder.finish().map_err(|e| TDAError::CompressionError {
-            details: e.to_string(),
-        })
-    }
-
-    pub fn from_msgpack_compressed(data: &[u8]) -> TDAResult<Self> {
-        use flate2::read::ZlibDecoder;
-        use std::io::Read;
-
-        let mut decoder = ZlibDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| TDAError::CompressionError {
-                details: e.to_string(),
-            })?;
-
-        let serializable: SerializableTDAParser = rmp_serde::from_slice(&decompressed)?;
-
-        Ok(serializable.to_parser())
-    }
-
-    pub fn load_with_cache<P: AsRef<Path>>(
-        &mut self,
-        source_path: P,
-        cache_path: Option<P>,
-    ) -> TDAResult<bool> {
-        if let Some(ref cache_path) = cache_path
-            && let Ok(cache_data) = std::fs::read(cache_path)
-            && let Ok(cached_parser) = Self::from_msgpack_compressed(&cache_data)
-        {
-            *self = cached_parser;
-            return Ok(true);
-        }
-
-        self.parse_from_file(source_path)?;
-
-        if let Some(cache_path) = cache_path
-            && let Ok(compressed_data) = self.to_msgpack_compressed()
-        {
-            std::fs::write(cache_path, compressed_data)?;
-        }
-
-        Ok(false)
-    }
-
-    pub fn statistics(&self) -> ParserStatistics {
-        ParserStatistics {
-            total_cells: self.rows().len() * self.columns().len(),
-            memory_usage: self.memory_usage(),
-            interned_strings: self.interner().len(),
-            parse_time_ms: self.metadata().parse_time_ns as f64 / 1_000_000.0,
-            compression_ratio: if self.metadata().file_size > 0 {
-                self.memory_usage() as f64 / self.metadata().file_size as f64
-            } else {
-                0.0
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ParserStatistics {
-    pub total_cells: usize,
-    pub memory_usage: usize,
-    pub interned_strings: usize,
-    pub parse_time_ms: f64,
-    pub compression_ratio: f64,
-}
-
-pub fn load_multiple_files<P: AsRef<Path> + Send + Sync>(
-    file_paths: &[P],
-    security_limits: Option<SecurityLimits>,
-) -> TDAResult<AHashMap<String, TDAParser>> {
-    use rayon::prelude::*;
-    use std::collections::HashMap;
-
-    let limits = security_limits.unwrap_or_default();
-
-    let results: Result<HashMap<String, TDAParser>, TDAError> = file_paths
-        .par_iter()
-        .map(|path| {
-            let path_str = path.as_ref().to_string_lossy().to_string();
-            let mut parser = TDAParser::with_limits(limits.clone());
-
-            parser.parse_from_file(path).map(|()| (path_str, parser))
-        })
-        .collect();
-
-    results.map(|hashmap| {
-        let mut ahashmap = AHashMap::new();
-        for (k, v) in hashmap {
-            ahashmap.insert(k, v);
-        }
-        ahashmap
-    })
 }
 
 #[cfg(test)]
@@ -391,13 +145,50 @@ Label       Name        Description
     }
 
     #[test]
-    fn test_security_limits() {
-        let limits = SecurityLimits {
-            max_file_size: 100,
-            ..SecurityLimits::default()
-        };
+    fn test_short_row_pads_with_null() {
+        let mut parser = TDAParser::new();
+        parser
+            .parse_from_string("2DA V2.0\n\nA B C\n0 x\n1 y \"\" z\n")
+            .unwrap();
 
-        let mut parser = TDAParser::with_limits(limits);
+        assert_eq!(parser.get_cell(0, 0).unwrap(), Some("x"));
+        assert_eq!(parser.get_cell(0, 1).unwrap(), None);
+        assert_eq!(parser.get_cell(0, 2).unwrap(), None);
+        assert_eq!(parser.get_cell(1, 1).unwrap(), Some(""));
+    }
+
+    #[test]
+    fn test_bom_is_stripped() {
+        let mut parser = TDAParser::new();
+        let data = [UTF8_BOM, b"2DA V2.0\n\nA B\n0 x y\n"].concat();
+        parser.parse_from_bytes(&data).unwrap();
+
+        assert_eq!(parser.get_cell_by_name(0, "B").unwrap(), Some("y"));
+    }
+
+    #[test]
+    fn test_non_utf8_cell_does_not_reject_table() {
+        let mut parser = TDAParser::new();
+        parser
+            .parse_from_bytes(b"2DA V2.0\n\nLabel Value\n0 Caf\xE9 1\n")
+            .unwrap();
+
+        assert_eq!(parser.row_count(), 1);
+        assert_eq!(parser.get_cell_by_name(0, "Value").unwrap(), Some("1"));
+    }
+
+    #[test]
+    fn test_invalid_header_rejected() {
+        let mut parser = TDAParser::new();
+        assert!(parser.parse_from_string("2DAM V2.0\n\nA\n").is_err());
+        assert!(parser.parse_from_string("2DA V3.0\n\nA\n").is_err());
+        assert!(parser.parse_from_string("2DA\tV2.0\t\t\n\nA\n").is_ok());
+    }
+
+    #[test]
+    fn test_security_limits() {
+        let mut parser = TDAParser::new();
+        parser.security_limits.max_file_size = 100;
         let large_data = "x".repeat(200);
 
         assert!(parser.parse_from_string(&large_data).is_err());

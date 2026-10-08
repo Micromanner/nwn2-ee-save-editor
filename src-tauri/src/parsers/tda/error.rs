@@ -8,12 +8,6 @@ pub enum TDAError {
     #[error("File size {size} exceeds maximum allowed size {max_size}")]
     FileSizeExceeded { size: usize, max_size: usize },
 
-    #[error("Invalid UTF-8 encoding at byte position {position}")]
-    InvalidUtf8 { position: usize },
-
-    #[error("Malformed line {line_number}: {details}")]
-    MalformedLine { line_number: usize, details: String },
-
     #[error("Column '{column}' not found in table")]
     ColumnNotFound { column: String },
 
@@ -23,20 +17,8 @@ pub enum TDAError {
     #[error("Column index {index} is out of bounds (max: {max})")]
     ColumnIndexOutOfBounds { index: usize, max: usize },
 
-    #[error("Memory mapping failed: {details}")]
-    MemoryMapError { details: String },
-
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-
-    #[error("Serialization error: {0}")]
-    SerializationError(#[from] rmp_serde::encode::Error),
-
-    #[error("Deserialization error: {0}")]
-    DeserializationError(#[from] rmp_serde::decode::Error),
-
-    #[error("Compression error: {details}")]
-    CompressionError { details: String },
 
     #[error("Column count {count} exceeds the configured limit of {limit}")]
     ColumnCountExceeded { count: usize, limit: usize },
@@ -46,20 +28,11 @@ pub enum TDAError {
 
     #[error("Line length {length} exceeds the configured limit of {limit}")]
     LineLengthExceeded { length: usize, limit: usize },
-
-    #[error("Parse error: {details}")]
-    ParseError { details: String },
-
-    #[error("Invalid token at position {position}: '{token}'")]
-    InvalidToken { position: usize, token: String },
-
-    #[error("Security violation: {details}")]
-    SecurityViolation { details: String },
 }
 
 pub type TDAResult<T> = Result<T, TDAError>;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SecurityLimits {
     pub max_file_size: usize,
     pub max_columns: usize,
@@ -67,34 +40,18 @@ pub struct SecurityLimits {
     pub max_line_length: usize,
 }
 
-impl SecurityLimits {
-    const DEFAULT_MAX_FILE_SIZE: usize = 256 * 1024 * 1024;
-    const DEFAULT_MAX_COLUMNS: usize = 1024;
-    const DEFAULT_MAX_ROWS: usize = 1_000_000;
-    const DEFAULT_MAX_LINE_LENGTH: usize = 65536;
-}
-
 impl Default for SecurityLimits {
     fn default() -> Self {
         Self {
-            max_file_size: Self::DEFAULT_MAX_FILE_SIZE,
-            max_columns: Self::DEFAULT_MAX_COLUMNS,
-            max_rows: Self::DEFAULT_MAX_ROWS,
-            max_line_length: Self::DEFAULT_MAX_LINE_LENGTH,
+            max_file_size: 256 * 1024 * 1024,
+            max_columns: 1024,
+            max_rows: 1_000_000,
+            max_line_length: 65536,
         }
     }
 }
 
 impl SecurityLimits {
-    pub fn testing() -> Self {
-        Self {
-            max_file_size: 16 * 1024 * 1024,
-            max_columns: 256,
-            max_rows: 100_000,
-            max_line_length: 8192,
-        }
-    }
-
     pub fn validate_file_size(&self, size: usize) -> TDAResult<()> {
         if size > self.max_file_size {
             Err(TDAError::FileSizeExceeded {

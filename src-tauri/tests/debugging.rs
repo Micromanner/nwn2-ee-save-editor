@@ -78,3 +78,6 @@ mod compare_level_up;
 
 #[path = "debugging/prepare_spell_test_saves.rs"]
 mod prepare_spell_test_saves;
+
+#[path = "debugging/dump_all_2das.rs"]
+mod dump_all_2das;

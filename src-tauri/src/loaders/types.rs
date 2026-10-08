@@ -214,29 +214,10 @@ pub struct LoadingStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsers::tlk::TLKStringEntry;
-    use crate::parsers::tlk::types::CachedString;
     use std::sync::RwLock;
 
     fn tlk_with(text: &str) -> Arc<RwLock<TLKParser>> {
-        let mut tlk = TLKParser::default();
-        tlk.entries.push(TLKStringEntry {
-            flags: 1,
-            sound_resref: None,
-            volume_variance: 0,
-            pitch_variance: 0,
-            data_offset: 0,
-            string_size: 0,
-        });
-        let symbol = tlk.interner.get_or_intern(text);
-        tlk.string_cache.insert(
-            0,
-            CachedString {
-                symbol,
-                byte_length: 0,
-            },
-        );
-        Arc::new(RwLock::new(tlk))
+        Arc::new(RwLock::new(TLKParser::from_strings(&[text])))
     }
 
     #[test]

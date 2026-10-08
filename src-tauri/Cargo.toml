@@ -96,9 +96,9 @@ indexmap = { version = "2.6", features = ["serde"] }
 memmap2 = "0.9"
 byteorder = "1.5"
 encoding_rs = "0.8"
-lasso = { version = "0.7", features = ["multi-threaded", "serialize"] }
+lasso = "0.7"
 ahash = "0.8"
-smallvec = { version = "1.13", features = ["serde"] }
+smallvec = "1.13"
 flate2 = "1.0"
 lzma-rust2 = { version = "0.21", default-features = false, features = ["std", "encoder", "optimization"] }
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }

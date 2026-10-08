@@ -2,12 +2,7 @@ pub mod error;
 pub mod parser;
 pub mod types;
 
-pub use error::{SecurityLimits, TLKError, TLKResult};
-pub use parser::load_multiple_files;
-pub use types::{
-    BatchMetrics, BatchStringResult, FileMetadata, ParserStatistics, SearchOptions, SearchResult,
-    SerializableTLKParser, TLKHeader, TLKParser, TLKStringEntry,
-};
+pub use types::TLKParser;
 
 use std::sync::{PoisonError, RwLock};
 
@@ -32,5 +27,5 @@ pub fn resolve_strref(
         (base?, str_ref)
     };
     let tlk = table.read().unwrap_or_else(PoisonError::into_inner);
-    tlk.read_string(index as usize).ok().flatten()
+    tlk.read_string(index as usize)
 }
