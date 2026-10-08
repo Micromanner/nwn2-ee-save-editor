@@ -20,8 +20,8 @@ use crate::services::toolset_bridge::{
 use super::creature_names::read_speaker_names;
 use super::journal_reader::read_live_journal;
 use super::module_name::read_module_display_name;
-use super::script_decoder::{DecodedWrite, decode_action};
-use super::script_source::{GameScripts, ScriptSources};
+use super::script_decoder::{DecodedWrite, ScriptDecode, loops_whole_faction};
+use super::script_source::{GameScripts, ScriptSources, open_module_archive};
 use super::types::{
     AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
     OrphanNote, QuestAggregate, QuestGraphProgress, SaveGraph, SpokenLine, TransitionNode,
@@ -157,11 +157,17 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             65.0 + ((idx + 1) as f32 / module_total as f32) * 20.0
         };
 
-        let display_name = if entry.resolution_kind == ResolutionKind::Unresolved {
-            String::new()
+        let module_path = std::path::Path::new(&entry.resolved_path);
+        // Opened once for the name, the speakers and the scripts.
+        let mut archive = if entry.resolution_kind == ResolutionKind::Unresolved {
+            None
         } else {
-            read_module_display_name(std::path::Path::new(&entry.resolved_path)).unwrap_or_default()
+            open_module_archive(module_path)
         };
+        let display_name = archive
+            .as_mut()
+            .and_then(read_module_display_name)
+            .unwrap_or_default();
         let label = if display_name.is_empty() {
             entry.name.as_str()
         } else {
@@ -188,6 +194,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 is_current: names_match(&entry.name, &current_module_id),
                 journal_category_tags: Vec::new(),
                 speaker_names: Vec::new(),
+                party_item_gifts: false,
             });
             continue;
         }
@@ -211,6 +218,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                     is_current: names_match(&entry.name, &current_module_id),
                     journal_category_tags: Vec::new(),
                     speaker_names: Vec::new(),
+                    party_item_gifts: false,
                 });
                 continue;
             }
@@ -224,14 +232,19 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             }
             merge_category(&mut quests, category, Some(&entry.name));
         }
+        let speaker_names = read_speaker_names(module_path, archive.as_mut());
         let mut scripts = ScriptSources::open(
-            std::path::Path::new(&entry.resolved_path),
+            module_path,
+            archive,
             campaign_summary
                 .campaign_path
                 .as_deref()
                 .map(std::path::Path::new),
             &mut game_scripts,
         );
+        let party_item_gifts = scripts
+            .source("ga_give_item")
+            .is_some_and(loops_whole_faction);
         let mut by_dlg: HashMap<&str, HashMap<i32, &ConvoNode>> = HashMap::new();
         for node in &graph.convo.nodes {
             by_dlg
@@ -266,7 +279,8 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
             resolution_kind: entry.resolution_kind,
             is_current: names_match(&entry.name, &current_module_id),
             journal_category_tags: tags_in_module,
-            speaker_names: read_speaker_names(std::path::Path::new(&entry.resolved_path)),
+            speaker_names,
+            party_item_gifts,
         });
     }
 
@@ -401,14 +415,25 @@ fn collect_transitions(
     siblings: &HashMap<i32, &ConvoNode>,
     spoken: Option<SpokenLine>,
 ) {
-    if !node
-        .actions
+    // Journal entries come from `ga_journal` and from wrapper scripts that call
+    // `AddJournalQuestEntry`, which only show once the wrappers are decoded.
+    let has_journal_entry = node.actions.iter().any(|a| {
+        extract_journal_transition(a).is_some()
+            || is_wrapper(a)
+                && scripts
+                    .decode(&a.script, &a.params)
+                    .is_some_and(|d| d.actions.iter().any(|da| da.script == "ga_journal"))
+    });
+    if !has_journal_entry {
+        return;
+    }
+    let actions = expand_wrapper_scripts(&node.actions, scripts);
+    if !actions
         .iter()
         .any(|a| extract_journal_transition(a).is_some())
     {
         return;
     }
-    let actions = expand_wrapper_scripts(&node.actions, scripts);
     let follow_up = follow_up_subgraph(node, siblings, scripts);
     // Partition once per node — every transition on this node reuses the same
     // co-authored snapshot, so avoid N×2 walks of node.actions inside the loop.
@@ -573,18 +598,11 @@ fn expand_wrapper_scripts(
 ) -> Vec<ConvoFunctor> {
     let mut out = Vec::with_capacity(actions.len());
     for action in actions {
-        if action.kind != FunctorKind::Custom || action.script.is_empty() {
+        if !is_wrapper(action) {
             out.push(action.clone());
             continue;
         }
-        let decoded = scripts
-            .source(&action.script)
-            .map(str::to_string)
-            .and_then(|src| {
-                let constants = scripts.constants(&action.script);
-                decode_action(&src, &action.params, &constants)
-            });
-        let Some(decoded) = decoded else {
+        let Some(decoded) = scripts.decode(&action.script, &action.params) else {
             out.push(action.clone());
             continue;
         };
@@ -592,7 +610,7 @@ fn expand_wrapper_scripts(
         let writes = decoded.writes.clone();
         let actions = decoded.actions.clone();
         out.push(ConvoFunctor {
-            decoded: Some(decoded),
+            decoded: Some(ScriptDecode::clone(&decoded)),
             ..action.clone()
         });
         out.extend(writes.iter().map(|w| synthesized_functor(w, &call)));
@@ -607,6 +625,11 @@ fn expand_wrapper_scripts(
         }));
     }
     out
+}
+
+/// A custom action script the decoder may expand.
+fn is_wrapper(action: &ConvoFunctor) -> bool {
+    action.kind == FunctorKind::Custom && !action.script.is_empty()
 }
 
 /// The wrapper call a spliced functor's `derived_from` names: `script(a, b)`.

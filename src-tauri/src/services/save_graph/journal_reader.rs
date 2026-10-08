@@ -30,8 +30,15 @@ pub fn read_live_journal(
     let playerlist = handler
         .extract_player_data()
         .map_err(|e| format!("Failed to extract playerlist.ifo: {e}"))?;
+    journal_entries(&playerlist, player_index)
+}
 
-    let gff = GffParser::from_bytes(playerlist)
+/// `read_live_journal` of `playerlist.ifo` bytes already in hand.
+pub(super) fn journal_entries(
+    playerlist: &[u8],
+    player_index: usize,
+) -> Result<Vec<LiveJournalEntry>, String> {
+    let gff = GffParser::from_bytes(playerlist.to_vec())
         .map_err(|e| format!("Failed to parse playerlist.ifo: {e}"))?;
     let root = gff
         .read_struct_fields(0)

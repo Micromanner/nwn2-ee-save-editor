@@ -11,7 +11,8 @@ use indexmap::IndexMap;
 use tracing::debug;
 
 use super::SaveGraph;
-use crate::parsers::erf::{ErfParser, SecurityLimits};
+use super::script_source::{module_file, open_module_archive};
+use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue};
 use crate::services::resource_manager::ResourceManager;
 
@@ -75,22 +76,18 @@ impl<'a> ItemBlueprints<'a> {
         found
     }
 
+    /// `file` from the module's archive or directory, else the campaign folder.
+    fn module_file(&self, module: &str, file: &str) -> Option<Vec<u8>> {
+        let path = self.modules.get(module);
+        // `open_module_archive` has nothing for an expanded module directory.
+        let mut archive = path.and_then(|p| self.archive(module, p));
+        let module_dir = path.filter(|p| p.is_dir());
+        let dirs = module_dir.into_iter().chain(&self.campaign_dir);
+        module_file(archive.as_deref_mut(), dirs.map(PathBuf::as_path), file)
+    }
+
     fn load(&self, module: &str, resref: &str) -> Option<ItemBlueprint> {
-        let file = format!("{resref}.uti");
-        if let Some(path) = self.modules.get(module) {
-            if path.is_dir() {
-                if let Ok(bytes) = std::fs::read(path.join(&file)) {
-                    return parse_blueprint(&bytes);
-                }
-            } else if let Some(mut archive) = self.archive(module, path)
-                && let Ok(bytes) = archive.extract_resource(&file)
-            {
-                return parse_blueprint(&bytes);
-            }
-        }
-        if let Some(dir) = &self.campaign_dir
-            && let Ok(bytes) = std::fs::read(dir.join(&file))
-        {
+        if let Some(bytes) = self.module_file(module, &format!("{resref}.uti")) {
             return parse_blueprint(&bytes);
         }
         let resources = self.resources?;
@@ -107,18 +104,7 @@ impl<'a> ItemBlueprints<'a> {
     fn archive(&self, module: &str, path: &Path) -> Option<std::cell::RefMut<'_, ErfParser>> {
         let mut archives = self.archives.borrow_mut();
         if !archives.contains_key(module) {
-            let mut parser = ErfParser::new().with_limits(SecurityLimits {
-                max_file_size: 4 * 1024 * 1024 * 1024,
-                ..SecurityLimits::default()
-            });
-            let parsed = match parser.read(path) {
-                Ok(()) => Some(parser),
-                Err(e) => {
-                    debug!("item blueprints unavailable for {}: {e}", path.display());
-                    None
-                }
-            };
-            archives.insert(module.to_string(), parsed);
+            archives.insert(module.to_string(), open_module_archive(path));
         }
         std::cell::RefMut::filter_map(archives, |a| a.get_mut(module)?.as_mut()).ok()
     }

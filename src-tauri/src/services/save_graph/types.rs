@@ -85,6 +85,9 @@ pub struct AggregatedModule {
     /// Creature display names keyed by lowercase tag, from the module's `.utc`
     /// blueprints and area `.git` instances. Empty when the module is unresolved.
     pub speaker_names: Vec<SpeakerName>,
+    /// The module's own `ga_give_item` (module or campaign folder) gives to every party
+    /// member with its party flag (SoZ), not just PCs like the stock script.
+    pub party_item_gifts: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,7 +111,6 @@ pub struct TransitionNode {
     pub dlg: String,
     pub node: i32,
     /// Speaker tag of the line; empty for the conversation owner or the player.
-    #[serde(default)]
     pub speaker: String,
     pub new_state: u32,
     /// Conversation-node `text_strref` from the bridge's `ConvoNode` (stock
@@ -122,22 +124,18 @@ pub struct TransitionNode {
     /// Full condition list on the node — whatever gates entry into this transition.
     pub gating_conditions: Vec<ConvoFunctor>,
     /// Whether this is a player reply (children are NPC lines) or an NPC line.
-    #[serde(default)]
     pub is_player: bool,
     /// The line lives in a developer cheat/debug conversation no player can start.
-    #[serde(default)]
     pub debug: bool,
     /// The nearest line with text at or above this one: what the player actually
     /// saw. Journal writes often sit on empty "continue" replies.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub spoken: Option<SpokenLine>,
     /// Ids of the lines that can follow this one; resolved through `follow_up`.
-    #[serde(default)]
     pub children: Vec<i32>,
     /// The lines reachable after this one without a further player decision,
     /// plus the candidates at the point where one is needed. The preview walks
     /// this with the save's variables to find what the game would have run.
-    #[serde(default)]
     pub follow_up: Vec<FollowNode>,
 }
 
@@ -150,7 +148,6 @@ pub struct SpokenLine {
     pub text_strref: i32,
     /// Conditions on the way from this line down to the write, this line included:
     /// what the save must satisfy for the game to get there.
-    #[serde(default)]
     pub conditions: Vec<ConvoFunctor>,
 }
 

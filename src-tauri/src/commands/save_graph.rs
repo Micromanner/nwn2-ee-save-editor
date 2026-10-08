@@ -119,32 +119,43 @@ pub async fn save_stage_quest_edit(
     let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
     let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
-    let game_data = state.game_data.read();
-    let paths = state.paths.read();
-    let mut session = state.session.write();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
-    let preview = session
-        .quest_edits
-        .preview(
-            &graph,
-            &tables,
-            handler,
-            &paths,
-            session
-                .primary_player_index
-                .unwrap_or(session.selected_player_index),
-            &tag,
-            target,
-            route,
-        )
-        .map_err(CommandError::from)?;
-    if preview.revision != revision {
-        return Err(CommandError::from(
+    let stale = || {
+        CommandError::from(
             "The save or pending edits changed. Refresh the preview before applying.".to_string(),
-        ));
+        )
+    };
+    // Previewed under the read lock so edits and saves are not held up meanwhile.
+    let (preview, generations) = {
+        let session = state.session.read();
+        let handler = session
+            .savegame_handler
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?;
+        let preview = session
+            .quest_edits
+            .preview(
+                &graph,
+                &tables,
+                handler,
+                &state.paths.read(),
+                session
+                    .primary_player_index
+                    .unwrap_or(session.selected_player_index),
+                &tag,
+                target,
+                route,
+            )
+            .map_err(CommandError::from)?;
+        let generations = (session.load_generation, session.quest_edits.generation());
+        (preview, generations)
+    };
+    if preview.revision != revision {
+        return Err(stale());
+    }
+    let game_data = state.game_data.read();
+    let mut session = state.session.write();
+    if (session.load_generation, session.quest_edits.generation()) != generations {
+        return Err(stale());
     }
     session
         .stage_quest_edit(preview, &graph, &selected, replace, &game_data)
@@ -244,14 +255,7 @@ pub async fn save_get_quest_variables(
             let value = reader.read(&key);
             let available = value.is_ok();
             let saved = value.ok().flatten();
-            let effective = session
-                .quest_edits
-                .pending
-                .iter()
-                .flat_map(|p| &p.writes)
-                .rfind(|w| w.key == key)
-                .map(|w| w.after.clone())
-                .or(saved.clone());
+            let effective = session.quest_edits.pending_value(&key).or(saved.clone());
             QuestVariableValue {
                 key,
                 saved,

@@ -7,9 +7,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use serde::Serialize;
-use tracing::debug;
 
-use crate::parsers::erf::{ErfParser, RES_TYPE_GIT, RES_TYPE_UTC, SecurityLimits};
+use crate::parsers::erf::{ErfParser, RES_TYPE_GIT, RES_TYPE_UTC};
 use crate::parsers::gff::{GffParser, GffValue};
 
 #[derive(Debug, Clone, Serialize)]
@@ -24,7 +23,9 @@ pub struct SpeakerName {
     pub conversation: String,
 }
 
-pub fn read_speaker_names(module_path: &Path) -> Vec<SpeakerName> {
+/// Speakers of a module: `archive` is its opened `.mod`
+/// (`script_source::open_module_archive`); an expanded directory is read as files.
+pub fn read_speaker_names(module_path: &Path, archive: Option<&mut ErfParser>) -> Vec<SpeakerName> {
     let mut by_tag: HashMap<String, SpeakerName> = HashMap::new();
     if module_path.is_dir() {
         let mut files: Vec<(String, Vec<u8>)> = Vec::new();
@@ -47,18 +48,7 @@ pub fn read_speaker_names(module_path: &Path) -> Vec<SpeakerName> {
                 index_resource(&mut by_tag, name, bytes.clone());
             }
         }
-    } else if module_path.is_file() {
-        let mut parser = ErfParser::new().with_limits(SecurityLimits {
-            max_file_size: 4 * 1024 * 1024 * 1024,
-            ..SecurityLimits::default()
-        });
-        if let Err(e) = parser.read(module_path) {
-            debug!(
-                "speaker names unavailable for {}: {e}",
-                module_path.display()
-            );
-            return Vec::new();
-        }
+    } else if let Some(parser) = archive {
         for res_type in [RES_TYPE_UTC, RES_TYPE_GIT] {
             for (name, _, _) in parser.list_resources(Some(res_type)) {
                 if let Ok(bytes) = parser.extract_resource(&name) {
@@ -163,7 +153,9 @@ mod tests {
         if !Path::new(OC_A1).is_file() {
             return;
         }
-        let names = read_speaker_names(Path::new(OC_A1));
+        let mut archive =
+            crate::services::save_graph::script_source::open_module_archive(Path::new(OC_A1));
+        let names = read_speaker_names(Path::new(OC_A1), archive.as_mut());
         let sand = names.iter().find(|n| n.tag == "10_intro_sand").unwrap();
         assert_eq!(sand.first_strref, Some(141851));
         let caleb = names.iter().find(|n| n.tag == "caleb").unwrap();

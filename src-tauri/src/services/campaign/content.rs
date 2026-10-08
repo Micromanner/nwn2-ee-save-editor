@@ -436,6 +436,15 @@ pub fn open_module_state(
     handler: &SaveGameHandler,
     module_id: &str,
 ) -> Result<(PathBuf, ErfParser), String> {
+    let (z_path, decompressed) = read_module_state(handler, module_id)?;
+    Ok((z_path, parse_module_state(&decompressed)?))
+}
+
+/// The `<module>.z` path and its decompressed ERF bytes.
+pub fn read_module_state(
+    handler: &SaveGameHandler,
+    module_id: &str,
+) -> Result<(PathBuf, Vec<u8>), String> {
     let z_path = find_module_z_file(handler.save_dir(), module_id)?;
     let file_name = z_path
         .file_name()
@@ -444,15 +453,19 @@ pub fn open_module_state(
     let bytes = handler
         .extract_file(file_name)
         .map_err(|e| format!("Failed to read {file_name}: {e}"))?;
-    let decompressed = decompress_z_bytes(&bytes)?;
+    Ok((z_path, decompress_z_bytes(&bytes)?))
+}
+
+/// The ERF of a decompressed module state, every resource loaded for editing.
+pub fn parse_module_state(decompressed: &[u8]) -> Result<ErfParser, String> {
     let mut erf_parser = ErfParser::new();
     erf_parser
-        .parse_from_bytes(&decompressed)
+        .parse_from_bytes(decompressed)
         .map_err(|e| format!("Failed to parse ERF: {e}"))?;
     erf_parser
         .load_all_resources()
         .map_err(|e| format!("Failed to load ERF resources: {e}"))?;
-    Ok((z_path, erf_parser))
+    Ok(erf_parser)
 }
 
 /// Module variables plus any other edit of the module's saved state (area `.git`s),

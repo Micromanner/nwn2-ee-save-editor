@@ -135,11 +135,10 @@ export function companionName(tag: string) {
   return COMPANION_NAMES[tag] ?? tag.charAt(0).toUpperCase() + tag.slice(1);
 }
 
-/** MotB `kinc_companion.GetCompanionTagByCode`: the first letter of the code, "one..." is One of Many. */
+/** MotB `kinc_companion.GetCompanionTagByCode`: the first two letters of the code, lowercased. */
 function motbCompanionTag(code: string) {
-  const lower = code.trim().toLowerCase();
-  if (lower.startsWith('one')) return 'oneofmany';
-  return { s: 'safiya', g: 'gann', o: 'okku', d: 'dove' }[lower.charAt(0)] ?? code;
+  const codes: Record<string, string> = { sa: 'safiya', ga: 'gann', ok: 'okku', do: 'dove', on: 'oneofmany' };
+  return codes[code.slice(0, 2).toLowerCase()] ?? code;
 }
 
 /** The companion behind an influence global (`00_nInfluencekhelgar` -> "Khelgar"), null for other variables. */
@@ -198,9 +197,22 @@ export function isPartyWrite(key: { value_type: string }) {
 export const COMPANION_CHARACTER_TYPE = 'companion_character';
 /** `VariableKey.value_type` of a feat on a companion: `name` is `<roster name>/<feat.2da row>`, the value 1 (owned) or 0. */
 export const COMPANION_FEAT_TYPE = 'companion_feat';
+/** `VariableKey.value_type` of an item handed to a companion: `name` is `<roster name>/<blueprint resref>`, the value the quantity. */
+export const COMPANION_ITEM_TYPE = 'companion_item';
+/** `VariableKey.value_type` of items taken from a companion's backpack: `name` is `<roster name>/<item tag>`, the value the units left. */
+export const COMPANION_ITEM_TAKE_TYPE = 'companion_item_take';
 
 export function isCompanionWrite(key: { value_type: string }) {
-  return key.value_type === COMPANION_CHARACTER_TYPE || key.value_type === COMPANION_FEAT_TYPE;
+  return [COMPANION_CHARACTER_TYPE, COMPANION_FEAT_TYPE, COMPANION_ITEM_TYPE, COMPANION_ITEM_TAKE_TYPE].includes(key.value_type);
+}
+
+export function isCompanionItemWrite(key: { value_type: string }) {
+  return key.value_type === COMPANION_ITEM_TYPE || key.value_type === COMPANION_ITEM_TAKE_TYPE;
+}
+
+/** Write kinds that move a quantity: two quests writing one both apply, so they never conflict. */
+export function accumulates(key: { value_type: string }) {
+  return [CHARACTER_TYPE, COMPANION_CHARACTER_TYPE, ITEM_TYPE, ITEM_TAKE_TYPE, COMPANION_ITEM_TYPE, COMPANION_ITEM_TAKE_TYPE].includes(key.value_type);
 }
 
 /** The companion and the field or feat row of a companion write. */

@@ -9,9 +9,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde_json::Value;
 use tracing::debug;
 
-use super::script_decoder::ScriptConstants;
+use super::script_decoder::{ScriptConstants, ScriptDecode, decode_action};
 use crate::parsers::erf::{ErfParser, SecurityLimits};
 
 /// The install's `data/scripts.zip`, `scripts_x1.zip` and `scripts_x2.zip`, shared by
@@ -86,36 +87,48 @@ impl GameScripts {
     }
 }
 
+/// A module `.mod` archive, readable up to the 4 GB ERF offset limit (Highcliff
+/// alone is 457 MB). `None` for expanded module directories and unreadable files.
+pub fn open_module_archive(module_path: &Path) -> Option<ErfParser> {
+    if !module_path.is_file() {
+        return None;
+    }
+    let mut parser = ErfParser::new().with_limits(SecurityLimits {
+        max_file_size: 4 * 1024 * 1024 * 1024,
+        ..SecurityLimits::default()
+    });
+    match parser.read(module_path) {
+        Ok(()) => Some(parser),
+        Err(e) => {
+            debug!("module archive unreadable: {}: {e}", module_path.display());
+            None
+        }
+    }
+}
+
 pub struct ScriptSources<'a> {
     archive: Option<ErfParser>,
     dirs: Vec<PathBuf>,
     game: &'a mut GameScripts,
     cache: HashMap<String, Option<String>>,
     constants_cache: HashMap<String, Arc<ScriptConstants>>,
+    /// Decodes by lowercase script name and JSON parameters: one dialogue line's
+    /// call is decoded once however many nodes repeat it.
+    decodes: HashMap<(String, String), Option<Arc<ScriptDecode>>>,
 }
 
 impl<'a> ScriptSources<'a> {
+    /// Sources of a module: `archive` is its opened `.mod` (`open_module_archive`);
+    /// an expanded module directory is searched as loose files.
     pub fn open(
         module_path: &Path,
+        archive: Option<ErfParser>,
         campaign_dir: Option<&Path>,
         game: &'a mut GameScripts,
     ) -> Self {
         let mut dirs = Vec::new();
-        let mut archive = None;
         if module_path.is_dir() {
             dirs.push(module_path.to_path_buf());
-        } else if module_path.is_file() {
-            let mut parser = ErfParser::new().with_limits(SecurityLimits {
-                max_file_size: 4 * 1024 * 1024 * 1024,
-                ..SecurityLimits::default()
-            });
-            match parser.read(module_path) {
-                Ok(()) => archive = Some(parser),
-                Err(e) => debug!(
-                    "script sources unavailable for {}: {e}",
-                    module_path.display()
-                ),
-            }
         }
         if let Some(dir) = campaign_dir {
             dirs.push(dir.to_path_buf());
@@ -126,7 +139,26 @@ impl<'a> ScriptSources<'a> {
             game,
             cache: HashMap::new(),
             constants_cache: HashMap::new(),
+            decodes: HashMap::new(),
         }
+    }
+
+    /// `script_decoder::decode_action` of a call to `script`, `None` when no source
+    /// ships or it has no `main`.
+    pub fn decode(&mut self, script: &str, params: &[Value]) -> Option<Arc<ScriptDecode>> {
+        let key = (
+            script.to_ascii_lowercase(),
+            Value::from(params.to_vec()).to_string(),
+        );
+        if let Some(decoded) = self.decodes.get(&key) {
+            return decoded.clone();
+        }
+        let decoded = self.source(script).map(str::to_string).and_then(|src| {
+            let constants = self.constants(script);
+            decode_action(&src, params, &constants).map(Arc::new)
+        });
+        self.decodes.insert(key, decoded.clone());
+        decoded
     }
 
     /// Named constants visible to `script`: `nwscript` (`FEAT_*` and friends) plus
@@ -181,18 +213,29 @@ impl<'a> ScriptSources<'a> {
 
     fn load(&mut self, script: &str) -> Option<String> {
         let file = format!("{script}.nss");
-        if let Some(archive) = self.archive.as_mut()
-            && let Ok(bytes) = archive.extract_resource(&file)
-        {
-            return Some(decode_text(&bytes));
-        }
-        for dir in &self.dirs {
-            if let Ok(bytes) = std::fs::read(dir.join(&file)) {
-                return Some(decode_text(&bytes));
-            }
-        }
-        None
+        module_file(
+            self.archive.as_mut(),
+            self.dirs.iter().map(PathBuf::as_path),
+            &file,
+        )
+        .map(|bytes| decode_text(&bytes))
     }
+}
+
+/// `file` from a module's archive, else from the first of `dirs` (an expanded module,
+/// the campaign folder) that has it.
+pub fn module_file<'p>(
+    archive: Option<&mut ErfParser>,
+    dirs: impl IntoIterator<Item = &'p Path>,
+    file: &str,
+) -> Option<Vec<u8>> {
+    if let Some(archive) = archive
+        && let Ok(bytes) = archive.extract_resource(file)
+    {
+        return Some(bytes);
+    }
+    dirs.into_iter()
+        .find_map(|dir| std::fs::read(dir.join(file)).ok())
 }
 
 /// NWScript sources are Windows-1252; string literals only matter for variable

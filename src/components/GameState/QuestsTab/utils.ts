@@ -1,3 +1,4 @@
+import { accumulates } from './scriptDescriptions';
 import type { PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode, VariableKey } from './types';
 
 export type QuestSource = 'normal' | 'live_only' | 'transition_only';
@@ -18,11 +19,11 @@ export function sameVariable(a: VariableKey, b: VariableKey) {
   return a.module === b.module && a.name === b.name && a.value_type === b.value_type;
 }
 
-/** Items given and taken add up across quests instead of overwriting each other, so they never conflict. */
+/** Gold, XP, alignment and items add up across quests instead of overwriting each other, so they never conflict. */
 export function conflictingEdits(preview: QuestPreview | null, selected: number[], pending: PendingQuestEdit[]) {
   return preview ? pending.filter(p => p.tag !== preview.tag && p.writes.some(old => selected.some(i => {
     const write = preview.writes[i];
-    return write && write.key.value_type !== 'item' && write.key.value_type !== 'item_take' && sameVariable(old.key, write.key) && old.after !== write.after;
+    return write && !accumulates(write.key) && sameVariable(old.key, write.key) && old.after !== write.after;
   }))) : [];
 }
 

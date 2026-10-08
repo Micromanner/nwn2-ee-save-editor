@@ -8,7 +8,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, journalText, questDisplayName } from './utils';
-import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, isMomentAction, isAreaWrite, DOOR_LOCK_TYPE, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE } from './scriptDescriptions';
+import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, isMomentAction, isAreaWrite, DOOR_LOCK_TYPE, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE, COMPANION_ITEM_TYPE, COMPANION_ITEM_TAKE_TYPE, isCompanionItemWrite } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -96,10 +96,11 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const featState = (value: string | number | null) => Number(value) ? t('gameState.quests.edit.featOwned') : t('gameState.quests.edit.featMissing');
   const partyLabel = (key: { name: string; value_type: string }) =>
     t(key.value_type === PARTY_TYPE ? 'gameState.quests.edit.partyApplied' : 'gameState.quests.edit.selectableApplied', { companion: companionName(key.name) });
-  // "Khelgar · Law/Chaos" for an alignment field, "Khelgar · Feat Cleave" for a feat.
-  const companionLabel = (write: { key: { name: string; value_type: string }; label_strref?: number }) => {
+  // "Khelgar · Law/Chaos" for an alignment field, "Khelgar · Feat Cleave" for a feat, "Khelgar · Potion" for an item.
+  const companionLabel = (write: { key: { name: string; value_type: string }; label?: string; label_strref?: number }) => {
     const { companion, field } = companionKey(write.key.name);
     if (write.key.value_type === COMPANION_FEAT_TYPE) return `${companion} · ${t('gameState.quests.edit.featApplied', { feat: featName({ name: field, label_strref: write.label_strref }) })}`;
+    if (isCompanionItemWrite(write.key)) return `${companion} · ${itemName({ name: field, label: write.label, label_strref: write.label_strref })}`;
     return `${companion} · ${t(field === 'GoodEvil' ? 'gameState.quests.edit.goodEvilApplied' : 'gameState.quests.edit.lawChaosApplied')}`;
   };
   // "Door: Hagen's House" / "Map pin: Hagen", the tag when the module names neither.
@@ -150,6 +151,10 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     const line = spokenLabel(option);
     return option.showModule ? `${line} (${resolveModule(option.module)})` : line;
   };
+  const givenOutcome = (item: string, write: { after: string | number }) =>
+    t('gameState.quests.edit.itemOutcome', { item, quantity: write.after });
+  const takenOutcome = (item: string, write: { before?: string | number | null; after: string | number }) =>
+    t('gameState.quests.edit.itemTakeOutcome', { item, quantity: Number(write.before ?? 0) - Number(write.after) });
   const optionOutcome = (option: RouteOption) => {
     const rewards: string[] = [];
     for (const write of option.writes) {
@@ -157,10 +162,10 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       if (kind) rewards.push(t(`gameState.quests.edit.${kind}Outcome`, { after: write.after }));
     }
     for (const write of option.writes) {
-      if (isItemWrite(write)) rewards.push(t('gameState.quests.edit.itemOutcome', { item: itemName(write), quantity: write.after }));
+      if (isItemWrite(write)) rewards.push(givenOutcome(itemName(write), write));
     }
     for (const write of option.writes) {
-      if (isItemTakeWrite(write)) rewards.push(t('gameState.quests.edit.itemTakeOutcome', { item: itemName(write), quantity: Number(write.before ?? 0) - Number(write.after) }));
+      if (isItemTakeWrite(write)) rewards.push(takenOutcome(itemName(write), write));
     }
     for (const write of option.writes) {
       if (isFeatWrite(write)) rewards.push(t('gameState.quests.edit.featOutcome', { feat: featName(write) }));
@@ -169,7 +174,12 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       if (isPartyWrite(write)) rewards.push(`${partyLabel(write)} ${partyState(write, write.after)}`);
     }
     for (const write of option.writes) {
-      if (isCompanionWrite(write)) rewards.push(write.value_type === COMPANION_FEAT_TYPE ? companionLabel({ key: write, label_strref: write.label_strref }) : `${companionLabel({ key: write })} ${write.after}`);
+      if (!isCompanionWrite(write)) continue;
+      const label = companionLabel({ key: write, label: write.label, label_strref: write.label_strref });
+      if (write.value_type === COMPANION_FEAT_TYPE) rewards.push(label);
+      else if (write.value_type === COMPANION_ITEM_TYPE) rewards.push(givenOutcome(label, write));
+      else if (write.value_type === COMPANION_ITEM_TAKE_TYPE) rewards.push(takenOutcome(label, write));
+      else rewards.push(`${label} ${write.after}`);
     }
     for (const write of option.writes) {
       if (isAreaWrite(write)) rewards.push(`${areaLabel(write)} ${areaState(write, write.after)}`);
@@ -278,9 +288,12 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             {influenceWrites.map((write, i) => changeRow(`influence-${i}`, t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) }), write.before, write.after, { delta: true }))}
             {featWrites.map((write, i) => changeRow(`feat-${i}`, t('gameState.quests.edit.featApplied', { feat: featName({ ...write, name: write.key.name }) }), featState(write.before), featState(write.after), write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {}))}
             {partyWrites.map((write, i) => changeRow(`party-${i}`, partyLabel(write.key), partyState(write.key, write.before), partyState(write.key, write.after), write.line != null ? { note: t('gameState.quests.edit.laterInConversation') } : {}))}
-            {companionWrites.map((write, i) => write.key.value_type === COMPANION_FEAT_TYPE
-              ? changeRow(`companion-${i}`, companionLabel(write), featState(write.before), featState(write.after), write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {})
-              : changeRow(`companion-${i}`, companionLabel(write), write.before, write.after, { delta: true, ...(write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {}) }))}
+            {companionWrites.map((write, i) => {
+              const derived = write.derived_from ? t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) : undefined;
+              if (write.key.value_type === COMPANION_FEAT_TYPE) return changeRow(`companion-${i}`, companionLabel(write), featState(write.before), featState(write.after), { note: derived });
+              const taken = write.key.value_type === COMPANION_ITEM_TAKE_TYPE ? t('gameState.quests.edit.itemTaken') : undefined;
+              return changeRow(`companion-${i}`, companionLabel(write), write.before, write.after, { delta: true, note: taken ?? derived });
+            })}
             {areaWrites.map((write, i) => changeRow(`area-${i}`, areaLabel({ ...write.key, label_strref: write.label_strref }), areaState(write.key, write.before), areaState(write.key, write.after), { note: [moduleLabel(write.key.module), ...(write.derived_from ? [t('gameState.quests.edit.derivedFrom', { script: write.derived_from })] : [])].join(' · ') }))}
             {effects.character.map((item, i) => <Fragment key={`effect-${i}`}>
               <span style={{ color: T.text }}>{item}</span>

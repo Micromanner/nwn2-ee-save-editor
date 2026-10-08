@@ -5,14 +5,11 @@
 //! TLK strref resolution is intentionally omitted; the first LocString
 //! substring is sufficient for OC/MotB/SoZ and standard custom campaigns.
 
-use std::path::Path;
-
 use crate::parsers::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue};
 
-pub fn read_module_display_name(mod_path: &Path) -> Option<String> {
-    let mut erf = ErfParser::new();
-    erf.read(mod_path).ok()?;
+/// `Mod_Name` of an opened module archive (`script_source::open_module_archive`).
+pub fn read_module_display_name(erf: &mut ErfParser) -> Option<String> {
     let ifo_bytes = erf.get_module_info().ok().flatten()?;
 
     let gff = GffParser::from_bytes(ifo_bytes).ok()?;

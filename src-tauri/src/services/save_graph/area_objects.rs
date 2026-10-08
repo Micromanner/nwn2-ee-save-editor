@@ -8,10 +8,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use indexmap::IndexMap;
-use tracing::debug;
 
-use crate::parsers::erf::{ErfParser, RES_TYPE_GIT, SecurityLimits};
-use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer, gff_text};
+use super::script_source::open_module_archive;
+use crate::parsers::erf::{ErfParser, RES_TYPE_GIT};
+use crate::parsers::gff::{
+    GffParser, GffValue, gff_integer, gff_text, insert_bool_preserving_type, rewrite_gff,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AreaField {
@@ -81,18 +83,7 @@ pub fn read_module_objects(module_path: &Path) -> ModuleObjects {
                 index_module_git(&mut objects, &name, bytes);
             }
         }
-    } else {
-        let mut parser = ErfParser::new().with_limits(SecurityLimits {
-            max_file_size: 4 * 1024 * 1024 * 1024,
-            ..SecurityLimits::default()
-        });
-        if let Err(e) = parser.read(module_path) {
-            debug!(
-                "area objects unavailable for {}: {e}",
-                module_path.display()
-            );
-            return objects;
-        }
+    } else if let Some(mut parser) = open_module_archive(module_path) {
         for (name, _, _) in parser.list_resources(Some(RES_TYPE_GIT)) {
             if let Ok(bytes) = parser.extract_resource(&name) {
                 index_module_git(&mut objects, &name, bytes);
@@ -214,31 +205,16 @@ fn edit_git(
     bytes: Vec<u8>,
     edits: &[(AreaField, &str, &ModuleObject, bool)],
 ) -> Result<Vec<u8>, String> {
-    let gff = GffParser::from_bytes(bytes).map_err(|e| e.to_string())?;
-    let file_type = gff.file_type.clone();
-    let file_version = gff.file_version.clone();
-    let root_id = gff.get_struct_id(0).map_err(|e| e.to_string())?;
-    let mut root = gff.read_owned_struct(0).map_err(|e| e.to_string())?;
-    for &(field, tag, object, value) in edits {
-        let Some(GffValue::ListOwned(entries)) = root.get_mut(field.list()) else {
-            return Err(format!("{} has no {}", object.area, field.list()));
-        };
-        let position = saved_position(entries, tag, object)?;
-        let flag = u8::from(value);
-        let slot = entries[position]
-            .entry(field.field().to_string())
-            .or_insert(GffValue::Byte(flag));
-        *slot = match slot {
-            GffValue::Word(_) => GffValue::Word(u16::from(flag)),
-            GffValue::Short(_) => GffValue::Short(i16::from(flag)),
-            GffValue::Dword(_) => GffValue::Dword(u32::from(flag)),
-            GffValue::Int(_) => GffValue::Int(i32::from(flag)),
-            _ => GffValue::Byte(flag),
-        };
-    }
-    GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(root, root_id)
-        .map_err(|e| format!("Failed to serialize area state: {e}"))
+    rewrite_gff(bytes, "area state", |root| {
+        for &(field, tag, object, value) in edits {
+            let Some(GffValue::ListOwned(entries)) = root.get_mut(field.list()) else {
+                return Err(format!("{} has no {}", object.area, field.list()));
+            };
+            let position = saved_position(entries, tag, object)?;
+            insert_bool_preserving_type(&mut entries[position], field.field(), value);
+        }
+        Ok(())
+    })
 }
 
 /// The save entry of a module object: a diff entry pointing at its module index, or
@@ -281,6 +257,7 @@ pub fn installed_module_objects(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parsers::gff::GffWriter;
 
     fn entry(
         struct_id: u32,

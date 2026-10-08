@@ -47,6 +47,26 @@ pub fn merge_fields_into_gff(
         .map_err(|e| format!("GFF serialization error: {e}"))
 }
 
+/// Parse a GFF, let `edit` change its root fields and write it back with the original
+/// file type, version and root struct id. `what` names the file in errors.
+pub fn rewrite_gff(
+    bytes: Vec<u8>,
+    what: &str,
+    edit: impl FnOnce(&mut IndexMap<String, GffValue<'static>>) -> Result<(), String>,
+) -> Result<Vec<u8>, String> {
+    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("{what} parse error: {e}"))?;
+    let root_struct_id = parser
+        .get_struct_id(0)
+        .map_err(|e| format!("{what} root id error: {e}"))?;
+    let mut root = parser
+        .read_owned_struct(0)
+        .map_err(|e| format!("{what} root error: {e}"))?;
+    edit(&mut root)?;
+    GffWriter::new(&parser.file_type, &parser.file_version)
+        .write_with_struct_id(root, root_struct_id)
+        .map_err(|e| format!("{what} serialization error: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

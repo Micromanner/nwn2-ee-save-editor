@@ -11,12 +11,13 @@ use sha2::{Digest, Sha256};
 use super::aggregator::derived_call;
 use super::area_objects::{self, AreaField, ModuleObjects};
 use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
+use super::journal_reader::journal_entries;
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
 use crate::character::{Character, FeatId, FeatSource};
 use crate::config::NWN2Paths;
 use crate::loaders::GameData;
 use crate::parsers::erf::ErfParser;
-use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer};
+use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer, rewrite_gff};
 use crate::parsers::tda::TDAParser;
 use crate::services::campaign::{CampaignManager, content};
 use crate::services::resource_manager::ResourceManager;
@@ -40,7 +41,7 @@ pub struct VariableWrite {
     pub before: Option<Value>,
     pub after: Value,
     pub action_index: usize,
-    /// Display name of an `ITEM_TYPE` write's blueprint, when embedded in it.
+    /// Display name of an item write's blueprint or taken item, when embedded in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// TLK strref of that name when it is not embedded.
@@ -240,6 +241,11 @@ impl Default for QuestEdits {
 }
 
 impl QuestEdits {
+    /// Changes whenever the pending edits do.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -275,46 +281,59 @@ impl QuestEdits {
 
     /// `globals.xml` values as they will be once the pending edits are saved.
     pub fn overlay_globals(&self, data: &mut crate::parsers::xml::XmlData) {
-        for write in self.pending_variables(None) {
-            let name = write.key.name.clone();
-            match write.key.value_type.as_str() {
-                "int" => {
-                    if let Some(v) = variable_number(&write.after) {
-                        data.integers
-                            .insert(name, i32::try_from(v as i64).unwrap_or_default());
-                    }
-                }
-                "float" => {
-                    if let Some(v) = variable_number(&write.after) {
-                        data.floats.insert(name, v as f32);
-                    }
-                }
-                _ => {
-                    data.strings.insert(name, variable_text(&write.after));
-                }
-            }
-        }
+        self.overlay_variables(
+            None,
+            |name, v| {
+                data.integers.insert(name, v);
+            },
+            |name, v| {
+                data.floats.insert(name, v);
+            },
+            |name, v| {
+                data.strings.insert(name, v);
+            },
+        );
     }
 
     /// A module's variables as they will be once the pending edits are saved.
     pub fn overlay_module(&self, module: &str, vars: &mut content::ModuleVariables) {
-        for write in self.pending_variables(Some(module)) {
+        self.overlay_variables(
+            Some(module),
+            |name, v| {
+                vars.integers.insert(name, v);
+            },
+            |name, v| {
+                vars.floats.insert(name, v);
+            },
+            |name, v| {
+                vars.strings.insert(name, v);
+            },
+        );
+    }
+
+    /// Hand each pending variable write of `module` (globals for `None`) to the
+    /// setter of its type, in staging order.
+    fn overlay_variables(
+        &self,
+        module: Option<&str>,
+        mut int: impl FnMut(String, i32),
+        mut float: impl FnMut(String, f32),
+        mut string: impl FnMut(String, String),
+    ) {
+        for write in self.pending_variables(module) {
             let name = write.key.name.clone();
             match write.key.value_type.as_str() {
                 "int" => {
                     if let Some(v) = variable_number(&write.after) {
-                        vars.integers
-                            .insert(name, i32::try_from(v as i64).unwrap_or_default());
+                        int(name, i32::try_from(v as i64).unwrap_or_default());
                     }
                 }
                 "float" => {
                     if let Some(v) = variable_number(&write.after) {
-                        vars.floats.insert(name, v as f32);
+                        float(name, v as f32);
                     }
                 }
-                _ => {
-                    vars.strings.insert(name, variable_text(&write.after));
-                }
+                _ => string(name, variable_text(&write.after)),
             }
         }
     }
@@ -324,6 +343,22 @@ impl QuestEdits {
         self.pending.retain(|p| p.tag != edit.tag);
         self.pending.push(edit);
         self.generation = NEXT_SESSION.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Put back edits a failed stage or discard took out.
+    pub fn restore_all(&mut self, edits: Vec<PendingQuestEdit>) {
+        for edit in edits {
+            self.restore(edit);
+        }
+    }
+
+    /// The value the pending edits leave `key` at, latest edit winning.
+    pub fn pending_value(&self, key: &VariableKey) -> Option<Value> {
+        self.pending
+            .iter()
+            .flat_map(|p| &p.writes)
+            .rfind(|w| w.key == *key)
+            .map(|w| w.after.clone())
     }
 
     pub fn preview(
@@ -337,18 +372,28 @@ impl QuestEdits {
         target: u32,
         route: Option<usize>,
     ) -> Result<QuestPreview, String> {
+        let live = LiveSave::read(handler, player, tag, target)?;
+        let mut reader = VariableReader::new(handler, paths, player);
+        self.preview_with(graph, tables, &live, &mut reader, tag, target, route)
+    }
+
+    /// `preview` against a save read once and a reader shared between previews.
+    fn preview_with(
+        &self,
+        graph: &SaveGraph,
+        tables: &RewardTables,
+        live: &LiveSave,
+        reader: &mut VariableReader<'_>,
+        tag: &str,
+        target: u32,
+        route: Option<usize>,
+    ) -> Result<QuestPreview, String> {
         let quest = graph
             .quests
             .iter()
             .find(|q| q.tag == tag)
             .ok_or("Quest is no longer available")?;
-        let bytes = handler.extract_player_data().map_err(|e| e.to_string())?;
-        // Validate storage and range before offering Apply, including absent entries.
-        write_journal(&bytes, player, &[(tag.to_string(), target)])?;
-        let saved_state = read_live_journal(handler, player)?
-            .iter()
-            .find(|q| q.tag == tag)
-            .map(|q| q.state);
+        let saved_state = live.journal.get(tag).copied();
         let before_state = self
             .pending
             .iter()
@@ -369,16 +414,13 @@ impl QuestEdits {
             next_steps: Vec::new(),
             blueprints: BTreeMap::new(),
         };
-        let mut reader = VariableReader::new(handler, paths, player);
-        let mut journal: BTreeMap<String, u32> = read_live_journal(handler, player)?
-            .into_iter()
-            .map(|q| (q.tag, q.state))
-            .collect();
+        let mut journal = live.journal.clone();
         for edit in &self.pending {
             journal.insert(edit.tag.clone(), edit.target);
         }
         journal.insert(tag.to_string(), target);
         reader.journal = Some(journal);
+        reader.overlay.clear();
         if let Some(index) = route {
             let tr = quest
                 .transitions
@@ -387,7 +429,7 @@ impl QuestEdits {
                 .ok_or("The selected route does not reach this state")?;
             // The chosen line first, then every line the game plays after it.
             let mut lines: Vec<(Option<i32>, &[ConvoFunctor])> = vec![(None, &tr.actions)];
-            let (followed, stop) = follow_conversation(tr, &mut reader)?;
+            let (followed, stop) = follow_conversation(tr, reader)?;
             for node in &followed {
                 lines.push((Some(node.node), &node.actions));
             }
@@ -449,11 +491,7 @@ impl QuestEdits {
                         // The journal map already holds the save and the pending quest targets.
                         let journal = reader.journal.get_or_insert_default();
                         let before = self
-                            .pending
-                            .iter()
-                            .flat_map(|p| &p.writes)
-                            .rfind(|w| w.key == key)
-                            .map(|w| w.after.clone())
+                            .pending_value(&key)
                             .or_else(|| journal.get(&other_tag).map(|s| Value::from(*s)));
                         if before.as_ref().and_then(Value::as_u64) >= Some(u64::from(state)) {
                             continue;
@@ -472,23 +510,12 @@ impl QuestEdits {
                         });
                         continue;
                     }
-                    // Pending edits and earlier writes of this preview win over the save.
-                    let mut current = |key: &VariableKey| {
-                        candidates
-                            .iter()
-                            .rfind(|w| w.key == *key)
-                            .map(|w| w.after.clone())
-                            .or_else(|| {
-                                self.pending
-                                    .iter()
-                                    .flat_map(|p| &p.writes)
-                                    .rfind(|w| w.key == *key)
-                                    .map(|w| w.after.clone())
-                            })
-                            .or_else(|| reader.read(key).ok().flatten())
-                            .and_then(|v| v.as_i64())
+                    let mut state = PreviewState {
+                        candidates: &candidates,
+                        edits: self,
+                        reader,
                     };
-                    let writes = match decode_writes(action, &tr.module, tables, &mut current) {
+                    let writes = match decode_writes(action, &tr.module, tables, &mut state) {
                         Ok(writes) => writes,
                         Err(reason) => {
                             result.effects.push(ActionEffect {
@@ -508,28 +535,22 @@ impl QuestEdits {
                             });
                             continue;
                         };
-                        let before = self
-                            .pending
-                            .iter()
-                            .flat_map(|p| &p.writes)
-                            .rfind(|w| w.key == key)
-                            .map(|w| w.after.clone())
-                            .or(saved.clone());
+                        let before = self.pending_value(&key).or(saved.clone());
                         let after = change.apply(before.as_ref());
                         // Nothing of that tag in the backpack: the script is a no-op in-game too.
-                        if key.value_type == ITEM_TAKE_TYPE && before == Some(after.clone()) {
+                        let taken = taken_tag(&key);
+                        if taken.is_some() && before == Some(after.clone()) {
                             continue;
                         }
-                        let blueprint = (key.value_type == ITEM_TYPE)
-                            .then(|| tables.item(&tr.module, &key.name))
-                            .flatten();
-                        if let Some(blueprint) = &blueprint {
+                        let resref = given_resref(&key);
+                        let blueprint = resref.and_then(|resref| tables.item(&tr.module, resref));
+                        if let (Some(resref), Some(blueprint)) = (resref, &blueprint) {
                             result
                                 .blueprints
-                                .insert(key.name.clone(), blueprint.clone());
+                                .insert(resref.to_string(), blueprint.clone());
                         }
-                        let (label, label_strref) = if key.value_type == ITEM_TAKE_TYPE {
-                            reader.item_label(&key.name)
+                        let (label, label_strref) = if let Some((owner, tag)) = taken {
+                            reader.item_label(owner, tag)
                         } else if key.value_type == FEAT_TYPE {
                             (None, tables.feat_name_strref(&key.name))
                         } else if area_field(&key.value_type).is_some() {
@@ -563,7 +584,7 @@ impl QuestEdits {
             // Items add up the way repeated CreateItemOnObject calls do.
             let mut merged: Vec<VariableWrite> = Vec::with_capacity(candidates.len());
             for candidate in candidates {
-                if candidate.key.value_type == ITEM_TYPE
+                if given_resref(&candidate.key).is_some()
                     && let Some(earlier) = merged.iter_mut().find(|w| w.key == candidate.key)
                 {
                     let total =
@@ -587,10 +608,14 @@ impl QuestEdits {
                 }
             }
             // A wrapper applied in full (nothing undecoded, every spliced write and action
-            // applied) leaves nothing to run by hand.
+            // applied, its journal entry being this edit's target) leaves nothing to run by hand.
             let unapplied: BTreeSet<String> = result
                 .effects
                 .iter()
+                .filter(|e| {
+                    e.reason != "journal_action"
+                        || journal_transition(&e.action).map(|(_, state)| state) != Some(target)
+                })
                 .filter_map(|e| e.action.derived_from.clone())
                 .collect();
             result.effects.retain(|e| {
@@ -615,10 +640,10 @@ impl QuestEdits {
                 .overlay
                 .insert(write.key.clone(), write.after.clone());
         }
-        result.next_steps = next_steps(quest, graph, target, &mut reader)?;
+        result.next_steps = next_steps(quest, graph, target, reader)?;
         let mut hash = Sha256::new();
         hash.update(self.generation.to_le_bytes());
-        hash.update(&bytes);
+        hash.update(&live.playerlist);
         hash.update(serde_json::to_vec(&result).map_err(|e| e.to_string())?);
         result.revision = hex::encode(hash.finalize());
         Ok(result)
@@ -640,21 +665,15 @@ impl QuestEdits {
             .iter()
             .find(|q| q.tag == tag)
             .ok_or("Quest is no longer available")?;
+        let live = LiveSave::read(handler, player, tag, target)?;
+        let mut reader = VariableReader::new(handler, paths, player);
         let mut out = Vec::new();
         for (route, tr) in quest.transitions.iter().enumerate() {
             if tr.new_state != target {
                 continue;
             }
-            let preview = self.preview(
-                graph,
-                tables,
-                handler,
-                paths,
-                player,
-                tag,
-                target,
-                Some(route),
-            )?;
+            let preview =
+                self.preview_with(graph, tables, &live, &mut reader, tag, target, Some(route))?;
             let mut writes: Vec<String> = preview
                 .writes
                 .iter()
@@ -740,8 +759,7 @@ impl QuestEdits {
                         writes.iter().any(|new| {
                             old.key == new.key
                                 && old.after != new.after
-                                && old.key.value_type != ITEM_TYPE
-                                && old.key.value_type != ITEM_TAKE_TYPE
+                                && !accumulates(&old.key.value_type)
                         })
                     })
             })
@@ -772,7 +790,7 @@ impl QuestEdits {
             .filter(|(resref, _)| {
                 writes
                     .iter()
-                    .any(|w| w.key.value_type == ITEM_TYPE && w.key.name == *resref)
+                    .any(|w| given_resref(&w.key) == Some(resref.as_str()))
             })
             .collect();
         self.pending.push(PendingQuestEdit {
@@ -822,6 +840,7 @@ impl QuestEdits {
     pub fn flush(
         &self,
         handler: &mut SaveGameHandler,
+        paths: &NWN2Paths,
         player: usize,
         primary: bool,
         game_data: &GameData,
@@ -840,31 +859,48 @@ impl QuestEdits {
         let mut feats: Vec<(i32, bool)> = Vec::new();
         let mut party: Vec<(String, bool)> = Vec::new();
         let mut selectable: Vec<(String, bool)> = Vec::new();
-        let mut companion_rewards: BTreeMap<String, Vec<(String, i64)>> = BTreeMap::new();
-        let mut companion_feats: BTreeMap<String, Vec<(i32, bool)>> = BTreeMap::new();
+        let mut companions: BTreeMap<String, CompanionChanges> = BTreeMap::new();
         for edit in &self.pending {
             for write in &edit.writes {
                 if edit.applied.is_some() && applies_to_player(&write.key.value_type) {
                     continue;
                 }
-                if write.key.value_type == COMPANION_CHARACTER_TYPE {
+                if matches!(
+                    write.key.value_type.as_str(),
+                    COMPANION_ITEM_TYPE
+                        | COMPANION_ITEM_TAKE_TYPE
+                        | COMPANION_CHARACTER_TYPE
+                        | COMPANION_FEAT_TYPE
+                ) {
                     let (ros_name, field) =
                         split_companion_key(&write.key.name).ok_or("Invalid companion key")?;
-                    let delta = write.after.as_i64().unwrap_or(0)
-                        - write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
-                    let rewards = companion_rewards.entry(ros_name.to_string()).or_default();
-                    match rewards.iter_mut().find(|(name, _)| name == field) {
-                        Some((_, total)) => *total += delta,
-                        None => rewards.push((field.to_string(), delta)),
+                    let changes = companions.entry(ros_name.to_string()).or_default();
+                    let after = write.after.as_i64().unwrap_or(0);
+                    let before = write.before.as_ref().and_then(Value::as_i64).unwrap_or(0);
+                    match write.key.value_type.as_str() {
+                        COMPANION_ITEM_TYPE => {
+                            let blueprint = edit
+                                .blueprints
+                                .get(field)
+                                .ok_or_else(|| format!("Item blueprint {field} missing"))?;
+                            changes.items.push((blueprint.clone(), after));
+                        }
+                        COMPANION_ITEM_TAKE_TYPE => {
+                            changes.takes.push((field.to_string(), before - after));
+                        }
+                        COMPANION_CHARACTER_TYPE => {
+                            let delta = after - before;
+                            match changes.rewards.iter_mut().find(|(name, _)| name == field) {
+                                Some((_, total)) => *total += delta,
+                                None => changes.rewards.push((field.to_string(), delta)),
+                            }
+                        }
+                        _ => {
+                            let feat = field.parse::<i32>().map_err(|_| "Invalid feat id")?;
+                            changes.feats.retain(|(id, _)| *id != feat);
+                            changes.feats.push((feat, after != 0));
+                        }
                     }
-                } else if write.key.value_type == COMPANION_FEAT_TYPE {
-                    let (ros_name, feat) =
-                        split_companion_key(&write.key.name).ok_or("Invalid companion key")?;
-                    let feat = feat.parse::<i32>().map_err(|_| "Invalid feat id")?;
-                    let owned = write.after.as_i64().unwrap_or(0) != 0;
-                    let feats = companion_feats.entry(ros_name.to_string()).or_default();
-                    feats.retain(|(id, _)| *id != feat);
-                    feats.push((feat, owned));
                 } else if write.key.value_type == PARTY_TYPE
                     || write.key.value_type == SELECTABLE_TYPE
                 {
@@ -916,6 +952,14 @@ impl QuestEdits {
         let bytes = handler.extract_player_data().map_err(|e| e.to_string())?;
         let bytes = write_pc_int_locals(&bytes, player, &locals)?;
         let (bytes, mut written) = add_player_rewards(&bytes, player, &rewards)?;
+        // Locals besides the journal (which the player save keeps from disk) as written,
+        // or the loaded player's next save puts the old ones back.
+        if locals.len() > self.pending.len() {
+            let var_table = player_struct(&bytes, player)?
+                .swap_remove("VarTable")
+                .ok_or("VarTable missing after writing locals")?;
+            written.push(("VarTable".into(), var_table));
+        }
         let (bytes, item_list) = apply_player_items(&bytes, player, &items, &takes, game_data)?;
         written.extend(item_list);
         let (bytes, feat_list) = set_player_feats(&bytes, player, &feats)?;
@@ -941,31 +985,17 @@ impl QuestEdits {
         if !selectable.is_empty() {
             roster::apply_selectable(handler, &selectable)?;
         }
-        let mut companions = Vec::new();
-        let ros_names: BTreeSet<&String> = companion_rewards
-            .keys()
-            .chain(companion_feats.keys())
-            .collect();
-        for ros_name in ros_names {
+        let mut written_companions = Vec::new();
+        for (ros_name, changes) in &companions {
             let stored = handler
                 .companion_stored_name(ros_name)
                 .map_err(|e| e.to_string())?;
             let bytes = handler.extract_file(&stored).map_err(|e| e.to_string())?;
-            let (bytes, fields) = update_companion(
-                &bytes,
-                companion_rewards
-                    .get(ros_name)
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[]),
-                companion_feats
-                    .get(ros_name)
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[]),
-            )?;
+            let (bytes, fields) = update_companion(bytes, changes, game_data)?;
             handler
                 .update_file(&stored, &bytes)
                 .map_err(|e| e.to_string())?;
-            companions.push((ros_name.clone(), fields));
+            written_companions.push((ros_name.clone(), fields));
         }
         let mut globals = Vec::new();
         let mut modules: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
@@ -1034,7 +1064,6 @@ impl QuestEdits {
         for module in area_edits.keys() {
             modules.entry(module.clone()).or_default();
         }
-        let paths = NWN2Paths::new();
         for (module, updates) in modules {
             let edits = area_edits.remove(&module).unwrap_or_default();
             let (path, bytes) = content::prepare_module_variable_updates(
@@ -1045,7 +1074,7 @@ impl QuestEdits {
                     if edits.is_empty() {
                         return Ok(());
                     }
-                    let objects = area_objects::installed_module_objects(&paths, &module)?;
+                    let objects = area_objects::installed_module_objects(paths, &module)?;
                     area_objects::write_saved(save, &objects, &edits)
                 },
             )?;
@@ -1059,9 +1088,77 @@ impl QuestEdits {
         }
         Ok(FlushedWrites {
             player: written,
-            companions,
+            companions: written_companions,
             warnings,
         })
+    }
+}
+
+/// The player's `playerlist.ifo` and journal, read once per command.
+struct LiveSave {
+    playerlist: Vec<u8>,
+    /// Journal states by quest tag.
+    journal: BTreeMap<String, u32>,
+}
+
+impl LiveSave {
+    /// Also checks that `tag` can be set to `target` (storage and range, absent
+    /// entries included) before a preview offers Apply.
+    fn read(
+        handler: &SaveGameHandler,
+        player: usize,
+        tag: &str,
+        target: u32,
+    ) -> Result<Self, String> {
+        let playerlist = handler.extract_player_data().map_err(|e| e.to_string())?;
+        write_journal(&playerlist, player, &[(tag.to_string(), target)])?;
+        let journal = journal_entries(&playerlist, player)?
+            .into_iter()
+            .map(|q| (q.tag, q.state))
+            .collect();
+        Ok(Self {
+            playerlist,
+            journal,
+        })
+    }
+}
+
+/// `SaveState` of a preview: earlier writes of this preview win over the pending
+/// edits, which win over the save.
+struct PreviewState<'p, 'r, 'a> {
+    candidates: &'p [VariableWrite],
+    edits: &'p QuestEdits,
+    reader: &'r mut VariableReader<'a>,
+}
+
+impl SaveState for PreviewState<'_, '_, '_> {
+    fn current(&mut self, key: &VariableKey) -> Option<i64> {
+        self.candidates
+            .iter()
+            .rfind(|w| w.key == *key)
+            .map(|w| w.after.clone())
+            .or_else(|| self.edits.pending_value(key))
+            .or_else(|| self.reader.read(key).ok().flatten())
+            .and_then(|v| v.as_i64())
+    }
+
+    fn stacks(&mut self, owner: Option<&str>, tag: &str) -> Vec<i64> {
+        self.reader.stacks(owner, tag)
+    }
+
+    fn party(&mut self) -> Vec<String> {
+        let names = self.reader.companion_names();
+        names
+            .into_iter()
+            .filter(|name| {
+                let key = VariableKey {
+                    module: None,
+                    name: name.clone(),
+                    value_type: PARTY_TYPE.into(),
+                };
+                self.current(&key) == Some(1)
+            })
+            .collect()
     }
 }
 
@@ -1075,6 +1172,8 @@ pub struct VariableReader<'a> {
     player_fields: Option<Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
     /// `roster.rst` members, for `PARTY_TYPE` / `SELECTABLE_TYPE` keys.
     roster: Option<Result<Vec<RosterMember>, String>>,
+    /// Lowercase roster names that have a `.ros` file.
+    companion_names: Option<Vec<String>>,
     /// Root structs of companion `.ros` files by lowercase roster name.
     companions: BTreeMap<String, Result<indexmap::IndexMap<String, GffValue<'static>>, String>>,
     /// Installed doors/map pins and the saved `<module>.z`, by module, for
@@ -1096,6 +1195,7 @@ impl<'a> VariableReader<'a> {
             modules: BTreeMap::new(),
             player_fields: None,
             roster: None,
+            companion_names: None,
             companions: BTreeMap::new(),
             areas: BTreeMap::new(),
             overlay: BTreeMap::new(),
@@ -1135,9 +1235,39 @@ impl<'a> VariableReader<'a> {
         objects.unique(field, &key.name).ok()?.label_strref
     }
 
+    /// Root struct of a companion's `.ros` by roster name.
+    fn companion_fields(
+        &mut self,
+        ros_name: &str,
+    ) -> Result<&indexmap::IndexMap<String, GffValue<'static>>, String> {
+        let handler = self.handler;
+        self.companions
+            .entry(ros_name.to_string())
+            .or_insert_with(|| {
+                let stored = handler
+                    .companion_stored_name(ros_name)
+                    .map_err(|e| e.to_string())?;
+                let bytes = handler.extract_file(&stored).map_err(|e| e.to_string())?;
+                owned_root(&bytes)
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// Backpack owner's fields: the player for `None`, else that companion.
+    fn owner_fields(
+        &mut self,
+        owner: Option<&str>,
+    ) -> Result<&indexmap::IndexMap<String, GffValue<'static>>, String> {
+        match owner {
+            None => self.player_fields(),
+            Some(ros_name) => self.companion_fields(ros_name),
+        }
+    }
+
     /// Display name of the first backpack item carrying `tag`: embedded text, TLK strref.
-    pub fn item_label(&mut self, tag: &str) -> (Option<String>, Option<i32>) {
-        let Ok(fields) = self.player_fields() else {
+    pub fn item_label(&mut self, owner: Option<&str>, tag: &str) -> (Option<String>, Option<i32>) {
+        let Ok(fields) = self.owner_fields(owner) else {
             return (None, None);
         };
         backpack_items(fields)
@@ -1146,8 +1276,51 @@ impl<'a> VariableReader<'a> {
             .unwrap_or((None, None))
     }
 
+    /// `StackSize` of each backpack item tagged `tag`, as saved; empty when unreadable.
+    pub fn stacks(&mut self, owner: Option<&str>, tag: &str) -> Vec<i64> {
+        let Ok(fields) = self.owner_fields(owner) else {
+            return Vec::new();
+        };
+        backpack_items(fields)
+            .filter(|item| item_tag_matches(item, tag))
+            .map(item_stack_size)
+            .collect()
+    }
+
+    /// Lowercase names of the roster members with a `.ros`, in `roster.rst` order: a
+    /// retired follower can keep its party flag without one and has no inventory.
+    fn companion_names(&mut self) -> Vec<String> {
+        let handler = self.handler;
+        self.companion_names
+            .get_or_insert_with(|| {
+                roster::companion_members(handler)
+                    .map(|members| {
+                        members
+                            .iter()
+                            .map(|m| m.ros_name.to_ascii_lowercase())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+            .clone()
+    }
+
+    fn roster_members(&mut self) -> Result<&Vec<RosterMember>, String> {
+        let handler = self.handler;
+        self.roster
+            .get_or_insert_with(|| {
+                let (_, bytes) = handler
+                    .extract_roster()
+                    .map_err(|e| e.to_string())?
+                    .ok_or("Save has no roster file")?;
+                roster::parse_roster_members(bytes)
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
     pub fn read(&mut self, key: &VariableKey) -> Result<Option<Value>, String> {
-        if key.value_type == ITEM_TYPE {
+        if key.value_type == ITEM_TYPE || key.value_type == COMPANION_ITEM_TYPE {
             return Ok(None);
         }
         if let Some(value) = self.overlay.get(key) {
@@ -1160,11 +1333,7 @@ impl<'a> VariableReader<'a> {
         {
             let fields = self.player_fields()?;
             if key.value_type == ITEM_TAKE_TYPE {
-                let units: i64 = backpack_items(fields)
-                    .filter(|item| item_tag_matches(item, &key.name))
-                    .map(|item| item_stack_size(item))
-                    .sum();
-                return Ok(Some(Value::from(units)));
+                return Ok(Some(Value::from(backpack_units(fields, &key.name))));
             }
             if key.value_type == PC_LOCAL_TYPE {
                 return Ok(pc_int_local(fields, &key.name));
@@ -1175,25 +1344,16 @@ impl<'a> VariableReader<'a> {
             }
             return Ok(fields.get(&key.name).and_then(gff_integer).map(Value::from));
         }
-        if key.value_type == COMPANION_CHARACTER_TYPE || key.value_type == COMPANION_FEAT_TYPE {
+        if matches!(
+            key.value_type.as_str(),
+            COMPANION_CHARACTER_TYPE | COMPANION_FEAT_TYPE | COMPANION_ITEM_TAKE_TYPE
+        ) {
             let (ros_name, field) =
                 split_companion_key(&key.name).ok_or("Invalid companion key")?;
-            let fields = self
-                .companions
-                .entry(ros_name.to_string())
-                .or_insert_with(|| {
-                    let stored = self
-                        .handler
-                        .companion_stored_name(ros_name)
-                        .map_err(|e| e.to_string())?;
-                    let bytes = self
-                        .handler
-                        .extract_file(&stored)
-                        .map_err(|e| e.to_string())?;
-                    owned_root(&bytes)
-                })
-                .as_ref()
-                .map_err(Clone::clone)?;
+            let fields = self.companion_fields(ros_name)?;
+            if key.value_type == COMPANION_ITEM_TAKE_TYPE {
+                return Ok(Some(Value::from(backpack_units(fields, field))));
+            }
             if key.value_type == COMPANION_FEAT_TYPE {
                 let feat = field.parse::<i64>().map_err(|_| "Invalid feat id")?;
                 return Ok(Some(Value::from(i64::from(has_feat(fields, feat)))));
@@ -1208,18 +1368,7 @@ impl<'a> VariableReader<'a> {
                 .map(|v| Some(Value::from(v)));
         }
         if key.value_type == PARTY_TYPE || key.value_type == SELECTABLE_TYPE {
-            let members = self
-                .roster
-                .get_or_insert_with(|| {
-                    let (_, bytes) = self
-                        .handler
-                        .extract_roster()
-                        .map_err(|e| e.to_string())?
-                        .ok_or("Save has no roster file")?;
-                    roster::parse_roster_members(bytes)
-                })
-                .as_ref()
-                .map_err(Clone::clone)?;
+            let members = self.roster_members()?;
             let member = members
                 .iter()
                 .find(|m| m.ros_name.eq_ignore_ascii_case(&key.name))
@@ -1490,7 +1639,7 @@ fn evaluate_condition(
         "gc_local_int" => true,
         _ => return Ok(None),
     };
-    if local && condition.params.get(2).and_then(Value::as_str) != Some("$MODULE") {
+    if local && !is_module_target(condition) {
         return Ok(None);
     }
     let Some(name) = condition.params.first().and_then(Value::as_str) else {
@@ -1535,7 +1684,8 @@ fn compare_check(current: i64, check: &str) -> Option<bool> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Change {
     Set(Value),
-    /// `"+3"`, `"-1"`, `"++"`: applied to the current value at preview time.
+    /// `"+3"`, `"-1"`, `"++"`: applied to the current value at preview time, wrapping
+    /// like NWScript's 32-bit `int`.
     Add(i64),
     /// Influence scripts: added to the current value, then capped the way
     /// `kinc_companion` caps it (`INFLUENCE_MIN`/`INFLUENCE_MAX`).
@@ -1555,7 +1705,7 @@ impl Change {
         let current = || before.and_then(Value::as_i64).unwrap_or(0);
         match self {
             Change::Set(value) => value.clone(),
-            Change::Add(delta) => Value::from(current() + delta),
+            Change::Add(delta) => Value::from((current() as i32).wrapping_add(*delta as i32)),
             Change::AddClamped { delta, min, max } => {
                 Value::from((current() + delta).clamp(*min, *max))
             }
@@ -1610,16 +1760,16 @@ fn oc_companion_tag(number: i64) -> Option<&'static str> {
     })
 }
 
-/// MotB `kinc_companion.GetCompanionTagByCode`: only the first letter of the code counts,
-/// except that "one..." is One of Many rather than Okku.
+/// MotB `kinc_companion.GetCompanionTagByCode`: the first two letters of the code
+/// count (`GetFirstChars`), lowercased.
 fn motb_companion_tag(code: &str) -> Option<&'static str> {
-    let code = code.trim().to_ascii_lowercase();
-    Some(match code.chars().next()? {
-        's' => "safiya",
-        'g' => "gann",
-        'o' if code.starts_with("one") => "oneofmany",
-        'o' => "okku",
-        'd' => "dove",
+    let code = code.to_ascii_lowercase();
+    Some(match code.get(..2)? {
+        "sa" => "safiya",
+        "ga" => "gann",
+        "ok" => "okku",
+        "do" => "dove",
+        "on" => "oneofmany",
         _ => return None,
     })
 }
@@ -1715,9 +1865,15 @@ pub const CHARACTER_TYPE: &str = "character";
 /// blueprint resref, the value the quantity.
 pub const ITEM_TYPE: &str = "item";
 /// `VariableKey::value_type` of items taken out of the player's backpack
-/// (`ga_take_item` / `ga_destroy_item`): `name` is the lowercase item tag, the
-/// value how many units of that tag the `ItemList` holds afterwards.
+/// (`ga_take_item` / `ga_destroy_item`): `name` is the item tag (case-sensitive,
+/// like `GetTag`), the value how many units of that tag the `ItemList` holds afterwards.
 pub const ITEM_TAKE_TYPE: &str = "item_take";
+/// `VariableKey::value_type` of an item handed to a companion (party-wide
+/// `ga_give_item`): `name` is `<roster name>/<blueprint resref>`, the value the quantity.
+pub const COMPANION_ITEM_TYPE: &str = "companion_item";
+/// `VariableKey::value_type` of items taken out of a companion's backpack (party-wide
+/// `ga_destroy_item`): `name` is `<roster name>/<item tag>`, the value the units left.
+pub const COMPANION_ITEM_TAKE_TYPE: &str = "companion_item_take";
 /// `VariableKey::value_type` of an integer local on the PC (`VarTable` of the
 /// player's struct), e.g. the `<tag>_XP_QPR` share of quest XP already paid.
 pub const PC_LOCAL_TYPE: &str = "pc_local";
@@ -1762,9 +1918,45 @@ pub fn writes_save_files(value_type: &str) -> bool {
             | SELECTABLE_TYPE
             | COMPANION_CHARACTER_TYPE
             | COMPANION_FEAT_TYPE
+            | COMPANION_ITEM_TYPE
+            | COMPANION_ITEM_TAKE_TYPE
             | DOOR_LOCK_TYPE
             | MAP_NOTE_TYPE
     )
+}
+
+/// Write kinds that move a quantity rather than set a value: two quests writing
+/// one of them both apply, so they never conflict.
+fn accumulates(value_type: &str) -> bool {
+    matches!(
+        value_type,
+        CHARACTER_TYPE
+            | COMPANION_CHARACTER_TYPE
+            | ITEM_TYPE
+            | ITEM_TAKE_TYPE
+            | COMPANION_ITEM_TYPE
+            | COMPANION_ITEM_TAKE_TYPE
+    )
+}
+
+/// Backpack owner (`None` = the player) and item tag of an item take write.
+fn taken_tag(key: &VariableKey) -> Option<(Option<&str>, &str)> {
+    match key.value_type.as_str() {
+        ITEM_TAKE_TYPE => Some((None, &key.name)),
+        COMPANION_ITEM_TAKE_TYPE => {
+            split_companion_key(&key.name).map(|(owner, tag)| (Some(owner), tag))
+        }
+        _ => None,
+    }
+}
+
+/// Blueprint resref of an item hand-out write.
+fn given_resref(key: &VariableKey) -> Option<&str> {
+    match key.value_type.as_str() {
+        ITEM_TYPE => Some(&key.name),
+        COMPANION_ITEM_TYPE => split_companion_key(&key.name).map(|(_, resref)| resref),
+        _ => None,
+    }
 }
 
 fn area_field(value_type: &str) -> Option<AreaField> {
@@ -1797,11 +1989,7 @@ fn creature_key(target: &str, field: &str) -> VariableKey {
     if target.is_empty() {
         character_key(field)
     } else {
-        VariableKey {
-            module: None,
-            name: format!("{}/{field}", target.to_ascii_lowercase()),
-            value_type: COMPANION_CHARACTER_TYPE.into(),
-        }
+        companion_key(target, field, COMPANION_CHARACTER_TYPE)
     }
 }
 
@@ -1810,17 +1998,31 @@ pub fn split_companion_key(name: &str) -> Option<(&str, &str)> {
     name.split_once('/')
 }
 
-/// A script target as a creature tag: empty for the PC speaker; `$`-targets other
-/// than the PC (`$OWNER`, `$OBJECT_SELF`, ...) are not creatures we can reach.
+/// A script target as a creature tag: empty for the player (`ginc_param_const.GetTarget`
+/// upper-cases `$PC`, `$PC_SPEAKER`, `$PC_LEADER`, `$PC_NEAREST`, all the PC in single
+/// player); other `$`-targets (`$OWNER`, `$OBJECT_SELF`, ...) are not creatures we can reach.
 fn target_tag(target: &str) -> Result<&str, &'static str> {
     let target = target.trim();
-    if target.is_empty() || target == "$PC_SPEAKER" {
+    if target.is_empty()
+        || ["$PC_SPEAKER", "$PC", "$PC_LEADER", "$PC_NEAREST"]
+            .iter()
+            .any(|pc| target.eq_ignore_ascii_case(pc))
+    {
         return Ok("");
     }
     if target.starts_with('$') {
         return Err("object_target");
     }
     Ok(target)
+}
+
+/// `ga_local_*` / `gc_local_*` aimed at the module (`GetTarget` upper-cases `$MODULE`).
+fn is_module_target(functor: &ConvoFunctor) -> bool {
+    functor
+        .params
+        .get(2)
+        .and_then(Value::as_str)
+        .is_some_and(|t| t.trim().eq_ignore_ascii_case("$MODULE"))
 }
 
 /// Gold is a DWORD, XP an INT; neither drops below 0 in the engine.
@@ -1897,11 +2099,7 @@ fn decode_feat(script: &str, action: &ConvoFunctor) -> Result<(VariableKey, Chan
             value_type: FEAT_TYPE.into(),
         }
     } else {
-        VariableKey {
-            module: None,
-            name: format!("{}/{feat}", target.to_ascii_lowercase()),
-            value_type: COMPANION_FEAT_TYPE.into(),
-        }
+        companion_key(target, &feat.to_string(), COMPANION_FEAT_TYPE)
     };
     Ok((key, Change::Set(Value::from(owned))))
 }
@@ -1987,7 +2185,7 @@ fn decode_area_object(
 /// of the player.
 fn decode_alignment_points(
     action: &ConvoFunctor,
-    current: &mut dyn FnMut(&VariableKey) -> Option<i64>,
+    state: &mut dyn SaveState,
 ) -> Result<Vec<(VariableKey, Change)>, &'static str> {
     let alignment = int_param(action, 0).ok_or("invalid_assignment")?;
     let shift = int_param(action, 1).ok_or("invalid_assignment")?;
@@ -2005,7 +2203,7 @@ fn decode_alignment_points(
         1 => [LAWFUL_CHAOTIC, GOOD_EVIL]
             .into_iter()
             .filter_map(|field| {
-                let value = current(&creature_key(target, field)).unwrap_or(50);
+                let value = state.current(&creature_key(target, field)).unwrap_or(50);
                 let delta = (50 - value).clamp(-shift, shift);
                 (delta != 0).then(|| shift_axis(field, delta))
             })
@@ -2065,16 +2263,28 @@ fn decode_partial_quest_xp(
     Ok(writes)
 }
 
+/// What the reward decoders read from the save as staged so far.
+pub trait SaveState {
+    /// Integer value of `key`, with the pending and earlier writes applied.
+    fn current(&mut self, key: &VariableKey) -> Option<i64>;
+    /// `StackSize` of each backpack item tagged `tag` of the player (`owner` `None`)
+    /// or a companion (roster name), in `ItemList` order, as saved.
+    fn stacks(&mut self, owner: Option<&str>, tag: &str) -> Vec<i64>;
+    /// Roster names of the companions in the party, in roster order.
+    fn party(&mut self) -> Vec<String>;
+}
+
 /// `decode_action` for every write of an action: `ga_give_partial_quest_xp` changes
-/// XP and the paid share together and needs the share's current value from `current`.
+/// XP and the paid share together and needs the share's current value; the item
+/// scripts need the backpacks and, with their party flag, the party.
 pub fn decode_writes(
     action: &ConvoFunctor,
     module: &str,
     tables: &RewardTables,
-    current: &mut dyn FnMut(&VariableKey) -> Option<i64>,
+    state: &mut dyn SaveState,
 ) -> Result<Vec<(VariableKey, Change)>, &'static str> {
     if action.script.eq_ignore_ascii_case("AdjustAlignment") {
-        return decode_alignment_points(action, current);
+        return decode_alignment_points(action, state);
     }
     if action
         .script
@@ -2085,34 +2295,65 @@ pub fn decode_writes(
             .first()
             .and_then(Value::as_str)
             .ok_or("invalid_assignment")?;
-        let rewarded = current(&VariableKey {
-            module: None,
-            name: format!("{tag}{QPR_SUFFIX}"),
-            value_type: PC_LOCAL_TYPE.into(),
-        })
-        .unwrap_or(0);
+        let rewarded = state
+            .current(&VariableKey {
+                module: None,
+                name: format!("{tag}{QPR_SUFFIX}"),
+                value_type: PC_LOCAL_TYPE.into(),
+            })
+            .unwrap_or(0);
         return decode_partial_quest_xp(action, tables, rewarded);
     }
-    if action.script.eq_ignore_ascii_case("ga_take_item")
-        || action.script.eq_ignore_ascii_case("ga_destroy_item")
-    {
-        return decode_item_take(action).map(|write| write.into_iter().collect());
+    if action.script.eq_ignore_ascii_case("ga_take_item") {
+        return decode_take_item(action, state);
     }
-    decode_action(action, module, tables).map(|write| vec![write])
+    if action.script.eq_ignore_ascii_case("ga_destroy_item") {
+        return decode_destroy_item(action, state);
+    }
+    let write = decode_action(action, module, tables)?;
+    // The party flag of `ga_give_item` reaches companions only where the campaign's
+    // own copy asks for every faction member (SoZ), not the stock one's PCs.
+    if write.0.value_type == ITEM_TYPE
+        && int_param(action, 2).unwrap_or(0) != 0
+        && tables.party_gives.contains(module)
+    {
+        let mut writes = vec![write.clone()];
+        for ros_name in state.party() {
+            writes.push((
+                companion_key(&ros_name, &write.0.name, COMPANION_ITEM_TYPE),
+                write.1.clone(),
+            ));
+        }
+        return Ok(writes);
+    }
+    Ok(vec![write])
+}
+
+/// Key of `field` on a companion (`<lowercase roster name>/<field>`), the counterpart
+/// of `split_companion_key`.
+fn companion_key(ros_name: &str, field: &str, value_type: &str) -> VariableKey {
+    VariableKey {
+        module: None,
+        name: format!("{}/{field}", ros_name.to_ascii_lowercase()),
+        value_type: value_type.into(),
+    }
 }
 
 /// Campaign-side data the reward scripts look up at runtime.
 pub struct RewardTables<'a> {
     /// Journal category XP by lowercase quest tag (`GetJournalQuestExperience`).
     quest_xp: BTreeMap<String, i64>,
-    /// Campaign folder holding `k_xp_awards.2da` (`ga_xp_award_2da_entry`).
+    /// Campaign folder holding `k_xp_awards.2da` (`ga_xp_award_2da_entry`) when there
+    /// is no resource manager (whose override chain indexes the campaign folder).
     campaign_path: Option<PathBuf>,
-    xp_awards: OnceCell<Option<TDAParser>>,
-    /// Item blueprints for `ga_give_item`.
+    xp_awards: OnceCell<Option<Arc<TDAParser>>>,
+    /// Item blueprints for `ga_give_item`, and the module's own item scripts.
     items: ItemBlueprints<'a>,
     /// `feat.2da` with overrides, for the names of `ga_give_feat` writes.
     resources: Option<&'a ResourceManager>,
     feats: OnceCell<Option<Arc<TDAParser>>>,
+    /// Modules whose `ga_give_item` gives to companions too (`party_item_gifts`).
+    party_gives: BTreeSet<String>,
 }
 
 impl<'a> RewardTables<'a> {
@@ -2128,6 +2369,12 @@ impl<'a> RewardTables<'a> {
             items: ItemBlueprints::new(graph, resources),
             resources,
             feats: OnceCell::new(),
+            party_gives: graph
+                .modules
+                .iter()
+                .filter(|m| m.party_item_gifts)
+                .map(|m| m.name.clone())
+                .collect(),
         }
     }
 
@@ -2140,6 +2387,7 @@ impl<'a> RewardTables<'a> {
             items: ItemBlueprints::detached(),
             resources: None,
             feats: OnceCell::new(),
+            party_gives: BTreeSet::new(),
         }
     }
 
@@ -2170,7 +2418,15 @@ impl<'a> RewardTables<'a> {
     fn xp_award(&self, row: i64) -> Option<i64> {
         let table = self
             .xp_awards
-            .get_or_init(|| load_2da(self.campaign_path.as_deref()?.join("k_xp_awards.2da")))
+            .get_or_init(|| {
+                if let Some(resources) = self.resources {
+                    return resources.get_2da_with_overrides("k_xp_awards").ok();
+                }
+                let path = self.campaign_path.as_deref()?.join("k_xp_awards.2da");
+                let mut parser = TDAParser::new();
+                parser.parse_from_file(&path).ok()?;
+                Some(Arc::new(parser))
+            })
             .as_ref()?;
         let row = usize::try_from(row).ok()?;
         let cell = table.get_cell_by_name(row, "XP").ok()?;
@@ -2178,11 +2434,7 @@ impl<'a> RewardTables<'a> {
     }
 }
 
-fn load_2da(path: PathBuf) -> Option<TDAParser> {
-    let mut parser = TDAParser::new();
-    parser.parse_from_file(&path).ok()?;
-    Some(parser)
-}
+const MAX_GIVEN_ITEMS: i64 = 9999;
 
 /// `decode_assignment` plus the reward scripts whose amount lives outside the dialogue:
 /// `ga_give_quest_xp(tag)` awards the journal category XP, `ga_xp_award_2da_entry(row)`
@@ -2194,8 +2446,8 @@ pub fn decode_action(
 ) -> Result<(VariableKey, Change), &'static str> {
     let script = action.script.to_ascii_lowercase();
     match script.as_str() {
-        // `ga_give_item(sTemplate, nQuantity, bAllPartyMembers)`: nQuantity below 1 is 1;
-        // the party flag only reaches other PCs in multiplayer.
+        // `ga_give_item(sTemplate, nQuantity, bAllPartyMembers)`: nQuantity below 1 is 1.
+        // The player's copy; `decode_writes` adds the party's.
         "ga_give_item" => {
             let resref = action
                 .params
@@ -2206,6 +2458,10 @@ pub fn decode_action(
                 .ok_or("invalid_assignment")?
                 .to_ascii_lowercase();
             let quantity = int_param(action, 1).unwrap_or(1).max(1);
+            // The script creates them one by one; no dialogue hands out more.
+            if quantity > MAX_GIVEN_ITEMS {
+                return Err("invalid_assignment");
+            }
             if tables.item(module, &resref).is_none() {
                 return Err("unknown_item");
             }
@@ -2236,40 +2492,104 @@ pub fn decode_action(
     }
 }
 
-/// `ga_take_item(sTag, nQuantity, bAllPartyMembers)` / `ga_destroy_item(sTag, nQuantity,
-/// bPCFaction)`: both match the tag in the backpack (`GetFirstItemInInventory`, never the
-/// equipped slots) and a negative quantity means every unit. `ga_take_item` reads 0 as 1,
-/// `ga_destroy_item` does nothing for 0 (`None`). The party flags only reach other PCs
-/// (`ga_take_item`) or companions once the PC runs out (`ga_destroy_item`); the PC's
-/// backpack is the only one written. Units are removed rather than `ga_take_item`'s whole
-/// stacks; both agree on unstackable quest items.
-fn decode_item_take(action: &ConvoFunctor) -> Result<Option<(VariableKey, Change)>, &'static str> {
-    let tag = action
+/// Tag of an item script (`sItemTag`); matched exactly, like `GetTag(oItem) == sItem`.
+fn item_tag_param(action: &ConvoFunctor) -> Result<String, &'static str> {
+    action
         .params
         .first()
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .ok_or("invalid_assignment")?
-        .to_ascii_lowercase();
-    let default = i64::from(action.script.eq_ignore_ascii_case("ga_take_item"));
-    let change = match int_param(action, 1).filter(|q| *q != 0).unwrap_or(default) {
-        0 => return Ok(None),
-        q if q < 0 => Change::Set(Value::from(0)),
-        q => Change::AddClamped {
-            delta: -q,
-            min: 0,
-            max: i64::MAX,
-        },
+        .map(str::to_string)
+        .ok_or("invalid_assignment")
+}
+
+fn take_units_change(units: i64) -> Change {
+    Change::AddClamped {
+        delta: -units,
+        min: 0,
+        max: i64::MAX,
+    }
+}
+
+/// `ga_take_item(sItemTag, nQuantity, bAllPartyMembers)`: `TakeNumItems` takes whole
+/// backpack items (one stack per count, never the equipped slots), 0 reads as 1 and a
+/// negative count takes everything. The party flag only reaches other PCs
+/// (`GetFirstFactionMember` default).
+fn decode_take_item(
+    action: &ConvoFunctor,
+    state: &mut dyn SaveState,
+) -> Result<Vec<(VariableKey, Change)>, &'static str> {
+    let tag = item_tag_param(action)?;
+    let key = VariableKey {
+        module: None,
+        name: tag.clone(),
+        value_type: ITEM_TAKE_TYPE.into(),
     };
-    Ok(Some((
-        VariableKey {
-            module: None,
-            name: tag,
-            value_type: ITEM_TAKE_TYPE.into(),
-        },
-        change,
-    )))
+    let count = int_param(action, 1).filter(|q| *q != 0).unwrap_or(1);
+    if count < 0 {
+        return Ok(vec![(key, Change::Set(Value::from(0)))]);
+    }
+    // The items before this one are already gone: skip the units taken so far.
+    let stacks = state.stacks(None, &tag);
+    let saved: i64 = stacks.iter().sum();
+    let mut skip = (saved - state.current(&key).unwrap_or(saved)).max(0);
+    let mut units = 0;
+    let mut items = 0;
+    for stack in stacks {
+        let left = stack - skip.min(stack);
+        skip -= stack - left;
+        if left > 0 && items < count {
+            units += left;
+            items += 1;
+        }
+    }
+    Ok(vec![(key, take_units_change(units))])
+}
+
+/// `ga_destroy_item(sItemTag, nQuantity, bPCFaction)`: destroys units of the tag from
+/// the backpack, nothing for 0, everything for a negative count. With `bPCFaction` it
+/// walks the whole faction, the PC first, then the party in roster order, until the
+/// count is met.
+fn decode_destroy_item(
+    action: &ConvoFunctor,
+    state: &mut dyn SaveState,
+) -> Result<Vec<(VariableKey, Change)>, &'static str> {
+    let tag = item_tag_param(action)?;
+    let quantity = int_param(action, 1).unwrap_or(0);
+    if quantity == 0 {
+        return Ok(Vec::new());
+    }
+    let mut owners = vec![VariableKey {
+        module: None,
+        name: tag.clone(),
+        value_type: ITEM_TAKE_TYPE.into(),
+    }];
+    if int_param(action, 2).unwrap_or(0) != 0 {
+        owners.extend(
+            state
+                .party()
+                .iter()
+                .map(|ros_name| companion_key(ros_name, &tag, COMPANION_ITEM_TAKE_TYPE)),
+        );
+    }
+    if quantity < 0 {
+        return Ok(owners
+            .into_iter()
+            .map(|key| (key, Change::Set(Value::from(0))))
+            .collect());
+    }
+    let mut writes = Vec::new();
+    let mut remaining = quantity;
+    for key in owners {
+        if remaining == 0 {
+            break;
+        }
+        let units = state.current(&key).unwrap_or(0).min(remaining);
+        remaining -= units;
+        writes.push((key, take_units_change(units)));
+    }
+    Ok(writes)
 }
 
 /// NWScript `StringToInt`: leading integer, anything else is 0.
@@ -2314,7 +2634,7 @@ pub fn decode_assignment(
         _ => return Err("unsupported_action"),
     };
     let local = script.starts_with("ga_local_");
-    if local && action.params.get(2).and_then(Value::as_str) != Some("$MODULE") {
+    if local && !is_module_target(action) {
         return Err("object_target");
     }
     let name = action
@@ -2341,9 +2661,10 @@ pub fn decode_assignment(
         let magnitude = if delta.is_empty() || delta.starts_with(['+', '-']) {
             1
         } else {
-            delta.parse::<i32>().map_err(|_| "invalid_assignment")?
+            // StringToInt: "3x" is 3.
+            string_to_int(delta).ok_or("invalid_assignment")?
         };
-        Change::Add(sign * i64::from(magnitude))
+        Change::Add(sign * magnitude)
     } else {
         let number = raw.strip_prefix('=').unwrap_or(raw);
         // ginc_var_ops.GetChangeComponents treats a signed operand after '=' as 1.
@@ -2421,7 +2742,9 @@ fn add_to_field(
         Some(GffValue::Dword(_)) => GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX)),
         Some(GffValue::Int64(_)) => GffValue::Int64(after),
         Some(GffValue::Dword64(_)) => GffValue::Dword64(u64::try_from(after).unwrap_or(0)),
-        None if name == GOLD => GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX)),
+        None if name == GOLD || name == EXPERIENCE => {
+            GffValue::Dword(u32::try_from(after).unwrap_or(u32::MAX))
+        }
         None if is_alignment_field(name) => GffValue::Byte(u8::try_from(after).unwrap_or(100)),
         None => GffValue::Int(i32::try_from(after).unwrap_or(i32::MAX)),
         Some(_) => return Err(format!("{name} has an unexpected storage type")),
@@ -2583,8 +2906,17 @@ fn backpack_items<'f>(
     }
 }
 
+/// `GetTag(oItem) == sItem`: an exact, case-sensitive match.
 fn item_tag_matches(item: &indexmap::IndexMap<String, GffValue<'static>>, tag: &str) -> bool {
-    matches!(item.get("Tag"), Some(GffValue::String(t)) if t.eq_ignore_ascii_case(tag))
+    matches!(item.get("Tag"), Some(GffValue::String(t)) if t.as_ref() == tag)
+}
+
+/// Units of `tag` in the backpack.
+fn backpack_units(fields: &indexmap::IndexMap<String, GffValue<'static>>, tag: &str) -> i64 {
+    backpack_items(fields)
+        .filter(|item| item_tag_matches(item, tag))
+        .map(item_stack_size)
+        .sum()
 }
 
 fn item_stack_size(item: &indexmap::IndexMap<String, GffValue<'static>>) -> i64 {
@@ -2779,35 +3111,48 @@ pub fn set_player_feats(
     Ok((bytes, vec![("FeatList".into(), list)]))
 }
 
-/// Alignment deltas and feat changes on a companion's `.ros` root, keeping the
-/// file's type, version and root struct id; returns the new bytes and the fields
-/// as written.
+/// What a flush changes on one companion's `.ros`.
+#[derive(Default)]
+struct CompanionChanges {
+    /// Alignment deltas.
+    rewards: Vec<(String, i64)>,
+    feats: Vec<(i32, bool)>,
+    items: Vec<(Arc<ItemBlueprint>, i64)>,
+    takes: Vec<(String, i64)>,
+}
+
+/// Apply `changes` to a companion's `.ros` root, keeping the file's type, version
+/// and root struct id; returns the new bytes and the fields as written.
 fn update_companion(
-    bytes: &[u8],
-    rewards: &[(String, i64)],
-    feats: &[(i32, bool)],
+    bytes: Vec<u8>,
+    changes: &CompanionChanges,
+    game_data: &GameData,
 ) -> Result<(Vec<u8>, WrittenFields), String> {
-    let parser = GffParser::from_bytes(bytes.to_vec()).map_err(|e| e.to_string())?;
-    let file_type = parser.file_type.clone();
-    let file_version = parser.file_version.clone();
-    let root_struct_id = parser.get_struct_id(0).map_err(|e| e.to_string())?;
-    let mut root = parser.read_owned_struct(0).map_err(|e| e.to_string())?;
     let mut written = Vec::new();
-    for (name, delta) in rewards {
-        let value = add_to_field(&mut root, name, *delta)?;
-        written.push((name.clone(), value));
-    }
-    if !feats.is_empty() {
-        root = set_feats(root, feats)?;
-        let list = root
-            .get("FeatList")
-            .cloned()
-            .ok_or("FeatList missing after changing feats")?;
-        written.push(("FeatList".into(), list));
-    }
-    let bytes = GffWriter::new(&file_type, &file_version)
-        .write_with_struct_id(root, root_struct_id)
-        .map_err(|e| e.to_string())?;
+    let bytes = rewrite_gff(bytes, "ros", |root| {
+        for (name, delta) in &changes.rewards {
+            let value = add_to_field(root, name, *delta)?;
+            written.push((name.clone(), value));
+        }
+        if !changes.feats.is_empty() {
+            *root = set_feats(std::mem::take(root), &changes.feats)?;
+            let list = root
+                .get("FeatList")
+                .cloned()
+                .ok_or("FeatList missing after changing feats")?;
+            written.push(("FeatList".into(), list));
+        }
+        if !changes.items.is_empty() || !changes.takes.is_empty() {
+            *root = give_items(std::mem::take(root), &changes.items, game_data)?;
+            take_items(root, &changes.takes);
+            let list = root
+                .get("ItemList")
+                .cloned()
+                .ok_or("ItemList missing after changing items")?;
+            written.push(("ItemList".into(), list));
+        }
+        Ok(())
+    })?;
     Ok((bytes, written))
 }
 
@@ -2845,7 +3190,7 @@ fn journal_variable(tag: &str) -> String {
 }
 
 /// Value of the integer local `name` on the player's struct, `None` when unset.
-fn pc_int_local(
+pub(crate) fn pc_int_local(
     fields: &indexmap::IndexMap<String, GffValue<'static>>,
     name: &str,
 ) -> Option<Value> {
@@ -2865,13 +3210,13 @@ pub fn write_journal(
     player: usize,
     edits: &[(String, u32)],
 ) -> Result<Vec<u8>, String> {
+    if edits.iter().any(|(tag, _)| tag.is_empty()) {
+        return Err("Empty quest tag".into());
+    }
     let locals: Vec<_> = edits
         .iter()
         .map(|(tag, state)| (journal_variable(tag), i64::from(*state)))
         .collect();
-    if edits.iter().any(|(tag, _)| tag.is_empty()) {
-        return Err("Empty quest tag".into());
-    }
     write_pc_int_locals(bytes, player, &locals)
 }
 
@@ -2990,9 +3335,16 @@ mod tests {
         .unwrap();
         assert_eq!(key.name, "00_nInfluenceoneofmany");
         assert_eq!(change.apply(Some(&json!(10))), json!(25));
+        // `GetFirstChars`: two letters decide; "on" is One of Many, a lone "o" nobody.
         let (key, _) =
-            decode_assignment(&action("ka_influence_magnitude", json!(["o", 1])), "m").unwrap();
+            decode_assignment(&action("ka_influence_magnitude", json!(["OK", 1])), "m").unwrap();
         assert_eq!(key.name, "00_nInfluenceokku");
+        let (key, _) =
+            decode_assignment(&action("ka_influence_magnitude", json!(["on", 1])), "m").unwrap();
+        assert_eq!(key.name, "00_nInfluenceoneofmany");
+        assert!(
+            decode_assignment(&action("ka_influence_magnitude", json!(["o", 1])), "m").is_err()
+        );
         assert!(
             decode_assignment(&action("ka_influence_magnitude", json!(["gann", 6])), "m").is_err()
         );
@@ -3120,13 +3472,24 @@ mod tests {
         (dir, handler)
     }
 
+    /// A stack of `count` `qe_head` items.
+    fn head(count: u16) -> indexmap::IndexMap<String, GffValue<'static>> {
+        indexmap! {
+            "BaseItem".into() => GffValue::Int(12),
+            "Tag".into() => GffValue::String("qe_head".into()),
+            "StackSize".into() => GffValue::Word(count),
+        }
+    }
+
     /// The rich fixture plus a two-member `roster.rst` (khelgar in the party and
     /// selectable, neeshka benched) and a `.ros` per member carrying the faction
-    /// the roster state implies. The PC's party faction is set to 9.
+    /// the roster state implies. The PC's party faction is set to 9. The PC carries
+    /// 2 `qe_head`, each companion 4.
     fn roster_fixture_handler() -> (tempfile::TempDir, SaveGameHandler) {
         use std::io::Write;
         let mut player = owned_players(&playerlist()).swap_remove(0);
         player.insert("FactionID".into(), GffValue::Word(9));
+        player.insert("ItemList".into(), GffValue::ListOwned(vec![head(2)]));
         let playerlist = GffWriter::new("IFO ", "V3.2")
             .write(indexmap! { "Mod_PlayerList".into() => GffValue::ListOwned(vec![player]) })
             .unwrap();
@@ -3158,6 +3521,7 @@ mod tests {
                         "FeatList".into() => GffValue::ListOwned(vec![
                             indexmap! { "Feat".into() => GffValue::Word(45) },
                         ]),
+                        "ItemList".into() => GffValue::ListOwned(vec![head(4)]),
                     },
                     0xFFFF_FFFF,
                 )
@@ -3250,7 +3614,9 @@ mod tests {
         let all: Vec<usize> = (0..preview.writes.len()).collect();
         edits.stage(preview, &graph, &all, false).unwrap();
         handler.begin_batch();
-        let written = edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        let written = edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .unwrap();
         handler.commit_batch().unwrap();
         assert!(written.player.is_empty());
         assert_eq!(written.companions.len(), 2);
@@ -3274,6 +3640,235 @@ mod tests {
         let neeshka = ros("neeshka");
         assert!(!has_feat(&neeshka, 45) && has_feat(&neeshka, 1705));
         assert_eq!(gff_integer(&neeshka["LawfulChaotic"]), Some(20));
+    }
+
+    /// `ga_destroy_item(tag, n, 1)` takes from the PC first, then the party in roster
+    /// order until `n` is met; SoZ's `ga_give_item` copy gives every party member the
+    /// full quantity, the stock script only the PC. Benched companions are untouched.
+    #[test]
+    fn party_wide_item_scripts_write_the_companions_ros() {
+        let (_dir, mut handler) = roster_fixture_handler();
+        let campaign = tempfile::tempdir().unwrap();
+        let sword = GffWriter::new("UTI ", "V3.2")
+            .write(indexmap! {
+                "BaseItem".into() => GffValue::Int(12),
+                "Tag".into() => GffValue::String("qe_sword".into()),
+            })
+            .unwrap();
+        std::fs::write(campaign.path().join("qe_sword.uti"), sword).unwrap();
+        let mut graph = graph();
+        graph.campaign.campaign_path = Some(campaign.path().display().to_string());
+        add_quest(
+            &mut graph,
+            "test",
+            vec![
+                action("ga_destroy_item", json!(["qe_head", 5, 1])),
+                action("ga_give_item", json!(["qe_sword", 1, 1])),
+            ],
+        );
+        let writes = |preview: &QuestPreview| {
+            preview
+                .writes
+                .iter()
+                .map(|w| {
+                    (
+                        w.key.value_type.clone(),
+                        w.key.name.clone(),
+                        w.before.clone(),
+                        w.after.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let preview = |tables: &RewardTables| {
+            QuestEdits::default()
+                .preview(
+                    &graph,
+                    tables,
+                    &handler,
+                    &NWN2Paths::new(),
+                    0,
+                    "test",
+                    20,
+                    Some(0),
+                )
+                .unwrap()
+        };
+        let take = |owner: &str, before: i64, after: i64| {
+            let (value_type, name) = if owner.is_empty() {
+                (ITEM_TAKE_TYPE, "qe_head".to_string())
+            } else {
+                (COMPANION_ITEM_TAKE_TYPE, format!("{owner}/qe_head"))
+            };
+            (
+                value_type.to_string(),
+                name,
+                Some(json!(before)),
+                json!(after),
+            )
+        };
+        let stock = preview(&RewardTables::from_graph(&graph, None));
+        assert_eq!(
+            writes(&stock),
+            vec![
+                take("", 2, 0),
+                take("khelgar", 4, 1),
+                (
+                    ITEM_TYPE.to_string(),
+                    "qe_sword".to_string(),
+                    None,
+                    json!(1)
+                ),
+            ]
+        );
+
+        // A module whose own `ga_give_item` walks the whole faction (SoZ).
+        let mut soz_graph = graph.clone();
+        soz_graph
+            .modules
+            .push(crate::services::save_graph::AggregatedModule {
+                name: "not_visited".into(),
+                display_name: String::new(),
+                resolved_path: String::new(),
+                resolution_kind: crate::services::toolset_bridge::ResolutionKind::Unresolved,
+                is_current: false,
+                journal_category_tags: Vec::new(),
+                speaker_names: Vec::new(),
+                party_item_gifts: true,
+            });
+        let soz = preview(&RewardTables::from_graph(&soz_graph, None));
+        assert_eq!(
+            writes(&soz)[3],
+            (
+                COMPANION_ITEM_TYPE.to_string(),
+                "khelgar/qe_sword".to_string(),
+                None,
+                json!(1)
+            )
+        );
+        let mut edits = QuestEdits::default();
+        let all: Vec<usize> = (0..soz.writes.len()).collect();
+        edits.stage(soz, &graph, &all, false).unwrap();
+        handler.begin_batch();
+        let written = edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .unwrap();
+        handler.commit_batch().unwrap();
+
+        let tags = |fields: &indexmap::IndexMap<String, GffValue<'static>>| {
+            backpack_items(fields)
+                .map(|item| {
+                    (
+                        crate::parsers::gff::gff_text(item, "Tag").unwrap_or_default(),
+                        item.get("StackSize").and_then(gff_integer).unwrap_or(1),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let ros = |name: &str| {
+            let stored = handler.companion_stored_name(name).unwrap();
+            owned_root(&handler.extract_file(&stored).unwrap()).unwrap()
+        };
+        assert_eq!(
+            tags(&ros("khelgar")),
+            vec![("qe_head".to_string(), 1), ("qe_sword".to_string(), 1)]
+        );
+        assert_eq!(tags(&ros("neeshka")), vec![("qe_head".to_string(), 4)]);
+        let player = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
+        assert_eq!(tags(&player), vec![("qe_sword".to_string(), 1)]);
+        assert_eq!(written.companions.len(), 1);
+        assert_eq!(written.companions[0].0, "khelgar");
+        assert_eq!(written.companions[0].1[0].0, "ItemList");
+    }
+
+    /// Gold from two quests adds up on save, so staging the second never asks to
+    /// replace the first.
+    #[test]
+    fn rewards_of_two_quests_do_not_conflict() {
+        let (_dir, handler) = rich_fixture_handler(100, 0);
+        let mut graph = graph();
+        add_quest(
+            &mut graph,
+            "one",
+            vec![action("ga_give_gold", json!([100]))],
+        );
+        add_quest(
+            &mut graph,
+            "two",
+            vec![action("ga_give_gold", json!([100]))],
+        );
+        let tables = RewardTables::from_graph(&graph, None);
+        let mut edits = QuestEdits::default();
+        for tag in ["one", "two"] {
+            let preview = edits
+                .preview(
+                    &graph,
+                    &tables,
+                    &handler,
+                    &NWN2Paths::new(),
+                    0,
+                    tag,
+                    20,
+                    Some(0),
+                )
+                .unwrap();
+            assert!(
+                edits
+                    .stage(preview, &graph, &[0], false)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        assert_eq!(edits.pending.len(), 2);
+        assert_eq!(edits.pending[1].writes[0].after, json!(300));
+    }
+
+    /// `ginc_var_ops`: the operand goes through `StringToInt`; NWScript ints wrap.
+    #[test]
+    fn relative_assignments_read_like_string_to_int_and_wrap() {
+        let (_, change) =
+            decode_assignment(&action("ga_global_int", json!(["x", "+3x"])), "m").unwrap();
+        assert_eq!(change, Change::Add(3));
+        assert_eq!(
+            Change::Add(1).apply(Some(&json!(i32::MAX))),
+            json!(i32::MIN)
+        );
+    }
+
+    /// `ginc_param_const.GetTarget` upper-cases its `$` targets; in single player the
+    /// PC, the party leader and the nearest PC are all the player.
+    #[test]
+    fn player_and_module_targets_match_get_target() {
+        for target in ["$pc", "$PC_LEADER", "$PC_Nearest", " $PC_SPEAKER "] {
+            let (key, _) =
+                decode_assignment(&action("ga_give_feat", json!([target, 1705, 0])), "m").unwrap();
+            assert_eq!(key.value_type, FEAT_TYPE, "{target}");
+        }
+        let (key, _) =
+            decode_assignment(&action("ga_local_int", json!(["x", "1", "$module"])), "m").unwrap();
+        assert_eq!(key.module.as_deref(), Some("m"));
+    }
+
+    #[test]
+    fn huge_item_quantities_are_refused() {
+        assert_eq!(
+            decode_action(
+                &action("ga_give_item", json!(["qe_sword", 2_000_000_000, 0])),
+                "m",
+                &RewardTables::empty()
+            ),
+            Err("invalid_assignment")
+        );
+    }
+
+    /// The engine writes `Experience` as a DWORD.
+    #[test]
+    fn a_missing_experience_field_is_created_as_dword() {
+        let mut fields = indexmap::IndexMap::new();
+        assert!(matches!(
+            add_to_field(&mut fields, EXPERIENCE, 250).unwrap(),
+            GffValue::Dword(250)
+        ));
     }
 
     #[test]
@@ -3332,7 +3927,9 @@ mod tests {
         let all: Vec<usize> = (0..preview.writes.len()).collect();
         edits.stage(preview, &graph, &all, false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .unwrap();
         handler.commit_batch().unwrap();
 
         let (_, bytes) = handler.extract_roster().unwrap().unwrap();
@@ -3412,7 +4009,7 @@ mod tests {
             .unwrap();
         handler.update_file("playerlist.ifo", &staged).unwrap();
         let written = edits
-            .flush(&mut handler, 0, true, &game_data())
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -3455,7 +4052,9 @@ mod tests {
         assert_eq!(preview.writes[0].after, json!(0));
         edits.stage(preview, &graph, &[0], false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(player_gold_and_xp(&handler), (0, 0, 0, 0));
     }
@@ -3523,7 +4122,7 @@ mod tests {
 
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, 0, true, &game_data())
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -3537,9 +4136,12 @@ mod tests {
                 .count(),
             _ => 0,
         };
-        assert_eq!(written.len(), 1);
-        assert_eq!(written[0].0, "ItemList");
-        assert_eq!(swords(&written[0].1), 3);
+        let item_list = &written
+            .iter()
+            .find(|(name, _)| name == "ItemList")
+            .unwrap()
+            .1;
+        assert_eq!(swords(item_list), 3);
         let player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
         assert_eq!(swords(&player["ItemList"]), 3);
         let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
@@ -3618,16 +4220,33 @@ mod tests {
         );
     }
 
+    /// A `SaveState` of fixed values, without backpacks or party.
+    struct Values<F>(F);
+
+    impl<F: FnMut(&VariableKey) -> Option<i64>> SaveState for Values<F> {
+        fn current(&mut self, key: &VariableKey) -> Option<i64> {
+            (self.0)(key)
+        }
+
+        fn stacks(&mut self, _: Option<&str>, _: &str) -> Vec<i64> {
+            Vec::new()
+        }
+
+        fn party(&mut self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
     /// nwscript `AdjustAlignment` out of a wrapper script: axis constants, both axes,
     /// and the neutral shift that stops at 50.
     #[test]
     fn adjust_alignment_points_shift_the_axes() {
         let tables = RewardTables::empty();
-        let mut current = |key: &VariableKey| match key.name.as_str() {
+        let mut current = Values(|key: &VariableKey| match key.name.as_str() {
             "LawfulChaotic" => Some(10),
             "GoodEvil" => Some(85),
             _ => None,
-        };
+        });
         let writes = decode_writes(
             &action("AdjustAlignment", json!([4, 5])),
             "m",
@@ -3670,11 +4289,11 @@ mod tests {
         .unwrap();
         assert_eq!(writes[0].1.apply(Some(&json!(10))), json!(25));
         assert_eq!(writes[1].1.apply(Some(&json!(85))), json!(70));
-        let mut nearly_neutral = |key: &VariableKey| match key.name.as_str() {
+        let mut nearly_neutral = Values(|key: &VariableKey| match key.name.as_str() {
             "LawfulChaotic" => Some(40),
             "GoodEvil" => Some(50),
             _ => None,
-        };
+        });
         let writes = decode_writes(
             &action("AdjustAlignment", json!([1, 15])),
             "m",
@@ -3777,6 +4396,8 @@ mod tests {
         assert_eq!(units(&character, "other"), 1);
     }
 
+    /// `ga_take_item` takes whole items (`TakeNumItems`), `ga_destroy_item` units; both
+    /// match the tag exactly. A later take starts where the pending ones left off.
     #[test]
     fn items_are_taken_by_tag_from_both_player_files() {
         use crate::parsers::gff::{LocalizedString, LocalizedSubstring};
@@ -3807,6 +4428,7 @@ mod tests {
                     item("other", Some(3)),
                     item("qe_head", Some(4)),
                     item("qe_head", Some(2)),
+                    item("qe_head", Some(5)),
                 ]),
             );
         });
@@ -3815,10 +4437,16 @@ mod tests {
             &mut graph,
             "take",
             vec![
-                action("ga_take_item", json!(["QE_Head", 3, 0])),
+                action("ga_take_item", json!(["qe_head", 1, 0])),
+                action("ga_take_item", json!(["QE_Head", 0, 0])),
                 action("ga_destroy_item", json!(["nothing_here", -1, 0])),
                 action("ga_destroy_item", json!(["other", 0, 0])),
             ],
+        );
+        add_quest(
+            &mut graph,
+            "take_more",
+            vec![action("ga_take_item", json!(["qe_head", 1, 0]))],
         );
         add_quest(
             &mut graph,
@@ -3827,58 +4455,58 @@ mod tests {
         );
         let mut edits = QuestEdits::default();
         let tables = RewardTables::from_graph(&graph, None);
-        let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                "take",
-                20,
-                Some(0),
-            )
-            .unwrap();
-        assert!(preview.effects.is_empty(), "{:?}", preview.effects);
-        assert_eq!(preview.writes.len(), 1, "{:?}", preview.writes);
-        let take = &preview.writes[0];
-        assert_eq!(take.key.value_type, ITEM_TAKE_TYPE);
-        assert_eq!(take.key.name, "qe_head");
+        let preview = |edits: &QuestEdits, tag: &str| {
+            edits
+                .preview(
+                    &graph,
+                    &tables,
+                    &handler,
+                    &NWN2Paths::new(),
+                    0,
+                    tag,
+                    20,
+                    Some(0),
+                )
+                .unwrap()
+        };
+        let take = preview(&edits, "take");
+        assert!(take.effects.is_empty(), "{:?}", take.effects);
+        let units = |p: &QuestPreview| {
+            p.writes
+                .iter()
+                .map(|w| (w.key.name.clone(), w.before.clone(), w.after.clone()))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(
-            (take.before.clone(), take.after.clone()),
-            (Some(json!(7)), json!(4))
+            units(&take),
+            vec![
+                ("qe_head".to_string(), Some(json!(11)), json!(7)),
+                ("QE_Head".to_string(), Some(json!(1)), json!(0)),
+            ]
         );
-        assert_eq!(take.label.as_deref(), Some("Bandit Head"));
-        assert_eq!(take.label_strref, Some(4242));
-        edits.stage(preview, &graph, &[0], false).unwrap();
-        let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                "destroy_all",
-                20,
-                Some(0),
-            )
-            .unwrap();
-        assert_eq!(preview.writes.len(), 1, "{:?}", preview.writes);
+        assert_eq!(take.writes[0].key.value_type, ITEM_TAKE_TYPE);
+        assert_eq!(take.writes[0].label.as_deref(), Some("Bandit Head"));
+        assert_eq!(take.writes[0].label_strref, Some(4242));
+        edits.stage(take, &graph, &[0, 1], false).unwrap();
+        let take_more = preview(&edits, "take_more");
         assert_eq!(
-            (
-                preview.writes[0].before.clone(),
-                preview.writes[0].after.clone()
-            ),
-            (Some(json!(3)), json!(0))
+            units(&take_more),
+            vec![("qe_head".to_string(), Some(json!(7)), json!(5))]
         );
-        edits.stage(preview, &graph, &[0], false).unwrap();
+        edits.stage(take_more, &graph, &[0], false).unwrap();
+        let destroy_all = preview(&edits, "destroy_all");
+        assert_eq!(
+            units(&destroy_all),
+            vec![("other".to_string(), Some(json!(3)), json!(0))]
+        );
+        edits.stage(destroy_all, &graph, &[0], false).unwrap();
         edits
             .validate_saved(&handler, &NWN2Paths::new(), 0)
             .unwrap();
 
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, 0, true, &game_data())
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -3897,26 +4525,23 @@ mod tests {
                 .collect::<Vec<_>>(),
             _ => Vec::new(),
         };
-        let expected = vec![
-            (
-                "qe_head".to_string(),
-                format!("{:?}", Some(GffValue::Word(2))),
-            ),
-            (
-                "qe_head".to_string(),
-                format!("{:?}", Some(GffValue::Word(2))),
-            ),
-        ];
-        assert_eq!(written.len(), 1);
-        assert_eq!(written[0].0, "ItemList");
-        assert_eq!(stacks(&written[0].1), expected);
+        let expected = vec![(
+            "qe_head".to_string(),
+            format!("{:?}", Some(GffValue::Word(5))),
+        )];
+        let item_list = &written
+            .iter()
+            .find(|(name, _)| name == "ItemList")
+            .unwrap()
+            .1;
+        assert_eq!(stacks(item_list), expected);
         let player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
         assert_eq!(stacks(&player["ItemList"]), expected);
         let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
         assert_eq!(stacks(&bic["ItemList"]), expected);
         let journal = read_live_journal(&handler, 0).unwrap();
         assert!(
-            ["take", "destroy_all"]
+            ["take", "take_more", "destroy_all"]
                 .iter()
                 .all(|tag| journal.iter().any(|e| e.tag == *tag && e.state == 20)),
             "{journal:?}"
@@ -3963,7 +4588,7 @@ mod tests {
         edits.stage(preview, &grant, &all, false).unwrap();
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, 0, true, &game_data())
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -3997,7 +4622,9 @@ mod tests {
         assert_eq!(preview.writes[0].after, json!(0));
         edits.stage(preview, &removal, &[0], false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .unwrap();
         handler.commit_batch().unwrap();
         let player = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
         let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
@@ -4042,7 +4669,7 @@ mod tests {
         edits.stage(preview, &graph, &[0], false).unwrap();
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, 0, true, &game_data())
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -4133,7 +4760,9 @@ mod tests {
         let all: Vec<usize> = (0..preview.writes.len()).collect();
         edits.stage(preview, &graph, &all, false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, true, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(player_gold_and_xp(&handler).1, 1300);
 
@@ -4587,7 +5216,9 @@ mod tests {
         let revision = preview.revision.clone();
         edits.stage(preview, &graph, &[0, 2], false).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .unwrap();
         assert!(
             std::fs::read_to_string(&globals)
                 .unwrap()
@@ -4752,7 +5383,9 @@ mod tests {
             .validate_saved(&handler, &NWN2Paths::new(), 0)
             .unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("resgff.zip")).unwrap(),
             original
@@ -4760,7 +5393,9 @@ mod tests {
         handler.abort_batch();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 10);
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 20);
         assert!(
@@ -4826,7 +5461,9 @@ mod tests {
         });
         edits.validate_saved(&handler, &paths, 0).unwrap();
         handler.begin_batch();
-        edits.flush(&mut handler, 0, false, &game_data()).unwrap();
+        edits
+            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("module_a.z")).unwrap(),
             original

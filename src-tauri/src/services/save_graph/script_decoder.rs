@@ -21,10 +21,10 @@ pub struct DecodedWrite {
     pub value: String,
 }
 
-/// An engine call on the player the branch always performs, in the shape of the
-/// dialogue action `editing::decode_writes` applies: `ga_alignment(act, axis)`,
+/// An engine call the branch always performs, in the shape of the dialogue action
+/// `editing::decode_writes` applies: `ga_alignment(act, axis)`,
 /// `AdjustAlignment(alignment, shift)`, `ga_give_feat("", feat, check)`,
-/// `ga_remove_feat("", feat)`.
+/// `ga_remove_feat("", feat)`, `ga_journal(tag, entry)`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DecodedAction {
     pub script: String,
@@ -81,26 +81,38 @@ fn decode_function(
     constants: &ScriptConstants,
 ) -> Option<ScriptDecode> {
     let tokens = tokenize(source);
-    let (param_names, body) = find_function(&tokens, function)?;
+    let (declared, body) = find_function(&tokens, function)?;
     let mut parser = Parser {
         tokens: body,
         pos: 0,
     };
     let stmts = parser.parse_statements();
     let mut ctx = Context {
-        params: param_names
-            .iter()
-            .zip(params.iter())
-            .map(|(name, value)| (name.clone(), value.clone()))
-            .collect(),
+        params: Vec::new(),
         module_aliases: HashSet::new(),
         pc_aliases: HashSet::new(),
         object_tags: HashMap::new(),
         constants,
         out: ScriptDecode::default(),
     };
+    // A parameter the functor leaves out takes its declared default (`int n = 0`).
+    for (index, (name, default)) in declared.iter().enumerate() {
+        let value = params
+            .get(index)
+            .cloned()
+            .or_else(|| default_value(default.as_deref()?, &ctx));
+        if let Some(value) = value {
+            ctx.params.push((name.clone(), value));
+        }
+    }
     interpret(&stmts, &mut ctx, false);
     Some(ctx.out)
+}
+
+fn default_value(tokens: &[Token], ctx: &Context) -> Option<Value> {
+    ctx.int_arg(tokens)
+        .map(Value::from)
+        .or_else(|| ctx.str_arg(tokens).map(Value::from))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -200,9 +212,12 @@ fn is_ident(token: Option<&Token>, name: &str) -> bool {
     matches!(token, Some(Token::Ident(x)) if x.eq_ignore_ascii_case(name))
 }
 
-/// Locate `<type> <function>(<params>) { ... }` and return the parameter names
-/// with the body tokens (without the outer braces).
-fn find_function(tokens: &[Token], function: &str) -> Option<(Vec<String>, Vec<Token>)> {
+/// A parameter's name and the tokens of its default value, if declared.
+type Param = (String, Option<Vec<Token>>);
+
+/// Locate `<type> <function>(<params>) { ... }` and return the parameters with the
+/// body tokens (without the outer braces).
+fn find_function(tokens: &[Token], function: &str) -> Option<(Vec<Param>, Vec<Token>)> {
     let mut i = 0;
     while i + 1 < tokens.len() {
         if is_ident(tokens.get(i), function) && is_punct(tokens.get(i + 1), "(") {
@@ -211,9 +226,18 @@ fn find_function(tokens: &[Token], function: &str) -> Option<(Vec<String>, Vec<T
             if is_punct(tokens.get(close + 1), "{") {
                 let params = tokens[i + 2..close]
                     .split(|t| is_punct(Some(t), ","))
-                    .filter_map(|decl| match decl.last() {
-                        Some(Token::Ident(name)) if decl.len() >= 2 => Some(name.clone()),
-                        _ => None,
+                    .filter_map(|decl| {
+                        let (decl, default) = match decl.iter().position(|t| is_punct(Some(t), "="))
+                        {
+                            Some(at) => (&decl[..at], Some(decl[at + 1..].to_vec())),
+                            None => (decl, None),
+                        };
+                        match decl.last() {
+                            Some(Token::Ident(name)) if decl.len() >= 2 => {
+                                Some((name.clone(), default))
+                            }
+                            _ => None,
+                        }
                     })
                     .collect();
                 let end = matching(tokens, close + 1, "{", "}")?;
@@ -264,13 +288,32 @@ enum Stmt {
         subject: Vec<Token>,
         cases: Vec<Case>,
     },
+    /// `break` (ends the enclosing switch or loop) or `return`.
+    Exit {
+        returns: bool,
+    },
 }
 
 #[derive(Debug)]
 struct Case {
-    /// `None` = `default`.
-    labels: Vec<Option<i64>>,
+    /// Label expressions; `None` = `default`.
+    labels: Vec<Option<Vec<Token>>>,
     body: Vec<Stmt>,
+}
+
+/// How control leaves a statement list: `exits` when no path reaches the next
+/// statement, `breaks`/`returns` when some path leaves through `break`/`return`.
+#[derive(Debug, Clone, Copy, Default)]
+struct Flow {
+    exits: bool,
+    breaks: bool,
+    returns: bool,
+}
+
+impl Flow {
+    fn may_exit(self) -> bool {
+        self.breaks || self.returns
+    }
 }
 
 struct Parser {
@@ -375,7 +418,13 @@ impl Parser {
                         self.pos += 1;
                         None
                     }
-                    "return" | "break" | "continue" => {
+                    "return" | "break" => {
+                        self.skip_to_semicolon();
+                        Some(Stmt::Exit {
+                            returns: lower == "return",
+                        })
+                    }
+                    "continue" => {
                         self.skip_to_semicolon();
                         None
                     }
@@ -439,22 +488,14 @@ impl Parser {
             return Stmt::Switch { subject, cases };
         }
         self.pos += 1;
-        let mut pending_labels: Vec<Option<i64>> = Vec::new();
+        let mut pending_labels: Vec<Option<Vec<Token>>> = Vec::new();
         while !self.at_end() && !is_punct(self.peek(), "}") {
             if is_ident(self.peek(), "case") {
                 self.pos += 1;
-                let mut sign = 1;
-                if is_punct(self.peek(), "-") {
-                    sign = -1;
-                    self.pos += 1;
-                }
-                let label = match self.peek() {
-                    Some(Token::Num(n)) => n.parse::<i64>().ok().map(|v| v * sign),
-                    _ => None,
-                };
+                let start = self.pos;
                 self.skip_until_punct(":");
+                pending_labels.push(Some(self.tokens[start..self.pos].to_vec()));
                 self.pos += 1;
-                pending_labels.push(label);
                 continue;
             }
             if is_ident(self.peek(), "default") {
@@ -681,6 +722,14 @@ impl Context<'_> {
         }
     }
 
+    /// String expression: string arguments joined by `+`
+    /// (`"xp_given_" + sQuestTag`, `VAR_REBEL`).
+    fn string_expr(&self, expr: &[Token]) -> Option<String> {
+        expr.split(|t| is_punct(Some(t), "+"))
+            .map(|part| self.str_arg(part))
+            .collect()
+    }
+
     /// The creature tag an expression resolves to: a tag lookup call or a variable
     /// assigned from one.
     fn object_tag(&self, expr: &[Token]) -> Option<String> {
@@ -802,69 +851,176 @@ const IGNORED_CALLS: &[&str] = &[
     "spawnscriptdebugger",
 ];
 
-fn interpret(stmts: &[Stmt], ctx: &mut Context, conditional: bool) {
+/// Walk a statement list; statements after a possible `break`/`return` only run
+/// on some paths, statements after a certain one never.
+fn interpret<'s>(
+    stmts: impl IntoIterator<Item = &'s Stmt>,
+    ctx: &mut Context,
+    conditional: bool,
+) -> Flow {
+    let mut flow = Flow::default();
     for stmt in stmts {
-        match stmt {
-            Stmt::Call { name, args } => interpret_call(name, args, ctx, conditional),
-            Stmt::Assign { name, expr } => {
-                if ctx.is_module(expr) {
-                    ctx.module_aliases.insert(name.clone());
+        let step = interpret_statement(stmt, ctx, conditional || flow.may_exit());
+        flow.breaks |= step.breaks;
+        flow.returns |= step.returns;
+        if step.exits {
+            flow.exits = true;
+            break;
+        }
+    }
+    flow
+}
+
+fn interpret_statement(stmt: &Stmt, ctx: &mut Context, conditional: bool) -> Flow {
+    match stmt {
+        Stmt::Call { name, args } => interpret_call(name, args, ctx, conditional),
+        Stmt::Assign { name, expr } => {
+            if ctx.is_module(expr) {
+                ctx.module_aliases.insert(name.clone());
+            }
+            if ctx.is_pc(expr) {
+                ctx.pc_aliases.insert(name.clone());
+            }
+            match ctx.object_tag(expr) {
+                Some(tag) => {
+                    ctx.object_tags.insert(name.clone(), tag);
                 }
-                if ctx.is_pc(expr) {
-                    ctx.pc_aliases.insert(name.clone());
-                }
-                match ctx.object_tag(expr) {
-                    Some(tag) => {
-                        ctx.object_tags.insert(name.clone(), tag);
-                    }
-                    None => {
-                        ctx.object_tags.remove(name);
-                    }
+                None => {
+                    ctx.object_tags.remove(name);
                 }
             }
-            Stmt::Block(body) => interpret(body, ctx, conditional),
-            Stmt::Conditional(body) => interpret(body, ctx, true),
-            Stmt::If {
-                condition,
-                then,
-                otherwise,
-            } => match ctx.bool_arg(condition) {
+            // `int n = LawChaosAxisAdjustment(oPC, -1);`, `object o = CreateObject(...)`:
+            // the call runs for its effect too.
+            if let [Token::Ident(callee), ..] = expr.as_slice()
+                && !is_query(callee)
+            {
+                interpret_nested_call(expr, ctx, conditional);
+            }
+        }
+        Stmt::Block(body) => return interpret(body, ctx, conditional),
+        Stmt::Conditional(body) => {
+            // A `break` leaves the loop only.
+            let body = interpret(body, ctx, true);
+            return Flow {
+                returns: body.returns,
+                ..Flow::default()
+            };
+        }
+        Stmt::If {
+            condition,
+            then,
+            otherwise,
+        } => {
+            return match ctx.bool_arg(condition) {
                 Some(true) => interpret(then, ctx, conditional),
                 Some(false) => interpret(otherwise, ctx, conditional),
                 None => {
-                    interpret(then, ctx, true);
-                    interpret(otherwise, ctx, true);
-                }
-            },
-            Stmt::Switch { subject, cases } => {
-                let selected = match subject.as_slice() {
-                    [Token::Ident(name)] => ctx.param(name).and_then(Value::as_i64),
-                    _ => None,
-                };
-                match selected {
-                    Some(value) => {
-                        let has_exact = cases.iter().any(|c| c.labels.contains(&Some(value)));
-                        for case in cases {
-                            let hit = if has_exact {
-                                case.labels.contains(&Some(value))
-                            } else {
-                                case.labels.contains(&None)
-                            };
-                            if hit {
-                                interpret(&case.body, ctx, conditional);
-                            }
-                        }
-                    }
-                    // Unknown subject: any branch might run.
-                    None => {
-                        for case in cases {
-                            interpret(&case.body, ctx, true);
-                        }
+                    let then = interpret(then, ctx, true);
+                    let otherwise = interpret(otherwise, ctx, true);
+                    Flow {
+                        exits: then.exits && otherwise.exits,
+                        breaks: then.breaks || otherwise.breaks,
+                        returns: then.returns || otherwise.returns,
                     }
                 }
-            }
+            };
+        }
+        Stmt::Switch { subject, cases } => {
+            return interpret_switch(subject, cases, ctx, conditional);
+        }
+        Stmt::Exit { returns } => {
+            return Flow {
+                exits: true,
+                breaks: !returns,
+                returns: *returns,
+            };
         }
     }
+    Flow::default()
+}
+
+/// Run a `switch` from the case the subject selects, falling through into the
+/// next cases until one leaves. An unknown subject or label: any case might run.
+fn interpret_switch(
+    subject: &[Token],
+    cases: &[Case],
+    ctx: &mut Context,
+    conditional: bool,
+) -> Flow {
+    let labels: Option<Vec<Vec<Option<i64>>>> = cases
+        .iter()
+        .map(|case| {
+            case.labels
+                .iter()
+                .map(|label| match label {
+                    Some(expr) => ctx.int_arg(expr).map(Some),
+                    None => Some(None),
+                })
+                .collect()
+        })
+        .collect();
+    let start = ctx.int_arg(subject).zip(labels).map(|(value, labels)| {
+        labels
+            .iter()
+            .position(|l| l.contains(&Some(value)))
+            .or_else(|| labels.iter().position(|l| l.contains(&None)))
+    });
+    let Some(start) = start else {
+        let mut returns = false;
+        for case in cases {
+            returns |= interpret(&case.body, ctx, true).returns;
+        }
+        return Flow {
+            returns,
+            ..Flow::default()
+        };
+    };
+    let cases = start.map_or(&cases[..0], |start| &cases[start..]);
+    let flow = interpret(cases.iter().flat_map(|c| &c.body), ctx, conditional);
+    // A `break` ends the switch; only a `return` on every path leaves the caller.
+    Flow {
+        exits: flow.exits && !flow.breaks,
+        breaks: false,
+        returns: flow.returns,
+    }
+}
+
+/// Calls whose result is the only effect, so an assignment from them is no call.
+fn is_query(callee: &str) -> bool {
+    let lower = callee.to_ascii_lowercase();
+    const PREFIXES: &[&str] = &[
+        "get",
+        "effect",
+        "itemproperty",
+        "talent",
+        "string",
+        "int",
+        "float",
+        "object",
+        "vector",
+        "location",
+    ];
+    const NAMES: &[&str] = &[
+        "random",
+        "abs",
+        "fabs",
+        "sqrt",
+        "pow",
+        "findsubstring",
+        "teststringagainstpattern",
+        "d2",
+        "d3",
+        "d4",
+        "d6",
+        "d8",
+        "d10",
+        "d12",
+        "d20",
+        "d100",
+    ];
+    PREFIXES.iter().any(|p| lower.starts_with(p))
+        || NAMES.contains(&lower.as_str())
+        || TAG_LOOKUPS.contains(&lower.as_str())
 }
 
 fn interpret_call(name: &str, args: &[Vec<Token>], ctx: &mut Context, conditional: bool) {
@@ -872,12 +1028,13 @@ fn interpret_call(name: &str, args: &[Vec<Token>], ctx: &mut Context, conditiona
     match lower.as_str() {
         "setglobalint" | "setglobalfloat" | "setglobalstring" => {
             let value_type = &lower["setglobal".len()..];
+            let value = WriteValue::Assign(args.get(1));
             record_write(
                 ctx,
                 false,
                 value_type,
                 args.first(),
-                args.get(1),
+                value,
                 conditional,
                 name,
             );
@@ -886,17 +1043,30 @@ fn interpret_call(name: &str, args: &[Vec<Token>], ctx: &mut Context, conditiona
             let target = args.first().map(Vec::as_slice).unwrap_or(&[]);
             if ctx.is_module(target) {
                 let value_type = &lower["setlocal".len()..];
-                record_write(
-                    ctx,
-                    true,
-                    value_type,
-                    args.get(1),
-                    args.get(2),
-                    conditional,
-                    name,
-                );
+                let value = WriteValue::Assign(args.get(2));
+                record_write(ctx, true, value_type, args.get(1), value, conditional, name);
             } else {
                 push_call(ctx, format!("{name}({})", render(target)));
+            }
+        }
+        // `ginc_vars`: `SetGlobalInt(sVarName, GetGlobalInt(sVarName) + iDelta)`.
+        "modifyglobalint" => {
+            let value = WriteValue::Add(args.get(1));
+            record_write(ctx, false, "int", args.first(), value, conditional, name);
+        }
+        // `AddJournalQuestEntry(sPlotID, nState, oCreature, ...)`: the stock
+        // `ga_journal(sQuestTag, nEntry, ...)` makes the same call.
+        "addjournalquestentry" => {
+            let tag = args.first().and_then(|expr| ctx.string_expr(expr));
+            let state = args.get(1).and_then(|expr| ctx.int_arg(expr));
+            match (tag, state) {
+                (Some(tag), Some(state)) if !conditional && !tag.is_empty() => {
+                    ctx.out.actions.push(DecodedAction {
+                        script: "ga_journal".into(),
+                        params: vec![Value::from(tag), Value::from(state)],
+                    });
+                }
+                _ => push_call(ctx, name.to_string()),
             }
         }
         "delaycommand" => {
@@ -939,6 +1109,23 @@ fn interpret_call(name: &str, args: &[Vec<Token>], ctx: &mut Context, conditiona
     }
 }
 
+/// Whether a script walks the whole faction: a `GetFirstFactionMember` call whose
+/// `bPCOnly` argument is `FALSE` (the default `TRUE` reaches PCs only).
+pub fn loops_whole_faction(source: &str) -> bool {
+    let tokens = tokenize(source);
+    tokens.iter().enumerate().any(|(i, token)| {
+        is_ident(Some(token), "GetFirstFactionMember")
+            && is_punct(tokens.get(i + 1), "(")
+            && matching(&tokens, i + 1, "(", ")").is_some_and(|close| {
+                let args = split_args(&tokens[i + 2..close]);
+                matches!(
+                    args.get(1).map(Vec::as_slice),
+                    Some([Token::Ident(word)]) if word == "FALSE"
+                ) || matches!(args.get(1).map(Vec::as_slice), Some([Token::Num(n)]) if n == "0")
+            })
+    })
+}
+
 fn interpret_nested_call(expr: &[Token], ctx: &mut Context, conditional: bool) {
     if let [Token::Ident(callee), rest @ ..] = expr
         && is_punct(rest.first(), "(")
@@ -955,25 +1142,50 @@ fn push_call(ctx: &mut Context, call: String) {
     }
 }
 
+/// The value argument of a variable write.
+#[derive(Clone, Copy)]
+enum WriteValue<'e> {
+    /// `SetGlobalInt(name, value)`.
+    Assign(Option<&'e Vec<Token>>),
+    /// `ModifyGlobalInt(name, delta)`.
+    Add(Option<&'e Vec<Token>>),
+}
+
+/// Record a variable write, its value in the `ga_global_int` textual convention.
 fn record_write(
     ctx: &mut Context,
     module_local: bool,
     value_type: &str,
     name_expr: Option<&Vec<Token>>,
-    value_expr: Option<&Vec<Token>>,
+    value: WriteValue<'_>,
     conditional: bool,
     call: &str,
 ) {
-    let name = match name_expr.map(Vec::as_slice) {
-        Some([Token::Str(s)]) if !s.is_empty() => s.clone(),
-        other => {
-            ctx.out
-                .unresolved
-                .push(format!("{call}({})", other.map(render).unwrap_or_default()));
+    let value_expr = match value {
+        WriteValue::Assign(expr) | WriteValue::Add(expr) => expr,
+    };
+    let name = match name_expr.and_then(|expr| ctx.string_expr(expr)) {
+        Some(name) if !name.is_empty() => name,
+        _ => {
+            ctx.out.unresolved.push(format!(
+                "{call}({}, {})",
+                name_expr.map(|e| render(e)).unwrap_or_default(),
+                value_expr.map(|e| render(e)).unwrap_or_default()
+            ));
             return;
         }
     };
-    let value = value_expr.and_then(|expr| eval_value(expr, value_type, &name, ctx));
+    let value = value_expr.and_then(|expr| match value {
+        WriteValue::Assign(_) => eval_value(expr, value_type, &name, ctx),
+        WriteValue::Add(_) => {
+            let delta = ctx.int_arg(expr)?;
+            Some(if delta < 0 {
+                delta.to_string()
+            } else {
+                format!("+{delta}")
+            })
+        }
+    });
     let Some(value) = value else {
         ctx.out.unresolved.push(format!(
             "{call}(\"{name}\", {})",
@@ -1404,6 +1616,396 @@ void main()
             decoded.unresolved,
             vec!["SetGlobalInt(\"Bad\", GetLocalInt(OBJECT_SELF, \"x\"))"]
         );
+    }
+
+    fn module_write(name: &str, value: &str) -> DecodedWrite {
+        DecodedWrite {
+            module_local: true,
+            ..write(name, value)
+        }
+    }
+
+    /// `13a_karina_state.nss` in `1300_old_owl_well.mod`: case 1 has no `break` and
+    /// falls into case 2.
+    #[test]
+    fn switch_cases_fall_through_until_a_break() {
+        let src = r#"
+void main(int nNodeCheck)
+{
+int nTemp = GetLocalInt(GetModule(), "KarinaState");
+
+switch (nNodeCheck)
+    {
+        case 0:
+            {
+                SetLocalInt(GetModule(), "KarinaState", 1);
+            }
+            break;
+        case 1:
+            {
+                //Do nothing
+            }
+        case 2:
+            {
+                SetLocalInt(GetModule(), "KarinaState", 3);
+            }
+        break;
+    }
+}"#;
+        let constants = ScriptConstants::default();
+        let zero = decode_action(src, &[json!(0)], &constants).unwrap();
+        assert_eq!(zero.writes, vec![module_write("KarinaState", "1")]);
+        let one = decode_action(src, &[json!(1)], &constants).unwrap();
+        assert_eq!(one.writes, vec![module_write("KarinaState", "3")]);
+        assert!(one.conditional_writes.is_empty());
+    }
+
+    /// `12a_cmdr_state.nss` in `1200_highcliff.mod`: the 100 branch returns before
+    /// the state write at the end; its pins sit in a loop.
+    const CMDR_STATE: &str = r#"
+#include "ginc_debug"
+
+void main(int nCommanderQuestState)
+{
+	object oTann = GetObjectByTag("12_Commander");
+	// This is a hack to avoid creating yet another script for a simple journal entry.
+	if (nCommanderQuestState == 100)
+	{
+		object oMapNote;
+		int nLoop;
+
+		for (nLoop = 1; nLoop <= 3; nLoop++)
+		{
+			oMapNote = GetObjectByTag("12_mn_tannman" + IntToString(nLoop));
+
+			SetMapPinEnabled(oMapNote, TRUE);
+		}
+
+		return;
+	}
+
+	if (nCommanderQuestState == 200)
+	{
+		PrettyMessage("Equip script running");
+		PlayCustomAnimation(oTann, "%", FALSE);
+		AssignCommand(oTann, ClearAllActions(TRUE));
+		AssignCommand(oTann, ActionEquipMostDamagingRanged());
+
+		return;
+	}
+
+	if (nCommanderQuestState == 50)
+	{
+		if (GetGlobalInt("12_help_cormick") == 1)
+		{
+			SetGlobalInt("12_help_cormick", 2);
+			AddJournalQuestEntry("GalenEscort", 30, GetPCSpeaker(), TRUE, TRUE, FALSE);
+		}
+	}
+	else
+	{
+		SetLocalInt(GetModule(), "CommanderQuestState", nCommanderQuestState);
+	}
+}"#;
+
+    #[test]
+    fn statements_after_a_return_do_not_run() {
+        let constants = ScriptConstants::default();
+        let hundred = decode_action(CMDR_STATE, &[json!(100)], &constants).unwrap();
+        assert!(hundred.writes.is_empty() && hundred.conditional_writes.is_empty());
+        assert_eq!(hundred.calls, vec!["SetMapPinEnabled"]);
+        let one = decode_action(CMDR_STATE, &[json!(1)], &constants).unwrap();
+        assert_eq!(one.writes, vec![module_write("CommanderQuestState", "1")]);
+        let fifty = decode_action(CMDR_STATE, &[json!(50)], &constants).unwrap();
+        assert!(fifty.writes.is_empty() && fifty.actions.is_empty());
+        assert_eq!(
+            fifty.conditional_writes,
+            vec![write("12_help_cormick", "2")]
+        );
+        assert_eq!(fifty.calls, vec!["AddJournalQuestEntry"]);
+    }
+
+    /// `d05_a_handle_sleeper.nss` in `d_x1.mod`: a guard that may return makes the
+    /// rest of the script conditional.
+    #[test]
+    fn statements_after_a_possible_return_are_conditional() {
+        let src = r#"
+#include "kinc_spirit_eater"
+#include "ginc_journal"
+
+void main(int bCovenDestroyed)
+{
+	object oPC = GetSpiritEater();
+
+	int nSleeperState = GetGlobalInt("D_nSleeperState");
+	string sQuest = "q44_sleeper";
+
+	if ( nSleeperState > 0 || GetJournalEntry(sQuest, oPC) == 0)
+		return;
+
+	int nCovenState = GetGlobalInt("D_nCoven");
+
+	if ( bCovenDestroyed == 1 )
+	{
+		AddJournalQuestEntry(sQuest, 930, oPC, TRUE, TRUE, FALSE);
+		RewardPartyQuestXP(oPC, sQuest);
+		SetGlobalInt("D_nSleeperState", 1);
+	}
+	else
+	{
+		AddJournalQuestEntry(sQuest, 940, oPC, TRUE, TRUE, FALSE);
+	}
+}"#;
+        let decoded = decode_action(src, &[json!(1)], &ScriptConstants::default()).unwrap();
+        assert!(decoded.writes.is_empty() && decoded.actions.is_empty());
+        assert_eq!(
+            decoded.conditional_writes,
+            vec![write("D_nSleeperState", "1")]
+        );
+        assert_eq!(
+            decoded.calls,
+            vec!["AddJournalQuestEntry", "RewardPartyQuestXP"]
+        );
+    }
+
+    /// `g01_a_buy_deepwine.nss` in `g_x2.mod`: an unconditional journal entry is a
+    /// `ga_journal` action.
+    #[test]
+    fn journal_entries_become_journal_actions() {
+        let src = r#"
+#include "ginc_journal"
+
+void main(int nCase)
+{
+	object oPC		= GetPCSpeaker();
+
+	SetLocalInt(GetModule(), "g_bDeepwineAcquired", TRUE);
+	AddJournalQuestEntry("g_q04_finest_wine", 200, oPC);
+
+	CreateItemOnObject("nx2_g_deepwine", oPC);
+
+	switch(nCase)
+	{
+		case 100:
+			TakeGoldFromCreature(5000, oPC);
+			break;
+		case 200:
+			TakeGoldFromCreature(2500, oPC);
+			break;
+		break;
+	}
+}"#;
+        let decoded = decode_action(src, &[json!(200)], &ScriptConstants::default()).unwrap();
+        assert_eq!(
+            decoded.writes,
+            vec![module_write("g_bDeepwineAcquired", "1")]
+        );
+        assert_eq!(
+            decoded.actions,
+            vec![DecodedAction {
+                script: "ga_journal".into(),
+                params: vec![json!("g_q04_finest_wine"), json!(200)],
+            }]
+        );
+        assert_eq!(
+            decoded.calls,
+            vec!["CreateItemOnObject", "TakeGoldFromCreature"]
+        );
+    }
+
+    /// `m_a_tw_feat.nss` in `m_x2.mod`: case labels are the script's own constants,
+    /// and `ginc_vars.ModifyGlobalInt` adds to the global.
+    #[test]
+    fn constant_case_labels_and_modify_global_int() {
+        let src = r#"
+#include "ginc_vars"
+#include "kinc_story"
+
+const int TW_FEARSOME_ROSTER		= 10;
+const int TW_IMP_FEARSOME_ROSTER	= 20;
+
+void main(int nCase)
+{
+
+	// Increment the number of teamwork feats the player has trained by 1.
+	ModifyGlobalInt("00_nFeatsTrained", 1);
+
+	switch (nCase)
+	{
+		case TW_FEARSOME_ROSTER:
+			SetGlobalInt("bFearsomeRoster", TRUE);
+			AddTeamworkFeat(FEAT_TW_FEARSOME_ROSTER);
+			break;
+		case TW_IMP_FEARSOME_ROSTER:
+			SetGlobalInt("bImpFearsomeRoster", TRUE);
+			AddTeamworkFeat(FEAT_TW_IMPROVED_FEARSOME_ROSTER);
+			break;
+		default:
+			break;
+	}
+}"#;
+        let mut constants = ScriptConstants::default();
+        constants.ints.insert("TW_FEARSOME_ROSTER".into(), 10);
+        constants.ints.insert("TW_IMP_FEARSOME_ROSTER".into(), 20);
+        let decoded = decode_action(src, &[json!(10)], &constants).unwrap();
+        assert_eq!(
+            decoded.writes,
+            vec![
+                write("00_nFeatsTrained", "+1"),
+                write("bFearsomeRoster", "1")
+            ]
+        );
+        assert_eq!(decoded.calls, vec!["AddTeamworkFeat"]);
+        // Without the constants no label is known: any case might run.
+        let unknown = decode_action(src, &[json!(10)], &ScriptConstants::default()).unwrap();
+        assert_eq!(unknown.writes, vec![write("00_nFeatsTrained", "+1")]);
+        assert_eq!(unknown.conditional_writes.len(), 2);
+    }
+
+    /// `21_a_new_tax.nss` in `2100_crossroad_keep_a2.mod`: variable names given as
+    /// `21_inc_cr_vars` constants, relative changes through `ModifyGlobalInt`.
+    #[test]
+    fn variable_names_resolve_through_constants() {
+        let src = r#"
+#include "21_inc_crossroad"
+#include "nw_i0_plot"
+
+void main(int iNewTax)
+{
+	object oPC = GetPCSpeaker();
+
+	int iOldTax = GetGlobalInt(TAX_PEASANT);	// get old tax
+	SetGlobalInt(TAX_PEASANT, iNewTax);			// set new tax
+
+	// adjustments based on tax change
+	if (iNewTax < iOldTax) // Lower taxes, makes them happier
+		ModifyGlobalInt(UNREST_MOD, -1);
+
+	if (iNewTax > iOldTax + 1)	// They'll be OK with moving taxes up one notch, but two will piss them off
+	{
+		if (GetCharisma(oPC) < 15 || GetGoodEvilValue(oPC) < 85 )	// A charismatic or good character can get away with a tax hike
+		{
+			ModifyGlobalInt(UNREST_MOD, 1);
+		}
+		else
+		{	// got away with it.
+			SetLocalInt(OBJECT_SELF, "TaxHike", 1);
+		}
+	}
+}"#;
+        let mut constants = ScriptConstants::default();
+        constants
+            .strings
+            .insert("TAX_PEASANT".into(), "21_Tax_Peasant".into());
+        constants
+            .strings
+            .insert("UNREST_MOD".into(), "21_Unrest_Mod".into());
+        let decoded = decode_action(src, &[json!(2)], &constants).unwrap();
+        assert_eq!(decoded.writes, vec![write("21_Tax_Peasant", "2")]);
+        assert_eq!(
+            decoded.conditional_writes,
+            vec![write("21_Unrest_Mod", "-1"), write("21_Unrest_Mod", "+1")]
+        );
+        assert!(decoded.unresolved.is_empty());
+        let unknown = decode_action(src, &[json!(2)], &ScriptConstants::default()).unwrap();
+        assert_eq!(unknown.unresolved[0], "SetGlobalInt(TAX_PEASANT, iNewTax)");
+    }
+
+    /// `0a_alignment_once.nss` in `0_tutorial.mod`: the shift happens in an
+    /// assignment (`nAdjustment = GoodEvilAxisAdjustment(...)`), after a guard.
+    #[test]
+    fn calls_inside_assignments_are_decoded() {
+        let src = r#"
+#include "ginc_debug"
+
+void main(int iActType, int bLawChaosAxis, string sSource)
+{
+	if (GetLocalInt(GetModule(),"bAlignmentHitFrom"+sSource))
+		return;
+	SetLocalInt(GetModule(),"bAlignmentHitFrom"+sSource,TRUE);
+
+    object oPC = (GetPCSpeaker()==OBJECT_INVALID?OBJECT_SELF:GetPCSpeaker());
+	int nAdjustment;
+
+    if (bLawChaosAxis == 0)
+	{
+		nAdjustment = GoodEvilAxisAdjustment(oPC, iActType);
+		PrettyMessage("Alignment shifted on Good-Evil Axis by " + IntToString(nAdjustment));
+		PrettyMessage("Overall Alignment on this axis = " + IntToString(GetGoodEvilValue(oPC)));
+	}
+    else
+	{
+		nAdjustment = LawChaosAxisAdjustment(oPC, iActType);
+		PrettyMessage("Alignment shifted on Law-Chaos Axis by " + IntToString(nAdjustment));
+		PrettyMessage("Overall Alignment on this axis = " + IntToString(GetLawChaosValue(oPC)));
+	}
+}"#;
+        let decoded = decode_action(
+            src,
+            &[json!(-1), json!(1), json!("WylBet")],
+            &ScriptConstants::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            decoded.conditional_writes,
+            vec![module_write("bAlignmentHitFromWylBet", "1")]
+        );
+        assert_eq!(decoded.calls, vec!["LawChaosAxisAdjustment(oPC, iActType)"]);
+    }
+
+    /// `2640a_baalbisan.nss` in `2600_aj_haven.mod`: `int nInfluenceDelta = 0`.
+    #[test]
+    fn parameter_defaults_are_parsed() {
+        let src = r#"
+void main( int nChoice, int nInfluenceDelta = 0 )
+{
+	switch( nChoice )
+	{
+		case 10:
+			InfluenceAllFemaleCompanions( nInfluenceDelta );
+			break;
+		case 20:
+			SetLocked(GetObjectByTag("26_dr_baalbisan_exit"), FALSE);
+			break;
+	}
+}"#;
+        let (params, _) = find_function(&tokenize(src), "main").unwrap();
+        assert_eq!(
+            params,
+            vec![
+                ("nChoice".to_string(), None),
+                (
+                    "nInfluenceDelta".to_string(),
+                    Some(vec![Token::Num("0".into())])
+                ),
+            ]
+        );
+    }
+
+    /// The `CreateItemsOnObject` loop of `ga_give_item.nss` as shipped in `data/scripts.zip`
+    /// (PCs only) and in SoZ's `campaign_x2` folder (every party member).
+    #[test]
+    fn faction_loops_with_bpconly_false_reach_companions() {
+        let stock = r#"
+		oTarg = GetFirstFactionMember(oPC);
+		while ( GetIsObjectValid(oTarg) == TRUE )
+		{
+			CreateItemsOnObject( sTemplate, oTarg, nQuantity );
+			oTarg = GetNextFactionMember(oPC);
+		}"#;
+        let soz = r#"
+		oTarg = GetFirstFactionMember(oPC, FALSE);
+		while ( GetIsObjectValid(oTarg) == TRUE )
+		{
+			CreateItemsOnObject( sTemplate, oTarg, nQuantity );
+			oTarg = GetNextFactionMember(oPC, FALSE);
+		}"#;
+        assert!(!loops_whole_faction(stock));
+        assert!(loops_whole_faction(soz));
+        assert!(loops_whole_faction(
+            "GetFirstFactionMember(GetFirstPC(), FALSE);"
+        ));
+        assert!(!loops_whole_faction("// GetFirstFactionMember(oPC, FALSE)"));
     }
 
     #[test]

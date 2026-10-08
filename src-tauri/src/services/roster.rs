@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use tracing::{info, warn};
 
 use crate::parsers::erf::RES_TYPE_GIT;
-use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer, gff_text};
+use crate::parsers::gff::{GffParser, GffValue, gff_integer, gff_text, rewrite_gff};
 use crate::services::campaign::content;
 use crate::services::savegame_handler::SaveGameHandler;
 
@@ -45,26 +45,6 @@ pub const BENCHED_FACTION: u16 = 4;
 
 fn int_field(fields: &IndexMap<String, GffValue<'_>>, name: &str) -> Option<i64> {
     fields.get(name).and_then(gff_integer)
-}
-
-/// Parse a GFF, let `edit` change its root fields and write it back with the original
-/// file type, version and root struct id. `what` names the file in errors.
-fn rewrite_gff(
-    bytes: Vec<u8>,
-    what: &str,
-    edit: impl FnOnce(&mut IndexMap<String, GffValue<'static>>) -> Result<(), String>,
-) -> Result<Vec<u8>, String> {
-    let parser = GffParser::from_bytes(bytes).map_err(|e| format!("{what} parse error: {e}"))?;
-    let root_struct_id = parser
-        .get_struct_id(0)
-        .map_err(|e| format!("{what} root id error: {e}"))?;
-    let mut root = parser
-        .read_owned_struct(0)
-        .map_err(|e| format!("{what} root error: {e}"))?;
-    edit(&mut root)?;
-    GffWriter::new(&parser.file_type, &parser.file_version)
-        .write_with_struct_id(root, root_struct_id)
-        .map_err(|e| format!("{what} serialization error: {e}"))
 }
 
 pub fn parse_roster_members(bytes: Vec<u8>) -> Result<Vec<RosterMember>, String> {
@@ -407,7 +387,12 @@ fn module_without_creatures(
     module: &str,
     tags: &[String],
 ) -> Result<Option<(String, Vec<u8>)>, String> {
-    let (z_path, mut erf) = content::open_module_state(handler, module)?;
+    let (z_path, decompressed) = content::read_module_state(handler, module)?;
+    // Most modules hold none of the tags: skip parsing hundreds of MB of resources.
+    if !tags.iter().any(|tag| holds_gff_string(&decompressed, tag)) {
+        return Ok(None);
+    }
+    let mut erf = content::parse_module_state(&decompressed)?;
     let mut edited = false;
     for (area, _, _) in erf.list_resources(Some(RES_TYPE_GIT)) {
         let mut edit_area = || -> Result<bool, String> {
@@ -432,18 +417,20 @@ fn module_without_creatures(
     Ok(Some((file_name.to_string(), bytes)))
 }
 
+/// Whether `bytes` (a GFF, or an archive of them) store the string `text`, compared
+/// case-insensitively: a GFF string is its u32 length followed by the text.
+fn holds_gff_string(bytes: &[u8], text: &str) -> bool {
+    let mut needle = (text.len() as u32).to_le_bytes().to_vec();
+    needle.extend_from_slice(text.as_bytes());
+    bytes
+        .windows(needle.len())
+        .any(|w| w.eq_ignore_ascii_case(&needle))
+}
+
 /// An area `.git` without the `Creature List` entries tagged with one of `tags`, or
 /// `None` when it holds none of them. Tags compare case-insensitively.
 fn without_creatures(bytes: Vec<u8>, tags: &[String]) -> Result<Option<Vec<u8>>, String> {
-    // A GFF string is stored as its u32 length followed by the text.
-    let holds = |tag: &String| {
-        let mut needle = (tag.len() as u32).to_le_bytes().to_vec();
-        needle.extend_from_slice(tag.as_bytes());
-        bytes
-            .windows(needle.len())
-            .any(|w| w.eq_ignore_ascii_case(&needle))
-    };
-    if !tags.iter().any(holds) {
+    if !tags.iter().any(|tag| holds_gff_string(&bytes, tag)) {
         return Ok(None);
     }
     let mut removed = false;
