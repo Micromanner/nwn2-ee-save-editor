@@ -1544,6 +1544,10 @@ pub enum Change {
         min: i64,
         max: i64,
     },
+    /// Engine `AdjustAlignment` on one axis: kept within 0..100, and a shift that
+    /// lands in another band (0-30, 31-69, 70-100) snaps to that band's middle
+    /// (15, 50, 85). Verified in-game 2026-10-08: GoodEvil 69 + 1 = 85.
+    AdjustAlignment(i64),
 }
 
 impl Change {
@@ -1555,7 +1559,25 @@ impl Change {
             Change::AddClamped { delta, min, max } => {
                 Value::from((current() + delta).clamp(*min, *max))
             }
+            Change::AdjustAlignment(delta) => {
+                let before = current().clamp(0, 100);
+                let after = (before + delta).clamp(0, 100);
+                let band = alignment_band(after);
+                Value::from(if band == alignment_band(before) {
+                    after
+                } else {
+                    [15, 50, 85][band]
+                })
+            }
         }
+    }
+}
+
+fn alignment_band(value: i64) -> usize {
+    match value {
+        ..=30 => 0,
+        31..=69 => 1,
+        _ => 2,
     }
 }
 
@@ -1837,8 +1859,7 @@ fn decode_reward(
 }
 
 /// `ga_alignment(iActType, bLawChaosAxis)` per `ginc_alignment`: act types 1..4 shift
-/// by 1, 3, 10 or 70 points towards good/lawful (negative towards evil/chaotic); the
-/// engine keeps both axes within 0..100.
+/// by 1, 3, 10 or 70 points towards good/lawful (negative towards evil/chaotic).
 fn decode_alignment(action: &ConvoFunctor) -> Result<(VariableKey, Change), &'static str> {
     let act = int_param(action, 0).ok_or("invalid_assignment")?;
     let magnitude = match act.abs() {
@@ -1855,11 +1876,7 @@ fn decode_alignment(action: &ConvoFunctor) -> Result<(VariableKey, Change), &'st
     };
     Ok((
         character_key(field),
-        Change::AddClamped {
-            delta: magnitude * act.signum(),
-            min: 0,
-            max: 100,
-        },
+        Change::AdjustAlignment(magnitude * act.signum()),
     ))
 }
 
@@ -1978,30 +1995,25 @@ fn decode_alignment_points(
         return Err("no_effect");
     }
     let target = target_tag(action.params.get(2).and_then(Value::as_str).unwrap_or(""))?;
-    let clamped = |field: &str, delta: i64| {
-        (
-            creature_key(target, field),
-            Change::AddClamped {
-                delta,
-                min: 0,
-                max: 100,
-            },
-        )
-    };
+    let shift_axis =
+        |field: &str, delta: i64| (creature_key(target, field), Change::AdjustAlignment(delta));
     let writes = match alignment {
-        0 => vec![clamped(LAWFUL_CHAOTIC, shift), clamped(GOOD_EVIL, shift)],
+        0 => vec![
+            shift_axis(LAWFUL_CHAOTIC, shift),
+            shift_axis(GOOD_EVIL, shift),
+        ],
         1 => [LAWFUL_CHAOTIC, GOOD_EVIL]
             .into_iter()
             .filter_map(|field| {
                 let value = current(&creature_key(target, field)).unwrap_or(50);
                 let delta = (50 - value).clamp(-shift, shift);
-                (delta != 0).then(|| clamped(field, delta))
+                (delta != 0).then(|| shift_axis(field, delta))
             })
             .collect(),
-        2 => vec![clamped(LAWFUL_CHAOTIC, shift)],
-        3 => vec![clamped(LAWFUL_CHAOTIC, -shift)],
-        4 => vec![clamped(GOOD_EVIL, shift)],
-        5 => vec![clamped(GOOD_EVIL, -shift)],
+        2 => vec![shift_axis(LAWFUL_CHAOTIC, shift)],
+        3 => vec![shift_axis(LAWFUL_CHAOTIC, -shift)],
+        4 => vec![shift_axis(GOOD_EVIL, shift)],
+        5 => vec![shift_axis(GOOD_EVIL, -shift)],
         _ => return Err("invalid_assignment"),
     };
     if writes.is_empty() {
@@ -3222,7 +3234,7 @@ mod tests {
         let lawful = write(COMPANION_CHARACTER_TYPE, "khelgar/LawfulChaotic");
         assert_eq!(
             (lawful.before.clone(), lawful.after.clone()),
-            (Some(json!(20)), json!(70))
+            (Some(json!(20)), json!(85))
         );
         let removed = write(COMPANION_FEAT_TYPE, "neeshka/45");
         assert_eq!(
@@ -3244,7 +3256,7 @@ mod tests {
         assert_eq!(written.companions.len(), 2);
         assert_eq!(written.companions[0].0, "khelgar");
         assert_eq!(written.companions[0].1[0].0, "LawfulChaotic");
-        assert_eq!(gff_integer(&written.companions[0].1[0].1), Some(70));
+        assert_eq!(gff_integer(&written.companions[0].1[0].1), Some(85));
 
         let ros = |name: &str| {
             let stored = handler.companion_stored_name(name).unwrap();
@@ -3255,7 +3267,7 @@ mod tests {
             owned_root(&bytes).unwrap()
         };
         let khelgar = ros("khelgar");
-        assert_eq!(gff_integer(&khelgar["LawfulChaotic"]), Some(70));
+        assert_eq!(gff_integer(&khelgar["LawfulChaotic"]), Some(85));
         assert!(matches!(khelgar["LawfulChaotic"], GffValue::Byte(_)));
         assert_eq!(gff_integer(&khelgar["GoodEvil"]), Some(60));
         assert_eq!(gff_integer(&khelgar["FactionID"]), Some(9));
@@ -3546,17 +3558,31 @@ mod tests {
             let (key, change) =
                 decode_assignment(&action("ga_alignment", json!([act, axis])), "m").unwrap();
             assert_eq!(key, character_key(field));
-            assert_eq!(
-                change,
-                Change::AddClamped {
-                    delta,
-                    min: 0,
-                    max: 100
-                }
-            );
+            assert_eq!(change, Change::AdjustAlignment(delta));
         }
         let (_, change) = decode_assignment(&action("ga_alignment", json!([4, 0])), "m").unwrap();
-        assert_eq!(change.apply(Some(&json!(50))), json!(100));
+        assert_eq!(change.apply(Some(&json!(50))), json!(85));
+    }
+
+    /// Shifts within a band are exact; one that lands in another band snaps to its middle.
+    #[test]
+    fn alignment_shifts_snap_to_the_middle_of_a_new_band() {
+        for (before, delta, after) in [
+            (69, 1, 85),
+            (71, -1, 70),
+            (71, -2, 50),
+            (71, -41, 15),
+            (30, 1, 50),
+            (31, -1, 15),
+            (98, 5, 100),
+            (10, -12, 0),
+        ] {
+            assert_eq!(
+                Change::AdjustAlignment(delta).apply(Some(&json!(before))),
+                json!(after),
+                "{before} {delta:+}"
+            );
+        }
     }
 
     #[test]
@@ -3599,7 +3625,7 @@ mod tests {
         let tables = RewardTables::empty();
         let mut current = |key: &VariableKey| match key.name.as_str() {
             "LawfulChaotic" => Some(10),
-            "GoodEvil" => Some(80),
+            "GoodEvil" => Some(85),
             _ => None,
         };
         let writes = decode_writes(
@@ -3643,7 +3669,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(writes[0].1.apply(Some(&json!(10))), json!(25));
-        assert_eq!(writes[1].1.apply(Some(&json!(80))), json!(65));
+        assert_eq!(writes[1].1.apply(Some(&json!(85))), json!(70));
         let mut nearly_neutral = |key: &VariableKey| match key.name.as_str() {
             "LawfulChaotic" => Some(40),
             "GoodEvil" => Some(50),
@@ -4005,7 +4031,9 @@ mod tests {
             .unwrap();
         let write = &preview.writes[0];
         let saved = write.saved.as_ref().and_then(Value::as_i64).unwrap_or(0);
-        assert_eq!(write.after, json!((saved + 10).min(100)));
+        let after = Change::AdjustAlignment(10).apply(Some(&json!(saved)));
+        assert_eq!(write.after, after);
+        let after = after.as_i64().unwrap();
         let bic_before = owned_root(&handler.extract_player_bic().unwrap().unwrap())
             .unwrap()
             .get("LawfulChaotic")
@@ -4025,14 +4053,11 @@ mod tests {
             written[0].1
         );
         let player = owned_players(&handler.extract_player_data().unwrap()).swap_remove(0);
-        assert_eq!(
-            gff_integer(&player["LawfulChaotic"]).unwrap(),
-            (saved + 10).min(100)
-        );
+        assert_eq!(gff_integer(&player["LawfulChaotic"]).unwrap(), after);
         let bic = owned_root(&handler.extract_player_bic().unwrap().unwrap()).unwrap();
         assert_eq!(
             gff_integer(&bic["LawfulChaotic"]).unwrap(),
-            (bic_before + 10).min(100)
+            (bic_before + after - saved).clamp(0, 100)
         );
     }
 
