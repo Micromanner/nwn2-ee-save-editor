@@ -1244,6 +1244,80 @@ impl SessionState {
         Ok(())
     }
 
+    /// Unsaved state a quest preview reads instead of the save: the loaded player when
+    /// it is the quest target, with the pending edit of `tag` taken back (previewing a
+    /// quest replaces its edit), the companions loaded in this session and the staged
+    /// party.
+    pub fn quest_live_characters(
+        &self,
+        tag: Option<&str>,
+    ) -> Result<editing::LiveCharacters<'_>, String> {
+        let target_loaded = self
+            .primary_player_index
+            .unwrap_or(self.selected_player_index)
+            == self.selected_player_index;
+        let applied = tag
+            .and_then(|tag| self.quest_edits.pending.iter().find(|p| p.tag == tag))
+            .and_then(|edit| edit.applied.as_ref());
+        let player = self
+            .loaded(&CharacterSource::Player)
+            .filter(|_| target_loaded);
+        let player = match (player, applied) {
+            (Some(player), Some(changes)) => {
+                let mut copy =
+                    Character::from_gff(player.clone_gff()).map_err(|e| e.to_string())?;
+                editing::revert_on_player(changes, &mut copy)?;
+                Some(std::borrow::Cow::Owned(copy.into_gff()))
+            }
+            (Some(player), None) => Some(std::borrow::Cow::Borrowed(player.gff())),
+            (None, _) => None,
+        };
+        let companions = std::iter::once((&self.character_source, self.character.as_ref()))
+            .chain(
+                self.parked
+                    .iter()
+                    .map(|(source, character, _)| (source, Some(character))),
+            )
+            .filter_map(|(source, character)| match source {
+                CharacterSource::Companion { ros_name } => {
+                    Some((ros_name.to_ascii_lowercase(), character?.gff()))
+                }
+                _ => None,
+            })
+            .collect();
+        Ok(editing::LiveCharacters {
+            player,
+            companions,
+            party: self
+                .staged_party
+                .iter()
+                .map(|(name, in_party)| (name.clone(), *in_party))
+                .collect(),
+            revision: self.character_revision,
+        })
+    }
+
+    /// Changes whenever a quest preview of this session could: another save, other
+    /// pending quest edits, an edited character.
+    pub fn quest_generation(&self) -> (u64, u64, u64) {
+        (
+            self.load_generation,
+            self.quest_edits.generation(),
+            self.character_revision,
+        )
+    }
+
+    /// The character loaded for `source`, active or parked.
+    fn loaded(&self, source: &CharacterSource) -> Option<&Character> {
+        if self.character_source == *source {
+            return self.character.as_ref();
+        }
+        self.parked
+            .iter()
+            .find(|(s, _, _)| s == source)
+            .map(|(_, character, _)| character)
+    }
+
     /// The player character wherever it currently lives (active or parked).
     fn player_character_mut(&mut self) -> Option<&mut Character> {
         if self.character_source == CharacterSource::Player {
@@ -1289,14 +1363,16 @@ impl SessionState {
                 // Quest edits are written after the party tab's changes, so theirs win.
                 staged_in_party: self
                     .quest_edits
-                    .pending
-                    .iter()
-                    .flat_map(|p| &p.writes)
-                    .rfind(|w| {
-                        w.key.value_type == editing::PARTY_TYPE
-                            && w.key.name.eq_ignore_ascii_case(&m.ros_name)
-                    })
-                    .map(|w| w.after.as_i64().unwrap_or(0) != 0)
+                    .pending_value(
+                        &editing::VariableKey {
+                            module: None,
+                            name: m.ros_name.to_ascii_lowercase(),
+                            value_type: editing::PARTY_TYPE.into(),
+                        },
+                        None,
+                        None,
+                    )
+                    .map(|v| v.as_i64().unwrap_or(0) != 0)
                     .or_else(|| {
                         self.staged_party
                             .get(&m.ros_name.to_ascii_lowercase())
@@ -2078,6 +2154,7 @@ mod tests {
                 saved: None,
                 before: None,
                 after: serde_json::json!(50),
+                change: crate::services::save_graph::editing::Change::Add(50),
                 action_index: 0,
                 label: None,
                 label_strref: None,
@@ -2085,6 +2162,7 @@ mod tests {
                 line: None,
             }],
             effects: Vec::new(),
+            lead_in: Vec::new(),
             followed: Vec::new(),
             follow_stop: None,
             next_steps: Vec::new(),
@@ -2210,6 +2288,7 @@ mod tests {
                 saved: None,
                 before: None,
                 after: serde_json::json!(50),
+                change: crate::services::save_graph::editing::Change::Add(50),
                 action_index: 0,
                 label: None,
                 label_strref: None,
@@ -2217,6 +2296,7 @@ mod tests {
                 line: None,
             }],
             effects: Vec::new(),
+            lead_in: Vec::new(),
             followed: Vec::new(),
             follow_stop: None,
             next_steps: Vec::new(),
@@ -2268,6 +2348,12 @@ mod tests {
             saved: None,
             before: None,
             after: serde_json::json!(after),
+            // Rewards add to the character, everything else is set.
+            change: if value_type == crate::services::save_graph::editing::CHARACTER_TYPE {
+                crate::services::save_graph::editing::Change::Add(after)
+            } else {
+                crate::services::save_graph::editing::Change::Set(serde_json::json!(after))
+            },
             action_index: 0,
             label: None,
             label_strref: None,
@@ -2289,6 +2375,7 @@ mod tests {
             route: None,
             writes,
             effects: Vec::new(),
+            lead_in: Vec::new(),
             followed: Vec::new(),
             follow_stop: None,
             next_steps: Vec::new(),

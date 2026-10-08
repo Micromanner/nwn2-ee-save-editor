@@ -769,6 +769,7 @@
         "youSaid": "Tú: \"{text}\"",
         "npcSaid": "{who}: \"{text}\"",
         "npc": "PNJ",
+        "earlierInConversation": "antes en la conversación",
         "laterInConversation": "más adelante en la conversación",
         "outcome": {
           "none": "Solo diario",

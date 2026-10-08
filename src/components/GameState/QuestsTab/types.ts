@@ -124,17 +124,24 @@ export interface VariableKey {
   value_type: string;
 }
 
+/** What a write does to its variable; re-applied to the value as it is when staged and saved. */
+export type Change =
+  | { kind: 'set'; value: string | number }
+  | { kind: 'add' | 'adjust_alignment' | 'raise'; value: number }
+  | { kind: 'add_clamped'; value: { delta: number; min: number; max: number } };
+
 export interface VariableWrite {
   key: VariableKey;
   saved: string | number | null;
   before: string | number | null;
   after: string | number;
+  change: Change;
   action_index: number;
   /** Item writes: the blueprint's embedded display name, or the TLK strref of it. */
   label?: string;
   label_strref?: number;
   derived_from?: string;
-  /** Node id of the follow-up line this write comes from; absent for the chosen line. */
+  /** Node id of the lead-in or follow-up line this write comes from; absent for the chosen line. */
   line?: number;
 }
 
@@ -197,6 +204,8 @@ export interface QuestPreview {
   route: number | null;
   writes: VariableWrite[];
   effects: { action: ConvoFunctor; reason: string; line?: number }[];
+  /** Lines the game plays before the chosen one on every way to it. */
+  lead_in?: FollowedLine[];
   followed?: FollowedLine[];
   follow_stop?: FollowStop;
   next_steps?: NextStep[];

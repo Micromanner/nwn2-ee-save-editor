@@ -131,6 +131,11 @@ pub struct TransitionNode {
     /// saw. Journal writes often sit on empty "continue" replies.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spoken: Option<SpokenLine>,
+    /// The lines every path from the conversation's start to this one passes through,
+    /// start first, that run actions: the game runs those before this line. Preview
+    /// only; `QuestPreview::lead_in` carries what the UI shows.
+    #[serde(skip)]
+    pub lead_in: Vec<FollowNode>,
     /// Ids of the lines that can follow this one; resolved through `follow_up`.
     pub children: Vec<i32>,
     /// The lines reachable after this one without a further player decision,
@@ -160,6 +165,7 @@ pub struct FollowNode {
     pub text_strref: Option<i32>,
     pub conditions: Vec<ConvoFunctor>,
     pub actions: Vec<ConvoFunctor>,
+    /// Ids of the lines that can follow; those not in the subgraph were not collected.
     pub children: Vec<i32>,
 }
 

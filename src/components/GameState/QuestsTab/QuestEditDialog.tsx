@@ -117,6 +117,10 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     return Number(value) ? t('gameState.quests.edit.selectable') : t('gameState.quests.edit.locked');
   };
   const conflicts = conflictingEdits(preview, selected, pending);
+  // Writes from a line played before the chosen one, or after it.
+  const leadIn = new Set((preview?.lead_in ?? []).map(line => line.node));
+  const lineNote = (line: number | undefined) => line == null ? undefined
+    : t(leadIn.has(line) ? 'gameState.quests.edit.earlierInConversation' : 'gameState.quests.edit.laterInConversation');
   const apply = async () => {
     if (!preview || busy) return;
     setBusy(true);
@@ -287,7 +291,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
             {itemTakeWrites.map((write, i) => changeRow(`item-take-${i}`, itemName({ ...write, name: write.key.name }), write.before, write.after, { delta: true, note: t('gameState.quests.edit.itemTaken') }))}
             {influenceWrites.map((write, i) => changeRow(`influence-${i}`, t('gameState.quests.edit.influenceApplied', { companion: influenceCompanion(write.key.name) }), write.before, write.after, { delta: true }))}
             {featWrites.map((write, i) => changeRow(`feat-${i}`, t('gameState.quests.edit.featApplied', { feat: featName({ ...write, name: write.key.name }) }), featState(write.before), featState(write.after), write.derived_from ? { note: t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) } : {}))}
-            {partyWrites.map((write, i) => changeRow(`party-${i}`, partyLabel(write.key), partyState(write.key, write.before), partyState(write.key, write.after), write.line != null ? { note: t('gameState.quests.edit.laterInConversation') } : {}))}
+            {partyWrites.map((write, i) => changeRow(`party-${i}`, partyLabel(write.key), partyState(write.key, write.before), partyState(write.key, write.after), { note: lineNote(write.line) }))}
             {companionWrites.map((write, i) => {
               const derived = write.derived_from ? t('gameState.quests.edit.derivedFrom', { script: write.derived_from }) : undefined;
               if (write.key.value_type === COMPANION_FEAT_TYPE) return changeRow(`companion-${i}`, companionLabel(write), featState(write.before), featState(write.after), { note: derived });
@@ -308,7 +312,8 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
               const note = [journal ? write.key.name.slice(JOURNAL_ENTRY_PREFIX.length)
                 : pcLocal ? t('gameState.quests.edit.pcLocal') : moduleLabel(write.key.module)];
               if (write.derived_from) note.push(t('gameState.quests.edit.derivedFrom', { script: write.derived_from }));
-              if (write.line != null) note.push(t('gameState.quests.edit.laterInConversation'));
+              const played = lineNote(write.line);
+              if (played) note.push(played);
               return changeRow(`flag-${index}`, journal ? t('gameState.quests.edit.journal') : write.key.name, write.before, write.after, { note: note.join(' · ') });
             })}
           </div>

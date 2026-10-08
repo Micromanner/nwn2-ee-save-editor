@@ -768,6 +768,7 @@
         "youSaid": "Vous : \"{text}\"",
         "npcSaid": "{who} : \"{text}\"",
         "npc": "PNJ",
+        "earlierInConversation": "plus tôt dans la conversation",
         "laterInConversation": "plus tard dans la conversation",
         "outcome": {
           "none": "Journal uniquement",

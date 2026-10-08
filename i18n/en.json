@@ -695,6 +695,7 @@
         "youSaid": "You: \"{text}\"",
         "npcSaid": "{who}: \"{text}\"",
         "npc": "NPC",
+        "earlierInConversation": "earlier in conversation",
         "laterInConversation": "later in conversation",
         "outcome": {
           "none": "Journal only",

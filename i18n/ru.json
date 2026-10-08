@@ -768,6 +768,7 @@
         "youSaid": "Вы: \"{text}\"",
         "npcSaid": "{who}: \"{text}\"",
         "npc": "NPC",
+        "earlierInConversation": "ранее в разговоре",
         "laterInConversation": "далее в разговоре",
         "outcome": {
           "none": "Только журнал",

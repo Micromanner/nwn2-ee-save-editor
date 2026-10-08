@@ -17,7 +17,8 @@ pub struct DecodedWrite {
     /// `int`, `float` or `string`.
     pub value_type: String,
     pub name: String,
-    /// Formatted like the value parameter of `ga_global_int`: `"1"`, `"+1"`, `"2.5"`, text.
+    /// Formatted like the value parameter of `ga_global_int`: `"1"`, `"+1"`, `"2.5"`, text;
+    /// a negative value that is set reads `"=-1"` (`"-1"` subtracts).
     pub value: String,
 }
 
@@ -61,6 +62,71 @@ impl ScriptDecode {
 pub struct ScriptConstants {
     pub ints: HashMap<String, i64>,
     pub strings: HashMap<String, String>,
+}
+
+/// Script-level `int NAME = 5;` / `const string NAME = "x";` declarations, outside every
+/// function body. A non-`const` one the script assigns again is a variable, not a
+/// constant. Earlier definitions win, so `nwscript` is collected before everything else.
+pub fn collect_constants(source: &str, constants: &mut ScriptConstants) {
+    let tokens = tokenize(source);
+    let mut assignments: HashMap<&str, usize> = HashMap::new();
+    for pair in tokens.windows(2) {
+        let name = match pair {
+            [Token::Ident(name), Token::Punct(op)]
+                if matches!(op.as_str(), "=" | "+=" | "-=" | "*=" | "/=" | "++" | "--") =>
+            {
+                name
+            }
+            [Token::Punct(op), Token::Ident(name)] if op == "++" || op == "--" => name,
+            _ => continue,
+        };
+        *assignments.entry(name.as_str()).or_default() += 1;
+    }
+    let mut depth = 0usize;
+    for (i, token) in tokens.iter().enumerate() {
+        match token {
+            Token::Punct(p) if p == "{" => depth += 1,
+            Token::Punct(p) if p == "}" => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if depth > 0
+            || !(i == 0 || is_punct(tokens.get(i - 1), ";") || is_punct(tokens.get(i - 1), "}"))
+        {
+            continue;
+        }
+        let is_const = is_ident(Some(token), "const");
+        let decl = &tokens[i + usize::from(is_const)..];
+        let [
+            Token::Ident(kind),
+            Token::Ident(name),
+            Token::Punct(eq),
+            rest @ ..,
+        ] = decl
+        else {
+            continue;
+        };
+        if eq != "=" || (!is_const && assignments.get(name.as_str()) != Some(&1)) {
+            continue;
+        }
+        let (sign, rest) = match rest {
+            [Token::Punct(minus), rest @ ..] if minus == "-" => (-1, rest),
+            _ => (1, rest),
+        };
+        match (kind.as_str(), rest) {
+            ("int", [Token::Num(n), Token::Punct(end), ..]) if end == ";" => {
+                if let Ok(n) = n.parse::<i64>() {
+                    constants.ints.entry(name.clone()).or_insert(sign * n);
+                }
+            }
+            ("string", [Token::Str(s), Token::Punct(end), ..]) if end == ";" => {
+                constants
+                    .strings
+                    .entry(name.clone())
+                    .or_insert_with(|| s.clone());
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Decode the `void main(...)` branch a dialogue action functor would run.
@@ -877,9 +943,13 @@ fn interpret_statement(stmt: &Stmt, ctx: &mut Context, conditional: bool) -> Flo
         Stmt::Assign { name, expr } => {
             if ctx.is_module(expr) {
                 ctx.module_aliases.insert(name.clone());
+            } else {
+                ctx.module_aliases.remove(name);
             }
             if ctx.is_pc(expr) {
                 ctx.pc_aliases.insert(name.clone());
+            } else {
+                ctx.pc_aliases.remove(name);
             }
             match ctx.object_tag(expr) {
                 Some(tag) => {
@@ -1206,16 +1276,24 @@ fn record_write(
     }
 }
 
-/// Evaluate a value expression into the `ga_global_int` textual convention.
+/// Evaluate a value expression into the `ga_global_int` textual convention; a negative
+/// value that is set rather than added reads `"=-1"`.
 fn eval_value(expr: &[Token], value_type: &str, name: &str, ctx: &Context) -> Option<String> {
+    let absolute = |n: String| {
+        if n.starts_with('-') {
+            format!("={n}")
+        } else {
+            n
+        }
+    };
     match expr {
         [Token::Num(n)] => Some(n.clone()),
-        [Token::Punct(sign), Token::Num(n)] if sign == "-" => Some(format!("-{n}")),
+        [Token::Punct(sign), Token::Num(n)] if sign == "-" => Some(absolute(format!("-{n}"))),
         [Token::Ident(word)] if word == "TRUE" => Some("1".into()),
         [Token::Ident(word)] if word == "FALSE" => Some("0".into()),
         [Token::Str(s)] if value_type == "string" => Some(s.clone()),
         [Token::Ident(word)] => match ctx.param(word)? {
-            Value::Number(n) if value_type != "string" => Some(n.to_string()),
+            Value::Number(n) if value_type != "string" => Some(absolute(n.to_string())),
             Value::String(s) if value_type == "string" => Some(s.clone()),
             _ => None,
         },
@@ -2019,5 +2097,55 @@ int StartingConditional()
 }
 "#;
         assert!(decode_action(src, &[], &ScriptConstants::default()).is_none());
+    }
+
+    /// A negative value that is set reads `"=-1"`, a relative one `"-1"`.
+    #[test]
+    fn negative_values_say_whether_they_are_set_or_added() {
+        let src = r#"
+void main(int nValue)
+{
+    SetGlobalInt("Set", -1);
+    SetGlobalInt("FromParam", nValue);
+    ModifyGlobalInt("Added", -1);
+    SetGlobalInt("Same", GetGlobalInt("Same") - 2);
+}
+"#;
+        let decoded = decode_action(src, &[json!(-4)], &ScriptConstants::default()).unwrap();
+        assert_eq!(
+            decoded.writes,
+            vec![
+                write("Set", "=-1"),
+                write("FromParam", "=-4"),
+                write("Added", "-1"),
+                write("Same", "-2"),
+            ]
+        );
+    }
+
+    /// A variable reassigned to something else no longer stands for the player or module.
+    #[test]
+    fn reassigned_aliases_are_forgotten() {
+        let src = r#"
+void main()
+{
+    object oTarget = GetPCSpeaker();
+    oTarget = GetObjectByTag("okku");
+    FeatAdd(oTarget, 7, FALSE);
+    object oMod = GetModule();
+    oMod = OBJECT_SELF;
+    SetLocalInt(oMod, "Flag", 1);
+}
+"#;
+        let decoded = decode_action(src, &[], &ScriptConstants::default()).unwrap();
+        assert_eq!(
+            decoded.actions,
+            vec![DecodedAction {
+                script: "ga_give_feat".into(),
+                params: vec![json!("okku"), json!(7), json!(0)],
+            }]
+        );
+        assert!(decoded.writes.is_empty());
+        assert_eq!(decoded.calls, vec!["SetLocalInt(oMod)".to_string()]);
     }
 }

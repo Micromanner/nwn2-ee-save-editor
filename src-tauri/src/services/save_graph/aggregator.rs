@@ -2,7 +2,7 @@
 //! campaign, merge per-module reference graphs with live save state (player journal,
 //! `globals.xml`, current module's `VarTable`), and emit one `SaveGraph` blob.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use tracing::{debug, info, warn};
 
@@ -259,6 +259,8 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 map.entry(*child).or_insert(node.node);
             }
         }
+        // Built per conversation the first time one of its lines is a transition.
+        let mut lead_ins: HashMap<&str, HashMap<i32, Vec<i32>>> = HashMap::new();
         for node in &graph.convo.nodes {
             let siblings = &by_dlg[node.dlg.as_str()];
             let spoken = spoken_line(node, siblings, &parents[node.dlg.as_str()]);
@@ -269,6 +271,7 @@ pub fn build(ctx: BuildContext<'_>) -> Result<SaveGraph, String> {
                 &mut scripts,
                 siblings,
                 spoken,
+                &mut lead_ins,
             );
         }
 
@@ -407,13 +410,14 @@ fn merge_category(
         });
 }
 
-fn collect_transitions(
-    node: &ConvoNode,
+fn collect_transitions<'g>(
+    node: &'g ConvoNode,
     module_name: &str,
     quests: &mut HashMap<String, QuestAggregate>,
     scripts: &mut ScriptSources<'_>,
     siblings: &HashMap<i32, &ConvoNode>,
     spoken: Option<SpokenLine>,
+    lead_ins: &mut HashMap<&'g str, HashMap<i32, Vec<i32>>>,
 ) {
     // Journal entries come from `ga_journal` and from wrapper scripts that call
     // `AddJournalQuestEntry`, which only show once the wrappers are decoded.
@@ -435,6 +439,16 @@ fn collect_transitions(
         return;
     }
     let follow_up = follow_up_subgraph(node, siblings, scripts);
+    let lead_in: Vec<FollowNode> = lead_ins
+        .entry(node.dlg.as_str())
+        .or_insert_with(|| lead_in_ids(siblings))
+        .get(&node.node)
+        .into_iter()
+        .flatten()
+        .filter_map(|id| siblings.get(id))
+        .filter(|line| !line.actions.is_empty())
+        .map(|line| follow_node(line, scripts))
+        .collect();
     // Partition once per node — every transition on this node reuses the same
     // co-authored snapshot, so avoid N×2 walks of node.actions inside the loop.
     let mut co_globals: Vec<ConvoFunctor> = Vec::new();
@@ -479,6 +493,7 @@ fn collect_transitions(
             is_player: node.is_player(),
             debug: is_debug_dialogue(&node.dlg),
             spoken: spoken.clone(),
+            lead_in: lead_in.clone(),
             children: node.children.clone(),
             follow_up: follow_up.clone(),
         });
@@ -542,7 +557,8 @@ const FOLLOW_UP_MAX_NODES: usize = 96;
 /// The lines the game can play after `start` without another real player decision:
 /// NPC lines are expanded (the engine picks the first whose conditions pass), and
 /// a lone player reply is expanded too. Where several player replies are offered
-/// they are included as leaves so the preview can report the choice.
+/// they are included without their own lines so the preview can report the choice.
+/// Collected nearest first, so the node cap never drops a line's siblings.
 fn follow_up_subgraph(
     start: &ConvoNode,
     siblings: &HashMap<i32, &ConvoNode>,
@@ -550,12 +566,12 @@ fn follow_up_subgraph(
 ) -> Vec<FollowNode> {
     let mut out = Vec::new();
     let mut seen: HashSet<i32> = HashSet::from([start.node]);
-    let mut frontier: Vec<(i32, usize, bool)> = start
+    let mut frontier: VecDeque<(i32, usize, bool)> = start
         .children
         .iter()
         .map(|id| (*id, 1, start.is_player() || start.children.len() == 1))
         .collect();
-    while let Some((id, depth, expand)) = frontier.pop() {
+    while let Some((id, depth, expand)) = frontier.pop_front() {
         if !seen.insert(id) || out.len() >= FOLLOW_UP_MAX_NODES {
             continue;
         }
@@ -566,26 +582,102 @@ fn follow_up_subgraph(
         if expand_children {
             // Children of an NPC line are player replies: expand only a lone one.
             let lone = node.children.len() == 1;
-            for child in node.children.iter().rev() {
-                frontier.push((*child, depth + 1, node.is_player() || lone));
+            for child in &node.children {
+                frontier.push_back((*child, depth + 1, node.is_player() || lone));
             }
         }
-        out.push(FollowNode {
-            node: node.node,
-            is_player: node.is_player(),
-            has_text: node.has_text,
-            speaker: node.speaker.clone(),
-            text_strref: (node.text_strref >= 0).then_some(node.text_strref),
-            conditions: node.conditions.clone(),
-            actions: expand_wrapper_scripts(&node.actions, scripts),
-            children: if expand_children {
-                node.children.clone()
-            } else {
-                Vec::new()
-            },
-        });
+        out.push(follow_node(node, scripts));
     }
     out
+}
+
+fn follow_node(node: &ConvoNode, scripts: &mut ScriptSources<'_>) -> FollowNode {
+    FollowNode {
+        node: node.node,
+        is_player: node.is_player(),
+        has_text: node.has_text,
+        speaker: node.speaker.clone(),
+        text_strref: (node.text_strref >= 0).then_some(node.text_strref),
+        conditions: node.conditions.clone(),
+        actions: expand_wrapper_scripts(&node.actions, scripts),
+        children: node.children.clone(),
+    }
+}
+
+/// For each line of one conversation, the lines every path from a starting entry to it
+/// passes through (its dominators), start first, itself excluded. Lines no starting
+/// entry reaches have none.
+fn lead_in_ids(nodes: &HashMap<i32, &ConvoNode>) -> HashMap<i32, Vec<i32>> {
+    let is_start = |id: i32| {
+        nodes
+            .get(&id)
+            .is_some_and(|n| n.node_type.eq_ignore_ascii_case("StartingEntry"))
+    };
+    let mut starts: Vec<i32> = nodes.keys().copied().filter(|id| is_start(*id)).collect();
+    starts.sort_unstable();
+    // Reverse postorder from the starting entries.
+    let mut postorder = Vec::new();
+    let mut visited: HashSet<i32> = HashSet::new();
+    for start in starts {
+        if !visited.insert(start) {
+            continue;
+        }
+        let mut stack = vec![(start, 0usize)];
+        while let Some((id, next)) = stack.pop() {
+            match nodes[&id].children.get(next) {
+                Some(child) => {
+                    stack.push((id, next + 1));
+                    if nodes.contains_key(child) && visited.insert(*child) {
+                        stack.push((*child, 0));
+                    }
+                }
+                None => postorder.push(id),
+            }
+        }
+    }
+    let order: Vec<i32> = postorder.into_iter().rev().collect();
+    let rank: HashMap<i32, usize> = order.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+    let mut preds: HashMap<i32, Vec<i32>> = HashMap::new();
+    for id in &order {
+        for child in &nodes[id].children {
+            if rank.contains_key(child) {
+                preds.entry(*child).or_default().push(*id);
+            }
+        }
+    }
+    let mut dominators: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for id in &order {
+            // A starting entry is also entered from outside the conversation.
+            let mut set: Option<BTreeSet<i32>> = is_start(*id).then(BTreeSet::new);
+            for pred in preds.get(id).into_iter().flatten() {
+                if let Some(pred_set) = dominators.get(pred) {
+                    set = Some(match set {
+                        None => pred_set.clone(),
+                        Some(acc) => acc.intersection(pred_set).copied().collect(),
+                    });
+                }
+            }
+            let Some(mut set) = set else {
+                continue;
+            };
+            set.insert(*id);
+            if dominators.get(id) != Some(&set) {
+                dominators.insert(*id, set);
+                changed = true;
+            }
+        }
+    }
+    dominators
+        .into_iter()
+        .map(|(id, set)| {
+            let mut chain: Vec<i32> = set.into_iter().filter(|d| *d != id).collect();
+            chain.sort_by_key(|d| rank[d]);
+            (id, chain)
+        })
+        .collect()
 }
 
 /// Decode custom action scripts whose source ships with the module and splice the
@@ -921,5 +1013,31 @@ mod tests {
         assert_eq!(quest.category.source, "campaign");
         assert_eq!(quest.category.xp, 50);
         assert_eq!(quest.defined_in, vec!["1000_neverwinter_a1".to_string()]);
+    }
+
+    /// Cormick (`10_cormick`): the reward replies sit under an opening entry every way
+    /// in passes; its action closes the intro, so the game runs it before them.
+    #[test]
+    fn lead_in_lines_are_on_every_path_from_a_starting_entry() {
+        let nodes = [
+            convo(1, "StartingEntry", "", 100, &[2, 3]),
+            convo(2, "Reply", "", 101, &[4]),
+            convo(3, "Reply", "", 102, &[4]),
+            convo(4, "Entry", "", 103, &[5, 1]),
+            convo(5, "Reply", "", 104, &[8]),
+            convo(6, "StartingEntry", "", 105, &[7]),
+            convo(7, "Reply", "", 106, &[8]),
+            convo(8, "Entry", "", 107, &[]),
+            convo(9, "Entry", "", 108, &[]),
+        ];
+        let siblings: HashMap<i32, &ConvoNode> = nodes.iter().map(|n| (n.node, n)).collect();
+        let lead_in = lead_in_ids(&siblings);
+        assert_eq!(lead_in[&1], Vec::<i32>::new());
+        // Either reply leads to 4; the link from 4 back to the start changes nothing.
+        assert_eq!(lead_in[&4], vec![1]);
+        assert_eq!(lead_in[&5], vec![1, 4]);
+        // Line 8 is also reached from the second start.
+        assert_eq!(lead_in[&8], Vec::<i32>::new());
+        assert!(!lead_in.contains_key(&9));
     }
 }

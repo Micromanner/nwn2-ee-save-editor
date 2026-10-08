@@ -4,7 +4,8 @@ import { groupRoutes } from './QuestEditDialog';
 import type { RouteSummary, PendingQuestEdit, QuestPreview, QuestSummary, TransitionNode, VariableWrite } from './types';
 
 const write = (module: string | null, after: number): VariableWrite => ({
-  key: { module, name: 'progress', value_type: 'int' }, saved: 1, before: 1, after, action_index: 0,
+  key: { module, name: 'progress', value_type: 'int' }, saved: 1, before: 1, after,
+  change: { kind: 'set', value: after }, action_index: 0,
 });
 const pending = (tag: string, writes: VariableWrite[]): PendingQuestEdit => ({
   tag, target: 20, saved_state: 1, source: null, writes,
@@ -24,6 +25,10 @@ describe('quest edit conflicts', () => {
     const differentType = write('module_a', 2);
     differentType.key.value_type = 'float';
     expect(conflictingEdits(preview, [0], [pending('float', [differentType])])).toEqual([]);
+  });
+  it('lets relative changes stack in staging order', () => {
+    const added = { ...write('module_a', 2), change: { kind: 'add' as const, value: 1 } };
+    expect(conflictingEdits(preview, [0], [pending('added', [added])])).toEqual([]);
   });
 });
 

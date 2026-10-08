@@ -1,5 +1,5 @@
-//! Resolves the `.uti` blueprints quest rewards hand out (`ga_give_item`): the
-//! line's own module archive first, then loose files in the campaign folder,
+//! Resolves the `.uti` blueprints quest rewards hand out (`ga_give_item`): loose files
+//! in the campaign folder first (it overrides its modules), then the line's own module,
 //! then the resource manager's override chain (base game, override, HAKs).
 
 use std::cell::RefCell;
@@ -76,14 +76,18 @@ impl<'a> ItemBlueprints<'a> {
         found
     }
 
-    /// `file` from the module's archive or directory, else the campaign folder.
+    /// `file` from the campaign folder, else the module's archive or directory.
     fn module_file(&self, module: &str, file: &str) -> Option<Vec<u8>> {
         let path = self.modules.get(module);
         // `open_module_archive` has nothing for an expanded module directory.
         let mut archive = path.and_then(|p| self.archive(module, p));
         let module_dir = path.filter(|p| p.is_dir());
-        let dirs = module_dir.into_iter().chain(&self.campaign_dir);
-        module_file(archive.as_deref_mut(), dirs.map(PathBuf::as_path), file)
+        module_file(
+            self.campaign_dir.as_deref(),
+            archive.as_deref_mut(),
+            module_dir.map(PathBuf::as_path),
+            file,
+        )
     }
 
     fn load(&self, module: &str, resref: &str) -> Option<ItemBlueprint> {

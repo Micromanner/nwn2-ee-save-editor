@@ -1,6 +1,6 @@
-//! Looks up `.nss` sources for scripts referenced by dialogue lines: inside the
-//! module's `.mod` archive (or expanded directory) first, then loose files in the
-//! campaign folder, then the game's `data/scripts*.zip` (includes and `nwscript`
+//! Looks up `.nss` sources for scripts referenced by dialogue lines: loose files in the
+//! campaign folder first (it overrides its modules), then the module's `.mod` archive
+//! (or expanded directory), then the game's `data/scripts*.zip` (includes and `nwscript`
 //! constants only; the generic `ga_*` family is already classified by the bridge).
 
 use std::collections::{HashMap, HashSet};
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use serde_json::Value;
 use tracing::debug;
 
-use super::script_decoder::{ScriptConstants, ScriptDecode, decode_action};
+use super::script_decoder::{ScriptConstants, ScriptDecode, collect_constants, decode_action};
 use crate::parsers::erf::{ErfParser, SecurityLimits};
 
 /// The install's `data/scripts.zip`, `scripts_x1.zip` and `scripts_x2.zip`, shared by
@@ -108,7 +108,8 @@ pub fn open_module_archive(module_path: &Path) -> Option<ErfParser> {
 
 pub struct ScriptSources<'a> {
     archive: Option<ErfParser>,
-    dirs: Vec<PathBuf>,
+    module_dir: Option<PathBuf>,
+    campaign_dir: Option<PathBuf>,
     game: &'a mut GameScripts,
     cache: HashMap<String, Option<String>>,
     constants_cache: HashMap<String, Arc<ScriptConstants>>,
@@ -126,16 +127,10 @@ impl<'a> ScriptSources<'a> {
         campaign_dir: Option<&Path>,
         game: &'a mut GameScripts,
     ) -> Self {
-        let mut dirs = Vec::new();
-        if module_path.is_dir() {
-            dirs.push(module_path.to_path_buf());
-        }
-        if let Some(dir) = campaign_dir {
-            dirs.push(dir.to_path_buf());
-        }
         Self {
             archive,
-            dirs,
+            module_dir: module_path.is_dir().then(|| module_path.to_path_buf()),
+            campaign_dir: campaign_dir.map(Path::to_path_buf),
             game,
             cache: HashMap::new(),
             constants_cache: HashMap::new(),
@@ -214,28 +209,32 @@ impl<'a> ScriptSources<'a> {
     fn load(&mut self, script: &str) -> Option<String> {
         let file = format!("{script}.nss");
         module_file(
+            self.campaign_dir.as_deref(),
             self.archive.as_mut(),
-            self.dirs.iter().map(PathBuf::as_path),
+            self.module_dir.as_deref(),
             &file,
         )
         .map(|bytes| decode_text(&bytes))
     }
 }
 
-/// `file` from a module's archive, else from the first of `dirs` (an expanded module,
-/// the campaign folder) that has it.
-pub fn module_file<'p>(
+/// `file` as a module line sees it: the campaign folder overrides the module, which is
+/// its `.mod` archive or an expanded module directory.
+pub fn module_file(
+    campaign_dir: Option<&Path>,
     archive: Option<&mut ErfParser>,
-    dirs: impl IntoIterator<Item = &'p Path>,
+    module_dir: Option<&Path>,
     file: &str,
 ) -> Option<Vec<u8>> {
+    if let Some(bytes) = campaign_dir.and_then(|dir| std::fs::read(dir.join(file)).ok()) {
+        return Some(bytes);
+    }
     if let Some(archive) = archive
         && let Ok(bytes) = archive.extract_resource(file)
     {
         return Some(bytes);
     }
-    dirs.into_iter()
-        .find_map(|dir| std::fs::read(dir.join(file)).ok())
+    module_dir.and_then(|dir| std::fs::read(dir.join(file)).ok())
 }
 
 /// NWScript sources are Windows-1252; string literals only matter for variable
@@ -257,48 +256,6 @@ fn includes_of(source: &str) -> Vec<String> {
         .collect()
 }
 
-/// Top-level `int NAME = 5;` / `const string NAME = "x";` declarations. Earlier
-/// definitions win so a script's own declarations shadow its includes' only when
-/// collected first; `nwscript` is collected before everything else.
-fn collect_constants(source: &str, constants: &mut ScriptConstants) {
-    for line in source.lines() {
-        let line = line.trim();
-        let line = line
-            .strip_prefix("const")
-            .map(str::trim_start)
-            .unwrap_or(line);
-        let Some((kind, rest)) = line.split_once(char::is_whitespace) else {
-            continue;
-        };
-        let Some((name, value)) = rest.split_once('=') else {
-            continue;
-        };
-        let name = name.trim();
-        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            continue;
-        }
-        let Some(value) = value.split_once(';').map(|(v, _)| v.trim()) else {
-            continue;
-        };
-        match kind {
-            "int" => {
-                if let Ok(n) = value.parse::<i64>() {
-                    constants.ints.entry(name.to_string()).or_insert(n);
-                }
-            }
-            "string" => {
-                if let Some(s) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')) {
-                    constants
-                        .strings
-                        .entry(name.to_string())
-                        .or_insert_with(|| s.to_string());
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,7 +269,14 @@ const string TAG_KHELGAR 	= "khelgar";
 int FEAT_ARMOR_PROFICIENCY_HEAVY        = 2;
 const int RR_KHELGAR = 7; // trailing
 string sNotConst = GetTag(OBJECT_SELF);
-void main() {}
+int nCounter = 0;
+const int NEGATIVE = -3;
+void Bump() { nCounter++; }
+void main(int nDefault = 4)
+{
+    int bDone = 0;
+    if (GetLocalInt(OBJECT_SELF, "x")) bDone = 1;
+}
 "#;
         assert_eq!(includes_of(src), vec!["kinc_companion", "ginc_misc"]);
         let mut constants = ScriptConstants::default();
@@ -320,6 +284,11 @@ void main() {}
         assert_eq!(constants.strings["TAG_KHELGAR"], "khelgar");
         assert_eq!(constants.ints["FEAT_ARMOR_PROFICIENCY_HEAVY"], 2);
         assert_eq!(constants.ints["RR_KHELGAR"], 7);
+        assert_eq!(constants.ints["NEGATIVE"], -3);
         assert!(!constants.strings.contains_key("sNotConst"));
+        // A function's locals, a global the script changes and parameter defaults are not constants.
+        assert!(!constants.ints.contains_key("bDone"));
+        assert!(!constants.ints.contains_key("nCounter"));
+        assert!(!constants.ints.contains_key("nDefault"));
     }
 }

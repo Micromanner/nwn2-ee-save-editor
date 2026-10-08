@@ -768,6 +768,7 @@
         "youSaid": "Du: \"{text}\"",
         "npcSaid": "{who}: \"{text}\"",
         "npc": "NPC",
+        "earlierInConversation": "früher im Gespräch",
         "laterInConversation": "später im Gespräch",
         "outcome": {
           "none": "Nur Tagebuch",

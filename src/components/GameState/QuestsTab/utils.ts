@@ -19,11 +19,15 @@ export function sameVariable(a: VariableKey, b: VariableKey) {
   return a.module === b.module && a.name === b.name && a.value_type === b.value_type;
 }
 
-/** Gold, XP, alignment and items add up across quests instead of overwriting each other, so they never conflict. */
+/**
+ * Gold, XP, alignment and items add up across quests, and relative changes apply in staging order;
+ * only two quests setting one variable to different values conflict.
+ */
 export function conflictingEdits(preview: QuestPreview | null, selected: number[], pending: PendingQuestEdit[]) {
   return preview ? pending.filter(p => p.tag !== preview.tag && p.writes.some(old => selected.some(i => {
     const write = preview.writes[i];
-    return write && !accumulates(write.key) && sameVariable(old.key, write.key) && old.after !== write.after;
+    return write && !accumulates(write.key) && sameVariable(old.key, write.key)
+      && old.change.kind === 'set' && write.change.kind === 'set' && old.after !== write.after;
   }))) : [];
 }
 

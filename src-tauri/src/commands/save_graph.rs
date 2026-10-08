@@ -67,6 +67,9 @@ pub async fn save_preview_quest_edit(
             session
                 .primary_player_index
                 .unwrap_or(session.selected_player_index),
+            session
+                .quest_live_characters(Some(&tag))
+                .map_err(CommandError::from)?,
             &tag,
             target,
             route,
@@ -99,6 +102,9 @@ pub async fn save_summarize_quest_routes(
             session
                 .primary_player_index
                 .unwrap_or(session.selected_player_index),
+            session
+                .quest_live_characters(Some(&tag))
+                .map_err(CommandError::from)?,
             &tag,
             target,
         )
@@ -141,20 +147,22 @@ pub async fn save_stage_quest_edit(
                 session
                     .primary_player_index
                     .unwrap_or(session.selected_player_index),
+                session
+                    .quest_live_characters(Some(&tag))
+                    .map_err(CommandError::from)?,
                 &tag,
                 target,
                 route,
             )
             .map_err(CommandError::from)?;
-        let generations = (session.load_generation, session.quest_edits.generation());
-        (preview, generations)
+        (preview, session.quest_generation())
     };
     if preview.revision != revision {
         return Err(stale());
     }
     let game_data = state.game_data.read();
     let mut session = state.session.write();
-    if (session.load_generation, session.quest_edits.generation()) != generations {
+    if session.quest_generation() != generations {
         return Err(stale());
     }
     session
@@ -248,14 +256,18 @@ pub async fn save_get_quest_variables(
         session
             .primary_player_index
             .unwrap_or(session.selected_player_index),
+        session
+            .quest_live_characters(None)
+            .map_err(CommandError::from)?,
     );
     Ok(keys
         .into_iter()
         .map(|key| {
-            let value = reader.read(&key);
+            let value = reader.read_saved(&key);
             let available = value.is_ok();
             let saved = value.ok().flatten();
-            let effective = session.quest_edits.pending_value(&key).or(saved.clone());
+            let base = reader.read_base(&key).ok().flatten();
+            let effective = session.quest_edits.pending_value(&key, base, None);
             QuestVariableValue {
                 key,
                 saved,
