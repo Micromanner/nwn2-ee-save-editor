@@ -444,3 +444,58 @@ fn test_empty_content() {
     let extracted = parser2.extract_resource("empty_file.2da").unwrap();
     assert!(extracted.is_empty());
 }
+
+/// A `MOD V1.1` holding `module.ifo` followed by `padding` nameless 0xFFFF
+/// slots, the layout of original-game module states (`G_X2.Z`).
+fn padded_module_state(padding: usize) -> Vec<u8> {
+    const HEADER: usize = 160;
+    const KEY: usize = 40;
+    let content = b"IFO Content";
+    let entries = 1 + padding;
+    let key_offset = HEADER;
+    let resource_offset = key_offset + entries * KEY;
+    let data_offset = resource_offset + entries * 8;
+
+    let mut bytes = vec![0u8; data_offset];
+    bytes[..8].copy_from_slice(b"MOD V1.1");
+    for (at, value) in [
+        (16, entries),
+        (20, HEADER),
+        (24, key_offset),
+        (28, resource_offset),
+    ] {
+        bytes[at..at + 4].copy_from_slice(&(value as u32).to_le_bytes());
+    }
+    bytes[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+
+    for i in 0..entries {
+        let key = key_offset + i * KEY;
+        let resource = resource_offset + i * 8;
+        if i == 0 {
+            bytes[key..key + 6].copy_from_slice(b"module");
+            bytes[key + 36..key + 38].copy_from_slice(&2014u16.to_le_bytes());
+            bytes[resource..resource + 4].copy_from_slice(&(data_offset as u32).to_le_bytes());
+            bytes[resource + 4..resource + 8]
+                .copy_from_slice(&(content.len() as u32).to_le_bytes());
+        } else {
+            bytes[key + 32..key + 36].copy_from_slice(&(i as u32).to_le_bytes());
+            bytes[key + 36..key + 38].copy_from_slice(&u16::MAX.to_le_bytes());
+        }
+    }
+    bytes.extend_from_slice(content);
+    bytes
+}
+
+#[test]
+fn test_module_state_padding_slots_are_skipped() {
+    let mut parser = ErfParser::new();
+    parser
+        .parse_from_bytes(&padded_module_state(3))
+        .expect("parse padded module state");
+
+    assert_eq!(parser.get_statistics().total_resources, 1);
+    assert_eq!(
+        parser.extract_resource("module.ifo").expect("module.ifo"),
+        b"IFO Content"
+    );
+}

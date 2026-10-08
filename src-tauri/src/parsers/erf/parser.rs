@@ -333,6 +333,11 @@ impl ErfParser {
         let mut largest: Option<(String, usize)> = None;
 
         for (key, entry) in keys.into_iter().zip(resources) {
+            // Original-game module states (`.Z`) end in nameless 0xFFFF padding slots.
+            if key.resource_name.is_empty() && key.resource_type == u16::MAX {
+                continue;
+            }
+
             // Update statistics
             *self
                 .stats
