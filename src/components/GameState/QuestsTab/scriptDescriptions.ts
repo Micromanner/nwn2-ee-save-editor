@@ -131,8 +131,9 @@ const COMPANION_NAMES: Record<string, string> = {
   ammon_jerro: 'Ammon Jerro', npc_bevil: 'Bevil', dove: 'Kaelyn the Dove', oneofmany: 'One of Many',
 };
 
-export function companionName(tag: string) {
-  return COMPANION_NAMES[tag] ?? tag.charAt(0).toUpperCase() + tag.slice(1);
+/** `names`: roster `RosCharName` by lowercased roster name, preferred when the save has one. */
+export function companionName(tag: string, names?: Record<string, string>) {
+  return names?.[tag.toLowerCase()] || COMPANION_NAMES[tag] || tag.charAt(0).toUpperCase() + tag.slice(1);
 }
 
 /** MotB `kinc_companion.GetCompanionTagByCode`: the first two letters of the code, lowercased. */
@@ -216,10 +217,10 @@ export function accumulates(key: { value_type: string }) {
 }
 
 /** The companion and the field or feat row of a companion write. */
-export function companionKey(name: string): { companion: string; field: string } {
+export function companionKey(name: string, names?: Record<string, string>): { companion: string; field: string } {
   const slash = name.indexOf('/');
-  if (slash < 0) return { companion: companionName(name), field: '' };
-  return { companion: companionName(name.slice(0, slash)), field: name.slice(slash + 1) };
+  if (slash < 0) return { companion: companionName(name, names), field: '' };
+  return { companion: companionName(name.slice(0, slash), names), field: name.slice(slash + 1) };
 }
 
 export type RewardKind = 'gold' | 'xp' | 'goodEvil' | 'lawChaos';

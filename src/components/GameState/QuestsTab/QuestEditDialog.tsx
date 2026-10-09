@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Button, Checkbox, Radio, RadioGroup, Spinner, Tag } from '@blueprintjs/core';
 import { invoke } from '@tauri-apps/api/core';
 import { ParchmentDialog } from '@/components/shared/ParchmentDialog';
+import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
@@ -23,6 +24,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
 }) {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
+  const { roster } = useCharacterContext();
   const { resolve: resolveModule } = useModuleNameResolver(modules);
   const speakers = useSpeakerNameResolver(modules, tlk);
   const [route, setRoute] = useState<number | null>(null);
@@ -83,6 +85,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
   const itemTakeWrites = preview ? preview.writes.filter(write => isItemTakeWrite(write.key)) : [];
   const influenceWrites = preview ? preview.writes.filter(write => influenceCompanion(write.key.name)) : [];
   const featWrites = preview ? preview.writes.filter(write => isFeatWrite(write.key)) : [];
+  const rosterNames = Object.fromEntries(roster.filter(entry => entry.char_name).map(entry => [entry.ros_name.toLowerCase(), entry.char_name]));
   const partyWrites = preview ? preview.writes.filter(write => isPartyWrite(write.key)) : [];
   const companionWrites = preview ? preview.writes.filter(write => isCompanionWrite(write.key)) : [];
   const areaWrites = preview ? preview.writes.filter(write => isAreaWrite(write.key)) : [];
@@ -95,10 +98,10 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
     (write.label_strref != null ? tlk.resolve(write.label_strref)?.replace(/<\/?(color|b|i)[^>]*>/gi, '').trim() : undefined) || `#${write.name}`;
   const featState = (value: string | number | null) => Number(value) ? t('gameState.quests.edit.featOwned') : t('gameState.quests.edit.featMissing');
   const partyLabel = (key: { name: string; value_type: string }) =>
-    t(key.value_type === PARTY_TYPE ? 'gameState.quests.edit.partyApplied' : 'gameState.quests.edit.selectableApplied', { companion: companionName(key.name) });
+    t(key.value_type === PARTY_TYPE ? 'gameState.quests.edit.partyApplied' : 'gameState.quests.edit.selectableApplied', { companion: companionName(key.name, rosterNames) });
   // "Khelgar · Law/Chaos" for an alignment field, "Khelgar · Feat Cleave" for a feat, "Khelgar · Potion" for an item.
   const companionLabel = (write: { key: { name: string; value_type: string }; label?: string; label_strref?: number }) => {
-    const { companion, field } = companionKey(write.key.name);
+    const { companion, field } = companionKey(write.key.name, rosterNames);
     if (write.key.value_type === COMPANION_FEAT_TYPE) return `${companion} · ${t('gameState.quests.edit.featApplied', { feat: featName({ name: field, label_strref: write.label_strref }) })}`;
     if (isCompanionItemWrite(write.key)) return `${companion} · ${itemName({ name: field, label: write.label, label_strref: write.label_strref })}`;
     return `${companion} · ${t(field === 'GoodEvil' ? 'gameState.quests.edit.goodEvilApplied' : 'gameState.quests.edit.lawChaosApplied')}`;
