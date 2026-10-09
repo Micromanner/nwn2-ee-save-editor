@@ -81,3 +81,27 @@ mod prepare_spell_test_saves;
 
 #[path = "debugging/dump_all_2das.rs"]
 mod dump_all_2das;
+
+#[path = "debugging/prepare_quest_review_saves.rs"]
+mod prepare_quest_review_saves;
+
+#[path = "debugging/find_quest_lines.rs"]
+mod find_quest_lines;
+
+#[path = "debugging/check_area_objects.rs"]
+mod check_area_objects;
+
+#[path = "debugging/dump_lead_in.rs"]
+mod dump_lead_in;
+
+#[path = "debugging/legacy_bytes_save.rs"]
+mod legacy_bytes_save;
+
+#[path = "debugging/prepare_alignment_saves.rs"]
+mod prepare_alignment_saves;
+
+#[path = "debugging/prepare_playerinfo_saves.rs"]
+mod prepare_playerinfo_saves;
+
+#[path = "debugging/scan_zero_tint_accessories.rs"]
+mod scan_zero_tint_accessories;
