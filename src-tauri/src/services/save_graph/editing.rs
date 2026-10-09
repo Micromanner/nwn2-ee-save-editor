@@ -541,7 +541,20 @@ impl QuestEdits {
             next_steps: Vec::new(),
             blueprints: BTreeMap::new(),
         };
+        let route_line = route
+            .map(|index| {
+                quest
+                    .transitions
+                    .get(index)
+                    .filter(|tr| tr.new_state == target)
+                    .ok_or("The selected route does not reach this state")
+            })
+            .transpose()?;
         let mut journal = self.pending_journal(&live.journal, tag);
+        // Before this edit's own target counts as reached.
+        let lead_in = route_line.map_or(&[][..], |tr| {
+            &tr.lead_in[unplayed_lead_in(&tr.lead_in, &journal)..]
+        });
         journal.insert(tag.to_string(), target);
         reader.journal = Some(journal);
         // The other quests' pending writes, as this quest's lines will find them.
@@ -558,12 +571,7 @@ impl QuestEdits {
                 reader.overlay.insert(key.clone(), value);
             }
         }
-        if let Some(index) = route {
-            let tr = quest
-                .transitions
-                .get(index)
-                .filter(|tr| tr.new_state == target)
-                .ok_or("The selected route does not reach this state")?;
+        if let Some(tr) = route_line {
             let mut played = PlayedLines {
                 tables,
                 module: &tr.module,
@@ -576,14 +584,14 @@ impl QuestEdits {
             };
             // What the game plays: the lines leading to the chosen one, the chosen line,
             // then every line it plays after it, each seeing the writes of the ones before.
-            for node in &tr.lead_in {
+            for node in lead_in {
                 played.line(LineKind::LeadIn(node.node), &node.actions, reader);
             }
             played.line(LineKind::Chosen, &tr.actions, reader);
             let (followed, stop) = follow_conversation(tr, reader, |node, reader| {
                 played.line(LineKind::FollowUp(node.node), &node.actions, reader);
             })?;
-            result.lead_in = tr.lead_in.iter().map(followed_line).collect();
+            result.lead_in = lead_in.iter().map(followed_line).collect();
             result.followed = followed.into_iter().map(followed_line).collect();
             result.follow_stop = Some(stop);
             let PlayedLines {
@@ -1152,6 +1160,21 @@ impl LineKind {
     }
 }
 
+/// Index of the first lead-in line the save has not played yet. A line whose journal
+/// entry the save already reached was played before (journal entries only move up),
+/// and so was every line before it: replaying those would roll later progress back.
+fn unplayed_lead_in(lead_in: &[FollowNode], journal: &BTreeMap<String, u32>) -> usize {
+    lead_in
+        .iter()
+        .rposition(|node| {
+            node.actions
+                .iter()
+                .filter_map(journal_transition)
+                .any(|(quest, state)| journal.get(&quest).is_some_and(|saved| *saved >= state))
+        })
+        .map_or(0, |played| played + 1)
+}
+
 fn followed_line(node: &FollowNode) -> FollowedLine {
     FollowedLine {
         node: node.node,
@@ -1225,12 +1248,16 @@ impl PlayedLines<'_> {
                     continue;
                 };
                 let after = change.apply(before.as_ref());
-                // Nothing of that tag in the backpack: the script is a no-op in-game too.
                 let taken = taken_tag(&key);
-                if taken.is_some() && before == Some(after.clone()) {
+                let resref = given_resref(&key);
+                // No-ops in-game too: nothing of that tag in the backpack, or a value the
+                // save already holds with no pending edit in between (a door already
+                // unlocked, a feat already missing). Item gives count, not set.
+                if before.as_ref() == Some(&after)
+                    && (taken.is_some() || (resref.is_none() && saved == before))
+                {
                     continue;
                 }
-                let resref = given_resref(&key);
                 let blueprint = resref.and_then(|resref| self.tables.item(self.module, resref));
                 if let (Some(resref), Some(blueprint)) = (resref, &blueprint) {
                     self.blueprints
@@ -6433,8 +6460,8 @@ mod tests {
             vec![
                 // Cormick's opening line closes the intro: `10a_faulk_state(1)`.
                 action("ga_global_int", json!(["FaulkState", "1"])),
-                // An earlier entry of the same quest on the way is moot.
-                action("__connector_quest_tuple__", json!(["test", 10])),
+                // An earlier entry of the same quest, not reached yet, on the way is moot.
+                action("__connector_quest_tuple__", json!(["test", 15])),
             ],
             vec![1],
         )];
@@ -6461,6 +6488,48 @@ mod tests {
             preview.effects.iter().all(|e| e.line != Some(5)),
             "{:?}",
             preview.effects
+        );
+    }
+
+    /// MotB `d05_coven`: the opening line sets `00_nStoryStep` 5 and later lead-in lines
+    /// add journal entries; a save that already has those entries played them.
+    #[test]
+    fn lead_in_lines_the_save_already_played_are_skipped() {
+        let line = |node, actions, next| follow(node, false, true, Vec::new(), actions, vec![next]);
+        let entry = |quest: &str, state: u32| {
+            vec![action("__connector_quest_tuple__", json!([quest, state]))]
+        };
+        let lead_in = vec![
+            line(
+                8625,
+                vec![action("ga_global_int", json!(["00_nStoryStep", "5"]))],
+                8405,
+            ),
+            line(8405, entry("q90_passage_to_thay", 100), 8621),
+            line(8621, entry("q00_dark_hunger", 400), 8551),
+            line(8551, Vec::new(), 8201),
+        ];
+        let journal = |entries: &[(&str, u32)]| {
+            entries
+                .iter()
+                .map(|(tag, state)| (tag.to_string(), *state))
+                .collect::<BTreeMap<_, _>>()
+        };
+        assert_eq!(unplayed_lead_in(&lead_in, &journal(&[])), 0);
+        assert_eq!(
+            unplayed_lead_in(&lead_in, &journal(&[("q90_passage_to_thay", 100)])),
+            2
+        );
+        assert_eq!(
+            unplayed_lead_in(
+                &lead_in,
+                &journal(&[("q90_passage_to_thay", 900), ("q00_dark_hunger", 600)])
+            ),
+            3
+        );
+        assert_eq!(
+            unplayed_lead_in(&lead_in, &journal(&[("q00_dark_hunger", 300)])),
+            0
         );
     }
 
@@ -6525,6 +6594,8 @@ mod tests {
                 action("ka_influence_magnitude", json!(["safiya", 7])),
                 action("ga_door_close", json!(["door", 0])),
                 action("ga_give_gold", json!([0, 0])),
+                // The player has no such feat.
+                action("ga_remove_feat", json!(["$PC_SPEAKER", "9999"])),
             ],
         );
         let edits = QuestEdits::default();
