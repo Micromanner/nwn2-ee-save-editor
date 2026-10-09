@@ -523,6 +523,39 @@ fn companion_save_removes_parked_area_copy() {
     assert_eq!(after, expected, "only Bishop's copy is gone");
 }
 
+// The party join is flushed into roster.rst before the copies are removed, so the
+// staged roster already lists Bishop in the party; his Flagon copy must still go.
+#[test]
+fn companion_joining_party_in_same_save_loses_area_copy() {
+    let (_tmp, save_path) = crate::common::temp_save_copy("user_save_linux");
+    assert!(
+        flagon_creature_tags(&save_path)
+            .iter()
+            .any(|t| t == "bishop")
+    );
+
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    session.load_companion("bishop").expect("load bishop");
+    session
+        .character_mut()
+        .expect("bishop")
+        .set_ability(app_lib::character::AbilityIndex::STR, 18)
+        .expect("set str");
+    session
+        .stage_party_membership(&[("bishop".to_string(), true)])
+        .expect("stage join");
+    session
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
+        .expect("save");
+
+    assert!(
+        !flagon_creature_tags(&save_path)
+            .iter()
+            .any(|t| t == "bishop")
+    );
+}
+
 // Fixture reality: the unrecruited SoZ cohort Umoja is a full creature in the
 // `g_x2.z` bazaar with a locked roster entry (RosSelectable 0); that creature is
 // the NPC the player hires, so a cohort edit must not remove it.

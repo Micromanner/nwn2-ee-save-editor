@@ -29,12 +29,13 @@ pub struct RosterMember {
 }
 
 impl RosterMember {
-    /// Benched, selectable and spawned from the roster before: a recruited companion
-    /// the game may have parked as a creature in an area (OC Act 1: the Sunken Flagon).
-    /// Locked members are not: the area creature of an unrecruited SoZ cohort or a junk
-    /// NPC is the NPC the player hires or meets.
-    pub fn is_parked(&self) -> bool {
-        self.available && self.selectable && self.loaded_before
+    /// Selectable and spawned from the roster before: a recruited companion, so an
+    /// area creature with its tag is a copy the game parked there (OC Act 1: the
+    /// Sunken Flagon), or a stale one when the member is in the party (the game deletes
+    /// it on joining). Locked members are not: the area creature of an unrecruited SoZ
+    /// cohort or a junk NPC is the NPC the player hires or meets.
+    pub fn owns_area_copy(&self) -> bool {
+        self.selectable && self.loaded_before
     }
 }
 
@@ -312,7 +313,7 @@ pub fn apply_party_membership(
     }
 }
 
-/// Delete the area copies of the parked companions (see [`RosterMember::is_parked`])
+/// Delete the area copies of the companions (see [`RosterMember::owns_area_copy`])
 /// whose `.ros` the open batch rewrites, in all module states of the save. A parked
 /// companion is also a full creature in that area's `.git`, and the game loads that
 /// object instead of the `.ros`; joining the party in-game deletes it. Without the copy
@@ -339,7 +340,7 @@ pub fn remove_staged_companion_area_copies(
     let mut tags = Vec::new();
     for member in parse_roster_members(roster)?
         .iter()
-        .filter(|m| m.is_parked())
+        .filter(|m| m.owns_area_copy())
     {
         let Ok(name) = handler.companion_stored_name(&member.ros_name) else {
             continue;
