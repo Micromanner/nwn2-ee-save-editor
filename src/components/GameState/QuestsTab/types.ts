@@ -32,11 +32,15 @@ export interface JournalCategory {
   entries: JournalEntry[];
 }
 
+export type DecodedChange =
+  | { kind: 'set'; value: number | string }
+  | { kind: 'add'; value: number };
+
 export interface DecodedWrite {
   module_local: boolean;
   value_type: string;
   name: string;
-  value: string;
+  change: DecodedChange;
 }
 
 /** Alignment shift or feat change on the player, in the shape of the dialogue action the editor applies. */

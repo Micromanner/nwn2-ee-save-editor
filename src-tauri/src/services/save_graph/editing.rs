@@ -464,10 +464,7 @@ impl QuestEdits {
         for edit in self.pending.iter().filter(|p| p.tag != exclude) {
             journal.insert(edit.tag.clone(), edit.target);
             for write in &edit.writes {
-                if write.key.value_type != PC_LOCAL_TYPE {
-                    continue;
-                }
-                let Some(tag) = write.key.name.strip_prefix(JOURNAL_PREFIX) else {
+                let Some(tag) = journal_tag(&write.key) else {
                     continue;
                 };
                 let before = journal.get(tag).map(|s| Value::from(*s));
@@ -484,36 +481,69 @@ impl QuestEdits {
         journal
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn preview(
         &self,
-        graph: &SaveGraph,
-        tables: &RewardTables,
-        handler: &SaveGameHandler,
-        paths: &NWN2Paths,
-        player: usize,
-        characters: LiveCharacters<'_>,
+        save: PreviewSave<'_>,
         tag: &str,
         target: u32,
         route: Option<usize>,
     ) -> Result<QuestPreview, String> {
-        let live = LiveSave::read(handler, player, tag, target)?;
-        let mut reader = VariableReader::new(handler, paths, player, characters);
-        self.preview_with(graph, tables, &live, &mut reader, tag, target, route)
+        let mut base = self.preview_base(save, tag, target)?;
+        self.preview_route(&mut base, tag, target, route)
     }
 
-    /// `preview` against a save read once and a reader shared between previews.
-    #[allow(clippy::too_many_arguments)]
-    fn preview_with(
+    /// The save read once for previews of `tag`, with the journal and variables as the
+    /// other pending edits leave them.
+    fn preview_base<'a>(
         &self,
-        graph: &SaveGraph,
-        tables: &RewardTables,
-        live: &LiveSave,
-        reader: &mut VariableReader<'_>,
+        save: PreviewSave<'a>,
+        tag: &str,
+        target: u32,
+    ) -> Result<PreviewBase<'a>, String> {
+        let live = LiveSave::read(save.handler, save.player, tag, target)?;
+        let mut reader =
+            VariableReader::new(save.handler, save.paths, save.player, save.characters);
+        let journal = self.pending_journal(&live.journal, tag);
+        let keys: BTreeSet<&VariableKey> = self
+            .unapplied_writes(Some(tag))
+            .map(|w| &w.key)
+            .filter(|key| given_resref(key).is_none() && journal_tag(key).is_none())
+            .collect();
+        let mut overlay = BTreeMap::new();
+        for key in keys {
+            if let Ok(base) = reader.read_base(key)
+                && let Some(value) = self.pending_value(key, base, Some(tag))
+            {
+                overlay.insert(key.clone(), value);
+            }
+        }
+        Ok(PreviewBase {
+            graph: save.graph,
+            tables: save.tables,
+            live,
+            reader,
+            journal,
+            overlay,
+        })
+    }
+
+    /// One route's preview (`None`: no line, only the state), starting from `base`.
+    fn preview_route(
+        &self,
+        base: &mut PreviewBase<'_>,
         tag: &str,
         target: u32,
         route: Option<usize>,
     ) -> Result<QuestPreview, String> {
+        let PreviewBase {
+            graph,
+            tables,
+            live,
+            reader,
+            journal: pending_journal,
+            overlay: pending_overlay,
+        } = base;
+        let (graph, tables) = (*graph, *tables);
         let quest = graph
             .quests
             .iter()
@@ -550,7 +580,7 @@ impl QuestEdits {
                     .ok_or("The selected route does not reach this state")
             })
             .transpose()?;
-        let mut journal = self.pending_journal(&live.journal, tag);
+        let mut journal = pending_journal.clone();
         // Before this edit's own target counts as reached.
         let reached = |quest: &str, state: u32| {
             [journal.get(quest), live.reached.get(quest)]
@@ -564,19 +594,7 @@ impl QuestEdits {
         journal.insert(tag.to_string(), target);
         reader.journal = Some(journal);
         // The other quests' pending writes, as this quest's lines will find them.
-        reader.overlay.clear();
-        let keys: BTreeSet<&VariableKey> = self
-            .unapplied_writes(Some(tag))
-            .map(|w| &w.key)
-            .filter(|key| given_resref(key).is_none())
-            .collect();
-        for key in keys {
-            if let Ok(base) = reader.read_base(key)
-                && let Some(value) = self.pending_value(key, base, Some(tag))
-            {
-                reader.overlay.insert(key.clone(), value);
-            }
-        }
+        reader.overlay = pending_overlay.clone();
         if let Some(tr) = route_line {
             let mut played = PlayedLines {
                 tables,
@@ -674,32 +692,25 @@ impl QuestEdits {
     }
 
     /// Preview every line that reaches `target` and reduce each to a `RouteSummary`.
-    #[allow(clippy::too_many_arguments)]
     pub fn summarize_routes(
         &self,
-        graph: &SaveGraph,
-        tables: &RewardTables,
-        handler: &SaveGameHandler,
-        paths: &NWN2Paths,
-        player: usize,
-        characters: LiveCharacters<'_>,
+        save: PreviewSave<'_>,
         tag: &str,
         target: u32,
     ) -> Result<Vec<RouteSummary>, String> {
-        let quest = graph
+        let quest = save
+            .graph
             .quests
             .iter()
             .find(|q| q.tag == tag)
             .ok_or("Quest is no longer available")?;
-        let live = LiveSave::read(handler, player, tag, target)?;
-        let mut reader = VariableReader::new(handler, paths, player, characters);
+        let mut base = self.preview_base(save, tag, target)?;
         let mut out = Vec::new();
         for (route, tr) in quest.transitions.iter().enumerate() {
             if tr.new_state != target {
                 continue;
             }
-            let preview =
-                self.preview_with(graph, tables, &live, &mut reader, tag, target, Some(route))?;
+            let preview = self.preview_route(&mut base, tag, target, Some(route))?;
             let mut writes: Vec<String> = preview
                 .writes
                 .iter()
@@ -1118,6 +1129,28 @@ impl QuestEdits {
     }
 }
 
+/// What a quest preview reads: the graph, its reward tables and the loaded save.
+pub struct PreviewSave<'a> {
+    pub graph: &'a SaveGraph,
+    pub tables: &'a RewardTables<'a>,
+    pub handler: &'a SaveGameHandler,
+    pub paths: &'a NWN2Paths,
+    pub player: usize,
+    pub characters: LiveCharacters<'a>,
+}
+
+/// The save read once for the previews of one quest, and where every route starts.
+struct PreviewBase<'a> {
+    graph: &'a SaveGraph,
+    tables: &'a RewardTables<'a>,
+    live: LiveSave,
+    reader: VariableReader<'a>,
+    /// Journal states once the other pending edits are applied.
+    journal: BTreeMap<String, u32>,
+    /// The other pending edits' variable writes over the live values.
+    overlay: BTreeMap<VariableKey, Value>,
+}
+
 /// The player's `playerlist.ifo` and journal, read once per command.
 struct LiveSave {
     playerlist: Vec<u8>,
@@ -1245,7 +1278,7 @@ impl PlayedLines<'_> {
                         self.effect(action, reason, line);
                     }
                 } else {
-                    self.journal_advance(action, action_index, other_tag, state, line, reader);
+                    self.journal_advance(action, action_index, &other_tag, state, line, reader);
                 }
                 continue;
             }
@@ -1300,7 +1333,7 @@ impl PlayedLines<'_> {
                     )
                 };
                 if resref.is_none() {
-                    reader.overlay.insert(key.clone(), after.clone());
+                    reader.stage(key.clone(), after.clone());
                 }
                 self.candidates.push(VariableWrite {
                     key,
@@ -1324,22 +1357,18 @@ impl PlayedLines<'_> {
         &mut self,
         action: &ConvoFunctor,
         action_index: usize,
-        other_tag: String,
+        other_tag: &str,
         state: u32,
         line: Option<i32>,
         reader: &mut VariableReader<'_>,
     ) {
         let key = VariableKey {
             module: None,
-            name: journal_variable(&other_tag),
+            name: journal_variable(other_tag),
             value_type: PC_LOCAL_TYPE.into(),
         };
-        // The journal map holds the save, the pending quest targets and this route so far.
-        let before = reader
-            .journal
-            .get_or_insert_default()
-            .get(&other_tag)
-            .map(|s| Value::from(*s));
+        // The journal holds the save, the pending quest targets and this route so far.
+        let before = reader.read(&key).ok().flatten();
         if before.as_ref().and_then(Value::as_u64) >= Some(u64::from(state)) {
             return;
         }
@@ -1365,11 +1394,7 @@ impl PlayedLines<'_> {
                 line,
             });
         }
-        reader
-            .journal
-            .get_or_insert_default()
-            .insert(other_tag, state);
-        reader.overlay.insert(key, after);
+        reader.stage(key, after);
     }
 }
 
@@ -1418,9 +1443,11 @@ pub struct VariableReader<'a> {
     /// Installed doors/map pins and the saved `<module>.z`, by module, for
     /// `DOOR_LOCK_TYPE` / `MAP_NOTE_TYPE` keys.
     areas: BTreeMap<String, Result<(ModuleObjects, ErfParser), String>>,
-    /// Values that take precedence over the live ones: pending and previewed writes.
+    /// Values that take precedence over the live ones: pending and previewed writes,
+    /// journal entries aside.
     pub overlay: BTreeMap<VariableKey, Value>,
-    /// Journal states (tag -> entry) for `gc_journal_entry`; `None` = unknown.
+    /// Journal states (tag -> entry) that take precedence over the `NW_JOURNAL_ENTRY`
+    /// locals, for `gc_journal_entry` too; `None` = unknown.
     pub journal: Option<BTreeMap<String, u32>>,
 }
 
@@ -1567,12 +1594,35 @@ impl<'a> VariableReader<'a> {
             .map_err(Clone::clone)
     }
 
-    /// The value with the pending and previewed writes (`overlay`) over the live one.
+    /// The value with the pending and previewed writes (`overlay`, `journal`) over the
+    /// live one.
     pub fn read(&mut self, key: &VariableKey) -> Result<Option<Value>, String> {
+        if let (Some(tag), Some(journal)) = (journal_tag(key), &self.journal) {
+            return Ok(journal.get(tag).map(|s| Value::from(*s)));
+        }
         if let Some(value) = self.overlay.get(key) {
             return Ok(Some(value.clone()));
         }
         self.lookup(key, true)
+    }
+
+    /// Record a previewed write for the reads after it: journal entries in `journal`,
+    /// everything else in `overlay`.
+    fn stage(&mut self, key: VariableKey, value: Value) {
+        let Some(tag) = journal_tag(&key) else {
+            self.overlay.insert(key, value);
+            return;
+        };
+        if let Some(state) = value.as_u64().and_then(|s| u32::try_from(s).ok()) {
+            self.journal
+                .get_or_insert_default()
+                .insert(tag.to_string(), state);
+        }
+    }
+
+    /// Whether a pending or previewed write stands in for the live value of `key`.
+    fn is_staged(&self, key: &VariableKey) -> bool {
+        (journal_tag(key).is_some() && self.journal.is_some()) || self.overlay.contains_key(key)
     }
 
     /// The live value: unsaved characters and party, else the save.
@@ -1592,10 +1642,12 @@ impl<'a> VariableReader<'a> {
         key: &VariableKey,
     ) -> Result<(Option<Value>, Option<Value>), String> {
         let saved = self.lookup(key, false)?;
-        let current = match self.overlay.get(key) {
-            Some(value) => Some(value.clone()),
-            None if self.has_live_value(key) => self.lookup(key, true)?,
-            None => saved.clone(),
+        let current = if self.is_staged(key) {
+            self.read(key)?
+        } else if self.has_live_value(key) {
+            self.lookup(key, true)?
+        } else {
+            saved.clone()
         };
         Ok((saved, current))
     }
@@ -2969,16 +3021,38 @@ pub fn decode_assignment(
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .ok_or("invalid_assignment")?;
-    let raw = action
-        .params
-        .get(1)
-        .and_then(Value::as_str)
-        .ok_or("invalid_assignment")?;
-    let after = if kind == "string" {
-        Change::Set(Value::from(raw))
-    } else if raw.is_empty() {
+    let after = match action.params.get(1) {
+        // A decoded wrapper's set (`SetGlobalInt(x, -1)`); dialogue parameters are text.
+        Some(Value::Number(n)) if kind == "int" => Change::Set(Value::from(
+            n.as_i64()
+                .and_then(|n| i32::try_from(n).ok())
+                .ok_or("invalid_assignment")?,
+        )),
+        Some(Value::Number(n)) if kind == "float" => {
+            Change::Set(Value::from(n.as_f64().ok_or("invalid_assignment")? as f32))
+        }
+        Some(Value::String(raw)) => text_change(kind, raw)?,
+        _ => return Err("invalid_assignment"),
+    };
+    Ok((
+        VariableKey {
+            module: local.then(|| module.to_string()),
+            name: name.into(),
+            value_type: kind.into(),
+        },
+        after,
+    ))
+}
+
+/// `ginc_var_ops` reading of a dialogue's value parameter for a `kind` variable.
+fn text_change(kind: &str, raw: &str) -> Result<Change, &'static str> {
+    if kind == "string" {
+        return Ok(Change::Set(Value::from(raw)));
+    }
+    if raw.is_empty() {
         return Err("unsupported_expression");
-    } else if let Some(delta) = raw.strip_prefix(['+', '-']) {
+    }
+    if let Some(delta) = raw.strip_prefix(['+', '-']) {
         // GetChangeComponents: "+3" adds 3; "+", "++", "+-" add 1 (same for "-").
         if kind != "int" {
             return Err("arithmetic_action");
@@ -2990,37 +3064,25 @@ pub fn decode_assignment(
             // StringToInt: "3x" is 3.
             string_to_int(delta).ok_or("invalid_assignment")?
         };
-        Change::Add(sign * magnitude)
-    } else {
-        let number = raw.strip_prefix('=').unwrap_or(raw);
+        return Ok(Change::Add(sign * magnitude));
+    }
+    let number = raw.strip_prefix('=').unwrap_or(raw);
+    if kind == "int" {
         // ginc_var_ops.GetChangeComponents treats a signed operand after '=' as 1.
-        // Leave those surprising expressions for the engine instead of guessing intent;
-        // a decoded wrapper's `"=-1"` is its `SetGlobalInt(x, -1)`.
-        let decoded_negative = action.derived_from.is_some() && number.starts_with('-');
-        if kind == "int" {
-            if (number.starts_with(['+', '-']) && !decoded_negative) || number.is_empty() {
-                return Err("unsupported_expression");
-            }
-            // Non-numeric text (e.g. ">0") reaches StringToInt in-game and becomes 0.
-            Change::Set(Value::from(
-                string_to_int(number).ok_or("invalid_assignment")?,
-            ))
-        } else {
-            let value = number.parse::<f32>().map_err(|_| "invalid_assignment")?;
-            if !value.is_finite() {
-                return Err("invalid_assignment");
-            }
-            Change::Set(Value::from(value))
+        // Leave those surprising expressions for the engine instead of guessing intent.
+        if number.starts_with(['+', '-']) || number.is_empty() {
+            return Err("unsupported_expression");
         }
-    };
-    Ok((
-        VariableKey {
-            module: local.then(|| module.to_string()),
-            name: name.into(),
-            value_type: kind.into(),
-        },
-        after,
-    ))
+        // Non-numeric text (e.g. ">0") reaches StringToInt in-game and becomes 0.
+        return Ok(Change::Set(Value::from(
+            string_to_int(number).ok_or("invalid_assignment")?,
+        )));
+    }
+    let value = number.parse::<f32>().map_err(|_| "invalid_assignment")?;
+    if !value.is_finite() {
+        return Err("invalid_assignment");
+    }
+    Ok(Change::Set(Value::from(value)))
 }
 
 fn owned_root(bytes: &[u8]) -> Result<indexmap::IndexMap<String, GffValue<'static>>, String> {
@@ -3675,6 +3737,14 @@ fn set_feats(
 
 const JOURNAL_PREFIX: &str = "NW_JOURNAL_ENTRY";
 
+/// Quest tag of a journal entry's PC local, the counterpart of `journal_variable`.
+fn journal_tag(key: &VariableKey) -> Option<&str> {
+    if key.value_type != PC_LOCAL_TYPE {
+        return None;
+    }
+    key.name.strip_prefix(JOURNAL_PREFIX)
+}
+
 /// The PC local the journal keeps a quest's state in.
 fn journal_variable(tag: &str) -> String {
     format!("{JOURNAL_PREFIX}{tag}")
@@ -4102,17 +4172,7 @@ mod tests {
         let tables = RewardTables::from_graph(&graph, None);
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         let reasons: Vec<&str> = preview.effects.iter().map(|e| e.reason.as_str()).collect();
         assert_eq!(reasons, vec!["unavailable_target", "object_target"]);
@@ -4210,17 +4270,7 @@ mod tests {
         };
         let preview = |tables: &RewardTables| {
             QuestEdits::default()
-                .preview(
-                    &graph,
-                    tables,
-                    &handler,
-                    &NWN2Paths::new(),
-                    0,
-                    LiveCharacters::default(),
-                    "test",
-                    20,
-                    Some(0),
-                )
+                .preview(test_save(&graph, tables, &handler), "test", 20, Some(0))
                 .unwrap()
         };
         let take = |owner: &str, before: i64, after: i64| {
@@ -4330,17 +4380,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         for tag in ["one", "two"] {
             let preview = edits
-                .preview(
-                    &graph,
-                    &tables,
-                    &handler,
-                    &NWN2Paths::new(),
-                    0,
-                    LiveCharacters::default(),
-                    tag,
-                    20,
-                    Some(0),
-                )
+                .preview(test_save(&graph, &tables, &handler), tag, 20, Some(0))
                 .unwrap();
             assert!(
                 edits
@@ -4418,17 +4458,7 @@ mod tests {
         let tables = RewardTables::from_graph(&graph, None);
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         assert_eq!(preview.effects.len(), 1, "{:?}", preview.effects);
         assert_eq!(preview.effects[0].reason, "unavailable_target");
@@ -4498,12 +4528,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -4571,12 +4596,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -4627,17 +4647,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let tables = RewardTables::from_graph(&graph, None);
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         assert_eq!(preview.effects.len(), 1, "{:?}", preview.effects);
         assert_eq!(preview.effects[0].reason, "unknown_item");
@@ -5005,17 +5015,7 @@ mod tests {
         let tables = RewardTables::from_graph(&graph, None);
         let preview = |edits: &QuestEdits, tag: &str| {
             edits
-                .preview(
-                    &graph,
-                    &tables,
-                    &handler,
-                    &NWN2Paths::new(),
-                    0,
-                    LiveCharacters::default(),
-                    tag,
-                    20,
-                    Some(0),
-                )
+                .preview(test_save(&graph, &tables, &handler), tag, 20, Some(0))
                 .unwrap()
         };
         let take = preview(&edits, "take");
@@ -5112,17 +5112,7 @@ mod tests {
         let tables = RewardTables::from_graph(&grant, None);
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(
-                &grant,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&grant, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         assert!(preview.effects.is_empty(), "{:?}", preview.effects);
         let feat = preview
@@ -5157,17 +5147,7 @@ mod tests {
         );
         let mut edits = QuestEdits::default();
         let preview = edits
-            .preview(
-                &removal,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&removal, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         assert_eq!(preview.writes[0].before, Some(json!(1)));
         assert_eq!(preview.writes[0].after, json!(0));
@@ -5196,17 +5176,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let tables = RewardTables::from_graph(&graph, None);
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         let write = &preview.writes[0];
         let saved = write.saved.as_ref().and_then(Value::as_i64).unwrap_or(0);
@@ -5256,17 +5226,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let tables = RewardTables::from_graph(&graph, None);
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         // Both calls write XP and the paid share, so neither variable is offered alone.
         assert!(preview.writes.is_empty(), "{:?}", preview.writes);
@@ -5280,17 +5240,7 @@ mod tests {
 
         graph.quests[0].transitions[0].actions.pop();
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         let xp = preview
             .writes
@@ -5323,17 +5273,7 @@ mod tests {
         // A second 60% after saving is capped at the remaining 40%.
         let edits = QuestEdits::default();
         let preview = edits
-            .preview(
-                &graph,
-                &tables,
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
-                "test",
-                20,
-                Some(0),
-            )
+            .preview(test_save(&graph, &tables, &handler), "test", 20, Some(0))
             .unwrap();
         let xp = preview
             .writes
@@ -5591,12 +5531,7 @@ mod tests {
         let edits = QuestEdits::default();
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -5634,12 +5569,7 @@ mod tests {
         std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>friendly</Name><Value>1</Value></Integer></Integers></Globals>").unwrap();
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -5652,12 +5582,7 @@ mod tests {
         graph.quests[0].transitions[0].follow_up[0].conditions[0].negate = true;
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -5670,12 +5595,7 @@ mod tests {
             condition("10c_brelaina_ck", json!([20]), false, "");
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -5755,12 +5675,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -5811,12 +5726,14 @@ mod tests {
         assert_ne!(
             edits
                 .preview(
-                    &graph,
-                    &RewardTables::from_graph(&graph, None),
-                    &handler,
-                    &NWN2Paths::new(),
-                    0,
-                    LiveCharacters::default(),
+                    PreviewSave {
+                        graph: &graph,
+                        tables: &RewardTables::from_graph(&graph, None),
+                        handler: &handler,
+                        paths: &NWN2Paths::new(),
+                        player: 0,
+                        characters: LiveCharacters::default()
+                    },
                     "test",
                     20,
                     Some(0)
@@ -5845,12 +5762,7 @@ mod tests {
         let mut edits = QuestEdits::default();
         let first = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -5859,12 +5771,7 @@ mod tests {
         edits.stage(first, &graph, &[0], false).unwrap();
         let second = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "other",
                 20,
                 Some(0),
@@ -5880,12 +5787,14 @@ mod tests {
         assert_eq!(
             edits
                 .preview(
-                    &graph,
-                    &RewardTables::from_graph(&graph, None),
-                    &handler,
-                    &NWN2Paths::new(),
-                    0,
-                    LiveCharacters::default(),
+                    PreviewSave {
+                        graph: &graph,
+                        tables: &RewardTables::from_graph(&graph, None),
+                        handler: &handler,
+                        paths: &NWN2Paths::new(),
+                        player: 0,
+                        characters: LiveCharacters::default()
+                    },
                     "test",
                     20,
                     Some(0)
@@ -5919,12 +5828,7 @@ mod tests {
         });
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 None,
@@ -5938,12 +5842,7 @@ mod tests {
         );
         let next = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 None,
@@ -6150,12 +6049,7 @@ mod tests {
         let edits = QuestEdits::default();
         let preview = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 Some(0),
@@ -6177,12 +6071,7 @@ mod tests {
         // Without the route nothing sets `joined`, so entry 30 stays closed.
         let journal_only = edits
             .preview(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
                 None,
@@ -6206,12 +6095,7 @@ mod tests {
         let edits = QuestEdits::default();
         let routes = edits
             .summarize_routes(
-                &graph,
-                &RewardTables::from_graph(&graph, None),
-                &handler,
-                &NWN2Paths::new(),
-                0,
-                LiveCharacters::default(),
+                test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                 "test",
                 20,
             )
@@ -6220,6 +6104,23 @@ mod tests {
         assert_eq!(routes[0].effects.len(), 1);
         assert_eq!(routes[0].effects[0].script, "ga_destroy");
         assert!(routes[0].signature.contains("ga_destroy([\"door_a\",0])"));
+    }
+
+    /// The save a test previews: player 0, no live characters, default paths.
+    fn test_save<'a>(
+        graph: &'a SaveGraph,
+        tables: &'a RewardTables<'a>,
+        handler: &'a SaveGameHandler,
+    ) -> PreviewSave<'a> {
+        static PATHS: std::sync::LazyLock<NWN2Paths> = std::sync::LazyLock::new(NWN2Paths::new);
+        PreviewSave {
+            graph,
+            tables,
+            handler,
+            paths: &PATHS,
+            player: 0,
+            characters: LiveCharacters::default(),
+        }
     }
 
     fn preview_with_live(
@@ -6233,12 +6134,14 @@ mod tests {
         let paths = NWN2Paths::new();
         edits
             .preview(
-                graph,
-                &RewardTables::from_graph(graph, None),
-                handler,
-                &paths,
-                0,
-                live,
+                PreviewSave {
+                    graph: graph,
+                    tables: &RewardTables::from_graph(graph, None),
+                    handler: handler,
+                    paths: &paths,
+                    player: 0,
+                    characters: live,
+                },
                 tag,
                 20,
                 route,
@@ -6427,12 +6330,7 @@ mod tests {
         let stage = |edits: &mut QuestEdits, tag: &str, target: u32, route: Option<usize>| {
             let preview = edits
                 .preview(
-                    &graph,
-                    &RewardTables::from_graph(&graph, None),
-                    &handler,
-                    &NWN2Paths::new(),
-                    0,
-                    LiveCharacters::default(),
+                    test_save(&graph, &RewardTables::from_graph(&graph, None), &handler),
                     tag,
                     target,
                     route,
@@ -6621,28 +6519,16 @@ mod tests {
         assert!(preview.writes.is_empty(), "{:?}", preview.writes);
     }
 
-    /// A decoded wrapper's `SetGlobalInt(x, -1)` sets -1; a dialogue's own `"=-1"` stays
-    /// `ginc_var_ops`'s surprise.
+    /// A decoded wrapper's `SetGlobalInt(x, -1)` (a number parameter) sets -1; a
+    /// dialogue's own `"=-1"` stays `ginc_var_ops`'s surprise, `"-1"` subtracts.
     #[test]
     fn decoded_negative_values_are_set() {
-        let mut decoded = action("ga_global_int", json!(["x", "=-1"]));
-        assert_eq!(
-            decode_assignment(&decoded, "m"),
-            Err("unsupported_expression")
-        );
-        decoded.derived_from = Some("wrapper(1)".into());
-        assert_eq!(
-            decode_assignment(&decoded, "m").map(|(_, change)| change),
-            Ok(Change::Set(json!(-1)))
-        );
-        let relative = ConvoFunctor {
-            derived_from: Some("wrapper(1)".into()),
-            ..action("ga_global_int", json!(["x", "-1"]))
+        let change = |params: Value| {
+            decode_assignment(&action("ga_global_int", params), "m").map(|(_, change)| change)
         };
-        assert_eq!(
-            decode_assignment(&relative, "m").map(|(_, change)| change),
-            Ok(Change::Add(-1))
-        );
+        assert_eq!(change(json!(["x", "=-1"])), Err("unsupported_expression"));
+        assert_eq!(change(json!(["x", -1])), Ok(Change::Set(json!(-1))));
+        assert_eq!(change(json!(["x", "-1"])), Ok(Change::Add(-1)));
     }
 
     /// Gives and takes apply in staging order, like staging does in memory: a take-all

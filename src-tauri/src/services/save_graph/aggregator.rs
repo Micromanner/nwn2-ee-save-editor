@@ -20,7 +20,7 @@ use crate::services::toolset_bridge::{
 use super::creature_names::read_speaker_names;
 use super::journal_reader::read_live_journal;
 use super::module_name::read_module_display_name;
-use super::script_decoder::{DecodedWrite, ScriptDecode, loops_whole_faction};
+use super::script_decoder::{DecodedChange, DecodedWrite, ScriptDecode, loops_whole_faction};
 use super::script_source::{GameScripts, ScriptSources, open_module_archive};
 use super::types::{
     AggregatedModule, CampaignSummary, FollowNode, LiveModuleVar, ModuleVarValue, OrphanKind,
@@ -750,10 +750,12 @@ fn synthesized_functor(write: &DecodedWrite, call: &str) -> ConvoFunctor {
         (false, "string") => (FunctorKind::GlobalString, "ga_global_string"),
         (false, _) => (FunctorKind::GlobalInt, "ga_global_int"),
     };
-    let mut params = vec![
-        serde_json::Value::from(write.name.as_str()),
-        serde_json::Value::from(write.value.as_str()),
-    ];
+    // A set travels as the value itself, unlike the dialogue's own text parameter.
+    let value = match &write.change {
+        DecodedChange::Set(value) => value.clone(),
+        DecodedChange::Add(delta) => serde_json::Value::from(format!("{delta:+}")),
+    };
+    let mut params = vec![serde_json::Value::from(write.name.as_str()), value];
     if write.module_local {
         params.push(serde_json::Value::from("$MODULE"));
     }

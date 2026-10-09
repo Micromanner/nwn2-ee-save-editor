@@ -40,6 +40,18 @@ struct QuestRevert {
     modified: bool,
 }
 
+/// A copy of `player` with the changes staging applied for `edits` taken back.
+fn without_quest_changes(
+    player: &Character,
+    edits: &[PendingQuestEdit],
+) -> Result<Character, String> {
+    let mut copy = Character::from_gff(player.clone_gff()).map_err(|e| e.to_string())?;
+    for changes in edits.iter().filter_map(|edit| edit.applied.as_ref()) {
+        editing::revert_on_player(changes, &mut copy)?;
+    }
+    Ok(copy)
+}
+
 /// Whether an undo entry staged one of `edits`.
 fn staged_one_of(entry: &HistoryEntry, edits: &[PendingQuestEdit]) -> bool {
     entry
@@ -801,7 +813,7 @@ impl SessionState {
         let Some((character, history)) = self.player_with_history_mut() else {
             return Ok(None);
         };
-        let mut player = Character::from_gff(character.clone_gff()).map_err(|e| e.to_string())?;
+        let player = without_quest_changes(character, edits)?;
         let mut snapshots: Vec<Option<Character>> = std::iter::repeat_with(|| None)
             .take(history.undo_stack.len())
             .collect();
@@ -824,7 +836,6 @@ impl SessionState {
             let Some(changes) = &edit.applied else {
                 continue;
             };
-            editing::revert_on_player(changes, &mut player)?;
             let marker = history
                 .undo_stack
                 .iter()
@@ -1258,17 +1269,14 @@ impl SessionState {
             == self.selected_player_index;
         let applied = tag
             .and_then(|tag| self.quest_edits.pending.iter().find(|p| p.tag == tag))
-            .and_then(|edit| edit.applied.as_ref());
+            .filter(|edit| edit.applied.is_some());
         let player = self
             .loaded(&CharacterSource::Player)
             .filter(|_| target_loaded);
         let player = match (player, applied) {
-            (Some(player), Some(changes)) => {
-                let mut copy =
-                    Character::from_gff(player.clone_gff()).map_err(|e| e.to_string())?;
-                editing::revert_on_player(changes, &mut copy)?;
-                Some(std::borrow::Cow::Owned(copy.into_gff()))
-            }
+            (Some(player), Some(edit)) => Some(std::borrow::Cow::Owned(
+                without_quest_changes(player, std::slice::from_ref(edit))?.into_gff(),
+            )),
             (Some(player), None) => Some(std::borrow::Cow::Borrowed(player.gff())),
             (None, _) => None,
         };

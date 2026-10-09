@@ -192,6 +192,17 @@ impl ResourceManager {
         self.invalidate_index_caches();
     }
 
+    /// Index one loose file under `source`, as a scan would.
+    #[cfg(test)]
+    pub(crate) fn index_test_file(&mut self, source: OverrideSource, path: PathBuf) {
+        let name = path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        self.insert_entries(vec![(name, ResourceLocation::from_file(source, path))]);
+    }
+
     fn count_locations(&self, source: impl Fn(&OverrideSource) -> bool) -> usize {
         self.resource_index
             .values()
@@ -322,6 +333,22 @@ impl ResourceManager {
     pub fn get_item_template(&self, resref: &str) -> Option<ResourceLocation> {
         let key = resource_key(&resref.to_lowercase(), "uti");
         best_location(self.resource_index.get(&key)?).cloned()
+    }
+
+    /// `get_item_template` among the locations whose source passes `keep`.
+    pub fn get_item_template_where(
+        &self,
+        resref: &str,
+        keep: impl Fn(&OverrideSource) -> bool,
+    ) -> Option<ResourceLocation> {
+        let key = resource_key(&resref.to_lowercase(), "uti");
+        best_location(
+            self.resource_index
+                .get(&key)?
+                .iter()
+                .filter(|l| keep(&l.source)),
+        )
+        .cloned()
     }
 
     /// Every item template by lowercase resref.

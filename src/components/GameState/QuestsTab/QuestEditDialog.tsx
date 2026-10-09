@@ -9,7 +9,7 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import { display } from '@/utils/dataHelpers';
 import { conflictingEdits, dialogueText, journalText, questDisplayName } from './utils';
-import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, isMomentAction, isAreaWrite, DOOR_LOCK_TYPE, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE, COMPANION_ITEM_TYPE, COMPANION_ITEM_TAKE_TYPE, isCompanionItemWrite } from './scriptDescriptions';
+import { PC_LOCAL_TYPE, JOURNAL_ENTRY_PREFIX, consoleCommand, describeEngineCall, describeScript, effectBucket, formatDecodedChange, engineCallBucket, formatRawCall, influenceCompanion, isFeatWrite, isItemTakeWrite, isItemWrite, isJournalConnector, isPlainFlag, isMajorEngineCall, isMajorWorldScript, isMomentAction, isAreaWrite, DOOR_LOCK_TYPE, rewardKind, signedDelta, isPartyWrite, PARTY_TYPE, companionName, isCompanionWrite, companionKey, COMPANION_FEAT_TYPE, COMPANION_ITEM_TYPE, COMPANION_ITEM_TAKE_TYPE, isCompanionItemWrite } from './scriptDescriptions';
 import type { AggregatedModule, ConvoFunctor, NextLine, PendingQuestEdit, QuestPreview, QuestSummary, RouteSummary, SpokenLine } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
 import { useSpeakerNameResolver } from './useSpeakerNameResolver';
@@ -410,7 +410,7 @@ export function QuestEditDialog({ quest, target, pending, tlk, modules, onClose,
       const decoded = f.decoded;
       if (!decoded) continue;
       for (const call of decoded.calls) push(engineCallBucket(call), describeEngineCall(call, t), isMajorEngineCall(call));
-      for (const w of decoded.conditional_writes) push('world', t('gameState.quests.edit.decodedConditional', { name: w.name, value: w.value }));
+      for (const w of decoded.conditional_writes) push('world', t('gameState.quests.edit.decodedConditional', { name: w.name, value: formatDecodedChange(w.change) }));
       for (const call of decoded.unresolved) push('world', t('gameState.quests.edit.decodedUnresolved', { call }));
     }
     return { character, world };

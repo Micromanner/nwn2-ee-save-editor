@@ -17,9 +17,17 @@ pub struct DecodedWrite {
     /// `int`, `float` or `string`.
     pub value_type: String,
     pub name: String,
-    /// Formatted like the value parameter of `ga_global_int`: `"1"`, `"+1"`, `"2.5"`, text;
-    /// a negative value that is set reads `"=-1"` (`"-1"` subtracts).
-    pub value: String,
+    pub change: DecodedChange,
+}
+
+/// What a decoded write does to its variable.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum DecodedChange {
+    /// `SetGlobalInt(x, -1)`: a number, or text for a string variable.
+    Set(Value),
+    /// `ModifyGlobalInt(x, 1)`, `SetGlobalInt(x, GetGlobalInt(x) - 1)`.
+    Add(i64),
 }
 
 /// An engine call the branch always performs, in the shape of the dialogue action
@@ -64,67 +72,111 @@ pub struct ScriptConstants {
     pub strings: HashMap<String, String>,
 }
 
-/// Script-level `int NAME = 5;` / `const string NAME = "x";` declarations, outside every
-/// function body. A non-`const` one the script assigns again is a variable, not a
-/// constant. Earlier definitions win, so `nwscript` is collected before everything else.
-pub fn collect_constants(source: &str, constants: &mut ScriptConstants) {
-    let tokens = tokenize(source);
-    let mut assignments: HashMap<&str, usize> = HashMap::new();
-    for pair in tokens.windows(2) {
-        let name = match pair {
-            [Token::Ident(name), Token::Punct(op)]
-                if matches!(op.as_str(), "=" | "+=" | "-=" | "*=" | "/=" | "++" | "--") =>
-            {
-                name
-            }
-            [Token::Punct(op), Token::Ident(name)] if op == "++" || op == "--" => name,
-            _ => continue,
-        };
-        *assignments.entry(name.as_str()).or_default() += 1;
-    }
-    let mut depth = 0usize;
-    for (i, token) in tokens.iter().enumerate() {
-        match token {
-            Token::Punct(p) if p == "{" => depth += 1,
-            Token::Punct(p) if p == "}" => depth = depth.saturating_sub(1),
-            _ => {}
-        }
-        if depth > 0
-            || !(i == 0 || is_punct(tokens.get(i - 1), ";") || is_punct(tokens.get(i - 1), "}"))
-        {
-            continue;
-        }
-        let is_const = is_ident(Some(token), "const");
-        let decl = &tokens[i + usize::from(is_const)..];
-        let [
-            Token::Ident(kind),
-            Token::Ident(name),
-            Token::Punct(eq),
-            rest @ ..,
-        ] = decl
-        else {
-            continue;
-        };
-        if eq != "=" || (!is_const && assignments.get(name.as_str()) != Some(&1)) {
-            continue;
-        }
-        let (sign, rest) = match rest {
-            [Token::Punct(minus), rest @ ..] if minus == "-" => (-1, rest),
-            _ => (1, rest),
-        };
-        match (kind.as_str(), rest) {
-            ("int", [Token::Num(n), Token::Punct(end), ..]) if end == ";" => {
-                if let Ok(n) = n.parse::<i64>() {
-                    constants.ints.entry(name.clone()).or_insert(sign * n);
+/// A literal a script-level declaration initializes its name with.
+#[derive(Debug, Clone)]
+enum Literal {
+    Int(i64),
+    Str(String),
+}
+
+/// One source file's script-level `int NAME = 5;` / `const string NAME = "x";`
+/// declarations, outside every function body, and how often the file assigns each
+/// name (its declaration included). Tokenized once per file.
+#[derive(Debug, Default)]
+pub struct Declarations {
+    /// `(name, const, value)` in source order.
+    declared: Vec<(String, bool, Literal)>,
+    assignments: HashMap<String, usize>,
+}
+
+impl Declarations {
+    pub fn parse(source: &str) -> Self {
+        let tokens = tokenize(source);
+        let mut assignments: HashMap<String, usize> = HashMap::new();
+        for pair in tokens.windows(2) {
+            let name = match pair {
+                [Token::Ident(name), Token::Punct(op)]
+                    if matches!(op.as_str(), "=" | "+=" | "-=" | "*=" | "/=" | "++" | "--") =>
+                {
+                    name
                 }
+                [Token::Punct(op), Token::Ident(name)] if op == "++" || op == "--" => name,
+                _ => continue,
+            };
+            *assignments.entry(name.clone()).or_default() += 1;
+        }
+        let mut declared = Vec::new();
+        let mut depth = 0usize;
+        for (i, token) in tokens.iter().enumerate() {
+            match token {
+                Token::Punct(p) if p == "{" => depth += 1,
+                Token::Punct(p) if p == "}" => depth = depth.saturating_sub(1),
+                _ => {}
             }
-            ("string", [Token::Str(s), Token::Punct(end), ..]) if end == ";" => {
+            if depth > 0
+                || !(i == 0 || is_punct(tokens.get(i - 1), ";") || is_punct(tokens.get(i - 1), "}"))
+            {
+                continue;
+            }
+            let is_const = is_ident(Some(token), "const");
+            let decl = &tokens[i + usize::from(is_const)..];
+            let [
+                Token::Ident(kind),
+                Token::Ident(name),
+                Token::Punct(eq),
+                rest @ ..,
+            ] = decl
+            else {
+                continue;
+            };
+            if eq != "=" {
+                continue;
+            }
+            let (sign, rest) = match rest {
+                [Token::Punct(minus), rest @ ..] if minus == "-" => (-1, rest),
+                _ => (1, rest),
+            };
+            let value = match (kind.as_str(), rest) {
+                ("int", [Token::Num(n), Token::Punct(end), ..]) if end == ";" => {
+                    n.parse::<i64>().ok().map(|n| Literal::Int(sign * n))
+                }
+                ("string", [Token::Str(s), Token::Punct(end), ..]) if end == ";" => {
+                    Some(Literal::Str(s.clone()))
+                }
+                _ => None,
+            };
+            if let Some(value) = value {
+                declared.push((name.clone(), is_const, value));
+            }
+        }
+        Self {
+            declared,
+            assignments,
+        }
+    }
+}
+
+/// The constants of a script whose `#include` chain, the script itself included, is
+/// `files`; earlier definitions win, so `nwscript` is collected before everything else.
+/// A non-`const` declaration is a variable, not a constant, when any file of the chain
+/// assigns it again.
+pub fn collect_constants(files: &[&Declarations], constants: &mut ScriptConstants) {
+    let assignments =
+        |name: &str| -> usize { files.iter().filter_map(|f| f.assignments.get(name)).sum() };
+    for (name, is_const, value) in files.iter().flat_map(|f| &f.declared) {
+        if !is_const && assignments(name) != 1 {
+            continue;
+        }
+        match value {
+            Literal::Int(n) => {
+                constants.ints.entry(name.clone()).or_insert(*n);
+            }
+            Literal::Str(s) => {
                 constants
                     .strings
                     .entry(name.clone())
                     .or_insert_with(|| s.clone());
             }
-            _ => {}
         }
     }
 }
@@ -1221,7 +1273,7 @@ enum WriteValue<'e> {
     Add(Option<&'e Vec<Token>>),
 }
 
-/// Record a variable write, its value in the `ga_global_int` textual convention.
+/// Record a variable write.
 fn record_write(
     ctx: &mut Context,
     module_local: bool,
@@ -1245,18 +1297,11 @@ fn record_write(
             return;
         }
     };
-    let value = value_expr.and_then(|expr| match value {
+    let change = value_expr.and_then(|expr| match value {
         WriteValue::Assign(_) => eval_value(expr, value_type, &name, ctx),
-        WriteValue::Add(_) => {
-            let delta = ctx.int_arg(expr)?;
-            Some(if delta < 0 {
-                delta.to_string()
-            } else {
-                format!("+{delta}")
-            })
-        }
+        WriteValue::Add(_) => ctx.int_arg(expr).map(DecodedChange::Add),
     });
-    let Some(value) = value else {
+    let Some(change) = change else {
         ctx.out.unresolved.push(format!(
             "{call}(\"{name}\", {})",
             value_expr.map(|e| render(e.as_slice())).unwrap_or_default()
@@ -1267,7 +1312,7 @@ fn record_write(
         module_local,
         value_type: value_type.to_string(),
         name,
-        value,
+        change,
     };
     if conditional {
         ctx.out.conditional_writes.push(write);
@@ -1276,26 +1321,29 @@ fn record_write(
     }
 }
 
-/// Evaluate a value expression into the `ga_global_int` textual convention; a negative
-/// value that is set rather than added reads `"=-1"`.
-fn eval_value(expr: &[Token], value_type: &str, name: &str, ctx: &Context) -> Option<String> {
-    let absolute = |n: String| {
-        if n.starts_with('-') {
-            format!("={n}")
-        } else {
-            n
-        }
+/// Evaluate an assigned value expression.
+fn eval_value(
+    expr: &[Token],
+    value_type: &str,
+    name: &str,
+    ctx: &Context,
+) -> Option<DecodedChange> {
+    let number = |n: &str, sign: i64| match value_type {
+        "float" => n.parse::<f64>().ok().map(|f| Value::from(sign as f64 * f)),
+        _ => n.parse::<i64>().ok().map(|i| Value::from(sign * i)),
     };
-    match expr {
-        [Token::Num(n)] => Some(n.clone()),
-        [Token::Punct(sign), Token::Num(n)] if sign == "-" => Some(absolute(format!("-{n}"))),
-        [Token::Ident(word)] if word == "TRUE" => Some("1".into()),
-        [Token::Ident(word)] if word == "FALSE" => Some("0".into()),
-        [Token::Str(s)] if value_type == "string" => Some(s.clone()),
+    let set = match expr {
+        [Token::Num(n)] if value_type != "string" => number(n, 1)?,
+        [Token::Punct(sign), Token::Num(n)] if sign == "-" && value_type != "string" => {
+            number(n, -1)?
+        }
+        [Token::Ident(word)] if word == "TRUE" => Value::from(1),
+        [Token::Ident(word)] if word == "FALSE" => Value::from(0),
+        [Token::Str(s)] if value_type == "string" => Value::from(s.as_str()),
         [Token::Ident(word)] => match ctx.param(word)? {
-            Value::Number(n) if value_type != "string" => Some(absolute(n.to_string())),
-            Value::String(s) if value_type == "string" => Some(s.clone()),
-            _ => None,
+            Value::Number(n) if value_type != "string" => Value::Number(n.clone()),
+            Value::String(s) if value_type == "string" => Value::from(s.as_str()),
+            _ => return None,
         },
         // `GetGlobalInt("X") + 1` on the same variable: relative change.
         [
@@ -1307,10 +1355,15 @@ fn eval_value(expr: &[Token], value_type: &str, name: &str, ctx: &Context) -> Op
             Token::Num(n),
         ] if open == "(" && close == ")" && (op == "+" || op == "-") => {
             let same_scope = getter.eq_ignore_ascii_case(&format!("GetGlobal{value_type}"));
-            (same_scope && read_name == name).then(|| format!("{op}{n}"))
+            if !same_scope || read_name != name {
+                return None;
+            }
+            let delta = n.parse::<i64>().ok()?;
+            return Some(DecodedChange::Add(if op == "-" { -delta } else { delta }));
         }
-        _ => None,
-    }
+        _ => return None,
+    };
+    Some(DecodedChange::Set(set))
 }
 
 fn render(tokens: &[Token]) -> String {
@@ -1399,13 +1452,21 @@ void main(int nDialogNode)
 }
 "#;
 
-    fn write(name: &str, value: &str) -> DecodedWrite {
+    fn write(name: &str, change: DecodedChange) -> DecodedWrite {
         DecodedWrite {
             module_local: false,
             value_type: "int".into(),
             name: name.into(),
-            value: value.into(),
+            change,
         }
+    }
+
+    fn set(value: i64) -> DecodedChange {
+        DecodedChange::Set(json!(value))
+    }
+
+    fn add(delta: i64) -> DecodedChange {
+        DecodedChange::Add(delta)
     }
 
     #[test]
@@ -1413,7 +1474,7 @@ void main(int nDialogNode)
         let decoded = decode_action(CALEB_STATE, &[json!(1)], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded.writes,
-            vec![write("CalebState", "1"), write("gbWatch", "0")]
+            vec![write("CalebState", set(1)), write("gbWatch", set(0))]
         );
         assert!(decoded.conditional_writes.is_empty());
         assert!(decoded.calls.is_empty());
@@ -1482,7 +1543,7 @@ void main(string sTag, int nEnable)
     #[test]
     fn unbraced_case_body() {
         let decoded = decode_action(CALEB_STATE, &[json!(2)], &ScriptConstants::default()).unwrap();
-        assert_eq!(decoded.writes, vec![write("CalebState", "2")]);
+        assert_eq!(decoded.writes, vec![write("CalebState", set(2))]);
         assert!(decoded.calls.is_empty());
     }
 
@@ -1491,9 +1552,12 @@ void main(string sTag, int nEnable)
         let decoded = decode_action(CALEB_STATE, &[json!(9)], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded.writes,
-            vec![write("CalebState", "+1"), write("Delayed", "5")]
+            vec![write("CalebState", add(1)), write("Delayed", set(5))]
         );
-        assert_eq!(decoded.conditional_writes, vec![write("CalebState", "10")]);
+        assert_eq!(
+            decoded.conditional_writes,
+            vec![write("CalebState", set(10))]
+        );
         assert_eq!(decoded.calls, vec!["ActionOpenDoor"]);
     }
 
@@ -1501,7 +1565,7 @@ void main(string sTag, int nEnable)
     fn default_case_passes_the_parameter_through() {
         let decoded =
             decode_action(CALEB_STATE, &[json!(42)], &ScriptConstants::default()).unwrap();
-        assert_eq!(decoded.writes, vec![write("CalebState", "42")]);
+        assert_eq!(decoded.writes, vec![write("CalebState", set(42))]);
     }
 
     #[test]
@@ -1664,25 +1728,25 @@ void main()
                     module_local: true,
                     value_type: "int".into(),
                     name: "10_enable_cormick".into(),
-                    value: "1".into()
+                    change: set(1)
                 },
                 DecodedWrite {
                     module_local: true,
                     value_type: "int".into(),
                     name: "flag".into(),
-                    value: "1".into()
+                    change: set(1)
                 },
                 DecodedWrite {
                     module_local: false,
                     value_type: "string".into(),
                     name: "Route".into(),
-                    value: "watch".into()
+                    change: DecodedChange::Set(json!("watch"))
                 },
                 DecodedWrite {
                     module_local: false,
                     value_type: "float".into(),
                     name: "Timer".into(),
-                    value: "2.5".into()
+                    change: DecodedChange::Set(json!(2.5))
                 },
             ]
         );
@@ -1696,10 +1760,10 @@ void main()
         );
     }
 
-    fn module_write(name: &str, value: &str) -> DecodedWrite {
+    fn module_write(name: &str, change: DecodedChange) -> DecodedWrite {
         DecodedWrite {
             module_local: true,
-            ..write(name, value)
+            ..write(name, change)
         }
     }
 
@@ -1732,9 +1796,9 @@ switch (nNodeCheck)
 }"#;
         let constants = ScriptConstants::default();
         let zero = decode_action(src, &[json!(0)], &constants).unwrap();
-        assert_eq!(zero.writes, vec![module_write("KarinaState", "1")]);
+        assert_eq!(zero.writes, vec![module_write("KarinaState", set(1))]);
         let one = decode_action(src, &[json!(1)], &constants).unwrap();
-        assert_eq!(one.writes, vec![module_write("KarinaState", "3")]);
+        assert_eq!(one.writes, vec![module_write("KarinaState", set(3))]);
         assert!(one.conditional_writes.is_empty());
     }
 
@@ -1793,12 +1857,15 @@ void main(int nCommanderQuestState)
         assert!(hundred.writes.is_empty() && hundred.conditional_writes.is_empty());
         assert_eq!(hundred.calls, vec!["SetMapPinEnabled"]);
         let one = decode_action(CMDR_STATE, &[json!(1)], &constants).unwrap();
-        assert_eq!(one.writes, vec![module_write("CommanderQuestState", "1")]);
+        assert_eq!(
+            one.writes,
+            vec![module_write("CommanderQuestState", set(1))]
+        );
         let fifty = decode_action(CMDR_STATE, &[json!(50)], &constants).unwrap();
         assert!(fifty.writes.is_empty() && fifty.actions.is_empty());
         assert_eq!(
             fifty.conditional_writes,
-            vec![write("12_help_cormick", "2")]
+            vec![write("12_help_cormick", set(2))]
         );
         assert_eq!(fifty.calls, vec!["AddJournalQuestEntry"]);
     }
@@ -1838,7 +1905,7 @@ void main(int bCovenDestroyed)
         assert!(decoded.writes.is_empty() && decoded.actions.is_empty());
         assert_eq!(
             decoded.conditional_writes,
-            vec![write("D_nSleeperState", "1")]
+            vec![write("D_nSleeperState", set(1))]
         );
         assert_eq!(
             decoded.calls,
@@ -1876,7 +1943,7 @@ void main(int nCase)
         let decoded = decode_action(src, &[json!(200)], &ScriptConstants::default()).unwrap();
         assert_eq!(
             decoded.writes,
-            vec![module_write("g_bDeepwineAcquired", "1")]
+            vec![module_write("g_bDeepwineAcquired", set(1))]
         );
         assert_eq!(
             decoded.actions,
@@ -1929,14 +1996,14 @@ void main(int nCase)
         assert_eq!(
             decoded.writes,
             vec![
-                write("00_nFeatsTrained", "+1"),
-                write("bFearsomeRoster", "1")
+                write("00_nFeatsTrained", add(1)),
+                write("bFearsomeRoster", set(1))
             ]
         );
         assert_eq!(decoded.calls, vec!["AddTeamworkFeat"]);
         // Without the constants no label is known: any case might run.
         let unknown = decode_action(src, &[json!(10)], &ScriptConstants::default()).unwrap();
-        assert_eq!(unknown.writes, vec![write("00_nFeatsTrained", "+1")]);
+        assert_eq!(unknown.writes, vec![write("00_nFeatsTrained", add(1))]);
         assert_eq!(unknown.conditional_writes.len(), 2);
     }
 
@@ -1979,10 +2046,13 @@ void main(int iNewTax)
             .strings
             .insert("UNREST_MOD".into(), "21_Unrest_Mod".into());
         let decoded = decode_action(src, &[json!(2)], &constants).unwrap();
-        assert_eq!(decoded.writes, vec![write("21_Tax_Peasant", "2")]);
+        assert_eq!(decoded.writes, vec![write("21_Tax_Peasant", set(2))]);
         assert_eq!(
             decoded.conditional_writes,
-            vec![write("21_Unrest_Mod", "-1"), write("21_Unrest_Mod", "+1")]
+            vec![
+                write("21_Unrest_Mod", add(-1)),
+                write("21_Unrest_Mod", add(1))
+            ]
         );
         assert!(decoded.unresolved.is_empty());
         let unknown = decode_action(src, &[json!(2)], &ScriptConstants::default()).unwrap();
@@ -2026,7 +2096,7 @@ void main(int iActType, int bLawChaosAxis, string sSource)
         .unwrap();
         assert_eq!(
             decoded.conditional_writes,
-            vec![module_write("bAlignmentHitFromWylBet", "1")]
+            vec![module_write("bAlignmentHitFromWylBet", set(1))]
         );
         assert_eq!(decoded.calls, vec!["LawChaosAxisAdjustment(oPC, iActType)"]);
     }
@@ -2099,7 +2169,7 @@ int StartingConditional()
         assert!(decode_action(src, &[], &ScriptConstants::default()).is_none());
     }
 
-    /// A negative value that is set reads `"=-1"`, a relative one `"-1"`.
+    /// A negative value that is set stays a set, a relative one an add.
     #[test]
     fn negative_values_say_whether_they_are_set_or_added() {
         let src = r#"
@@ -2115,10 +2185,10 @@ void main(int nValue)
         assert_eq!(
             decoded.writes,
             vec![
-                write("Set", "=-1"),
-                write("FromParam", "=-4"),
-                write("Added", "-1"),
-                write("Same", "-2"),
+                write("Set", set(-1)),
+                write("FromParam", set(-4)),
+                write("Added", add(-1)),
+                write("Same", add(-2)),
             ]
         );
     }

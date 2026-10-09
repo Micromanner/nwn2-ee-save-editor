@@ -129,8 +129,8 @@ fn save_graph_builds_on_classic_campaign() {
     assert_eq!(
         synthesized,
         vec![
-            ("ga_global_int", vec![json!("CalebState"), json!("1")]),
-            ("ga_global_int", vec![json!("gbWatch"), json!("0")]),
+            ("ga_global_int", vec![json!("CalebState"), json!(1)]),
+            ("ga_global_int", vec![json!("gbWatch"), json!(0)]),
             ("ga_lock", vec![json!("10_hagen_door_ext"), json!(0)]),
         ]
     );

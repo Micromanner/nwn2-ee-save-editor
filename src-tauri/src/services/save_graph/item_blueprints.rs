@@ -1,6 +1,6 @@
-//! Resolves the `.uti` blueprints quest rewards hand out (`ga_give_item`): loose files
-//! in the campaign folder first (it overrides its modules), then the line's own module,
-//! then the resource manager's override chain (base game, override, HAKs).
+//! Resolves the `.uti` blueprints quest rewards hand out (`ga_give_item`) in the game's
+//! content priority: HAKs and override folders, then loose files in the campaign folder
+//! (it overrides its modules), then the line's own module, then the base game.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -14,7 +14,7 @@ use super::SaveGraph;
 use super::script_source::{module_file, open_module_archive};
 use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue};
-use crate::services::resource_manager::ResourceManager;
+use crate::services::resource_manager::{OverrideSource, ResourceManager};
 
 #[derive(Debug, Clone)]
 pub struct ItemBlueprint {
@@ -91,11 +91,22 @@ impl<'a> ItemBlueprints<'a> {
     }
 
     fn load(&self, module: &str, resref: &str) -> Option<ItemBlueprint> {
-        if let Some(bytes) = self.module_file(module, &format!("{resref}.uti")) {
+        // The chain's campaign and module copies are the loaded module's; the line's own
+        // campaign folder and module take their place.
+        let chained = self.resources.and_then(|r| {
+            let info = r.get_item_template_where(resref, |s| {
+                !matches!(s, OverrideSource::Module | OverrideSource::Campaign)
+            })?;
+            Some((r, info))
+        });
+        let outranks_module = chained
+            .as_ref()
+            .is_some_and(|(_, info)| info.source.priority() > OverrideSource::Campaign.priority());
+        if !outranks_module && let Some(bytes) = self.module_file(module, &format!("{resref}.uti"))
+        {
             return parse_blueprint(&bytes);
         }
-        let resources = self.resources?;
-        let info = resources.get_item_template(resref)?;
+        let (resources, info) = chained?;
         match resources.get_item_template_fields(&info) {
             Ok(fields) => Some(blueprint_from_fields(fields)),
             Err(e) => {
@@ -142,5 +153,61 @@ fn blueprint_from_fields(fields: IndexMap<String, GffValue<'static>>) -> ItemBlu
         fields,
         name,
         name_strref,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::NWN2Paths;
+    use crate::parsers::gff::GffWriter;
+    use indexmap::indexmap;
+    use tokio::sync::RwLock;
+
+    fn write_uti(dir: &Path, tag: &str) -> PathBuf {
+        let bytes = GffWriter::new("UTI ", "V3.2")
+            .write(indexmap! { "Tag".into() => GffValue::String(tag.into()) })
+            .unwrap();
+        let path = dir.join("qe_sword.uti");
+        std::fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    fn blueprints<'a>(campaign: &Path, resources: &'a ResourceManager) -> ItemBlueprints<'a> {
+        ItemBlueprints {
+            campaign_dir: Some(campaign.to_path_buf()),
+            resources: Some(resources),
+            ..ItemBlueprints::detached()
+        }
+    }
+
+    fn tag(blueprint: Option<Arc<ItemBlueprint>>) -> String {
+        match &blueprint.unwrap().fields["Tag"] {
+            GffValue::String(tag) => tag.to_string(),
+            other => panic!("Tag is {other:?}"),
+        }
+    }
+
+    /// HAKs and override folders beat the campaign folder and module; the base game
+    /// loses to them.
+    #[test]
+    fn override_chain_ranks_around_the_campaign_folder() {
+        let campaign = tempfile::tempdir().unwrap();
+        write_uti(campaign.path(), "campaign");
+        let other = tempfile::tempdir().unwrap();
+        let hak = write_uti(other.path(), "hak");
+        let base = tempfile::tempdir().unwrap();
+        let base = write_uti(base.path(), "base");
+        let mut resources = ResourceManager::new(Arc::new(RwLock::new(NWN2Paths::new())));
+        resources.index_test_file(OverrideSource::BaseGame, base);
+        assert_eq!(
+            tag(blueprints(campaign.path(), &resources).get("m", "QE_Sword")),
+            "campaign"
+        );
+        resources.index_test_file(OverrideSource::Hak(0), hak);
+        assert_eq!(
+            tag(blueprints(campaign.path(), &resources).get("m", "qe_sword")),
+            "hak"
+        );
     }
 }

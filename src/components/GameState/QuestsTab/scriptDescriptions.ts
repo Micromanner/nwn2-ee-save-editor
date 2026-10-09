@@ -1,4 +1,5 @@
-import type { ConvoFunctor } from './types';
+import { formatModifier } from '@/utils/dataHelpers';
+import type { ConvoFunctor, DecodedChange } from './types';
 
 /**
  * Positional parameter names for the stock NWN2 `ga_*` / `gc_*` conversation
@@ -347,6 +348,11 @@ export function isJournalConnector(f: ConvoFunctor) {
   return f.kind === 'journal' || f.script === '__connector_quest_tuple__';
 }
 
+/** `5` / `+1` for a decoded write. */
+export function formatDecodedChange(change: DecodedChange) {
+  return change.kind === 'add' ? formatModifier(change.value) : String(change.value);
+}
+
 function formatChange(raw: string) {
   if (raw === '++') return '+1';
   if (raw === '--') return '-1';
@@ -380,7 +386,8 @@ export function describeScript(
   names.forEach((name, i) => {
     const raw = f.params[i];
     const text = raw == null ? '' : String(raw);
-    if (name === 'change' || name === 'check') values[name] = formatChange(text);
+    // A number is a decoded wrapper's set; the dialogue's own values are text.
+    if (name === 'change' || name === 'check') values[name] = typeof raw === 'number' ? `= ${raw}` : formatChange(text);
     else if (name === 'target') values[name] = formatTarget(text, script, t);
     else if (name === 'companion' && script === 'ga_influence') values[name] = companionName(OC_COMPANION_TAGS[Number(text)] ?? text);
     else if (name === 'companion' && script.startsWith('ka_influence')) values[name] = companionName(motbCompanionTag(text));

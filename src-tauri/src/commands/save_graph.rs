@@ -5,13 +5,16 @@ use tauri::{AppHandle, State};
 
 use crate::commands::campaign::cached_module_info;
 use crate::commands::{CommandError, CommandResult};
-use crate::services::save_graph::editing::{PendingQuestEdit, QuestPreview};
+use crate::config::NWN2Paths;
+use crate::services::save_graph::editing::{
+    PendingQuestEdit, PreviewSave, QuestPreview, RewardTables,
+};
 use crate::services::save_graph::{
     self, BuildContext, OrphanKind, QuestGraphProgress, SaveGraph, SaveGraphSummary, TransitionNode,
 };
 use crate::services::savegame_handler::SaveGameHandler;
 use crate::services::toolset_bridge::{self, BridgeError};
-use crate::state::AppState;
+use crate::state::{AppState, SessionState};
 
 /// Lightweight Quests-tab payload: campaign + module roster + per-quest summaries
 /// without transition arrays. Full `SaveGraph` is cached in `SessionState` so the
@@ -51,29 +54,13 @@ pub async fn save_preview_quest_edit(
 ) -> CommandResult<QuestPreview> {
     let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
-    let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
+    let tables = RewardTables::from_graph(&graph, Some(&resources));
     let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
+    let paths = state.paths.read();
+    let save = preview_save(&session, &graph, &tables, &paths, &tag)?;
     session
         .quest_edits
-        .preview(
-            &graph,
-            &tables,
-            handler,
-            &state.paths.read(),
-            session
-                .primary_player_index
-                .unwrap_or(session.selected_player_index),
-            session
-                .quest_live_characters(Some(&tag))
-                .map_err(CommandError::from)?,
-            &tag,
-            target,
-            route,
-        )
+        .preview(save, &tag, target, route)
         .map_err(CommandError::from)
 }
 
@@ -86,29 +73,39 @@ pub async fn save_summarize_quest_routes(
 ) -> CommandResult<Vec<crate::services::save_graph::editing::RouteSummary>> {
     let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
-    let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
+    let tables = RewardTables::from_graph(&graph, Some(&resources));
     let session = state.session.read();
-    let handler = session
-        .savegame_handler
-        .as_ref()
-        .ok_or(CommandError::NoCharacterLoaded)?;
+    let paths = state.paths.read();
+    let save = preview_save(&session, &graph, &tables, &paths, &tag)?;
     session
         .quest_edits
-        .summarize_routes(
-            &graph,
-            &tables,
-            handler,
-            &state.paths.read(),
-            session
-                .primary_player_index
-                .unwrap_or(session.selected_player_index),
-            session
-                .quest_live_characters(Some(&tag))
-                .map_err(CommandError::from)?,
-            &tag,
-            target,
-        )
+        .summarize_routes(save, &tag, target)
         .map_err(CommandError::from)
+}
+
+/// The loaded save as the previews of quest `tag` read it.
+fn preview_save<'a>(
+    session: &'a SessionState,
+    graph: &'a SaveGraph,
+    tables: &'a RewardTables<'a>,
+    paths: &'a NWN2Paths,
+    tag: &str,
+) -> CommandResult<PreviewSave<'a>> {
+    Ok(PreviewSave {
+        graph,
+        tables,
+        handler: session
+            .savegame_handler
+            .as_ref()
+            .ok_or(CommandError::NoCharacterLoaded)?,
+        paths,
+        player: session
+            .primary_player_index
+            .unwrap_or(session.selected_player_index),
+        characters: session
+            .quest_live_characters(Some(tag))
+            .map_err(CommandError::from)?,
+    })
 }
 
 #[tauri::command]
@@ -124,7 +121,7 @@ pub async fn save_stage_quest_edit(
 ) -> CommandResult<Vec<PendingQuestEdit>> {
     let graph = ensure_quest_graph(&app, &state).await?;
     let resources = state.resource_manager.read().await;
-    let tables = save_graph::editing::RewardTables::from_graph(&graph, Some(&resources));
+    let tables = RewardTables::from_graph(&graph, Some(&resources));
     let stale = || {
         CommandError::from(
             "The save or pending edits changed. Refresh the preview before applying.".to_string(),
@@ -133,27 +130,11 @@ pub async fn save_stage_quest_edit(
     // Previewed under the read lock so edits and saves are not held up meanwhile.
     let (preview, generations) = {
         let session = state.session.read();
-        let handler = session
-            .savegame_handler
-            .as_ref()
-            .ok_or(CommandError::NoCharacterLoaded)?;
+        let paths = state.paths.read();
+        let save = preview_save(&session, &graph, &tables, &paths, &tag)?;
         let preview = session
             .quest_edits
-            .preview(
-                &graph,
-                &tables,
-                handler,
-                &state.paths.read(),
-                session
-                    .primary_player_index
-                    .unwrap_or(session.selected_player_index),
-                session
-                    .quest_live_characters(Some(&tag))
-                    .map_err(CommandError::from)?,
-                &tag,
-                target,
-                route,
-            )
+            .preview(save, &tag, target, route)
             .map_err(CommandError::from)?;
         (preview, session.quest_generation())
     };
@@ -216,7 +197,7 @@ pub async fn save_get_quest_variables(
         .as_ref()
         .ok_or(CommandError::NoCharacterLoaded)?;
     let mut keys = std::collections::BTreeSet::new();
-    let tables = save_graph::editing::RewardTables::from_graph(&graph, None);
+    let tables = RewardTables::from_graph(&graph, None);
     for tr in &quest.transitions {
         for action in tr.actions.iter().chain(&tr.gating_conditions) {
             use crate::services::toolset_bridge::FunctorKind;
