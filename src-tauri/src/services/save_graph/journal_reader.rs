@@ -38,6 +38,18 @@ pub(super) fn journal_entries(
     playerlist: &[u8],
     player_index: usize,
 ) -> Result<Vec<LiveJournalEntry>, String> {
+    let mut journals = player_journals(playerlist)?;
+    let count = journals.len();
+    if player_index >= count {
+        return Err(format!(
+            "player_index {player_index} out of range ({count})"
+        ));
+    }
+    Ok(journals.swap_remove(player_index))
+}
+
+/// The live journal of every `Mod_PlayerList` entry, in list order.
+pub(super) fn player_journals(playerlist: &[u8]) -> Result<Vec<Vec<LiveJournalEntry>>, String> {
     let gff = GffParser::from_bytes(playerlist.to_vec())
         .map_err(|e| format!("Failed to parse playerlist.ifo: {e}"))?;
     let root = gff
@@ -49,43 +61,34 @@ pub(super) fn journal_entries(
         _ => return Err("Mod_PlayerList missing or not a list".to_string()),
     };
 
-    let entry = players
-        .get(player_index)
-        .ok_or_else(|| {
-            format!(
-                "player_index {player_index} out of range ({})",
-                players.len()
-            )
-        })?
-        .force_load()
-        .map_err(|e| e.to_string())?;
-
-    let Some(GffValue::List(var_table)) = entry.get("VarTable") else {
-        return Ok(Vec::new());
-    };
-
-    let mut out = Vec::new();
-    for var_lazy in var_table {
-        let fields = var_lazy.force_load().map_err(|e| e.to_string())?;
-        let Some(GffValue::String(name)) = fields.get("Name") else {
-            continue;
-        };
-        let Some(tag) = name.strip_prefix(JOURNAL_ENTRY_PREFIX) else {
-            continue;
-        };
-        if tag.is_empty() {
-            continue;
+    let mut journals = Vec::with_capacity(players.len());
+    for player in players {
+        let entry = player.force_load().map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        if let Some(GffValue::List(var_table)) = entry.get("VarTable") {
+            for var_lazy in var_table {
+                let fields = var_lazy.force_load().map_err(|e| e.to_string())?;
+                let Some(GffValue::String(name)) = fields.get("Name") else {
+                    continue;
+                };
+                let Some(tag) = name.strip_prefix(JOURNAL_ENTRY_PREFIX) else {
+                    continue;
+                };
+                if tag.is_empty() {
+                    continue;
+                }
+                let state = match fields.get("Value") {
+                    Some(GffValue::Int(v)) if *v >= 0 => *v as u32,
+                    Some(GffValue::Dword(v)) => *v,
+                    _ => continue,
+                };
+                out.push(LiveJournalEntry {
+                    tag: tag.to_string(),
+                    state,
+                });
+            }
         }
-        let state = match fields.get("Value") {
-            Some(GffValue::Int(v)) if *v >= 0 => *v as u32,
-            Some(GffValue::Dword(v)) => *v,
-            _ => continue,
-        };
-        out.push(LiveJournalEntry {
-            tag: tag.to_string(),
-            state,
-        });
+        journals.push(out);
     }
-
-    Ok(out)
+    Ok(journals)
 }

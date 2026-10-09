@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::aggregator::derived_call;
 use super::area_objects::{self, AreaField, ModuleObjects};
 use super::item_blueprints::{ItemBlueprint, ItemBlueprints};
-use super::journal_reader::journal_entries;
+use super::journal_reader::player_journals;
 use super::{FollowNode, SaveGraph, SpokenLine, TransitionNode, read_live_journal};
 use crate::character::{Character, FeatId, FeatSource};
 use crate::config::NWN2Paths;
@@ -552,8 +552,14 @@ impl QuestEdits {
             .transpose()?;
         let mut journal = self.pending_journal(&live.journal, tag);
         // Before this edit's own target counts as reached.
+        let reached = |quest: &str, state: u32| {
+            [journal.get(quest), live.reached.get(quest)]
+                .into_iter()
+                .flatten()
+                .any(|saved| *saved >= state)
+        };
         let lead_in = route_line.map_or(&[][..], |tr| {
-            &tr.lead_in[unplayed_lead_in(&tr.lead_in, &journal)..]
+            &tr.lead_in[unplayed_lead_in(&tr.lead_in, reached)..]
         });
         journal.insert(tag.to_string(), target);
         reader.journal = Some(journal);
@@ -1117,6 +1123,9 @@ struct LiveSave {
     playerlist: Vec<u8>,
     /// Journal states by quest tag.
     journal: BTreeMap<String, u32>,
+    /// The highest state any character in the save reached, by quest tag: in a
+    /// multiplayer save the story is shared, the journal is per character.
+    reached: BTreeMap<String, u32>,
 }
 
 impl LiveSave {
@@ -1130,13 +1139,22 @@ impl LiveSave {
     ) -> Result<Self, String> {
         let playerlist = handler.extract_player_data().map_err(|e| e.to_string())?;
         write_journal(&playerlist, player, &[(tag.to_string(), target)])?;
-        let journal = journal_entries(&playerlist, player)?
-            .into_iter()
-            .map(|q| (q.tag, q.state))
+        let journals = player_journals(&playerlist)?;
+        let journal = journals
+            .get(player)
+            .ok_or_else(|| format!("player_index {player} out of range ({})", journals.len()))?
+            .iter()
+            .map(|q| (q.tag.clone(), q.state))
             .collect();
+        let mut reached: BTreeMap<String, u32> = BTreeMap::new();
+        for entry in journals.into_iter().flatten() {
+            let state = reached.entry(entry.tag).or_default();
+            *state = (*state).max(entry.state);
+        }
         Ok(Self {
             playerlist,
             journal,
+            reached,
         })
     }
 }
@@ -1161,16 +1179,16 @@ impl LineKind {
 }
 
 /// Index of the first lead-in line the save has not played yet. A line whose journal
-/// entry the save already reached was played before (journal entries only move up),
+/// entry the save already `reached` was played before (journal entries only move up),
 /// and so was every line before it: replaying those would roll later progress back.
-fn unplayed_lead_in(lead_in: &[FollowNode], journal: &BTreeMap<String, u32>) -> usize {
+fn unplayed_lead_in(lead_in: &[FollowNode], reached: impl Fn(&str, u32) -> bool) -> usize {
     lead_in
         .iter()
         .rposition(|node| {
             node.actions
                 .iter()
                 .filter_map(journal_transition)
-                .any(|(quest, state)| journal.get(&quest).is_some_and(|saved| *saved >= state))
+                .any(|(quest, state)| reached(&quest, state))
         })
         .map_or(0, |played| played + 1)
 }
@@ -6509,28 +6527,20 @@ mod tests {
             line(8621, entry("q00_dark_hunger", 400), 8551),
             line(8551, Vec::new(), 8201),
         ];
-        let journal = |entries: &[(&str, u32)]| {
-            entries
-                .iter()
-                .map(|(tag, state)| (tag.to_string(), *state))
-                .collect::<BTreeMap<_, _>>()
+        let unplayed = |entries: &[(&str, u32)]| {
+            unplayed_lead_in(&lead_in, |quest, state| {
+                entries
+                    .iter()
+                    .any(|(tag, saved)| *tag == quest && *saved >= state)
+            })
         };
-        assert_eq!(unplayed_lead_in(&lead_in, &journal(&[])), 0);
+        assert_eq!(unplayed(&[]), 0);
+        assert_eq!(unplayed(&[("q90_passage_to_thay", 100)]), 2);
         assert_eq!(
-            unplayed_lead_in(&lead_in, &journal(&[("q90_passage_to_thay", 100)])),
-            2
-        );
-        assert_eq!(
-            unplayed_lead_in(
-                &lead_in,
-                &journal(&[("q90_passage_to_thay", 900), ("q00_dark_hunger", 600)])
-            ),
+            unplayed(&[("q90_passage_to_thay", 900), ("q00_dark_hunger", 600)]),
             3
         );
-        assert_eq!(
-            unplayed_lead_in(&lead_in, &journal(&[("q00_dark_hunger", 300)])),
-            0
-        );
+        assert_eq!(unplayed(&[("q00_dark_hunger", 300)]), 0);
     }
 
     /// A reply the graph kept without its children ends the walk as `depth`, not `end`.
