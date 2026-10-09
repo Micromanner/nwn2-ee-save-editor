@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Button, Card, Elevation, Icon, InputGroup, Menu, MenuDivider, MenuItem, NonIdealState, Popover, Slider, Switch } from '@blueprintjs/core';
-import { GiMirrorMirror, GiMagnifyingGlass, GiBrokenShield } from 'react-icons/gi';
+import { GiMirrorMirror, GiBrokenShield } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';

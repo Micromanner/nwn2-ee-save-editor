@@ -26,23 +26,6 @@ export interface FeatsState {
   };
 }
 
-export interface FilterState {
-  activeOnly: boolean;
-}
-
-export interface CategoryInfo {
-  id: string;
-  name: string;
-  count: number;
-  subcategories?: SubcategoryInfo[];
-}
-
-export interface SubcategoryInfo {
-  id: string;
-  name: string;
-  count: number;
-}
-
 // Feat type constants based on NWN2
 export const FEAT_TYPES = {
   GENERAL: 1,
@@ -60,53 +43,3 @@ export const FEAT_TYPES = {
   RACIAL: 4096,
   DOMAIN: 8192,
 } as const;
-
-// View modes for feat display
-export type ViewMode = 'grid' | 'list';
-
-// Mock categories based on NWN2 official structure
-export const FEAT_CATEGORIES: CategoryInfo[] = [
-  { id: 'general', name: 'General', count: 0 },
-  { id: 'combat', name: 'Combat', count: 0 },
-  {
-    id: 'class',
-    name: 'Class',
-    count: 0,
-    subcategories: [
-      { id: 'barbarian', name: 'Barbarian', count: 0 },
-      { id: 'bard', name: 'Bard', count: 0 },
-      { id: 'cleric', name: 'Cleric', count: 0 },
-      { id: 'druid', name: 'Druid', count: 0 },
-      { id: 'fighter', name: 'Fighter', count: 0 },
-      { id: 'monk', name: 'Monk', count: 0 },
-      { id: 'paladin', name: 'Paladin', count: 0 },
-      { id: 'ranger', name: 'Ranger', count: 0 },
-      { id: 'rogue', name: 'Rogue', count: 0 },
-      { id: 'sorcerer', name: 'Sorcerer', count: 0 },
-      { id: 'wizard', name: 'Wizard', count: 0 },
-      { id: 'warlock', name: 'Warlock', count: 0 },
-    ],
-  },
-  {
-    id: 'race',
-    name: 'Race',
-    count: 0,
-    subcategories: [
-      { id: 'human', name: 'Human', count: 0 },
-      { id: 'elf', name: 'Elf [All]', count: 0 },
-      { id: 'dwarf', name: 'Dwarf [All]', count: 0 },
-      { id: 'halfling', name: 'Halfling [All]', count: 0 },
-      { id: 'gnome', name: 'Gnome [All]', count: 0 },
-      { id: 'half-elf', name: 'Half-Elf', count: 0 },
-      { id: 'half-orc', name: 'Half-Orc', count: 0 },
-      { id: 'planetouched', name: 'Planetouched', count: 0 },
-    ],
-  },
-  { id: 'epic', name: 'Epic', count: 0 },
-  { id: 'divine', name: 'Divine', count: 0 },
-  { id: 'metamagic', name: 'Metamagic', count: 0 },
-  { id: 'item_creation', name: 'Item Creation', count: 0 },
-  { id: 'skills_saves', name: 'Skills & Saves', count: 0 },
-  { id: 'spellcasting', name: 'Spellcasting', count: 0 },
-  { id: 'teamwork', name: 'Teamwork', count: 0 },
-];

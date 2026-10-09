@@ -4,7 +4,7 @@ import {
   NonIdealState, Switch, Tab, Tabs,
 } from '@blueprintjs/core';
 import { Popover } from '@blueprintjs/core';
-import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiBackwardTime, GiInfo, GiMagnifyingGlass } from 'react-icons/gi';
+import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiBackwardTime, GiInfo } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T, formatBytes } from '../theme';
 import { formatDateTime } from '@/utils/dateFormat';

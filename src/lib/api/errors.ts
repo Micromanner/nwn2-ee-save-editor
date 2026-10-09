@@ -223,10 +223,3 @@ export function getTranslatedError(error: CommandError, t: TranslationFn): Trans
       };
   }
 }
-
-/**
- * Get the error code for programmatic handling
- */
-export function getErrorCode(error: CommandError): CommandErrorCode {
-  return error.code;
-}

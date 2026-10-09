@@ -44,11 +44,6 @@ function tintChannelsKey(t: TintChannels): string {
   return `${c(t.channel1)}|${c(t.channel2)}|${c(t.channel3)}`;
 }
 
-function tintToHex(c: TintChannel): string {
-  const hex = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${hex(c.r)}${hex(c.g)}${hex(c.b)}`;
-}
-
 const PART_LABEL_KEYS = ['appearance.part1', 'appearance.part2', 'appearance.part3'] as const;
 
 /// Left/right pairs, in body order; the six vestigial slots have no meshes

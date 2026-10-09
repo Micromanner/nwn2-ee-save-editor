@@ -58,13 +58,6 @@ function summarizeChanges(manifest: BackupManifest | null | undefined, t: (key: 
   return parts.length > 0 ? parts.join(', ') : t('fileBrowser.changesNone');
 }
 
-interface FileListResponse {
-  files: FileInfo[];
-  total_count: number;
-  path: string;
-  current_path: string;
-}
-
 interface FileBrowserDialogProps {
   isOpen: boolean;
   onClose: () => void;

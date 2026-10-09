@@ -193,5 +193,3 @@ export const CharacterStateAPI = {
   undo: () => invoke<UndoResult>('undo'),
   redo: () => invoke<UndoResult>('redo'),
 };
-
-export default CharacterStateAPI;

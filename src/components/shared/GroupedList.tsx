@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Icon } from '@blueprintjs/core';
 import { List, RowComponentProps } from 'react-window';
 import { T } from '../theme';

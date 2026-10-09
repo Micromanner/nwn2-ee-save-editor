@@ -422,11 +422,6 @@ export function useAbilityScores(
     let totalSpent = ps.actual_increases ?? 0;
 
     // Add exactly one spent point for every point an ability is increased locally
-    const attributeMapping: Record<string, string> = {
-      'Str': 'str_', 'Dex': 'dex', 'Con': 'con', 
-      'Int': 'int', 'Wis': 'wis', 'Cha': 'cha'
-    };
-    
     for (const [key, localVal] of Object.entries(localAbilityScoreOverrides)) {
       const originalVal = abilityScoreData.base_scores?.[key as AbilityKey];
       if (originalVal !== undefined && localVal !== originalVal) {

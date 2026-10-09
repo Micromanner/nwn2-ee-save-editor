@@ -3,7 +3,6 @@ import { useTranslations } from '@/hooks/useTranslations';
 import { useCharacterContext } from '@/contexts/CharacterContext';
 import type { ClassInfo } from '@/contexts/CharacterContext';
 import { invoke } from '@tauri-apps/api/core';
-import type { XpProgress } from '@/lib/bindings';
 
 export interface ClassLevel {
   id: number;

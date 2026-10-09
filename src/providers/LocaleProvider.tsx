@@ -49,7 +49,6 @@ const loadMessages = async (locale: string) => {
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState('en');
   const [messages, setMessages] = useState<Record<string, unknown>>({});
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     invoke<{ language: string; system_locale: string }>('get_app_config')
@@ -61,16 +60,13 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       .catch(() => loadMessages('en'))
       .then((msgs) => {
         setMessages(msgs);
-        setIsLoading(false);
       });
   }, []);
 
   const setLocale = async (newLocale: string) => {
-    setIsLoading(true);
     const newMessages = await loadMessages(newLocale);
     setMessages(newMessages);
     setLocaleState(newLocale);
-    setIsLoading(false);
   };
 
   return (

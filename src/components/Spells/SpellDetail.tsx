@@ -61,7 +61,6 @@ export function SpellDetail({ spell, memorizedCount, isOwned, editableClasses = 
   const addableClasses = editableClasses.filter(c => c.can_edit_spells && spellLevelFor(c) !== undefined);
 
   const schoolName = spell.school_name || spell.school;
-  const schoolColor = SPELL_SCHOOL_COLORS[schoolName || ''] || T.textMuted;
   const parsedDesc = spell.description ? parseSpellDescriptionBody(spell.description) : null;
 
   return (

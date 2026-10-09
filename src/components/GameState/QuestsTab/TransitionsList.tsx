@@ -5,7 +5,6 @@ import { useTranslations } from '@/hooks/useTranslations';
 import type { TlkResolver } from '@/hooks/useTlkResolver';
 import type { AggregatedModule, ConvoFunctor, QuestSummary, TransitionNode } from './types';
 import { useModuleNameResolver } from './useModuleNameResolver';
-import { describeScript, formatRawCall, isJournalConnector } from './scriptDescriptions';
 import { dialogueText } from './utils';
 
 function formatParam(param: unknown): string {
@@ -61,25 +60,6 @@ function FunctorList({ title, items }: { title: string; items: ConvoFunctor[] })
           {items.map((f, i) => <FunctorRow key={i} f={f} />)}
         </div>
       )}
-    </div>
-  );
-}
-
-export function PlainList({ title, items }: { title: string; items: ConvoFunctor[] }) {
-  const t = useTranslations();
-  const shown = items.filter(f => !isJournalConnector(f));
-  if (shown.length === 0) return null;
-  return (
-    <div style={{ marginTop: 4 }}>
-      <div className="t-semibold" style={{ color: T.textMuted }}>{title}</div>
-      <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>
-        {shown.map((f, i) => {
-          const text = describeScript(f, t);
-          return <li key={i} style={{ color: T.text }}>
-            {text ?? <span className="t-mono" style={{ color: T.textMuted }}>{formatRawCall(f)}</span>}
-          </li>;
-        })}
-      </ul>
     </div>
   );
 }

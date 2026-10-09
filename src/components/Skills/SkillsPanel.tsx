@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Alert, Button, Card, Elevation, HTMLTable, InputGroup, NonIdealState, Tag, Icon, Tooltip } from '@blueprintjs/core';
-import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation, GiMagnifyingGlass } from 'react-icons/gi';
+import { GiBrokenShield, GiVisoredHelm, GiAnticlockwiseRotation } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { T } from '../theme';
 import { LoadingState, ModCell, mod, StepInput } from '../shared';

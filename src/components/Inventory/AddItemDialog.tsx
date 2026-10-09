@@ -1,6 +1,6 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button, ButtonGroup, InputGroup, Menu, MenuItem, Popover, Tab, Tabs } from '@blueprintjs/core';
-import { GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
+import { GiFunnel } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { List, RowComponentProps } from 'react-window';
 import { ParchmentDialog, LoadingState } from '../shared';

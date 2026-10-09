@@ -13,10 +13,6 @@ export interface SaveFile {
 export type SaveMode = 'sp' | 'mp';
 
 export class TauriAPI {
-  static async isAvailable(): Promise<boolean> {
-    return typeof window !== 'undefined' && '__TAURI__' in window;
-  }
-
   static async initializeGameData(): Promise<boolean> {
     return await invoke('initialize_game_data');
   }

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button, InputGroup, Tabs, Tab, Popover, Menu, MenuItem, NonIdealState, Icon } from '@blueprintjs/core';
-import { GiVisoredHelm, GiFunnel, GiMagnifyingGlass } from 'react-icons/gi';
+import { GiVisoredHelm, GiFunnel } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { T, SPELL_SCHOOL_COLORS } from '../theme';
@@ -49,7 +49,6 @@ export function SpellsPanel() {
   const [allSpells, setAllSpells] = useState<SpellInfo[]>([]);
   const [allSpellsLoading, setAllSpellsLoading] = useState(false);
   const [allSpellsPage, setAllSpellsPage] = useState(1);
-  const [allSpellsTotal, setAllSpellsTotal] = useState(0);
   const [_allSpellsHasNext, setAllSpellsHasNext] = useState(false);
   const [_allSpellsHasPrev, setAllSpellsHasPrev] = useState(false);
   const [abilitiesOpen, setAbilitiesOpen] = useState(true);
@@ -73,7 +72,6 @@ export function SpellsPanel() {
     const hasFilters = activeSchool !== 'all' || activeLevel !== 'all' || activeClass !== 'all' || debouncedSearch.length >= 3;
     if (!hasFilters && allSpellsPage === 1 && allSpellsCache) {
       setAllSpells(allSpellsCache.spells);
-      setAllSpellsTotal(allSpellsCache.pagination.total);
       setAllSpellsHasNext(allSpellsCache.pagination.has_next);
       setAllSpellsHasPrev(allSpellsCache.pagination.has_previous);
       return;
@@ -101,7 +99,6 @@ export function SpellsPanel() {
         });
 
         setAllSpells(response.spells);
-        setAllSpellsTotal(response.pagination.total);
         setAllSpellsHasNext(response.pagination.has_next);
         setAllSpellsHasPrev(response.pagination.has_previous);
       } catch {

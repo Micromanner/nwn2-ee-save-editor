@@ -71,7 +71,6 @@ export function FeatsPanel() {
   const [currentPage, setCurrentPage] = useState(1);
   const [_hasNext, setHasNext] = useState(false);
   const [_hasPrevious, setHasPrevious] = useState(false);
-  const [allFeatsTotal, setAllFeatsTotal] = useState(0);
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -89,7 +88,6 @@ export function FeatsPanel() {
     const hasFilters = activeTypeBit != null || debouncedSearch.length >= 3;
     if (!hasFilters && currentPage === 1 && allFeatsCache) {
       setAllFeats(allFeatsCache.feats);
-      setAllFeatsTotal(allFeatsCache.pagination.total);
       setHasNext(allFeatsCache.pagination.has_next);
       setHasPrevious(allFeatsCache.pagination.has_previous);
       setAllFeatsLoading(false);
@@ -116,7 +114,6 @@ export function FeatsPanel() {
     }).then(response => {
       if (!cancelled) {
         setAllFeats(response.feats);
-        setAllFeatsTotal(response.pagination.total);
         setHasNext(response.pagination.has_next);
         setHasPrevious(response.pagination.has_previous);
       }

@@ -4,25 +4,6 @@ import type { FullInventorySummary, FullEquippedItem } from '@/lib/bindings';
 export const INVENTORY_COLS = 8;
 export const INVENTORY_ROWS = 8;
 
-export const SLOT_MAPPING: Record<string, string> = {
-  'helmet': 'head', 'head': 'head',
-  'chest': 'chest',
-  'belt': 'belt',
-  'boots': 'boots',
-  'neck': 'neck',
-  'cloak': 'cloak',
-  'gloves': 'gloves',
-  'l ring': 'left_ring', 'left_ring': 'left_ring',
-  'r ring': 'right_ring', 'right_ring': 'right_ring',
-  'l hand': 'left_hand', 'left_hand': 'left_hand',
-  'r hand': 'right_hand', 'right_hand': 'right_hand',
-  'arrows': 'arrows', 'bullets': 'bullets', 'bolts': 'bolts',
-};
-
-export function mapSlotName(slot: string): string | null {
-  return SLOT_MAPPING[slot.toLowerCase()] ?? null;
-}
-
 export interface GridItem {
   id: string;
   name: string;
@@ -88,21 +69,4 @@ export function resolveEquipSlot(
   );
 
   return emptySlot || defaultSlot;
-}
-
-export function getEquippedItemForSlot(
-  data: FullInventorySummary | null,
-  slotName: string
-): { name: string; base_item: number; is_custom: boolean } | null {
-  if (!data) return null;
-
-  const mapped = mapSlotName(slotName) || slotName;
-  const equipData = data.equipped?.find(e => e.slot.toLowerCase() === mapped.toLowerCase());
-  if (!equipData) return null;
-
-  return {
-    name: equipData.name || `Item ${equipData.base_item}`,
-    base_item: equipData.base_item,
-    is_custom: equipData.custom || false,
-  };
 }

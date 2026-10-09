@@ -5,7 +5,7 @@ import { GameIcon } from '../shared/GameIcon';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { T } from '../theme';
-import { fmtNum, LoadingState } from '../shared';
+import { LoadingState } from '../shared';
 import { ItemDetails, makeEquippedItem, makeInventoryItem, type AnyItem } from './ItemDetails';
 import { AddItemDialog } from './AddItemDialog';
 import { EditItemDialog } from './EditItemDialog';

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { InputGroup, NonIdealState, Tag } from '@blueprintjs/core';
 import { LoadingState } from '@/components/shared';
-import { GiBrokenShield, GiCube, GiMagnifyingGlass } from 'react-icons/gi';
+import { GiBrokenShield, GiCube } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { List, RowComponentProps } from 'react-window';
 import { invoke } from '@tauri-apps/api/core';

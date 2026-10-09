@@ -2,29 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   INVENTORY_COLS,
   INVENTORY_ROWS,
-  mapSlotName,
   parseInventoryGrid,
   resolveEquipSlot,
 } from '../inventoryUtils';
 import type { FullEquippedItem } from '@/lib/bindings';
-
-describe('mapSlotName', () => {
-  it('maps helmet to head', () => {
-    expect(mapSlotName('helmet')).toBe('head');
-  });
-
-  it('maps l ring to left_ring', () => {
-    expect(mapSlotName('l ring')).toBe('left_ring');
-  });
-
-  it('returns null for unknown slots', () => {
-    expect(mapSlotName('unknown')).toBeNull();
-  });
-
-  it('is case-insensitive', () => {
-    expect(mapSlotName('Helmet')).toBe('head');
-  });
-});
 
 describe('parseInventoryGrid', () => {
   it('returns INVENTORY_COLS * INVENTORY_ROWS null slots for null data', () => {

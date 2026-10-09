@@ -4,7 +4,7 @@ import { GiCancel, GiCheckMark } from 'react-icons/gi';
 import { T, FEAT_TYPE_COLORS } from '../theme';
 import { GameIcon } from '../shared/GameIcon';
 import type { FeatInfo, PrereqValue } from '@/lib/bindings';
-import { FEAT_TYPE_LABELS, getFeatTypeLabel } from '@/utils/featUtils';
+import { getFeatTypeLabel } from '@/utils/featUtils';
 import { DetailSection, FormattedDescription } from '../shared';
 import { display } from '@/utils/dataHelpers';
 import { useTranslations } from '@/hooks/useTranslations';

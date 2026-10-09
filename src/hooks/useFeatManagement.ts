@@ -126,36 +126,3 @@ export function useFeatManagement(
     clearSelection,
   };
 }
-
-interface UseFeatNavigationReturn {
-  selectedCategory: string | null;
-  selectedSubcategory: string | null;
-  setSelectedCategory: (category: string | null) => void;
-  setSelectedSubcategory: (subcategory: string | null) => void;
-  navigateTo: (category: string | null, subcategory: string | null) => void;
-  clearNavigation: () => void;
-}
-
-export function useFeatNavigation(): UseFeatNavigationReturn {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
-
-  const navigateTo = useCallback((category: string | null, subcategory: string | null) => {
-    setSelectedCategory(category);
-    setSelectedSubcategory(subcategory);
-  }, []);
-
-  const clearNavigation = useCallback(() => {
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-  }, []);
-
-  return {
-    selectedCategory,
-    selectedSubcategory,
-    setSelectedCategory,
-    setSelectedSubcategory,
-    navigateTo,
-    clearNavigation,
-  };
-}

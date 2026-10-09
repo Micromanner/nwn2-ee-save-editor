@@ -51,13 +51,6 @@ export const SPELL_SCHOOL_COLORS: Record<string, string> = {
   'spells.schools.universal': '#546e7a',
 };
 
-export const RARITY_COLORS: Record<string, string> = {
-  common: T.text,
-  uncommon: T.positive,
-  rare: '#1565c0',
-  epic: '#6a1b9a',
-};
-
 export function formatBytes(bytes: number) {
   if (bytes === 0) return '-';
   const units = ['B', 'KB', 'MB', 'GB'];
