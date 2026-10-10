@@ -193,21 +193,16 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
     try {
       const updates = Object.entries(influences)
         .filter(([id, val]) => val !== (companions[id]?.influence ?? 0))
-        .map(([id, val]) => gameStateAPI.updateCompanionInfluence(companions[id].influence_var, val));
-      const results = await Promise.allSettled(updates);
+        .map(([id, val]): [string, string, string] => [companions[id].influence_var, String(val), 'int']);
+      await gameStateAPI.batchUpdateCampaignVariables(updates);
       const res = await gameStateAPI.getCompanionInfluence();
       setCompanions(res.companions);
       initialRef.current = res.companions;
-      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-      if (failed) {
-        handleError(failed.reason);
-      } else {
-        const map: Record<string, number> = {};
-        Object.entries(res.companions).forEach(([id, data]) => {
-          map[id] = data.influence ?? 0;
-        });
-        setInfluences(map);
-      }
+      const map: Record<string, number> = {};
+      Object.entries(res.companions).forEach(([id, data]) => {
+        map[id] = data.influence ?? 0;
+      });
+      setInfluences(map);
     } catch (err) {
       handleError(err);
     } finally {
@@ -253,7 +248,7 @@ function ReputationTab({ characterId, globalsVersion }: { characterId: number; g
       {(hasChanges || isSaving) && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 16px', borderBottom: `1px solid ${T.borderLight}` }}>
           <Button small minimal icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} onClick={handleRevertAll} style={{ color: MODIFIED }} disabled={isSaving}>{t('common.revertAll')}</Button>
-          <Button small intent="primary" loading={isSaving} onClick={handleSave}>{t('common.save')}</Button>
+          <Button small intent="primary" loading={isSaving} onClick={handleSave}>{t('common.apply')}</Button>
         </div>
       )}
 
@@ -417,7 +412,7 @@ function VariableSection({
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="t-semibold" style={{ color: MODIFIED }}>{changeCount} {t('common.modified')}</span>
               <Button small minimal icon={<GameIcon icon={GiAnticlockwiseRotation} size={14} />} onClick={onRevertAll} style={{ color: MODIFIED }} disabled={isSaving}>{t('common.revertAll')}</Button>
-              <Button small intent="primary" loading={isSaving} onClick={onSave}>{t('common.save')}</Button>
+              <Button small intent="primary" loading={isSaving} onClick={onSave}>{t('common.apply')}</Button>
             </div>
           )}
         </div>

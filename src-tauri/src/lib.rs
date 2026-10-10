@@ -206,7 +206,6 @@ pub fn run() {
             crate::commands::campaign::get_campaign_settings,
             crate::commands::campaign::update_campaign_settings,
             crate::commands::campaign::get_companion_influence,
-            crate::commands::campaign::update_companion_influence,
             crate::commands::campaign::batch_update_module_variables,
             crate::commands::campaign::batch_update_campaign_variables,
             crate::commands::campaign::list_campaign_backups,

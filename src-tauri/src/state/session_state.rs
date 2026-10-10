@@ -10,12 +10,13 @@ use crate::loaders::GameData;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 use crate::services::PlayerInfo;
 use crate::services::campaign::content::{ModuleInfo, ModuleVariables};
+use crate::services::campaign::staged::StagedVariables;
 use crate::services::item_property_decoder::ItemPropertyDecoder;
 use crate::services::load_diagnostics::{LoadError, LoadReport, LoadStage};
 use crate::services::save_graph::SaveGraph;
 use crate::services::save_graph::editing::{self, PendingQuestEdit, QuestPreview};
 use crate::services::savegame_handler::backup_manifest::{
-    self, CharacterChanges, PartyChange, QuestChange, SaveRecord, VariableChange,
+    self, CharacterChanges, PartyChange, QuestChange, SaveRecord,
 };
 use crate::services::savegame_handler::{PlayerOutputs, SAVENAME_TXT, SaveFormat, SaveGameHandler};
 use crate::state::standalone_bic;
@@ -152,6 +153,9 @@ pub struct SessionState {
     /// so caches built in the background can tell they are stale.
     pub character_revision: u64,
     pub quest_edits: crate::services::save_graph::editing::QuestEdits,
+    /// Campaign and module variables set in the Game State tabs, written by
+    /// `save_character`.
+    pub staged_variables: StagedVariables,
     pub history: History,
     pub character_source: CharacterSource,
     pub standalone_backup_done: bool,
@@ -195,6 +199,7 @@ impl SessionState {
             load_generation: 0,
             character_revision: 0,
             quest_edits: crate::services::save_graph::editing::QuestEdits::default(),
+            staged_variables: StagedVariables::default(),
             history: History::default(),
             character_source: CharacterSource::Player,
             standalone_backup_done: false,
@@ -361,6 +366,7 @@ impl SessionState {
         self.staged_party.clear();
         self.staged_save_name = None;
         self.quest_edits.clear();
+        self.staged_variables.clear();
         self.clear_history();
 
         info!("Character loaded successfully");
@@ -404,6 +410,7 @@ impl SessionState {
         self.staged_party.clear();
         self.staged_save_name = None;
         self.quest_edits.clear();
+        self.staged_variables.clear();
         self.clear_history();
 
         info!("Standalone character loaded successfully");
@@ -513,6 +520,7 @@ impl SessionState {
         }
         self.staged_save_name = None;
         self.quest_edits.clear();
+        self.staged_variables.clear();
         self.module_info_cache = None;
         self.append_to_load_backup(&record);
         self.clear_history();
@@ -521,8 +529,9 @@ impl SessionState {
     }
 
     /// Stage every write of a save into the open batch: all modified characters
-    /// (each attempted even when one fails), staged party changes, then quest
-    /// edits, save name and cheat flags once everything before succeeded.
+    /// (each attempted even when one fails), staged party changes, then staged
+    /// variables, quest edits, save name and cheat flags once everything before
+    /// succeeded.
     fn stage_save_writes(
         &mut self,
         game_data: &GameData,
@@ -577,6 +586,7 @@ impl SessionState {
             player_index,
             self.primary_player_index.is_some(),
             game_data,
+            &self.staged_variables,
         )?;
         warnings.append(&mut rewarded_fields.warnings);
         warnings.extend(
@@ -650,6 +660,7 @@ impl SessionState {
         self.staged_party.clear();
         self.staged_save_name = None;
         self.quest_edits.clear();
+        self.staged_variables.clear();
         self.clear_history();
     }
 
@@ -894,8 +905,8 @@ impl SessionState {
     }
 
     /// Everything this save will write, described for the backup manifests:
-    /// history labels per character, pending quest edits and staged party
-    /// changes. Built before the save mutates any of them.
+    /// history labels per character, pending quest edits, staged party changes
+    /// and staged variables. Built before the save mutates any of them.
     fn build_save_record(&self, game_data: &GameData) -> SaveRecord {
         let mut characters: Vec<CharacterChanges> = Vec::new();
         for (source, label) in &self.change_log {
@@ -978,18 +989,8 @@ impl SessionState {
             characters,
             quests,
             party,
-            variables: Vec::new(),
+            variables: self.staged_variables.changes(),
         }
-    }
-
-    /// Game-state variables are written to disk immediately, so they are
-    /// recorded on the load backup right away instead of on save.
-    pub fn record_variable_changes(&self, variables: impl IntoIterator<Item = VariableChange>) {
-        self.append_to_load_backup(&SaveRecord {
-            saved_at: chrono::Local::now().to_rfc3339(),
-            variables: variables.into_iter().collect(),
-            ..Default::default()
-        });
     }
 
     /// Describe changes written after the load backup in its manifest.
@@ -1114,6 +1115,19 @@ impl SessionState {
         out
     }
 
+    /// `globals.xml` values as they will be once saved: staged variables, then the
+    /// pending quest edits' writes on top.
+    pub fn overlay_globals(&self, data: &mut crate::parsers::xml::XmlData) {
+        self.staged_variables.overlay_globals(data);
+        self.quest_edits.overlay_globals(data);
+    }
+
+    /// A module's variables as they will be once saved, like `overlay_globals`.
+    pub fn overlay_module(&self, module: &str, vars: &mut ModuleVariables) {
+        self.staged_variables.overlay_module(module, vars);
+        self.quest_edits.overlay_module(module, vars);
+    }
+
     pub fn invalidate_module_info_cache(&mut self) {
         self.module_info_cache = None;
     }
@@ -1124,6 +1138,7 @@ impl SessionState {
             || !self.staged_party.is_empty()
             || !self.quest_edits.pending.is_empty()
             || self.staged_save_name.is_some()
+            || !self.staged_variables.is_empty()
     }
 
     /// The save's display name from `savename.txt`, staged edits included. `None`
@@ -1301,6 +1316,7 @@ impl SessionState {
                 .iter()
                 .map(|(name, in_party)| (name.clone(), *in_party))
                 .collect(),
+            variables: Some(&self.staged_variables),
             revision: self.character_revision,
         })
     }

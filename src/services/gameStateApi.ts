@@ -105,10 +105,6 @@ export class GameStateAPI {
     return { companions };
   }
 
-  async updateCompanionInfluence(variable: string, newInfluence: number): Promise<void> {
-    await invoke('update_companion_influence', { variable, newInfluence });
-  }
-
   async getCampaignVariables(): Promise<CampaignVariablesResponse> {
     return invoke<CampaignVariablesResponse>('get_campaign_variables');
   }

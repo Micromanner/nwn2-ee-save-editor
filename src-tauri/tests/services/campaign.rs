@@ -1,6 +1,5 @@
 use app_lib::config::NWN2Paths;
 use app_lib::services::campaign::CampaignManager;
-use app_lib::services::save_graph::editing::QuestEdits;
 use app_lib::services::savegame_handler::SaveGameHandler;
 // use std::fs;
 use tempfile::TempDir;
@@ -71,44 +70,6 @@ fn strip_area_code_removes_brace_prefix() {
     assert_eq!(strip_area_code("{abc}Keep"), "{abc}Keep");
 }
 
-#[test]
-fn test_campaign_manager_write_operations() {
-    let fixture_path = common::fixtures_path().join("saves/Classic_Campaign");
-    let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("Classic_Campaign_Write");
-
-    common::copy_dir_recursive(&fixture_path, &save_path).expect("Failed to copy fixture");
-
-    let mut handler = SaveGameHandler::new(&save_path).expect("Failed to create handler");
-
-    // Test update_global_int
-    let test_var = "TEST_INT_VAR";
-    let test_val = 12345;
-
-    CampaignManager::update_global_int(&mut handler, test_var, test_val)
-        .expect("Failed to update global int");
-
-    // Verify update
-    let xml_content = handler
-        .extract_globals_xml()
-        .expect("Failed to read globals");
-    assert!(xml_content.contains(test_var));
-    assert!(xml_content.contains(&test_val.to_string()));
-
-    // Test update_global_string
-    let test_str_var = "TEST_STR_VAR";
-    let test_str_val = "TestValue";
-
-    CampaignManager::update_global_string(&mut handler, test_str_var, test_str_val)
-        .expect("Failed to update global string");
-
-    let xml_content_2 = handler
-        .extract_globals_xml()
-        .expect("Failed to read globals 2");
-    assert!(xml_content_2.contains(test_str_var));
-    assert!(xml_content_2.contains(test_str_val));
-}
-
 // Fixture reality: MOTB/globals.xml carries a single companion variable
 // (00_nInfluencesafiya); gann/okku/dove/oneofmany exist only as .ros files.
 // The influence page must still list the whole MotB cast and none of the OC.
@@ -116,8 +77,7 @@ fn test_campaign_manager_write_operations() {
 fn companion_influence_lists_whole_campaign_cast_from_roster() {
     let handler =
         SaveGameHandler::new(common::fixtures_path().join("saves/MOTB")).expect("handler");
-    let companions = CampaignManager::get_companion_influence(&handler, &QuestEdits::default())
-        .expect("influence");
+    let companions = CampaignManager::get_companion_influence(&handler, |_| {}).expect("influence");
 
     let mut ids: Vec<&str> = companions
         .iter()
@@ -136,8 +96,7 @@ fn companion_influence_lists_whole_campaign_cast_from_roster() {
 fn companion_influence_lists_whole_oc_cast() {
     let handler = SaveGameHandler::new(common::fixtures_path().join("saves/Classic_Campaign"))
         .expect("handler");
-    let companions = CampaignManager::get_companion_influence(&handler, &QuestEdits::default())
-        .expect("influence");
+    let companions = CampaignManager::get_companion_influence(&handler, |_| {}).expect("influence");
 
     let explicit = companions
         .values()
@@ -159,7 +118,7 @@ fn mid_playthrough_influence(
             .join(save),
     )
     .expect("handler");
-    CampaignManager::get_companion_influence(&handler, &QuestEdits::default()).expect("influence")
+    CampaignManager::get_companion_influence(&handler, |_| {}).expect("influence")
 }
 
 // Westgate keeps influence in `HF_COINF_<tag>` (westgate2.hak `CompanionInfluence`);

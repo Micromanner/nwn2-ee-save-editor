@@ -155,7 +155,11 @@ pub fn list_module_backups(
     Ok(backups)
 }
 
-pub fn restore_module_backup(handler: &SaveGameHandler, backup_path: &str) -> Result<(), String> {
+/// Restore a module backup; returns the restored module's id.
+pub fn restore_module_backup(
+    handler: &SaveGameHandler,
+    backup_path: &str,
+) -> Result<String, String> {
     let backup = PathBuf::from(backup_path);
     ensure_backup_in_dir(&backup, &get_module_backup_dir(handler.save_dir()))?;
 
@@ -179,7 +183,7 @@ pub fn restore_module_backup(handler: &SaveGameHandler, backup_path: &str) -> Re
         ext,
         backup.display()
     );
-    Ok(())
+    Ok(module_id.to_string())
 }
 
 /// Backup files with `extension` in `dir`, newest first; empty if `dir` is missing.

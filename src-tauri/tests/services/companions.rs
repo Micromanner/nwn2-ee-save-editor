@@ -717,34 +717,112 @@ fn save_appends_change_record_to_load_backup_manifest() {
     );
 }
 
+/// Stage the int `name = value` in `module` (`None` = campaign variables).
+fn stage_int(session: &mut SessionState, module: Option<&str>, name: &str, value: i32) {
+    let paths = app_lib::config::NWN2Paths::new();
+    let handler = session.savegame_handler.as_ref().expect("handler");
+    session
+        .staged_variables
+        .stage(
+            handler,
+            &paths,
+            module,
+            &[(name.into(), value.to_string(), "int".into())],
+        )
+        .expect("stage");
+}
+
+fn saved_global(session: &SessionState, name: &str) -> Option<i32> {
+    let handler = session.savegame_handler.as_ref().expect("handler");
+    app_lib::services::campaign::CampaignManager::get_campaign_variables(handler)
+        .expect("globals")
+        .integers
+        .get(name)
+        .copied()
+}
+
 #[test]
-fn variable_changes_are_recorded_on_the_load_backup_manifest() {
-    use app_lib::services::savegame_handler::backup_manifest::{self, VariableChange};
+fn staged_variables_stay_in_memory_until_save() {
+    use app_lib::services::campaign::CampaignManager;
+    use app_lib::services::savegame_handler::backup_manifest;
 
     let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
     let mut session = make_session();
     load_save(&mut session, &save_path.to_string_lossy());
-
     let load_backup = std::fs::read_dir(backup::get_backup_dir_for_save(&save_path))
         .expect("backups dir")
         .flatten()
         .map(|e| e.path())
         .find(|p| p.is_dir())
         .expect("load backup created");
+    let before = saved_global(&session, "00_nInfluencekhelgar");
 
-    session.record_variable_changes(vec![VariableChange {
-        module: None,
-        name: "00_nInfluencekhelgar".into(),
-        value: "50".into(),
-    }]);
+    stage_int(&mut session, None, "00_nInfluencekhelgar", 50);
 
+    assert_eq!(saved_global(&session, "00_nInfluencekhelgar"), before);
+    assert!(session.has_unsaved_changes());
+    let handler = session.savegame_handler.as_ref().expect("handler");
+    let mut data = CampaignManager::get_campaign_variables(handler).expect("globals");
+    session.overlay_globals(&mut data);
+    assert_eq!(data.integers.get("00_nInfluencekhelgar"), Some(&50));
+
+    session
+        .save_character(&empty_game_data(), &app_lib::config::NWN2Paths::new(), 3)
+        .expect("save");
+
+    assert!(!session.has_unsaved_changes());
+    assert_eq!(saved_global(&session, "00_nInfluencekhelgar"), Some(50));
     let manifest = backup_manifest::read(&load_backup).expect("manifest");
     assert_eq!(manifest.saves.len(), 1);
     let record = &manifest.saves[0];
-    assert!(record.characters.is_empty());
     assert_eq!(record.variables.len(), 1);
     assert_eq!(record.variables[0].name, "00_nInfluencekhelgar");
     assert_eq!(record.variables[0].value, "50");
+}
+
+#[test]
+fn staged_module_variables_are_written_on_save() {
+    use app_lib::services::campaign::CampaignManager;
+
+    let (_tmp, save_path) = crate::common::temp_save_copy("Classic_Campaign");
+    let mut session = make_session();
+    load_save(&mut session, &save_path.to_string_lossy());
+    let paths = app_lib::config::NWN2Paths::new();
+    let module = session
+        .savegame_handler
+        .as_ref()
+        .expect("handler")
+        .extract_current_module()
+        .expect("current module");
+    let saved = |session: &SessionState| {
+        let handler = session.savegame_handler.as_ref().expect("handler");
+        CampaignManager::get_module_info_by_id(handler, &paths, &module)
+            .expect("module variables")
+            .1
+            .integers
+            .get("EDITOR_TEST_VAR")
+            .copied()
+    };
+
+    stage_int(&mut session, Some(&module), "EDITOR_TEST_VAR", 7);
+    assert_eq!(saved(&session), None);
+
+    session
+        .save_character(&empty_game_data(), &paths, 3)
+        .expect("save");
+    assert_eq!(saved(&session), Some(7));
+}
+
+#[test]
+fn staging_the_saved_value_unstages_the_variable() {
+    let mut session = make_session();
+    load_save(&mut session, "Classic_Campaign");
+    let saved = saved_global(&session, "00_nInfluencekhelgar").unwrap_or(0);
+
+    stage_int(&mut session, None, "00_nInfluencekhelgar", saved + 1);
+    stage_int(&mut session, None, "00_nInfluencekhelgar", saved);
+
+    assert!(!session.has_unsaved_changes());
 }
 
 #[test]

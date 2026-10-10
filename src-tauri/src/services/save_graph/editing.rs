@@ -19,6 +19,8 @@ use crate::loaders::GameData;
 use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter, gff_integer, rewrite_gff};
 use crate::parsers::tda::TDAParser;
+use crate::services::campaign::backup::{backup_campaign_variables, backup_module_z};
+use crate::services::campaign::staged::StagedVariables;
 use crate::services::campaign::{CampaignManager, content};
 use crate::services::resource_manager::ResourceManager;
 use crate::services::roster::{self, RosterMember};
@@ -32,6 +34,18 @@ pub struct VariableKey {
     pub module: Option<String>,
     pub name: String,
     pub value_type: String,
+}
+
+impl VariableKey {
+    /// Whether the key lives in `module` (globals for `None`); module ids compare
+    /// case-insensitively.
+    pub fn in_scope(&self, module: Option<&str>) -> bool {
+        match (self.module.as_deref(), module) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -254,6 +268,8 @@ pub struct LiveCharacters<'a> {
     pub companions: BTreeMap<String, &'a GffStruct>,
     /// Staged party membership by lowercase roster name.
     pub party: BTreeMap<String, bool>,
+    /// Campaign and module variables set in the Game State tabs.
+    pub variables: Option<&'a StagedVariables>,
     /// Changes whenever the characters above do; part of the preview revision.
     pub revision: u64,
 }
@@ -265,18 +281,20 @@ fn variable_number(value: &Value) -> Option<f64> {
         .or_else(|| value.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
-/// A variable store's `int`/`float`/`string` maps by `VariableKey::value_type`.
-trait VariableStore {
+/// A variable store's `int`/`float`/`string` (and `bool`) maps by
+/// `VariableKey::value_type`.
+pub(crate) trait VariableStore {
     fn get(&self, kind: &str, name: &str) -> Option<Value>;
     fn set(&mut self, kind: &str, name: String, value: &Value);
 }
 
 macro_rules! variable_store {
-    ($store:ty) => {
+    ($store:ty $(, $booleans:ident)?) => {
         impl VariableStore for $store {
             fn get(&self, kind: &str, name: &str) -> Option<Value> {
                 match kind {
                     "int" => self.integers.get(name).map(|v| Value::from(*v)),
+                    $("bool" => self.$booleans.get(name).map(|v| Value::from(*v)),)?
                     "float" => self.floats.get(name).map(|v| Value::from(*v)),
                     _ => self.strings.get(name).map(|v| Value::from(v.as_str())),
                 }
@@ -287,6 +305,9 @@ macro_rules! variable_store {
                     "int" => {
                         self.integers.insert(name, variable_int(value));
                     }
+                    $("bool" => {
+                        self.$booleans.insert(name, variable_int(value));
+                    })?
                     "float" => {
                         self.floats.insert(name, variable_float(value));
                     }
@@ -299,24 +320,26 @@ macro_rules! variable_store {
     };
 }
 
-variable_store!(crate::parsers::xml::XmlData);
+variable_store!(crate::parsers::xml::XmlData, booleans);
 variable_store!(content::ModuleVariables);
 
-fn variable_int(value: &Value) -> i32 {
+pub(crate) fn variable_int(value: &Value) -> i32 {
     variable_number(value)
         .and_then(|v| i32::try_from(v as i64).ok())
         .unwrap_or_default()
 }
 
-fn variable_float(value: &Value) -> f32 {
+pub(crate) fn variable_float(value: &Value) -> f32 {
     variable_number(value).unwrap_or_default() as f32
 }
 
-fn variable_text(value: &Value) -> String {
-    value
-        .as_str()
-        .map(str::to_string)
-        .unwrap_or_else(|| value.to_string())
+/// The text a variable is written as; floats as the `f32` the game stores.
+pub(crate) fn variable_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Number(n) if n.is_f64() => variable_float(value).to_string(),
+        _ => value.to_string(),
+    }
 }
 
 /// Write kinds staging applies to the loaded player instead of `flush`.
@@ -371,12 +394,7 @@ impl QuestEdits {
     ) -> Vec<(VariableKey, Value)> {
         let mut keys: Vec<&VariableKey> = Vec::new();
         for write in self.pending.iter().flat_map(|p| &p.writes) {
-            let in_scope = match (&write.key.module, module) {
-                (None, None) => true,
-                (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
-                _ => false,
-            };
-            if in_scope
+            if write.key.in_scope(module)
                 && matches!(write.key.value_type.as_str(), "int" | "float" | "string")
                 && !keys.contains(&&write.key)
             {
@@ -686,6 +704,9 @@ impl QuestEdits {
             hash.update(name.as_bytes());
             hash.update([u8::from(*in_party)]);
         }
+        for (key, value) in reader.live.variables.iter().flat_map(|v| v.iter()) {
+            hash.update(serde_json::to_vec(&(key, value)).map_err(|e| e.to_string())?);
+        }
         hash.update(serde_json::to_vec(&result).map_err(|e| e.to_string())?);
         result.revision = hex::encode(hash.finalize());
         Ok(result)
@@ -875,10 +896,11 @@ impl QuestEdits {
         Ok(())
     }
 
-    /// Write every pending edit into the save. Gold and XP rewards are added to the
-    /// player as already staged in this batch (so character-tab edits survive) and to
-    /// `player.bic` when `primary` is set; the fields written are returned so the
-    /// caller can bring an in-memory player up to date.
+    /// Write every pending edit and the `staged` variables into the save. Gold and XP
+    /// rewards are added to the player as already staged in this batch (so
+    /// character-tab edits survive) and to `player.bic` when `primary` is set; the
+    /// fields written are returned so the caller can bring an in-memory player up to
+    /// date.
     pub fn flush(
         &self,
         handler: &mut SaveGameHandler,
@@ -886,8 +908,10 @@ impl QuestEdits {
         player: usize,
         primary: bool,
         game_data: &GameData,
+        staged: &StagedVariables,
     ) -> Result<FlushedWrites, String> {
         if self.pending.is_empty() {
+            self.flush_variables(handler, paths, staged)?;
             return Ok(FlushedWrites::default());
         }
         let bytes = handler.extract_player_data().map_err(|e| e.to_string())?;
@@ -1054,9 +1078,26 @@ impl QuestEdits {
                 .map_err(|e| e.to_string())?;
             written_companions.push((ros_name.clone(), fields));
         }
+        self.flush_variables(handler, paths, staged)?;
+        Ok(FlushedWrites {
+            player: written,
+            companions: written_companions,
+            warnings,
+        })
+    }
+
+    /// Write the staged variables, then the pending edits' story variables and area
+    /// objects, into the save, each file once: the pending writes change the values
+    /// as staged. Backs up the files the staged variables change.
+    fn flush_variables(
+        &self,
+        handler: &mut SaveGameHandler,
+        paths: &NWN2Paths,
+        staged: &StagedVariables,
+    ) -> Result<(), String> {
         let mut area_edits: BTreeMap<String, Vec<(AreaField, String, bool)>> = BTreeMap::new();
-        let mut modules: BTreeSet<String> = BTreeSet::new();
-        let mut globals = false;
+        let mut modules: BTreeSet<String> = staged.modules().map(str::to_string).collect();
+        let mut globals = staged.touches(None);
         for write in self.pending.iter().flat_map(|p| &p.writes) {
             if let Some(field) = area_field(&write.key.value_type) {
                 let module = write
@@ -1081,8 +1122,12 @@ impl QuestEdits {
             }
         }
         if globals {
+            if staged.touches(None) {
+                backup_campaign_variables(handler)?;
+            }
             let xml = handler.extract_globals_xml().map_err(|e| e.to_string())?;
             let mut parser = crate::parsers::xml::RustXmlParser::from_string(&xml)?;
+            staged.overlay_globals(&mut parser.data);
             self.overlay_globals(&mut parser.data);
             handler
                 .update_file("globals.xml", parser.to_xml_string()?.as_bytes())
@@ -1093,26 +1138,30 @@ impl QuestEdits {
         for module in modules {
             let edits = area_edits.remove(&module).unwrap_or_default();
             let updates: Vec<(String, String, String)> = if variable_modules.contains(&module) {
-                let (_, vars) = CampaignManager::get_module_info_by_id(handler, paths, &module)?;
-                self.pending_variables(Some(&module), &vars)
-                    .into_iter()
-                    .map(|(key, value)| (key.name, variable_text(&value), key.value_type))
-                    .collect()
+                let (_, mut vars) =
+                    CampaignManager::get_module_info_by_id(handler, paths, &module)?;
+                staged.overlay_module(&module, &mut vars);
+                let mut updates = staged.updates(Some(&module));
+                updates.extend(
+                    self.pending_variables(Some(&module), &vars)
+                        .into_iter()
+                        .map(|(key, value)| (key.name, variable_text(&value), key.value_type)),
+                );
+                updates
             } else {
                 Vec::new()
             };
-            let (path, bytes) = content::prepare_module_variable_updates(
-                handler,
-                &updates,
-                Some(&module),
-                |save| {
+            if staged.touches(Some(&module)) {
+                backup_module_z(handler, &module)?;
+            }
+            let (path, bytes) =
+                content::prepare_module_variable_updates(handler, &updates, &module, |save| {
                     if edits.is_empty() {
                         return Ok(());
                     }
                     let objects = area_objects::installed_module_objects(paths, &module)?;
                     area_objects::write_saved(save, &objects, &edits)
-                },
-            )?;
+                })?;
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -1121,11 +1170,7 @@ impl QuestEdits {
                 .update_file(name, &bytes)
                 .map_err(|e| e.to_string())?;
         }
-        Ok(FlushedWrites {
-            player: written,
-            companions: written_companions,
-            warnings,
-        })
+        Ok(())
     }
 }
 
@@ -1666,8 +1711,13 @@ impl<'a> VariableReader<'a> {
                 })
             }
             PARTY_TYPE => self.live.party.contains_key(&key.name.to_ascii_lowercase()),
-            _ => false,
+            _ => self.staged_variable(key).is_some(),
         }
+    }
+
+    /// The value set in the Game State tabs for a campaign or module variable.
+    fn staged_variable(&self, key: &VariableKey) -> Option<&Value> {
+        self.live.variables?.get(key)
     }
 
     fn lookup(&mut self, key: &VariableKey, live: bool) -> Result<Option<Value>, String> {
@@ -1733,6 +1783,9 @@ impl<'a> VariableReader<'a> {
                 member.selectable
             };
             return Ok(Some(Value::from(i64::from(value))));
+        }
+        if live && let Some(value) = self.staged_variable(key) {
+            return Ok(Some(value.clone()));
         }
         if let Some(module) = &key.module {
             let vars = self
@@ -4203,7 +4256,14 @@ mod tests {
         edits.stage(preview, &graph, &all, false).unwrap();
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
         assert!(written.player.is_empty());
@@ -4330,7 +4390,14 @@ mod tests {
         edits.stage(soz, &graph, &all, false).unwrap();
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                false,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
 
@@ -4489,7 +4556,14 @@ mod tests {
         edits.stage(preview, &graph, &all, false).unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
 
@@ -4566,7 +4640,14 @@ mod tests {
             .unwrap();
         handler.update_file("playerlist.ifo", &staged).unwrap();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -4606,7 +4687,14 @@ mod tests {
         edits.stage(preview, &graph, &[0], false).unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(player_gold_and_xp(&handler), (0, 0, 0, 0));
@@ -4666,7 +4754,14 @@ mod tests {
 
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -5055,7 +5150,14 @@ mod tests {
 
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -5128,7 +5230,14 @@ mod tests {
         edits.stage(preview, &grant, &all, false).unwrap();
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -5154,7 +5263,14 @@ mod tests {
         edits.stage(preview, &removal, &[0], false).unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
         let player = player_struct(&handler.extract_player_data().unwrap(), 0).unwrap();
@@ -5191,7 +5307,14 @@ mod tests {
         edits.stage(preview, &graph, &[0], false).unwrap();
         handler.begin_batch();
         let written = edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap()
             .player;
         handler.commit_batch().unwrap();
@@ -5265,7 +5388,14 @@ mod tests {
         edits.stage(preview, &graph, &all, false).unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(player_gold_and_xp(&handler).1, 1300);
@@ -5655,6 +5785,36 @@ mod tests {
     }
 
     #[test]
+    fn staged_variables_are_live_values() {
+        let (dir, handler) = fixture_handler();
+        std::fs::write(dir.path().join("globals.xml"), "<Globals><Integers><Integer><Name>a</Name><Value>1</Value></Integer></Integers></Globals>").unwrap();
+        let paths = NWN2Paths::new();
+        let mut staged = StagedVariables::default();
+        staged
+            .stage(
+                &handler,
+                &paths,
+                None,
+                &[("a".into(), "5".into(), "int".into())],
+            )
+            .unwrap();
+        let live = LiveCharacters {
+            variables: Some(&staged),
+            ..LiveCharacters::default()
+        };
+        let mut reader = VariableReader::new(&handler, &paths, 0, live);
+        let key = VariableKey {
+            module: None,
+            name: "a".into(),
+            value_type: "int".into(),
+        };
+        assert_eq!(
+            reader.read_saved_and_current(&key).unwrap(),
+            (Some(json!(1)), Some(json!(5)))
+        );
+    }
+
+    #[test]
     fn optional_assignments_roundtrip_and_external_changes_invalidate_preview() {
         let (dir, mut handler) = fixture_handler();
         let globals = dir.path().join("globals.xml");
@@ -5698,7 +5858,14 @@ mod tests {
         edits.stage(preview, &graph, &[0, 2], false).unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                false,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         assert!(
             std::fs::read_to_string(&globals)
@@ -5855,7 +6022,14 @@ mod tests {
             .unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                false,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("resgff.zip")).unwrap(),
@@ -5865,7 +6039,14 @@ mod tests {
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 10);
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                false,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
         assert_eq!(read_live_journal(&handler, 0).unwrap()[0].state, 20);
@@ -5934,7 +6115,14 @@ mod tests {
         edits.validate_saved(&handler, &paths, 0).unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, false, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                false,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         assert_eq!(
             std::fs::read(dir.path().join("module_a.z")).unwrap(),
@@ -6292,7 +6480,14 @@ mod tests {
         .unwrap();
         handler.begin_batch();
         edits
-            .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+            .flush(
+                &mut handler,
+                &NWN2Paths::new(),
+                0,
+                true,
+                &game_data(),
+                &StagedVariables::default(),
+            )
             .unwrap();
         handler.commit_batch().unwrap();
         let saved = CampaignManager::get_campaign_variables(&handler).unwrap();
@@ -6307,7 +6502,14 @@ mod tests {
             let (_dir, mut handler) = fixture_handler();
             handler.begin_batch();
             edits
-                .flush(&mut handler, &NWN2Paths::new(), 0, true, &game_data())
+                .flush(
+                    &mut handler,
+                    &NWN2Paths::new(),
+                    0,
+                    true,
+                    &game_data(),
+                    &StagedVariables::default(),
+                )
                 .unwrap();
             handler.commit_batch().unwrap();
             read_live_journal(&handler, 0)

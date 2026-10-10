@@ -12,9 +12,8 @@ use crate::parsers::erf::ErfParser;
 use crate::parsers::gff::{GffParser, GffValue, GffWriter};
 
 use crate::config::NWN2Paths;
-use crate::services::campaign::backup::backup_module_z;
 use crate::services::resource_manager::module_loader::find_installed_module;
-use crate::services::savegame_handler::{SaveGameHandler, commit_outputs};
+use crate::services::savegame_handler::SaveGameHandler;
 
 /// True if the path's extension is `z` regardless of case.
 /// EE saves use lowercase `.z` (LZMA); original-NWN2 saves use uppercase `.Z` (PK zip).
@@ -413,22 +412,6 @@ fn parse_module_z_file(
     Ok((info, vars))
 }
 
-pub fn batch_update_module_variables(
-    handler: &SaveGameHandler,
-    updates: &[(String, String, String)],
-    module_id: Option<&str>,
-) -> Result<(), String> {
-    if updates.is_empty() {
-        return Ok(());
-    }
-    let (path, bytes) = prepare_module_variable_updates(handler, updates, module_id, |_| Ok(()))?;
-    let module = module_id
-        .map(str::to_string)
-        .unwrap_or(handler.extract_current_module().unwrap_or_default());
-    backup_module_z(handler, &module)?;
-    commit_outputs(vec![(path, bytes)]).map_err(|e| format!("Failed to write .z file: {e}"))
-}
-
 /// The saved state of a module (`<module>.z`) as a fully loaded ERF, ready to
 /// edit and re-serialize, with the path it came from. Reads through the handler,
 /// so a `.z` already staged in the open batch is edited on top of, not replaced.
@@ -473,12 +456,10 @@ pub fn parse_module_state(decompressed: &[u8]) -> Result<ErfParser, String> {
 pub fn prepare_module_variable_updates(
     handler: &SaveGameHandler,
     updates: &[(String, String, String)],
-    module_id: Option<&str>,
+    module_id: &str,
     edit_state: impl FnOnce(&mut ErfParser) -> Result<(), String>,
 ) -> Result<(PathBuf, Vec<u8>), String> {
-    let current_module_id = handler.extract_current_module().unwrap_or_default();
-    let target_module = module_id.unwrap_or(&current_module_id);
-    let (z_path, mut erf_parser) = open_module_state(handler, target_module)?;
+    let (z_path, mut erf_parser) = open_module_state(handler, module_id)?;
 
     info!(
         "Batch updating {} module variables in {:?}",
