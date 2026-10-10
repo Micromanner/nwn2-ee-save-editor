@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button, Checkbox, Tab, Tabs } from '@blueprintjs/core';
+import { Button, Checkbox, Menu, MenuItem, Popover, Tab, Tabs } from '@blueprintjs/core';
 import { GiTiedScroll } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
 import { DropdownSelect, ParchmentDialog, StepInput, LoadingState } from '../shared';
@@ -154,16 +154,13 @@ export function EditItemDialog({
     return meta.allowed_columns === null || meta.allowed_columns.includes(propColumn);
   }, [propColumn]);
 
-  const handleAddProperty = () => {
-    if (!preloadedMetadata?.property_types.length) return;
-    const firstProp = preloadedMetadata.property_types.find(isPropertyAllowed)
-      ?? preloadedMetadata.property_types[0];
+  const handleAddProperty = (propMeta: PropertyMetadata) => {
     const newProp = {
-      PropertyName: firstProp.id,
+      PropertyName: propMeta.id,
       Subtype: 0,
-      CostTable: firstProp.cost_table_idx ?? 0,
-      CostValue: defaultCostValue(firstProp),
-      Param1: firstProp.param1_idx ?? 255,
+      CostTable: propMeta.cost_table_idx ?? 0,
+      CostValue: defaultCostValue(propMeta),
+      Param1: propMeta.param1_idx ?? 255,
       Param1Value: 0,
       ChanceAppear: 100,
       Useable: true,
@@ -396,7 +393,20 @@ export function EditItemDialog({
                 <span className="t-semibold" style={{ color: T.text }}>
                   {t('inventory.enchantments')} ({properties.length})
                 </span>
-                <Button small icon="add" intent="primary" text={t('inventory.addProperty')} onClick={handleAddProperty} disabled={!preloadedMetadata} />
+                <Popover
+                  placement="bottom-end"
+                  minimal
+                  disabled={!preloadedMetadata}
+                  content={
+                    <Menu style={{ maxHeight: 300, overflowY: 'auto' }}>
+                      {(preloadedMetadata?.property_types || []).filter(isPropertyAllowed).map(pt => (
+                        <MenuItem key={pt.id} text={pt.label} onClick={() => handleAddProperty(pt)} />
+                      ))}
+                    </Menu>
+                  }
+                >
+                  <Button small icon="add" intent="primary" text={t('inventory.addProperty')} disabled={!preloadedMetadata} />
+                </Popover>
               </div>
 
               <div style={{ paddingRight: 8 }}>
