@@ -335,7 +335,7 @@
     "noProperties": "Aucune propriété spéciale",
     "baseArmorClass": "CA de base",
     "unequip": "Déséquiper",
-    "backpackEmpty": "Sac à dos vide",
+    "backpackEmpty": "Inventaire vide",
     "bagEmpty": "Vide",
     "backpackEmptyDescription": "Aucun objet dans l'inventaire.",
     "noPreviewAvailable": "Aucun modèle 3D disponible pour cet objet",
@@ -470,7 +470,7 @@
       "other": "Autres"
     },
     "selectItem": "Sélectionnez un objet",
-    "selectItemHint": "Choisissez parmi l'équipement ou le sac à dos",
+    "selectItemHint": "Choisissez parmi l'équipement ou l'inventaire",
     "flags": "Indicateurs",
     "weightValue": "{value} livres",
     "goldValue": "{value} PO",

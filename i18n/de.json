@@ -335,9 +335,9 @@
     "noProperties": "Keine speziellen Eigenschaften",
     "baseArmorClass": "Basis-RK",
     "unequip": "Ablegen",
-    "backpackEmpty": "Rucksack ist leer",
+    "backpackEmpty": "Inventar ist leer",
     "bagEmpty": "Leer",
-    "backpackEmptyDescription": "Keine Gegenstände im Rucksack.",
+    "backpackEmptyDescription": "Keine Gegenstände im Inventar.",
     "item": "Gegenstand",
     "qty": "Menge",
     "editor": {
@@ -470,7 +470,7 @@
       }
     },
     "selectItem": "Gegenstand auswählen",
-    "selectItemHint": "Aus Ausrüstung oder Rucksack wählen",
+    "selectItemHint": "Aus Ausrüstung oder Inventar wählen",
     "flags": "Markierungen",
     "weightValue": "{value} Pfd.",
     "goldValue": "{value} GM",

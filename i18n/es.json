@@ -335,9 +335,9 @@
     "noProperties": "Sin propiedades especiales",
     "baseArmorClass": "CA base",
     "unequip": "Desequipar",
-    "backpackEmpty": "La mochila está vacía",
+    "backpackEmpty": "El inventario está vacío",
     "bagEmpty": "Vacío",
-    "backpackEmptyDescription": "No hay objetos en la mochila.",
+    "backpackEmptyDescription": "No hay objetos en el inventario.",
     "item": "Objeto",
     "qty": "Cant.",
     "editor": {
@@ -470,7 +470,7 @@
       }
     },
     "selectItem": "Selecciona un objeto",
-    "selectItemHint": "Elige entre el equipo o la mochila",
+    "selectItemHint": "Elige entre el equipo o el inventario",
     "flags": "Indicadores",
     "weightValue": "{value} lb.",
     "goldValue": "{value} po",
