@@ -8,7 +8,7 @@ import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { useInventoryManagement } from '@/hooks/useInventoryManagement';
+import { useInventoryManagement, type ItemLocation } from '@/hooks/useInventoryManagement';
 import { type ItemEditorMetadataResponse, type PropertyMetadata } from '@/services/inventoryApi';
 import { stripNwn2Tags } from '@/utils/nwn2Markup';
 import { MarkupEditor } from './MarkupEditor';
@@ -47,8 +47,7 @@ export interface EditItemDialogProps {
   onClose: () => void;
   onSaved?: () => void;
   itemData: Record<string, unknown> | null;
-  itemIndex?: number | null;
-  slot?: string | null;
+  target: ItemLocation | null;
   resolvedName?: string;
   resolvedDescription?: string;
   resolvedIcon?: string;
@@ -65,8 +64,7 @@ export function EditItemDialog({
   onClose,
   onSaved,
   itemData,
-  itemIndex,
-  slot,
+  target,
   resolvedName,
   resolvedDescription,
   resolvedIcon,
@@ -98,7 +96,7 @@ export function EditItemDialog({
     if (isOpen) setTab('basic');
   }, [isOpen]);
 
-  const itemKey = `${itemIndex ?? ''}:${slot ?? ''}`;
+  const itemKey = `${target?.containerIndex ?? ''}:${target?.itemIndex ?? ''}:${target?.slot ?? ''}`;
   const baseItemId = Number(localData?.BaseItem || 0);
 
   useEffect(() => {
@@ -208,8 +206,9 @@ export function EditItemDialog({
     setIsSaving(true);
     try {
       await updateItem({
-        item_index: itemIndex ?? undefined,
-        slot: slot ?? undefined,
+        item_index: target?.itemIndex,
+        container_index: target?.containerIndex ?? undefined,
+        slot: target?.slot,
         item_data: localData,
         appearance: localAppearance,
       });

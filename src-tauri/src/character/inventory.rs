@@ -4,7 +4,7 @@ use crate::character::item_appearance::{ItemAppearance, parse_equip_slots};
 use crate::character::types::BaseItemId;
 use crate::loaders::GameData;
 use crate::parsers::gff::{GffValue, LocalizedString, LocalizedSubstring};
-use crate::services::item_cost_calculator::calculate_item_cost;
+use crate::services::item_cost_calculator::{calculate_item_cost, cost_table_row};
 use crate::services::item_property_decoder::{ItemBonuses, ItemPropertyDecoder};
 use crate::utils::parsing::{row_int, row_str};
 use indexmap::IndexMap;
@@ -135,6 +135,8 @@ pub struct BaseItemData {
     /// `baseitems.PropColumn` - the `itemprops.2da` column that says which
     /// properties the engine honours on this base type. -1 when blank.
     pub prop_column: i32,
+    /// `baseitems.Container` - a bag that holds items in its own `ItemList`.
+    pub is_container: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -147,7 +149,16 @@ pub struct FullInventorySummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct FullInventoryItem {
+    /// Position in the backpack `ItemList`, or in the container's own
+    /// `ItemList` when `container_index` is set.
     pub index: usize,
+    /// Backpack index of the container (bag of holding) holding this item.
+    pub container_index: Option<usize>,
+    /// `baseitems.Container` - a bag that can hold items, even while empty.
+    pub is_container: bool,
+    /// Items stored in this container's nested `ItemList`; empty otherwise.
+    pub contents: Vec<FullInventoryItem>,
+    /// Raw GFF fields without the nested `ItemList`, which is in `contents`.
     pub item: RawItemData,
     pub base_item: i32,
     pub base_item_name: String,
@@ -241,6 +252,7 @@ struct ItemDetails {
     max_stack: i32,
     max_props: i32,
     prop_column: i32,
+    is_container: bool,
     decoded_properties: Vec<DecodedPropertyInfo>,
     item_data: RawItemData,
     appearance: ItemAppearance,
@@ -358,28 +370,9 @@ impl super::Character {
         })
     }
 
-    pub fn get_base_item_data(
-        &self,
-        base_item_id: i32,
-        game_data: &GameData,
-    ) -> Option<BaseItemData> {
-        let baseitems = game_data.get_table("baseitems")?;
-        let row = baseitems.get_by_id(base_item_id)?;
-
-        Some(BaseItemData {
-            name: game_data
-                .get_string(row_int(&row, "name", -1))
-                .unwrap_or_else(|| format!("Item {base_item_id}")),
-            category: get_item_category(&row),
-            max_stack: row_int(&row, "stacking", 1),
-            max_props: row_int(&row, "maxprops", 0),
-            prop_column: row_int(&row, "propcolumn", -1),
-        })
-    }
-
     /// `baseitems.Stacking`, 1 for a base item missing from `baseitems`.
     pub(crate) fn max_stack(&self, base_item_id: i32, game_data: &GameData) -> i32 {
-        self.get_base_item_data(base_item_id, game_data)
+        base_item_data(base_item_id, game_data)
             .map_or(1, |d| d.max_stack)
             .max(1)
     }
@@ -397,40 +390,40 @@ impl super::Character {
             .iter()
             .enumerate()
             .map(|(index, item_struct)| {
-                let common = self.item_details(item_struct, game_data, decoder, resource_manager);
-                total_weight += common.weight * common.stack_size as f32;
-                let field = |name: &str| item_struct.get(name).and_then(gff_value_to_i32);
-                let (equippable_slots, default_slot) =
-                    self.get_equippable_slots(common.base_item, game_data);
-
-                FullInventoryItem {
+                let mut entry = self.inventory_entry(
                     index,
-                    item: common.item_data,
-                    base_item: common.base_item,
-                    base_item_name: common.base_item_name,
-                    name: common.name,
-                    icon: common.icon,
-                    description: common.description,
-                    weight: common.weight,
-                    value: common.value,
-                    is_custom: common.is_custom,
-                    stack_size: common.stack_size,
-                    enhancement: field("Enhancement").unwrap_or(0),
-                    charges: field("Charges"),
-                    identified: field("Identified").unwrap_or(1) != 0,
-                    plot: field("Plot") == Some(1),
-                    cursed: field("Cursed") == Some(1),
-                    stolen: field("Stolen") == Some(1),
-                    base_ac: common.base_ac,
-                    max_stack: common.max_stack,
-                    max_props: common.max_props,
-                    prop_column: common.prop_column,
-                    category: common.category,
-                    equippable_slots,
-                    default_slot,
-                    decoded_properties: common.decoded_properties,
-                    appearance: common.appearance,
+                    None,
+                    item_struct,
+                    game_data,
+                    decoder,
+                    resource_manager,
+                );
+                total_weight += entry.weight * entry.stack_size as f32;
+
+                if let Some(GffValue::ListOwned(contents)) = item_struct.get("ItemList") {
+                    entry.contents = contents
+                        .iter()
+                        .enumerate()
+                        .map(|(child_index, child)| {
+                            self.inventory_entry(
+                                child_index,
+                                Some(index),
+                                child,
+                                game_data,
+                                decoder,
+                                resource_manager,
+                            )
+                        })
+                        .collect();
+                    let contents_weight: f32 = entry
+                        .contents
+                        .iter()
+                        .map(|child| child.weight * child.stack_size as f32)
+                        .sum();
+                    total_weight +=
+                        contents_weight * container_weight_factor(item_struct, game_data);
                 }
+                entry
             })
             .collect();
 
@@ -478,6 +471,55 @@ impl super::Character {
         }
     }
 
+    /// A backpack item, or with `container_index` an item inside the container at
+    /// that backpack index. `contents` is left empty.
+    fn inventory_entry(
+        &self,
+        index: usize,
+        container_index: Option<usize>,
+        item_struct: &IndexMap<String, GffValue<'static>>,
+        game_data: &GameData,
+        decoder: &ItemPropertyDecoder,
+        resource_manager: Option<&crate::services::resource_manager::ResourceManager>,
+    ) -> FullInventoryItem {
+        let common = self.item_details(item_struct, game_data, decoder, resource_manager);
+        let field = |name: &str| item_struct.get(name).and_then(gff_value_to_i32);
+        let (equippable_slots, default_slot) =
+            self.get_equippable_slots(common.base_item, game_data);
+
+        FullInventoryItem {
+            index,
+            container_index,
+            is_container: common.is_container,
+            contents: Vec::new(),
+            item: common.item_data,
+            base_item: common.base_item,
+            base_item_name: common.base_item_name,
+            name: common.name,
+            icon: common.icon,
+            description: common.description,
+            weight: common.weight,
+            value: common.value,
+            is_custom: common.is_custom,
+            stack_size: common.stack_size,
+            enhancement: field("Enhancement").unwrap_or(0),
+            charges: field("Charges"),
+            identified: field("Identified").unwrap_or(1) != 0,
+            plot: field("Plot") == Some(1),
+            cursed: field("Cursed") == Some(1),
+            stolen: field("Stolen") == Some(1),
+            base_ac: common.base_ac,
+            max_stack: common.max_stack,
+            max_props: common.max_props,
+            prop_column: common.prop_column,
+            category: common.category,
+            equippable_slots,
+            default_slot,
+            decoded_properties: common.decoded_properties,
+            appearance: common.appearance,
+        }
+    }
+
     /// Display fields shared by inventory and equipped items.
     fn item_details(
         &self,
@@ -490,7 +532,7 @@ impl super::Character {
             .get("BaseItem")
             .and_then(gff_value_to_i32)
             .unwrap_or(0);
-        let base_item_data = self.get_base_item_data(base_item, game_data);
+        let base_item_data = base_item_data(base_item, game_data);
         let base_item_name = base_item_data
             .as_ref()
             .map_or_else(|| format!("Item {base_item}"), |d| d.name.clone());
@@ -505,6 +547,14 @@ impl super::Character {
         {
             appearance.tints = effective;
         }
+
+        // A container's contents travel in `contents`; a copy here would come
+        // back on every edit of the bag and overwrite them.
+        let item_data = item_struct
+            .iter()
+            .filter(|(key, _)| key.as_str() != "ItemList")
+            .filter_map(|(key, value)| gff_to_json_primitive(value).map(|json| (key.clone(), json)))
+            .collect();
 
         ItemDetails {
             base_item,
@@ -530,8 +580,9 @@ impl super::Character {
             max_stack: base_item_data.as_ref().map_or(1, |d| d.max_stack.max(1)),
             max_props: base_item_data.as_ref().map_or(0, |d| d.max_props),
             prop_column: base_item_data.as_ref().map_or(-1, |d| d.prop_column),
+            is_container: base_item_data.as_ref().is_some_and(|d| d.is_container),
             decoded_properties: self.decode_item_properties(item_struct, decoder),
-            item_data: RawItemData(gff_struct_to_json(item_struct)),
+            item_data: RawItemData(item_data),
             appearance,
         }
     }
@@ -811,41 +862,36 @@ impl super::Character {
         })
     }
 
-    pub fn unequip_item(&mut self, slot: EquipmentSlot) -> Result<UnequipResult, CharacterError> {
-        let mut equip_list =
-            self.get_list_owned("Equip_ItemList")
+    /// Removes and returns the item equipped in `slot`.
+    fn take_equipped_item(
+        &mut self,
+        slot: EquipmentSlot,
+    ) -> Result<IndexMap<String, GffValue<'static>>, CharacterError> {
+        let equip_list =
+            self.get_list_mut("Equip_ItemList")
                 .ok_or(CharacterError::FieldMissing {
                     field: "Equip_ItemList",
                 })?;
-
         let slot_bitmask = slot.to_bitmask();
-        let mut item_to_unequip = None;
-        let mut found_index = None;
+        let index = equip_list
+            .iter()
+            .position(|item| {
+                item.get("__struct_id__")
+                    .and_then(gff_value_to_i32)
+                    .unwrap_or(0) as u32
+                    == slot_bitmask
+            })
+            .ok_or_else(|| {
+                CharacterError::InvalidOperation(format!(
+                    "No item equipped in {} slot",
+                    slot.display_name()
+                ))
+            })?;
+        Ok(equip_list.remove(index))
+    }
 
-        for (index, item_struct) in equip_list.iter().enumerate() {
-            let struct_id = item_struct
-                .get("__struct_id__")
-                .and_then(gff_value_to_i32)
-                .unwrap_or(0) as u32;
-
-            if struct_id == slot_bitmask {
-                item_to_unequip = Some(item_struct.clone());
-                found_index = Some(index);
-                break;
-            }
-        }
-
-        let Some(item_struct) = item_to_unequip else {
-            return Err(CharacterError::InvalidOperation(format!(
-                "No item equipped in {} slot",
-                slot.display_name()
-            )));
-        };
-
-        if let Some(index) = found_index {
-            equip_list.remove(index);
-            self.set_list("Equip_ItemList", equip_list);
-        }
+    pub fn unequip_item(&mut self, slot: EquipmentSlot) -> Result<UnequipResult, CharacterError> {
+        let item_struct = self.take_equipped_item(slot)?;
 
         let mut inv_list = self.get_list_owned("ItemList").unwrap_or_default();
         let mut inv_item = item_struct.clone();
@@ -868,6 +914,11 @@ impl super::Character {
             }),
             inventory_index: Some(inventory_index),
         })
+    }
+
+    /// Deletes the item equipped in `slot` outright.
+    pub fn destroy_equipped_item(&mut self, slot: EquipmentSlot) -> Result<(), CharacterError> {
+        self.take_equipped_item(slot).map(|_| ())
     }
 
     pub fn add_item(
@@ -957,7 +1008,7 @@ impl super::Character {
         game_data: &GameData,
     ) -> Result<AddItemResult, CharacterError> {
         mark_identified(&mut item);
-        self.clamp_stack_size(&mut item, game_data);
+        clamp_stack_size(&mut item, game_data);
         let info = self.parse_basic_item_info(&item);
 
         let mut inv_list = self.get_list_owned("ItemList").unwrap_or_default();
@@ -972,20 +1023,45 @@ impl super::Character {
         })
     }
 
-    pub fn remove_item(&mut self, index: usize) -> Result<RemoveItemResult, CharacterError> {
-        let mut inv_list = self
-            .get_list_owned("ItemList")
+    /// Runs `edit` on the backpack `ItemList`, or with `container` on the nested
+    /// `ItemList` of the container at that backpack index.
+    fn edit_item_list<R>(
+        &mut self,
+        container: Option<usize>,
+        edit: impl FnOnce(&mut Vec<IndexMap<String, GffValue<'static>>>) -> Result<R, CharacterError>,
+    ) -> Result<R, CharacterError> {
+        let inv_list = self
+            .get_list_mut("ItemList")
             .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
 
-        if index >= inv_list.len() {
-            return Err(CharacterError::ValidationFailed {
-                field: "index",
-                message: format!("Index {index} out of bounds"),
-            });
+        match container {
+            None => edit(inv_list),
+            Some(bag) => match inv_list
+                .get_mut(bag)
+                .and_then(|item| item.get_mut("ItemList"))
+            {
+                Some(GffValue::ListOwned(contents)) => edit(contents),
+                _ => Err(CharacterError::InvalidOperation(format!(
+                    "No container at index {bag}"
+                ))),
+            },
         }
+    }
 
-        let removed_struct = inv_list.remove(index);
-        self.set_list("ItemList", inv_list);
+    pub fn remove_item(
+        &mut self,
+        index: usize,
+        container: Option<usize>,
+    ) -> Result<RemoveItemResult, CharacterError> {
+        let removed_struct = self.edit_item_list(container, |inv_list| {
+            if index >= inv_list.len() {
+                return Err(CharacterError::ValidationFailed {
+                    field: "index",
+                    message: format!("Index {index} out of bounds"),
+                });
+            }
+            Ok(inv_list.remove(index))
+        })?;
 
         let removed_info = self.parse_basic_item_info(&removed_struct);
 
@@ -1007,26 +1083,28 @@ impl super::Character {
     pub fn transform_inventory_item(
         &mut self,
         index: usize,
+        container: Option<usize>,
         mut new_item: IndexMap<String, GffValue<'static>>,
         game_data: &GameData,
     ) -> Result<TransformResult, CharacterError> {
         mark_identified(&mut new_item);
-        self.clamp_stack_size(&mut new_item, game_data);
-        let mut inv_list = self
-            .get_list_owned("ItemList")
-            .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
-
-        if index >= inv_list.len() {
-            return Err(CharacterError::ValidationFailed {
-                field: "index",
-                message: format!("Index {index} out of bounds"),
-            });
-        }
-
-        inv_list[index] = new_item;
-        self.set_list("ItemList", inv_list);
-
-        Ok(TransformResult {})
+        clamp_stack_size(&mut new_item, game_data);
+        self.edit_item_list(container, |inv_list| {
+            let Some(slot) = inv_list.get_mut(index) else {
+                return Err(CharacterError::ValidationFailed {
+                    field: "index",
+                    message: format!("Index {index} out of bounds"),
+                });
+            };
+            if matches!(slot.get("ItemList"), Some(GffValue::ListOwned(contents)) if !contents.is_empty())
+            {
+                return Err(CharacterError::InvalidOperation(
+                    "Cannot transform a container that holds items".to_string(),
+                ));
+            }
+            *slot = new_item;
+            Ok(TransformResult {})
+        })
     }
 
     /// Replaces the item equipped in `slot` with `new_item`, keeping only the
@@ -1040,7 +1118,7 @@ impl super::Character {
         game_data: &GameData,
     ) -> Result<TransformResult, CharacterError> {
         mark_identified(&mut new_item);
-        self.clamp_stack_size(&mut new_item, game_data);
+        clamp_stack_size(&mut new_item, game_data);
         let base_item_id = new_item
             .get("BaseItem")
             .and_then(gff_value_to_i32)
@@ -1108,60 +1186,21 @@ impl super::Character {
     pub fn update_inventory_item(
         &mut self,
         index: usize,
+        container: Option<usize>,
         updated_data: &HashMap<String, JsonValue>,
         game_data: &GameData,
     ) -> Result<(), CharacterError> {
-        let mut inv_list = self
-            .get_list_owned("ItemList")
-            .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
-
-        if index >= inv_list.len() {
-            return Err(CharacterError::InvalidOperation(format!(
-                "No item at index {index}"
-            )));
-        }
-
-        merge_json_into_gff_struct(&mut inv_list[index], updated_data)
-            .map_err(invalid_item_field)?;
-        normalize_item_properties_list(&mut inv_list[index]);
-        self.clamp_stack_size(&mut inv_list[index], game_data);
-        self.set_list("ItemList", inv_list);
-        Ok(())
-    }
-
-    /// Hold `StackSize` to `baseitems.Stacking`. The engine renders a single item
-    /// for a non-stackable base type (a cloak is Stacking=1) but still multiplies
-    /// encumbrance by the stack, so an over-sized stack reads as one cloak that
-    /// weighs ten. A base item missing from `baseitems` keeps its stack.
-    fn clamp_stack_size(
-        &self,
-        item: &mut IndexMap<String, GffValue<'static>>,
-        game_data: &GameData,
-    ) {
-        let Some(stack_size) = item.get("StackSize").and_then(gff_value_to_i32) else {
-            return;
-        };
-
-        let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
-        let Some(base_item_data) = self.get_base_item_data(base_item_id, game_data) else {
-            return;
-        };
-        let max_stack = base_item_data.max_stack.max(1);
-
-        let clamped = stack_size.clamp(1, max_stack);
-        if clamped == stack_size {
-            return;
-        }
-
-        tracing::debug!(
-            base_item_id,
-            stack_size,
-            max_stack,
-            "Clamped StackSize to baseitems.Stacking"
-        );
-
-        let new_value = typed_stack_size(item.get("StackSize"), clamped);
-        item.insert("StackSize".to_string(), new_value);
+        self.edit_item_list(container, |inv_list| {
+            let Some(item) = inv_list.get_mut(index) else {
+                return Err(CharacterError::InvalidOperation(format!(
+                    "No item at index {index}"
+                )));
+            };
+            merge_json_into_gff_struct(item, updated_data).map_err(invalid_item_field)?;
+            normalize_item_properties_list(item);
+            clamp_stack_size(item, game_data);
+            Ok(())
+        })
     }
 
     pub fn update_equipped_item(
@@ -1193,7 +1232,7 @@ impl super::Character {
         merge_json_into_gff_struct(&mut equip_list[item_idx], updated_data)
             .map_err(invalid_item_field)?;
         normalize_item_properties_list(&mut equip_list[item_idx]);
-        self.clamp_stack_size(&mut equip_list[item_idx], game_data);
+        clamp_stack_size(&mut equip_list[item_idx], game_data);
         self.set_list("Equip_ItemList", equip_list);
         Ok(())
     }
@@ -1201,26 +1240,25 @@ impl super::Character {
     pub fn apply_inventory_item_appearance(
         &mut self,
         index: usize,
+        container: Option<usize>,
         appearance: &crate::character::ItemAppearance,
         game_data: &GameData,
     ) -> Result<(), CharacterError> {
-        let mut inv_list = self
-            .get_list_owned("ItemList")
-            .ok_or(CharacterError::FieldMissing { field: "ItemList" })?;
-        if index >= inv_list.len() {
-            return Err(CharacterError::InvalidOperation(format!(
-                "No item at index {index}"
-            )));
-        }
-        let base_item_id = inv_list[index]
-            .get("BaseItem")
-            .and_then(gff_value_to_i32)
-            .unwrap_or(-1);
-        let mut routed = appearance.clone();
-        let variation_is_ui_only = routed.prepare_for_write(base_item_id, game_data);
-        write_appearance_into_item(&mut inv_list[index], &routed, !variation_is_ui_only);
-        self.set_list("ItemList", inv_list);
-        Ok(())
+        self.edit_item_list(container, |inv_list| {
+            let Some(item) = inv_list.get_mut(index) else {
+                return Err(CharacterError::InvalidOperation(format!(
+                    "No item at index {index}"
+                )));
+            };
+            let base_item_id = item
+                .get("BaseItem")
+                .and_then(gff_value_to_i32)
+                .unwrap_or(-1);
+            let mut routed = appearance.clone();
+            let variation_is_ui_only = routed.prepare_for_write(base_item_id, game_data);
+            write_appearance_into_item(item, &routed, !variation_is_ui_only);
+            Ok(())
+        })
     }
 
     pub fn apply_equipped_item_appearance(
@@ -1272,7 +1310,7 @@ impl super::Character {
         game_data: &GameData,
     ) -> Result<AddItemResult, CharacterError> {
         mark_identified(&mut item);
-        self.clamp_stack_size(&mut item, game_data);
+        clamp_stack_size(&mut item, game_data);
         let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
 
         let tag = item
@@ -1480,6 +1518,86 @@ fn item_unit_weight(
     tenth_lbs
         .and_then(|s| s.parse::<f32>().ok())
         .map_or(0.0, |w| w / 10.0)
+}
+
+/// `itempropdef.2da` row of "Enhanced Container: Reduced Weight".
+const ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT: i32 = 32;
+
+/// Share of a container's contents weight that counts toward encumbrance:
+/// `1 - Value` of the property's cost table row (`iprp_redcost`, -20%..-100%),
+/// reached through `itempropdef.CostTableResRef`; 1 without the property.
+fn container_weight_factor(
+    container: &IndexMap<String, GffValue<'static>>,
+    game_data: &GameData,
+) -> f32 {
+    let Some(GffValue::ListOwned(props)) = container.get("PropertiesList") else {
+        return 1.0;
+    };
+    let Some(cost_value) = props.iter().find_map(|prop| {
+        (prop.get("PropertyName").and_then(gff_value_to_i32)
+            == Some(ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT))
+        .then(|| prop.get("CostValue").and_then(gff_value_to_i32))
+        .flatten()
+    }) else {
+        return 1.0;
+    };
+
+    let reduction = game_data
+        .get_table("itempropdef")
+        .and_then(|t| t.get_by_id(ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT))
+        .and_then(|row| row_str(&row, "costtableresref"))
+        .and_then(|s| s.parse::<i32>().ok())
+        .and_then(|cost_table| cost_table_row(cost_table, cost_value, game_data))
+        .and_then(|row| row_str(&row, "value"))
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    (1.0 - reduction).clamp(0.0, 1.0)
+}
+
+/// Hold `StackSize` to `baseitems.Stacking`. The engine renders a single item
+/// for a non-stackable base type (a cloak is Stacking=1) but still multiplies
+/// encumbrance by the stack, so an over-sized stack reads as one cloak that
+/// weighs ten. A base item missing from `baseitems` keeps its stack.
+fn clamp_stack_size(item: &mut IndexMap<String, GffValue<'static>>, game_data: &GameData) {
+    let Some(stack_size) = item.get("StackSize").and_then(gff_value_to_i32) else {
+        return;
+    };
+
+    let base_item_id = item.get("BaseItem").and_then(gff_value_to_i32).unwrap_or(0);
+    let Some(max_stack) = base_item_data(base_item_id, game_data).map(|d| d.max_stack.max(1))
+    else {
+        return;
+    };
+
+    let clamped = stack_size.clamp(1, max_stack);
+    if clamped == stack_size {
+        return;
+    }
+
+    tracing::debug!(
+        base_item_id,
+        stack_size,
+        max_stack,
+        "Clamped StackSize to baseitems.Stacking"
+    );
+
+    let new_value = typed_stack_size(item.get("StackSize"), clamped);
+    item.insert("StackSize".to_string(), new_value);
+}
+
+fn base_item_data(base_item_id: i32, game_data: &GameData) -> Option<BaseItemData> {
+    let row = game_data.get_table("baseitems")?.get_by_id(base_item_id)?;
+
+    Some(BaseItemData {
+        name: game_data
+            .get_string(row_int(&row, "name", -1))
+            .unwrap_or_else(|| format!("Item {base_item_id}")),
+        category: get_item_category(&row),
+        max_stack: row_int(&row, "stacking", 1),
+        max_props: row_int(&row, "maxprops", 0),
+        prop_column: row_int(&row, "propcolumn", -1),
+        is_container: row_int(&row, "container", 0) == 1,
+    })
 }
 
 /// `baseitems.EquipableSlots` bitmask, 0 when the row is missing or blank.
@@ -2563,7 +2681,12 @@ mod tests {
         let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
 
         character
-            .transform_inventory_item(0, stackable_item("new_item", 1, &[(52, 21)]), &game_data)
+            .transform_inventory_item(
+                0,
+                None,
+                stackable_item("new_item", 1, &[(52, 21)]),
+                &game_data,
+            )
             .unwrap();
 
         assert_eq!(character.inventory_count(), 2);
@@ -2580,7 +2703,7 @@ mod tests {
         let game_data = game_data_with_stackable_baseitem();
         let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
         let result =
-            character.transform_inventory_item(99, stackable_item("x", 1, &[]), &game_data);
+            character.transform_inventory_item(99, None, stackable_item("x", 1, &[]), &game_data);
         assert!(result.is_err());
     }
 
@@ -2688,7 +2811,7 @@ mod tests {
         let mut character = Character::from_gff(create_test_fields()).expect("character from gff");
 
         character
-            .transform_inventory_item(0, stackable_item("bundle", 50, &[]), &game_data)
+            .transform_inventory_item(0, None, stackable_item("bundle", 50, &[]), &game_data)
             .unwrap();
 
         // game_data_with_stackable_baseitem's only row (BaseItem 0) caps at 10.
@@ -2732,7 +2855,7 @@ mod tests {
         item.insert("BaseItem".to_string(), GffValue::Int(9999));
 
         character
-            .transform_inventory_item(0, item, &game_data)
+            .transform_inventory_item(0, None, item, &game_data)
             .unwrap();
 
         assert_eq!(stack_size_at(&character, 0), 50);
@@ -2746,7 +2869,7 @@ mod tests {
         item.insert("StackSize".to_string(), GffValue::Dword(50));
 
         character
-            .transform_inventory_item(0, item, &game_data)
+            .transform_inventory_item(0, None, item, &game_data)
             .unwrap();
 
         let stored = character.get_inventory_item_at(0).unwrap();
@@ -2768,7 +2891,7 @@ mod tests {
         ] {
             let updates: HashMap<String, JsonValue> = serde_json::from_value(bad).unwrap();
             let err = character
-                .update_inventory_item(0, &updates, &game_data)
+                .update_inventory_item(0, None, &updates, &game_data)
                 .unwrap_err();
             assert!(matches!(err, CharacterError::ValidationFailed { .. }));
         }
@@ -2867,7 +2990,7 @@ mod tests {
                 .into_iter()
                 .collect();
         character
-            .update_inventory_item(0, &updates, &game_data)
+            .update_inventory_item(0, None, &updates, &game_data)
             .unwrap();
 
         let stored = character.get_inventory_item_at(0).unwrap();
@@ -2892,7 +3015,7 @@ mod tests {
                 .into_iter()
                 .collect();
         character
-            .update_inventory_item(0, &updates, &game_data)
+            .update_inventory_item(0, None, &updates, &game_data)
             .unwrap();
 
         let stored = character.get_inventory_item_at(0).unwrap();

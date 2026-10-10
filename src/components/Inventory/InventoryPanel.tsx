@@ -9,12 +9,12 @@ import { LoadingState } from '../shared';
 import { ItemDetails, makeEquippedItem, makeInventoryItem, type AnyItem } from './ItemDetails';
 import { AddItemDialog } from './AddItemDialog';
 import { EditItemDialog } from './EditItemDialog';
-import { BackpackTable } from './BackpackTable';
+import { BackpackTable, backpackItemKey } from './BackpackTable';
 import { useSubsystem } from '@/contexts/CharacterContext';
-import { useInventoryManagement } from '@/hooks/useInventoryManagement';
+import { useInventoryManagement, type ItemLocation } from '@/hooks/useInventoryManagement';
 import { inventoryAPI } from '@/services/inventoryApi';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import type { FullEquippedItem, FullInventoryItem, ItemAppearance } from '@/lib/bindings';
+import type { FullEquippedItem, FullInventoryItem, FullInventorySummary, ItemAppearance } from '@/lib/bindings';
 import { resolveEquipSlot } from '@/utils/inventoryUtils';
 import { stripNwn2Tags } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
@@ -36,6 +36,21 @@ function getEquippedItemForDisplaySlot(
   const apiSlot = DISPLAY_SLOT_TO_API[displaySlot];
   if (!apiSlot) return undefined;
   return equippedItems.find(e => e.slot.toLowerCase() === apiSlot.toLowerCase());
+}
+
+function findBackpackItem(
+  data: FullInventorySummary,
+  index: number,
+  containerIndex: number | null,
+): FullInventoryItem | undefined {
+  if (containerIndex === null) return data.inventory?.find(i => i.index === index);
+  return data.inventory?.find(i => i.index === containerIndex)?.contents.find(i => i.index === index);
+}
+
+function itemLocation(item: AnyItem): ItemLocation {
+  return item._kind === 'equipped'
+    ? { slot: item.slot }
+    : { itemIndex: item.index, containerIndex: item.container_index };
 }
 
 interface EquipSlotProps {
@@ -93,19 +108,18 @@ export function InventoryPanel() {
   const { character, characterId, itemEditorMetadata, activeSource } = useCharacterContext();
   const isCompanion = activeSource.kind === 'companion';
   const inventorySubsystem = useSubsystem('inventory');
-  const { equipItem, unequipItem, deleteItem } = useInventoryManagement();
+  const { equipItem, unequipItem, deleteItem, destroyEquippedItem } = useInventoryManagement();
 
   const [selectedItem, setSelectedItem] = useState<AnyItem | null>(null);
   const [goldInput, setGoldInput] = useState('0');
   const [gold, setGold] = useState(0);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [transformOpen, setTransformOpen] = useState(false);
-  const [transformTarget, setTransformTarget] = useState<{ itemIndex?: number; slot?: string } | null>(null);
+  const [transformTarget, setTransformTarget] = useState<ItemLocation | null>(null);
   const [pendingEditIndex, setPendingEditIndex] = useState<number | null>(null);
   const [editItemOpen, setEditItemOpen] = useState(false);
   const [editItemData, setEditItemData] = useState<Record<string, unknown> | null>(null);
-  const [editItemIndex, setEditItemIndex] = useState<number | null>(null);
-  const [editItemSlot, setEditItemSlot] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<ItemLocation | null>(null);
   const [editAppearance, setEditAppearance] = useState<ItemAppearance | null>(null);
   const [editBaseLimits, setEditBaseLimits] = useState<{ maxStack: number; propColumn: number }>({ maxStack: 1, propColumn: -1 });
   const [editResolvedName, setEditResolvedName] = useState<string | undefined>(undefined);
@@ -136,8 +150,7 @@ export function InventoryPanel() {
       setPendingEditIndex(null);
       setSelectedItem(makeInventoryItem(newItem));
       setEditItemData(newItem.item);
-      setEditItemIndex(newItem.index);
-      setEditItemSlot(null);
+      setEditTarget({ itemIndex: newItem.index });
       setEditAppearance(newItem.appearance);
       setEditBaseLimits({ maxStack: newItem.max_stack, propColumn: newItem.prop_column });
       setEditResolvedName(newItem.name || undefined);
@@ -151,7 +164,7 @@ export function InventoryPanel() {
   useEffect(() => {
     if (!inventoryData || !selectedItem) return;
     if (selectedItem._kind === 'inventory') {
-      const fresh = inventoryData.inventory?.find(i => i.index === (selectedItem as FullInventoryItem).index);
+      const fresh = findBackpackItem(inventoryData, selectedItem.index, selectedItem.container_index);
       if (fresh) setSelectedItem(makeInventoryItem(fresh));
       else setSelectedItem(null);
     } else {
@@ -202,9 +215,18 @@ export function InventoryPanel() {
     }
   };
 
-  const handleDelete = async (index: number) => {
+  const handleDelete = async (index: number, containerIndex: number | null) => {
     try {
-      await deleteItem(index);
+      await deleteItem(index, containerIndex);
+      setSelectedItem(null);
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const handleDestroy = async (slot: string) => {
+    try {
+      await destroyEquippedItem(slot);
       setSelectedItem(null);
     } catch (err) {
       handleError(err);
@@ -319,11 +341,8 @@ export function InventoryPanel() {
           <div style={{ padding: '0 16px 12px', flex: 1, overflow: 'auto', minHeight: 0 }}>
             <BackpackTable
               items={backpackItems}
-              selectedIndex={selectedItem?._kind === 'inventory' ? (selectedItem as unknown as { index: number }).index : null}
-              onSelectItem={(index) => {
-                const item = backpackItems.find(i => i.index === index);
-                if (item) setSelectedItem(makeInventoryItem(item));
-              }}
+              selectedKey={selectedItem?._kind === 'inventory' ? backpackItemKey(selectedItem) : null}
+              onSelectItem={(item) => setSelectedItem(makeInventoryItem(item))}
             />
           </div>
 
@@ -372,21 +391,14 @@ export function InventoryPanel() {
             item={selectedItem}
             canEquip={
               selectedItem?._kind === 'inventory' &&
-              !!(selectedItem as FullInventoryItem).default_slot
+              selectedItem.container_index === null &&
+              !!selectedItem.default_slot
             }
             onEdit={() => {
               if (!selectedItem) return;
-              if (selectedItem._kind === 'equipped') {
-                setEditItemData(selectedItem.item_data);
-                setEditItemIndex(null);
-                setEditItemSlot(selectedItem.slot);
-                setEditAppearance(selectedItem.appearance);
-              } else {
-                setEditItemData((selectedItem as FullInventoryItem).item);
-                setEditItemIndex((selectedItem as FullInventoryItem).index);
-                setEditItemSlot(null);
-                setEditAppearance((selectedItem as FullInventoryItem).appearance);
-              }
+              setEditItemData(selectedItem._kind === 'equipped' ? selectedItem.item_data : selectedItem.item);
+              setEditTarget(itemLocation(selectedItem));
+              setEditAppearance(selectedItem.appearance);
               setEditBaseLimits({ maxStack: selectedItem.max_stack, propColumn: selectedItem.prop_column });
               setEditResolvedName(selectedItem.name || undefined);
               setEditResolvedDescription(selectedItem.description || undefined);
@@ -396,11 +408,10 @@ export function InventoryPanel() {
             onEquip={handleEquip}
             onUnequip={handleUnequip}
             onDelete={handleDelete}
+            onDestroy={handleDestroy}
             onTransform={() => {
               if (!selectedItem) return;
-              setTransformTarget(selectedItem._kind === 'equipped'
-                ? { slot: selectedItem.slot }
-                : { itemIndex: (selectedItem as FullInventoryItem).index });
+              setTransformTarget(itemLocation(selectedItem));
               setTransformOpen(true);
             }}
           />
@@ -417,8 +428,7 @@ export function InventoryPanel() {
         isOpen={editItemOpen}
         onClose={() => setEditItemOpen(false)}
         itemData={editItemData}
-        itemIndex={editItemIndex}
-        slot={editItemSlot}
+        target={editTarget}
         resolvedName={editResolvedName}
         resolvedDescription={editResolvedDescription}
         resolvedIcon={editResolvedIcon}

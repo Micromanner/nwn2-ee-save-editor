@@ -17,15 +17,6 @@ export const DISPLAY_SLOT_TO_API: Record<string, string> = {
   bolts: 'bolts',
 };
 
-const API_TO_DISPLAY_SLOT: Record<string, string> = Object.fromEntries(
-  Object.entries(DISPLAY_SLOT_TO_API).map(([display, api]) => [api, display]),
-);
-
-export function slotLabel(t: Translate, apiSlot: string): string {
-  const key = API_TO_DISPLAY_SLOT[apiSlot.toLowerCase()];
-  return key ? t(`inventory.slots.${key}`) : apiSlot;
-}
-
 const CATEGORY_KEYS: Record<string, string> = {
   'Armor & Clothing': 'armorAndClothing',
   'Weapons': 'weapons',

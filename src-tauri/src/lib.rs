@@ -154,6 +154,7 @@ pub fn run() {
             crate::commands::inventory::unequip_item,
             crate::commands::inventory::add_to_inventory,
             crate::commands::inventory::remove_from_inventory,
+            crate::commands::inventory::destroy_equipped_item,
             crate::commands::inventory::get_available_templates,
             crate::commands::inventory::add_item_from_template,
             crate::commands::inventory::get_editor_metadata,

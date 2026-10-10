@@ -8,7 +8,7 @@ import { T } from '../theme';
 import { useTranslations } from '@/hooks/useTranslations';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useCharacterContext } from '@/contexts/CharacterContext';
-import { useInventoryManagement } from '@/hooks/useInventoryManagement';
+import { useInventoryManagement, type ItemLocation } from '@/hooks/useInventoryManagement';
 import { inventoryAPI, BaseItem, ItemTemplate, ITEM_CATEGORIES, CATEGORIES_WITH_SUBS, SUB_CATEGORY_LABELS, isVanillaSource } from '@/services/inventoryApi';
 import { display } from '@/utils/dataHelpers';
 import { categoryLabel as resolveCategoryLabel, sourceLabel } from './inventoryLabels';
@@ -24,7 +24,7 @@ interface AddItemDialogProps {
   onClose: () => void;
   onItemAdded?: (itemIndex: number) => void;
   /** When set, the dialog replaces this item with the chosen template instead of adding. */
-  transformTarget?: { itemIndex?: number; slot?: string } | null;
+  transformTarget?: ItemLocation | null;
   onItemTransformed?: () => void;
 }
 

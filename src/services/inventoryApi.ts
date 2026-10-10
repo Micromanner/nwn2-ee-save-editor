@@ -14,6 +14,7 @@ export interface UnequipItemRequest {
 
 export interface UpdateItemRequest {
   item_index?: number;
+  container_index?: number;
   slot?: string;
   item_data: Record<string, unknown>;
   appearance?: import('@/lib/bindings').ItemAppearance | null;
@@ -132,12 +133,16 @@ export class InventoryAPI {
     await invoke('unequip_item', { slot: request.slot });
   }
 
+  async destroyEquippedItem(slot: string): Promise<void> {
+    await invoke('destroy_equipped_item', { slot });
+  }
+
   async updateGold(gold: number): Promise<void> {
       await invoke('set_gold', { amount: gold });
   }
 
-  async deleteItem(itemIndex: number): Promise<void> {
-      await invoke('remove_from_inventory', { index: itemIndex });
+  async deleteItem(itemIndex: number, containerIndex: number | null): Promise<void> {
+      await invoke('remove_from_inventory', { index: itemIndex, containerIndex });
   }
 
   async getEditorMetadata(): Promise<ItemEditorMetadataResponse> {

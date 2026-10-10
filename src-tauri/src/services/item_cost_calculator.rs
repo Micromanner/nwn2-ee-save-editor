@@ -5,7 +5,7 @@ use crate::character::armor_rules_row;
 use crate::character::gff_helpers::gff_value_to_i32;
 use crate::loaders::GameData;
 use crate::parsers::gff::GffValue;
-use crate::utils::parsing::row_str;
+use crate::utils::parsing::{Row, row_str};
 
 /// NWN2 cost tables use multipliers that represent thousands of gold.
 const GOLD_MULTIPLIER: f64 = 1000.0;
@@ -218,28 +218,29 @@ fn lookup_param_table_value(table_id: u32, param_value: u32, game_data: &GameDat
 /// empty (`IPRP_BASE1`, table 0), missing, or has no row for the value is
 /// flat and multiplies by 1; only a real row can scale it (including to 0).
 fn lookup_cost_table_value(table_id: u32, cost_value: u32, game_data: &GameData) -> f64 {
-    let Some(iprp_costtable) = game_data.get_table("iprp_costtable") else {
-        warn!("iprp_costtable.2da not loaded");
-        return 1.0;
-    };
-
-    let Some(table_name) = iprp_costtable
-        .get_by_id(table_id as i32)
-        .and_then(|row| row_str(&row, "name"))
-        .filter(|name| name != "****")
-        .map(|name| name.to_lowercase())
-    else {
-        return 1.0;
-    };
-
-    let Some(cost_table) = game_data.get_table(&table_name) else {
-        trace!(table_name, "Cost table not loaded");
-        return 1.0;
-    };
-
-    cost_table
-        .get_by_id(cost_value as i32)
+    cost_table_row(table_id as i32, cost_value as i32, game_data)
         .and_then(|row| row_str(&row, "cost"))
         .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(1.0)
+}
+
+/// Row `cost_value` of the table `iprp_costtable.2da` row `table_id` names.
+pub(crate) fn cost_table_row(table_id: i32, cost_value: i32, game_data: &GameData) -> Option<Row> {
+    let Some(iprp_costtable) = game_data.get_table("iprp_costtable") else {
+        warn!("iprp_costtable.2da not loaded");
+        return None;
+    };
+
+    let table_name = iprp_costtable
+        .get_by_id(table_id)
+        .and_then(|row| row_str(&row, "name"))
+        .filter(|name| name != "****")
+        .map(|name| name.to_lowercase())?;
+
+    let Some(cost_table) = game_data.get_table(&table_name) else {
+        trace!(table_name, "Cost table not loaded");
+        return None;
+    };
+
+    cost_table.get_by_id(cost_value)
 }

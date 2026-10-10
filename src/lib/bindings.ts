@@ -645,6 +645,9 @@ export interface DecodedPropertyInfo {
 
 export interface FullInventoryItem {
   index: number;
+  container_index: number | null;
+  is_container: boolean;
+  contents: FullInventoryItem[];
   item: Record<string, unknown>;
   base_item: number;
   base_item_name: string;
@@ -721,6 +724,7 @@ export interface AddItemResult {
 
 export interface TransformItemRequest {
   item_index: number | null;
+  container_index: number | null;
   slot: string | null;
   target_resref: string;
 }

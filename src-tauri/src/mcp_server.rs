@@ -538,6 +538,13 @@ fn get_inventory(state: McpState, _params: Value) -> anyhow::Result<Value> {
                 for item in inv {
                     if let Some(item_obj) = item.as_object_mut() {
                         item_obj.remove("item");
+                        if let Some(contents) =
+                            item_obj.get_mut("contents").and_then(|v| v.as_array_mut())
+                        {
+                            for child in contents.iter_mut().filter_map(|c| c.as_object_mut()) {
+                                child.remove("item");
+                            }
+                        }
                     }
                 }
             }

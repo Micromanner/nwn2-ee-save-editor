@@ -81,7 +81,7 @@ async fn prepare_spell_test_saves() {
                 }]),
             )]);
             character
-                .update_inventory_item(index, &update, game_data)
+                .update_inventory_item(index, None, &update, game_data)
                 .expect("set properties");
             let equipped = character
                 .equip_item(index, EquipmentSlot::Neck, game_data)

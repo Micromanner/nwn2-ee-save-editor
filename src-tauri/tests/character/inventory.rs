@@ -1,9 +1,11 @@
 use crate::common::{create_test_context, fixtures_path, load_test_gff};
+use app_lib::character::gff_helpers::{extract_list_from_map, gff_value_to_i32};
 use app_lib::character::{Character, EncumbranceStatus, EquipmentSlot};
 use app_lib::loaders::GameData;
-use app_lib::parsers::gff::GffParser;
+use app_lib::parsers::gff::{GffParser, GffValue, GffWriter};
 use app_lib::services::item_property_decoder::ItemPropertyDecoder;
 use app_lib::services::savegame_handler::SaveGameHandler;
+use indexmap::IndexMap;
 
 // Use a high level character to ensure they have equipment and gold
 const TEST_CHAR_FILE: &str = "ryathstrongarm/ryathstrongarm4.bic";
@@ -389,7 +391,7 @@ async fn test_stack_size_clamped_to_base_item_stacking() {
     };
 
     character
-        .update_inventory_item(cloak_index, &updates(10), game_data)
+        .update_inventory_item(cloak_index, None, &updates(10), game_data)
         .expect("update cloak");
 
     let items = character.get_full_inventory_summary(game_data, &ctx.decoder, None);
@@ -408,7 +410,7 @@ async fn test_stack_size_clamped_to_base_item_stacking() {
         .expect("arrow index");
 
     character
-        .update_inventory_item(arrow_index, &updates(99), game_data)
+        .update_inventory_item(arrow_index, None, &updates(99), game_data)
         .expect("update arrows");
 
     let items = character.get_full_inventory_summary(game_data, &ctx.decoder, None);
@@ -419,4 +421,208 @@ async fn test_stack_size_clamped_to_base_item_stacking() {
         .expect("arrows still present");
     assert_eq!(arrows.max_stack, 99);
     assert_eq!(arrows.stack_size, 99, "arrows stack up to 99");
+}
+
+/// IWD mid-playthrough PC: backpack index 104 is a bag of holding (BaseItem 66)
+/// holding 8 items, index 7 a bag carrying "Enhanced Container: Reduced Weight".
+type ItemStruct = IndexMap<String, GffValue<'static>>;
+
+const BAG_SAVE: &str = "saves/mid-playthrough-saves/IWD/player.bic";
+const BAG_INDEX: usize = 104;
+const REDUCED_WEIGHT_BAG_INDEX: usize = 7;
+
+fn load_bag_character() -> Character {
+    let data = std::fs::read(fixtures_path().join(BAG_SAVE)).expect("read IWD player.bic");
+    let parser = GffParser::from_bytes(data).expect("parse IWD player.bic");
+    let fields = parser.read_struct_fields(0).expect("read root struct");
+    Character::from_gff(fields).expect("character from gff")
+}
+
+fn bag_contents(character: &Character, bag: usize) -> Vec<ItemStruct> {
+    let bag = character.get_inventory_item_at(bag).expect("bag");
+    extract_list_from_map(&bag, "ItemList").expect("bag has an ItemList")
+}
+
+#[tokio::test]
+async fn container_contents_are_listed_under_the_bag() {
+    let ctx = create_test_context().await;
+    let character = load_bag_character();
+
+    let summary = character.get_full_inventory_summary(&ctx.game_data, &ctx.decoder, None);
+    let bag = &summary.inventory[BAG_INDEX];
+
+    assert_eq!(bag.base_item, 66);
+    assert_eq!(bag.contents.len(), 8);
+    assert!(
+        !bag.item.0.contains_key("ItemList"),
+        "raw bag data must not carry the contents back on edit"
+    );
+    assert!(bag.is_container);
+    let empty_bag = &summary.inventory[REDUCED_WEIGHT_BAG_INDEX];
+    assert!(empty_bag.is_container && empty_bag.contents.is_empty());
+    assert!(!bag.contents[0].is_container);
+    for (i, child) in bag.contents.iter().enumerate() {
+        assert_eq!(child.index, i);
+        assert_eq!(child.container_index, Some(BAG_INDEX));
+        assert!(child.contents.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn container_child_edit_survives_gff_round_trip() {
+    let ctx = create_test_context().await;
+    let game_data = &ctx.game_data;
+    let mut character = load_bag_character();
+    let backpack_len = character.inventory_count();
+    let before = bag_contents(&character, BAG_INDEX);
+
+    let summary = character.get_full_inventory_summary(game_data, &ctx.decoder, None);
+    let bag_json = summary.inventory[BAG_INDEX].item.0.clone();
+    character
+        .update_inventory_item(BAG_INDEX, None, &bag_json, game_data)
+        .expect("edit bag with its own data");
+
+    let child = &summary.inventory[BAG_INDEX].contents[1];
+    let new_stack = if child.stack_size > 1 {
+        1
+    } else {
+        child.max_stack
+    };
+    assert_ne!(
+        new_stack, child.stack_size,
+        "child must be stackable for this test"
+    );
+    let updates = std::collections::HashMap::from([(
+        "StackSize".to_string(),
+        serde_json::Value::from(new_stack),
+    )]);
+    character
+        .update_inventory_item(1, Some(BAG_INDEX), &updates, game_data)
+        .expect("edit bag child");
+
+    let bytes = GffWriter::new("BIC ", "V3.2")
+        .write(character.into_gff())
+        .expect("write bic");
+    let reloaded = Character::from_gff(
+        GffParser::from_bytes(bytes)
+            .expect("reparse")
+            .read_struct_fields(0)
+            .expect("root"),
+    )
+    .expect("character");
+
+    let after = bag_contents(&reloaded, BAG_INDEX);
+    assert_eq!(reloaded.inventory_count(), backpack_len);
+    assert_eq!(after.len(), before.len());
+    let stack = |item: &ItemStruct| item.get("StackSize").and_then(gff_value_to_i32);
+    assert_eq!(stack(&after[1]), Some(new_stack));
+    for i in [0, 2, 7] {
+        assert_eq!(
+            format!("{:?}", after[i]),
+            format!("{:?}", before[i]),
+            "untouched child {i} changed"
+        );
+    }
+}
+
+#[tokio::test]
+async fn removing_a_container_child_keeps_the_bag_and_siblings() {
+    let mut character = load_bag_character();
+    let backpack_len = character.inventory_count();
+    let before = bag_contents(&character, BAG_INDEX);
+
+    character
+        .remove_item(0, Some(BAG_INDEX))
+        .expect("remove child");
+
+    let after = bag_contents(&character, BAG_INDEX);
+    assert_eq!(character.inventory_count(), backpack_len);
+    assert_eq!(format!("{after:?}"), format!("{:?}", &before[1..]));
+    assert!(
+        character.remove_item(0, Some(0)).is_err(),
+        "index 0 is not a container"
+    );
+}
+
+#[tokio::test]
+async fn container_contents_count_toward_encumbrance_with_reduction() {
+    let ctx = create_test_context().await;
+    let game_data = &ctx.game_data;
+    let mut character = load_bag_character();
+
+    let total = |c: &Character| {
+        c.get_full_inventory_summary(game_data, &ctx.decoder, None)
+            .encumbrance
+            .total_weight
+    };
+    let summary = character.get_full_inventory_summary(game_data, &ctx.decoder, None);
+    let contents_weight: f32 = summary.inventory[BAG_INDEX]
+        .contents
+        .iter()
+        .map(|c| c.weight * c.stack_size as f32)
+        .sum();
+    assert!(contents_weight > 0.0);
+    let full = total(&character);
+
+    // Give the bag the -100% row (iprp_redcost 5) of the reduced-weight property
+    // another bag in the same save carries.
+    let mut property = match character
+        .get_inventory_item_at(REDUCED_WEIGHT_BAG_INDEX)
+        .and_then(|bag| bag.get("PropertiesList").cloned())
+    {
+        Some(GffValue::ListOwned(props)) => props[0].clone(),
+        other => panic!("reference bag has no property: {other:?}"),
+    };
+    property.insert("CostValue".to_string(), GffValue::Word(5));
+    let mut backpack = character.get_list_owned("ItemList").expect("backpack");
+    backpack[BAG_INDEX].insert(
+        "PropertiesList".to_string(),
+        GffValue::ListOwned(vec![property]),
+    );
+    character.set_list("ItemList", backpack);
+
+    let reduced = total(&character);
+    assert!(
+        (full - reduced - contents_weight).abs() < 0.01,
+        "full {full}, reduced {reduced}, contents {contents_weight}"
+    );
+}
+
+#[tokio::test]
+async fn destroying_an_equipped_item_empties_the_slot_without_touching_the_backpack() {
+    let data = load_test_gff(TEST_CHAR_FILE);
+    let parser = GffParser::from_bytes(data).expect("Failed to parse GFF");
+    let fields = parser.read_struct_fields(0).expect("root struct");
+    let mut character = Character::from_gff(fields).expect("character from gff");
+
+    let slot = [
+        EquipmentSlot::Chest,
+        EquipmentSlot::RightHand,
+        EquipmentSlot::Head,
+    ]
+    .into_iter()
+    .find(|slot| character.get_equipped_item_by_slot(*slot).is_some())
+    .expect("an equipped slot");
+    let backpack_len = character.inventory_count();
+    let equipped_count = character.equipped_count();
+
+    character.destroy_equipped_item(slot).expect("destroy");
+
+    assert!(character.get_equipped_item_by_slot(slot).is_none());
+    assert_eq!(character.equipped_count(), equipped_count - 1);
+    assert_eq!(character.inventory_count(), backpack_len);
+}
+
+#[tokio::test]
+async fn transforming_a_filled_bag_is_rejected() {
+    let ctx = create_test_context().await;
+    let mut character = load_bag_character();
+    let replacement = character.get_inventory_item_at(0).expect("item");
+
+    assert!(
+        character
+            .transform_inventory_item(BAG_INDEX, None, replacement, &ctx.game_data)
+            .is_err()
+    );
+    assert_eq!(bag_contents(&character, BAG_INDEX).len(), 8);
 }

@@ -9,7 +9,6 @@ import type { FullEquippedItem, FullInventoryItem } from '@/lib/bindings';
 import { display } from '@/utils/dataHelpers';
 import { nwn2ToHtml, renderNwn2Markup } from '@/utils/nwn2Markup';
 import { useIcon } from '@/hooks/useIcon';
-import { slotLabel } from './inventoryLabels';
 
 export type AnyItem =
   | (FullEquippedItem & { _kind: 'equipped' })
@@ -33,11 +32,12 @@ interface ItemDetailsProps {
   onEdit?: () => void;
   onEquip?: (index: number, slot: string) => void;
   onUnequip?: (slot: string) => void;
-  onDelete?: (index: number) => void;
+  onDelete?: (index: number, containerIndex: number | null) => void;
+  onDestroy?: (slot: string) => void;
   onTransform?: () => void;
 }
 
-export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDelete, onTransform }: ItemDetailsProps) {
+export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDelete, onDestroy, onTransform }: ItemDetailsProps) {
   const t = useTranslations();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [pendingPlotAction, setPendingPlotAction] = useState<'edit' | 'transform' | null>(null);
@@ -58,6 +58,8 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
   }
 
   const equipped = isEquippedItem(item);
+  // A transform swaps in a fresh template, which would drop everything in the bag.
+  const canTransform = equipped || item.contents.length === 0;
   const name = display(item.name);
   const description = item.description;
   const weight = item.weight;
@@ -82,7 +84,7 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
                 onClick={() => onUnequip?.(item.slot)}
               />
             </ButtonGroup>
-            <Button minimal icon="trash" small intent="danger" text={t('inventory.destroy')} />
+            <Button minimal icon="trash" small intent="danger" text={t('inventory.delete')} onClick={() => setDeleteConfirmOpen(true)} />
           </>
         )}
         {!equipped && (
@@ -91,9 +93,11 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
               <Button icon={<GameIcon icon={GiQuillInk} size={14} />} small text={t('common.edit')} style={{ color: T.textMuted }}
                 onClick={() => isPlot ? setPendingPlotAction('edit') : onEdit?.()}
               />
-              <Button icon="exchange" small text={t('inventory.transformItem')} style={{ color: T.textMuted }}
-                onClick={() => isPlot ? setPendingPlotAction('transform') : onTransform?.()}
-              />
+              {canTransform && (
+                <Button icon="exchange" small text={t('inventory.transformItem')} style={{ color: T.textMuted }}
+                  onClick={() => isPlot ? setPendingPlotAction('transform') : onTransform?.()}
+                />
+              )}
               {canEquip && (
                 <Button
                   icon={<GameIcon icon={GiArmorUpgrade} size={14} />}
@@ -131,9 +135,6 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
           )}
           <div style={{ minWidth: 0 }}>
             <H4 style={{ margin: 0, color: T.text, overflowWrap: 'anywhere' }}>{renderNwn2Markup(name)}</H4>
-            <span style={{ color: T.textMuted }}>
-              {equipped ? `${slotLabel(t, item.slot)} · ${baseItemName}` : baseItemName}
-            </span>
           </div>
         </div>
       </div>
@@ -222,7 +223,11 @@ export function ItemDetails({ item, canEquip, onEdit, onEquip, onUnequip, onDele
       <Alert
         isOpen={deleteConfirmOpen}
         onClose={() => setDeleteConfirmOpen(false)}
-        onConfirm={() => { setDeleteConfirmOpen(false); onDelete?.((item as FullInventoryItem).index); }}
+        onConfirm={() => {
+          setDeleteConfirmOpen(false);
+          if (equipped) onDestroy?.(item.slot);
+          else onDelete?.(item.index, item.container_index);
+        }}
         intent="danger"
         icon="trash"
         confirmButtonText={t('inventory.delete')}

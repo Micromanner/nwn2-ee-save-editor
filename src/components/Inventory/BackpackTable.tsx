@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { HTMLTable, Icon, NonIdealState } from '@blueprintjs/core';
 import { GiSwapBag } from 'react-icons/gi';
 import { GameIcon } from '../shared/GameIcon';
@@ -12,8 +12,13 @@ import { categoryLabel } from './inventoryLabels';
 
 interface BackpackTableProps {
   items: FullInventoryItem[];
-  selectedIndex: number | null;
-  onSelectItem: (index: number) => void;
+  selectedKey: string | null;
+  onSelectItem: (item: FullInventoryItem) => void;
+}
+
+/** Identifies a backpack item, or an item inside a bag, across reloads. */
+export function backpackItemKey(item: Pick<FullInventoryItem, 'index' | 'container_index'>): string {
+  return `${item.container_index ?? ''}:${item.index}`;
 }
 
 type SortKey = 'name' | 'category' | 'stack_size' | 'weight' | 'value';
@@ -30,15 +35,26 @@ function compareItems(a: FullInventoryItem, b: FullInventoryItem, key: SortKey):
   return (a[key] ?? 0) - (b[key] ?? 0);
 }
 
-export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTableProps) {
+export function BackpackTable({ items, selectedKey, onSelectItem }: BackpackTableProps) {
   const t = useTranslations();
   const [sort, setSort] = useState<SortState | null>(null);
+  const [openBags, setOpenBags] = useState<Set<number>>(new Set());
 
-  const sortedItems = useMemo(() => {
-    if (!sort) return items;
+  const sortItems = useCallback((list: FullInventoryItem[]) => {
+    if (!sort) return list;
     const sign = sort.dir === 'asc' ? 1 : -1;
-    return [...items].sort((a, b) => sign * compareItems(a, b, sort.key) || a.index - b.index);
-  }, [items, sort]);
+    return [...list].sort((a, b) => sign * compareItems(a, b, sort.key) || a.index - b.index);
+  }, [sort]);
+
+  const sortedItems = useMemo(() => sortItems(items), [items, sortItems]);
+
+  const toggleBag = (index: number) => {
+    setOpenBags(prev => {
+      const next = new Set(prev);
+      if (!next.delete(index)) next.add(index);
+      return next;
+    });
+  };
 
   const toggleSort = (key: SortKey) => {
     setSort(prev => {
@@ -56,6 +72,46 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
       )}
     </th>
   );
+
+  const renderRow = (item: FullInventoryItem, isOpen: boolean) => {
+    const key = backpackItemKey(item);
+    const selected = selectedKey === key;
+    const inBag = item.container_index !== null;
+    const isBag = item.is_container;
+    return (
+      <tr
+        key={key}
+        onClick={() => onSelectItem(item)}
+        className={selected ? 't-bold' : undefined}
+        style={selected ? { background: 'rgba(160, 82, 45, 0.1)' } : undefined}
+      >
+        <td className={!selected && item.is_custom ? 't-semibold' : undefined} style={{
+          color: item.is_custom ? T.accent : T.text,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          paddingLeft: inBag ? 28 : undefined,
+        }}>
+          {isBag && (
+            <Icon
+              icon={isOpen ? 'caret-down' : 'caret-right'}
+              size={14}
+              style={{ marginRight: 4, verticalAlign: 'middle', cursor: 'pointer', color: T.textMuted }}
+              onClick={(e) => { e.stopPropagation(); toggleBag(item.index); }}
+            />
+          )}
+          {renderNwn2Markup(display(item.name))}
+          {isBag && <span style={{ color: T.textMuted }}> ({item.contents.length})</span>}
+        </td>
+        <td style={{ color: T.textMuted }}>{display(categoryLabel(t, item.category))}</td>
+        <td style={{ textAlign: 'center' }}>{item.stack_size > 1 ? item.stack_size : ''}</td>
+        <td style={{ textAlign: 'right', color: T.textMuted }}>
+          {item.weight > 0 ? t('inventory.weightValue', { value: item.weight.toFixed(1) }) : '-'}
+        </td>
+        <td style={{ textAlign: 'right', color: T.textMuted }}>
+          {item.value > 0 ? t('inventory.goldValue', { value: fmtNum(item.value) }) : '-'}
+        </td>
+      </tr>
+    );
+  };
 
   if (items.length === 0) {
     return (
@@ -86,31 +142,22 @@ export function BackpackTable({ items, selectedIndex, onSelectItem }: BackpackTa
         </tr>
       </thead>
       <tbody>
-        {sortedItems.map((item) => {
-          const selected = selectedIndex === item.index;
-          return (
-            <tr
-              key={item.index}
-              onClick={() => onSelectItem(item.index)}
-              className={selected ? 't-bold' : undefined}
-              style={selected ? { background: 'rgba(160, 82, 45, 0.1)' } : undefined}
-            >
-              <td className={!selected && item.is_custom ? 't-semibold' : undefined} style={{
-                color: item.is_custom ? T.accent : T.text,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {renderNwn2Markup(display(item.name))}
-              </td>
-              <td style={{ color: T.textMuted }}>{display(categoryLabel(t, item.category))}</td>
-              <td style={{ textAlign: 'center' }}>{item.stack_size > 1 ? item.stack_size : ''}</td>
-            <td style={{ textAlign: 'right', color: T.textMuted }}>
-              {item.weight > 0 ? t('inventory.weightValue', { value: item.weight.toFixed(1) }) : '-'}
-            </td>
-            <td style={{ textAlign: 'right', color: T.textMuted }}>
-              {item.value > 0 ? t('inventory.goldValue', { value: fmtNum(item.value) }) : '-'}
-            </td>
-          </tr>
-          );
+        {sortedItems.flatMap((item) => {
+          const isOpen = openBags.has(item.index);
+          const rows = [renderRow(item, isOpen)];
+          if (isOpen) {
+            rows.push(...sortItems(item.contents).map(child => renderRow(child, false)));
+            if (item.contents.length === 0) {
+              rows.push(
+                <tr key={`${item.index}:empty`}>
+                  <td colSpan={5} style={{ paddingLeft: 28, color: T.textMuted, fontStyle: 'italic' }}>
+                    {t('inventory.bagEmpty')}
+                  </td>
+                </tr>
+              );
+            }
+          }
+          return rows;
         })}
       </tbody>
     </HTMLTable>

@@ -139,10 +139,22 @@ pub async fn add_to_inventory(
 pub async fn remove_from_inventory(
     state: State<'_, AppState>,
     index: usize,
+    container_index: Option<usize>,
 ) -> CommandResult<RemoveItemResult> {
     let mut session = state.session.write();
     session.record_edit(format!("Remove item from slot {index}"), |character| {
-        Ok(character.remove_item(index)?)
+        Ok(character.remove_item(index, container_index)?)
+    })
+}
+
+#[tauri::command]
+pub async fn destroy_equipped_item(
+    state: State<'_, AppState>,
+    slot: EquipmentSlot,
+) -> CommandResult<()> {
+    let mut session = state.session.write();
+    session.record_edit(format!("Destroy {slot:?}"), |character| {
+        Ok(character.destroy_equipped_item(slot)?)
     })
 }
 
@@ -520,6 +532,9 @@ fn parse_equipment_slot(s: &str) -> Option<EquipmentSlot> {
 #[derive(Debug, Deserialize)]
 pub struct UpdateItemRequest {
     pub item_index: Option<usize>,
+    /// Backpack index of the container holding the item at `item_index`.
+    #[serde(default)]
+    pub container_index: Option<usize>,
     pub slot: Option<String>,
     pub item_data: HashMap<String, JsonValue>,
     /// Optional typed appearance patch. When present, the backend writes Variation,
@@ -554,9 +569,11 @@ pub async fn update_item(
                 character.apply_equipped_item_appearance(slot, appearance, &game_data)?;
             }
         } else if let Some(index) = request.item_index {
-            character.update_inventory_item(index, &request.item_data, &game_data)?;
+            let container = request.container_index;
+            character.update_inventory_item(index, container, &request.item_data, &game_data)?;
             if let Some(appearance) = &request.appearance {
-                character.apply_inventory_item_appearance(index, appearance, &game_data)?;
+                character
+                    .apply_inventory_item_appearance(index, container, appearance, &game_data)?;
             }
         } else {
             return Err(CommandError::InvalidValue {
@@ -572,6 +589,9 @@ pub async fn update_item(
 #[derive(Debug, Deserialize)]
 pub struct TransformItemRequest {
     pub item_index: Option<usize>,
+    /// Backpack index of the container holding the item at `item_index`.
+    #[serde(default)]
+    pub container_index: Option<usize>,
     pub slot: Option<String>,
     pub target_resref: String,
 }
@@ -595,7 +615,12 @@ pub async fn transform_item(
                 })?;
             Ok(character.transform_equipped_item(slot, item_fields, &game_data)?)
         } else if let Some(index) = request.item_index {
-            Ok(character.transform_inventory_item(index, item_fields, &game_data)?)
+            Ok(character.transform_inventory_item(
+                index,
+                request.container_index,
+                item_fields,
+                &game_data,
+            )?)
         } else {
             Err(CommandError::InvalidValue {
                 field: "request".to_string(),

@@ -7,6 +7,13 @@ import { inventoryAPI, EquipItemRequest, UnequipItemRequest, UpdateItemRequest }
 // reads; without it, equipping a cloak rebuilds the mesh with a stale tint.
 const EQUIP_DEPENDENT_SUBSYSTEMS = ['abilityScores', 'combat', 'saves', 'skills', 'appearance'] as const;
 
+/** An equipped item by slot, or a backpack item by index (inside the bag at containerIndex). */
+export interface ItemLocation {
+  itemIndex?: number;
+  containerIndex?: number | null;
+  slot?: string;
+}
+
 export function useInventoryManagement() {
   const t = useTranslations();
   const { character, invalidateSubsystems } = useCharacterContext();
@@ -51,10 +58,17 @@ export function useInventoryManagement() {
     await refreshAfterMutation(refreshInventoryAndEquipStats);
   }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
-  const deleteItem = useCallback(async (itemIndex: number) => {
+  const destroyEquippedItem = useCallback(async (slot: string) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
-    await inventoryAPI.deleteItem(itemIndex);
+    await inventoryAPI.destroyEquippedItem(slot);
+    await refreshAfterMutation(refreshInventoryAndEquipStats);
+  }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
+
+  const deleteItem = useCallback(async (itemIndex: number, containerIndex: number | null) => {
+    if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
+
+    await inventoryAPI.deleteItem(itemIndex, containerIndex);
     await refreshAfterMutation(refreshInventory);
   }, [t, character?.id, refreshAfterMutation, refreshInventory]);
 
@@ -84,11 +98,12 @@ export function useInventoryManagement() {
     return response;
   }, [t, character?.id, refreshAfterMutation, refreshInventoryAndEquipStats]);
 
-  const transformItem = useCallback(async (target: { itemIndex?: number; slot?: string }, targetResref: string) => {
+  const transformItem = useCallback(async (target: ItemLocation, targetResref: string) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));
 
     await inventoryAPI.transformItem({
       item_index: target.itemIndex ?? null,
+      container_index: target.containerIndex ?? null,
       slot: target.slot ?? null,
       target_resref: targetResref,
     });
@@ -99,6 +114,7 @@ export function useInventoryManagement() {
     equipItem,
     unequipItem,
     deleteItem,
+    destroyEquippedItem,
     addItemByBaseType,
     updateItem,
     addItemFromTemplate,
