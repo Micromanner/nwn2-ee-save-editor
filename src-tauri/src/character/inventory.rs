@@ -415,13 +415,7 @@ impl super::Character {
                             )
                         })
                         .collect();
-                    let contents_weight: f32 = entry
-                        .contents
-                        .iter()
-                        .map(|child| child.weight * child.stack_size as f32)
-                        .sum();
-                    total_weight +=
-                        contents_weight * container_weight_factor(item_struct, game_data);
+                    total_weight += contents_weight(item_struct, &entry.contents, game_data);
                 }
                 entry
             })
@@ -1496,7 +1490,9 @@ fn armor_rules_ac(
 
 /// Weight of one unit in lbs. Armor and shields weigh `armorrulestats.WEIGHT`
 /// by `ArmorRulesType` (full plate 50 lb); their `baseitems.TenthLBS` is generic
-/// (every body armor 10 lb).
+/// (every body armor 10 lb). A Weight Reduction property multiplies it by its
+/// `iprp_weightcost.Value`; the engine reads that table by line position, where
+/// line 8 is "01%" (verified in-game: a 0.5 lb item with CostValue 8 weighs ~0).
 fn item_unit_weight(
     item_struct: &IndexMap<String, GffValue<'static>>,
     game_data: &GameData,
@@ -1515,43 +1511,65 @@ fn item_unit_weight(
             .get_by_id(base_item_id)
             .and_then(|row| row_str(&row, "tenthlbs"))
     });
-    tenth_lbs
+    let base = tenth_lbs
         .and_then(|s| s.parse::<f32>().ok())
-        .map_or(0.0, |w| w / 10.0)
+        .map_or(0.0, |w| w / 10.0);
+    base * property_cost_table_value(item_struct, ITEM_PROPERTY_WEIGHT_REDUCTION, game_data)
+        .unwrap_or(1.0)
 }
 
+/// `itempropdef.2da` row of "Weight Reduction" (the item's own weight).
+const ITEM_PROPERTY_WEIGHT_REDUCTION: i32 = 11;
 /// `itempropdef.2da` row of "Enhanced Container: Reduced Weight".
 const ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT: i32 = 32;
 
-/// Share of a container's contents weight that counts toward encumbrance:
-/// `1 - Value` of the property's cost table row (`iprp_redcost`, -20%..-100%),
-/// reached through `itempropdef.CostTableResRef`; 1 without the property.
-fn container_weight_factor(
-    container: &IndexMap<String, GffValue<'static>>,
+/// `Value` of the cost-table row the item's `property_id` property points at
+/// (`itempropdef.CostTableResRef` -> `iprp_costtable`); `None` without it.
+fn property_cost_table_value(
+    item_struct: &IndexMap<String, GffValue<'static>>,
+    property_id: i32,
     game_data: &GameData,
-) -> f32 {
-    let Some(GffValue::ListOwned(props)) = container.get("PropertiesList") else {
-        return 1.0;
+) -> Option<f32> {
+    let Some(GffValue::ListOwned(props)) = item_struct.get("PropertiesList") else {
+        return None;
     };
-    let Some(cost_value) = props.iter().find_map(|prop| {
-        (prop.get("PropertyName").and_then(gff_value_to_i32)
-            == Some(ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT))
-        .then(|| prop.get("CostValue").and_then(gff_value_to_i32))
-        .flatten()
-    }) else {
-        return 1.0;
-    };
+    let cost_value = props.iter().find_map(|prop| {
+        (prop.get("PropertyName").and_then(gff_value_to_i32) == Some(property_id))
+            .then(|| prop.get("CostValue").and_then(gff_value_to_i32))
+            .flatten()
+    })?;
 
-    let reduction = game_data
-        .get_table("itempropdef")
-        .and_then(|t| t.get_by_id(ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT))
+    game_data
+        .get_table("itempropdef")?
+        .get_by_id(property_id)
         .and_then(|row| row_str(&row, "costtableresref"))
         .and_then(|s| s.parse::<i32>().ok())
         .and_then(|cost_table| cost_table_row(cost_table, cost_value, game_data))
         .and_then(|row| row_str(&row, "value"))
         .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(0.0);
-    (1.0 - reduction).clamp(0.0, 1.0)
+}
+
+/// Weight a container's contents add to encumbrance. Like the engine, each
+/// item's weight in tenths of a lb keeps the percentage the container's
+/// `iprp_redcost.Value` leaves, rounded down per item (verified in-game: a -80%
+/// pouch holding 6.0 + 1.0 + 2x0.1 + 2.0 + 0.3 + 2.0 lb counts 2.2 lb, not 2.3).
+fn contents_weight(
+    container: &IndexMap<String, GffValue<'static>>,
+    contents: &[FullInventoryItem],
+    game_data: &GameData,
+) -> f32 {
+    let reduction =
+        property_cost_table_value(container, ITEM_PROPERTY_CONTAINER_REDUCED_WEIGHT, game_data)
+            .unwrap_or(0.0);
+    let kept_percent = 100 - ((reduction * 100.0).round() as i64).clamp(0, 100);
+
+    let tenths: i64 = contents
+        .iter()
+        .map(|item| {
+            (item.weight * item.stack_size as f32 * 10.0).round() as i64 * kept_percent / 100
+        })
+        .sum();
+    tenths as f32 / 10.0
 }
 
 /// Hold `StackSize` to `baseitems.Stacking`. The engine renders a single item

@@ -626,3 +626,42 @@ async fn transforming_a_filled_bag_is_rejected() {
     );
     assert_eq!(bag_contents(&character, BAG_INDEX).len(), 8);
 }
+
+/// Save 000943 (OC): backpack index 21 is a -80% Magic Pouch holding 11.5 lb,
+/// index 11 a 0.5 lb item with Weight Reduction CostValue 8. In-game the PC
+/// carried 33.9 lb, and 43.2 lb after moving the pouch contents to the backpack.
+#[tokio::test]
+async fn encumbrance_matches_in_game_weights() {
+    const POUCH_INDEX: usize = 21;
+    let ctx = create_test_context().await;
+    let data = std::fs::read(fixtures_path().join("saves/bag_weight/player.bic"))
+        .expect("read bag_weight player.bic");
+    let fields = GffParser::from_bytes(data)
+        .expect("parse")
+        .read_struct_fields(0)
+        .expect("root");
+    let mut character = Character::from_gff(fields).expect("character");
+    let total = |c: &Character| {
+        c.get_full_inventory_summary(&ctx.game_data, &ctx.decoder, None)
+            .encumbrance
+            .total_weight
+    };
+
+    assert!(
+        (total(&character) - 33.9).abs() < 0.05,
+        "{}",
+        total(&character)
+    );
+
+    let mut backpack = character.get_list_owned("ItemList").expect("backpack");
+    let contents = extract_list_from_map(&backpack[POUCH_INDEX], "ItemList").expect("pouch");
+    backpack[POUCH_INDEX].insert("ItemList".to_string(), GffValue::ListOwned(Vec::new()));
+    backpack.extend(contents);
+    character.set_list("ItemList", backpack);
+
+    assert!(
+        (total(&character) - 43.2).abs() < 0.05,
+        "{}",
+        total(&character)
+    );
+}

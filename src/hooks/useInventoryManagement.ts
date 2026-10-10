@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useCharacterContext, useSubsystem } from '@/contexts/CharacterContext';
+import { useCharacterContext } from '@/contexts/CharacterContext';
 import { useTranslations } from '@/hooks/useTranslations';
 import { inventoryAPI, EquipItemRequest, UnequipItemRequest, UpdateItemRequest } from '@/services/inventoryApi';
 
@@ -17,7 +17,6 @@ export interface ItemLocation {
 export function useInventoryManagement() {
   const t = useTranslations();
   const { character, invalidateSubsystems } = useCharacterContext();
-  const inventoryData = useSubsystem('inventory');
 
   // The backend mutation has already committed by the time this runs. If the
   // refresh itself throws (e.g. a transient IPC failure), just surface that
@@ -35,14 +34,14 @@ export function useInventoryManagement() {
     }
   }, []);
 
+  // invalidateSubsystems also refreshes the undo/redo state for the new history entry.
   const refreshInventory = useCallback(async () => {
-    await inventoryData.load({ silent: true });
-  }, [inventoryData]);
+    await invalidateSubsystems(['inventory']);
+  }, [invalidateSubsystems]);
 
   const refreshInventoryAndEquipStats = useCallback(async () => {
-    await inventoryData.load({ silent: true });
-    await invalidateSubsystems([...EQUIP_DEPENDENT_SUBSYSTEMS]);
-  }, [inventoryData, invalidateSubsystems]);
+    await invalidateSubsystems(['inventory', ...EQUIP_DEPENDENT_SUBSYSTEMS]);
+  }, [invalidateSubsystems]);
 
   const equipItem = useCallback(async (request: EquipItemRequest) => {
     if (!character?.id) throw new Error(t('common.noCharacterLoaded'));

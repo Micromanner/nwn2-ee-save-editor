@@ -105,7 +105,7 @@ function EquipSlot({ slot, equippedItem, selected, onSelect }: EquipSlotProps) {
 export function InventoryPanel() {
   const t = useTranslations();
   const { handleError } = useErrorHandler();
-  const { character, characterId, itemEditorMetadata, activeSource } = useCharacterContext();
+  const { character, characterId, itemEditorMetadata, activeSource, invalidateSubsystems } = useCharacterContext();
   const isCompanion = activeSource.kind === 'companion';
   const inventorySubsystem = useSubsystem('inventory');
   const { equipItem, unequipItem, deleteItem, destroyEquippedItem } = useInventoryManagement();
@@ -185,7 +185,7 @@ export function InventoryPanel() {
       await inventoryAPI.updateGold(clamped);
       setGold(clamped);
       setGoldInput(clamped.toString());
-      await inventorySubsystem.load({ silent: true });
+      await invalidateSubsystems(['inventory']);
     } catch (err) {
       handleError(err);
       setGoldInput(gold.toString());
